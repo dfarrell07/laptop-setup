@@ -1,0 +1,85 @@
+---
+# roles/packages/tasks/main.yml
+# Install packages via dnf (Linux) or brew (macOS).
+
+- name: Install CLI packages (dnf)
+  ansible.builtin.dnf:
+    name: "{{ packages_cli }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install language packages (dnf)
+  ansible.builtin.dnf:
+    name: "{{ packages_languages }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install security packages (dnf)
+  ansible.builtin.dnf:
+    name: "{{ packages_security }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install container packages (dnf)
+  ansible.builtin.dnf:
+    name: "{{ packages_containers }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install networking packages (dnf)
+  ansible.builtin.dnf:
+    name: "{{ packages_networking }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_system == 'Linux'
+
+- name: Install Homebrew packages (macOS)
+  community.general.homebrew:
+    name: "{{ packages_brew }}"
+    state: present
+  when: ansible_os_family == 'Darwin'
+
+- name: Install Homebrew cask packages (macOS)
+  community.general.homebrew_cask:
+    name: "{{ packages_brew_cask }}"
+    state: present
+  when: ansible_os_family == 'Darwin'
+
+- name: Install zoxide (dnf)
+  ansible.builtin.dnf:
+    name: zoxide
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
+- name: Install ShellCheck and shfmt (dnf)
+  ansible.builtin.dnf:
+    name:
+      - ShellCheck
+      - shfmt
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install yamllint and ansible-lint (pipx)
+  ansible.builtin.command:
+    cmd: "pipx install {{ item }}"
+    creates: "{{ ansible_user_dir }}/.local/bin/{{ item }}"
+  loop:
+    - yamllint
+    - ansible-lint
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']

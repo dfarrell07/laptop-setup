@@ -1,0 +1,128 @@
+# Example: repos_dnf role — adding a third-party RPM repo that CSB may block
+#
+# On RHEL CSB, third-party repos may be blocked by:
+#   - subscription-manager repo restrictions
+#   - fapolicyd blocking RPM GPG key import
+#   - Network proxy blocking external repo URLs
+#   - SELinux denying repo file creation
+
+---
+- name: Add Tailscale RPM repository
+  block:
+    - name: Import Tailscale GPG key
+      ansible.builtin.rpm_key:
+        key: "https://pkgs.tailscale.com/stable/rhel/{{ ansible_distribution_major_version }}/repo.gpg"
+        state: present
+      become: true
+      tags: [become]
+
+    - name: Add Tailscale yum repo
+      ansible.builtin.yum_repository:
+        name: tailscale-stable
+        description: Tailscale stable
+        baseurl: "https://pkgs.tailscale.com/stable/rhel/{{ ansible_distribution_major_version }}/$basearch"
+        gpgcheck: true
+        gpgkey: "https://pkgs.tailscale.com/stable/rhel/{{ ansible_distribution_major_version }}/repo.gpg"
+        repo_gpgcheck: true
+        enabled: true
+      become: true
+      tags: [become]
+
+    - name: Verify Tailscale repo is usable
+      ansible.builtin.command:
+        cmd: dnf repoinfo tailscale-stable
+      changed_when: false
+      become: true
+      tags: [become]
+
+  rescue:
+    - name: Record Tailscale repo failure
+      ansible.builtin.include_tasks: common/tasks/csb-failure-handler.yml
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Tailscale RPM repository"
+        _csb_error: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_nice_json) }}"
+        _csb_action: >-
+          Use Tailscale static binary with userspace networking instead
+          (tailscaled --tun=userspace-networking, no repo/root/TUN needed).
+          Alternatively, file IT ticket for repo exception.
+        _csb_ticket_summary: "Exception request: Tailscale RPM repository"
+        _csb_ticket_body: |
+          ## Request
+          Add Tailscale stable RPM repository to approved third-party repo list.
+
+          ## Business Justification
+          Tailscale provides encrypted mesh VPN for secure machine-to-machine
+          access between development workstations. Required for accessing
+          development clusters and CI infrastructure without exposing SSH
+          ports to public networks.
+
+          ## Technical Details
+          - Repository URL: https://pkgs.tailscale.com/stable/rhel/{{ ansible_distribution_major_version }}/
+          - GPG key: https://pkgs.tailscale.com/stable/rhel/{{ ansible_distribution_major_version }}/repo.gpg
+          - Packages needed: tailscale
+          - Vendor: Tailscale Inc. (SOC 2 Type II certified)
+
+          ## Workaround (in use)
+          Static binary with userspace networking (zero system modification).
+          Full repo install preferred for automatic security updates.
+
+          ## Error Encountered
+          {{ ansible_failed_result.msg | default('Unknown error') | truncate(500) }}
+        _csb_ticket_priority: Normal
+        _csb_ticket_category: "Software Installation"
+
+
+- name: Add EPEL repository
+  block:
+    - name: Install EPEL release package
+      ansible.builtin.dnf:
+        name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+        state: present
+        disable_gpg_check: false
+      become: true
+      tags: [become]
+
+    - name: Verify EPEL repo is usable
+      ansible.builtin.command:
+        cmd: dnf repoinfo epel
+      changed_when: false
+      become: true
+      tags: [become]
+
+  rescue:
+    - name: Record EPEL repo failure
+      ansible.builtin.include_tasks: common/tasks/csb-failure-handler.yml
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add EPEL repository"
+        _csb_error: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_nice_json) }}"
+        _csb_action: >-
+          EPEL provides distrobox, ShellCheck, and other dev tools not in
+          base RHEL. Use Toolbx/Distrobox with Fedora container as fallback
+          (Fedora has all these packages natively).
+        _csb_ticket_summary: "Exception request: EPEL repository for RHEL {{ ansible_distribution_major_version }}"
+        _csb_ticket_body: |
+          ## Request
+          Enable EPEL (Extra Packages for Enterprise Linux) repository.
+
+          ## Business Justification
+          EPEL provides developer tooling (distrobox, ShellCheck, shfmt,
+          yamllint) not available in base RHEL. These are standard code
+          quality tools used across Red Hat engineering.
+
+          ## Technical Details
+          - Repository: EPEL {{ ansible_distribution_major_version }} (Fedora Project, community-maintained)
+          - Package: epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm
+          - Source: https://dl.fedoraproject.org/pub/epel/
+          - Packages needed: distrobox, ShellCheck, shfmt, yamllint
+
+          ## Risk Assessment
+          EPEL is maintained by the Fedora Project (a Red Hat-sponsored
+          community project). Packages are built from Fedora sources and
+          designed to not conflict with base RHEL packages.
+
+          ## Error Encountered
+          {{ ansible_failed_result.msg | default('Unknown error') | truncate(500) }}
+        _csb_ticket_priority: High
+        _csb_ticket_category: "Software Installation"

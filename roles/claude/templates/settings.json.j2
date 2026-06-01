@@ -1,0 +1,9 @@
+{
+  "env": {
+{% for key, value in claude_telemetry_env.items() %}
+    "{{ key }}": "{{ value }}"{{ "," if not loop.last else "" }}
+{% endfor %}
+  },
+  "sandbox": {{ claude_sandbox_config | to_nice_json }},
+  "cleanupPeriodDays": {{ claude_cleanup_period_days }}
+}

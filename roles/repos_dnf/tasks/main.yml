@@ -1,0 +1,75 @@
+---
+# roles/repos_dnf/tasks/main.yml
+# Third-party RPM repos (dnf-based OS only).
+# Uses block/rescue to handle CSB restrictions gracefully.
+
+- name: Add GitHub CLI repo
+  when: repo_gh_cli | default(true)
+  block:
+    - name: Add gh-cli repo
+      ansible.builtin.yum_repository:
+        name: gh-cli
+        description: GitHub CLI
+        baseurl: "https://cli.github.com/packages/rpm"
+        gpgcheck: true
+        gpgkey: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059"
+        enabled: true
+  rescue:
+    - name: Record gh-cli repo failure
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add GitHub CLI repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install gh binary manually or inside container"
+        _csb_ticket_summary: "Exception request: GitHub CLI RPM repository"
+        _csb_ticket_body: "GitHub CLI repo needed for PR workflows"
+
+- name: Add Google Chrome repo
+  when: repo_google_chrome | default(true)
+  block:
+    - name: Add google-chrome repo
+      ansible.builtin.yum_repository:
+        name: google-chrome
+        description: Google Chrome
+        baseurl: "{{ repos_dnf_google_chrome_repo }}"
+        gpgcheck: true
+        gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
+        enabled: true
+  rescue:
+    - name: Record Chrome repo failure
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Google Chrome repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
+        _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
+        _csb_ticket_body: "Google Chrome needed for web development and testing"
+
+- name: Enable RPM Fusion repos
+  when:
+    - repo_rpmfusion | default(true)
+    - ansible_distribution == 'Fedora'
+  block:
+    - name: Install RPM Fusion free release
+      ansible.builtin.dnf:
+        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        state: present
+        disable_gpg_check: false
+
+    - name: Install RPM Fusion nonfree release
+      ansible.builtin.dnf:
+        name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        state: present
+        disable_gpg_check: false
+  rescue:
+    - name: Record RPM Fusion failure
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Enable RPM Fusion repositories"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "RPM Fusion provides multimedia codecs and drivers. Not critical for development."
+        _csb_ticket_summary: "Exception request: RPM Fusion repositories"
+        _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"

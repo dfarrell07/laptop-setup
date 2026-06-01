@@ -1,0 +1,166 @@
+---
+- name: Verify (VM)
+  hosts: all
+  gather_facts: true
+  become: false
+
+  tasks:
+    # --- Package checks ---
+    - name: Check git is installed
+      ansible.builtin.command: git --version
+      changed_when: false
+
+    - name: Check zsh is installed
+      ansible.builtin.command: zsh --version
+      changed_when: false
+
+    - name: Check tmux is installed
+      ansible.builtin.command: tmux -V
+      changed_when: false
+
+    - name: Check jq is installed
+      ansible.builtin.command: jq --version
+      changed_when: false
+
+    - name: Check fzf is installed
+      ansible.builtin.command: fzf --version
+      changed_when: false
+
+    # --- Dotfile checks ---
+    - name: Verify .zshrc exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.zshrc"
+      register: verify_zshrc
+
+    - name: Assert .zshrc exists
+      ansible.builtin.assert:
+        that: verify_zshrc.stat.exists
+
+    - name: Verify .gitconfig exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.gitconfig"
+      register: verify_gitconfig
+
+    - name: Assert .gitconfig exists
+      ansible.builtin.assert:
+        that: verify_gitconfig.stat.exists
+
+    - name: Verify .tmux.conf exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.tmux.conf"
+      register: verify_tmux
+
+    - name: Assert .tmux.conf exists
+      ansible.builtin.assert:
+        that: verify_tmux.stat.exists
+
+    - name: Verify SSH config exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.ssh/config"
+      register: verify_ssh_config
+
+    - name: Assert SSH config exists
+      ansible.builtin.assert:
+        that: verify_ssh_config.stat.exists
+
+    # --- Git security checks ---
+    - name: Check git core.fsmonitor
+      ansible.builtin.command: git config --global core.fsmonitor
+      register: verify_fsmonitor
+      changed_when: false
+
+    - name: Assert git core.fsmonitor is false
+      ansible.builtin.assert:
+        that: verify_fsmonitor.stdout == 'false'
+
+    - name: Check git safe.bareRepository
+      ansible.builtin.command: git config --global safe.bareRepository
+      register: verify_bare_repo
+      changed_when: false
+
+    - name: Assert git safe.bareRepository is explicit
+      ansible.builtin.assert:
+        that: verify_bare_repo.stdout == 'explicit'
+
+    # --- Claude checks ---
+    - name: Verify Claude personal config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-personal"
+      register: verify_claude_dir
+
+    - name: Assert Claude config directory exists
+      ansible.builtin.assert:
+        that:
+          - verify_claude_dir.stat.isdir
+          - verify_claude_dir.stat.mode == '0700'
+
+    # --- System hardening checks (VM only) ---
+    - name: Check firewall default zone
+      ansible.builtin.command: firewall-cmd --get-default-zone
+      register: verify_fw_zone
+      changed_when: false
+      become: true
+
+    - name: Assert firewall default zone is drop
+      ansible.builtin.assert:
+        that: verify_fw_zone.stdout == 'drop'
+        fail_msg: "Firewall default zone is '{{ verify_fw_zone.stdout }}', expected 'drop'"
+
+    - name: Check sysctl kernel.unprivileged_bpf_disabled
+      ansible.builtin.command: sysctl -n kernel.unprivileged_bpf_disabled
+      register: verify_bpf
+      changed_when: false
+      become: true
+
+    - name: Assert unprivileged BPF is disabled
+      ansible.builtin.assert:
+        that: verify_bpf.stdout == '1'
+
+    - name: Check sysctl net.ipv4.conf.all.rp_filter
+      ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
+      register: verify_rp_filter
+      changed_when: false
+      become: true
+
+    - name: Assert reverse path filtering is strict
+      ansible.builtin.assert:
+        that: verify_rp_filter.stdout == '1'
+
+    - name: Verify auditd rules file exists
+      ansible.builtin.stat:
+        path: /etc/audit/rules.d/99-claude.rules
+      register: verify_auditd
+      become: true
+
+    - name: Assert auditd rules deployed
+      ansible.builtin.assert:
+        that: verify_auditd.stat.exists
+
+    - name: Verify DNS-over-TLS config exists
+      ansible.builtin.stat:
+        path: /etc/systemd/resolved.conf.d/99-dot.conf
+      register: verify_dot
+      become: true
+
+    - name: Assert DNS-over-TLS config deployed
+      ansible.builtin.assert:
+        that: verify_dot.stat.exists
+
+    - name: Check core dumps disabled
+      ansible.builtin.command: sysctl -n kernel.core_pattern
+      register: verify_core
+      changed_when: false
+      become: true
+
+    - name: Verify kernel lockdown in grubby
+      ansible.builtin.command: grubby --info=DEFAULT
+      register: verify_lockdown
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert kernel lockdown integrity
+      ansible.builtin.assert:
+        that: "'lockdown=integrity' in verify_lockdown.stdout"
+        fail_msg: "Kernel lockdown=integrity not found in boot args"
+      when: verify_lockdown.rc == 0

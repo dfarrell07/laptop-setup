@@ -1,0 +1,18 @@
+---
+# roles/common/tasks/main.yml
+# OS detection, CSB detection, prerequisite directories.
+
+- name: Run CSB detection
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb_detect.yml"
+  when: ansible_system == 'Linux'
+
+- name: Ensure prerequisite directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ansible_user_dir }}/.config/git"
+    - "{{ ansible_user_dir }}/.config/git/template/hooks"
+    - "{{ ansible_user_dir }}/.local/bin"
+    - "{{ ansible_user_dir }}/.local/share"

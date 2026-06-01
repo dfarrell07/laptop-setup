@@ -1,0 +1,96 @@
+---
+- name: Verify (macOS)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Check git is installed
+      ansible.builtin.command: git --version
+      changed_when: false
+
+    - name: Check tmux is installed
+      ansible.builtin.command: tmux -V
+      changed_when: false
+      failed_when: false
+
+    - name: Check jq is installed
+      ansible.builtin.command: jq --version
+      changed_when: false
+      failed_when: false
+
+    - name: Check fzf is installed
+      ansible.builtin.command: fzf --version
+      changed_when: false
+      failed_when: false
+
+    - name: Verify .zshrc exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.zshrc"
+      register: verify_zshrc
+
+    - name: Assert .zshrc exists
+      ansible.builtin.assert:
+        that: verify_zshrc.stat.exists
+        fail_msg: ".zshrc was not deployed"
+
+    - name: Verify .gitconfig exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.gitconfig"
+      register: verify_gitconfig
+
+    - name: Assert .gitconfig exists
+      ansible.builtin.assert:
+        that: verify_gitconfig.stat.exists
+        fail_msg: ".gitconfig was not deployed"
+
+    - name: Verify .tmux.conf exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.tmux.conf"
+      register: verify_tmux
+
+    - name: Assert .tmux.conf exists
+      ansible.builtin.assert:
+        that: verify_tmux.stat.exists
+        fail_msg: ".tmux.conf was not deployed"
+
+    - name: Verify SSH config exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.ssh/config"
+      register: verify_ssh_config
+
+    - name: Assert SSH config exists
+      ansible.builtin.assert:
+        that: verify_ssh_config.stat.exists
+        fail_msg: "SSH config was not deployed"
+
+    - name: Verify SSH sockets directory exists (macOS ControlPath)
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.ssh/sockets"
+      register: verify_ssh_sockets
+
+    - name: Assert SSH sockets directory exists
+      ansible.builtin.assert:
+        that: verify_ssh_sockets.stat.isdir
+        fail_msg: "SSH sockets directory missing for macOS ControlPath"
+
+    - name: Verify Claude personal config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-personal"
+      register: verify_claude_dir
+
+    - name: Assert Claude config directory exists
+      ansible.builtin.assert:
+        that:
+          - verify_claude_dir.stat.isdir
+          - verify_claude_dir.stat.mode == '0700'
+        fail_msg: "Claude personal config dir missing or wrong permissions"
+
+    - name: Check git core.fsmonitor setting
+      ansible.builtin.command: git config --global core.fsmonitor
+      register: verify_fsmonitor
+      changed_when: false
+
+    - name: Assert git core.fsmonitor is false
+      ansible.builtin.assert:
+        that: verify_fsmonitor.stdout == 'false'
+        fail_msg: "git core.fsmonitor is not set to false"

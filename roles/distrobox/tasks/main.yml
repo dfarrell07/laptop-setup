@@ -1,0 +1,142 @@
+---
+# roles/distrobox/tasks/main.yml
+# Create Distrobox/Toolbx container + register for Play 3 provisioning.
+
+# --- Detect container tool ---
+- name: Check for distrobox
+  ansible.builtin.command:
+    cmd: which distrobox
+  register: distrobox_check
+  changed_when: false
+  failed_when: false
+
+- name: Check for toolbox
+  ansible.builtin.command:
+    cmd: which toolbox
+  register: distrobox_toolbox_check
+  changed_when: false
+  failed_when: false
+
+- name: Set container tool facts
+  ansible.builtin.set_fact:
+    distrobox_use_distrobox: "{{ distrobox_check.rc == 0 }}"
+    distrobox_use_toolbox: "{{ distrobox_check.rc != 0 and distrobox_toolbox_check.rc == 0 }}"
+    distrobox_tool: >-
+      {{ 'distrobox' if (distrobox_check.rc == 0)
+         else ('toolbox' if (distrobox_toolbox_check.rc == 0)
+         else 'none') }}
+
+- name: Skip container setup if no tool available
+  ansible.builtin.debug:
+    msg: "Neither distrobox nor toolbox found — skipping container setup"
+  when: distrobox_tool == 'none'
+
+# --- kind host prerequisites ---
+- name: Ensure containers.conf directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/containers"
+    state: directory
+    mode: "0755"
+  when: distrobox_tool != 'none'
+
+- name: Set containers.conf log_driver for kind
+  community.general.ini_file:
+    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    section: containers
+    option: log_driver
+    value: '"{{ distrobox_kind_log_driver }}"'
+    mode: "0644"
+    create: true
+  when: distrobox_tool != 'none'
+
+- name: Set containers.conf pids_limit for kind
+  community.general.ini_file:
+    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    section: containers
+    option: pids_limit
+    value: "{{ distrobox_kind_pids_limit }}"
+    mode: "0644"
+  when: distrobox_tool != 'none'
+
+# --- Check if container exists ---
+- name: Check if container exists
+  ansible.builtin.command:
+    cmd: "podman container exists {{ distrobox_container_name }}"
+  register: distrobox_container_exists
+  changed_when: false
+  failed_when: false
+  when: distrobox_tool != 'none'
+
+# --- Distrobox path ---
+- name: Create container via Distrobox
+  when:
+    - distrobox_use_distrobox | bool
+    - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
+  block:
+    - name: Ensure distrobox config directory
+      ansible.builtin.file:
+        path: "{{ distrobox_ini_path | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy distrobox.ini
+      ansible.builtin.template:
+        src: distrobox.ini.j2
+        dest: "{{ distrobox_ini_path }}"
+        mode: "0644"
+
+    - name: Create container with distrobox assemble
+      ansible.builtin.command:
+        cmd: "distrobox assemble create --file {{ distrobox_ini_path }}"
+      register: distrobox_create_result
+      changed_when: "'already exists' not in (distrobox_create_result.stderr | default(''))"
+
+# --- Toolbx path ---
+- name: Create container via Toolbx
+  when:
+    - distrobox_use_toolbox | bool
+    - distrobox_container_exists.rc != 0
+  block:
+    - name: Create Toolbx container
+      ansible.builtin.command:
+        cmd: >-
+          toolbox create
+          --container {{ distrobox_container_name }}
+          --distro {{ container_distro | default('fedora') }}
+          --release {{ container_release | default('42') }}
+      register: distrobox_toolbox_create
+      changed_when: distrobox_toolbox_create.rc == 0
+
+# --- Start and register for Play 3 ---
+- name: Start container
+  ansible.builtin.command:
+    cmd: "podman start {{ distrobox_container_name }}"
+  register: distrobox_start
+  changed_when: "'already running' not in (distrobox_start.stderr | default(''))"
+  failed_when:
+    - distrobox_start.rc != 0
+    - "'already running' not in (distrobox_start.stderr | default(''))"
+    - "'already started' not in (distrobox_start.stderr | default(''))"
+  when: distrobox_tool != 'none'
+
+- name: Detect Python inside container
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ distrobox_container_name }}
+      sh -c 'command -v python3 || command -v python'
+  register: distrobox_python
+  changed_when: false
+  failed_when: false
+  when: distrobox_tool != 'none'
+
+- name: Register container as Ansible host for Play 3
+  ansible.builtin.add_host:
+    name: "{{ distrobox_container_name }}"
+    groups: containers
+    ansible_connection: containers.podman.podman
+    ansible_host: "{{ distrobox_container_name }}"
+    ansible_python_interpreter: "{{ distrobox_python.stdout | default('/usr/bin/python3') | trim }}"
+    ansible_remote_tmp: /tmp/.ansible/tmp
+  when:
+    - distrobox_tool != 'none'
+    - distrobox_python.rc | default(1) == 0

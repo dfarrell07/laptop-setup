@@ -1,0 +1,102 @@
+---
+# roles/dotfiles/tasks/main.yml
+# Deploy configuration files (copy + template), OS-conditional.
+
+- name: Install oh-my-zsh
+  ansible.builtin.git:
+    repo: https://github.com/ohmyzsh/ohmyzsh.git
+    dest: "{{ ansible_user_dir }}/.oh-my-zsh"
+    depth: 1
+    version: master
+    update: false
+
+- name: Ensure config directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ansible_user_dir }}/.config/git"
+    - "{{ ansible_user_dir }}/.config/git/template/hooks"
+    - "{{ ansible_user_dir }}/.config/user-tmpfiles.d"
+    - "{{ ansible_user_dir }}/.local/run/tmux"
+    - "{{ ansible_user_dir }}/.ssh"
+    - "{{ ansible_user_dir }}/.ssh/sockets"
+
+- name: Ensure Claude config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/claude"
+    state: directory
+    mode: "0700"
+
+- name: Deploy zshrc
+  ansible.builtin.template:
+    src: zshrc.j2
+    dest: "{{ ansible_user_dir }}/.zshrc"
+    mode: "0644"
+
+- name: Deploy gitconfig
+  ansible.builtin.template:
+    src: gitconfig.j2
+    dest: "{{ ansible_user_dir }}/.gitconfig"
+    mode: "0644"
+
+- name: Deploy git conditional includes
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ ansible_user_dir }}/.config/git/{{ item }}"
+    mode: "0644"
+  loop:
+    - config-work
+    - config-personal
+
+- name: Deploy tmux.conf
+  ansible.builtin.template:
+    src: tmux.conf.j2
+    dest: "{{ ansible_user_dir }}/.tmux.conf"
+    mode: "0644"
+
+- name: Deploy vimrc
+  ansible.builtin.template:
+    src: vimrc.j2
+    dest: "{{ ansible_user_dir }}/.vimrc"
+    mode: "0644"
+
+- name: Deploy SSH client config
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ ansible_user_dir }}/.ssh/config"
+    mode: "0600"
+
+- name: Set SSH directory permissions
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.ssh"
+    mode: "0700"
+
+- name: Deploy SSH socket tmpfiles config
+  ansible.builtin.copy:
+    content: "d %t/ssh 0700 - - -\n"
+    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/ssh-sockets.conf"
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
+- name: Activate tmpfiles to create SSH socket directory
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --user --create
+  changed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Deploy Claude work-env file
+  ansible.builtin.copy:
+    content: |
+      export CLAUDE_CONFIG_DIR=~/.claude-work
+      export CLAUDE_CODE_USE_VERTEX=1
+      # Vertex project vars — set in CLAUDE.local.md, not here
+    dest: "{{ ansible_user_dir }}/.config/claude/work-env"
+    mode: "0600"
+  when: profile == 'work'
+
+- name: Set tmux socket directory permissions
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.local/run/tmux"
+    mode: "0700"

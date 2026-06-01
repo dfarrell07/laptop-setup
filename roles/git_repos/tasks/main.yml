@@ -1,0 +1,70 @@
+---
+# roles/git_repos/tasks/main.yml
+# Clone repos via HTTPS, add fork remotes. Filter by category.
+
+- name: Check gh auth status
+  ansible.builtin.command:
+    cmd: gh auth status
+  register: git_repos_gh_auth
+  changed_when: false
+  failed_when: false
+
+- name: Warn if gh not authenticated
+  ansible.builtin.debug:
+    msg: >-
+      GitHub CLI not authenticated. Run 'gh auth login' before
+      'make repos'. Cloning will fail for private repos.
+  when: git_repos_gh_auth.rc != 0
+
+- name: Determine active categories for profile
+  ansible.builtin.set_fact:
+    git_repos_active_categories: >-
+      {{
+        [git_repos_category_filter] if git_repos_category_filter | length > 0
+        else (git_repos_work_categories if profile == 'work'
+        else git_repos_personal_categories)
+      }}
+
+- name: Filter repos by category and enabled status
+  ansible.builtin.set_fact:
+    git_repos_filtered: >-
+      {{
+        git_repos_list | default([])
+        | selectattr('enabled', 'equalto', true)
+        | selectattr('category', 'in', git_repos_active_categories)
+        | list
+      }}
+
+- name: Display repos to clone
+  ansible.builtin.debug:
+    msg: "Will clone {{ git_repos_filtered | length }} repos (categories: {{ git_repos_active_categories | join(', ') }})"
+
+- name: Ensure base directory exists
+  ansible.builtin.file:
+    path: "{{ git_repos_base_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone repositories  # noqa: latest[git]
+  ansible.builtin.git:
+    repo: "{{ item.url }}"
+    dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
+    update: false
+    version: HEAD
+  loop: "{{ git_repos_filtered }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  failed_when: false
+
+- name: Add fork remotes  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "git remote add {{ item.1.name }} {{ item.1.url }}"
+    chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
+  loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.dest }} -> {{ item.1.name }}"
+  register: git_repos_remote_result
+  changed_when: git_repos_remote_result.rc == 0
+  failed_when:
+    - git_repos_remote_result.rc != 0
+    - "'already exists' not in (git_repos_remote_result.stderr | default(''))"

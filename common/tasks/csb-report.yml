@@ -1,0 +1,112 @@
+# common/tasks/csb-report.yml
+#
+# Final reporting play: renders a summary of all CSB failures and
+# generates IT ticket templates for each blocked operation.
+# Include this at the end of site.yml as a dedicated play.
+#
+# Usage in site.yml:
+#   - name: CSB compatibility report
+#     hosts: all
+#     gather_facts: false
+#     tasks:
+#       - name: Generate CSB report
+#         ansible.builtin.include_tasks: common/tasks/csb-report.yml
+
+---
+- name: Check for CSB failures
+  ansible.builtin.set_fact:
+    _csb_has_failures: "{{ (csb_failures | default([])) | length > 0 }}"
+
+- name: Report — no CSB failures detected
+  ansible.builtin.debug:
+    msg: "All tasks completed successfully. No CSB restrictions encountered."
+  when: not _csb_has_failures | bool
+
+- name: Report — CSB failure summary
+  ansible.builtin.debug:
+    msg: |
+
+      ╔══════════════════════════════════════════════════════════════╗
+      ║                   CSB COMPATIBILITY REPORT                  ║
+      ╠══════════════════════════════════════════════════════════════╣
+      ║  Total failures: {{ (csb_failures | length) | string | center(39) }}║
+      ║  Roles affected: {{ (csb_failures | map(attribute='role') | unique | join(', ')) | truncate(39) | center(39) }}║
+      ╚══════════════════════════════════════════════════════════════╝
+
+      {% for failure in csb_failures %}
+      ── Failure {{ loop.index }} of {{ csb_failures | length }} ──────────────────────────────
+        Role:      {{ failure.role }}
+        Task:      {{ failure.task }}
+        Time:      {{ failure.timestamp }}
+        Error:     {{ failure.error | truncate(120) }}
+        Action:    {{ failure.suggested_action }}
+
+      {% endfor %}
+  when: _csb_has_failures | bool
+
+- name: Report — IT ticket templates
+  ansible.builtin.debug:
+    msg: |
+
+      ════════════════════════════════════════════════════════════════
+      IT TICKET {{ loop.index }}: {{ item.ticket.summary }}
+      ════════════════════════════════════════════════════════════════
+      Priority:  {{ item.ticket.priority }}
+      Category:  {{ item.ticket.category }}
+
+      {{ item.ticket.body }}
+      ────────────────────────────────────────────────────────────────
+
+  loop: "{{ csb_failures }}"
+  loop_control:
+    label: "{{ item.ticket.summary }}"
+  when: _csb_has_failures | bool
+
+- name: Write CSB report to file
+  ansible.builtin.copy:
+    content: |
+      # CSB Compatibility Report
+      # Generated: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
+      # Host: {{ inventory_hostname }}
+
+      {% if csb_failures | default([]) | length == 0 %}
+      No CSB restrictions encountered. All tasks completed successfully.
+      {% else %}
+      ## Summary
+
+      Total failures: {{ csb_failures | length }}
+      Roles affected: {{ csb_failures | map(attribute='role') | unique | join(', ') }}
+
+      ## Failures
+
+      {% for failure in csb_failures %}
+      ### {{ loop.index }}. {{ failure.task }}
+      - **Role:** {{ failure.role }}
+      - **Time:** {{ failure.timestamp }}
+      - **Error:** {{ failure.error }}
+      - **Suggested action:** {{ failure.suggested_action }}
+
+      {% endfor %}
+      ## IT Tickets to File
+
+      {% for failure in csb_failures %}
+      ### Ticket {{ loop.index }}: {{ failure.ticket.summary }}
+      - **Priority:** {{ failure.ticket.priority }}
+      - **Category:** {{ failure.ticket.category }}
+
+      {{ failure.ticket.body }}
+
+      ---
+      {% endfor %}
+      {% endif %}
+    dest: "{{ ansible_user_dir | default(lookup('env', 'HOME')) }}/csb-report.md"
+    mode: "0644"
+  delegate_to: localhost
+
+- name: Display report file location
+  ansible.builtin.debug:
+    msg: >-
+      CSB report written to
+      {{ ansible_user_dir | default(lookup('env', 'HOME')) }}/csb-report.md
+      — review and file {{ csb_failures | default([]) | length }} IT ticket(s).
+  when: _csb_has_failures | bool

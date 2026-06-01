@@ -1,0 +1,88 @@
+# {{ ansible_managed }}
+# ~/.zshrc — managed by Ansible (roles/dotfiles)
+
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="{{ dotfiles_oh_my_zsh_theme }}"
+
+zstyle ':omz:update' mode disabled
+
+plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
+
+source $ZSH/oh-my-zsh.sh
+
+# --- Environment ---
+export EDITOR=vim
+export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$PATH"
+
+# --- Tool hooks (silently skip if not installed) ---
+command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
+command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+
+# --- Claude Code instance guard ---
+claude() {
+  if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
+    echo "ERROR: CLAUDE_CONFIG_DIR not set. Use 'cw' (work) or 'ccp' (personal)." >&2
+    return 1
+  fi
+  command claude "$@"
+}
+
+# --- Claude Code in tmux (sessions survive disconnects) ---
+cw() {
+  command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
+  local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
+  local s="work-${dir}"
+  tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"
+}
+
+ccp() {
+  command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
+  local phys="$(pwd -P)"
+  if [[ "$phys" == */src/openshift/* || "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* ]]; then
+    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
+  fi
+  local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
+  local s="personal-${dir}"
+  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; CLAUDE_CONFIG_DIR=~/.claude-personal claude; zsh"
+}
+
+cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
+ca() { tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: " | xargs -r tmux attach -t; }
+cwt() { local n="${1:?Usage: cwt <worktree-name>}"; tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree '$n'; zsh"; }
+cstatus() {
+  for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E 'work-|personal-'); do
+    echo "=== $s ==="; tmux capture-pane -t "$s" -p | tail -3; echo
+  done
+}
+
+# --- Device access (Tailscale + mosh) ---
+alias laptop='mosh laptop.tail'
+alias mac='mosh mac-desktop.tail'
+laptop-claude() { mosh laptop.tail -- tmux new-session -A -s "${1:-work}"; }
+mac-claude() { mosh mac-desktop.tail -- tmux new-session -A -s "${1:-personal}"; }
+alias rc='claude --remote-control'
+
+# --- Quick nav ---
+alias src='cd ~/src'
+alias subm='cd ~/src/submariner-io'
+alias ovnk='cd ~/src/openshift/ovn-kubernetes'
+alias notes='cd ~/src/dfarrell07/notes-ai'
+
+# --- Task queue ---
+cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
+
+# --- Status ---
+alias yk='ykman info'
+alias vpn='ip route | grep -E "tun|wg"'
+alias ts='tailscale status'
+
+# --- General aliases ---
+alias gv="gvim -vp"
+alias gi="grep -rniI --color=always --exclude-dir=vendor"
+alias ping="ping -i .2"
+alias pingg="ping www.google.com"
+alias ping8="ping 8.8.8.8"
+
+# --- umask ---
+umask 077

@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+[{{ distrobox_container_name }}]
+image={{ distrobox_container_image }}
+pull=true
+replace={{ distrobox_container_replace | bool | lower }}
+start_now=false
+
+additional_packages="{{ distrobox_packages | join(' ') }}"
+
+# Host delegation symlinks
+{% for cmd in distrobox_host_exec_commands %}
+init_hooks=ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }};
+{% endfor %}
+
+# Exports to host
+{% for bin in distrobox_exports %}
+init_hooks=distrobox-export --bin /usr/bin/{{ bin }} --export-path {{ ansible_user_dir }}/.local/bin 2>/dev/null || true;
+{% endfor %}

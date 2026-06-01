@@ -1,0 +1,33 @@
+---
+driver:
+  name: vagrant
+  provider:
+    name: libvirt
+
+platforms:
+  - name: fedora-test
+    box: fedora/43-cloud-base
+    memory: 4096
+    cpus: 2
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: /dev/null
+  config_options:
+    defaults:
+      vault_password_file: /dev/null
+    privilege_escalation:
+      become: true
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - create
+    - converge
+    - idempotence
+    - verify
+    - destroy

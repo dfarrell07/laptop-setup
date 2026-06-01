@@ -1,0 +1,30 @@
+---
+# Shipped defaults — override in config.yml (gitignored).
+# Uses Geerling's config override pattern:
+#   default.config.yml (this file, checked in)
+#   config.yml (gitignored, per-machine overrides)
+
+profile: work
+ssh_port: 722
+
+# Feature toggles (naming: install_<feature>)
+install_docker: false
+install_vpn: true
+install_virtualization: true
+
+# Third-party repos (naming: repo_<name>, dnf-based OS only)
+repo_gh_cli: true
+repo_google_chrome: true
+repo_google_cloud_sdk: true
+repo_rpmfusion: true
+repo_slack: true
+repo_acli: true
+repo_docker_ce: false
+repo_mullvad: true
+repo_redhat: true
+
+# Container settings
+container_name: fedora-dev
+container_image: "registry.fedoraproject.org/fedora-toolbox:42"
+container_distro: fedora
+container_release: "42"

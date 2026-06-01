@@ -1,0 +1,21 @@
+---
+git_repos_base_dir: "{{ ansible_user_dir }}/src"
+
+# Filter: set via -e repo_category=ovnk to clone only one category.
+# Empty string means "all enabled repos for this profile."
+git_repos_category_filter: "{{ repo_category | default('') }}"
+
+# Profile-based category defaults
+git_repos_work_categories:
+  - personal
+  - bpfman
+  - downstream
+  - konflux
+  - ovnk
+  - cncf
+  - misc
+
+git_repos_personal_categories:
+  - personal
+  - ovnk
+  - cncf

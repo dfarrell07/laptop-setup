@@ -1,0 +1,63 @@
+---
+# roles/containers/tasks/main.yml
+# Podman/Docker config, registry auth.
+
+- name: Ensure containers config directory
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Set auth.json permissions if exists
+  ansible.builtin.file:
+    path: "{{ containers_auth_file }}"
+    mode: "0600"
+  failed_when: false
+  changed_when: false
+
+- name: Check registry auth status
+  ansible.builtin.command:
+    cmd: "podman login --get-login {{ item }}"
+  loop: "{{ containers_registries }}"
+  register: containers_auth_status
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Report unauthenticated registries
+  ansible.builtin.debug:
+    msg: >-
+      Registry {{ item.item }} not authenticated.
+      Run: podman login --authfile {{ containers_auth_file }} {{ item.item }}
+      Then: chmod 0600 {{ containers_auth_file }}
+  loop: "{{ containers_auth_status.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - item.rc is defined
+    - item.rc != 0
+
+- name: Check user group membership
+  ansible.builtin.command:
+    cmd: id -nG
+  register: containers_user_groups
+  changed_when: false
+
+- name: Warn if user is in Docker group
+  ansible.builtin.debug:
+    msg: >-
+      Docker group membership = passwordless root. Never join.
+      Use rootless Podman or rootless Docker instead.
+  when: "'docker' in containers_user_groups.stdout.split()"
+
+- name: Disable Docker socket by default
+  ansible.builtin.systemd:
+    name: docker.socket
+    state: stopped
+    enabled: false
+  become: true
+  tags: [become]
+  when:
+    - ansible_system == 'Linux'
+    - not (install_docker | default(false))
+  failed_when: false

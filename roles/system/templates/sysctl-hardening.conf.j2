@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# Security hardening sysctl values
+{% for key, value in system_sysctl_hardening.items() %}
+{{ key }} = {{ value }}
+{% endfor %}

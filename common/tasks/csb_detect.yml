@@ -1,0 +1,356 @@
+---
+# CSB (Corporate Standard Build) detection tasks.
+# All checks run without root (no become). Safe to re-run (idempotent).
+# Sets facts consumed by later roles to adapt behavior.
+
+# ---------------------------------------------------------------------------
+# 1. OS family detection
+# ---------------------------------------------------------------------------
+- name: Detect OS family
+  ansible.builtin.set_fact:
+    is_rhel: "{{ ansible_distribution == 'RedHat' }}"
+    is_fedora: "{{ ansible_distribution == 'Fedora' }}"
+    is_macos: "{{ ansible_os_family == 'Darwin' }}"
+    is_linux: "{{ ansible_system == 'Linux' }}"
+
+# ---------------------------------------------------------------------------
+# 2. fapolicyd
+# ---------------------------------------------------------------------------
+- name: Check if fapolicyd service exists
+  ansible.builtin.command:
+    cmd: systemctl list-unit-files fapolicyd.service
+  register: _fapolicyd_unit
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Check fapolicyd active state
+  ansible.builtin.command:
+    cmd: systemctl is-active fapolicyd.service
+  register: _fapolicyd_active
+  changed_when: false
+  failed_when: false
+  when:
+    - is_linux | bool
+    - _fapolicyd_unit.rc == 0
+
+# fapolicyd ships a CLI to query its current mode. Fall back to the config
+# file when the CLI is unavailable.  Both paths run without root.
+- name: Check fapolicyd mode via fapolicyd-cli
+  ansible.builtin.command:
+    cmd: fapolicyd-cli --list
+  register: _fapolicyd_cli
+  changed_when: false
+  failed_when: false
+  when:
+    - is_linux | bool
+    - _fapolicyd_active.rc | default(1) == 0
+
+- name: Check fapolicyd config for permissive mode
+  ansible.builtin.command:
+    cmd: grep -i '^permissive' /etc/fapolicyd/fapolicyd.conf
+  register: _fapolicyd_permissive_grep
+  changed_when: false
+  failed_when: false
+  when:
+    - is_linux | bool
+    - _fapolicyd_active.rc | default(1) == 0
+    - _fapolicyd_cli.rc | default(1) != 0
+
+- name: Set fapolicyd facts
+  ansible.builtin.set_fact:
+    fapolicyd_installed: >-
+      {{ (is_linux | bool) and (_fapolicyd_unit.rc | default(1) == 0) }}
+    fapolicyd_running: >-
+      {{ (is_linux | bool) and (_fapolicyd_active.rc | default(1) == 0) }}
+    fapolicyd_enforcing: >-
+      {{
+        (is_linux | bool)
+        and (_fapolicyd_active.rc | default(1) == 0)
+        and not (
+          (_fapolicyd_permissive_grep.stdout | default('')) is match('(?i)permissive\s*=\s*1')
+        )
+      }}
+
+# ---------------------------------------------------------------------------
+# 3. Sudo capability
+# ---------------------------------------------------------------------------
+- name: Probe sudo access
+  ansible.builtin.command:
+    cmd: sudo -n -l
+  register: _sudo_list
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set sudo facts
+  ansible.builtin.set_fact:
+    sudo_available: >-
+      {{ (is_linux | bool) and (_sudo_list.rc | default(1) == 0) }}
+    sudo_unrestricted: >-
+      {{
+        (is_linux | bool)
+        and (_sudo_list.rc | default(1) == 0)
+        and ('(ALL) ALL' in (_sudo_list.stdout | default('')))
+      }}
+    sudo_scoped: >-
+      {{
+        (is_linux | bool)
+        and (_sudo_list.rc | default(1) == 0)
+        and ('(ALL) ALL' not in (_sudo_list.stdout | default('')))
+      }}
+    sudo_none: >-
+      {{ (is_linux | bool) and (_sudo_list.rc | default(1) != 0) }}
+
+# ---------------------------------------------------------------------------
+# 4. USBGuard
+# ---------------------------------------------------------------------------
+- name: Check if usbguard service is active
+  ansible.builtin.command:
+    cmd: systemctl is-active usbguard.service
+  register: _usbguard_active
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set USBGuard fact
+  ansible.builtin.set_fact:
+    usbguard_running: >-
+      {{ (is_linux | bool) and (_usbguard_active.rc | default(1) == 0) }}
+
+# ---------------------------------------------------------------------------
+# 5. Internal CA certificates (Red Hat specific)
+# ---------------------------------------------------------------------------
+- name: Check for Red Hat internal CA certs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: _ca_certs
+  loop:
+    - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+    - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
+    - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
+  when: is_linux | bool
+
+- name: Set internal CA fact
+  ansible.builtin.set_fact:
+    internal_ca_present: >-
+      {{
+        (is_linux | bool)
+        and (_ca_certs.results | default([])
+             | selectattr('stat.exists', 'defined')
+             | selectattr('stat.exists')
+             | list | length > 0)
+      }}
+
+# ---------------------------------------------------------------------------
+# 6. CSB heuristic: RHEL + fapolicyd + internal CA
+# ---------------------------------------------------------------------------
+- name: Set CSB detection fact
+  ansible.builtin.set_fact:
+    csb_detected: >-
+      {{
+        (is_rhel | bool)
+        and (fapolicyd_installed | bool)
+        and (internal_ca_present | bool)
+      }}
+    csb_restricted: >-
+      {{
+        (is_rhel | bool)
+        and (fapolicyd_enforcing | bool)
+        and (internal_ca_present | bool)
+      }}
+
+# ---------------------------------------------------------------------------
+# 7. Rootless container readiness (subuid / subgid)
+# ---------------------------------------------------------------------------
+- name: Check subuid entry for current user
+  ansible.builtin.command:
+    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subuid"
+  register: _subuid
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Check subgid entry for current user
+  ansible.builtin.command:
+    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subgid"
+  register: _subgid
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set rootless container facts
+  ansible.builtin.set_fact:
+    podman_rootless_ready: >-
+      {{
+        (is_linux | bool)
+        and (_subuid.rc | default(1) == 0)
+        and (_subgid.rc | default(1) == 0)
+      }}
+
+# ---------------------------------------------------------------------------
+# 8. Toolbx and Distrobox availability
+# ---------------------------------------------------------------------------
+- name: Check for toolbox binary
+  ansible.builtin.command:
+    cmd: which toolbox
+  register: _toolbox_bin
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Check for distrobox binary
+  ansible.builtin.command:
+    cmd: which distrobox
+  register: _distrobox_bin
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set container tool facts
+  ansible.builtin.set_fact:
+    toolbox_installed: >-
+      {{ (is_linux | bool) and (_toolbox_bin.rc | default(1) == 0) }}
+    distrobox_installed: >-
+      {{ (is_linux | bool) and (_distrobox_bin.rc | default(1) == 0) }}
+
+# ---------------------------------------------------------------------------
+# 9. Network proxy detection
+# ---------------------------------------------------------------------------
+- name: Set proxy facts
+  ansible.builtin.set_fact:
+    network_proxied: >-
+      {{
+        (ansible_env.http_proxy | default('') | length > 0)
+        or (ansible_env.HTTP_PROXY | default('') | length > 0)
+        or (ansible_env.https_proxy | default('') | length > 0)
+        or (ansible_env.HTTPS_PROXY | default('') | length > 0)
+      }}
+    proxy_url: >-
+      {{
+        ansible_env.https_proxy
+        | default(ansible_env.HTTPS_PROXY
+        | default(ansible_env.http_proxy
+        | default(ansible_env.HTTP_PROXY
+        | default(''))))
+      }}
+
+# ---------------------------------------------------------------------------
+# 10. Firewall zone
+# ---------------------------------------------------------------------------
+- name: Get active firewall zone
+  ansible.builtin.command:
+    cmd: firewall-cmd --get-default-zone
+  register: _fw_zone
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set firewall zone fact
+  ansible.builtin.set_fact:
+    firewall_zone: "{{ _fw_zone.stdout | default('unknown') | trim }}"
+  when: is_linux | bool
+
+- name: Set firewall zone fact (non-Linux)
+  ansible.builtin.set_fact:
+    firewall_zone: "n/a"
+  when: not (is_linux | bool)
+
+# ---------------------------------------------------------------------------
+# 11. STIG / OSCAP profile detection
+# ---------------------------------------------------------------------------
+- name: Check for applied OSCAP profile
+  ansible.builtin.command:
+    cmd: oscap info /etc/oscap/applied-profile.xml
+  register: _oscap_applied
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Check for STIG packages
+  ansible.builtin.command:
+    cmd: rpm -q scap-security-guide
+  register: _ssg_pkg
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Check for aide (STIG file-integrity indicator)
+  ansible.builtin.command:
+    cmd: rpm -q aide
+  register: _aide_pkg
+  changed_when: false
+  failed_when: false
+  when: is_linux | bool
+
+- name: Set STIG/OSCAP facts
+  ansible.builtin.set_fact:
+    oscap_profile_applied: >-
+      {{ (is_linux | bool) and (_oscap_applied.rc | default(1) == 0) }}
+    stig_indicators_present: >-
+      {{
+        (is_linux | bool)
+        and (
+          (_ssg_pkg.rc | default(1) == 0)
+          or (_aide_pkg.rc | default(1) == 0)
+          or (fapolicyd_installed | bool)
+          or (usbguard_running | bool)
+        )
+      }}
+
+# ---------------------------------------------------------------------------
+# 12. Derived: container tier strategy
+# ---------------------------------------------------------------------------
+# Three tiers from the migration plan:
+#   host-only  - unrestricted Fedora/macOS, install everything on host
+#   hybrid     - RHEL with full sudo, install basics on host + container for extras
+#   container  - CSB restricted, minimal host + full dev env in container
+- name: Determine container tier
+  ansible.builtin.set_fact:
+    needs_container_tier: >-
+      {{
+        'container' if (csb_restricted | bool)
+        else ('hybrid' if (is_rhel | bool)
+        else 'host-only')
+      }}
+
+# ---------------------------------------------------------------------------
+# 13. Summary for the user
+# ---------------------------------------------------------------------------
+- name: CSB detection summary
+  ansible.builtin.debug:
+    msg: |
+      === CSB Detection Summary ===
+      OS family          : {{ ansible_distribution | default('unknown') }} {{ ansible_distribution_version | default('') }}
+      Is RHEL            : {{ is_rhel }}
+      Is Fedora          : {{ is_fedora }}
+      Is macOS           : {{ is_macos }}
+      ---
+      fapolicyd installed: {{ fapolicyd_installed }}
+      fapolicyd running  : {{ fapolicyd_running }}
+      fapolicyd enforcing: {{ fapolicyd_enforcing }}
+      ---
+      Sudo available     : {{ sudo_available | default(false) }}
+      Sudo unrestricted  : {{ sudo_unrestricted | default(false) }}
+      Sudo scoped        : {{ sudo_scoped | default(false) }}
+      Sudo none          : {{ sudo_none | default(false) }}
+      ---
+      USBGuard running   : {{ usbguard_running }}
+      Internal CA certs  : {{ internal_ca_present | default(false) }}
+      ---
+      CSB detected       : {{ csb_detected }}
+      CSB restricted     : {{ csb_restricted }}
+      ---
+      Podman rootless OK : {{ podman_rootless_ready | default(false) }}
+      Toolbx installed   : {{ toolbox_installed }}
+      Distrobox installed: {{ distrobox_installed }}
+      ---
+      Network proxied    : {{ network_proxied }}
+      Proxy URL          : {{ proxy_url }}
+      Firewall zone      : {{ firewall_zone }}
+      ---
+      OSCAP profile      : {{ oscap_profile_applied | default(false) }}
+      STIG indicators    : {{ stig_indicators_present | default(false) }}
+      ---
+      Container tier     : {{ needs_container_tier }}
+      ================================

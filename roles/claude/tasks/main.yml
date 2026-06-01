@@ -1,0 +1,65 @@
+---
+# roles/claude/tasks/main.yml
+# Claude Code install, instance isolation, settings.
+
+# --- Install Claude Code ---
+- name: Check if Claude Code is installed
+  ansible.builtin.command:
+    cmd: claude --version
+  register: claude_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Claude Code via native binary
+  ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module
+    cmd: "curl -fsSL {{ claude_install_url }} | bash"
+  args:
+    creates: "{{ ansible_user_dir }}/.claude/bin/claude"
+  when:
+    - claude_version_check.rc != 0
+    - claude_install_method == 'native'
+
+# --- Instance isolation directories ---
+- name: Create work instance config directory
+  ansible.builtin.file:
+    path: "{{ claude_work_config_dir }}"
+    state: directory
+    mode: "0700"
+  when: profile == 'work'
+
+- name: Create personal instance config directory
+  ansible.builtin.file:
+    path: "{{ claude_personal_config_dir }}"
+    state: directory
+    mode: "0700"
+
+# --- Settings ---
+- name: Deploy work instance settings
+  ansible.builtin.template:
+    src: settings.json.j2
+    dest: "{{ claude_work_config_dir }}/settings.json"
+    mode: "0600"
+  when: profile == 'work'
+
+- name: Deploy personal instance settings
+  ansible.builtin.template:
+    src: settings.json.j2
+    dest: "{{ claude_personal_config_dir }}/settings.json"
+    mode: "0600"
+
+# --- Security: ~/.claude permissions ---
+- name: Set ~/.claude directory permissions
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.claude"
+    state: directory
+    mode: "0700"
+  failed_when: false
+
+# --- Git safety (defense-in-depth) ---
+# core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
+- name: Remove unsafe safe.directory entries  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: git config --global --unset-all safe.directory
+  register: claude_safe_dir
+  changed_when: claude_safe_dir.rc == 0
+  failed_when: false

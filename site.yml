@@ -1,0 +1,117 @@
+---
+# Play 1 — Host system (become: true)
+# Runs repos_dnf and system roles that need play-level privilege escalation.
+- name: System setup (requires sudo)
+  hosts: localhost
+  become: true
+  gather_facts: true
+  tags: [become]
+
+  pre_tasks:
+    - name: Capture real user home directory
+      ansible.builtin.set_fact:
+        real_user_home: "{{ lookup('env', 'HOME') }}"
+      become: false
+      tags: [always]
+
+    - name: Load configuration
+      ansible.builtin.include_vars: default.config.yml
+      tags: [always]
+
+    - name: Load user overrides
+      ansible.builtin.include_vars: config.yml
+      failed_when: false
+      tags: [always]
+
+  roles:
+    - role: repos_dnf
+      tags: [repos_dnf]
+      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+    - role: system
+      tags: [system]
+      when: ansible_system == 'Linux'
+
+# Play 2 — Host user (no play-level become)
+# Individual tasks escalate with become: true + tags: [become] as needed.
+- name: User setup
+  hosts: localhost
+  become: false
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: default.config.yml
+      tags: [always]
+
+    - name: Load user overrides
+      ansible.builtin.include_vars: config.yml
+      failed_when: false
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [always]
+
+    - role: dotfiles
+      tags: [dotfiles]
+
+    - role: packages
+      tags: [packages]
+
+    - role: ssh
+      tags: [ssh]
+
+    - role: git_repos
+      tags: [repos]
+
+    - role: redhat
+      tags: [redhat]
+      when: profile == 'work'
+
+    - role: containers
+      tags: [containers]
+
+    - role: desktop
+      tags: [desktop]
+      when: ansible_system == 'Linux'
+
+    - role: distrobox
+      tags: [distrobox]
+      when: ansible_system == 'Linux'
+
+    - role: claude
+      tags: [claude]
+
+  post_tasks:
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: common/tasks/csb-report.yml
+      tags: [always]
+
+# Play 3 — Container provisioning (podman connection)
+# Only runs when the distrobox role registered a container via add_host.
+- name: Provision dev container
+  hosts: containers
+  connection: containers.podman.podman
+  gather_facts: false
+  tags: [distrobox]
+
+  pre_tasks:
+    - name: Bootstrap Python inside container
+      ansible.builtin.raw: |
+        if ! command -v python3 &>/dev/null; then
+          dnf install -y python3 python3-dnf
+        fi
+      changed_when: false
+
+    - name: Gather minimal facts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - distribution
+
+  tasks:
+    - name: Container provisioning placeholder
+      ansible.builtin.debug:
+        msg: "Container provisioning tasks go here (Phase 6)"
