@@ -1,0 +1,37 @@
+---
+# roles/packages/tasks/main.yml
+# Install packages via dnf (Linux) or brew (macOS).
+
+- name: Install dnf packages
+  ansible.builtin.dnf:
+    name: >-
+      {{ packages_cli
+         + packages_languages
+         + packages_security
+         + packages_containers
+         + packages_networking }}
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install Homebrew packages (macOS)
+  community.general.homebrew:
+    name: "{{ packages_brew }}"
+    state: present
+  when: ansible_os_family == 'Darwin'
+
+- name: Install Homebrew cask packages (macOS)
+  community.general.homebrew_cask:
+    name: "{{ packages_brew_cask }}"
+    state: present
+  when: ansible_os_family == 'Darwin'
+
+- name: Install yamllint and ansible-lint (pipx)
+  ansible.builtin.command:
+    cmd: "pipx install {{ item }}"
+    creates: "{{ ansible_user_dir }}/.local/bin/{{ item }}"
+  loop:
+    - yamllint
+    - ansible-lint
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']

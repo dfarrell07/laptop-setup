@@ -1,0 +1,55 @@
+---
+# roles/desktop/tasks/main.yml
+# Desktop environment: Sway/GNOME/i3, Alacritty, fonts. Linux only.
+
+- name: Detect desktop environment
+  ansible.builtin.set_fact:
+    desktop_detected: >-
+      {{ 'sway' if (ansible_env.XDG_SESSION_TYPE | default('') == 'wayland' and
+                    ansible_env.XDG_CURRENT_DESKTOP | default('') == 'sway')
+         else ('gnome' if (ansible_env.XDG_CURRENT_DESKTOP | default('') is search('GNOME'))
+         else ('i3' if (ansible_env.XDG_CURRENT_DESKTOP | default('') == 'i3')
+         else 'unknown')) }}
+  when: desktop_environment == 'auto'
+
+- name: Set effective desktop
+  ansible.builtin.set_fact:
+    desktop_effective: "{{ desktop_environment if desktop_environment != 'auto' else desktop_detected | default('unknown') }}"
+
+- name: Install common desktop packages
+  ansible.builtin.dnf:
+    name: "{{ desktop_common_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install Sway packages
+  ansible.builtin.dnf:
+    name: "{{ desktop_sway_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - desktop_effective == 'sway'
+
+- name: Install i3 packages
+  ansible.builtin.dnf:
+    name: "{{ desktop_i3_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - desktop_effective == 'i3'
+    - ansible_distribution == 'Fedora'
+
+- name: Set zsh as default shell
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    shell: /bin/zsh
+  become: true
+  tags: [become]
+  when:
+    - ansible_user_shell | default('/bin/bash') != '/bin/zsh'

@@ -1,0 +1,32 @@
+---
+# Sysctl hardening values
+system_sysctl_hardening:
+  kernel.yama.ptrace_scope: 1
+  kernel.kptr_restrict: 1
+  kernel.io_uring_disabled: 1
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv4.conf.all.rp_filter: 1
+  net.core.bpf_jit_harden: 2
+
+# Firewall
+system_firewall_default_zone: drop
+system_firewall_icmp_types:
+  - destination-unreachable
+  - fragmentation-needed
+  - time-exceeded
+  - echo-reply
+
+# Services
+system_enable_libvirtd: "{{ install_virtualization | default(true) }}"
+system_enable_mullvad: "{{ install_vpn | default(true) }}"
+
+# Core dumps
+system_coredump_storage: none
+system_coredump_process_size_max: 0
+
+# Logind
+system_lid_switch: lock
+system_lid_switch_external: lock
+system_lid_switch_docked: ignore

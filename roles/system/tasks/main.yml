@@ -1,0 +1,195 @@
+---
+# roles/system/tasks/main.yml
+# System hardening: firewall, sysctl, kernel lockdown, auditd, services.
+# All tasks require become (Play 1 has become: true at play level).
+
+# --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+# --- Sysctl hardening ---
+- name: Deploy sysctl hardening config
+  ansible.builtin.template:
+    src: sysctl-hardening.conf.j2
+    dest: /etc/sysctl.d/90-hardening.conf
+    mode: "0644"
+  notify: Reload sysctl
+
+# --- Firewall (drop zone) ---
+- name: Set firewalld running fact
+  ansible.builtin.set_fact:
+    system_firewalld_running: >-
+      {{ ansible_facts.services['firewalld.service'] is defined and
+         ansible_facts.services['firewalld.service'].state == 'running' }}
+
+- name: Check current default firewall zone
+  ansible.builtin.command:
+    cmd: firewall-cmd --get-default-zone
+  register: system_fw_default_zone
+  changed_when: false
+  failed_when: false
+  when: system_firewalld_running | bool
+
+- name: Set default firewall zone to drop
+  ansible.builtin.command:
+    cmd: firewall-cmd --set-default-zone=drop
+  changed_when: true
+  when:
+    - system_firewalld_running | bool
+    - system_fw_default_zone.stdout | default('') != 'drop'
+  notify:
+    - Reload firewalld
+    - Restart tailscaled
+
+- name: Enable ICMP block inversion on drop zone
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: firewall-cmd --permanent --zone=drop --add-icmp-block-inversion
+  register: system_icmp_inversion
+  changed_when: "'ALREADY_ENABLED' not in (system_icmp_inversion.stderr | default(''))"
+  failed_when:
+    - system_icmp_inversion.rc != 0
+    - "'ALREADY_ENABLED' not in (system_icmp_inversion.stderr | default(''))"
+  when: system_firewalld_running | bool
+  notify: Reload firewalld
+
+# NOTE: With icmp-block-inversion enabled, --add-icmp-block ALLOWS these types
+# (semantics are inverted). Without inversion, this command would block them.
+- name: Allow essential ICMP types through drop zone
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{ item }}"
+  loop: "{{ system_firewall_icmp_types }}"
+  register: system_icmp_types
+  changed_when: "'ALREADY_ENABLED' not in (system_icmp_types.stderr | default(''))"
+  failed_when:
+    - system_icmp_types.rc != 0
+    - "'ALREADY_ENABLED' not in (system_icmp_types.stderr | default(''))"
+  when: system_firewalld_running | bool
+  notify: Reload firewalld
+
+- name: Open SSH port in firewall
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    zone: drop
+    permanent: true
+    immediate: true
+    state: enabled
+  when: system_firewalld_running | bool
+  notify:
+    - Reload firewalld
+    - Restart tailscaled
+
+# --- Kernel lockdown ---
+- name: Check current kernel cmdline
+  ansible.builtin.command:
+    cmd: grubby --info=DEFAULT
+  register: system_grubby_info
+  changed_when: false
+  failed_when: false
+
+- name: Enable kernel lockdown (integrity mode)
+  ansible.builtin.command:
+    cmd: grubby --args="lockdown=integrity" --update-kernel=ALL
+  when: "'lockdown=integrity' not in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
+# --- Core dumps ---
+- name: Ensure coredump config directory
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Disable core dumps
+  ansible.builtin.template:
+    src: coredump-disable.conf.j2
+    dest: /etc/systemd/coredump.conf.d/disable.conf
+    mode: "0644"
+
+# --- Auditd ---
+- name: Deploy auditd rules
+  ansible.builtin.template:
+    src: auditd-claude.rules.j2
+    dest: /etc/audit/rules.d/claude-code.rules
+    mode: "0640"
+  notify: Restart auditd
+  when: ansible_facts.services['auditd.service'] is defined
+
+# --- Mask cups-browsed (RCE entry point) ---
+- name: Mask cups-browsed service
+  ansible.builtin.systemd:
+    name: cups-browsed
+    masked: true
+    state: stopped
+  failed_when: false
+
+# --- Logind lid close ---
+- name: Configure lid close behavior
+  community.general.ini_file:
+    path: /etc/systemd/logind.conf
+    section: Login
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - key: HandleLidSwitch
+      value: "{{ system_lid_switch }}"
+    - key: HandleLidSwitchExternalPower
+      value: "{{ system_lid_switch_external }}"
+    - key: HandleLidSwitchDocked
+      value: "{{ system_lid_switch_docked }}"
+  notify: Restart logind
+
+# --- Services ---
+- name: Enable libvirtd
+  ansible.builtin.systemd:
+    name: libvirtd
+    state: started
+    enabled: true
+  when: system_enable_libvirtd | bool
+  failed_when: false
+
+- name: Enable Mullvad VPN service
+  ansible.builtin.systemd:
+    name: mullvad-daemon
+    state: started
+    enabled: true
+  when: system_enable_mullvad | bool
+  failed_when: false
+
+# --- Firmware updates ---
+- name: Check for firmware updates
+  ansible.builtin.command:
+    cmd: fwupdmgr get-updates --no-unreported-check
+  register: system_fwupd
+  changed_when: false
+  failed_when: false
+
+- name: Report available firmware updates
+  ansible.builtin.debug:
+    msg: "Firmware updates available. Run: sudo fwupdmgr update"
+  when:
+    - system_fwupd.rc == 0
+    - "'No updates available' not in (system_fwupd.stdout | default(''))"
+
+# --- DNS-over-TLS ---
+- name: Ensure resolved drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+  when: ansible_facts.services['systemd-resolved.service'] is defined
+
+- name: Deploy DNS-over-TLS resolved config
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Resolve]
+      DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+      Domains=~.
+      DNSOverTLS=yes
+      LLMNR=no
+    dest: /etc/systemd/resolved.conf.d/99-dot.conf
+    mode: "0644"
+  when: ansible_facts.services['systemd-resolved.service'] is defined
+  notify: Restart systemd-resolved

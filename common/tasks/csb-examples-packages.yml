@@ -1,0 +1,185 @@
+# Example: packages role — installing a binary to /usr/local/bin with become
+#
+# On RHEL CSB, binary installs to /usr/local/bin may be blocked by:
+#   - fapolicyd (deny-all policy for non-RPM-trusted paths)
+#   - No sudo / restricted sudo (become fails)
+#   - SELinux context mismatch (bin_t required)
+#
+# The fallback strategy is: try /usr/local/bin (system-wide, needs become),
+# fall back to ~/.local/bin (user-space, no become, but fapolicyd may block).
+
+---
+- name: Install kind binary
+  block:
+    - name: Download kind binary
+      ansible.builtin.get_url:
+        url: "https://kind.sigs.k8s.io/dl/v{{ kind_version }}/kind-linux-amd64"
+        dest: "/tmp/kind-{{ kind_version }}"
+        checksum: "sha256:{{ kind_sha256 }}"
+        mode: "0644"
+
+    - name: Install kind to /usr/local/bin
+      ansible.builtin.copy:
+        src: "/tmp/kind-{{ kind_version }}"
+        dest: /usr/local/bin/kind
+        mode: "0755"
+        remote_src: true
+      become: true
+      tags: [become]
+
+    - name: Restore SELinux context on kind binary
+      ansible.builtin.command:
+        cmd: restorecon -v /usr/local/bin/kind
+      changed_when: true
+      become: true
+      tags: [become]
+
+    - name: Verify kind is executable
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kind version
+      changed_when: false
+
+  rescue:
+    - name: "Fallback: install kind to ~/.local/bin"
+      block:
+        - name: Ensure ~/.local/bin exists
+          ansible.builtin.file:
+            path: "{{ ansible_user_dir }}/.local/bin"
+            state: directory
+            mode: "0755"
+
+        - name: Copy kind to ~/.local/bin
+          ansible.builtin.copy:
+            src: "/tmp/kind-{{ kind_version }}"
+            dest: "{{ ansible_user_dir }}/.local/bin/kind"
+            mode: "0755"
+            remote_src: true
+
+        - name: Verify kind is executable from user path
+          ansible.builtin.command:
+            cmd: "{{ ansible_user_dir }}/.local/bin/kind version"
+          changed_when: false
+
+      rescue:
+        - name: Record kind binary install failure
+          ansible.builtin.include_tasks: common/tasks/csb-failure-handler.yml
+          vars:
+            _csb_role: packages
+            _csb_task_name: "Install kind binary"
+            _csb_error: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_nice_json) }}"
+            _csb_action: >-
+              Both /usr/local/bin and ~/.local/bin failed. If fapolicyd is
+              blocking execution, install kind inside a Distrobox/Toolbx
+              container instead (container binaries bypass host fapolicyd).
+              If sudo is the issue, file IT ticket for /usr/local/bin write
+              access or scoped sudoers entry.
+            _csb_ticket_summary: "Exception request: install kind to /usr/local/bin"
+            _csb_ticket_body: |
+              ## Request
+              Permission to install kind (Kubernetes-in-Docker) binary to
+              /usr/local/bin, OR add fapolicyd exception for ~/.local/bin.
+
+              ## Business Justification
+              kind is required for local Kubernetes development and testing
+              of OpenShift controllers and operators. It creates disposable
+              clusters using rootless Podman containers.
+
+              ## Technical Details
+              - Binary: kind v{{ kind_version }}
+              - Source: https://kind.sigs.k8s.io/
+              - SHA256: {{ kind_sha256 }}
+              - Installed to: /usr/local/bin/kind (preferred) or ~/.local/bin/kind
+              - Dependencies: rootless Podman (already available on CSB)
+
+              ## If fapolicyd is blocking
+              Add trust rule: `fapolicyd-cli --file add /usr/local/bin/kind`
+              Or: `fapolicyd-cli --file add {{ ansible_user_dir }}/.local/bin/kind`
+
+              ## Error Encountered
+              {{ ansible_failed_result.msg | default('Unknown error') | truncate(500) }}
+            _csb_ticket_priority: High
+            _csb_ticket_category: "Software Installation"
+
+
+- name: Install gh (GitHub CLI) binary
+  block:
+    - name: Download gh tarball
+      ansible.builtin.get_url:
+        url: "https://github.com/cli/cli/releases/download/v{{ gh_version }}/gh_{{ gh_version }}_linux_amd64.tar.gz"
+        dest: "/tmp/gh_{{ gh_version }}_linux_amd64.tar.gz"
+        checksum: "sha256:{{ gh_sha256 }}"
+        mode: "0644"
+
+    - name: Extract gh binary
+      ansible.builtin.unarchive:
+        src: "/tmp/gh_{{ gh_version }}_linux_amd64.tar.gz"
+        dest: /tmp
+        remote_src: true
+
+    - name: Install gh to /usr/local/bin
+      ansible.builtin.copy:
+        src: "/tmp/gh_{{ gh_version }}_linux_amd64/bin/gh"
+        dest: /usr/local/bin/gh
+        mode: "0755"
+        remote_src: true
+      become: true
+      tags: [become]
+
+    - name: Verify gh is executable
+      ansible.builtin.command:
+        cmd: gh --version
+      changed_when: false
+
+  rescue:
+    - name: "Fallback: install gh to ~/.local/bin"
+      block:
+        - name: Ensure ~/.local/bin exists
+          ansible.builtin.file:
+            path: "{{ ansible_user_dir }}/.local/bin"
+            state: directory
+            mode: "0755"
+
+        - name: Copy gh to ~/.local/bin
+          ansible.builtin.copy:
+            src: "/tmp/gh_{{ gh_version }}_linux_amd64/bin/gh"
+            dest: "{{ ansible_user_dir }}/.local/bin/gh"
+            mode: "0755"
+            remote_src: true
+
+        - name: Verify gh is executable from user path
+          ansible.builtin.command:
+            cmd: "{{ ansible_user_dir }}/.local/bin/gh --version"
+          changed_when: false
+
+      rescue:
+        - name: Record gh binary install failure
+          ansible.builtin.include_tasks: common/tasks/csb-failure-handler.yml
+          vars:
+            _csb_role: packages
+            _csb_task_name: "Install gh (GitHub CLI) binary"
+            _csb_error: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_nice_json) }}"
+            _csb_action: >-
+              Install gh inside Distrobox/Toolbx container and export to host
+              via distrobox-export --bin. If fapolicyd blocks the export,
+              use gh only from within the container.
+            _csb_ticket_summary: "Exception request: install GitHub CLI (gh) binary"
+            _csb_ticket_body: |
+              ## Request
+              Permission to install GitHub CLI (gh) to /usr/local/bin,
+              OR add fapolicyd exception for ~/.local/bin/gh.
+
+              ## Business Justification
+              gh is the official GitHub CLI, required for pull request
+              workflows, issue management, and CI interaction. Used daily
+              by all engineers working with GitHub-hosted repositories.
+
+              ## Technical Details
+              - Binary: gh v{{ gh_version }}
+              - Source: https://github.com/cli/cli/releases/
+              - SHA256: {{ gh_sha256 }}
+              - Publisher: GitHub (Microsoft subsidiary)
+
+              ## Error Encountered
+              {{ ansible_failed_result.msg | default('Unknown error') | truncate(500) }}
+            _csb_ticket_priority: High
+            _csb_ticket_category: "Software Installation"

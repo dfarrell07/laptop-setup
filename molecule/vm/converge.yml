@@ -1,0 +1,47 @@
+---
+- name: Converge — System setup (VM)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Capture real user home directory
+      ansible.builtin.set_fact:
+        real_user_home: "{{ ansible_user_dir }}"
+      become: false
+
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Override profile
+      ansible.builtin.set_fact:
+        profile: personal
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+  roles:
+    - role: repos_dnf
+      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+    - role: system
+
+- name: Converge — User setup (VM)
+  hosts: all
+  become: false
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Override profile
+      ansible.builtin.set_fact:
+        profile: personal
+
+  roles:
+    - role: common
+    - role: dotfiles
+    - role: packages
+    - role: ssh
+    - role: containers
+    - role: claude

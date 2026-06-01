@@ -1,0 +1,77 @@
+---
+# Git repositories to clone. Full list (~114 repos).
+# Structure: url, dest (relative to git_repos_base_dir), category, enabled,
+# optional extra_remotes list.
+#
+# Categories: personal, bpfman, downstream, konflux, ovnk, cncf, misc
+# Filter with: -e repo_category=ovnk
+
+git_repos_list:
+  # --- submariner-io (category: downstream) ---
+  - url: https://github.com/submariner-io/submariner-operator
+    dest: submariner-io/submariner-operator
+    category: downstream
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_op
+        url: "git@github.com:dfarrell07/submariner-operator.git"
+
+  - url: https://github.com/submariner-io/submariner
+    dest: submariner-io/submariner
+    category: downstream
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_subm
+        url: "git@github.com:dfarrell07/submariner.git"
+
+  - url: https://github.com/submariner-io/admiral
+    dest: submariner-io/admiral
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/lighthouse
+    dest: submariner-io/lighthouse
+    category: downstream
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_lh
+        url: "git@github.com:dfarrell07/lighthouse.git"
+
+  - url: https://github.com/submariner-io/shipyard
+    dest: submariner-io/shipyard
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/cloud-prepare
+    dest: submariner-io/cloud-prepare
+    category: downstream
+    enabled: true
+
+  # --- openshift / ovnk (category: ovnk) ---
+  - url: https://github.com/openshift/ovn-kubernetes
+    dest: openshift/ovn-kubernetes
+    category: ovnk
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_ovnk
+        url: "git@github.com:dfarrell07/ovn-kubernetes.git"
+
+  # --- personal ---
+  - url: https://github.com/dfarrell07/notes-ai
+    dest: dfarrell07/notes-ai
+    category: personal
+    enabled: true
+
+  - url: https://github.com/dfarrell07/laptop-setup
+    dest: dfarrell07/laptop-setup
+    category: personal
+    enabled: true
+
+  # --- disabled (will not clone) ---
+  - url: https://github.com/dfarrell07/dependent-issues
+    dest: dfarrell07/dependent-issues
+    category: misc
+    enabled: false
+
+  # Populate remaining ~104 repos here.
+  # See migration plan Git Repos section for the full list.

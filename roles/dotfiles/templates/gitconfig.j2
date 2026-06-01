@@ -1,0 +1,57 @@
+# {{ ansible_managed }}
+[user]
+	name = {{ dotfiles_user_name }}
+	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
+	signingkey = ~/.ssh/id_ed25519_sk_signing.pub
+
+[commit]
+	gpgsign = true
+
+[gpg]
+	format = ssh
+
+[gpg "ssh"]
+	allowedSignersFile = ~/.config/git/allowed_signers
+
+[push]
+	default = current
+	autoSetupRemote = true
+
+[pull]
+	rebase = true
+
+[url "ssh://git@github.com/"]
+	pushInsteadOf = https://github.com/
+
+[alias]
+	logg = log --oneline --graph --decorate --all
+
+[diff]
+	tool = meld
+
+[difftool]
+	prompt = false
+
+[help]
+	autocorrect = 1
+
+[core]
+	hooksPath = ~/.config/git/template/hooks
+	fsmonitor = false
+
+[safe]
+	bareRepository = explicit
+
+{% if profile == 'work' %}
+[http "https://internal-git.example.com"]
+	sslCAInfo = /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+{% endif %}
+
+[includeIf "gitdir:~/src/openshift/"]
+	path = ~/.config/git/config-work
+
+[includeIf "gitdir:~/src/submariner-io/"]
+	path = ~/.config/git/config-work
+
+[includeIf "gitdir:~/src/dfarrell07/"]
+	path = ~/.config/git/config-personal

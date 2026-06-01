@@ -1,0 +1,19 @@
+---
+claude_install_method: native  # native (recommended) or npm (deprecated)
+claude_install_url: "https://claude.ai/install.sh"
+
+claude_work_config_dir: "{{ ansible_user_dir }}/.claude-work"
+claude_personal_config_dir: "{{ ansible_user_dir }}/.claude-personal"
+
+claude_telemetry_env:
+  DISABLE_ERROR_REPORTING: "1"
+  DISABLE_FEEDBACK_COMMAND: "1"
+  # Do NOT set DISABLE_TELEMETRY — breaks feature flags (Opus 1M context)
+  # Do NOT set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC — same + disables updater
+
+claude_sandbox_config:
+  enabled: true
+  allowUnsandboxedCommands: false
+  failIfUnavailable: true
+
+claude_cleanup_period_days: 7

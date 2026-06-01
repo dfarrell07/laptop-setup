@@ -1,0 +1,40 @@
+# common/tasks/csb-failure-handler.yml
+#
+# Reusable handler: append a structured failure record to csb_failures.
+# Called via `include_tasks` from rescue blocks.
+#
+# Required variables (set by the calling rescue block):
+#   _csb_task_name      - human-readable task name
+#   _csb_error           - the ansible_failed_result or error message
+#   _csb_action          - suggested remediation action
+#   _csb_ticket_summary  - one-line IT ticket summary
+#   _csb_ticket_body     - multi-line IT ticket description
+#   _csb_role            - role that failed (repos_dnf, packages, system, etc.)
+
+---
+- name: Record CSB failure
+  ansible.builtin.set_fact:
+    csb_failures: >-
+      {{
+        csb_failures | default([]) + [{
+          'role': _csb_role,
+          'task': _csb_task_name,
+          'error': _csb_error | default('unknown error'),
+          'timestamp': ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')),
+          'suggested_action': _csb_action,
+          'ticket': {
+            'summary': _csb_ticket_summary,
+            'body': _csb_ticket_body,
+            'priority': _csb_ticket_priority | default('Normal'),
+            'category': _csb_ticket_category | default('Software Installation'),
+          },
+        }]
+      }}
+
+- name: "Warn: {{ _csb_task_name }} failed (CSB restriction)"
+  ansible.builtin.debug:
+    msg: >-
+      CSB BLOCKED: {{ _csb_task_name }} in role {{ _csb_role }}.
+      Error: {{ _csb_error | default('unknown') | truncate(200) }}.
+      Suggested action: {{ _csb_action }}.
+      Continuing playbook execution.

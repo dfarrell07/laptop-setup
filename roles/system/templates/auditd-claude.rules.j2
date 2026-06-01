@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Audit rules for sensitive file access monitoring
+
+# Exclusion rules (MUST come before watch rules — first-match wins)
+-a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
+-a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
+
+# Write/attribute changes on frequently-accessed sensitive paths
+-w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
+-w {{ real_user_home }}/.gnupg/ -p wa -k claude-sensitive-write
+-w {{ real_user_home }}/.kube/config -p wa -k claude-sensitive-write
+
+# Read access on rarely-accessed high-value files
+-w {{ real_user_home }}/.aws/ -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.vault_pass -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.claude/.credentials.json -p r -k claude-sensitive-read

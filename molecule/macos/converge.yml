@@ -1,0 +1,20 @@
+---
+- name: Converge (macOS)
+  hosts: all
+  gather_facts: true
+  become: false
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Override profile
+      ansible.builtin.set_fact:
+        profile: personal
+
+  roles:
+    - role: common
+    - role: dotfiles
+    - role: packages
+    - role: ssh
+    - role: claude

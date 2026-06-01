@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+
+# Prefix
+unbind C-b
+set -g prefix {{ dotfiles_tmux_prefix }}
+bind {{ dotfiles_tmux_prefix }} send-prefix
+
+# Vi mode
+setw -g mode-keys vi
+
+# History
+set -g history-limit {{ dotfiles_tmux_history_limit }}
+
+# Silence monitoring
+setw -g monitor-silence 30
+set -g visual-silence both
+
+# Mouse
+set -g mouse on
+
+# Start windows at 1
+set -g base-index 1
+setw -g pane-base-index 1
+
+# Quick reload
+bind r source-file ~/.tmux.conf \; display "Config reloaded"
+
+# Split panes
+bind | split-window -h -c "#{pane_current_path}"
+bind - split-window -v -c "#{pane_current_path}"
+
+# Vi copy mode
+bind -T copy-mode-vi v send-keys -X begin-selection
+{% if ansible_os_family | default('') == 'Darwin' %}
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
+{% elif (ansible_env.XDG_SESSION_TYPE | default('')) == 'wayland' %}
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy"
+{% else %}
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "xclip -selection clipboard"
+{% endif %}

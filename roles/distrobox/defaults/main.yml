@@ -1,0 +1,56 @@
+---
+distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:42') }}"
+distrobox_container_replace: "{{ container_replace | default(false) }}"
+
+distrobox_ini_path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+
+distrobox_packages:
+  - git
+  - vim
+  - tmux
+  - zsh
+  - fzf
+  - direnv
+  - jq
+  - curl
+  - wget
+  - tar
+  - unzip
+  - gcc
+  - gcc-c++
+  - clang
+  - make
+  - cmake
+  - golang
+  - python3
+  - python3-pip
+  - python3-devel
+  - nodejs
+  - npm
+  - ShellCheck
+  - yamllint
+  - ripgrep
+  - fd-find
+  - buildah
+  - skopeo
+  - zoxide
+  - shfmt
+  - procps-ng
+  - findutils
+  - which
+  - hostname
+  - bash-completion
+
+distrobox_host_exec_commands:
+  - podman
+  - docker
+  - flatpak
+
+distrobox_exports:
+  - jq
+  - vim
+
+# kind host prerequisites
+distrobox_kind_log_driver: "k8s-file"
+distrobox_kind_pids_limit: 65536
