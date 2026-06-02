@@ -1,0 +1,27 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Claude Code Task Queue Poller
+
+[Service]
+Type=oneshot
+ExecStart={{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh
+Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo }}
+Environment=CLAUDE_BIN={{ ansible_user_dir }}/.local/bin/claude
+UnsetEnvironment=ANTHROPIC_BASE_URL HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
+MemoryMax=4G
+CPUQuota=80%
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+ProtectClock=true
+ProtectHostname=true
+PrivateDevices=true
+RestrictSUIDSGID=true
+ProcSubset=pid
+SystemCallArchitectures=native

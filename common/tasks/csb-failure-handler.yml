@@ -20,7 +20,7 @@
           'role': _csb_role,
           'task': _csb_task_name,
           'error': _csb_error | default('unknown error'),
-          'timestamp': ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')),
+          'timestamp': lookup('pipe', 'date -Iseconds'),
           'suggested_action': _csb_action,
           'ticket': {
             'summary': _csb_ticket_summary,

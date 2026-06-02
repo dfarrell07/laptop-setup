@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Claude Code Task Queue Timer
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=2min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

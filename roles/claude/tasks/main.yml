@@ -11,10 +11,8 @@
   failed_when: false
 
 - name: Install Claude Code via native binary
-  ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module
+  ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
     cmd: "curl -fsSL {{ claude_install_url }} | bash"
-  args:
-    creates: "{{ ansible_user_dir }}/.claude/bin/claude"
   when:
     - claude_version_check.rc != 0
     - claude_install_method == 'native'
@@ -47,12 +45,44 @@
     dest: "{{ claude_personal_config_dir }}/settings.json"
     mode: "0600"
 
+# --- Instance CLAUDE.md ---
+- name: Deploy work instance CLAUDE.md
+  ansible.builtin.template:
+    src: CLAUDE.md.j2
+    dest: "{{ claude_work_config_dir }}/CLAUDE.md"
+    mode: "0600"
+  when: profile == 'work'
+
+- name: Deploy personal instance CLAUDE.md
+  ansible.builtin.template:
+    src: CLAUDE.md.j2
+    dest: "{{ claude_personal_config_dir }}/CLAUDE.md"
+    mode: "0600"
+
 # --- Security: ~/.claude permissions ---
-- name: Set ~/.claude directory permissions
+# Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time
+# chmod.  Use systemd-tmpfiles to re-apply 0700 at each boot instead.
+- name: Deploy claude-privacy tmpfiles config
+  ansible.builtin.copy:
+    content: |
+      # Gate ~/.claude so world cannot traverse into it.
+      # Claude Code resets this to 0755 on launch; tmpfiles restores 0700 at boot.
+      z %h/.claude 0700 - - -
+    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
+- name: Apply claude-privacy tmpfiles now
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --user --create
+  changed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.claude"
-    state: directory
     mode: "0700"
+  when: ansible_system == 'Darwin'
   failed_when: false
 
 # --- Git safety (defense-in-depth) ---
@@ -62,4 +92,42 @@
     cmd: git config --global --unset-all safe.directory
   register: claude_safe_dir
   changed_when: claude_safe_dir.rc == 0
+  failed_when: false
+
+# --- Task queue (systemd timer + poller script) ---
+- name: Deploy task queue poller script
+  ansible.builtin.copy:
+    src: claude-queue-poller.sh
+    dest: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
+    mode: "0700"
+  when: claude_queue_enabled | bool
+
+- name: Deploy task queue systemd service
+  ansible.builtin.template:
+    src: claude-queue.service.j2
+    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
+    mode: "0644"
+  when:
+    - claude_queue_enabled | bool
+    - ansible_system == 'Linux'
+
+- name: Deploy task queue systemd timer
+  ansible.builtin.template:
+    src: claude-queue.timer.j2
+    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
+    mode: "0644"
+  when:
+    - claude_queue_enabled | bool
+    - ansible_system == 'Linux'
+
+- name: Enable task queue timer
+  ansible.builtin.systemd:
+    name: claude-queue.timer
+    scope: user
+    state: started
+    enabled: true
+    daemon_reload: true
+  when:
+    - claude_queue_enabled | bool
+    - ansible_system == 'Linux'
   failed_when: false

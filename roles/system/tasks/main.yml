@@ -7,6 +7,36 @@
 - name: Gather service facts
   ansible.builtin.service_facts:
 
+# --- SELinux enforcement check ---
+- name: Verify SELinux is enforcing
+  ansible.builtin.assert:
+    that:
+      - ansible_selinux.status == 'enabled'
+      - ansible_selinux.mode == 'enforcing'
+      - ansible_selinux.type == 'targeted'
+    fail_msg: >-
+      SELinux is {{ ansible_selinux.mode | default('disabled') }}
+      (type: {{ ansible_selinux.type | default('unknown') }}).
+      Fix: sudo setenforce 1 && sudo sed -i
+      's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+  when: ansible_selinux is defined
+
+# --- Harden /dev/shm mount options ---
+- name: Harden /dev/shm with noexec
+  ansible.posix.mount:
+    path: /dev/shm
+    src: tmpfs
+    fstype: tmpfs
+    opts: defaults,nosuid,nodev,noexec
+    state: mounted
+
+# --- Kernel module blacklist ---
+- name: Deploy kernel module blacklist
+  ansible.builtin.template:
+    src: modprobe-hardening.conf.j2
+    dest: /etc/modprobe.d/hardening.conf
+    mode: "0644"
+
 # --- Sysctl hardening ---
 - name: Deploy sysctl hardening config
   ansible.builtin.template:
@@ -39,18 +69,21 @@
     - system_fw_default_zone.stdout | default('') != 'drop'
   notify:
     - Reload firewalld
+    - Reload NetworkManager
     - Restart tailscaled
 
 - name: Enable ICMP block inversion on drop zone
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: firewall-cmd --permanent --zone=drop --add-icmp-block-inversion
   register: system_icmp_inversion
-  changed_when: "'ALREADY_ENABLED' not in (system_icmp_inversion.stderr | default(''))"
+  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
   failed_when:
     - system_icmp_inversion.rc != 0
-    - "'ALREADY_ENABLED' not in (system_icmp_inversion.stderr | default(''))"
+    - "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
   when: system_firewalld_running | bool
-  notify: Reload firewalld
+  notify:
+    - Reload firewalld
+    - Restart tailscaled
 
 # NOTE: With icmp-block-inversion enabled, --add-icmp-block ALLOWS these types
 # (semantics are inverted). Without inversion, this command would block them.
@@ -59,12 +92,14 @@
     cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{ item }}"
   loop: "{{ system_firewall_icmp_types }}"
   register: system_icmp_types
-  changed_when: "'ALREADY_ENABLED' not in (system_icmp_types.stderr | default(''))"
+  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
   failed_when:
     - system_icmp_types.rc != 0
-    - "'ALREADY_ENABLED' not in (system_icmp_types.stderr | default(''))"
+    - "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
   when: system_firewalld_running | bool
-  notify: Reload firewalld
+  notify:
+    - Reload firewalld
+    - Restart tailscaled
 
 - name: Open SSH port in firewall
   ansible.posix.firewalld:
@@ -123,6 +158,17 @@
     state: stopped
   failed_when: false
 
+# --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
+- name: Mask avahi-daemon service
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - avahi-daemon.service
+    - avahi-daemon.socket
+  failed_when: false
+
 # --- Logind lid close ---
 - name: Configure lid close behavior
   community.general.ini_file:
@@ -138,7 +184,20 @@
       value: "{{ system_lid_switch_external }}"
     - key: HandleLidSwitchDocked
       value: "{{ system_lid_switch_docked }}"
+    - key: HandlePowerKey
+      value: lock
+    - key: IdleAction
+      value: lock
+    - key: IdleActionSec
+      value: "300"
   notify: Restart logind
+
+# --- Disable Ctrl+Alt+Delete reboot ---
+- name: Mask Ctrl+Alt+Delete reboot target
+  ansible.builtin.systemd:
+    name: ctrl-alt-del.target
+    masked: true
+  failed_when: false
 
 # --- Services ---
 - name: Enable libvirtd
@@ -157,6 +216,33 @@
   when: system_enable_mullvad | bool
   failed_when: false
 
+# --- USBGuard ---
+- name: Install USBGuard
+  ansible.builtin.dnf:
+    name:
+      - usbguard
+      - usbguard-selinux
+    state: present
+  when: system_install_usbguard | default(true) | bool
+  failed_when: false
+
+- name: Deploy USBGuard whitelist rules
+  ansible.builtin.template:
+    src: usbguard-rules.conf.j2
+    dest: /etc/usbguard/rules.conf
+    mode: "0600"
+  when: system_install_usbguard | default(true) | bool
+  failed_when: false
+  notify: Restart usbguard
+
+- name: Enable USBGuard service
+  ansible.builtin.systemd:
+    name: usbguard
+    state: started
+    enabled: true
+  when: system_install_usbguard | default(true) | bool
+  failed_when: false
+
 # --- Firmware updates ---
 - name: Check for firmware updates
   ansible.builtin.command:
@@ -171,6 +257,110 @@
   when:
     - system_fwupd.rc == 0
     - "'No updates available' not in (system_fwupd.stdout | default(''))"
+
+# --- sshd hardening ---
+- name: Ensure sshd config drop-in directory
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    mode: "0755"
+
+- name: Deploy sshd hardening config
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    mode: "0600"
+  notify: Restart sshd
+  when: ansible_facts.services['sshd.service'] is defined
+
+# --- SELinux SSH port label ---
+- name: Label non-default SSH port for SELinux
+  community.general.seport:
+    ports: "{{ ssh_port }}"
+    proto: tcp
+    setype: ssh_port_t
+    state: present
+  when: ssh_port | int != 22
+  failed_when: false
+
+# --- Crypto policy ---
+- name: Check current crypto policy
+  ansible.builtin.command:
+    cmd: update-crypto-policies --show
+  register: system_crypto_policy
+  changed_when: false
+  failed_when: false
+
+- name: Set crypto policy to DEFAULT:NO-SHA1
+  ansible.builtin.command:
+    cmd: update-crypto-policies --set DEFAULT:NO-SHA1
+  when:
+    - system_crypto_policy.rc == 0
+    - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
+  changed_when: true
+  notify: Restart sshd
+
+# --- Kernel modules for kind ---
+- name: Load iptables kernel modules for kind
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  loop:
+    - ip6_tables
+    - ip6table_nat
+    - ip_tables
+    - iptable_nat
+  failed_when: false
+
+# --- NetworkManager Tailscale unmanaged ---
+- name: Ensure NetworkManager conf.d exists
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    mode: "0755"
+  failed_when: false
+
+- name: Configure NetworkManager to ignore Tailscale interfaces
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [keyfile]
+      unmanaged-devices=interface-name:tailscale*
+    dest: /etc/NetworkManager/conf.d/tailscale.conf
+    mode: "0644"
+  failed_when: false
+  notify: Reload NetworkManager
+
+# --- GNOME gcr-ssh-agent mask ---
+- name: Mask gcr-ssh-agent socket
+  ansible.builtin.systemd:
+    name: gcr-ssh-agent.socket
+    masked: true
+    scope: user
+  become: false
+  failed_when: false
+
+# --- dnf-automatic ---
+- name: Install dnf-automatic
+  ansible.builtin.dnf:
+    name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
+    state: present
+  failed_when: false
+
+- name: Deploy dnf-automatic config
+  ansible.builtin.template:
+    src: dnf-automatic.conf.j2
+    dest: /etc/dnf/automatic.conf
+    mode: "0644"
+  notify: Restart dnf-automatic timer
+
+- name: Enable dnf-automatic timer
+  ansible.builtin.systemd:
+    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
+    state: started
+    enabled: true
+  failed_when: false
 
 # --- DNS-over-TLS ---
 - name: Ensure resolved drop-in directory
@@ -188,8 +378,125 @@
       DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
       Domains=~.
       DNSOverTLS=yes
+      DNSSEC=yes
+      FallbackDNS=
       LLMNR=no
+      MulticastDNS=no
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when: ansible_facts.services['systemd-resolved.service'] is defined
   notify: Restart systemd-resolved
+
+# --- Verify resolv.conf symlink for split DNS ---
+- name: Check resolv.conf symlink target
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: system_resolv_conf
+
+- name: Warn if resolv.conf is not stub-resolv
+  ansible.builtin.debug:
+    msg: >-
+      /etc/resolv.conf {{ 'points to ' + (system_resolv_conf.stat.lnk_source | default('unknown'))
+      if (system_resolv_conf.stat.islnk | default(false)) else 'is a regular file (not a symlink)' }}.
+      For proper split DNS, it should symlink to /run/systemd/resolve/stub-resolv.conf.
+      Fix: ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+  when: >-
+    not (system_resolv_conf.stat.islnk | default(false)) or
+    'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
+
+# --- Chrony NTS (authenticated time sync) ---
+- name: Deploy NTS-authenticated chrony config
+  ansible.builtin.template:
+    src: chrony-nts.conf.j2
+    dest: /etc/chrony.conf
+    mode: "0644"
+    backup: true
+  notify: Restart chronyd
+
+- name: Ensure chronyd is enabled
+  ansible.builtin.systemd:
+    name: chronyd
+    state: started
+    enabled: true
+
+# --- Restrict su to wheel group ---
+- name: Enable pam_wheel.so for su
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
+    line: 'auth		required	pam_wheel.so use_uid'
+    insertafter: '^#.*pam_wheel.so'
+
+# --- Lock root account ---
+- name: Check root account status
+  ansible.builtin.command:
+    cmd: passwd -S root
+  register: system_root_status
+  changed_when: false
+
+- name: Lock root account
+  ansible.builtin.command:
+    cmd: passwd -l root
+  when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
+  changed_when: true
+
+# --- AIDE file integrity monitoring ---
+- name: Install AIDE
+  ansible.builtin.dnf:
+    name: aide
+    state: present
+  when: system_aide_enabled | bool
+
+- name: Ensure AIDE monitors /usr/local/bin
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/usr/local/bin'
+    line: '/usr/local/bin CONTENT_EX'
+    state: present
+  when: system_aide_enabled | bool
+
+- name: Check if AIDE database exists
+  ansible.builtin.stat:
+    path: /var/lib/aide/aide.db.gz
+  register: system_aide_db
+  when: system_aide_enabled | bool
+
+- name: Initialize AIDE database (first run only)
+  ansible.builtin.command:
+    cmd: aide --init
+  when:
+    - system_aide_enabled | bool
+    - not (system_aide_db.stat.exists | default(false))
+  changed_when: true
+
+- name: Promote initial AIDE database
+  ansible.builtin.copy:
+    src: /var/lib/aide/aide.db.new.gz
+    dest: /var/lib/aide/aide.db.gz
+    remote_src: true
+    mode: "0600"
+  when:
+    - system_aide_enabled | bool
+    - not (system_aide_db.stat.exists | default(false))
+
+- name: Deploy AIDE check service
+  ansible.builtin.template:
+    src: aide-check.service.j2
+    dest: /etc/systemd/system/aide-check.service
+    mode: "0644"
+  when: system_aide_enabled | bool
+
+- name: Deploy AIDE check timer
+  ansible.builtin.template:
+    src: aide-check.timer.j2
+    dest: /etc/systemd/system/aide-check.timer
+    mode: "0644"
+  when: system_aide_enabled | bool
+
+- name: Enable AIDE check timer
+  ansible.builtin.systemd:
+    name: aide-check.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: system_aide_enabled | bool

@@ -238,7 +238,7 @@ GNOME Keyring (on GNOME < 46 / RHEL 9) or its replacement `gcr-ssh-agent` (on GN
    [Install]
    WantedBy=default.target
    ```
-3. Set `SSH_AUTH_SOCK` in `~/.config/environment.d/ssh_auth_sock.conf`:
+3. Set `SSH_AUTH_SOCK` in `~/.config/environment.d/ssh-agent.conf`:
    ```
    SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket
    ```
@@ -329,3 +329,64 @@ The npm ecosystem has repeated supply chain compromises. The Bitwarden CLI publi
 - On CSB, install inside the Distrobox container.
 
 **CSB IT ticket:** No. Binary goes inside the container or uses a verified download path.
+
+---
+
+## system: USBGuard Blocks YubiKey or Keyboard
+
+**Symptom:**
+YubiKey stops responding after USBGuard is enabled. External keyboard (Moonlander) is not recognized. Devices work after `usbguard allow-device`.
+
+**Cause:**
+USBGuard blocks all USB devices not in the whitelist (`/etc/usbguard/rules.conf`). The default deployed rules whitelist YubiKey (`1050:*`), Moonlander (`3297:1969`), and hardwired devices, but a new device or firmware update may change the device ID.
+
+**Fix:**
+- List blocked devices: `usbguard list-devices --blocked`
+- Temporarily allow: `usbguard allow-device <id>`
+- Permanently add to whitelist: update `system_usbguard_whitelist` in `roles/system/defaults/main.yml` and re-run `make system`
+- Generate a fresh policy from current devices: `usbguard generate-policy -P`
+
+**CSB IT ticket:** USBGuard may already be managed by IT. Check before modifying rules.
+
+---
+
+## system: sshd Fails After Hardening Drop-in
+
+**Symptom:**
+```
+sshd: error: Bind to port XXXX failed
+```
+or SSH connections rejected after deploying `00-hardening.conf`.
+
+**Cause:**
+The sshd hardening drop-in restricts `AllowUsers` to the current Ansible user. If the username differs from what's expected, or if the port conflicts with an existing config, sshd may fail.
+
+**Fix:**
+- Check the deployed config: `cat /etc/ssh/sshd_config.d/00-hardening.conf`
+- Verify the `AllowUsers` line matches your actual username
+- Ensure the `Port` value matches the `ssh_port` variable in `default.config.yml`
+- Check for conflicts with the base `sshd_config`: `sshd -T | grep -i port`
+- Restart: `systemctl restart sshd`
+- If locked out, use console access or another user to fix the config
+
+---
+
+## notes: Transcrypt Clone/Decrypt Failures
+
+**Symptom:**
+```
+Could not clone notes repo via SSH or HTTPS.
+```
+or files in `~/notes` contain ciphertext (`U2FsdGVkX1...`) instead of plaintext.
+
+**Cause:**
+The notes repo is private and encrypted with transcrypt. Clone requires GitHub auth (SSH keys or `gh auth login`). Decryption requires the transcrypt password from vault.
+
+**Fix:**
+- Clone failure: run `gh auth login` then `make notes`
+- Ciphertext visible: set `vault_notes_transcrypt_password` in vault.yml, then `make notes`
+- Transcrypt not installed: run `make packages` first
+- To manually initialize: `cd ~/notes && transcrypt -c aes-256-cbc -p '<password>' -y`
+- To rekey (e.g., switch to YubiKey): `cd ~/notes && transcrypt --rekey`
+
+**CSB IT ticket:** No. The notes repo is personal and does not require system changes.

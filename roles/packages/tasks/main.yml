@@ -15,10 +15,27 @@
   tags: [become]
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
 
+- name: Install virtualization packages
+  ansible.builtin.dnf:
+    name: "{{ packages_virtualization }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - install_virtualization | default(true) | bool
+
 - name: Install Homebrew packages (macOS)
   community.general.homebrew:
     name: "{{ packages_brew }}"
     state: present
+  when: ansible_os_family == 'Darwin'
+
+- name: Add Homebrew taps (macOS)
+  community.general.homebrew_tap:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_brew_taps }}"
   when: ansible_os_family == 'Darwin'
 
 - name: Install Homebrew cask packages (macOS)
@@ -27,11 +44,300 @@
     state: present
   when: ansible_os_family == 'Darwin'
 
-- name: Install yamllint and ansible-lint (pipx)
+- name: Install ssh-askpass (macOS)
+  community.general.homebrew:
+    name: theseal/ssh-askpass/ssh-askpass
+    state: present
+  when: ansible_os_family == 'Darwin'
+
+# --- Binary downloads (SHA256-verified, pinned versions) ---
+
+- name: Install oc and kubectl
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if oc is installed
+      ansible.builtin.command:
+        cmd: /usr/local/bin/oc version --client
+      register: packages_oc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install oc + kubectl
+      when: packages_oc_check.rc != 0
+      block:
+        - name: Fetch OpenShift client sha256sum.txt
+          ansible.builtin.uri:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
+            return_content: true
+          register: packages_oc_sha256sums
+
+        - name: Extract SHA256 for openshift-client-linux.tar.gz
+          ansible.builtin.set_fact:
+            packages_oc_sha256: >-
+              {{ packages_oc_sha256sums.content
+                 | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
+                                '\1', multiline=True)
+                 | first }}
+
+        - name: Download OpenShift client tarball (SHA256-verified)
+          ansible.builtin.get_url:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
+            dest: /tmp/openshift-client-linux.tar.gz
+            checksum: "sha256:{{ packages_oc_sha256 }}"
+            mode: "0644"
+
+        - name: Extract oc and kubectl
+          ansible.builtin.unarchive:
+            src: /tmp/openshift-client-linux.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts:
+              - --no-same-owner
+          become: true
+          tags: [become]
+
+        - name: Set permissions on oc and kubectl
+          ansible.builtin.file:
+            path: "/usr/local/bin/{{ item }}"
+            mode: "0755"
+          loop: [oc, kubectl]
+          become: true
+          tags: [become]
+
+        - name: Clean up oc tarball
+          ansible.builtin.file:
+            path: /tmp/openshift-client-linux.tar.gz
+            state: absent
+
+- name: Install opm (Operator Package Manager)
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+    - profile == 'work'
+  block:
+    - name: Check if opm is installed
+      ansible.builtin.command:
+        cmd: /usr/local/bin/opm version
+      register: packages_opm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install opm
+      when: packages_opm_check.rc != 0
+      block:
+        - name: Fetch OPM sha256sum.txt
+          ansible.builtin.uri:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
+            return_content: true
+          register: packages_opm_sha256sums
+
+        - name: Extract SHA256 for opm-linux.tar.gz
+          ansible.builtin.set_fact:
+            packages_opm_sha256: >-
+              {{ packages_opm_sha256sums.content
+                 | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
+                                '\1', multiline=True)
+                 | first }}
+
+        - name: Download opm tarball (SHA256-verified)
+          ansible.builtin.get_url:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"
+            dest: /tmp/opm-linux.tar.gz
+            checksum: "sha256:{{ packages_opm_sha256 }}"
+            mode: "0644"
+
+        - name: Extract opm binary
+          ansible.builtin.unarchive:
+            src: /tmp/opm-linux.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts:
+              - --no-same-owner
+          become: true
+          tags: [become]
+
+        - name: Set permissions on opm
+          ansible.builtin.file:
+            path: /usr/local/bin/opm
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Clean up opm tarball
+          ansible.builtin.file:
+            path: /tmp/opm-linux.tar.gz
+            state: absent
+
+- name: Install kind
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Download kind binary
+      ansible.builtin.get_url:
+        url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-amd64"
+        dest: /usr/local/bin/kind
+        checksum: "sha256:{{ packages_kind_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+
+- name: Install helm
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if helm is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/helm version --short
+      register: packages_helm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and extract helm
+      when: "packages_helm_version not in (packages_helm_check.stdout | default(''))"
+      block:
+        - name: Download helm tarball
+          ansible.builtin.get_url:
+            url: "https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-amd64.tar.gz"
+            dest: /tmp/helm.tar.gz
+            checksum: "sha256:{{ packages_helm_sha256 }}"
+            mode: "0644"
+
+        - name: Extract helm binary
+          ansible.builtin.unarchive:
+            src: /tmp/helm.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts:
+              - --strip-components=1
+              - linux-amd64/helm
+          become: true
+          tags: [become]
+
+        - name: Set permissions on helm
+          ansible.builtin.file:
+            path: /usr/local/bin/helm
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Clean up helm tarball
+          ansible.builtin.file:
+            path: /tmp/helm.tar.gz
+            state: absent
+
+- name: Install kustomize
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if kustomize is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kustomize version
+      register: packages_kustomize_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and extract kustomize
+      when: "packages_kustomize_version not in (packages_kustomize_check.stdout | default(''))"
+      block:
+        - name: Download kustomize tarball
+          vars:
+            _ver: "{{ packages_kustomize_version }}"
+          ansible.builtin.get_url:
+            url: "{{ packages_kustomize_url_base }}/kustomize%2Fv{{ _ver }}/kustomize_v{{ _ver }}_linux_amd64.tar.gz"
+            dest: /tmp/kustomize.tar.gz
+            checksum: "sha256:{{ packages_kustomize_sha256 }}"
+            mode: "0644"
+
+        - name: Extract kustomize binary
+          ansible.builtin.unarchive:
+            src: /tmp/kustomize.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+          become: true
+          tags: [become]
+
+        - name: Set permissions on kustomize
+          ansible.builtin.file:
+            path: /usr/local/bin/kustomize
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Clean up kustomize tarball
+          ansible.builtin.file:
+            path: /tmp/kustomize.tar.gz
+            state: absent
+
+# --- pip/pipx installs ---
+
+- name: Install transcrypt
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
+    dest: /usr/local/bin/transcrypt
+    checksum: "sha256:{{ packages_transcrypt_sha256 }}"
+    mode: "0755"
+  become: true
+  tags: [become]
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+
+- name: Install SOPS
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Download SOPS binary
+      ansible.builtin.get_url:
+        url: "https://github.com/getsops/sops/releases/download/v{{ packages_sops_version }}/sops-v{{ packages_sops_version }}.linux.amd64"
+        dest: /usr/local/bin/sops
+        checksum: "sha256:{{ packages_sops_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+
+# --- Go install tools ---
+
+- name: Install Go tools
   ansible.builtin.command:
-    cmd: "pipx install {{ item }}"
-    creates: "{{ ansible_user_dir }}/.local/bin/{{ item }}"
-  loop:
-    - yamllint
-    - ansible-lint
+    cmd: "go install {{ item }}"
+    creates: >-
+      {{ ansible_user_dir }}/go/bin/{{
+        item | regex_replace('.*/([^@]+)@.*', '\1')
+      }}
+  environment:
+    GOPATH: "{{ ansible_user_dir }}/go"
+    GOBIN: "{{ ansible_user_dir }}/go/bin"
+    GONOSUMCHECK: ""
+    GONOSUMDB: ""
+  loop: "{{ packages_go_install }}"
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+
+# --- pip/pipx installs ---
+
+- name: Install yamllint (pipx, version-pinned)
+  community.general.pipx:
+    name: yamllint
+    source: "yamllint=={{ packages_yamllint_version }}"
+    state: install
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
+- name: Install ansible-lint (pipx, version-pinned)
+  community.general.pipx:
+    name: ansible-lint
+    source: "ansible-lint=={{ packages_ansible_lint_version }}"
+    state: install
   when: ansible_pkg_mgr in ['dnf', 'dnf5']

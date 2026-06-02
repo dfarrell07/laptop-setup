@@ -10,8 +10,10 @@ packages_cli:
   - tmux
   - mosh
   - jq
-  - watch
+  - yq
+  - procps-ng
   - nmap
+  - meld
   - direnv
   - vim
   - zsh
@@ -21,6 +23,10 @@ packages_cli:
   - zoxide
   - ShellCheck
   - shfmt
+  - gh
+  - golangci-lint
+  - tailscale
+  - toolbox
 
 packages_languages:
   - golang
@@ -28,15 +34,24 @@ packages_languages:
   - python3-pip
   - gcc
   - gcc-c++
+  - clang
 
 packages_security:
   - yubikey-manager
   - bubblewrap
+  - policycoreutils-python-utils
+  - age
 
 packages_containers:
   - podman
   - buildah
   - skopeo
+
+packages_virtualization:
+  - libvirt
+  - qemu-kvm
+  - virt-install
+  - virt-viewer
 
 # Desktop packages managed by the desktop role, not here.
 
@@ -48,6 +63,51 @@ packages_networking:
   - iperf3
   - traceroute
   - iproute
+  - ovn
+  - openvswitch
+
+# Binary downloads — pinned versions with SHA256 verification.
+# Override versions in config.yml when upgrading.
+packages_kind_version: "0.31.0"
+packages_kind_sha256: "eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa"
+
+packages_helm_version: "4.2.0"
+packages_helm_sha256: "97dbeb971be4ac4b27e3839976d9564c0fb35c6f3b1da89dd1e292d236af4096"
+
+packages_kustomize_version: "5.8.1"
+packages_kustomize_sha256: "029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d"
+packages_kustomize_url_base: "https://github.com/kubernetes-sigs/kustomize/releases/download"
+
+packages_transcrypt_version: "2.3.2"
+packages_transcrypt_sha256: "d4723d29cee8781de6fa83e5ad2817ad81241674fb4159db6452c1ce9d4b0253"
+
+packages_sops_version: "3.13.1"
+packages_sops_sha256: "620a9d7e3352ababeca6908cea24a6e8b14ce89a448ddbd3f94f1ef3398f470a"
+
+packages_yamllint_version: "1.38.0"
+packages_ansible_lint_version: "26.4.0"
+
+packages_oc_version: "stable"
+
+packages_go_install:
+  - sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+  - k8s.io/code-generator/cmd/client-gen@latest
+  - k8s.io/code-generator/cmd/informer-gen@latest
+  - k8s.io/code-generator/cmd/lister-gen@latest
+  - k8s.io/code-generator/cmd/deepcopy-gen@latest
+  - k8s.io/code-generator/cmd/applyconfiguration-gen@latest
+  - k8s.io/code-generator/cmd/defaulter-gen@latest
+  - github.com/submariner-io/subctl/cmd/subctl@latest
+  - mvdan.cc/gofumpt@latest
+  - golang.org/x/vuln/cmd/govulncheck@latest
+  - github.com/daixiang0/gci@latest
+
+packages_install_binaries: true
+
+packages_brew_taps:
+  - nikitabobko/tap
+  - theseal/ssh-askpass
+  - domt4/autoupdate
 
 packages_brew_cask:
   - alacritty
@@ -56,6 +116,7 @@ packages_brew_cask:
   - keepassxc
   - slack
   - lulu
+  - nikitabobko/tap/aerospace
 
 packages_brew:
   - ansible
@@ -67,12 +128,17 @@ packages_brew:
   - tmux
   - mosh
   - jq
+  - yq
   - direnv
   - fzf
   - zoxide
   - shellcheck
   - shfmt
   - yamllint
+  - ansible-lint
+  - golangci-lint
   - golang
   - python3
   - gh
+  - tailscale
+  - socat

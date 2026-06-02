@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+# Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
+
+Port {{ ssh_port }}
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+PermitEmptyPasswords no
+HostbasedAuthentication no
+PermitUserEnvironment no
+
+AllowUsers {{ real_user_id }}
+MaxAuthTries 3
+MaxSessions 2
+LoginGraceTime 30
+
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+
+ClientAliveInterval 300
+ClientAliveCountMax 2
+LogLevel VERBOSE
+UsePAM yes
+StrictModes yes
+UseDNS no
+MaxStartups 10:30:60
+RekeyLimit 1G 1h

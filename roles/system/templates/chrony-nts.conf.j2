@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+# NTS-authenticated time sources
+server time.cloudflare.com iburst nts
+server nts.netnod.se iburst nts
+server ptbtime1.ptb.de iburst nts
+
+# Unauthenticated fallback (only used if ALL NTS sources fail)
+pool 2.fedora.pool.ntp.org iburst
+
+# Prefer NTS; fall back to pool only when NTS unavailable
+authselectmode prefer
+
+# Use NTP servers from DHCP
+sourcedir /run/chrony-dhcp
+
+# Persist NTS cookies across restarts
+ntsdumpdir /var/lib/chrony
+
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+leapseclist /usr/share/zoneinfo/leap-seconds.list
+logdir /var/log/chrony

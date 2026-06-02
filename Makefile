@@ -1,10 +1,21 @@
-.PHONY: all minimal bootstrap lint check diff test smoke-test \
-       dotfiles packages repos repos-ovnk repos-konflux repos-personal \
+.PHONY: help all minimal bootstrap bootstrap-test lint check diff test smoke-test \
+       dotfiles packages repos notes repos-ovnk repos-konflux repos-personal \
+       repos-bpfman repos-downstream repos-cncf \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
-       container-rebuild csb-audit vault-edit update \
-       smoke-test-host smoke-test-container \
-       syntax-check shellcheck markdownlint commitlint \
-       test-container test-vm
+       container-rebuild csb-audit vault-edit update hooks \
+       smoke-test-host smoke-test-fedora \
+       ci syntax-check shellcheck markdownlint commitlint \
+       test-scripts test-fedora test-vm
+
+help:
+	@echo "Primary:    all minimal container container-rebuild update"
+	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
+	@echo "            redhat containers claude distrobox"
+	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
+	@echo "Testing:    lint ci test test-scripts test-fedora test-vm smoke-test smoke-test-host smoke-test-fedora check"
+	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
+	@echo "Setup:      bootstrap bootstrap-test hooks"
+	@echo "Other:      csb-audit diff vault-edit"
 
 # --- Primary targets ---
 
@@ -24,10 +35,31 @@ container-rebuild:
 
 bootstrap:
 	sudo dnf install -y ansible-core git ykpers
+	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && chmod 700 scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	ansible-galaxy collection install -r requirements.yml
+	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
+	@if command -v npm >/dev/null 2>&1; then \
+		npm install; \
+	else \
+		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
+	fi
+	git config --local core.hooksPath .githooks
+	@echo "Bootstrap complete. Git hooks active."
+
+bootstrap-test:
+	python3 -m venv .venv
+	.venv/bin/pip install -r requirements-test.txt
+	ansible-galaxy collection install -r requirements.yml
+	sudo dnf install -y libvirt vagrant vagrant-libvirt
+	vagrant box add fedora/43-cloud-base --provider libvirt || true
+
+hooks:
+	git config --local core.hooksPath .githooks
+	@echo "Git hooks installed (core.hooksPath = .githooks)"
 
 update:
 	ansible-galaxy collection install -r requirements.yml --force
+	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
 	ansible-playbook site.yml --ask-become-pass
 
 # --- Individual roles ---
@@ -41,6 +73,9 @@ packages:
 repos:
 	ansible-playbook site.yml --tags common,repos
 
+notes:
+	ansible-playbook site.yml --tags common,notes
+
 repos-ovnk:
 	ansible-playbook site.yml --tags common,repos -e repo_category=ovnk
 
@@ -49,6 +84,15 @@ repos-konflux:
 
 repos-personal:
 	ansible-playbook site.yml --tags common,repos -e repo_category=personal
+
+repos-bpfman:
+	ansible-playbook site.yml --tags common,repos -e repo_category=bpfman
+
+repos-downstream:
+	ansible-playbook site.yml --tags common,repos -e repo_category=downstream
+
+repos-cncf:
+	ansible-playbook site.yml --tags common,repos -e repo_category=cncf
 
 ssh:
 	ansible-playbook site.yml --tags common,ssh
@@ -86,6 +130,8 @@ check:
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
+ci: lint syntax-check test-scripts test-fedora
+
 lint:
 	ansible-lint
 	yamllint --strict .
@@ -103,10 +149,13 @@ markdownlint:
 commitlint:
 	npx commitlint --from origin/main --to HEAD
 
-test: test-container test-vm
+test: test-scripts test-fedora test-vm
 
-test-container:
-	molecule test -s container
+test-scripts:
+	bash scripts/test-queue-poller.sh
+
+test-fedora:
+	molecule test -s fedora
 
 test-vm:
 	molecule test -s vm
@@ -117,7 +166,7 @@ smoke-test:
 smoke-test-host:
 	scripts/smoke-test.sh
 
-smoke-test-container:
+smoke-test-fedora:
 	scripts/smoke-test.sh --container fedora-dev
 
 # --- Vault ---

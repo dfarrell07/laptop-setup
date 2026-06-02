@@ -11,17 +11,14 @@
     - name: Check tmux is installed
       ansible.builtin.command: tmux -V
       changed_when: false
-      failed_when: false
 
     - name: Check jq is installed
       ansible.builtin.command: jq --version
       changed_when: false
-      failed_when: false
 
     - name: Check fzf is installed
       ansible.builtin.command: fzf --version
       changed_when: false
-      failed_when: false
 
     - name: Verify .zshrc exists
       ansible.builtin.stat:
@@ -85,6 +82,16 @@
           - verify_claude_dir.stat.mode == '0700'
         fail_msg: "Claude personal config dir missing or wrong permissions"
 
+    - name: Verify git repos base directory exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/src"
+      register: verify_repos_dir
+
+    - name: Assert git repos base directory exists
+      ansible.builtin.assert:
+        that: verify_repos_dir.stat.isdir
+        fail_msg: "Git repos base directory ~/src was not created"
+
     - name: Check git core.fsmonitor setting
       ansible.builtin.command: git config --global core.fsmonitor
       register: verify_fsmonitor
@@ -94,3 +101,34 @@
       ansible.builtin.assert:
         that: verify_fsmonitor.stdout == 'false'
         fail_msg: "git core.fsmonitor is not set to false"
+
+    - name: Verify Claude CLAUDE.md deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+      register: verify_claude_md
+
+    - name: Assert Claude CLAUDE.md exists
+      ansible.builtin.assert:
+        that: verify_claude_md.stat.exists
+        fail_msg: "Claude CLAUDE.md not deployed"
+
+    - name: Verify bashrc deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.bashrc"
+      register: verify_bashrc
+
+    - name: Assert bashrc exists
+      ansible.builtin.assert:
+        that: verify_bashrc.stat.exists
+        fail_msg: "bashrc was not deployed"
+
+    # --- Desktop role (macOS) ---
+    - name: Verify AeroSpace config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
+      register: verify_aerospace
+
+    - name: Assert AeroSpace config exists
+      ansible.builtin.assert:
+        that: verify_aerospace.stat.exists
+        fail_msg: "AeroSpace config not deployed"

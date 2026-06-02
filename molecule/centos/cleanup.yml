@@ -1,0 +1,13 @@
+---
+- name: Cleanup (CentOS)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Remove mock Red Hat CA cert files
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/redhat/files/{{ item }}"
+        state: absent
+      loop:
+        - 2022-IT-Root-CA.pem
+        - Eng-CA.crt
+      delegate_to: localhost

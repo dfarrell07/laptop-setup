@@ -51,10 +51,33 @@
     mode: "0644"
   when: distrobox_tool != 'none'
 
+- name: Enable Podman socket for kind
+  ansible.builtin.systemd:
+    name: podman.socket
+    scope: user
+    state: started
+    enabled: true
+  register: distrobox_podman_socket
+  when: distrobox_tool != 'none'
+  failed_when: false
+
+- name: Warn if Podman socket failed
+  ansible.builtin.debug:
+    msg: >-
+      Podman socket enablement failed. kind will not work without it.
+      Check: systemctl --user status podman.socket
+  when:
+    - distrobox_podman_socket is defined
+    - distrobox_podman_socket is failed
+
 # --- Check if container exists ---
 - name: Check if container exists
   ansible.builtin.command:
-    cmd: "podman container exists {{ distrobox_container_name }}"
+    argv:
+      - podman
+      - container
+      - exists
+      - "{{ distrobox_container_name }}"
   register: distrobox_container_exists
   changed_when: false
   failed_when: false
@@ -80,7 +103,10 @@
 
     - name: Create container with distrobox assemble
       ansible.builtin.command:
-        cmd: "distrobox assemble create --file {{ distrobox_ini_path }}"
+        cmd: >-
+          distrobox assemble create
+          {{ '--replace' if distrobox_container_replace | bool else '' }}
+          --file {{ distrobox_ini_path }}
       register: distrobox_create_result
       changed_when: "'already exists' not in (distrobox_create_result.stderr | default(''))"
 
@@ -96,21 +122,30 @@
           toolbox create
           --container {{ distrobox_container_name }}
           --distro {{ container_distro | default('fedora') }}
-          --release {{ container_release | default('42') }}
+          --release {{ container_release | default('43') }}
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
 
 # --- Start and register for Play 3 ---
-- name: Start container
+- name: Check if container is running
   ansible.builtin.command:
-    cmd: "podman start {{ distrobox_container_name }}"
-  register: distrobox_start
-  changed_when: "'already running' not in (distrobox_start.stderr | default(''))"
-  failed_when:
-    - distrobox_start.rc != 0
-    - "'already running' not in (distrobox_start.stderr | default(''))"
-    - "'already started' not in (distrobox_start.stderr | default(''))"
+    argv:
+      - podman
+      - inspect
+      - --format
+      - "{% raw %}{{.State.Running}}{% endraw %}"
+      - "{{ distrobox_container_name }}"
+  register: distrobox_running
+  changed_when: false
+  failed_when: false
   when: distrobox_tool != 'none'
+
+- name: Start container
+  ansible.builtin.command:  # noqa: no-changed-when
+    cmd: "podman start {{ distrobox_container_name }}"
+  when:
+    - distrobox_tool != 'none'
+    - (distrobox_running.stdout | default('') | trim | lower) != 'true'
 
 - name: Detect Python inside container
   ansible.builtin.command:
@@ -130,6 +165,18 @@
     ansible_host: "{{ distrobox_container_name }}"
     ansible_python_interpreter: "{{ distrobox_python.stdout | default('/usr/bin/python3') | trim }}"
     ansible_remote_tmp: /tmp/.ansible/tmp
+    distrobox_packages: "{{ distrobox_packages }}"
+    distrobox_host_exec_commands: "{{ distrobox_host_exec_commands }}"
+    distrobox_oc_version: "{{ distrobox_oc_version }}"
   when:
     - distrobox_tool != 'none'
     - distrobox_python.rc | default(1) == 0
+
+- name: Warn if Python not found in container
+  ansible.builtin.debug:
+    msg: >-
+      Python not found inside {{ distrobox_container_name }}.
+      Container provisioning (Play 3) will be skipped.
+  when:
+    - distrobox_tool != 'none'
+    - distrobox_python.rc | default(1) != 0

@@ -1,0 +1,35 @@
+---
+- name: Converge (Debian/ChromeOS Crostini)
+  hosts: all
+  gather_facts: true
+
+  vars:
+    profile: personal
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Override profile
+      ansible.builtin.set_fact:
+        profile: personal
+
+    - name: Install git (prerequisite for dotfiles)
+      ansible.builtin.apt:
+        name: git
+        state: present
+        update_cache: true
+      when: ansible_pkg_mgr == 'apt'
+
+  roles:
+    - role: common
+    - role: packages
+      vars:
+        packages_install_binaries: false
+    - role: dotfiles
+    - role: ssh
+    - role: git_repos
+    - role: containers
+    - role: claude
+      vars:
+        claude_install_method: skip

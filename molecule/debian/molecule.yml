@@ -1,0 +1,34 @@
+---
+driver:
+  name: podman
+
+platforms:
+  - name: debian-test
+    # To update digest: podman pull docker.io/geerlingguy/docker-debian12-ansible:latest
+    # then: podman inspect --format='{{.Digest}}' docker.io/geerlingguy/docker-debian12-ansible:latest
+    image: docker.io/geerlingguy/docker-debian12-ansible@sha256:24e7cf0f01a607f4509eb99ab7829ee7ee3beb211253f90df4f51ebeae849e90
+    pre_build_image: true
+    privileged: true
+    command: /usr/sbin/init
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+  config_options:
+    defaults:
+      vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - create
+    - converge
+    - idempotence
+    - verify
+    - destroy

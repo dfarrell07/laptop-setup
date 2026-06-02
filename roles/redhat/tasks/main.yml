@@ -7,6 +7,7 @@
     path: "{{ role_path }}/files/{{ item }}"
   loop: "{{ redhat_ca_certs }}"
   register: redhat_ca_stat
+  delegate_to: localhost
 
 - name: Deploy Red Hat CA certificates
   ansible.builtin.copy:
@@ -22,6 +23,16 @@
   when:
     - ansible_system == 'Linux'
     - item.stat.exists
+
+- name: Install Red Hat cert packages
+  ansible.builtin.dnf:
+    name: "{{ redhat_cert_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+  notify: Update CA trust
 
 - name: Install VPN packages
   ansible.builtin.dnf:

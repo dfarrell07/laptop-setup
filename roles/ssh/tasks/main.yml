@@ -14,57 +14,52 @@
     return_content: true
   register: ssh_github_meta
   changed_when: false
+  failed_when: false
 
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
     name: github.com
     key: "github.com {{ item }}"
     state: present
+    hash_host: true
   loop: "{{ (ssh_github_meta.json.ssh_keys | default([])) }}"
+  when: ssh_github_meta.status | default(0) == 200
 
-- name: Hash known_hosts hostnames
-  ansible.builtin.command:
-    cmd: "ssh-keygen -H -f {{ ansible_user_dir }}/.ssh/known_hosts"
-  changed_when: false
-  failed_when: false
+- name: Deploy SSH auth key
+  ansible.builtin.copy:
+    content: "{{ ssh_auth_key }}"
+    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk"
+    mode: "0600"
+  no_log: true
+  when: ssh_auth_key | default('') | length > 0
 
-- name: Remove known_hosts backup
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh/known_hosts.old"
-    state: absent
+- name: Deploy SSH auth public key
+  ansible.builtin.copy:
+    content: "{{ ssh_auth_key_pub }}"
+    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk.pub"
+    mode: "0644"
+  no_log: true
+  when: ssh_auth_key_pub | default('') | length > 0
 
-# SSH key deployment from vault — uncomment when vault is populated (Phase 7)
-# - name: Deploy SSH auth key
-#   ansible.builtin.copy:
-#     content: "{{ vault_ssh_auth_key }}"
-#     dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk"
-#     mode: "0600"
-#   no_log: true
-#
-# - name: Deploy SSH auth public key
-#   ansible.builtin.copy:
-#     content: "{{ vault_ssh_auth_key_pub }}"
-#     dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk.pub"
-#     mode: "0644"
-#   no_log: true
-#
-# - name: Deploy SSH signing key
-#   ansible.builtin.copy:
-#     content: "{{ vault_ssh_signing_key }}"
-#     dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing"
-#     mode: "0600"
-#   no_log: true
-#
-# - name: Deploy SSH signing public key
-#   ansible.builtin.copy:
-#     content: "{{ vault_ssh_signing_key_pub }}"
-#     dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing.pub"
-#     mode: "0644"
-#   no_log: true
+- name: Deploy SSH signing key
+  ansible.builtin.copy:
+    content: "{{ ssh_signing_key }}"
+    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing"
+    mode: "0600"
+  no_log: true
+  when: ssh_signing_key | default('') | length > 0
+
+- name: Deploy SSH signing public key
+  ansible.builtin.copy:
+    content: "{{ ssh_signing_key_pub }}"
+    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing.pub"
+    mode: "0644"
+  no_log: true
+  when: ssh_signing_key_pub | default('') | length > 0
 
 - name: Deploy allowed signers file
   ansible.builtin.template:
     src: allowed_signers.j2
     dest: "{{ ansible_user_dir }}/.config/git/allowed_signers"
     mode: "0644"
-  when: false  # Enable when signing key pub is available
+  when: ssh_git_signing_pubkey | default('') | length > 0

@@ -1,0 +1,128 @@
+---
+# common/tasks/container-provision-tasks.yml
+# Runs inside the dev container via Play 3 (containers.podman.podman connection).
+# Distrobox role (Play 2) creates and registers the container via add_host.
+
+# --- Ensure dev packages ---
+- name: Ensure development packages installed
+  ansible.builtin.dnf:
+    name: "{{ distrobox_packages }}"
+    state: present
+
+# --- Binary downloads ---
+- name: Create /usr/local/bin if absent
+  ansible.builtin.file:
+    path: /usr/local/bin
+    state: directory
+    mode: "0755"
+
+- name: Check if oc is installed
+  ansible.builtin.command:
+    cmd: /usr/local/bin/oc version --client
+  register: container_oc_check
+  changed_when: false
+  failed_when: false
+
+- name: Download and install oc + kubectl
+  when: container_oc_check.rc != 0
+  block:
+    - name: Fetch OpenShift client SHA256 checksums
+      ansible.builtin.uri:
+        url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ distrobox_oc_version }}/sha256sum.txt"
+        return_content: true
+      register: container_oc_checksums
+
+    - name: Extract oc tarball checksum
+      ansible.builtin.set_fact:
+        container_oc_sha256: >-
+          {{ container_oc_checksums.content |
+             regex_search('([a-f0-9]{64})\s+openshift-client-linux\.tar\.gz',
+             '\1', multiline=True) | first }}
+
+    - name: Download OpenShift client tarball
+      ansible.builtin.get_url:
+        url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ distrobox_oc_version }}/openshift-client-linux.tar.gz"
+        dest: /tmp/openshift-client-linux.tar.gz
+        checksum: "sha256:{{ container_oc_sha256 }}"
+        mode: "0644"
+
+    - name: Extract oc and kubectl
+      ansible.builtin.unarchive:
+        src: /tmp/openshift-client-linux.tar.gz
+        dest: /usr/local/bin
+        remote_src: true
+        extra_opts:
+          - --no-same-owner
+
+    - name: Set permissions on oc and kubectl
+      ansible.builtin.file:
+        path: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [oc, kubectl]
+
+    - name: Clean up tarball
+      ansible.builtin.file:
+        path: /tmp/openshift-client-linux.tar.gz
+        state: absent
+
+# --- Go tools (not in Fedora repos) ---
+- name: Install golangci-lint via go install
+  ansible.builtin.command:
+    cmd: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+    creates: /root/go/bin/golangci-lint
+  environment:
+    GOPATH: /root/go
+    GOBIN: /root/go/bin
+
+# --- Host-command delegation ---
+- name: Check for distrobox-host-exec
+  ansible.builtin.stat:
+    path: /usr/bin/distrobox-host-exec
+  register: container_host_exec
+
+- name: Create distrobox-host-exec symlinks
+  ansible.builtin.file:
+    src: /usr/bin/distrobox-host-exec
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop: "{{ distrobox_host_exec_commands }}"
+  when: container_host_exec.stat.exists
+
+- name: Deploy flatpak-spawn wrapper scripts (Toolbx fallback)
+  ansible.builtin.copy:
+    dest: "/usr/local/bin/{{ item }}"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      exec flatpak-spawn --host {{ item }} "$@"
+  loop: "{{ distrobox_host_exec_commands }}"
+  when: not container_host_exec.stat.exists
+
+# --- Verify ---
+- name: Confirm Python works
+  ansible.builtin.command:
+    cmd: python3 --version
+  changed_when: false
+
+- name: Confirm oc is available
+  ansible.builtin.command:
+    cmd: /usr/local/bin/oc version --client
+  register: container_oc_version
+  changed_when: false
+  failed_when: false
+
+- name: Confirm host delegation works
+  ansible.builtin.command:
+    cmd: /usr/local/bin/podman --version
+  register: container_host_podman
+  changed_when: false
+  failed_when: false
+
+- name: Provisioning summary
+  ansible.builtin.debug:
+    msg: |
+      === Container Provisioning Summary ===
+      oc client  : {{ container_oc_version.stdout | default('not installed') | trim }}
+      Host podman: {{ container_host_podman.stdout | default('not available') | trim }}
+      ======================================

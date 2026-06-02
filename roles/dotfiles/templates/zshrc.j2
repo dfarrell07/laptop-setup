@@ -8,16 +8,29 @@ zstyle ':omz:update' mode disabled
 
 plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
 
-source $ZSH/oh-my-zsh.sh
+source "$ZSH/oh-my-zsh.sh"
 
 # --- Environment ---
 export EDITOR=vim
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
-export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$PATH"
+export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
+export TMUX_TMPDIR="$HOME/.local/run/tmux"
+export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 
 # --- Tool hooks (silently skip if not installed) ---
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+
+# --- Claude Code API endpoint guard ---
+_claude_check_base_url() {
+  if [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+    local host="${ANTHROPIC_BASE_URL#https://}"; host="${host#http://}"; host="${host#*@}"; host="${host%%[:/]*}"
+    if [[ "$host" != "api.anthropic.com" && "$host" != *-aiplatform.googleapis.com ]]; then
+      echo "BLOCKED: ANTHROPIC_BASE_URL=$host (untrusted)" >&2
+      return 1
+    fi
+  fi
+}
 
 # --- Claude Code instance guard ---
 claude() {
@@ -25,12 +38,14 @@ claude() {
     echo "ERROR: CLAUDE_CONFIG_DIR not set. Use 'cw' (work) or 'ccp' (personal)." >&2
     return 1
   fi
+  _claude_check_base_url || return 1
   command claude "$@"
 }
 
 # --- Claude Code in tmux (sessions survive disconnects) ---
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
+  _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
   tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"
@@ -39,17 +54,18 @@ cw() {
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
-  if [[ "$phys" == */src/openshift/* || "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* ]]; then
+  if [[ "$phys" == */src/openshift/* || "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* || "$phys" == */src/ovnk/* || "$phys" == */src/konflux/* || "$phys" == */src/bpfman/* || "$phys" == */src/ds/* || "$phys" == */src/cncf/* ]]; then
     echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
   fi
+  _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="personal-${dir}"
   tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; CLAUDE_CONFIG_DIR=~/.claude-personal claude; zsh"
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
-ca() { tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: " | xargs -r tmux attach -t; }
-cwt() { local n="${1:?Usage: cwt <worktree-name>}"; tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree '$n'; zsh"; }
+ca() { local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
+cwt() { local n="${1:?Usage: cwt <worktree-name>}"; _claude_check_base_url || return 1; tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree $n; zsh"; }
 cstatus() {
   for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E 'work-|personal-'); do
     echo "=== $s ==="; tmux capture-pane -t "$s" -p | tail -3; echo
@@ -67,14 +83,18 @@ alias rc='claude --remote-control'
 alias src='cd ~/src'
 alias subm='cd ~/src/submariner-io'
 alias ovnk='cd ~/src/openshift/ovn-kubernetes'
-alias notes='cd ~/src/dfarrell07/notes-ai'
+alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 
 # --- Task queue ---
 cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
 
 # --- Status ---
 alias yk='ykman info'
+{% if ansible_system | default('Linux') == 'Darwin' %}
+alias vpn='netstat -rn | grep -E "utun|wg"'
+{% else %}
 alias vpn='ip route | grep -E "tun|wg"'
+{% endif %}
 alias ts='tailscale status'
 
 # --- General aliases ---

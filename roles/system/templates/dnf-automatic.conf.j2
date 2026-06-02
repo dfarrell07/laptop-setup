@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+# dnf-automatic / dnf5-automatic configuration
+# Overrides vendor defaults at /usr/share/dnf5/dnf5-plugins/automatic.conf
+
+[commands]
+# Apply all available updates (not just download)
+apply_updates = yes
+download_updates = yes
+
+# All upgrades, not just security
+upgrade_type = default
+
+# Wait up to 60s for network
+network_online_timeout = 60
+
+# Random delay before download (timer already adds up to 60m jitter)
+random_sleep = 0
+
+# Never auto-reboot
+reboot = never
+
+[emitters]
+emit_via = stdio
+emit_no_updates = no
+
+# NOTE: dnf5 has no config-level repo exclusion. Third-party repos
+# (docker-ce, chrome, slack, etc.) are excluded from auto-updates by
+# setting enabled=0 in their .repo files. The repos_dnf role creates
+# them with enabled=true; disable individually if auto-update is risky.

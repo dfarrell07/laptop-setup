@@ -29,8 +29,8 @@
       ╔══════════════════════════════════════════════════════════════╗
       ║                   CSB COMPATIBILITY REPORT                  ║
       ╠══════════════════════════════════════════════════════════════╣
-      ║  Total failures: {{ (csb_failures | length) | string | center(39) }}║
-      ║  Roles affected: {{ (csb_failures | map(attribute='role') | unique | join(', ')) | truncate(39) | center(39) }}║
+      ║  Total failures: {{ (csb_failures | length) | string | center(44) }}║
+      ║  Roles affected: {{ (csb_failures | map(attribute='role') | unique | join(', ')) | truncate(44) | center(44) }}║
       ╚══════════════════════════════════════════════════════════════╝
 
       {% for failure in csb_failures %}
@@ -100,7 +100,8 @@
       {% endfor %}
       {% endif %}
     dest: "{{ ansible_user_dir | default(lookup('env', 'HOME')) }}/csb-report.md"
-    mode: "0644"
+    mode: "0600"
+  when: _csb_has_failures | bool
 
 - name: Display report file location
   ansible.builtin.debug:

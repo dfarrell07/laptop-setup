@@ -8,10 +8,18 @@
   tags: [become]
 
   pre_tasks:
-    - name: Capture real user home directory
+    - name: Capture real user identity
       ansible.builtin.set_fact:
         real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_id: "{{ lookup('env', 'USER') }}"
       become: false
+      tags: [always]
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
       tags: [always]
 
     - name: Load configuration
@@ -65,6 +73,9 @@
     - role: git_repos
       tags: [repos]
 
+    - role: notes
+      tags: [notes]
+
     - role: redhat
       tags: [redhat]
       when: profile == 'work'
@@ -74,7 +85,6 @@
 
     - role: desktop
       tags: [desktop]
-      when: ansible_system == 'Linux'
 
     - role: distrobox
       tags: [distrobox]
@@ -97,11 +107,16 @@
   tags: [distrobox]
 
   pre_tasks:
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
+
     - name: Bootstrap Python inside container
       ansible.builtin.raw: |
-        if ! command -v python3 &>/dev/null; then
-          dnf install -y python3 python3-dnf
-        fi
+        dnf install -y python3 python3-libdnf5 2>/dev/null || \
+        dnf install -y python3 python3-dnf 2>/dev/null || true
       changed_when: false
 
     - name: Gather minimal facts
@@ -112,6 +127,6 @@
           - distribution
 
   tasks:
-    - name: Container provisioning placeholder
-      ansible.builtin.debug:
-        msg: "Container provisioning via include_tasks — not yet implemented"
+    - name: Provision dev container
+      ansible.builtin.include_tasks:
+        file: "{{ common_project_root }}/common/tasks/container-provision-tasks.yml"
