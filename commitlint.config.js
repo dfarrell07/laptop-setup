@@ -25,5 +25,6 @@ module.exports = {
         'notes',
       ],
     ],
+    'subject-case': [0],
   },
 };
