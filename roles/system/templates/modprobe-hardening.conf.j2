@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# Blacklist unused filesystem and DMA modules (CIS/STIG)
+
+# Unused filesystems — attack surface via crafted images
+install cramfs /bin/false
+install freevxfs /bin/false
+install jffs2 /bin/false
+install hfs /bin/false
+install hfsplus /bin/false
+install udf /bin/false
+
+# DMA attack interfaces — physical access exploitation
+install firewire-core /bin/false
+install firewire-ohci /bin/false
+install firewire-sbp2 /bin/false
+
+# USB mass storage — close boot-time window before USBGuard
+install usb_storage /bin/false
+install uas /bin/false

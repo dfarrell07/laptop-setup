@@ -5,9 +5,10 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Capture real user home directory
+    - name: Capture real user identity
       ansible.builtin.set_fact:
         real_user_home: "{{ ansible_user_dir }}"
+        real_user_id: "{{ ansible_user_id }}"
       become: false
 
     - name: Load configuration
@@ -16,6 +17,10 @@
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
 
     - name: Gather service facts
       ansible.builtin.service_facts:
@@ -43,5 +48,8 @@
     - role: dotfiles
     - role: packages
     - role: ssh
+    - role: git_repos
     - role: containers
     - role: claude
+      vars:
+        claude_install_method: skip

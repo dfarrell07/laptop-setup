@@ -21,6 +21,8 @@ module.exports = {
         'deps',
         'docs',
         'scripts',
+        'molecule',
+        'notes',
       ],
     ],
   },

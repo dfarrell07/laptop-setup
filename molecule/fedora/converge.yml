@@ -1,0 +1,37 @@
+---
+- name: Converge (Fedora)
+  hosts: all
+  gather_facts: true
+
+  vars:
+    profile: personal
+    packages_security: []
+    packages_containers: []
+    packages_networking: []
+    packages_install_binaries: false
+    install_virtualization: false
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Override profile
+      ansible.builtin.set_fact:
+        profile: personal
+
+  roles:
+    - role: common
+    - role: packages
+    - role: dotfiles
+    - role: ssh
+    - role: git_repos
+    - role: containers
+    - role: desktop
+      vars:
+        desktop_environment: 'unknown'
+        desktop_common_packages: []
+        desktop_sway_packages: []
+        desktop_i3_packages: []
+    - role: claude
+      vars:
+        claude_install_method: skip

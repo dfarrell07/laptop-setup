@@ -7,19 +7,35 @@
     repo: https://github.com/ohmyzsh/ohmyzsh.git
     dest: "{{ ansible_user_dir }}/.oh-my-zsh"
     depth: 1
-    version: master
+    version: "4c82a2eedf0c43d47601ffa8b0303ed1326fab8f"
     update: false
 
 - name: Ensure config directories exist
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    mode: "0700"
+  loop:
+    - "{{ ansible_user_dir }}/.ssh/sockets"
+
+- name: Ensure Linux-only config directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
     mode: "0755"
   loop:
     - "{{ ansible_user_dir }}/.config/user-tmpfiles.d"
+    - "{{ ansible_user_dir }}/.config/environment.d"
+    - "{{ ansible_user_dir }}/.config/systemd/user"
+  when: ansible_system == 'Linux'
+
+- name: Ensure private directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
     - "{{ ansible_user_dir }}/.local/run/tmux"
-    - "{{ ansible_user_dir }}/.ssh"
-    - "{{ ansible_user_dir }}/.ssh/sockets"
 
 - name: Ensure Claude config directory
   ansible.builtin.file:
@@ -38,6 +54,39 @@
     src: gitconfig.j2
     dest: "{{ ansible_user_dir }}/.gitconfig"
     mode: "0644"
+
+- name: Deploy gitleaks pre-commit hook
+  ansible.builtin.copy:
+    dest: "{{ ansible_user_dir }}/.config/git/template/hooks/pre-commit"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      if command -v gitleaks >/dev/null 2>&1; then
+        gitleaks git --pre-commit --staged --redact --max-decode-depth 2
+      fi
+
+- name: Ensure gh config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/gh"
+    state: directory
+    mode: "0700"
+
+- name: Check if gh config exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/gh/config.yml"
+  register: dotfiles_gh_config
+
+- name: Deploy gh CLI config
+  ansible.builtin.copy:
+    content: |
+      git_protocol: https
+      editor: vim
+      prompt: enabled
+      aliases:
+        co: pr checkout
+    dest: "{{ ansible_user_dir }}/.config/gh/config.yml"
+    mode: "0600"
+  when: not dotfiles_gh_config.stat.exists
 
 - name: Deploy git conditional includes
   ansible.builtin.copy:
@@ -60,16 +109,41 @@
     dest: "{{ ansible_user_dir }}/.vimrc"
     mode: "0644"
 
+- name: Deploy bashrc
+  ansible.builtin.template:
+    src: bashrc.j2
+    dest: "{{ ansible_user_dir }}/.bashrc"
+    mode: "0644"
+
+- name: Deploy SSH agent systemd user service
+  ansible.builtin.template:
+    src: ssh-agent.service.j2
+    dest: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
+- name: Enable SSH agent user service
+  ansible.builtin.systemd:
+    name: ssh-agent
+    scope: user
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: ansible_system == 'Linux'
+  failed_when: false
+
+- name: Deploy SSH agent environment.d config
+  ansible.builtin.copy:
+    content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
+    dest: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
 - name: Deploy SSH client config
   ansible.builtin.template:
     src: ssh_config.j2
     dest: "{{ ansible_user_dir }}/.ssh/config"
     mode: "0600"
-
-- name: Set SSH directory permissions
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh"
-    mode: "0700"
 
 - name: Deploy SSH socket tmpfiles config
   ansible.builtin.copy:
@@ -84,6 +158,37 @@
   changed_when: false
   when: ansible_system == 'Linux'
 
+- name: Ensure direnv config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/direnv"
+    state: directory
+    mode: "0755"
+
+- name: Deploy safe direnv config
+  ansible.builtin.copy:
+    content: |
+      [global]
+      strict_env = true
+      warn_timeout = "10s"
+    dest: "{{ ansible_user_dir }}/.config/direnv/direnv.toml"
+    mode: "0644"
+
+- name: Set .npmrc permissions if exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.npmrc"
+    mode: "0600"
+  failed_when: false
+
+- name: Harden credential directory permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "0700"
+  loop:
+    - "{{ ansible_user_dir }}/.aws"
+    - "{{ ansible_user_dir }}/.config/gcloud"
+    - "{{ ansible_user_dir }}/.kube"
+  failed_when: false
+
 - name: Deploy Claude work-env file
   ansible.builtin.copy:
     content: |
@@ -93,8 +198,3 @@
     dest: "{{ ansible_user_dir }}/.config/claude/work-env"
     mode: "0600"
   when: profile == 'work'
-
-- name: Set tmux socket directory permissions
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.local/run/tmux"
-    mode: "0700"

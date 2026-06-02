@@ -6,23 +6,37 @@ on:
     branches: [main]
   pull_request:
 
-permissions: {}
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   ansible-lint:
     name: Ansible Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: '3.x'
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
 
       - name: Install ansible-lint
-        run: pip install ansible-lint
+        run: pip install 'ansible-lint>=26,<27' 'ansible>=11,<12'
+
+      - name: Create vault password script for CI
+        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
 
       - name: Run ansible-lint
         run: ansible-lint --profile production
@@ -30,17 +44,22 @@ jobs:
   yamllint:
     name: YAML Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: '3.x'
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
 
       - name: Install yamllint
-        run: pip install yamllint
+        run: pip install 'yamllint>=1,<2'
 
       - name: Run yamllint
         run: yamllint --strict .
@@ -48,36 +67,68 @@ jobs:
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Run shellcheck
         run: find scripts -type f -name "*.sh" -exec shellcheck -S warning {} +
 
-  syntax-check:
-    name: Ansible Syntax Check
+  vault-encryption:
+    name: Vault Encryption Check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Ensure vault files are encrypted
+        run: |
+          failed=0
+          while IFS= read -r f; do
+            if head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
+              continue
+            fi
+            # Allow the placeholder stub (no real secrets)
+            if grep -q 'vault_placeholder' "$f" && [ "$(grep -E '^vault_' "$f" | grep -cv 'vault_placeholder')" -eq 0 ]; then
+              echo "::notice file=${f}::Vault stub (no real secrets) — OK"
+              continue
+            fi
+            echo "::error file=${f}::Unencrypted vault file: ${f}"
+            failed=1
+          done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*')
+          exit $failed
+
+  syntax-check:
+    name: Ansible Syntax Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: '3.x'
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
 
       - name: Install Ansible
-        run: pip install ansible
+        run: pip install 'ansible>=11,<12'
 
       - name: Install collections
         run: ansible-galaxy collection install -r requirements.yml
 
-      - name: Create dummy vault password script
-        run: |
-          echo '#!/bin/bash' > scripts/vault-pass.sh
-          echo 'echo "ci-dummy-password"' >> scripts/vault-pass.sh
-          chmod +x scripts/vault-pass.sh
+      - name: Create vault password script for CI
+        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
 
       - name: Run syntax check
         run: ansible-playbook site.yml --syntax-check
@@ -85,33 +136,64 @@ jobs:
   markdownlint:
     name: Markdown Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run markdownlint
         run: npx markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
+  gitleaks:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   commitlint:
     name: Commit Message Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     steps:
       - name: Check out the repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run commitlint
-        run: >-
-          npx commitlint
-          --from ${{ github.event.pull_request.base.sha }}
-          --to ${{ github.event.pull_request.head.sha }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npx commitlint --from "$BASE_SHA" --to "$HEAD_SHA"

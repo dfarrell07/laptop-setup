@@ -1,12 +1,32 @@
 ---
-# Git repositories to clone. Full list (~114 repos).
-# Structure: url, dest (relative to git_repos_base_dir), category, enabled,
-# optional extra_remotes list.
-#
-# Categories: personal, bpfman, downstream, konflux, ovnk, cncf, misc
+# Git repositories to clone under ~/src/ (or git_repos_base_dir).
 # Filter with: -e repo_category=ovnk
+#
+# Categories: personal, downstream, ovnk, konflux, bpfman, cncf
+# Work profile: all enabled. Personal profile: personal + ovnk + cncf.
 
 git_repos_list:
+  # --- personal ---
+  - url: https://github.com/dfarrell07/notes-ai
+    dest: dfarrell07/notes-ai
+    category: personal
+    enabled: true
+
+  - url: https://github.com/dfarrell07/laptop-setup
+    dest: dfarrell07/laptop-setup
+    category: personal
+    enabled: true
+
+  - url: https://github.com/dfarrell07/claude-skills
+    dest: dfarrell07/claude-skills
+    category: personal
+    enabled: true
+
+  - url: https://github.com/dfarrell07/ovnk-workspace
+    dest: dfarrell07/ovnk-workspace
+    category: personal
+    enabled: true
+
   # --- submariner-io (category: downstream) ---
   - url: https://github.com/submariner-io/submariner-operator
     dest: submariner-io/submariner-operator
@@ -47,31 +67,393 @@ git_repos_list:
     category: downstream
     enabled: true
 
-  # --- openshift / ovnk (category: ovnk) ---
-  - url: https://github.com/openshift/ovn-kubernetes
-    dest: openshift/ovn-kubernetes
+  - url: https://github.com/submariner-io/subctl
+    dest: submariner-io/subctl
+    category: downstream
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_subctl
+        url: "git@github.com:dfarrell07/subctl.git"
+
+  - url: https://github.com/submariner-io/enhancements
+    dest: submariner-io/enhancements
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/submariner-website
+    dest: submariner-io/submariner-website
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/submariner-charts
+    dest: submariner-io/submariner-charts
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/releases
+    dest: submariner-io/releases
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/submariner-io/get.submariner.io
+    dest: submariner-io/get.submariner.io
+    category: downstream
+    enabled: true
+
+  # --- stolostron / ACM (category: downstream) ---
+  - url: https://github.com/stolostron/submariner-addon
+    dest: stolostron/submariner-addon
+    category: downstream
+    enabled: true
+    extra_remotes:
+      - name: dfarrell_addon
+        url: "git@github.com:dfarrell07/submariner-addon.git"
+
+  - url: https://github.com/stolostron/submariner-release-management
+    dest: stolostron/submariner-release-management
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/stolostron/submariner-operator-fbc
+    dest: stolostron/submariner-operator-fbc
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/stolostron/rhacm-docs
+    dest: stolostron/rhacm-docs
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/stolostron/acm-threat-model
+    dest: stolostron/acm-threat-model
+    category: downstream
+    enabled: true
+
+  - url: https://github.com/stolostron/secure-engineering-container
+    dest: stolostron/secure-engineering-container
+    category: downstream
+    enabled: true
+
+  # --- downstream internal (VPN required) ---
+  - url: "ssh://dfarrell@code.engineering.redhat.com:22/submariner-operator.git"
+    dest: ds/submariner-operator
+    category: downstream
+    enabled: true
+
+  - url: "ssh://dfarrell@code.engineering.redhat.com:22/submariner.git"
+    dest: ds/submariner
+    category: downstream
+    enabled: true
+
+  - url: "ssh://dfarrell@code.engineering.redhat.com:22/lighthouse.git"
+    dest: ds/lighthouse
+    category: downstream
+    enabled: true
+
+  - url: "git@gitlab.cee.redhat.com:acm-cpaas-midstream/submariner-operator-midstream.git"
+    dest: ds/submariner-operator-midstream
+    category: downstream
+    enabled: true
+
+  # --- bpfman ---
+  - url: https://github.com/openshift/bpfman
+    dest: bpfman/bpfman
+    category: bpfman
+    enabled: true
+
+  - url: https://github.com/openshift/bpfman-catalog
+    dest: bpfman/bpfman-catalog
+    category: bpfman
+    enabled: true
+
+  - url: https://github.com/openshift/bpfman-operator
+    dest: bpfman/bpfman-operator
+    category: bpfman
+    enabled: true
+
+  - url: https://github.com/bpfman/bpfman-operator
+    dest: bpfman/bpfman-operator-upstream
+    category: bpfman
+    enabled: true
+
+  - url: https://github.com/bpfman/bpfman
+    dest: bpfman/bpfman-upstream
+    category: bpfman
+    enabled: true
+
+  # --- ovnk ---
+  - url: https://github.com/ovn-org/ovn-kubernetes
+    dest: ovnk/ovn-org/ovn-kubernetes
     category: ovnk
     enabled: true
     extra_remotes:
       - name: dfarrell_ovnk
         url: "git@github.com:dfarrell07/ovn-kubernetes.git"
 
-  # --- personal ---
-  - url: https://github.com/dfarrell07/notes-ai
-    dest: dfarrell07/notes-ai
-    category: personal
+  - url: https://github.com/openshift/ovn-kubernetes
+    dest: ovnk/openshift/ovn-kubernetes
+    category: ovnk
     enabled: true
 
-  - url: https://github.com/dfarrell07/laptop-setup
-    dest: dfarrell07/laptop-setup
-    category: personal
+  - url: https://github.com/openshift/cluster-network-operator
+    dest: ovnk/openshift/cluster-network-operator
+    category: ovnk
     enabled: true
 
-  # --- disabled (will not clone) ---
-  - url: https://github.com/dfarrell07/dependent-issues
-    dest: dfarrell07/dependent-issues
-    category: misc
-    enabled: false
+  - url: https://github.com/openshift/cloud-network-config-controller
+    dest: ovnk/openshift/cloud-network-config-controller
+    category: ovnk
+    enabled: true
 
-  # Populate remaining ~104 repos here.
-  # See migration plan Git Repos section for the full list.
+  - url: https://github.com/openshift/multus-cni
+    dest: ovnk/openshift/multus-cni
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/network-tools
+    dest: ovnk/openshift/network-tools
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/api
+    dest: ovnk/openshift/api
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/enhancements
+    dest: ovnk/openshift/enhancements
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/release
+    dest: ovnk/openshift/release
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/origin
+    dest: ovnk/openshift/origin
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/openshift-docs
+    dest: ovnk/openshift/openshift-docs
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/ci-docs
+    dest: ovnk/openshift/ci-docs
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/ci-tools
+    dest: ovnk/openshift/ci-tools
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/runbooks
+    dest: ovnk/openshift/runbooks
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift/sippy
+    dest: ovnk/openshift/sippy
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/ai-helpers
+    dest: ovnk/openshift-eng/ai-helpers
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/ci-test-mapping
+    dest: ovnk/openshift-eng/ci-test-mapping
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/gangway-cli
+    dest: ovnk/openshift-eng/gangway-cli
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/ocp-build-data
+    dest: ovnk/openshift-eng/ocp-build-data
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/ocp-performance-analyzer-mcp
+    dest: ovnk/openshift-eng/ocp-performance-analyzer-mcp
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/openshift-ci-mcp
+    dest: ovnk/openshift-eng/openshift-ci-mcp
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/openshift-tests-extension
+    dest: ovnk/openshift-eng/openshift-tests-extension
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openshift-eng/rebasebot
+    dest: ovnk/openshift-eng/rebasebot
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-org/ovn
+    dest: ovnk/ovn-org/ovn
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-org/ovn-fake-multinode
+    dest: ovnk/ovn-org/ovn-fake-multinode
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-org/ovn-heater
+    dest: ovnk/ovn-org/ovn-heater
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-org/ovn-website
+    dest: ovnk/ovn-org/ovn-website
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-kubernetes/kubernetes-traffic-flow-tests
+    dest: ovnk/ovn-kubernetes/kubernetes-traffic-flow-tests
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-kubernetes/libovsdb
+    dest: ovnk/ovn-kubernetes/libovsdb
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/ovn-kubernetes/ovn-kubernetes-mcp
+    dest: ovnk/ovn-kubernetes/ovn-kubernetes-mcp
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/openvswitch/ovs
+    dest: ovnk/openvswitch/ovs
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/kubernetes/enhancements
+    dest: ovnk/kubernetes/enhancements
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/kubernetes-sigs/network-policy-api
+    dest: ovnk/kubernetes-sigs/network-policy-api
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/kubernetes-sigs/kube-agentic-networking
+    dest: ovnk/kubernetes-sigs/kube-agentic-networking
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/metallb/frr-k8s
+    dest: ovnk/metallb/frr-k8s
+    category: ovnk
+    enabled: true
+
+  - url: https://github.com/containers/kubernetes-mcp-server
+    dest: ovnk/containers/kubernetes-mcp-server
+    category: ovnk
+    enabled: true
+
+  # --- konflux ---
+  - url: https://github.com/konflux-ci/build-definitions
+    dest: konflux/konflux-ci/build-definitions
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/konflux-ci/docs
+    dest: konflux/konflux-ci/docs
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/konflux-ci/release-service-catalog
+    dest: konflux/konflux-ci/release-service-catalog
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/release-engineering/rhtap-ec-policy
+    dest: konflux/release-engineering/rhtap-ec-policy
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/konflux-ci/olm-operator-konflux-sample
+    dest: konflux/olm-operator-konflux-sample
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/konflux-ci/rpm-lockfile-prototype
+    dest: konflux/rpm-lockfile-prototype
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/containerbuildsystem/operator-manifest
+    dest: konflux/operator-manifest
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/conforma/policy
+    dest: konflux/conforma/policy
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/stolostron/gatekeeper-operator-fbc
+    dest: konflux/gatekeeper-operator-fbc
+    category: konflux
+    enabled: true
+
+  - url: https://github.com/stolostron/volsync-operator-product-fbc
+    dest: konflux/volsync-operator-product-fbc
+    category: konflux
+    enabled: true
+
+  # --- konflux internal (VPN required) ---
+  - url: "git@gitlab.cee.redhat.com:releng/advisories.git"
+    dest: konflux/advisories
+    category: konflux
+    enabled: true
+
+  - url: "git@gitlab.cee.redhat.com:rhtap-release/advisories.git"
+    dest: konflux/advisories-stage
+    category: konflux
+    enabled: true
+
+  - url: "git@gitlab.cee.redhat.com:releng/konflux-release-data.git"
+    dest: konflux/konflux-release-data
+    category: konflux
+    enabled: true
+
+  - url: "git@gitlab.cee.redhat.com:releng/pyxis-repo-configs.git"
+    dest: konflux/pyxis-repo-configs
+    category: konflux
+    enabled: true
+
+  - url: "git@gitlab.cee.redhat.com:konflux/docs/users.git"
+    dest: konflux/users-docs
+    category: konflux
+    enabled: true
+
+  # --- cncf ---
+  - url: https://github.com/cncf/foundation
+    dest: cncf/foundation
+    category: cncf
+    enabled: true
+
+  - url: https://github.com/cncf/landscape
+    dest: cncf/landscape
+    category: cncf
+    enabled: true
+
+  - url: https://github.com/cncf/toc
+    dest: cncf/toc
+    category: cncf
+    enabled: true

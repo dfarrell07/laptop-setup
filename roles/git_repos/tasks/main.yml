@@ -54,11 +54,25 @@
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
-  failed_when: false
+  register: git_repos_clone_results
+  ignore_errors: true
+
+- name: Report failed clones
+  ansible.builtin.debug:
+    msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.msg | default('unknown error') }}"
+  loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
 
 - name: Add fork remotes  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: "git remote add {{ item.1.name }} {{ item.1.url }}"
+    argv:
+      - git
+      - remote
+      - add
+      - "--"
+      - "{{ item.1.name }}"
+      - "{{ item.1.url }}"
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
@@ -68,3 +82,4 @@
   failed_when:
     - git_repos_remote_result.rc != 0
     - "'already exists' not in (git_repos_remote_result.stderr | default(''))"
+    - "'No such file' not in (git_repos_remote_result.stderr | default(''))"

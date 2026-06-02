@@ -3,13 +3,9 @@
 Host *
     VisualHostKey yes
     HashKnownHosts yes
-    AddKeysToAgent yes
-
-Host github.com gh gist
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_sk
     IdentitiesOnly yes
+    AddKeysToAgent confirm
+    KexAlgorithms mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256
     ControlMaster auto
 {% if ansible_system | default('Linux') == 'Linux' %}
     ControlPath /run/user/%i/ssh/%r@%h-%p
@@ -18,9 +14,16 @@ Host github.com gh gist
 {% endif %}
     ControlPersist 120
 
+Host github.com gh gist
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentitiesOnly yes
+    PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
+
 {% if profile == 'work' %}
 Host internal-git
-    HostName internal-git.example.com
+    HostName {{ dotfiles_internal_git_host | default('internal-git.example.com') }}
     User git
     IdentityFile ~/.ssh/id_rsa_redhat
     IdentitiesOnly yes

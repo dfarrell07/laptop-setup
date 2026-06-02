@@ -42,19 +42,46 @@ if [[ -f /etc/os-release ]]; then
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
 record "os_family" "pass" "$OS_FAMILY"
 if [[ "$OS_FAMILY" == "rhel" ]]; then
-  for d in /etc/pki/ca-trust/source/anchors /etc/pki/tls/certs; do
-    for p in '*RH*' '*redhat*' '*Eng-CA*' '*IT-Root*'; do
-      [[ -n "$(find "$d" -maxdepth 1 -name "$p" -print -quit 2>/dev/null)" ]] && IS_CSB=true && break 2
-    done
+  has_certs=false has_fapolicyd=false
+  for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
+    [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
+  systemctl is-active fapolicyd &>/dev/null && has_fapolicyd=true
+  [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
 fi
 [[ "$IS_CSB" == true ]] \
   && record "csb_detected" "warn" "RHEL CSB — expect fapolicyd/sudo constraints" \
   || record "csb_detected" "pass" "not CSB"
 if [[ -z "$PROFILE" ]]; then
-  [[ "$IS_CSB" == true || "$OS_FAMILY" != "darwin" ]] && PROFILE="work" || PROFILE="personal"
+  [[ "$IS_CSB" == true ]] && PROFILE="work" || PROFILE="personal"
+  [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
 fi
 record "profile" "pass" "$PROFILE"
+
+# --- Required tools ---
+for tool in ansible-playbook git python3 curl; do
+  if command -v "$tool" &>/dev/null; then
+    ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
+    record "required_${tool}" "pass" "$ver"
+  else
+    record "required_${tool}" "fail" "not installed — run: make bootstrap"
+  fi
+done
+
+# --- Ansible collections ---
+if command -v ansible-galaxy &>/dev/null; then
+  missing_cols=()
+  for col in community.general containers.podman ansible.posix; do
+    ansible-galaxy collection list "$col" &>/dev/null || missing_cols+=("$col")
+  done
+  if [[ ${#missing_cols[@]} -eq 0 ]]; then
+    record "ansible_collections" "pass" "all required collections installed"
+  else
+    record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
+  fi
+else
+  record "ansible_collections" "skip" "ansible-galaxy not found"
+fi
 
 # --- YubiKey presence ---
 yk_found=false
@@ -69,13 +96,13 @@ if [[ "$yk_found" == true ]]; then
     if ykchalresp -2 "preflight-test" &>/dev/null; then
       record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
     else
-      record "yubikey_chalresp" "fail" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
+      record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
     fi
   else
     record "yubikey_chalresp" "skip" "ykchalresp not installed (need ykpers)"
   fi
 else
-  record "yubikey_present" "fail" "no YubiKey detected — vault decryption will fail"
+  record "yubikey_present" "warn" "no YubiKey detected — vault uses stub password until configured"
 fi
 
 # --- Vault password scripts ---
@@ -85,7 +112,7 @@ if [[ -x "$vscript" ]]; then
   output=$("$vscript" 2>/dev/null) || true
   len=${#output}
   if [[ $len -ge 8 ]]; then
-    record "vault" "pass" "script returned ${len}-char password"
+    record "vault" "pass" "script returned valid password"
   elif [[ $len -gt 0 ]]; then
     record "vault" "warn" "script returned only ${len} chars"
   else
@@ -110,11 +137,15 @@ if [[ -f "$VAULT_FILE" ]]; then
 fi
 
 # --- Network connectivity ---
-for netlabel_url in github=https://github.com galaxy=https://galaxy.ansible.com registry=https://registry.access.redhat.com; do
+for netlabel_url in github=https://github.com galaxy=https://galaxy.ansible.com registry=https://registry.redhat.io; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
-  if curl -sfSL --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
-    record "net_${nlabel}" "pass" "$nurl reachable"
-  else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
+  if command -v curl &>/dev/null; then
+    if curl -sSL --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
+      record "net_${nlabel}" "pass" "$nurl reachable"
+    else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
+  else
+    record "net_${nlabel}" "skip" "curl not installed"
+  fi
 done
 
 # --- fapolicyd detection (Linux only) ---
@@ -125,12 +156,19 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
     if "$tmpscript" &>/dev/null; then
       record "fapolicyd" "warn" "active but /tmp execution allowed"
     else
-      record "fapolicyd" "fail" "active and blocking — use pipelining=True in ansible.cfg"
+      record "fapolicyd" "fail" "active and blocking /tmp execution — ansible.cfg already has pipelining=true"
     fi
     rm -f "$tmpscript"
   else
     record "fapolicyd" "pass" "not active"
   fi
+fi
+
+# --- Transcrypt (for notes repo) ---
+if command -v transcrypt &>/dev/null; then
+  record "installed_transcrypt" "pass" "$(transcrypt --version 2>&1)"
+else
+  record "installed_transcrypt" "warn" "not installed — needed for encrypted notes repo"
 fi
 
 # --- Sudo scope ---
@@ -147,6 +185,7 @@ fi
 
 # --- Disk space (need 5GB free in $HOME) ---
 avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}') || avail_kb=0
+avail_kb="${avail_kb:-0}"
 avail_gb=$((avail_kb / 1048576))
 if [[ $avail_gb -ge 5 ]]; then
   record "disk_space" "pass" "${avail_gb}GB free in \$HOME"

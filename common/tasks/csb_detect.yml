@@ -346,7 +346,7 @@
       Distrobox installed: {{ distrobox_installed }}
       ---
       Network proxied    : {{ network_proxied }}
-      Proxy URL          : {{ proxy_url }}
+      Proxy URL          : {{ proxy_url | regex_replace('://[^@]+@', '://***@') }}
       Firewall zone      : {{ firewall_zone }}
       ---
       OSCAP profile      : {{ oscap_profile_applied | default(false) }}

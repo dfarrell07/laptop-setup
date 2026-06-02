@@ -20,6 +20,23 @@
     cmd: service auditd restart
   changed_when: true
 
+- name: Restart usbguard
+  ansible.builtin.systemd:
+    name: usbguard
+    state: restarted
+  failed_when: false
+
+- name: Restart sshd
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+
+- name: Reload NetworkManager
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: reloaded
+  failed_when: false
+
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
@@ -29,3 +46,14 @@
   ansible.builtin.systemd:
     name: systemd-logind
     state: restarted
+
+- name: Restart chronyd
+  ansible.builtin.systemd:
+    name: chronyd
+    state: restarted
+
+- name: Restart dnf-automatic timer
+  ansible.builtin.systemd:
+    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
+    state: restarted
+  failed_when: false

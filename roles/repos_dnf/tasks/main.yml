@@ -16,7 +16,7 @@
         enabled: true
   rescue:
     - name: Record gh-cli repo failure
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
         _csb_role: repos_dnf
         _csb_task_name: "Add GitHub CLI repository"
@@ -26,7 +26,9 @@
         _csb_ticket_body: "GitHub CLI repo needed for PR workflows"
 
 - name: Add Google Chrome repo
-  when: repo_google_chrome | default(true)
+  when:
+    - repo_google_chrome | default(true)
+    - ansible_architecture == 'x86_64'
   block:
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
@@ -38,7 +40,7 @@
         enabled: true
   rescue:
     - name: Record Chrome repo failure
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
         _csb_role: repos_dnf
         _csb_task_name: "Add Google Chrome repository"
@@ -46,6 +48,155 @@
         _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
         _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
         _csb_ticket_body: "Google Chrome needed for web development and testing"
+
+- name: Add Google Cloud SDK repo
+  when:
+    - repo_google_cloud_sdk | default(true)
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Add google-cloud-sdk repo
+      ansible.builtin.yum_repository:
+        name: google-cloud-sdk
+        description: Google Cloud CLI
+        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64"
+        gpgcheck: true
+        gpgkey: "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+        enabled: true
+  rescue:
+    - name: Record Google Cloud SDK repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Google Cloud SDK repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install gcloud manually or inside container"
+        _csb_ticket_summary: "Exception request: Google Cloud SDK RPM repository"
+        _csb_ticket_body: "Google Cloud SDK needed for GCP workflows"
+
+- name: Add Slack repo
+  when:
+    - repo_slack | default(true)
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Add slack repo
+      ansible.builtin.yum_repository:
+        name: slack
+        description: Slack Desktop
+        baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
+        gpgcheck: true
+        gpgkey: "https://packagecloud.io/slacktechnologies/slack/gpgkey"
+        enabled: true
+  rescue:
+    - name: Record Slack repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Slack repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install Slack via Flatpak or download RPM directly"
+        _csb_ticket_summary: "Exception request: Slack RPM repository"
+        _csb_ticket_body: "Slack desktop app for team communication"
+
+- name: Add Mullvad VPN repo
+  when:
+    - repo_mullvad | default(true)
+    - ansible_distribution == 'Fedora'
+  block:
+    - name: Add mullvad repo
+      ansible.builtin.yum_repository:
+        name: mullvad
+        description: Mullvad VPN
+        baseurl: "https://repository.mullvad.net/rpm/stable/$basearch"
+        gpgcheck: true
+        gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
+        enabled: true
+  rescue:
+    - name: Record Mullvad repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Mullvad VPN repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Download Mullvad RPM directly from mullvad.net"
+        _csb_ticket_summary: "Exception request: Mullvad VPN RPM repository"
+        _csb_ticket_body: "Mullvad VPN for privacy-preserving internet access"
+
+- name: Add Docker CE repo
+  when: repo_docker_ce | default(false)
+  block:
+    - name: Add docker-ce repo
+      ansible.builtin.yum_repository:
+        name: docker-ce
+        description: Docker CE Stable
+        baseurl: >-
+          https://download.docker.com/linux/{{
+          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
+          }}/$releasever/$basearch/stable
+        gpgcheck: true
+        gpgkey: >-
+          https://download.docker.com/linux/{{
+          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
+          }}/gpg
+        enabled: true
+  rescue:
+    - name: Record Docker CE repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Docker CE repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Use rootless Podman instead (recommended)"
+        _csb_ticket_summary: "Exception request: Docker CE RPM repository"
+        _csb_ticket_body: "Docker CE for container builds requiring Docker-specific features"
+
+- name: Add acli repo
+  when:
+    - repo_acli | default(true)
+    - profile == 'work'
+    - repos_dnf_acli_baseurl is defined
+  block:
+    - name: Add acli repo
+      ansible.builtin.yum_repository:
+        name: acli
+        description: Atlassian CLI
+        baseurl: "{{ repos_dnf_acli_baseurl }}"
+        gpgcheck: false
+        enabled: true
+  rescue:
+    - name: Record acli repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add acli repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install acli via pip: pip install atlassian-cli"
+        _csb_ticket_summary: "Exception request: acli RPM repository"
+        _csb_ticket_body: "acli for Atlassian CLI workflows"
+
+- name: Add Red Hat internal repos
+  when:
+    - repo_redhat | default(true)
+    - profile == 'work'
+    - repos_dnf_redhat_baseurl is defined
+  block:
+    - name: Add Red Hat internal repo
+      ansible.builtin.yum_repository:
+        name: redhat-internal
+        description: Red Hat Internal Tools
+        baseurl: "{{ repos_dnf_redhat_baseurl }}"
+        gpgcheck: "{{ repos_dnf_redhat_gpgkey | default('') | length > 0 }}"
+        gpgkey: "{{ repos_dnf_redhat_gpgkey | default(omit) }}"
+        enabled: true
+  rescue:
+    - name: Record Red Hat repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Red Hat internal repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install Red Hat internal tools manually or request VPN access"
+        _csb_ticket_summary: "Exception request: Red Hat internal RPM repository"
+        _csb_ticket_body: "Internal tools repo needed for Red Hat development workflows"
 
 - name: Enable RPM Fusion repos
   when:
@@ -63,7 +214,7 @@
         state: present
   rescue:
     - name: Record RPM Fusion failure
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/common/tasks/csb-failure-handler.yml"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
         _csb_role: repos_dnf
         _csb_task_name: "Enable RPM Fusion repositories"

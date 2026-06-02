@@ -1,0 +1,97 @@
+---
+- name: Check if notes repo exists
+  ansible.builtin.stat:
+    path: "{{ notes_repo_path }}/.git"
+  register: notes_repo_stat
+
+- name: Clone notes repo
+  ansible.builtin.git:  # noqa: latest[git]
+    repo: "{{ notes_remote_url }}"
+    dest: "{{ notes_repo_path }}"
+    update: false
+  when: not notes_repo_stat.stat.exists
+  failed_when: false
+  register: notes_clone_result
+
+- name: Clone notes repo via HTTPS (SSH fallback)
+  ansible.builtin.git:  # noqa: latest[git]
+    repo: "{{ notes_remote_url_https }}"
+    dest: "{{ notes_repo_path }}"
+    update: false
+  when:
+    - not notes_repo_stat.stat.exists
+    - notes_clone_result.failed | default(false)
+  failed_when: false
+  register: notes_clone_https_result
+
+- name: Set notes repo available fact
+  ansible.builtin.set_fact:
+    notes_repo_available: >-
+      {{ notes_repo_stat.stat.exists or
+         not (notes_clone_result.failed | default(false)) or
+         not (notes_clone_https_result.failed | default(false)) }}
+
+- name: Warn if notes repo could not be cloned
+  ansible.builtin.debug:
+    msg: >-
+      Could not clone notes repo via SSH or HTTPS.
+      Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
+  when: not notes_repo_available | bool
+
+- name: Check if transcrypt is available
+  ansible.builtin.command:
+    cmd: which transcrypt
+  register: notes_transcrypt_bin
+  changed_when: false
+  failed_when: false
+  when: notes_repo_available | bool
+
+- name: Check if transcrypt is initialized
+  ansible.builtin.command:
+    cmd: transcrypt --display
+    chdir: "{{ notes_repo_path }}"
+  register: notes_transcrypt_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when:
+    - notes_repo_available | bool
+    - notes_transcrypt_bin.rc | default(1) == 0
+
+- name: Initialize transcrypt
+  ansible.builtin.command:
+    cmd: "transcrypt -c {{ notes_transcrypt_cipher }} -y"
+    chdir: "{{ notes_repo_path }}"
+  environment:
+    TRANSCRYPT_PASSWORD: "{{ notes_transcrypt_password }}"
+  changed_when: true
+  when:
+    - notes_repo_available | bool
+    - notes_transcrypt_bin.rc | default(1) == 0
+    - notes_transcrypt_check.rc | default(1) != 0
+    - notes_transcrypt_password | default('') | length > 0
+  no_log: true
+
+- name: Restrict notes .git/config permissions (contains transcrypt password)
+  ansible.builtin.file:
+    path: "{{ notes_repo_path }}/.git/config"
+    mode: "0600"
+  when: notes_repo_available | bool
+
+- name: Warn if transcrypt not available
+  ansible.builtin.debug:
+    msg: "transcrypt not installed — run 'make packages' first"
+  when:
+    - notes_repo_available | bool
+    - notes_transcrypt_bin.rc | default(1) != 0
+
+- name: Warn if transcrypt password not set
+  ansible.builtin.debug:
+    msg: >-
+      notes_transcrypt_password is empty — transcrypt not initialized.
+      Set vault_notes_transcrypt_password in vault.yml to enable.
+  when:
+    - notes_repo_available | bool
+    - notes_transcrypt_bin.rc | default(1) == 0
+    - notes_transcrypt_check.rc | default(1) != 0
+    - notes_transcrypt_password | default('') | length == 0

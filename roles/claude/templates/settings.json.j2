@@ -5,5 +5,17 @@
 {% endfor %}
   },
   "sandbox": {{ claude_sandbox_config | to_nice_json }},
-  "cleanupPeriodDays": {{ claude_cleanup_period_days }}
+  "cleanupPeriodDays": {{ claude_cleanup_period_days }},
+  "enableAllProjectMcpServers": false,
+  "permissions": {
+    "deny": [
+{% for path in claude_deny_read %}
+      "Read({{ path }})"{{ "," if not loop.last or claude_deny_write | length > 0 else "" }}
+{% endfor %}
+{% for path in claude_deny_write %}
+      "Edit({{ path }})",
+      "Write({{ path }})"{{ "," if not loop.last else "" }}
+{% endfor %}
+    ]
+  }
 }

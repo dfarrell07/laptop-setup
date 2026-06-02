@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# USBGuard device whitelist — all other USB devices are blocked by default.
+{% for rule in system_usbguard_whitelist %}
+{{ rule }}
+{% endfor %}

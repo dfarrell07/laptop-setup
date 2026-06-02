@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+
+- Always use `--signoff` (`-s`) on git commits
+- You cannot push — pushes route over SSH and require YubiKey touch. Commit to a branch, then ask the user to push. Once pushed, open the PR.
+- Prefer terse responses.
+- After any manual install, config tweak, or system change — update the corresponding Ansible role in `~/laptop-setup` to capture it. The Ansible repo is the source of truth for machine state.
+- Never include conversation context, user names, or personal details in commit messages or PR descriptions. Reference code, not people.
+- Never include internal infrastructure names (hostnames, cluster names, registry URLs) in commits to public repos. Use placeholders — actual names are in CLAUDE.local.md.

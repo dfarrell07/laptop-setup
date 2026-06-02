@@ -11,10 +11,12 @@ provisioner:
   connection_options:
     ansible_connection: local
   env:
-    ANSIBLE_VAULT_PASSWORD_FILE: /dev/null
+    ANSIBLE_VAULT_PASSWORD_FILE: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
   config_options:
     defaults:
-      vault_password_file: /dev/null
+      vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
   inventory:
     host_vars:
       macos-instance:
@@ -28,4 +30,5 @@ scenario:
   test_sequence:
     - dependency
     - converge
+    - idempotence
     - verify

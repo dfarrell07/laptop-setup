@@ -1,6 +1,8 @@
 ---
 desktop_environment: auto  # auto, sway, i3, gnome
 
+desktop_alacritty_font_size: 11.0
+
 desktop_sway_packages:
   - sway
   - swayidle
@@ -23,3 +25,36 @@ desktop_common_packages:
   - gvim
   - dejavu-sans-mono-fonts
   - terminus-fonts
+  - gnome-keyring
+
+desktop_deploy_chrome_policies: true
+
+desktop_macos_defaults:
+  - domain: NSGlobalDomain
+    key: KeyRepeat
+    type: int
+    value: 2
+  - domain: NSGlobalDomain
+    key: InitialKeyRepeat
+    type: int
+    value: 15
+  - domain: NSGlobalDomain
+    key: NSAutomaticQuoteSubstitutionEnabled
+    type: bool
+    value: false
+  - domain: NSGlobalDomain
+    key: NSAutomaticDashSubstitutionEnabled
+    type: bool
+    value: false
+  - domain: com.apple.finder
+    key: AppleShowAllExtensions
+    type: bool
+    value: true
+  - domain: com.apple.finder
+    key: _FXShowPosixPathInTitle
+    type: bool
+    value: true
+  - domain: com.apple.screencapture
+    key: location
+    type: string
+    value: "{{ ansible_user_dir }}/Downloads"

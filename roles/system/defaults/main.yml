@@ -4,17 +4,35 @@ system_sysctl_hardening:
   kernel.yama.ptrace_scope: 1
   kernel.kptr_restrict: 1
   kernel.io_uring_disabled: 1
+  kernel.unprivileged_bpf_disabled: 1
+  kernel.dmesg_restrict: 1
+  kernel.perf_event_paranoid: 2
   net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
   net.ipv6.conf.all.accept_redirects: 0
-  net.ipv4.conf.all.rp_filter: 1
-  net.core.bpf_jit_harden: 2
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv6.conf.all.accept_source_route: 0
+  net.ipv4.conf.all.rp_filter: 2
+  net.ipv4.conf.default.rp_filter: 2
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  fs.suid_dumpable: 0
+  net.core.bpf_jit_harden: 1
+  fs.inotify.max_user_watches: 524288
+  fs.inotify.max_user_instances: 512
 
 # Firewall
-system_firewall_default_zone: drop
 system_firewall_icmp_types:
   - destination-unreachable
   - fragmentation-needed
+  - packet-too-big
   - time-exceeded
   - echo-reply
 
@@ -25,6 +43,17 @@ system_enable_mullvad: "{{ install_vpn | default(true) }}"
 # Core dumps
 system_coredump_storage: none
 system_coredump_process_size_max: 0
+
+# USBGuard
+system_install_usbguard: true
+system_usbguard_whitelist:
+  - "allow id 1050:* name \"Yubico\" with-interface one-of { 03:*:* 0B:*:* }"
+  - "allow id 3297:1969 name \"ZSA Moonlander\" with-interface one-of { 03:*:* }"
+  - "allow with-connect-type \"hardwired\""
+  - "allow with-connect-type \"direct\""
+
+# AIDE file integrity monitoring
+system_aide_enabled: true
 
 # Logind
 system_lid_switch: lock

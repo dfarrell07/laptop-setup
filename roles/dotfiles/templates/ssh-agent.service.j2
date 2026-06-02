@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+[Unit]
+Description=OpenSSH Agent
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket
+Restart=on-failure
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectHome=tmpfs
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+LockPersonality=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

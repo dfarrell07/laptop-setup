@@ -1,6 +1,6 @@
 ---
 # roles/desktop/tasks/main.yml
-# Desktop environment: Sway/GNOME/i3, Alacritty, fonts. Linux only.
+# Desktop environment: Sway/GNOME/i3 (Linux), AeroSpace (macOS), Alacritty, fonts.
 
 - name: Detect desktop environment
   ansible.builtin.set_fact:
@@ -45,6 +45,67 @@
     - desktop_effective == 'i3'
     - ansible_distribution == 'Fedora'
 
+# --- Alacritty config ---
+- name: Ensure Alacritty config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/alacritty"
+    state: directory
+    mode: "0755"
+
+- name: Deploy Alacritty config
+  ansible.builtin.template:
+    src: alacritty.toml.j2
+    dest: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+    mode: "0644"
+
+# --- Chrome managed policies ---
+- name: Create Chrome managed policies directory
+  ansible.builtin.file:
+    path: /etc/opt/chrome/policies/managed
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [become]
+  when:
+    - desktop_deploy_chrome_policies | default(true) | bool
+    - ansible_system == 'Linux'
+
+- name: Deploy Chrome security policy
+  ansible.builtin.copy:
+    src: chrome-security-policy.json
+    dest: /etc/opt/chrome/policies/managed/security.json
+    mode: "0644"
+    validate: "python3 -c \"import json; json.load(open('%s'))\""
+  become: true
+  tags: [become]
+  when:
+    - desktop_deploy_chrome_policies | default(true) | bool
+    - ansible_system == 'Linux'
+
+- name: Create Chromium managed policies directory
+  ansible.builtin.file:
+    path: /etc/chromium/policies/managed
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [become]
+  when:
+    - desktop_deploy_chrome_policies | default(true) | bool
+    - ansible_system == 'Linux'
+
+- name: Deploy Chromium security policy
+  ansible.builtin.copy:
+    src: chrome-security-policy.json
+    dest: /etc/chromium/policies/managed/security.json
+    mode: "0644"
+    validate: "python3 -c \"import json; json.load(open('%s'))\""
+  become: true
+  tags: [become]
+  when:
+    - desktop_deploy_chrome_policies | default(true) | bool
+    - ansible_system == 'Linux'
+
+# --- Shell ---
 - name: Set zsh as default shell
   ansible.builtin.user:
     name: "{{ ansible_user_id }}"
@@ -53,3 +114,114 @@
   tags: [become]
   when:
     - ansible_user_shell | default('/bin/bash') != '/bin/zsh'
+
+# --- macOS: AeroSpace config ---
+- name: Ensure AeroSpace config directory (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/aerospace"
+    state: directory
+    mode: "0755"
+  when: ansible_os_family == 'Darwin'
+
+- name: Deploy AeroSpace config (macOS)
+  ansible.builtin.template:
+    src: aerospace.toml.j2
+    dest: "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
+    mode: "0644"
+  when: ansible_os_family == 'Darwin'
+
+# --- macOS: defaults ---
+- name: Set macOS defaults
+  community.general.osx_defaults:
+    domain: "{{ item.domain }}"
+    key: "{{ item.key }}"
+    type: "{{ item.type }}"
+    value: "{{ item.value }}"
+  loop: "{{ desktop_macos_defaults }}"
+  loop_control:
+    label: "{{ item.domain }} {{ item.key }}"
+  when: ansible_os_family == 'Darwin'
+
+# --- macOS: firewall ---
+- name: Enable macOS firewall
+  ansible.builtin.command:
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+  changed_when: false
+  become: true
+  tags: [become]
+  when: ansible_os_family == 'Darwin'
+  failed_when: false
+
+- name: Enable macOS firewall stealth mode
+  ansible.builtin.command:
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
+  changed_when: false
+  become: true
+  tags: [become]
+  when: ansible_os_family == 'Darwin'
+  failed_when: false
+
+# --- GNOME hardening (Linux only, GNOME desktops) ---
+- name: Check if GNOME is installed
+  ansible.builtin.command:
+    cmd: gnome-shell --version
+  register: desktop_gnome_check
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Disable notifications on lock screen
+  community.general.dconf:
+    key: /org/gnome/desktop/notifications/show-in-lock-screen
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Ensure screen lock is enabled
+  community.general.dconf:
+    key: /org/gnome/desktop/screensaver/lock-enabled
+    value: "true"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable USB automount
+  community.general.dconf:
+    key: /org/gnome/desktop/media-handling/automount
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable autorun from removable media
+  community.general.dconf:
+    key: /org/gnome/desktop/media-handling/autorun-never
+    value: "true"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable automount-open
+  community.general.dconf:
+    key: /org/gnome/desktop/media-handling/automount-open
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable GNOME RDP
+  community.general.dconf:
+    key: /org/gnome/desktop/remote-desktop/rdp/enable
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable GNOME VNC
+  community.general.dconf:
+    key: /org/gnome/desktop/remote-desktop/vnc/enable
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0

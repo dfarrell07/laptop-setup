@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=AIDE file integrity check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/aide --check
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

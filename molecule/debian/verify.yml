@@ -1,0 +1,137 @@
+---
+- name: Verify (Debian/ChromeOS Crostini)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Check git is installed
+      ansible.builtin.command: git --version
+      changed_when: false
+
+    - name: Verify .zshrc exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.zshrc"
+      register: verify_zshrc
+
+    - name: Assert .zshrc exists
+      ansible.builtin.assert:
+        that: verify_zshrc.stat.exists
+        fail_msg: ".zshrc was not deployed"
+
+    - name: Verify .gitconfig exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.gitconfig"
+      register: verify_gitconfig
+
+    - name: Assert .gitconfig exists
+      ansible.builtin.assert:
+        that: verify_gitconfig.stat.exists
+        fail_msg: ".gitconfig was not deployed"
+
+    - name: Verify .tmux.conf exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.tmux.conf"
+      register: verify_tmux
+
+    - name: Assert .tmux.conf exists
+      ansible.builtin.assert:
+        that: verify_tmux.stat.exists
+        fail_msg: ".tmux.conf was not deployed"
+
+    - name: Verify SSH config exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.ssh/config"
+      register: verify_ssh_config
+
+    - name: Assert SSH config exists
+      ansible.builtin.assert:
+        that: verify_ssh_config.stat.exists
+        fail_msg: "SSH config was not deployed"
+
+    - name: Verify SSH config permissions
+      ansible.builtin.assert:
+        that: verify_ssh_config.stat.mode == '0600'
+        fail_msg: "SSH config has wrong permissions (expected 0600)"
+
+    - name: Verify SSH directory permissions
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.ssh"
+      register: verify_ssh_dir
+
+    - name: Assert SSH directory is 0700
+      ansible.builtin.assert:
+        that: verify_ssh_dir.stat.mode == '0700'
+        fail_msg: "SSH directory has wrong permissions (expected 0700)"
+
+    - name: Verify git repos base directory exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/src"
+      register: verify_repos_dir
+
+    - name: Assert git repos base directory exists
+      ansible.builtin.assert:
+        that: verify_repos_dir.stat.isdir
+        fail_msg: "Git repos base directory ~/src was not created"
+
+    - name: Verify Claude personal config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-personal"
+      register: verify_claude_dir
+
+    - name: Assert Claude config directory exists
+      ansible.builtin.assert:
+        that:
+          - verify_claude_dir.stat.isdir
+          - verify_claude_dir.stat.mode == '0700'
+        fail_msg: "Claude personal config dir missing or wrong permissions"
+
+    - name: Check git core.fsmonitor setting
+      ansible.builtin.command: git config --global core.fsmonitor
+      register: verify_fsmonitor
+      changed_when: false
+
+    - name: Assert git core.fsmonitor is false
+      ansible.builtin.assert:
+        that: verify_fsmonitor.stdout == 'false'
+        fail_msg: "git core.fsmonitor is not set to false"
+
+    - name: Verify Claude CLAUDE.md exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+      register: verify_claude_md
+
+    - name: Assert Claude CLAUDE.md exists
+      ansible.builtin.assert:
+        that: verify_claude_md.stat.exists
+        fail_msg: "Claude CLAUDE.md not deployed"
+
+    - name: Verify bashrc exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.bashrc"
+      register: verify_bashrc
+
+    - name: Assert bashrc exists
+      ansible.builtin.assert:
+        that: verify_bashrc.stat.exists
+        fail_msg: ".bashrc was not deployed"
+
+    - name: Check git core.hooksPath
+      ansible.builtin.command: git config --global core.hooksPath
+      register: verify_hooks_path
+      changed_when: false
+
+    - name: Assert core.hooksPath is set
+      ansible.builtin.assert:
+        that: "'hooks' in verify_hooks_path.stdout"
+        fail_msg: "git core.hooksPath not configured"
+
+    # --- Containers ---
+    - name: Verify containers config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/containers"
+      register: verify_containers_dir
+
+    - name: Assert containers config directory exists
+      ansible.builtin.assert:
+        that: verify_containers_dir.stat.isdir
+        fail_msg: "Containers config directory was not created"

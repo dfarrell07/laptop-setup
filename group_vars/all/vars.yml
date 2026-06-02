@@ -1,5 +1,28 @@
 ---
-# Plaintext variables referencing vault_ prefixed secrets.
-# Example: ssh_key: "{{ vault_ssh_key }}"
-#
-# Populated during implementation phases 3-7.
+# Indirection layer between vault secrets and role variables.
+# Roles reference these; vault_ prefixed variables come from vault.yml.
+
+# Static string for {{ ansible_managed }} in templates (no timestamps)
+ansible_managed: "Ansible managed — do not edit"
+
+# SSH keys (deployed by ssh role when vault is populated)
+ssh_auth_key: "{{ vault_ssh_auth_key | default('') }}"
+ssh_auth_key_pub: "{{ vault_ssh_auth_key_pub | default('') }}"
+ssh_signing_key: "{{ vault_ssh_signing_key | default('') }}"
+ssh_signing_key_pub: "{{ vault_ssh_signing_key_pub | default('') }}"
+
+# Git signing
+ssh_git_signing_email: "{{ dotfiles_user_email_work }}"
+ssh_git_signing_pubkey: "{{ vault_ssh_signing_key_pub | default('') }}"
+
+# Red Hat internal git key
+rh_git_key: "{{ vault_rh_git_key | default('') }}"
+
+# Internal hostnames (override in config.yml per-environment)
+dotfiles_internal_git_host: "internal-git.example.com"
+
+# Registry auth tokens
+registry_tokens: "{{ vault_registry_tokens | default({}) }}"
+
+# Notes repo transcrypt password
+notes_transcrypt_password: "{{ vault_notes_transcrypt_password | default('') }}"

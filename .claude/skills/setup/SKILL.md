@@ -49,8 +49,8 @@ Determine the OS and profile before running roles.
 ansible -m setup -a 'filter=ansible_os_family,ansible_distribution*' localhost
 ```
 
-If the machine is RHEL and `/etc/redhat-release` contains "CSB" or the hostname
-matches a CSB pattern, set `is_csb=true` for Phase 6.
+CSB is detected via three factors: RHEL distribution + fapolicyd installed +
+internal CA certs present. The playbook sets `csb_detected`/`csb_restricted` facts.
 
 Check sudo access level. This determines which targets can run:
 
@@ -59,7 +59,7 @@ sudo -n -l 2>/dev/null || echo "no-sudo"
 ```
 
 <!-- AGENT DECISION POINT: If sudo is unavailable or scoped, skip targets that
-require become (packages, system, redhat, cloud). Inform the user which
+require become (repos-dnf, system, packages, redhat, containers, desktop). Inform the user which
 targets are being skipped and why. On CSB, suggest `make minimal` if full
 sudo is unavailable. -->
 
@@ -80,11 +80,12 @@ targets that do not apply to this OS/profile or that the user did not request):
 4. `make packages` (some tasks need sudo)
 5. `make ssh`
 6. `make repos`
-7. `make redhat` (work profile, needs sudo)
-8. `make containers` (some tasks need sudo)
-9. `make desktop` (Linux desktop only, needs sudo)
-10. `make distrobox`
-11. `make claude`
+7. `make notes` (clones + transcrypt-decrypts private ~/notes repo)
+8. `make redhat` (work profile, needs sudo)
+9. `make containers` (some tasks need sudo)
+10. `make desktop` (Linux and macOS desktop, needs sudo on Linux)
+11. `make distrobox` (creates container + provisions via Play 3)
+12. `make claude`
 
 Note: `common` role is tagged `always` and runs automatically with any target.
 
@@ -145,6 +146,19 @@ gh auth status 2>&1
 
 If not authenticated, tell the user to run `gh auth login` and select HTTPS
 protocol. Wait for them to confirm completion, then verify.
+
+### Notes Repo (transcrypt)
+
+If `make notes` warned about missing transcrypt password, the user needs to
+populate `vault_notes_transcrypt_password` in vault.yml. Guide them:
+
+```bash
+make vault-edit  # add vault_notes_transcrypt_password: "<password>"
+make notes       # re-run to initialize transcrypt
+```
+
+If clone failed (no GitHub auth), resolve GitHub CLI auth first (above), then
+re-run `make notes`.
 
 ### OpenShift (work profile only)
 
@@ -208,7 +222,7 @@ whether auth steps in Phase 4 were completed. -->
 
 ## Phase 6: CSB Report (RHEL CSB only)
 
-Skip this phase if `is_csb` is not true.
+Skip this phase if `csb_detected` is not true.
 
 Parse the CSB compatibility report generated during Phase 3:
 

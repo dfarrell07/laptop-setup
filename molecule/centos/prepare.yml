@@ -1,0 +1,14 @@
+---
+- name: Prepare (CentOS)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Create mock Red Hat CA cert files for testing
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/redhat/files/{{ item }}"
+        content: "mock-cert-for-testing"
+        mode: "0644"
+      loop:
+        - 2022-IT-Root-CA.pem
+        - Eng-CA.crt
+      delegate_to: localhost

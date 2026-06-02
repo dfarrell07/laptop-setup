@@ -15,5 +15,59 @@ claude_sandbox_config:
   enabled: true
   allowUnsandboxedCommands: false
   failIfUnavailable: true
+  enableWeakerNestedSandbox: true
 
 claude_cleanup_period_days: 7
+
+claude_queue_enabled: false
+claude_queue_repo: ""
+
+claude_deny_read:
+  - "~/.ssh/**"
+  - "~/.aws/**"
+  - "~/.gnupg/**"
+  - "~/.kube/**"
+  - "~/.config/gh/**"
+  - "~/.config/gcloud/**"
+  - "~/.config/acli/**"
+  - "~/.config/containers/auth.json"
+  - "~/.docker/config.json"
+  - "~/.local/share/keyrings/**"
+  - "~/.claude-work/**"
+  - "~/.claude-personal/**"
+  - "~/.claude/.credentials.json"
+  - "~/.vault_pass*"
+  - "~/.netrc"
+  - "~/.npmrc"
+  - "**/.env"
+  - "**/.git/config"
+  - "/proc/*/environ"
+  - "/proc/*/cmdline"
+  - "~/.zsh_history"
+  - "~/.bash_history"
+  - "//run/host/**"
+
+claude_deny_write:
+  - "~/.ssh/**"
+  - "~/.aws/**"
+  - "~/.gnupg/**"
+  - "~/.kube/**"
+  - "~/.config/gh/**"
+  - "~/.config/gcloud/**"
+  - "~/.config/acli/**"
+  - "~/.config/containers/auth.json"
+  - "~/.docker/config.json"
+  - "~/.local/share/keyrings/**"
+  - "~/.claude-work/**"
+  - "~/.claude-personal/**"
+  - "~/.claude/.credentials.json"
+  - "~/.claude/settings.json"
+  - "~/.claude/settings.local.json"
+  - "~/.vault_pass*"
+  - "~/.netrc"
+  - "~/.npmrc"
+  - "**/.env"
+  - "**/.git/config"
+  - "~/.zsh_history"
+  - "~/.bash_history"
+  - "//run/host/**"
