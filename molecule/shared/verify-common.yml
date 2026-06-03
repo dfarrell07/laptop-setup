@@ -122,6 +122,16 @@
     that: verify_gpgsign.stdout == 'true'
     fail_msg: "git commit.gpgsign not enabled"
 
+- name: Check git safe.bareRepository setting
+  ansible.builtin.command: git config --global safe.bareRepository
+  register: verify_bare_repo
+  changed_when: false
+
+- name: Assert git safe.bareRepository is explicit
+  ansible.builtin.assert:
+    that: verify_bare_repo.stdout == 'explicit'
+    fail_msg: "git safe.bareRepository is not set to explicit"
+
 # --- Directories ---
 - name: Verify ~/bin directory exists
   ansible.builtin.stat:
@@ -161,10 +171,12 @@
     path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
   register: verify_claude_settings
 
-- name: Assert Claude settings.json exists
+- name: Assert Claude settings.json exists with 0600
   ansible.builtin.assert:
-    that: verify_claude_settings.stat.exists
-    fail_msg: "Claude settings.json not deployed"
+    that:
+      - verify_claude_settings.stat.exists
+      - verify_claude_settings.stat.mode == '0600'
+    fail_msg: "Claude settings.json not deployed or wrong permissions (expected 0600)"
 
 - name: Verify Claude CLAUDE.md deployed
   ansible.builtin.stat:
@@ -200,3 +212,27 @@
       - verify_gh_dir.stat.isdir
       - verify_gh_dir.stat.mode == '0700'
     fail_msg: "gh config directory missing or wrong permissions"
+
+# --- Dotfiles: direnv ---
+- name: Verify direnv config exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/direnv/direnv.toml"
+  register: verify_direnv
+
+- name: Assert direnv config deployed
+  ansible.builtin.assert:
+    that: verify_direnv.stat.exists
+    fail_msg: "direnv config not deployed"
+
+# --- Dotfiles: SSH agent (Linux only) ---
+- name: Verify SSH agent systemd service deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
+  register: verify_ssh_agent
+  when: ansible_system == 'Linux'
+
+- name: Assert SSH agent service deployed
+  ansible.builtin.assert:
+    that: verify_ssh_agent.stat.exists
+    fail_msg: "SSH agent systemd user service not deployed"
+  when: ansible_system == 'Linux'

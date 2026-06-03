@@ -28,13 +28,3 @@
   ansible.builtin.assert:
     that: verify_containers_dir.stat.isdir
     fail_msg: "Containers config directory was not created"
-
-- name: Check git safe.bareRepository setting
-  ansible.builtin.command: git config --global safe.bareRepository
-  register: verify_bare_repo
-  changed_when: false
-
-- name: Assert git safe.bareRepository is explicit
-  ansible.builtin.assert:
-    that: verify_bare_repo.stdout == 'explicit'
-    fail_msg: "git safe.bareRepository is not set to explicit"

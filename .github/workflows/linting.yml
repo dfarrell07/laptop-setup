@@ -75,7 +75,10 @@ jobs:
           persist-credentials: false
 
       - name: Run shellcheck
-        run: find scripts -type f -name "*.sh" -exec shellcheck -S warning {} +
+        run: |
+          shellcheck -S warning scripts/*.sh
+          shellcheck -S warning roles/claude/files/*.sh
+          shellcheck -S warning .githooks/*
 
       - name: Validate preflight JSON output
         run: bash scripts/preflight.sh --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
