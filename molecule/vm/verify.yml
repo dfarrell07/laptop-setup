@@ -5,122 +5,47 @@
   become: false
 
   tasks:
-    # --- Package checks ---
-    - name: Check git is installed
-      ansible.builtin.command: git --version
-      changed_when: false
+    # --- Shared assertions (all platforms) ---
+    - name: Include common verify assertions
+      ansible.builtin.include_tasks: ../shared/verify-common.yml
 
-    - name: Check zsh is installed
-      ansible.builtin.command: zsh --version
-      changed_when: false
+    # --- Shared assertions (dnf platforms) ---
+    - name: Include dnf verify assertions
+      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
 
-    - name: Check tmux is installed
-      ansible.builtin.command: tmux -V
-      changed_when: false
-
-    - name: Check jq is installed
-      ansible.builtin.command: jq --version
-      changed_when: false
-
-    - name: Check fzf is installed
-      ansible.builtin.command: fzf --version
-      changed_when: false
-
-    # --- Dotfile checks ---
-    - name: Verify .zshrc exists
+    # --- repos_dnf checks ---
+    - name: Verify gh-cli repo configured
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.zshrc"
-      register: verify_zshrc
+        path: /etc/yum.repos.d/gh-cli.repo
+      register: verify_gh_repo
+      become: true
 
-    - name: Assert .zshrc exists
+    - name: Assert gh-cli repo exists
       ansible.builtin.assert:
-        that: verify_zshrc.stat.exists
-        fail_msg: ".zshrc was not deployed"
+        that: verify_gh_repo.stat.exists
+        fail_msg: "gh-cli repo not configured"
 
-    - name: Verify .gitconfig exists
+    - name: Verify sysctl hardening config deployed
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.gitconfig"
-      register: verify_gitconfig
+        path: /etc/sysctl.d/90-hardening.conf
+      register: verify_sysctl
+      become: true
 
-    - name: Assert .gitconfig exists
+    - name: Assert sysctl hardening deployed
       ansible.builtin.assert:
-        that: verify_gitconfig.stat.exists
-        fail_msg: ".gitconfig was not deployed"
+        that: verify_sysctl.stat.exists
+        fail_msg: "Sysctl hardening config not deployed"
 
-    - name: Verify .tmux.conf exists
+    - name: Verify modprobe hardening config deployed
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.tmux.conf"
-      register: verify_tmux
+        path: /etc/modprobe.d/hardening.conf
+      register: verify_modprobe
+      become: true
 
-    - name: Assert .tmux.conf exists
+    - name: Assert modprobe hardening deployed
       ansible.builtin.assert:
-        that: verify_tmux.stat.exists
-        fail_msg: ".tmux.conf was not deployed"
-
-    - name: Verify SSH config exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.ssh/config"
-      register: verify_ssh_config
-
-    - name: Assert SSH config exists
-      ansible.builtin.assert:
-        that: verify_ssh_config.stat.exists
-        fail_msg: "SSH config was not deployed"
-
-    # --- Git security checks ---
-    - name: Check git core.fsmonitor
-      ansible.builtin.command: git config --global core.fsmonitor
-      register: verify_fsmonitor
-      changed_when: false
-
-    - name: Assert git core.fsmonitor is false
-      ansible.builtin.assert:
-        that: verify_fsmonitor.stdout == 'false'
-        fail_msg: "git core.fsmonitor is not set to false"
-
-    - name: Check git safe.bareRepository
-      ansible.builtin.command: git config --global safe.bareRepository
-      register: verify_bare_repo
-      changed_when: false
-
-    - name: Assert git safe.bareRepository is explicit
-      ansible.builtin.assert:
-        that: verify_bare_repo.stdout == 'explicit'
-        fail_msg: "git safe.bareRepository is not set to explicit"
-
-    # --- Claude checks ---
-    - name: Verify Claude personal config directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-personal"
-      register: verify_claude_dir
-
-    - name: Assert Claude config directory exists
-      ansible.builtin.assert:
-        that:
-          - verify_claude_dir.stat.isdir
-          - verify_claude_dir.stat.mode == '0700'
-        fail_msg: "Claude personal config dir missing or wrong permissions"
-
-    # --- Git repos and containers checks ---
-    - name: Verify git repos base directory exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/src"
-      register: verify_repos_dir
-
-    - name: Assert git repos base directory exists
-      ansible.builtin.assert:
-        that: verify_repos_dir.stat.isdir
-        fail_msg: "Git repos base directory ~/src was not created"
-
-    - name: Verify containers config directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/containers"
-      register: verify_containers_dir
-
-    - name: Assert containers config directory exists
-      ansible.builtin.assert:
-        that: verify_containers_dir.stat.isdir
-        fail_msg: "Containers config directory was not created"
+        that: verify_modprobe.stat.exists
+        fail_msg: "Modprobe hardening config not deployed"
 
     # --- System hardening checks (VM only) ---
     - name: Gather service facts for conditional checks
@@ -144,10 +69,10 @@
       changed_when: false
       become: true
 
-    - name: Assert BPF JIT hardening for unprivileged users
+    - name: Assert BPF JIT hardening
       ansible.builtin.assert:
-        that: verify_bpf.stdout == '1'
-        fail_msg: "BPF JIT hardening not enabled (expected sysctl value 1)"
+        that: verify_bpf.stdout == '2'
+        fail_msg: "BPF JIT hardening not set to 2"
 
     - name: Check sysctl net.ipv4.conf.all.rp_filter
       ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
@@ -155,10 +80,10 @@
       changed_when: false
       become: true
 
-    - name: Assert reverse path filtering is loose (VPN-compatible)
+    - name: Assert reverse path filtering
       ansible.builtin.assert:
-        that: verify_rp_filter.stdout == '2'
-        fail_msg: "Reverse path filtering not set to loose mode (expected 2 for VPN compat)"
+        that: verify_rp_filter.stdout == '1'
+        fail_msg: "Reverse path filtering not set to strict mode"
 
     - name: Verify auditd rules file exists
       ansible.builtin.stat:
@@ -169,7 +94,7 @@
     - name: Assert auditd rules deployed
       ansible.builtin.assert:
         that: verify_auditd.stat.exists
-        fail_msg: "Auditd rules not deployed at /etc/audit/rules.d/claude-code.rules"
+        fail_msg: "Auditd rules not deployed"
       when: ansible_facts.services['auditd.service'] is defined
 
     - name: Verify DNS-over-TLS config exists
@@ -181,14 +106,8 @@
     - name: Assert DNS-over-TLS config deployed
       ansible.builtin.assert:
         that: verify_dot.stat.exists
-        fail_msg: "DNS-over-TLS config not deployed at /etc/systemd/resolved.conf.d/99-dot.conf"
+        fail_msg: "DNS-over-TLS config not deployed"
       when: ansible_facts.services['systemd-resolved.service'] is defined
-
-    - name: Check core dumps disabled
-      ansible.builtin.command: sysctl -n kernel.core_pattern
-      register: verify_core
-      changed_when: false
-      become: true
 
     - name: Verify kernel lockdown in grubby
       ansible.builtin.command: grubby --info=DEFAULT
@@ -212,7 +131,7 @@
     - name: Assert sshd hardening deployed
       ansible.builtin.assert:
         that: verify_sshd.stat.exists
-        fail_msg: "SSHD hardening config not deployed at /etc/ssh/sshd_config.d/00-hardening.conf"
+        fail_msg: "SSHD hardening config not deployed"
 
     - name: Verify crypto-policy
       ansible.builtin.command: update-crypto-policies --show
@@ -224,7 +143,7 @@
     - name: Assert crypto-policy is DEFAULT:NO-SHA1
       ansible.builtin.assert:
         that: verify_crypto.stdout == 'DEFAULT:NO-SHA1'
-        fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected 'DEFAULT:NO-SHA1'"
+        fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected DEFAULT:NO-SHA1"
       when: verify_crypto.rc == 0
 
     - name: Verify NetworkManager Tailscale config
@@ -236,27 +155,7 @@
     - name: Assert Tailscale NM unmanaged config deployed
       ansible.builtin.assert:
         that: verify_nm_ts.stat.exists
-        fail_msg: "NetworkManager Tailscale unmanaged config not deployed"
-
-    - name: Verify Claude CLAUDE.md deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
-      register: verify_claude_md
-
-    - name: Assert Claude CLAUDE.md exists
-      ansible.builtin.assert:
-        that: verify_claude_md.stat.exists
-        fail_msg: "Claude CLAUDE.md not deployed"
-
-    - name: Verify bashrc deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.bashrc"
-      register: verify_bashrc
-
-    - name: Assert bashrc exists
-      ansible.builtin.assert:
-        that: verify_bashrc.stat.exists
-        fail_msg: ".bashrc was not deployed"
+        fail_msg: "NetworkManager Tailscale config not deployed"
 
     # --- New system hardening checks ---
     - name: Check /dev/shm mount options
@@ -280,7 +179,7 @@
     - name: Assert usb_storage is blacklisted
       ansible.builtin.assert:
         that: verify_usb_storage.rc == 0
-        fail_msg: "usb_storage not blacklisted in /etc/modprobe.d/hardening.conf"
+        fail_msg: "usb_storage not blacklisted"
 
     - name: Verify chrony NTS config
       ansible.builtin.command: grep -q nts /etc/chrony.conf
@@ -292,7 +191,7 @@
     - name: Assert chrony has NTS config
       ansible.builtin.assert:
         that: verify_chrony_nts.rc == 0
-        fail_msg: "NTS not configured in /etc/chrony.conf"
+        fail_msg: "NTS not configured in chrony.conf"
 
     - name: Verify chronyd is enabled
       ansible.builtin.systemd:

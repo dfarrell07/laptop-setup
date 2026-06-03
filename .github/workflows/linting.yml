@@ -77,6 +77,15 @@ jobs:
       - name: Run shellcheck
         run: find scripts -type f -name "*.sh" -exec shellcheck -S warning {} +
 
+      - name: Validate preflight JSON output
+        run: bash scripts/preflight.sh --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
+
+      - name: Validate smoke-test JSON output
+        run: bash scripts/smoke-test.sh --user-only --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
+
+      - name: Run queue poller unit tests
+        run: bash scripts/test-queue-poller.sh
+
   vault-encryption:
     name: Vault Encryption Check
     runs-on: ubuntu-latest
