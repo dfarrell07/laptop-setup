@@ -1,2 +1,40 @@
 #!/bin/sh
+# Enforce imperative mood commit messages (Tim Pope style)
+msg=$(head -1 "$1")
+first=$(echo "$msg" | awk '{print $1}')
+
+# Check capitalized
+if ! echo "$msg" | grep -qE '^[A-Z]'; then
+  echo "ERROR: Capitalize the subject line" >&2
+  exit 1
+fi
+
+# Reject common past tense and gerund first words
+case "$first" in
+  Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|Fixed|\
+  Implemented|Improved|Merged|Moved|Refactored|Removed|Renamed|\
+  Replaced|Resolved|Reverted|Started|Stopped|Updated|Upgraded|\
+  Adding|Changing|Creating|Deleting|Enabling|Disabling|Expanding|\
+  Fixing|Implementing|Improving|Merging|Moving|Refactoring|Removing|\
+  Renaming|Replacing|Resolving|Reverting|Starting|Stopping|Updating|\
+  Upgrading)
+    echo "ERROR: Use imperative mood ('$first' is not imperative)" >&2
+    echo "  Write 'Add ...' not 'Added/Adding ...'" >&2
+    exit 1 ;;
+esac
+
+# Check length
+len=${#msg}
+if [ "$len" -gt 72 ]; then
+  echo "ERROR: Subject too long ($len > 72 chars)" >&2
+  exit 1
+fi
+
+# No trailing period
+if echo "$msg" | grep -qE '\.$'; then
+  echo "ERROR: No trailing period on subject line" >&2
+  exit 1
+fi
+
+# Run commitlint for remaining rules (body blank line, etc.)
 npx --no -- commitlint --edit "$1"
