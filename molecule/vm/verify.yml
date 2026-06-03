@@ -25,6 +25,28 @@
         that: verify_gh_repo.stat.exists
         fail_msg: "gh-cli repo not configured"
 
+    - name: Verify google-chrome repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/google-chrome.repo
+      register: verify_chrome_repo
+      become: true
+
+    - name: Assert google-chrome repo exists
+      ansible.builtin.assert:
+        that: verify_chrome_repo.stat.exists
+        fail_msg: "google-chrome repo not configured"
+
+    - name: Verify mullvad repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/mullvad.repo
+      register: verify_mullvad_repo
+      become: true
+
+    - name: Assert mullvad repo exists
+      ansible.builtin.assert:
+        that: verify_mullvad_repo.stat.exists
+        fail_msg: "mullvad repo not configured"
+
     - name: Verify sysctl hardening config deployed
       ansible.builtin.stat:
         path: /etc/sysctl.d/90-hardening.conf
@@ -35,6 +57,16 @@
       ansible.builtin.assert:
         that: verify_sysctl.stat.exists
         fail_msg: "Sysctl hardening config not deployed"
+
+    - name: Check sysctl config contains ptrace restriction
+      ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 1' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sysctl config contains dmesg restriction
+      ansible.builtin.command: grep -q 'kernel.dmesg_restrict = 1' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
 
     - name: Verify modprobe hardening config deployed
       ansible.builtin.stat:
@@ -91,10 +123,12 @@
       register: verify_auditd
       become: true
 
-    - name: Assert auditd rules deployed
+    - name: Assert auditd rules deployed with correct mode
       ansible.builtin.assert:
-        that: verify_auditd.stat.exists
-        fail_msg: "Auditd rules not deployed"
+        that:
+          - verify_auditd.stat.exists
+          - verify_auditd.stat.mode == '0640'
+        fail_msg: "Auditd rules not deployed or wrong permissions (expected 0640)"
       when: ansible_facts.services['auditd.service'] is defined
 
     - name: Verify DNS-over-TLS config exists
@@ -128,10 +162,22 @@
       register: verify_sshd
       become: true
 
-    - name: Assert sshd hardening deployed
+    - name: Assert sshd hardening deployed with correct mode
       ansible.builtin.assert:
-        that: verify_sshd.stat.exists
-        fail_msg: "SSHD hardening config not deployed"
+        that:
+          - verify_sshd.stat.exists
+          - verify_sshd.stat.mode == '0600'
+        fail_msg: "SSHD hardening config not deployed or wrong permissions (expected 0600)"
+
+    - name: Check sshd config disables password auth
+      ansible.builtin.command: grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config disables root login
+      ansible.builtin.command: grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
 
     - name: Verify crypto-policy
       ansible.builtin.command: update-crypto-policies --show
@@ -180,6 +226,16 @@
       ansible.builtin.assert:
         that: verify_usb_storage.rc == 0
         fail_msg: "usb_storage not blacklisted"
+
+    - name: Check modprobe blacklists cramfs
+      ansible.builtin.command: grep -q cramfs /etc/modprobe.d/hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check modprobe blacklists firewire-core
+      ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
+      changed_when: false
+      become: true
 
     - name: Verify chrony NTS config
       ansible.builtin.command: grep -q nts /etc/chrony.conf
@@ -230,3 +286,56 @@
       ansible.builtin.assert:
         that: verify_aide_timer.status.UnitFileState == 'enabled'
         fail_msg: "AIDE check timer not enabled"
+
+    # --- Service masking ---
+    - name: Check cups-browsed service state
+      ansible.builtin.systemd:
+        name: cups-browsed
+      register: verify_cups
+      become: true
+      failed_when: false
+
+    - name: Assert cups-browsed is masked
+      ansible.builtin.assert:
+        that: verify_cups.status.UnitFileState == 'masked'
+        fail_msg: "cups-browsed is not masked"
+      when: verify_cups.status is defined
+
+    - name: Check ctrl-alt-del.target state
+      ansible.builtin.systemd:
+        name: ctrl-alt-del.target
+      register: verify_cad
+      become: true
+      failed_when: false
+
+    - name: Assert ctrl-alt-del is masked
+      ansible.builtin.assert:
+        that: verify_cad.status.UnitFileState == 'masked'
+        fail_msg: "ctrl-alt-del.target is not masked"
+      when: verify_cad.status is defined
+
+    # --- Core dump disable ---
+    - name: Verify core dump disable config
+      ansible.builtin.stat:
+        path: /etc/systemd/coredump.conf.d/disable.conf
+      register: verify_coredump
+      become: true
+
+    - name: Assert core dump disable config deployed
+      ansible.builtin.assert:
+        that: verify_coredump.stat.exists
+        fail_msg: "Core dump disable config not deployed"
+
+    # --- dnf-automatic ---
+    - name: Verify dnf-automatic timer enabled
+      ansible.builtin.systemd:
+        name: dnf-automatic-install.timer
+      register: verify_dnf_auto
+      become: true
+      failed_when: false
+
+    - name: Assert dnf-automatic timer is enabled
+      ansible.builtin.assert:
+        that: verify_dnf_auto.status.UnitFileState == 'enabled'
+        fail_msg: "dnf-automatic timer not enabled"
+      when: verify_dnf_auto.status is defined
