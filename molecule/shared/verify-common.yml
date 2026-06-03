@@ -7,6 +7,7 @@
   ansible.builtin.command: git --version
   changed_when: false
 
+# --- Dotfiles ---
 - name: Verify .zshrc exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.zshrc"
@@ -37,6 +38,27 @@
     that: verify_tmux.stat.exists
     fail_msg: ".tmux.conf was not deployed"
 
+- name: Verify .vimrc exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.vimrc"
+  register: verify_vimrc
+
+- name: Assert .vimrc exists
+  ansible.builtin.assert:
+    that: verify_vimrc.stat.exists
+    fail_msg: ".vimrc was not deployed"
+
+- name: Verify bashrc deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.bashrc"
+  register: verify_bashrc
+
+- name: Assert bashrc exists
+  ansible.builtin.assert:
+    that: verify_bashrc.stat.exists
+    fail_msg: ".bashrc was not deployed"
+
+# --- SSH ---
 - name: Verify SSH config exists with correct permissions
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.ssh/config"
@@ -49,49 +71,18 @@
       - verify_ssh_config.stat.mode == '0600'
     fail_msg: "SSH config missing or wrong permissions"
 
-- name: Verify Claude personal config directory
+- name: Verify SSH directory permissions
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal"
-  register: verify_claude_dir
+    path: "{{ ansible_user_dir }}/.ssh"
+  register: verify_ssh_dir
 
-- name: Assert Claude config directory exists with 0700
+- name: Assert SSH directory is 0700
   ansible.builtin.assert:
-    that:
-      - verify_claude_dir.stat.isdir
-      - verify_claude_dir.stat.mode == '0700'
-    fail_msg: "Claude personal config dir missing or wrong permissions"
+    that: verify_ssh_dir.stat.mode == '0700'
+    fail_msg: "SSH directory has wrong permissions"
 
-- name: Verify Claude CLAUDE.md deployed
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
-  register: verify_claude_md
-
-- name: Assert Claude CLAUDE.md exists
-  ansible.builtin.assert:
-    that: verify_claude_md.stat.exists
-    fail_msg: "Claude CLAUDE.md not deployed"
-
-- name: Verify bashrc deployed
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.bashrc"
-  register: verify_bashrc
-
-- name: Assert bashrc exists
-  ansible.builtin.assert:
-    that: verify_bashrc.stat.exists
-    fail_msg: ".bashrc was not deployed"
-
-- name: Verify git repos base directory exists
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/src"
-  register: verify_repos_dir
-
-- name: Assert git repos base directory exists
-  ansible.builtin.assert:
-    that: verify_repos_dir.stat.isdir
-    fail_msg: "Git repos base directory ~/src was not created"
-
-- name: Check git core.fsmonitor setting
+# --- Git security ---
+- name: Check git core.fsmonitor
   ansible.builtin.command: git config --global core.fsmonitor
   register: verify_fsmonitor
   changed_when: false
@@ -110,3 +101,102 @@
   ansible.builtin.assert:
     that: "'hooks' in verify_hooks_path.stdout"
     fail_msg: "git core.hooksPath not configured"
+
+- name: Check git push.autoSetupRemote
+  ansible.builtin.command: git config --global push.autoSetupRemote
+  register: verify_auto_remote
+  changed_when: false
+
+- name: Assert push.autoSetupRemote is true
+  ansible.builtin.assert:
+    that: verify_auto_remote.stdout == 'true'
+    fail_msg: "git push.autoSetupRemote not set"
+
+- name: Check git commit.gpgsign
+  ansible.builtin.command: git config --global commit.gpgsign
+  register: verify_gpgsign
+  changed_when: false
+
+- name: Assert commit.gpgsign is true
+  ansible.builtin.assert:
+    that: verify_gpgsign.stdout == 'true'
+    fail_msg: "git commit.gpgsign not enabled"
+
+# --- Directories ---
+- name: Verify ~/bin directory exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/bin"
+  register: verify_bin_dir
+
+- name: Assert ~/bin exists
+  ansible.builtin.assert:
+    that: verify_bin_dir.stat.isdir
+    fail_msg: "~/bin directory was not created"
+
+- name: Verify git repos base directory exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/src"
+  register: verify_repos_dir
+
+- name: Assert git repos base directory exists
+  ansible.builtin.assert:
+    that: verify_repos_dir.stat.isdir
+    fail_msg: "Git repos base directory ~/src was not created"
+
+# --- Claude ---
+- name: Verify Claude personal config directory
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-personal"
+  register: verify_claude_dir
+
+- name: Assert Claude config directory exists with 0700
+  ansible.builtin.assert:
+    that:
+      - verify_claude_dir.stat.isdir
+      - verify_claude_dir.stat.mode == '0700'
+    fail_msg: "Claude personal config dir missing or wrong permissions"
+
+- name: Verify Claude settings.json exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
+  register: verify_claude_settings
+
+- name: Assert Claude settings.json exists
+  ansible.builtin.assert:
+    that: verify_claude_settings.stat.exists
+    fail_msg: "Claude settings.json not deployed"
+
+- name: Verify Claude CLAUDE.md deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+  register: verify_claude_md
+
+- name: Assert Claude CLAUDE.md exists
+  ansible.builtin.assert:
+    that: verify_claude_md.stat.exists
+    fail_msg: "Claude CLAUDE.md not deployed"
+
+# --- Git hooks ---
+- name: Verify gitleaks pre-commit hook
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/template/hooks/pre-commit"
+  register: verify_precommit
+
+- name: Assert pre-commit hook is executable
+  ansible.builtin.assert:
+    that:
+      - verify_precommit.stat.exists
+      - verify_precommit.stat.executable
+    fail_msg: "Gitleaks pre-commit hook missing or not executable"
+
+- name: Verify gh CLI config directory
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/gh"
+  register: verify_gh_dir
+
+- name: Assert gh config directory exists with 0700
+  ansible.builtin.assert:
+    that:
+      - verify_gh_dir.stat.isdir
+      - verify_gh_dir.stat.mode == '0700'
+    fail_msg: "gh config directory missing or wrong permissions"
