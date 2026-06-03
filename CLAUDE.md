@@ -31,9 +31,8 @@ make check            # Dry run (--check mode)
 
 ## Commit Conventions
 
-- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(dotfiles): add starship prompt`
-- Scopes: role names (common, dotfiles, packages, ssh, git_repos, notes, repos_dnf, system,
-  redhat, containers, desktop, distrobox, claude), plus ci, deps, docs, scripts, molecule
+- Start with an imperative verb: `Add cgroup mount to molecule configs`
+- Max 72 characters, capitalize first word, no trailing period
 - Always use `--signoff` (`-s`) when creating git commits
 
 ## Vault

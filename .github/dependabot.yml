@@ -8,8 +8,10 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
-    commit-message:
-      prefix: "chore(deps)"
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "pip"
     directory: "/"
@@ -18,26 +20,19 @@ updates:
     labels:
       - "dependencies"
       - "pip"
-    commit-message:
-      prefix: "chore(deps)"
     groups:
-      molecule:
+      python:
         patterns:
-          - "molecule*"
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     labels:
       - "dependencies"
       - "npm"
-    commit-message:
-      prefix: "chore(deps)"
     groups:
-      commitlint:
+      node:
         patterns:
-          - "@commitlint*"
-      markdownlint:
-        patterns:
-          - "markdownlint*"
+          - "*"

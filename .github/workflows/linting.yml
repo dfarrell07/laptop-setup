@@ -197,3 +197,31 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: npx commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
+
+      - name: Check imperative mood
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            msg=$(git log -1 --format=%s "$sha")
+            first=$(echo "$msg" | awk '{print $1}')
+            if ! echo "$msg" | grep -qE '^[A-Z]'; then
+              echo "::error::Commit $sha: Subject must start with a capital letter"
+              failed=1
+            fi
+            case "$first" in
+              Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|\
+              Fixed|Implemented|Improved|Merged|Moved|Refactored|\
+              Removed|Renamed|Replaced|Resolved|Reverted|Started|\
+              Stopped|Updated|Upgraded|\
+              Adding|Changing|Creating|Deleting|Enabling|Disabling|\
+              Expanding|Fixing|Implementing|Improving|Merging|Moving|\
+              Refactoring|Removing|Renaming|Replacing|Resolving|\
+              Reverting|Starting|Stopping|Updating|Upgrading)
+                echo "::error::Commit $sha: Use imperative mood, not '$first'"
+                failed=1 ;;
+            esac
+          done
+          exit $failed
