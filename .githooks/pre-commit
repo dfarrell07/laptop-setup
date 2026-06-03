@@ -1,6 +1,8 @@
 #!/bin/sh
-# Block commits that include unencrypted vault files
+# Pre-commit checks: vault encryption, secrets, YAML, shell, JSON
 failed=0
+
+# Block unencrypted vault files
 for f in $(git diff --cached --name-only -z -- '*vault.yml' | tr '\0' '\n'); do
   if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
@@ -8,11 +10,42 @@ for f in $(git diff --cached --name-only -z -- '*vault.yml' | tr '\0' '\n'); do
   fi
 done
 
-# Run gitleaks if available
+# Secret scanning
 if command -v gitleaks >/dev/null 2>&1; then
   if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2; then
     failed=1
   fi
+fi
+
+# YAML lint staged files
+if command -v yamllint >/dev/null 2>&1; then
+  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml' | grep -v node_modules | grep -v collections)
+  if [ -n "$yaml_files" ]; then
+    if ! echo "$yaml_files" | xargs yamllint --strict; then
+      failed=1
+    fi
+  fi
+fi
+
+# Shell lint staged scripts
+if command -v shellcheck >/dev/null 2>&1; then
+  sh_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh')
+  if [ -n "$sh_files" ]; then
+    if ! echo "$sh_files" | xargs shellcheck -S warning; then
+      failed=1
+    fi
+  fi
+fi
+
+# JSON validation on staged files
+json_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.json' | grep -v node_modules | grep -v package-lock)
+if [ -n "$json_files" ]; then
+  for f in $json_files; do
+    if ! python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+      echo "ERROR: $f is not valid JSON" >&2
+      failed=1
+    fi
+  done
 fi
 
 exit $failed
