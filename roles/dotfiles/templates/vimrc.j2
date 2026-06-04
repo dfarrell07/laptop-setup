@@ -16,10 +16,15 @@ set smartcase
 set history=5000
 set undolevels=1000
 set backspace=indent,eol,start
-set clipboard=unnamedplus
-set spell
+if has('clipboard')
+  set clipboard=unnamedplus
+endif
 syntax on
 filetype plugin indent on
 
-" Restore cursor position
-autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
+autocmd FileType markdown,text,gitcommit setlocal spell
+
+augroup vimrc_restore
+  autocmd!
+  autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
+augroup END
