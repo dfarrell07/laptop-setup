@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: requirements-test.txt
 
       - name: Install ansible-lint
-        run: pip install 'ansible-lint>=26,<27' 'ansible>=11,<12'
+        run: pip install -r requirements-test.txt
 
       - name: Create vault password script for CI
         run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
@@ -78,7 +78,7 @@ jobs:
         run: |
           shellcheck -S warning scripts/*.sh
           shellcheck -S warning roles/claude/files/*.sh
-          shellcheck -S warning .githooks/*
+          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg
 
       - name: Validate preflight JSON output
         run: bash scripts/preflight.sh --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
@@ -134,7 +134,7 @@ jobs:
           cache-dependency-path: requirements-test.txt
 
       - name: Install Ansible
-        run: pip install 'ansible>=11,<12'
+        run: pip install -r requirements-test.txt
 
       - name: Install collections
         run: ansible-galaxy collection install -r requirements.yml
