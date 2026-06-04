@@ -8,6 +8,31 @@
     - name: Include common verify assertions
       ansible.builtin.include_tasks: ../shared/verify-common.yml
 
+    # --- Packages (apt) ---
+    - name: Check vim is installed
+      ansible.builtin.command: vim --version
+      changed_when: false
+
+    - name: Check curl is installed
+      ansible.builtin.command: which curl
+      changed_when: false
+
+    - name: Check tmux is installed
+      ansible.builtin.command: tmux -V
+      changed_when: false
+
+    - name: Check zsh is installed
+      ansible.builtin.command: zsh --version
+      changed_when: false
+
+    - name: Check jq is installed
+      ansible.builtin.command: jq --version
+      changed_when: false
+
+    - name: Check fzf is installed
+      ansible.builtin.command: fzf --version
+      changed_when: false
+
     # --- Desktop role ---
     - name: Verify Chrome policy deployed
       ansible.builtin.stat:

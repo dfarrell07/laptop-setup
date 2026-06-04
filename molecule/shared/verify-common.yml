@@ -58,6 +58,28 @@
     that: verify_bashrc.stat.exists
     fail_msg: ".bashrc was not deployed"
 
+- name: Verify oh-my-zsh is installed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.oh-my-zsh"
+  register: verify_omz
+
+- name: Assert oh-my-zsh exists
+  ansible.builtin.assert:
+    that:
+      - verify_omz.stat.exists
+      - verify_omz.stat.isdir
+    fail_msg: "oh-my-zsh was not cloned"
+
+- name: Verify git config-personal exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/config-personal"
+  register: verify_git_personal
+
+- name: Assert git config-personal deployed
+  ansible.builtin.assert:
+    that: verify_git_personal.stat.exists
+    fail_msg: "git config-personal not deployed"
+
 # --- SSH ---
 - name: Verify SSH config exists with correct permissions
   ansible.builtin.stat:
@@ -140,8 +162,22 @@
 
 - name: Assert ~/bin exists
   ansible.builtin.assert:
-    that: verify_bin_dir.stat.isdir
+    that:
+      - verify_bin_dir.stat.exists
+      - verify_bin_dir.stat.isdir
     fail_msg: "~/bin directory was not created"
+
+- name: Verify ~/.local/bin directory exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.local/bin"
+  register: verify_local_bin
+
+- name: Assert ~/.local/bin exists
+  ansible.builtin.assert:
+    that:
+      - verify_local_bin.stat.exists
+      - verify_local_bin.stat.isdir
+    fail_msg: "~/.local/bin directory was not created"
 
 - name: Verify git repos base directory exists
   ansible.builtin.stat:
@@ -150,7 +186,9 @@
 
 - name: Assert git repos base directory exists
   ansible.builtin.assert:
-    that: verify_repos_dir.stat.isdir
+    that:
+      - verify_repos_dir.stat.exists
+      - verify_repos_dir.stat.isdir
     fail_msg: "Git repos base directory ~/src was not created"
 
 # --- Claude ---
@@ -162,6 +200,7 @@
 - name: Assert Claude config directory exists with 0700
   ansible.builtin.assert:
     that:
+      - verify_claude_dir.stat.exists
       - verify_claude_dir.stat.isdir
       - verify_claude_dir.stat.mode == '0700'
     fail_msg: "Claude personal config dir missing or wrong permissions"
@@ -209,6 +248,7 @@
 - name: Assert gh config directory exists with 0700
   ansible.builtin.assert:
     that:
+      - verify_gh_dir.stat.exists
       - verify_gh_dir.stat.isdir
       - verify_gh_dir.stat.mode == '0700'
     fail_msg: "gh config directory missing or wrong permissions"

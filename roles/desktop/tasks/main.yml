@@ -210,6 +210,38 @@
     - ansible_system == 'Linux'
     - desktop_gnome_check.rc | default(1) == 0
 
+- name: Set screen idle timeout (CIS 900s max)
+  community.general.dconf:
+    key: /org/gnome/desktop/session/idle-delay
+    value: "uint32 300"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Set screen lock delay after idle
+  community.general.dconf:
+    key: /org/gnome/desktop/screensaver/lock-delay
+    value: "uint32 0"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable location services
+  community.general.dconf:
+    key: /org/gnome/system/location/enabled
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Disable recent files tracking
+  community.general.dconf:
+    key: /org/gnome/desktop/privacy/remember-recent-files
+    value: "false"
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
 - name: Disable GNOME RDP
   community.general.dconf:
     key: /org/gnome/desktop/remote-desktop/rdp/enable

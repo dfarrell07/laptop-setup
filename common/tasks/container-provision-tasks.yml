@@ -36,7 +36,7 @@
       ansible.builtin.set_fact:
         container_oc_sha256: >-
           {{ container_oc_checksums.content |
-             regex_search('([a-f0-9]{64})\s+openshift-client-linux\.tar\.gz',
+             regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
              '\1', multiline=True) | first }}
 
     - name: Download OpenShift client tarball
@@ -69,10 +69,10 @@
 - name: Install golangci-lint via go install
   ansible.builtin.command:
     cmd: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-    creates: /root/go/bin/golangci-lint
+    creates: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
   environment:
-    GOPATH: /root/go
-    GOBIN: /root/go/bin
+    GOPATH: "{{ ansible_env.HOME }}/go"
+    GOBIN: "{{ ansible_env.HOME }}/go/bin"
 
 # --- Host-command delegation ---
 - name: Check for distrobox-host-exec

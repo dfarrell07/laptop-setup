@@ -24,12 +24,14 @@
   failed_when: false
   register: notes_clone_https_result
 
+- name: Re-check if notes repo exists after clone attempts
+  ansible.builtin.stat:
+    path: "{{ notes_repo_path }}/.git"
+  register: notes_repo_post_clone
+
 - name: Set notes repo available fact
   ansible.builtin.set_fact:
-    notes_repo_available: >-
-      {{ notes_repo_stat.stat.exists or
-         not (notes_clone_result.failed | default(false)) or
-         not (notes_clone_https_result.failed | default(false)) }}
+    notes_repo_available: "{{ notes_repo_post_clone.stat.exists }}"
 
 - name: Warn if notes repo could not be cloned
   ansible.builtin.debug:

@@ -1,21 +1,21 @@
-.PHONY: help all minimal bootstrap bootstrap-test lint check diff test smoke-test \
+.PHONY: help all minimal backup bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes repos-ovnk repos-konflux repos-personal \
        repos-bpfman repos-downstream repos-cncf \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
-       smoke-test-host smoke-test-fedora \
+       smoke-test-fedora \
        ci syntax-check shellcheck markdownlint commitlint \
-       test-scripts test-fedora test-vm
+       test-scripts test-fedora test-centos test-debian test-macos test-vm
 
 help:
 	@echo "Primary:    all minimal container container-rebuild update"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
-	@echo "Testing:    lint ci test test-scripts test-fedora test-vm smoke-test smoke-test-host smoke-test-fedora check"
+	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-vm smoke-test check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
-	@echo "Other:      csb-audit diff vault-edit"
+	@echo "Other:      backup csb-audit diff vault-edit"
 
 # --- Primary targets ---
 
@@ -30,6 +30,9 @@ container:
 
 container-rebuild:
 	ansible-playbook site.yml --tags common,distrobox -e container_replace=true
+
+backup:
+	bash scripts/backup.sh
 
 # --- Bootstrap ---
 
@@ -130,7 +133,7 @@ check:
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
-ci: lint syntax-check test-scripts test-fedora
+ci: lint syntax-check test-scripts test-fedora test-centos test-debian
 
 lint:
 	ansible-lint
@@ -149,7 +152,7 @@ markdownlint:
 commitlint:
 	npx commitlint --from origin/main --to HEAD
 
-test: test-scripts test-fedora test-vm
+test: test-scripts test-fedora test-centos test-debian test-vm
 
 test-scripts:
 	bash scripts/test-queue-poller.sh
@@ -157,13 +160,19 @@ test-scripts:
 test-fedora:
 	molecule test -s fedora
 
+test-centos:
+	molecule test -s centos
+
+test-debian:
+	molecule test -s debian
+
+test-macos:
+	molecule test -s macos
+
 test-vm:
 	molecule test -s vm
 
 smoke-test:
-	scripts/smoke-test.sh
-
-smoke-test-host:
 	scripts/smoke-test.sh
 
 smoke-test-fedora:

@@ -37,4 +37,6 @@ if echo "$msg" | grep -qE '\.$'; then
 fi
 
 # Run commitlint for remaining rules (body blank line, etc.)
-npx --no -- commitlint --edit "$1"
+if command -v npx >/dev/null 2>&1; then
+  npx --no -- commitlint --edit "$1"
+fi

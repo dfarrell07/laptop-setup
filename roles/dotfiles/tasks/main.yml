@@ -10,13 +10,12 @@
     version: "4c82a2eedf0c43d47601ffa8b0303ed1326fab8f"
     update: false
 
-- name: Ensure config directories exist
+- name: Ensure macOS SSH sockets directory exists
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ ansible_user_dir }}/.ssh/sockets"
     state: directory
     mode: "0700"
-  loop:
-    - "{{ ansible_user_dir }}/.ssh/sockets"
+  when: ansible_system != 'Linux'
 
 - name: Ensure Linux-only config directories exist
   ansible.builtin.file:
@@ -89,8 +88,8 @@
   when: not dotfiles_gh_config.stat.exists
 
 - name: Deploy git conditional includes
-  ansible.builtin.copy:
-    src: "{{ item }}"
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
     dest: "{{ ansible_user_dir }}/.config/git/{{ item }}"
     mode: "0644"
   loop:
@@ -138,6 +137,16 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
     mode: "0644"
   when: ansible_system == 'Linux'
+
+- name: Check if SSH supports post-quantum KEX
+  ansible.builtin.command: ssh -Q kex
+  register: dotfiles_ssh_kex_check
+  changed_when: false
+  failed_when: false
+
+- name: Set PQ KEX availability fact
+  ansible.builtin.set_fact:
+    dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in (dotfiles_ssh_kex_check.stdout | default('')) }}"
 
 - name: Deploy SSH client config
   ansible.builtin.template:

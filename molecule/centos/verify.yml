@@ -25,6 +25,18 @@
           - verify_claude_work.stat.mode == '0700'
         fail_msg: "Claude work config dir missing or wrong permissions"
 
+    - name: Verify Claude work settings.json exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-work/settings.json"
+      register: verify_claude_work_settings
+
+    - name: Assert Claude work settings.json exists with 0600
+      ansible.builtin.assert:
+        that:
+          - verify_claude_work_settings.stat.exists
+          - verify_claude_work_settings.stat.mode == '0600'
+        fail_msg: "Claude work settings.json not deployed or wrong permissions"
+
     - name: Check git user.email is work email
       ansible.builtin.command: git config --global user.email
       register: verify_git_email

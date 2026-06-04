@@ -2,18 +2,29 @@
 # Blacklist unused filesystem and DMA modules (CIS/STIG)
 
 # Unused filesystems — attack surface via crafted images
+blacklist cramfs
 install cramfs /bin/false
+blacklist freevxfs
 install freevxfs /bin/false
+blacklist jffs2
 install jffs2 /bin/false
+blacklist hfs
 install hfs /bin/false
+blacklist hfsplus
 install hfsplus /bin/false
+blacklist udf
 install udf /bin/false
 
 # DMA attack interfaces — physical access exploitation
+blacklist firewire-core
 install firewire-core /bin/false
+blacklist firewire-ohci
 install firewire-ohci /bin/false
+blacklist firewire-sbp2
 install firewire-sbp2 /bin/false
 
 # USB mass storage — close boot-time window before USBGuard
+blacklist usb_storage
 install usb_storage /bin/false
+blacklist uas
 install uas /bin/false
