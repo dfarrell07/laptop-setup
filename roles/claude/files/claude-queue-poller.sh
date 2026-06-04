@@ -123,7 +123,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     git fetch origin
     git checkout "$DEFAULT_BRANCH"
     git pull --ff-only origin "$DEFAULT_BRANCH"
-    git checkout -b "$BRANCH_NAME"
+    git checkout -B "$BRANCH_NAME"
 
     set +e
     timeout "$TIMEOUT_SECONDS" "$CLAUDE_BIN" -p \

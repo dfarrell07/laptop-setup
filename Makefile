@@ -138,13 +138,13 @@ ci: lint syntax-check test-scripts test-fedora test-centos test-debian
 lint:
 	ansible-lint
 	yamllint --strict .
-	find scripts -type f -name "*.sh" -exec shellcheck -S warning {} +
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check
 
 shellcheck:
-	find scripts -type f -name "*.sh" -exec shellcheck -S warning {} +
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
 markdownlint:
 	npx markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
