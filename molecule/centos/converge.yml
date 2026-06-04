@@ -3,44 +3,41 @@
   hosts: all
   gather_facts: true
 
-  vars:
-    profile: work
-    # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng not in Rocky 10 repos
-    packages_cli:
-      - git
-      - make
-      - curl
-      - tree
-      - htop
-      - tmux
-      - mosh
-      - jq
-      - nmap
-      - vim
-      - zsh
-      - fzf
-      - socat
-      - pipx
-      - ShellCheck
-    packages_languages:
-      - golang
-      - python3
-      - python3-pip
-      - gcc
-      - gcc-c++
-    packages_security: []
-    packages_containers: []
-    packages_networking: []
-    packages_install_binaries: false
-    install_virtualization: false
-
   pre_tasks:
     - name: Load configuration
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 
-    - name: Override profile
+    - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
+        # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng not in Rocky 10 repos
+        packages_cli:
+          - git
+          - make
+          - curl
+          - tree
+          - htop
+          - tmux
+          - mosh
+          - jq
+          - nmap
+          - vim
+          - zsh
+          - fzf
+          - socat
+          - pipx
+          - ShellCheck
+        packages_languages:
+          - golang
+          - python3
+          - python3-pip
+          - gcc
+          - gcc-c++
+        packages_security: []
+        packages_containers: []
+        packages_networking: []
+        packages_install_binaries: false
+        install_virtualization: false
 
   roles:
     - role: common
