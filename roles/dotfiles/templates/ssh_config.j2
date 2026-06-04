@@ -5,7 +5,7 @@ Host *
     HashKnownHosts yes
     IdentitiesOnly yes
     AddKeysToAgent confirm
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled | default(true) %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled | default(false) %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
     ControlMaster auto
 {% if ansible_system | default('Linux') == 'Linux' %}
     ControlPath /run/user/%i/ssh/%r@%h-%p
