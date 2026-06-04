@@ -1,6 +1,6 @@
 ---
 # roles/packages/tasks/main.yml
-# Install packages via dnf (Linux) or brew (macOS).
+# Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
 - name: Install dnf packages
   ansible.builtin.dnf:
@@ -24,6 +24,15 @@
   when:
     - ansible_pkg_mgr in ['dnf', 'dnf5']
     - install_virtualization | default(true) | bool
+
+- name: Install apt packages (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "{{ packages_apt }}"
+    state: present
+    update_cache: true
+  become: true
+  tags: [become]
+  when: ansible_pkg_mgr == 'apt'
 
 - name: Install Homebrew packages (macOS)
   community.general.homebrew:
@@ -66,7 +75,10 @@
       failed_when: false
 
     - name: Download and install oc + kubectl
-      when: packages_oc_check.rc != 0
+      when: >-
+        packages_oc_check.rc != 0 or
+        packages_oc_version == 'stable' or
+        packages_oc_version not in (packages_oc_check.stdout | default(''))
       block:
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
@@ -278,7 +290,7 @@
             path: /tmp/kustomize.tar.gz
             state: absent
 
-# --- pip/pipx installs ---
+# --- Standalone script/binary downloads ---
 
 - name: Install transcrypt
   ansible.builtin.get_url:
@@ -322,9 +334,22 @@
     GONOSUMCHECK: ""
     GONOSUMDB: ""
   loop: "{{ packages_go_install }}"
+  register: packages_go_results
+  failed_when: false
   when:
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
+
+- name: Report failed Go tool installs
+  ansible.builtin.debug:
+    msg: "Failed to install {{ item.item }}: {{ item.stderr | default('unknown error') | trim }}"
+  loop: "{{ packages_go_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - packages_go_results is defined
+    - item.rc | default(0) != 0
+    - item.skipped is not defined or not item.skipped
 
 # --- pip/pipx installs ---
 

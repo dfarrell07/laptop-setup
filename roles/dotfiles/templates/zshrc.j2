@@ -12,7 +12,9 @@ source "$ZSH/oh-my-zsh.sh"
 
 # --- Environment ---
 export EDITOR=vim
+{% if profile == 'work' %}
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+{% endif %}
 export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
 export TMUX_TMPDIR="$HOME/.local/run/tmux"
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
@@ -43,6 +45,7 @@ claude() {
 }
 
 # --- Claude Code in tmux (sessions survive disconnects) ---
+{% if profile == 'work' %}
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   _claude_check_base_url || return 1
@@ -50,11 +53,12 @@ cw() {
   local s="work-${dir}"
   tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"
 }
+{% endif %}
 
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
-  if [[ "$phys" == */src/openshift/* || "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* || "$phys" == */src/ovnk/* || "$phys" == */src/konflux/* || "$phys" == */src/bpfman/* || "$phys" == */src/ds/* || "$phys" == */src/cncf/* ]]; then
+  if [[ "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* || "$phys" == */src/ovnk/* || "$phys" == */src/konflux/* || "$phys" == */src/bpfman/* || "$phys" == */src/ds/* || "$phys" == */src/cncf/* ]]; then
     echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
   fi
   _claude_check_base_url || return 1
@@ -65,7 +69,9 @@ ccp() {
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
 ca() { local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
+{% if profile == 'work' %}
 cwt() { local n="${1:?Usage: cwt <worktree-name>}"; _claude_check_base_url || return 1; tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree $n; zsh"; }
+{% endif %}
 cstatus() {
   for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E 'work-|personal-'); do
     echo "=== $s ==="; tmux capture-pane -t "$s" -p | tail -3; echo
@@ -82,7 +88,7 @@ alias rc='claude --remote-control'
 # --- Quick nav ---
 alias src='cd ~/src'
 alias subm='cd ~/src/submariner-io'
-alias ovnk='cd ~/src/openshift/ovn-kubernetes'
+alias ovnk='cd ~/src/ovnk'
 alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 
 # --- Task queue ---

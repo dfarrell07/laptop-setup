@@ -18,8 +18,26 @@
       changed_when: false
 
     - name: Check curl is installed
-      ansible.builtin.command: curl --version
+      ansible.builtin.command: which curl
       changed_when: false
+
+    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
+    - name: Check notes repo directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes/.git"
+      register: verify_notes
+
+    - name: Assert notes .git/config has 0600 when repo exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes/.git/config"
+      register: verify_notes_config
+      when: verify_notes.stat.exists
+
+    - name: Verify notes .git/config permissions
+      ansible.builtin.assert:
+        that: verify_notes_config.stat.mode == '0600'
+        fail_msg: "notes .git/config should be 0600"
+      when: verify_notes.stat.exists and verify_notes_config.stat.exists
 
     # --- Desktop role ---
     - name: Verify Alacritty config deployed

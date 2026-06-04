@@ -7,8 +7,16 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 ```bash
 make all              # Full run (asks for sudo password)
 make minimal          # Dotfiles + SSH + repos only (no sudo)
+make backup           # Back up dotfiles before re-provisioning
+make bootstrap        # Initial setup (install deps, collections, hooks)
+make update           # Update collections + full run
 make lint             # ansible-lint + yamllint + shellcheck
+make container        # Distrobox/toolbox dev container
+make container-rebuild # Rebuild container from scratch
 make test-fedora      # Molecule Fedora tests (fast, Podman)
+make test-centos      # Molecule CentOS Stream tests
+make test-debian      # Molecule Debian tests
+make test-macos       # Molecule macOS tests
 make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification
 make check            # Dry run (--check mode)
@@ -19,7 +27,7 @@ make check            # Dry run (--check mode)
 - **site.yml** — 3 plays: system (become), user (no become), container (podman connection)
 - **13 roles**: common, repos_dnf, system, dotfiles, packages, ssh, git_repos, notes, redhat, containers, desktop, distrobox, claude
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
-- **scripts/** — preflight.sh, smoke-test.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
+- **scripts/** — preflight.sh, smoke-test.sh, backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
 - **molecule/** — Test scenarios (fedora, centos, debian, vm, macos) + shared verify includes
 
 ## Key Patterns
@@ -45,7 +53,9 @@ make check            # Dry run (--check mode)
 
 - `make lint` — ansible-lint (production profile) + yamllint + shellcheck
 - `make syntax-check` — Playbook syntax validation
-- `make test-fedora` — Molecule Fedora 43 (common, packages, dotfiles, ssh, git_repos, containers, desktop, claude)
+- `make test-fedora` — Molecule Fedora 43 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
+- `make test-centos` — Molecule CentOS Stream (work profile, includes redhat role)
+- `make test-debian` — Molecule Debian 12 (apt packages, notes, desktop, claude)
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services)
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
 - CI runs linting + Fedora/CentOS/Debian/macOS molecule tests on every PR, VM tests locally

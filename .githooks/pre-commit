@@ -41,7 +41,7 @@ fi
 json_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.json' | grep -v node_modules | grep -v package-lock)
 if [ -n "$json_files" ]; then
   for f in $json_files; do
-    if ! python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+    if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi

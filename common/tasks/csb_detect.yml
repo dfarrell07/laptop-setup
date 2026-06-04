@@ -55,7 +55,6 @@
   when:
     - is_linux | bool
     - _fapolicyd_active.rc | default(1) == 0
-    - _fapolicyd_cli.rc | default(1) != 0
 
 - name: Set fapolicyd facts
   ansible.builtin.set_fact:

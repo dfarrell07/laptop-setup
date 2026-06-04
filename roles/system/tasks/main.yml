@@ -351,7 +351,7 @@
 - name: Deploy dnf-automatic config
   ansible.builtin.template:
     src: dnf-automatic.conf.j2
-    dest: /etc/dnf/automatic.conf
+    dest: "{{ '/etc/dnf/dnf5-plugins/automatic.conf' if ansible_pkg_mgr == 'dnf5' else '/etc/dnf/automatic.conf' }}"
     mode: "0644"
   notify: Restart dnf-automatic timer
 

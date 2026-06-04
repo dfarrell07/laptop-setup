@@ -8,7 +8,7 @@
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
 -w {{ real_user_home }}/.gnupg/ -p wa -k claude-sensitive-write
--w {{ real_user_home }}/.kube/config -p rwa -k claude-sensitive-write
+-w {{ real_user_home }}/.kube/config -p wa -k claude-sensitive-write
 
 # Read access on rarely-accessed high-value files
 -w {{ real_user_home }}/.aws/ -p r -k claude-sensitive-read
@@ -48,8 +48,8 @@
 
 # Audit infrastructure protection
 -w /etc/audit/ -p wa -k audit-config
--w /sbin/auditd -p x -k audit-tools
--w /sbin/auditctl -p x -k audit-tools
+-w /usr/bin/auditd -p x -k audit-tools
+-w /usr/bin/auditctl -p x -k audit-tools
 
 # Make rules immutable (requires reboot to change)
 -e 2

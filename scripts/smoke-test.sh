@@ -281,5 +281,13 @@ fi
 # ---- Output ----
 if $JSON; then
   printf '{"results":[%s],"failures":%d}\n' "$(IFS=,; echo "${RESULTS[*]}")" "$FAILURES"
+else
+  total=${#RESULTS[@]}
+  passed=$((total - FAILURES))
+  if [[ $FAILURES -gt 0 ]]; then
+    printf "\n--- %d/%d passed (${F}%d FAILED${R}) ---\n" "$passed" "$total" "$FAILURES"
+  else
+    printf "\n--- %d/%d passed (${P}all passed${R}) ---\n" "$passed" "$total"
+  fi
 fi
 exit $(( FAILURES > 0 ? 1 : 0 ))

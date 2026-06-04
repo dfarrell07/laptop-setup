@@ -59,7 +59,7 @@ fi
 record "profile" "pass" "$PROFILE"
 
 # --- Required tools ---
-for tool in ansible-playbook git python3 curl; do
+for tool in ansible-playbook git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     record "required_${tool}" "pass" "$ver"
@@ -216,7 +216,7 @@ if [[ "$JSON" == true ]]; then
   first=true
   for r in "${RESULTS[@]}"; do
     IFS='|' read -r name status detail <<< "$r"
-    detail="${detail//\\/\\\\}"; detail="${detail//\"/\\\"}"
+    detail="${detail//\\/\\\\}"; detail="${detail//\"/\\\"}"; detail="${detail//$'\n'/\\n}"; detail="${detail//$'\t'/\\t}"
     [[ "$first" == true ]] && first=false || printf ','
     printf '{"name":"%s","status":"%s","detail":"%s"}' "$name" "$status" "$detail"
   done

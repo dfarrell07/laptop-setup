@@ -64,22 +64,16 @@
   loop_control:
     label: "{{ item.item.dest }}"
 
-- name: Add fork remotes  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    argv:
-      - git
-      - remote
-      - add
-      - "--"
-      - "{{ item.1.name }}"
-      - "{{ item.1.url }}"
+- name: Configure fork remotes  # noqa: command-instead-of-module no-changed-when
+  ansible.builtin.shell:
+    cmd: >-
+      git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" 2>/dev/null ||
+      git remote add "{{ item.1.name }}" "{{ item.1.url }}"
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
   register: git_repos_remote_result
-  changed_when: git_repos_remote_result.rc == 0
   failed_when:
     - git_repos_remote_result.rc != 0
-    - "'already exists' not in (git_repos_remote_result.stderr | default(''))"
     - "'No such file' not in (git_repos_remote_result.stderr | default(''))"

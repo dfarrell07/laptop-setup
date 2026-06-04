@@ -21,7 +21,7 @@
   tags: [become]
   notify: Update CA trust
   when:
-    - ansible_system == 'Linux'
+    - ansible_os_family == 'RedHat'
     - item.stat.exists
 
 - name: Install Red Hat cert packages

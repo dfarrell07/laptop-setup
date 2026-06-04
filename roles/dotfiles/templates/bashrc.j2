@@ -1,4 +1,10 @@
 # {{ ansible_managed }}
-export PATH="$PATH:$HOME/.local/bin:$HOME/bin"
+export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
 export EDITOR=vim
+export TMUX_TMPDIR="$HOME/.local/run/tmux"
+export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
+
+command -v direnv &>/dev/null && eval "$(direnv hook bash)"
+command -v zoxide &>/dev/null && eval "$(zoxide init bash)"
+
 umask 077

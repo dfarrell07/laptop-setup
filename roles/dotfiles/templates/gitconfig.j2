@@ -59,13 +59,10 @@
 [credential "https://github.com"]
 	helper = !gh auth git-credential
 
-{% if profile == 'work' and ansible_system | default('Linux') == 'Linux' %}
-[http "https://{{ dotfiles_internal_git_host | default('internal-git.example.com') }}"]
+{% if profile == 'work' and ansible_system | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
+[http "https://{{ dotfiles_internal_git_host }}"]
 	sslCAInfo = /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
 {% endif %}
-
-[includeIf "gitdir:~/src/openshift/"]
-	path = ~/.config/git/config-work
 
 [includeIf "gitdir:~/src/submariner-io/"]
 	path = ~/.config/git/config-work

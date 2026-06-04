@@ -21,6 +21,26 @@
       ansible.builtin.command: fzf --version
       changed_when: false
 
+    - name: Check direnv is installed
+      ansible.builtin.command: direnv version
+      changed_when: false
+
+    - name: Check zoxide is installed
+      ansible.builtin.command: zoxide --version
+      changed_when: false
+
+    - name: Check gh CLI is installed
+      ansible.builtin.command: gh --version
+      changed_when: false
+
+    - name: Check go is installed
+      ansible.builtin.command: go version
+      changed_when: false
+
+    - name: Check shellcheck is installed
+      ansible.builtin.command: shellcheck --version
+      changed_when: false
+
     - name: Verify SSH sockets directory exists (macOS ControlPath)
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.ssh/sockets"
