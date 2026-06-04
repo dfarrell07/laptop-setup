@@ -299,7 +299,7 @@
       ansible.builtin.assert:
         that: verify_cups.status.UnitFileState == 'masked'
         fail_msg: "cups-browsed is not masked"
-      when: verify_cups.status is defined
+      when: verify_cups.status.UnitFileState | default('') != ''
 
     - name: Check ctrl-alt-del.target state
       ansible.builtin.systemd:
@@ -312,7 +312,7 @@
       ansible.builtin.assert:
         that: verify_cad.status.UnitFileState == 'masked'
         fail_msg: "ctrl-alt-del.target is not masked"
-      when: verify_cad.status is defined
+      when: verify_cad.status.UnitFileState | default('') != ''
 
     # --- Core dump disable ---
     - name: Verify core dump disable config
@@ -329,7 +329,7 @@
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled
       ansible.builtin.systemd:
-        name: dnf-automatic.timer
+        name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
       register: verify_dnf_auto
       become: true
       failed_when: false
@@ -338,4 +338,4 @@
       ansible.builtin.assert:
         that: verify_dnf_auto.status.UnitFileState == 'enabled'
         fail_msg: "dnf-automatic timer not enabled"
-      when: verify_dnf_auto.status is defined
+      when: verify_dnf_auto.status.UnitFileState | default('') != ''
