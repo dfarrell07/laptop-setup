@@ -14,8 +14,40 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ansible: ${{ steps.filter.outputs.ansible }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check changed paths
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${EVENT_NAME}" = "push" ]; then
+            echo "ansible=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -qE '^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml|requirements\.yml|requirements-test\.txt|molecule/|scripts/)'; then
+            echo "ansible=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ansible=false" >> "$GITHUB_OUTPUT"
+          fi
+
   fedora:
     name: Molecule (Fedora)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -42,6 +74,8 @@ jobs:
 
   centos:
     name: Molecule (CentOS Stream)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -68,6 +102,8 @@ jobs:
 
   debian:
     name: Molecule (Debian)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -94,6 +130,8 @@ jobs:
 
   macos:
     name: Molecule (macOS)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
     runs-on: macos-14
     timeout-minutes: 30
     steps:
