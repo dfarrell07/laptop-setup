@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dfarrell07.ssh-agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/ssh-agent</string>
+    <string>-D</string>
+    <string>-a</string>
+    <string>{{ ansible_user_dir }}/.ssh/ssh-agent.socket</string>
+    <string>-t</string>
+    <string>{{ dotfiles_ssh_agent_timeout }}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/ssh-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/ssh-agent.log</string>
+</dict>
+</plist>

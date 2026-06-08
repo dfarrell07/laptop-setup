@@ -138,6 +138,35 @@
     mode: "0644"
   when: ansible_system == 'Linux'
 
+# --- macOS: SSH agent via launchd ---
+- name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "launchctl disable user/{{ ansible_user_uid }}/com.openssh.ssh-agent"
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == 'Darwin'
+
+- name: Ensure log directory exists (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.local/share/log"
+    state: directory
+    mode: "0755"
+  when: ansible_os_family == 'Darwin'
+
+- name: Deploy SSH agent launchd plist (macOS)
+  ansible.builtin.template:
+    src: ssh-agent.plist.j2
+    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+    mode: "0644"
+  when: ansible_os_family == 'Darwin'
+
+- name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+  when: ansible_os_family == 'Darwin'
+  changed_when: false
+  failed_when: false
+
 - name: Check if SSH supports post-quantum KEX
   ansible.builtin.command: ssh -Q kex
   register: dotfiles_ssh_kex_check

@@ -131,3 +131,54 @@
     - claude_queue_enabled | bool
     - ansible_system == 'Linux'
   failed_when: false
+
+# --- macOS: launchd services ---
+- name: Ensure log directory exists (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.local/share/log"
+    state: directory
+    mode: "0755"
+  when: ansible_os_family == 'Darwin'
+
+- name: Deploy task queue launchd plist (macOS)
+  ansible.builtin.template:
+    src: claude-queue.plist.j2
+    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-queue.plist"
+    mode: "0644"
+  when:
+    - ansible_os_family == 'Darwin'
+    - claude_queue_enabled | bool
+
+- name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-queue.plist"
+  when:
+    - ansible_os_family == 'Darwin'
+    - claude_queue_enabled | bool
+  changed_when: false
+  failed_when: false
+
+- name: Deploy Remote Control launchd plist (macOS)
+  ansible.builtin.template:
+    src: claude-remote-control.plist.j2
+    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist"
+    mode: "0644"
+  when:
+    - ansible_os_family == 'Darwin'
+    - claude_remote_control_enabled | bool
+
+- name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist"
+  when:
+    - ansible_os_family == 'Darwin'
+    - claude_remote_control_enabled | bool
+  changed_when: false
+  failed_when: false
+
+- name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: brew autoupdate start 43200 --upgrade --cleanup
+  when: ansible_os_family == 'Darwin'
+  changed_when: false
+  failed_when: false

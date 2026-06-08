@@ -28,6 +28,16 @@ DOTFILES=(
   .claude-personal/CLAUDE.md
   .claude-work/settings.json
   .claude-work/CLAUDE.md
+  .config/i3/config
+  .config/sway/config
+  .config/i3status-rust/config.toml
+  .config/aerospace/aerospace.toml
+  .config/systemd/user/ssh-agent.service
+  .config/systemd/user/claude-queue.service
+  .config/systemd/user/claude-queue.timer
+  Library/LaunchAgents/com.dfarrell07.ssh-agent.plist
+  Library/LaunchAgents/com.dfarrell07.claude-queue.plist
+  Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist
 )
 
 count=0

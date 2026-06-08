@@ -37,7 +37,13 @@ backup:
 # --- Bootstrap ---
 
 bootstrap:
-	sudo dnf install -y ansible-core git ykpers
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		brew install ansible git openssh libfido2 ykman ykpers; \
+	elif command -v apt-get >/dev/null 2>&1; then \
+		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization; \
+	else \
+		sudo dnf install -y ansible-core git ykpers; \
+	fi
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && chmod 700 scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	ansible-galaxy collection install -r requirements.yml
 	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix

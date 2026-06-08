@@ -204,7 +204,7 @@ Install via the native binary installer:
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
-The native binary is code-signed, GPG-verified, and has zero npm dependencies. It installs to `~/.claude/bin/` (add to PATH).
+The native binary is SHA256-verified and has zero npm dependencies. It installs to `~/.claude/bin/` (add to PATH).
 
 On CSB where curl-installed binaries are blocked by fapolicyd, install Claude Code inside the Distrobox container where fapolicyd does not apply.
 

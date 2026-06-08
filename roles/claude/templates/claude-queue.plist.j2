@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dfarrell07.claude-queue</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>120</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>{{ ansible_user_dir }}</string>
+    <key>PATH</key>
+    <string>{{ ansible_user_dir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CLAUDE_QUEUE_REPO</key>
+    <string>{{ claude_queue_repo }}</string>
+    <key>CLAUDE_BIN</key>
+    <string>{{ ansible_user_dir }}/.local/bin/claude</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/claude-queue.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/claude-queue.log</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

@@ -33,10 +33,22 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **Supply chain** — `.npmrc ignore-scripts=true`, Ansible collection
   verification, Chrome extension allowlisting, binary SHA256 verification,
   oh-my-zsh pinned to commit SHA
+- **CI supply chain** — actionlint, zizmor, and gitleaks run as
+  SHA256-verified binary downloads instead of third-party node actions;
+  all GHA actions SHA-pinned by commit hash; OSSF Scorecard weekly
+- **Privilege escalation** — `become_exe = /usr/bin/sudo` in ansible.cfg
+  prevents PATH-based sudo trojan attacks
+- **Branch protection** — main requires 4 status checks (Ansible Lint,
+  Vault Encryption Check, Secret Detection, Ansible Syntax Check);
+  force push and deletion blocked; linear history enforced
+- **Secret scanning** — GitHub secret scanning and push protection
+  enabled (server-side complement to gitleaks pre-commit hook)
 - **Browser hardening** — 37 Chrome/Chromium managed policies (HTTPS-only,
   site isolation, WebRTC, download restrictions, remote debugging blocked)
 - **Desktop hardening** — GNOME lock screen notifications hidden, USB
-  automount disabled, RDP/VNC disabled
+  automount disabled, RDP/VNC disabled, idle lock at 300s (GNOME dconf,
+  i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
+  600s display off)
 
 ## Vault Security
 

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- {{ ansible_managed }} -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dfarrell07.claude-remote-control</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ ansible_user_dir }}/.local/bin/claude</string>
+    <string>--remote-control</string>
+    <string>--sandbox</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>{{ ansible_user_dir }}</string>
+    <key>PATH</key>
+    <string>{{ ansible_user_dir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CLAUDE_CONFIG_DIR</key>
+    <string>{{ ansible_user_dir }}/.claude-personal</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/claude-remote-control.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_user_dir }}/.local/share/log/claude-remote-control.log</string>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>

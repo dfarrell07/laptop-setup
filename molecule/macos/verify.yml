@@ -61,3 +61,14 @@
       ansible.builtin.assert:
         that: verify_aerospace.stat.exists
         fail_msg: "AeroSpace config not deployed"
+
+    # --- launchd services (macOS) ---
+    - name: Verify SSH agent launchd plist deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+      register: verify_ssh_plist
+
+    - name: Assert SSH agent plist exists
+      ansible.builtin.assert:
+        that: verify_ssh_plist.stat.exists
+        fail_msg: "SSH agent launchd plist not deployed"
