@@ -3,7 +3,7 @@
        repos-bpfman repos-downstream repos-cncf \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
-       smoke-test-fedora \
+       smoke-test-container smoke-test-fedora \
        ci syntax-check shellcheck markdownlint commitlint \
        test-scripts test-fedora test-centos test-debian test-macos test-vm
 
@@ -12,7 +12,7 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
-	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-vm smoke-test check"
+	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-vm smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
 	@echo "Other:      backup csb-audit diff vault-edit"
@@ -175,8 +175,10 @@ test-vm:
 smoke-test:
 	scripts/smoke-test.sh
 
-smoke-test-fedora:
+smoke-test-container:
 	scripts/smoke-test.sh --container fedora-dev
+
+smoke-test-fedora: smoke-test-container
 
 # --- Vault ---
 
