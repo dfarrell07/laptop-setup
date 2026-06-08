@@ -58,6 +58,51 @@
     dest: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
     mode: "0644"
 
+# --- i3 config ---
+- name: Ensure i3 config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/i3"
+    state: directory
+    mode: "0755"
+  when: desktop_effective == 'i3'
+
+- name: Deploy i3 config
+  ansible.builtin.template:
+    src: i3.config.j2
+    dest: "{{ ansible_user_dir }}/.config/i3/config"
+    mode: "0644"
+  when: desktop_effective == 'i3'
+
+# --- Sway config ---
+- name: Ensure Sway config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/sway"
+    state: directory
+    mode: "0755"
+  when: desktop_effective == 'sway'
+
+- name: Deploy Sway config
+  ansible.builtin.template:
+    src: sway.config.j2
+    dest: "{{ ansible_user_dir }}/.config/sway/config"
+    mode: "0644"
+  when: desktop_effective == 'sway'
+
+# --- i3status-rust config (shared by i3 and Sway) ---
+- name: Ensure i3status-rust config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/i3status-rust"
+    state: directory
+    mode: "0755"
+  when: desktop_effective in ['i3', 'sway']
+
+- name: Deploy i3status-rust config
+  ansible.builtin.template:
+    src: i3status-rust.toml.j2
+    dest: "{{ ansible_user_dir }}/.config/i3status-rust/config.toml"
+    mode: "0644"
+  when: desktop_effective in ['i3', 'sway']
+
 # --- Chrome managed policies ---
 - name: Create Chrome managed policies directory
   ansible.builtin.file:

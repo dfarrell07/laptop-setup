@@ -16,6 +16,9 @@ export EDITOR=vim
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
 {% endif %}
 export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
+{% if ansible_system | default('Linux') == 'Darwin' %}
+export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
+{% endif %}
 export TMUX_TMPDIR="$HOME/.local/run/tmux"
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 

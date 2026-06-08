@@ -18,7 +18,8 @@ make test-centos      # Molecule CentOS Stream tests
 make test-debian      # Molecule Debian tests
 make test-macos       # Molecule macOS tests
 make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
-make smoke-test       # Post-run verification
+make smoke-test       # Post-run verification (host)
+make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
 ```
 
@@ -42,6 +43,9 @@ make check            # Dry run (--check mode)
 - Start with an imperative verb: `Add cgroup mount to molecule configs`
 - Max 72 characters, capitalize first word, no trailing period
 - Always use `--signoff` (`-s`) when creating git commits
+- Optional scope from commitlint enum: `common`, `repos-dnf`, `packages`,
+  `dotfiles`, `ssh`, `git-repos`, `notes`, `redhat`, `containers`,
+  `desktop`, `system`, `distrobox`, `claude`, `ci`, `docs`, `chore`
 
 ## Vault
 
@@ -59,3 +63,14 @@ make check            # Dry run (--check mode)
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services)
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
 - CI runs linting + Fedora/CentOS/Debian/macOS molecule tests on every PR, VM tests locally
+- CI skips molecule on doc-only PRs (shell-based git diff, no third-party action)
+
+## CI Security
+
+- All third-party GHA actions SHA-pinned by commit hash
+- actionlint, zizmor, and gitleaks run as SHA256-verified binary downloads
+  (no third-party node actions — eliminates opaque `dist/index.js` supply chain risk)
+- OSSF Scorecard runs weekly with SARIF upload to Security tab
+- Branch protection on main: 4 required checks (Ansible Lint, Vault Encryption
+  Check, Secret Detection, Ansible Syntax Check), force push blocked, linear history
+- GitHub secret scanning + push protection enabled

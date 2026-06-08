@@ -64,3 +64,29 @@
       ansible.builtin.command:
         cmd: "python3 -c \"import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))\""
       changed_when: false
+
+    # --- Desktop WM configs (converge sets desktop_environment: i3) ---
+    - name: Verify i3 config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/i3/config"
+      register: verify_i3
+
+    - name: Assert i3 config exists
+      ansible.builtin.assert:
+        that: verify_i3.stat.exists
+        fail_msg: "i3 config not deployed"
+
+    - name: Verify i3status-rust config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/i3status-rust/config.toml"
+      register: verify_i3status
+
+    - name: Assert i3status-rust config exists
+      ansible.builtin.assert:
+        that: verify_i3status.stat.exists
+        fail_msg: "i3status-rust config not deployed"
+
+    - name: Validate i3status-rust TOML syntax
+      ansible.builtin.command:
+        cmd: "python3 -c \"import tomllib; tomllib.load(open('{{ ansible_user_dir }}/.config/i3status-rust/config.toml', 'rb'))\""
+      changed_when: false
