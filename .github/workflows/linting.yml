@@ -102,6 +102,7 @@ jobs:
         run: |
           failed=0
           while IFS= read -r f; do
+            # shellcheck disable=SC2016
             if head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
               continue
             fi
@@ -187,7 +188,7 @@ jobs:
           chmod +x gitleaks
 
       - name: Run gitleaks
-        run: ./gitleaks git --source=. --redact
+        run: ./gitleaks git . --redact
 
   actionlint:
     name: Action Lint
