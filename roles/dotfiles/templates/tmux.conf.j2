@@ -5,6 +5,9 @@ unbind C-b
 set -g prefix {{ dotfiles_tmux_prefix }}
 bind {{ dotfiles_tmux_prefix }} send-prefix
 
+# Reduce escape sequence ambiguity (default 500ms is too slow)
+set -sg escape-time 10
+
 # Vi mode
 setw -g mode-keys vi
 

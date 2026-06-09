@@ -48,7 +48,7 @@ bootstrap:
 	ansible-galaxy collection install -r requirements.yml
 	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
 	@if command -v npm >/dev/null 2>&1; then \
-		npm install; \
+		npm install --ignore-scripts; \
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
@@ -153,10 +153,10 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
 markdownlint:
-	npx markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
+	npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
 commitlint:
-	npx commitlint --from origin/main --to HEAD
+	npx --no -- commitlint --from origin/main --to HEAD
 
 test: test-scripts test-fedora test-centos test-debian test-vm
 

@@ -88,6 +88,46 @@ jobs:
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh
 
+  lockfile-lint:
+    name: Lockfile Integrity Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Validate lockfile integrity and registry
+        run: |
+          python3 -c "
+          import json, sys
+          lock = json.load(open('package-lock.json'))
+          errors = []
+          for name, info in lock.get('packages', {}).items():
+              if not name:
+                  continue
+              integrity = info.get('integrity', '')
+              resolved = info.get('resolved', '')
+              if integrity and not integrity.startswith('sha512-'):
+                  errors.append(f'Weak hash ({integrity[:10]}...): {name}')
+              if resolved and not resolved.startswith('https://registry.npmjs.org/'):
+                  errors.append(f'Non-npmjs registry: {name} -> {resolved}')
+              if resolved.startswith(('git://', 'git+', 'ssh://')):
+                  errors.append(f'Git protocol dependency (bypasses ignore-scripts): {name}')
+          if errors:
+              for e in errors:
+                  print(f'::error::{e}')
+              sys.exit(1)
+          print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
+          "
+
+      - name: Verify npm package signatures
+        run: npm audit signatures
+
+      - name: Check for known vulnerabilities
+        run: npm audit
+
   vault-encryption:
     name: Vault Encryption Check
     runs-on: ubuntu-latest
@@ -162,10 +202,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run markdownlint
-        run: npx markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
+        run: npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
   gitleaks:
     name: Secret Detection
@@ -253,13 +293,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run commitlint
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
+        run: npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
 
       - name: Check imperative mood
         env:

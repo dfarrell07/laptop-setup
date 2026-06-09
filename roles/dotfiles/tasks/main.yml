@@ -7,7 +7,7 @@
     repo: https://github.com/ohmyzsh/ohmyzsh.git
     dest: "{{ ansible_user_dir }}/.oh-my-zsh"
     depth: 1
-    version: "4c82a2eedf0c43d47601ffa8b0303ed1326fab8f"
+    version: "70ad5e3df8f7bed68aa6672029496926e632aedd"
     update: false
 
 - name: Ensure macOS SSH sockets directory exists
@@ -207,6 +207,7 @@
     content: |
       [global]
       strict_env = true
+      disable_stdin = true
       warn_timeout = "10s"
     dest: "{{ ansible_user_dir }}/.config/direnv/direnv.toml"
     mode: "0644"

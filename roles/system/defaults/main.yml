@@ -3,7 +3,7 @@
 system_sysctl_hardening:
   kernel.yama.ptrace_scope: 1
   kernel.kptr_restrict: 1
-  kernel.io_uring_disabled: 1
+  kernel.io_uring_disabled: 2
   kernel.unprivileged_bpf_disabled: 1
   kernel.dmesg_restrict: 1
   kernel.perf_event_paranoid: 2
@@ -26,6 +26,8 @@ system_sysctl_hardening:
   net.ipv6.conf.all.accept_ra: 0
   net.ipv6.conf.default.accept_ra: 0
   fs.suid_dumpable: 0
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.icmp_ignore_bogus_error_responses: 1
   net.ipv4.tcp_syncookies: 1
   net.ipv4.tcp_rfc1337: 1
   kernel.kexec_load_disabled: 1
@@ -40,6 +42,7 @@ system_firewall_icmp_types:
   - packet-too-big
   - time-exceeded
   - echo-reply
+  - parameter-problem
 
 # Services
 system_enable_libvirtd: "{{ install_virtualization | default(true) }}"
@@ -52,8 +55,8 @@ system_coredump_process_size_max: 0
 # USBGuard
 system_install_usbguard: true
 system_usbguard_whitelist:
-  - "allow id 1050:* name \"Yubico\" with-interface one-of { 03:*:* 0B:*:* }"
-  - "allow id 3297:1969 name \"ZSA Moonlander\" with-interface one-of { 03:*:* }"
+  - "allow id 1050:* name \"YubiKey\" with-interface one-of { 03:*:* 0B:*:* }"
+  - "allow id 3297:1969 name \"Moonlander\" with-interface one-of { 03:*:* }"
   - "allow with-connect-type \"hardwired\""
   - "allow with-connect-type \"direct\""
 
