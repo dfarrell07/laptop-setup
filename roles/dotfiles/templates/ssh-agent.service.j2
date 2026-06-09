@@ -4,7 +4,7 @@ Description=OpenSSH Agent
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket
+ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket -t {{ dotfiles_ssh_agent_timeout }}
 Restart=on-failure
 NoNewPrivileges=true
 CapabilityBoundingSet=
@@ -23,6 +23,9 @@ ProtectHostname=true
 RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=true
 SystemCallArchitectures=native
+ProtectKernelLogs=true
+ProcSubset=pid
+UMask=0077
 
 [Install]
 WantedBy=default.target

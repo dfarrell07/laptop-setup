@@ -14,6 +14,18 @@ blacklist hfsplus
 install hfsplus /bin/false
 blacklist udf
 install udf /bin/false
+blacklist squashfs
+install squashfs /bin/false
+
+# Unused network protocols — CVE-validated attack surface
+blacklist dccp
+install dccp /bin/false
+blacklist sctp
+install sctp /bin/false
+blacklist rds
+install rds /bin/false
+blacklist tipc
+install tipc /bin/false
 
 # DMA attack interfaces — physical access exploitation
 blacklist firewire-core

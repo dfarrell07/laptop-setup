@@ -48,4 +48,28 @@ if [ -n "$json_files" ]; then
   done
 fi
 
+# Lockfile integrity (only when package-lock.json is staged)
+if git diff --cached --name-only | grep -q 'package-lock.json'; then
+  if ! python3 -c "
+import json, sys
+lock = json.load(open('package-lock.json'))
+for name, info in lock.get('packages', {}).items():
+    if not name:
+        continue
+    integrity = info.get('integrity', '')
+    resolved = info.get('resolved', '')
+    if integrity and not integrity.startswith('sha512-'):
+        print(f'ERROR: Weak hash in lockfile: {name}', file=sys.stderr)
+        sys.exit(1)
+    if resolved and not resolved.startswith('https://registry.npmjs.org/'):
+        print(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}', file=sys.stderr)
+        sys.exit(1)
+    if resolved.startswith(('git://', 'git+', 'ssh://')):
+        print(f'ERROR: Git protocol dep bypasses ignore-scripts: {name}', file=sys.stderr)
+        sys.exit(1)
+" 2>&1; then
+    failed=1
+  fi
+fi
+
 exit $failed
