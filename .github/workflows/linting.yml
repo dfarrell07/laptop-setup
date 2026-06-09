@@ -122,6 +122,9 @@ jobs:
           print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
           "
 
+      - name: Install packages for audit
+        run: npm ci --ignore-scripts
+
       - name: Verify npm package signatures
         run: npm audit signatures
 
