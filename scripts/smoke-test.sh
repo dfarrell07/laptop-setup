@@ -97,6 +97,18 @@ for f in .zshrc .gitconfig .tmux.conf .vimrc .bashrc; do
   else record "dotfile-$f" "FAIL" "not deployed or not Ansible-managed"; fi
 done
 
+# global gitignore (XDG path — read automatically by Git, no core.excludesfile needed)
+_gi="$HOME/.config/git/ignore"
+if grep -q "Ansible managed" "$_gi" 2>/dev/null; then record "dotfile-git-ignore" "PASS"
+else record "dotfile-git-ignore" "FAIL" "not deployed or not Ansible-managed: $_gi"; fi
+unset _gi
+
+# ripgreprc (loaded via RIPGREP_CONFIG_PATH in zshrc)
+_rg="$HOME/.config/ripgrep/config"
+if grep -q "Ansible managed" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc" "PASS"
+else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
+unset _rg
+
 # environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
 if [[ "$(uname -s)" == "Linux" ]]; then
   _ecf="$HOME/.config/environment.d/containers.conf"

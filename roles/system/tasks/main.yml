@@ -761,7 +761,7 @@
     content: |
       # {{ ansible_managed }}
       [keyfile]
-      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*
+      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   failed_when: false
