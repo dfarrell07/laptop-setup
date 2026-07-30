@@ -61,10 +61,16 @@ else
 fi
 
 # Dev tool presence
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "tc:tc -V" "strace:strace --version"; do
+for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "FAIL" "not found"; fi
 done
+
+# ec CLI (work-profile only — guard on binary presence)
+if [[ -x /usr/local/bin/ec ]]; then
+  if run ec version &>/dev/null; then record "ec" "PASS"
+  else record "ec" "FAIL" "not executable"; fi
+fi
 
 # GitHub CLI authenticated
 if run gh auth status &>/dev/null 2>&1; then record "gh-auth" "PASS"

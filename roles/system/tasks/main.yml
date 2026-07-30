@@ -630,12 +630,15 @@
     - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
 
 # --- sshd hardening ---
-- name: Assert real_user_id is non-empty before deploying AllowUsers
+- name: Assert real_user_id is non-empty and not root before deploying AllowUsers
   ansible.builtin.assert:
-    that: real_user_id | default('') | length > 0
+    that:
+      - real_user_id | default('') | length > 0
+      - real_user_id != 'root'
     fail_msg: >-
-      real_user_id is empty — AllowUsers in sshd config would lock out all SSH users.
-      Run as your normal user with -K, not as root (which sets USER=root).
+      real_user_id='{{ real_user_id | default("(empty)") }}' — AllowUsers in sshd would
+      lock out all SSH users. Run as your normal user with -K (make all), not as root.
+      'sudo -i && make all' sets USER=root and would write 'AllowUsers root'.
   when: ansible_facts.services['sshd.service'] is defined
 
 - name: Ensure sshd config drop-in directory
