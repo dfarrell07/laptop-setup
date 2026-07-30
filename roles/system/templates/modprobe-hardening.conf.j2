@@ -39,7 +39,7 @@ install usb_storage /bin/false
 blacklist uas
 install uas /bin/false
 
-{% if system_disable_bluetooth | default(true) | bool %}
+{% if system_disable_bluetooth | default(false) | bool %}
 # Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
 # Default is enabled (false). To disable BT: set system_disable_bluetooth: true.
 blacklist btusb

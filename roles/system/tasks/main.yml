@@ -208,7 +208,7 @@
     name: bluetooth.service
     masked: true
     state: stopped
-  when: system_disable_bluetooth | default(true) | bool
+  when: system_disable_bluetooth | default(false) | bool
   failed_when: false
 
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
