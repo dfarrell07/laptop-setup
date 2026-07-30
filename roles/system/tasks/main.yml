@@ -757,6 +757,15 @@
     mode: "0644"
   failed_when: false
 
+- name: Enforce pam_pwhistory for root (CIS 5.3.5)
+  community.general.ini_file:
+    path: /etc/security/pwhistory.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    mode: "0644"
+  failed_when: false
+
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
   community.general.ini_file:
@@ -773,6 +782,15 @@
     - { key: ocredit, value: "-1" }
     - { key: difok, value: "4" }
     - { key: maxrepeat, value: "3" }
+  failed_when: false
+
+- name: Enforce pwquality for root (CIS 5.3.4)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    mode: "0644"
   failed_when: false
 
 # --- Restrict su to wheel group ---
