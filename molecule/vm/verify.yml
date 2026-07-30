@@ -398,3 +398,52 @@
         that: verify_dnf_auto.status.UnitFileState == 'enabled'
         fail_msg: "dnf-automatic timer not enabled"
       when: verify_dnf_auto.status.UnitFileState | default('') != ''
+
+    # --- Cron access restriction (CIS 5.1.8 / 5.1.9) ---
+    - name: Verify /etc/cron.allow exists
+      ansible.builtin.stat:
+        path: /etc/cron.allow
+      register: verify_cron_allow
+      become: true
+
+    - name: Assert /etc/cron.allow exists with mode 0600
+      ansible.builtin.assert:
+        that:
+          - verify_cron_allow.stat.exists
+          - verify_cron_allow.stat.mode == '0600'
+        fail_msg: "/etc/cron.allow missing or wrong permissions"
+
+    - name: Assert /etc/cron.deny does not exist
+      ansible.builtin.stat:
+        path: /etc/cron.deny
+      register: verify_cron_deny
+      become: true
+
+    - name: Assert /etc/cron.deny is absent (CIS 5.1.8)
+      ansible.builtin.assert:
+        that: not verify_cron_deny.stat.exists
+        fail_msg: "/etc/cron.deny exists but cron.allow is authoritative"
+
+    - name: Verify /etc/cron.d permissions
+      ansible.builtin.stat:
+        path: /etc/cron.d
+      register: verify_crond
+      become: true
+
+    - name: Assert /etc/cron.d has mode 0700 (CIS 5.1.7)
+      ansible.builtin.assert:
+        that: verify_crond.stat.mode == '0700'
+        fail_msg: "/etc/cron.d wrong permissions (expected 0700)"
+      when: verify_crond.stat.exists
+
+    - name: Verify /etc/cron.daily permissions
+      ansible.builtin.stat:
+        path: /etc/cron.daily
+      register: verify_cron_daily
+      become: true
+
+    - name: Assert /etc/cron.daily has mode 0700 (CIS 5.1.4)
+      ansible.builtin.assert:
+        that: verify_cron_daily.stat.mode == '0700'
+        fail_msg: "/etc/cron.daily wrong permissions (expected 0700)"
+      when: verify_cron_daily.stat.exists
