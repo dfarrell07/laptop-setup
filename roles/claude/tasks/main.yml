@@ -182,3 +182,13 @@
   when: ansible_os_family == 'Darwin'
   changed_when: false
   failed_when: false
+  register: _claude_brew_autoupdate
+
+- name: Warn if brew autoupdate failed (may need trust step)
+  ansible.builtin.debug:
+    msg: >-
+      brew autoupdate start failed (rc={{ _claude_brew_autoupdate.rc }}).
+      Run 'brew autoupdate' interactively to complete trust if this is the first run.
+  when:
+    - ansible_os_family == 'Darwin'
+    - _claude_brew_autoupdate.rc | default(0) != 0
