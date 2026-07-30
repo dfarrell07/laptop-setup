@@ -68,8 +68,8 @@
   when: distrobox_tool != 'none'
   failed_when: false
 
-- name: Check Podman socket is active
-  ansible.builtin.command:
+- name: Check Podman socket is active  # noqa: command-instead-of-module
+  ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
     cmd: systemctl --user is-active podman.socket
   register: distrobox_podman_socket_active
   changed_when: false

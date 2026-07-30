@@ -102,8 +102,8 @@ system_disable_bluetooth: false  # Set true in config.yml to blacklist btusb/blu
 # locking out all users on the next sshd restart.
 # Must use lookup('env') not ansible_user_id/dir: those Ansible facts
 # resolve to root/root when the role runs with become: true at play level.
-real_user_home: "{{ lookup('env', 'HOME') }}"
-real_user_id: "{{ lookup('env', 'USER') }}"
+real_user_home: "{{ lookup('env', 'HOME') }}"  # noqa: var-naming[no-role-prefix]
+real_user_id: "{{ lookup('env', 'USER') }}"  # noqa: var-naming[no-role-prefix]
 
 # Fallback for standalone invocation — site.yml loads default.config.yml first.
-ssh_port: 722
+ssh_port: 722  # noqa: var-naming[no-role-prefix]
