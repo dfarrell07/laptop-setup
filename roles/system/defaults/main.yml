@@ -39,7 +39,7 @@ system_sysctl_hardening:
   net.bridge.bridge-nf-call-iptables: 1
   net.bridge.bridge-nf-call-ip6tables: 1
   kernel.randomize_va_space: 2
-  net.ipv6.conf.default.use_tempaddr: 2
+  # note: use_tempaddr omitted — SLAAC is disabled via accept_ra=0, so tempaddr has no effect
 
 # Firewall
 system_firewall_icmp_types:

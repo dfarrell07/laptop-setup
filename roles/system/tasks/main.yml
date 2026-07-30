@@ -194,6 +194,7 @@
 - name: Disable legacy vsyscall page (exploit gadget source)
   ansible.builtin.command:
     cmd: grubby --args="vsyscall=none" --update-kernel=ALL
+  register: system_vsyscall_result
   when:
     - system_grubby_info.rc | default(1) == 0
     - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
@@ -203,7 +204,10 @@
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
     msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall). Reboot to activate."
-  when: system_lockdown_result is changed or (system_iommu_result is defined and system_iommu_result is changed)
+  when: >-
+    (system_lockdown_result is changed) or
+    (system_iommu_result is defined and system_iommu_result is changed) or
+    (system_vsyscall_result is defined and system_vsyscall_result is changed)
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
