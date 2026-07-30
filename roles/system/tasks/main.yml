@@ -445,6 +445,7 @@
   when: >-
     system_modules_result.results
     | selectattr('item', 'equalto', 'br_netfilter')
+    | selectattr('rc', 'defined')
     | selectattr('rc', 'ne', 0)
     | list | length > 0
 
