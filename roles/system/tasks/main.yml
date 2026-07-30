@@ -802,6 +802,7 @@
     path: /etc/aide.conf
     regexp: '^/etc/ssh/sshd_config.d'
     line: '/etc/ssh/sshd_config.d NORMAL'
+    insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (first-match-wins)
     state: present
   when: system_aide_enabled | bool
 
