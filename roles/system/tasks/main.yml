@@ -761,7 +761,7 @@
     content: |
       # {{ ansible_managed }}
       [keyfile]
-      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*
+      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:ovn-k8s-mp0
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   failed_when: false
@@ -1597,6 +1597,19 @@
   notify: Reinitialize AIDE database
   # Default aide.conf only PERMS-checks /etc; auditd watches /etc/selinux for
   # writes (-k mac-policy) but AIDE needs content-level integrity verification.
+
+- name: Add /etc/bpfman to AIDE monitoring (eBPF program manager config)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/bpfman'
+    line: '/etc/bpfman NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+  # Default aide.conf only PERMS-checks /etc; bpfman has kernel-level eBPF access
+  # so config mutations by root must be content-verified, not just perm-checked.
+  # Paired with the auditd -w /etc/bpfman/ watch in auditd-claude.rules.j2.
 
 - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
   ansible.builtin.lineinfile:

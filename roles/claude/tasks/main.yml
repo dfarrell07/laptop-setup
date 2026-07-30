@@ -43,6 +43,15 @@
     mode: "0700"
 
 # --- Settings ---
+# Also deploy settings to the default ~/.claude instance — without this,
+# invoking claude without --config-dir uses ~/.claude with no deny lists,
+# no sandbox config, and no telemetry suppression.
+- name: Deploy default instance settings (~/.claude)
+  ansible.builtin.template:
+    src: settings.json.j2
+    dest: "{{ ansible_user_dir }}/.claude/settings.json"
+    mode: "0600"
+
 - name: Deploy work instance settings
   ansible.builtin.template:
     src: settings.json.j2

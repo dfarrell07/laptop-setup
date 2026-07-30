@@ -75,6 +75,9 @@
 # USBGuard device whitelist (allow new devices to avoid silent privilege escalation)
 -w /etc/usbguard/ -p wa -k device-policy
 
+# bpfman eBPF program manager configuration (trusted daemon with kernel-level access)
+-w /etc/bpfman/ -p wa -k bpfman-config
+
 # Kernel parameter and module configuration
 -w /etc/sysctl.d/ -p wa -k kernel-params
 -w /etc/modprobe.d/ -p wa -k kernel-modules

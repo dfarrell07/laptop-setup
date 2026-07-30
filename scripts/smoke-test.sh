@@ -61,7 +61,7 @@ else
 fi
 
 # Dev tool presence
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli"; do
+for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli" "bpfman:bpfman --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "FAIL" "not found"; fi
 done
@@ -437,6 +437,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
   else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi
+  if systemctl is-active fwupd-refresh.timer &>/dev/null; then record "fwupd-refresh-timer" "PASS"
+  else record "fwupd-refresh-timer" "WARN" "fwupd-refresh.timer inactive — LVFS firmware metadata may be stale"; fi
 
   # pam_wheel.so
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"

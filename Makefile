@@ -19,11 +19,15 @@ help:
 	@echo "Other:      backup csb-audit diff vault-edit"
 
 # --- Primary targets ---
+# Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
+guard-not-root:
+	@[ "$$(id -u)" != "0" ] || \
+		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
-all:
+all: guard-not-root
 	ansible-playbook site.yml --ask-become-pass
 
-minimal:
+minimal: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
 
 container:
@@ -72,16 +76,16 @@ update:
 
 # --- Individual roles ---
 
-dotfiles:
+dotfiles: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles
 
-packages:
+packages: guard-not-root
 	ansible-playbook site.yml --tags common,packages --ask-become-pass
 
-repos:
+repos: guard-not-root
 	ansible-playbook site.yml --tags common,repos
 
-notes:
+notes: guard-not-root
 	ansible-playbook site.yml --tags common,notes
 
 repos-ovnk:
