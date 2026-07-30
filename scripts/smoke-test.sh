@@ -234,6 +234,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
       else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
     fi
+    # ICMP block-inversion must be enabled: without it the allow-list becomes a block-list,
+    # silently breaking IPv6 NDP (neighbour-solicitation/advertisement) and PMTU discovery.
+    if firewall-cmd --zone=drop --query-icmp-block-inversion &>/dev/null; then record "firewall-icmp-inversion" "PASS"
+    else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone — NDP and PMTU discovery broken"; fi
   fi
 
   # tailscaled service state (Linux systemd — on macOS tailscale uses launchd, handled by connectivity check above)

@@ -80,7 +80,11 @@ packages_networking:
   - bind-utils
   - bpftool
   - wireshark
+  - wireshark-cli  # tshark — scripting-safe CLI capture; wireshark pkg may not install on headless CSB
+  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
+  - strace         # system call tracer; needed on host for bpfman daemon debugging (not just container)
   - perf
+  - sos            # Red Hat support diagnostic bundle tool (sos report); required for CSB/RHEL support cases
 
 packages_apt:
   - git

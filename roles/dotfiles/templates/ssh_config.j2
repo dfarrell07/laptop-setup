@@ -11,13 +11,15 @@ Host *
     Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
     MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
     KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled | default(false) %}mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,{% endif %}curve25519-sha256
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
     ControlMaster auto
 {% if ansible_system | default('Linux') == 'Linux' %}
     ControlPath /run/user/%i/ssh/%r@%h-%p
 {% else %}
     ControlPath ~/.ssh/sockets/%r@%h-%p
 {% endif %}
-    ControlPersist 120
+    ControlPersist 600
 
 Host github.com gist.github.com
     User git

@@ -1213,6 +1213,14 @@
     mode: "0644"
   when: real_user_id is defined
 
+- name: Enable session lingering for rootless podman socket persistence
+  ansible.builtin.command:
+    cmd: loginctl enable-linger {{ real_user_id }}
+  changed_when: false
+  when: real_user_id is defined
+  # Without linger, systemd kills the user session (and podman.socket) when the
+  # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
+
 # --- Lock root account ---
 - name: Check root account status
   ansible.builtin.command:

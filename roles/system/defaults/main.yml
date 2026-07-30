@@ -86,6 +86,9 @@ system_usbguard_whitelist:
   - "allow id 174f:11a8 with-connect-type \"not used\""  # Sunplus webcam
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   - "allow with-connect-type \"hardwired\""
+  # STM32 DFU bootloader — Moonlander firmware flashing (Wally/qmk flash).
+  # Re-enumerates as VID 0483:df11 when reset button pressed or QK_BOOT keycode used.
+  - "allow id 0483:df11 name \"DFU in FS Mode\" with-interface one-of { FE:01:* }"
 
 # Machine-specific additional whitelist rules merged with the above.
 # Set in config.yml (gitignored) to add device-specific rules without
