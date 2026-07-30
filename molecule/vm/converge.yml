@@ -7,8 +7,8 @@
   pre_tasks:
     - name: Capture real user identity
       ansible.builtin.set_fact:
-        real_user_home: "{{ ansible_user_dir }}"
-        real_user_id: "{{ ansible_user_id }}"
+        real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_id: "{{ lookup('env', 'USER') }}"
       become: false
 
     - name: Load configuration

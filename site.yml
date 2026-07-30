@@ -80,6 +80,11 @@
       tags: [redhat]
       when: profile == 'work'
 
+    # Flush handlers so update-ca-trust fires before distrobox pulls images.
+    # If container_image is overridden to an internal registry, the pull needs
+    # the Red Hat CA certs already trusted.
+    - ansible.builtin.meta: flush_handlers
+
     - role: containers
       tags: [containers]
 

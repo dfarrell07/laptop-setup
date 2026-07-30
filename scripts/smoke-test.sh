@@ -249,7 +249,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "aide-timer" "WARN" "timer not enabled"; fi
 
   # Chrony NTS
-  if grep -q 'nts' /etc/chrony.conf 2>/dev/null; then record "chrony-nts" "PASS"
+  if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then record "chrony-nts" "PASS"
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
 
   # pam_wheel.so
@@ -272,7 +272,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "chrome-policies" "WARN" "not deployed"; fi
 
   # Unexpected listening ports (non-loopback)
-  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.0\.0\.1|::1" | tail -n +2 || true)
+  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | tail -n +2 || true)
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 
