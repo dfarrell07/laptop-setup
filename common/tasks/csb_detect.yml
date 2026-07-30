@@ -159,7 +159,7 @@
 # ---------------------------------------------------------------------------
 - name: Check subuid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subuid"
+    cmd: "grep -q ^{{ real_user_id | default(ansible_user_id) }}: /etc/subuid"
   register: _subuid
   changed_when: false
   failed_when: false
@@ -167,7 +167,7 @@
 
 - name: Check subgid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subgid"
+    cmd: "grep -q ^{{ real_user_id | default(ansible_user_id) }}: /etc/subgid"
   register: _subgid
   changed_when: false
   failed_when: false

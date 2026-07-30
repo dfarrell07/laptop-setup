@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+# ~/.config/ripgrep/config — loaded via RIPGREP_CONFIG_PATH in zshrc
+
+# Case-insensitive unless the pattern has uppercase
+--smart-case
+
+# Search hidden files/dirs (e.g. .github/, .envrc) by default
+--hidden
+
+# Skip .git directory (always noise)
+--glob=!.git
+
+# Skip Go and Node vendor trees (still searchable with -u when needed)
+--glob=!vendor
+--glob=!node_modules

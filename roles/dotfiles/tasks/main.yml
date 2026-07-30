@@ -118,6 +118,24 @@
     - config-work
     - config-personal
 
+- name: Deploy global gitignore
+  ansible.builtin.template:
+    src: gitignore_global.j2
+    dest: "{{ ansible_user_dir }}/.config/git/ignore"
+    mode: "0644"
+
+- name: Ensure ripgrep config directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/ripgrep"
+    state: directory
+    mode: "0755"
+
+- name: Deploy ripgreprc
+  ansible.builtin.template:
+    src: ripgreprc.j2
+    dest: "{{ ansible_user_dir }}/.config/ripgrep/config"
+    mode: "0644"
+
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2

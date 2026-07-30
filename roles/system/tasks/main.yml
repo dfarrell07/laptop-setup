@@ -308,13 +308,14 @@
 
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
-    msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall/init_on_free/page_alloc.shuffle). Reboot to activate."
+    msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
   when: >-
     (system_lockdown_result is changed) or
     (system_iommu_result is defined and system_iommu_result is changed) or
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or
     (system_init_on_free_result is defined and system_init_on_free_result is changed) or
-    (system_page_shuffle_result is defined and system_page_shuffle_result is changed)
+    (system_page_shuffle_result is defined and system_page_shuffle_result is changed) or
+    (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed)
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
