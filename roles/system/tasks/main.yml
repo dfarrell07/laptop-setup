@@ -984,20 +984,20 @@
 - name: Ensure subuid entry exists for user
   ansible.builtin.lineinfile:
     path: /etc/subuid
-    regexp: "^{{ real_user }}:"
-    line: "{{ real_user }}:100000:65536"
+    regexp: "^{{ real_user_id }}:"
+    line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
-  when: real_user is defined
+  when: real_user_id is defined
 
 - name: Ensure subgid entry exists for user
   ansible.builtin.lineinfile:
     path: /etc/subgid
-    regexp: "^{{ real_user }}:"
-    line: "{{ real_user }}:100000:65536"
+    regexp: "^{{ real_user_id }}:"
+    line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
-  when: real_user is defined
+  when: real_user_id is defined
 
 # --- Lock root account ---
 - name: Check root account status
