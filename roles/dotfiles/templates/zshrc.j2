@@ -24,11 +24,13 @@ SAVEHIST=50000
 unsetopt SHARE_HISTORY  # oh-my-zsh sets this; unset so APPEND_HISTORY controls write behavior
 setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 {% if ansible_system | default('Linux') == 'Darwin' %}
-export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"  # preserve existing socket if set
 {% endif %}
 export TMUX_TMPDIR="$HOME/.local/run/tmux"
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 {% if ansible_system | default('Linux') == 'Linux' %}
+# SSH_AUTH_SOCK fallback for shells that bypass systemd user session (sudo -s, su -)
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
 export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 # Wayland-native rendering for Qt and Electron when running under Sway

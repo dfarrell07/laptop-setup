@@ -376,8 +376,6 @@
   ansible.builtin.dnf:
     name: [tlp, tlp-rdw]
     state: present
-  become: true
-  tags: [become]
   when:
     - system_tlp_enabled | bool
     - ansible_pkg_mgr in ['dnf', 'dnf5']
@@ -869,7 +867,7 @@
 
 - name: Set console keymap
   ansible.builtin.copy:
-    content: "KEYMAP={{ system_keymap | default('us') }}\n"
+    content: "KEYMAP={{ system_keymap }}\n"
     dest: /etc/vconsole.conf
     mode: "0644"
   when: ansible_system == 'Linux'
