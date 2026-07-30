@@ -371,6 +371,52 @@
   when: "'Intel' not in (ansible_processor | join(' '))"
   failed_when: false
 
+# --- TLP battery charge management (ThinkPad) ---
+- name: Install TLP for ThinkPad battery charge thresholds
+  ansible.builtin.dnf:
+    name: [tlp, tlp-rdw]
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - system_tlp_enabled | bool
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
+- name: Mask power-profiles-daemon (conflicts with TLP)
+  ansible.builtin.systemd:
+    name: power-profiles-daemon
+    masked: true
+    state: stopped
+  when: system_tlp_enabled | bool
+  failed_when: false
+
+- name: Deploy TLP ThinkPad charge threshold config
+  ansible.builtin.template:
+    src: tlp-thinkpad.conf.j2
+    dest: /etc/tlp.d/50-thinkpad.conf
+    mode: "0644"
+  when:
+    - system_tlp_enabled | bool
+    - ansible_system == 'Linux'
+  failed_when: false
+  notify: Restart tlp
+
+- name: Enable and start TLP service
+  ansible.builtin.systemd:
+    name: tlp
+    state: started
+    enabled: true
+  when: system_tlp_enabled | bool
+  failed_when: false
+
+- name: Enable TLP sleep service (suspend/resume battery management)
+  ansible.builtin.systemd:
+    name: tlp-sleep.service
+    enabled: true
+  when: system_tlp_enabled | bool
+  failed_when: false
+
 # --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable cups.service ---
 # cups-browsed is masked (not just disabled) because it's an active RCE target.
 # cups.service is disabled/stopped but NOT masked — Flatpak print dialogs use

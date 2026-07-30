@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# TLP ThinkPad battery charge threshold configuration.
+# Deployed as a drop-in to /etc/tlp.d/ (overrides /etc/tlp.conf defaults).
+# Target: ThinkPad P16v Gen 1 AMD — uses thinkpad_acpi sysfs interface.
+# No reboot required; changes apply immediately on 'systemctl restart tlp'.
+#
+# Li-ion longevity: keeping charge between 20-80% significantly extends
+# battery cycle life. Override system_tlp_bat0_start/stop in config.yml.
+
+TLP_ENABLE=1
+
+# Battery charge thresholds (uses thinkpad_acpi — no extra kernel modules needed)
+START_CHARGE_THRESH_BAT0={{ system_tlp_bat0_start }}
+STOP_CHARGE_THRESH_BAT0={{ system_tlp_bat0_stop }}
+START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start }}
+STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop }}
+
+# WiFi power: leave at TLP default (auto).
+# NM's 99-wifi-powersave.conf pins wifi.powersave=2 (disabled) — NM config wins.

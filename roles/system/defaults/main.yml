@@ -93,6 +93,11 @@ system_locale: en_US.UTF-8
 
 system_aide_enabled: true
 
+# TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
+system_tlp_enabled: true
+system_tlp_bat0_start: 20   # start charging when battery drops below this %
+system_tlp_bat0_stop: 80    # stop charging at this % (Li-ion longevity: keep 20-80%)
+
 # Logind
 system_lid_switch: suspend
 system_lid_switch_external: lock
