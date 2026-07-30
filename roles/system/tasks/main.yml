@@ -924,6 +924,13 @@
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
 
+- name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^#?YESCRYPT_COST_FACTOR'
+    line: 'YESCRYPT_COST_FACTOR 5'
+    mode: "0644"
+
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - name: Check useradd default INACTIVE setting
   ansible.builtin.command:
