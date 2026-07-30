@@ -279,11 +279,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
   _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
-  if grep -q '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^KbdInteractiveAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^PermitEmptyPasswords no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+  if grep -q '^PasswordAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -292,7 +292,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
     record "sshd-hardening" "PASS"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    record "sshd-hardening" "FAIL" "sshd drop-in missing key directives (MaxAuthTries=$_max_auth)"
+    record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms (MaxAuthTries=$_max_auth)"
   else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
   # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
   if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -608,7 +608,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock"; fi
 
   # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
-  if loginctl show-user "$USER" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
+  if loginctl show-user "${SUDO_USER:-$USER}" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
     record "session-linger" "PASS"
   else record "session-linger" "FAIL" "linger not enabled — podman.socket dies when provisioning SSH session ends"; fi
 
