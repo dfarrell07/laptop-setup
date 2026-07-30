@@ -16,6 +16,14 @@
   ansible.builtin.set_fact:
     desktop_effective: "{{ desktop_environment if desktop_environment != 'auto' else desktop_detected | default('unknown') }}"
 
+- name: Warn when desktop detection falls through to unknown
+  ansible.builtin.debug:
+    msg: >-
+      Desktop environment could not be detected (desktop_effective=unknown).
+      For remote/SSH provisioning, set desktop_environment: i3 or
+      desktop_environment: sway in config.yml to deploy WM configs explicitly.
+  when: desktop_effective == 'unknown'
+
 - name: Install common desktop packages
   ansible.builtin.dnf:
     name: "{{ desktop_common_packages }}"
