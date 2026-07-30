@@ -260,7 +260,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if command -v update-crypto-policies &>/dev/null; then
     cp=$(update-crypto-policies --show 2>/dev/null || echo "?")
     if [[ "$cp" == "DEFAULT:NO-SHA1" ]]; then record "crypto-policy" "PASS"
-    else record "crypto-policy" "WARN" "'$cp', expected 'DEFAULT:NO-SHA1'"; fi
+    else record "crypto-policy" "FAIL" "'$cp', expected 'DEFAULT:NO-SHA1' (SHA1 accepted system-wide)"; fi
   fi
 
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
@@ -315,7 +315,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # avahi-daemon masked
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
-  else record "avahi-masked" "WARN" "not masked"; fi
+  else record "avahi-masked" "FAIL" "not masked (mDNS service discovery leakage risk)"; fi
 
   # AIDE file integrity (timer enabled+active AND database initialized)
   if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
@@ -466,7 +466,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
   else record "tlp-service" "WARN" "tlp.service not enabled"; fi
   if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
-  else record "tlp-config" "FAIL" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
+  else record "tlp-config" "WARN" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
   # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
   if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
     _bat_end=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo "?")
