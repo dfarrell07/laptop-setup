@@ -371,6 +371,36 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 
+  # login.defs password aging (CIS 5.4.x)
+  if grep -qE '^PASS_MAX_DAYS[[:space:]]+365' /etc/login.defs 2>/dev/null; then record "pass-max-days" "PASS"
+  else record "pass-max-days" "FAIL" "PASS_MAX_DAYS not set to 365 in login.defs"; fi
+  if grep -qE '^UMASK[[:space:]]+027' /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
+  else record "umask-login-defs" "FAIL" "UMASK not set to 027 in login.defs"; fi
+  if grep -qE '^INACTIVE[[:space:]]+30' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
+  else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
+
+  # WiFi MAC address randomization (privacy)
+  if grep -q 'wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
+    record "wifi-mac-rand" "PASS"
+  else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
+
+  # logind IdleAction=lock (physical security)
+  if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
+    record "logind-idle-lock" "PASS"
+  else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock"; fi
+
+  # Critical kernel sysctl values
+  _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }
+  _sysctl_check "kernel.kptr_restrict"       "1" "sysctl-kptr-restrict"
+  _sysctl_check "kernel.kexec_load_disabled" "1" "sysctl-kexec-disabled"
+  _sysctl_check "kernel.io_uring_disabled"   "1" "sysctl-io-uring-disabled"
+  _sysctl_check "kernel.randomize_va_space"  "2" "sysctl-aslr"
+  _sysctl_check "fs.suid_dumpable"           "0" "sysctl-suid-dumpable"
+
+  # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
+  if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
+  else record "vsyscall-none" "WARN" "vsyscall=none not in cmdline (requires reboot if grubby ran)"; fi
+
 fi
 
 # ---- Output ----
