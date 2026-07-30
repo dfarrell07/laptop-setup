@@ -818,6 +818,7 @@
     dest: /etc/dnf/automatic.conf
     mode: "0644"
   notify: Restart dnf-automatic timer
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']  # /etc/dnf/ doesn't exist on Debian/macOS
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
