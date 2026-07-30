@@ -4,7 +4,10 @@
 # Uses block/rescue to handle CSB restrictions gracefully.
 
 - name: Add GitHub CLI repo
-  when: repo_gh_cli | default(true)
+  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/CentOS
+  when:
+    - repo_gh_cli | default(true)
+    - ansible_distribution != 'Fedora'
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:

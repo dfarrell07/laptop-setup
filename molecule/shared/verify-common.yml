@@ -168,6 +168,28 @@
     that: verify_bare_repo.stdout == 'explicit'
     fail_msg: "git safe.bareRepository is not set to explicit"
 
+- name: Check git gpg.format
+  ansible.builtin.command:
+    cmd: git config --global gpg.format
+  register: verify_gpg_format
+  changed_when: false
+
+- name: Assert gpg.format is ssh
+  ansible.builtin.assert:
+    that: verify_gpg_format.stdout == 'ssh'
+    fail_msg: "gpg.format not set to ssh — SSH commit signing not configured"
+
+- name: Check git user.signingkey
+  ansible.builtin.command:
+    cmd: git config --global user.signingkey
+  register: verify_signingkey
+  changed_when: false
+
+- name: Assert user.signingkey is set
+  ansible.builtin.assert:
+    that: verify_signingkey.stdout | length > 0
+    fail_msg: "git user.signingkey is not configured — SSH signing key not set"
+
 # --- Directories ---
 - name: Verify ~/bin directory exists
   ansible.builtin.stat:

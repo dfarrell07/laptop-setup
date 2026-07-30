@@ -119,13 +119,16 @@ packages_ansible_lint_version: "26.6.0"
 packages_oc_version: "4.22.6"
 
 packages_go_install:
-  - sigs.k8s.io/controller-tools/cmd/controller-gen@latest
-  - k8s.io/code-generator/cmd/client-gen@latest
-  - k8s.io/code-generator/cmd/informer-gen@latest
-  - k8s.io/code-generator/cmd/lister-gen@latest
-  - k8s.io/code-generator/cmd/deepcopy-gen@latest
-  - k8s.io/code-generator/cmd/applyconfiguration-gen@latest
-  - k8s.io/code-generator/cmd/defaulter-gen@latest
+  # Pin controller-gen and code-generator tools to match OVN-K's go.mod
+  # (hack/update-codegen.sh uses v0.36.2). Bump together when OVN-K upgrades k8s.
+  - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
+  - k8s.io/code-generator/cmd/client-gen@v0.36.2
+  - k8s.io/code-generator/cmd/informer-gen@v0.36.2
+  - k8s.io/code-generator/cmd/lister-gen@v0.36.2
+  - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
+  - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
+  - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
+  # The remaining tools produce no committed artifacts — @latest is safe.
   - github.com/submariner-io/subctl/cmd/subctl@latest
   - mvdan.cc/gofumpt@latest
   - golang.org/x/vuln/cmd/govulncheck@latest
