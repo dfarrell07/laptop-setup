@@ -726,6 +726,30 @@
   changed_when: true
   failed_when: false
 
+# --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
+- name: Check if authselect with-pwhistory feature is already enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-pwhistory
+  register: system_authselect_pwhistory_check
+  changed_when: false
+  failed_when: false
+
+- name: Enable authselect with-pwhistory feature
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-pwhistory
+  when: system_authselect_pwhistory_check.rc | default(1) != 0
+  changed_when: true
+  failed_when: false
+
+- name: Configure pam_pwhistory remember count (CIS 5.3.5)
+  community.general.ini_file:
+    path: /etc/security/pwhistory.conf
+    section: null
+    option: remember
+    value: "24"
+    mode: "0644"
+  failed_when: false
+
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
   community.general.ini_file:
@@ -866,6 +890,13 @@
     - { name: UMASK, value: "027" }
     - { name: INACTIVE, value: "30" }
 
+- name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^ENCRYPT_METHOD'
+    line: 'ENCRYPT_METHOD YESCRYPT'
+    mode: "0644"
+
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - name: Check useradd default INACTIVE setting
   ansible.builtin.command:
@@ -891,6 +922,20 @@
     cmd: passwd -l root
   when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
   changed_when: true
+  failed_when: false
+
+# --- Critical file permissions (CIS 6.1.2/6.1.4/6.1.6/6.1.8) ---
+- name: Enforce permissions on critical auth files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/passwd, group: root, mode: "0644"}
+    - {path: /etc/shadow, group: shadow, mode: "0000"}
+    - {path: /etc/group, group: root, mode: "0644"}
+    - {path: /etc/gshadow, group: shadow, mode: "0000"}
   failed_when: false
 
 # --- AIDE file integrity monitoring ---
