@@ -40,8 +40,6 @@ bind - split-window -v -c "#{pane_current_path}"
 bind -T copy-mode-vi v send-keys -X begin-selection
 {% if ansible_system | default('Linux') == 'Darwin' %}
 bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
-{% elif (ansible_env.XDG_SESSION_TYPE | default('')) == 'wayland' %}
-bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy"
 {% else %}
-bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "xclip -selection clipboard"
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy"
 {% endif %}
