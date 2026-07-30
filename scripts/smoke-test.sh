@@ -74,11 +74,7 @@ else record "gh-auth" "WARN" "not authenticated (interactive login required)"; f
 if run ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
-# Tailscale daemon and connectivity
-if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
-else record "tailscaled-active" "WARN" "tailscaled not running"; fi
-if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
-else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot)"; fi
+# Tailscale connectivity (cross-platform via CLI)
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "not connected"; fi
 
@@ -236,6 +232,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   fi
 
+  # tailscaled service state (Linux systemd — on macOS tailscale uses launchd, handled by connectivity check above)
+  if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
+  else record "tailscaled-active" "WARN" "tailscaled not running"; fi
+  if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
+  else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot)"; fi
+
   # USBGuard (verify both installed, active, and enabled)
   if command -v usbguard &>/dev/null; then
     if systemctl is-active usbguard &>/dev/null && systemctl is-enabled usbguard &>/dev/null; then
@@ -326,8 +328,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-enabled chronyd &>/dev/null && systemctl is-active chronyd &>/dev/null; then
     record "chronyd-service" "PASS"
   elif systemctl is-enabled chronyd &>/dev/null; then
-    record "chronyd-service" "WARN" "chronyd enabled but not active"
-  else record "chronyd-service" "WARN" "chronyd not enabled"; fi
+    record "chronyd-service" "FAIL" "chronyd enabled but not active (time sync required for FIDO2/TLS)"
+  else record "chronyd-service" "FAIL" "chronyd not enabled (no time sync = FIDO2/TLS breaks on reboot)"; fi
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
   else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi

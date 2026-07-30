@@ -36,7 +36,8 @@
 - name: Check ykpers is installed (ykchalresp)
   ansible.builtin.command: which ykchalresp
   changed_when: false
-  when: packages_security | length > 0  # packages_security emptied in some scenarios (e.g. fedora)
+  # packages_security not in scope in verify play; default([]) prevents UndefinedVariable
+  when: packages_security | default([]) | length > 0
 
 - name: Verify containers config directory
   ansible.builtin.stat:

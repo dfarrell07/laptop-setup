@@ -59,7 +59,7 @@ bootstrap:
 bootstrap-test: .venv
 	ansible-galaxy collection install -r requirements.yml
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
-	vagrant box add fedora/44-cloud-base --provider libvirt || true
+	vagrant box add githubixx/fedora-44 --provider libvirt || true
 
 hooks:
 	git config --local core.hooksPath .githooks

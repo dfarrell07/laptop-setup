@@ -200,9 +200,8 @@
 - name: Assert allowed_signers exists and is non-empty
   ansible.builtin.assert:
     that:
-      - verify_allowed_signers.stat.exists
       - verify_allowed_signers.stat.size > 0
-    fail_msg: "~/.config/git/allowed_signers missing or empty — SSH signature verification not configured"
+    fail_msg: "~/.config/git/allowed_signers is empty — SSH signature verification not configured"
   when: verify_allowed_signers.stat.exists
 
 - name: Check allowed_signers contains sk-ssh-ed25519 key
