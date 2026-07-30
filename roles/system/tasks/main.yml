@@ -374,7 +374,9 @@
 # --- TLP battery charge management (ThinkPad) ---
 - name: Install TLP for ThinkPad battery charge thresholds
   ansible.builtin.dnf:
-    name: [tlp, tlp-rdw]
+    name:
+      - tlp
+      - tlp-rdw
     state: present
   when:
     - system_tlp_enabled | bool
@@ -523,6 +525,7 @@
     src: usbguard-rules.conf.j2
     dest: /etc/usbguard/rules.conf
     mode: "0600"
+    backup: true
   when: system_install_usbguard | default(true) | bool
   failed_when: false
   notify: Restart usbguard
