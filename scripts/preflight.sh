@@ -41,16 +41,23 @@ if [[ -f /etc/os-release ]]; then
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
 record "os_family" "pass" "$OS_FAMILY"
-if [[ "$OS_FAMILY" == "rhel" ]]; then
+if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   has_certs=false has_fapolicyd=false
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
-  systemctl is-active fapolicyd &>/dev/null && has_fapolicyd=true
-  [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
+  # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
+  systemctl list-unit-files fapolicyd.service &>/dev/null && has_fapolicyd=true
+  if [[ "$OS_FAMILY" == "rhel" ]]; then
+    [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
+  else
+    # Fedora CSB: FQDN ends in .csb AND internal CA present (fapolicyd not required)
+    fqdn=$(hostname -f 2>/dev/null || hostname)
+    [[ "$fqdn" == *.csb && "$has_certs" == true ]] && IS_CSB=true
+  fi
 fi
 [[ "$IS_CSB" == true ]] \
-  && record "csb_detected" "warn" "RHEL CSB — expect fapolicyd/sudo constraints" \
+  && record "csb_detected" "warn" "CSB detected — expect fapolicyd/sudo constraints" \
   || record "csb_detected" "pass" "not CSB"
 if [[ -z "$PROFILE" ]]; then
   [[ "$IS_CSB" == true ]] && PROFILE="work" || PROFILE="personal"

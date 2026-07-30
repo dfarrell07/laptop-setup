@@ -112,3 +112,8 @@
       ansible.builtin.assert:
         that: verify_i3status.stat.exists
         fail_msg: "i3status config not deployed"
+
+    - name: Check pactl is installed (pulseaudio-utils — audio keybindings and i3status volume)
+      ansible.builtin.command:
+        cmd: which pactl
+      changed_when: false
