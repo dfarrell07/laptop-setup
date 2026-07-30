@@ -223,7 +223,9 @@
   ansible.builtin.command:
     cmd: grubby --args="lockdown=integrity" --update-kernel=ALL
   register: system_lockdown_result
-  when: "'lockdown=integrity' not in (system_grubby_info.stdout | default(''))"
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'lockdown=integrity' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
 

@@ -149,7 +149,9 @@
       failed_when: false
 
     - name: Download and install opm
-      when: packages_opm_check.rc != 0
+      when: >-
+        packages_opm_check.rc != 0 or
+        packages_oc_version not in (packages_opm_check.stdout | default(''))
       block:
         - name: Fetch OPM sha256sum.txt
           ansible.builtin.uri:

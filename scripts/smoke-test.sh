@@ -286,6 +286,20 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
   else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
+  # Auditd watch keys for new paths deployed by the system role
+  for _key in power-config device-policy kernel-params kernel-modules; do
+    if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
+      record "auditd-watch-${_key}" "PASS"
+    else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
+  done
+  # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
+  if [[ -f /etc/aide.conf ]]; then
+    for _path in "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/tlp.d" "/etc/tlp.conf"; do
+      label="aide-monitors-$(basename "$_path")"
+      if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
+      else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
+    done
+  fi
 
   # kernel module blacklist (verify key blacklist entries)
   if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
@@ -472,6 +486,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     _bat_end=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo "?")
     if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
     else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
+    unset _bat_end
+  fi
+  if [[ -f /sys/class/power_supply/BAT0/charge_control_start_threshold ]]; then
+    _bat_start=$(cat /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null || echo "?")
+    if [[ "$_bat_start" != "?" && "$_bat_start" -gt 0 && "$_bat_start" -lt 100 ]] 2>/dev/null; then
+      record "tlp-bat-start-threshold" "PASS"
+    else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi
+    unset _bat_start
     unset _bat_end
   fi
 
