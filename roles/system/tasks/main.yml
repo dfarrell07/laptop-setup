@@ -599,6 +599,12 @@
   notify: Restart sshd
   when: ansible_facts.services['sshd.service'] is defined
 
+- name: Validate sshd config syntax after deploying drop-in  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: sshd -t
+  changed_when: false
+  when: ansible_facts.services['sshd.service'] is defined
+
 # --- SELinux SSH port label ---
 - name: Label non-default SSH port for SELinux
   community.general.seport:
