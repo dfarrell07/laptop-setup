@@ -5,6 +5,14 @@ unbind C-b
 set -g prefix {{ dotfiles_tmux_prefix }}
 bind {{ dotfiles_tmux_prefix }} send-prefix
 
+# Terminal — 256-color + true-color passthrough
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-256color:Tc"
+
+# Refresh SSH_AUTH_SOCK on tmux attach so reattached sessions use the
+# current agent socket, not the one inherited at session creation time.
+set -g update-environment "SSH_AUTH_SOCK"
+
 # Reduce escape sequence ambiguity (default 500ms is too slow)
 set -sg escape-time 10
 
