@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Derive GitHub username from default.config.yml (used in macOS plist filenames)
-GITHUB_USER="$(grep 'dotfiles_github_user:' "$(dirname "$0")/../default.config.yml" 2>/dev/null | awk '{print $2}' || echo "dfarrell07")"
+GITHUB_USER="$(grep 'dotfiles_github_user:' "$(dirname "$0")/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "dfarrell07")"
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
