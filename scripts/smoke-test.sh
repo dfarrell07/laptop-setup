@@ -251,9 +251,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
   else record "cups-browsed-masked" "WARN" "not masked"; fi
 
-  # cups.service disabled (not masked — cups.socket remains for Flatpak on-demand activation)
-  if ! systemctl is-enabled cups.service &>/dev/null 2>&1; then record "cups-disabled" "PASS"
-  else record "cups-disabled" "WARN" "cups.service should be disabled (not a print server)"; fi
+  # cups.service disabled (not masked — cups.socket must remain for Flatpak on-demand activation)
+  _cups_state=$(systemctl show -p UnitFileState --value cups.service 2>/dev/null)
+  if [[ "$_cups_state" == "disabled" ]]; then record "cups-disabled" "PASS"
+  else record "cups-disabled" "WARN" "cups.service state is '$_cups_state', expected 'disabled' (masked breaks Flatpak print)"; fi
+  unset _cups_state
 
   # avahi-daemon masked
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
