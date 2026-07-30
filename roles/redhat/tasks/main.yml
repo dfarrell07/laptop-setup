@@ -68,3 +68,9 @@
       vars:
         _csb_role: redhat
         _csb_task_name: "Restrict splunk system account shell"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "Splunk shell remains default; account may be used for login"
+        _csb_ticket_summary: "Cannot restrict splunk account shell on CSB"
+        _csb_ticket_body: >-
+          The splunk service account shell could not be set to /sbin/nologin.
+          This may allow interactive login via the splunk account.

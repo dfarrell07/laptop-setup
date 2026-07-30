@@ -58,6 +58,7 @@ OPTIONAL_FILES=(
   .aws/config
   .config/containers/auth.json
   .claude/.credentials.json
+  .claude/settings.json
 )
 
 count=0

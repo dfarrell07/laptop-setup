@@ -74,6 +74,16 @@
         that: verify_aerospace.stat.exists
         fail_msg: "AeroSpace config not deployed"
 
+    - name: Verify Alacritty config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+      register: verify_alacritty_macos
+
+    - name: Assert Alacritty config exists
+      ansible.builtin.assert:
+        that: verify_alacritty_macos.stat.exists
+        fail_msg: "Alacritty config not deployed on macOS"
+
     # --- launchd services (macOS) ---
     - name: Verify SSH agent launchd plist deployed
       ansible.builtin.stat:

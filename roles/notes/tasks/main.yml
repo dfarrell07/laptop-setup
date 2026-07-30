@@ -79,7 +79,6 @@
     path: "{{ notes_repo_path }}"
     mode: "0700"
   when: notes_repo_available | bool
-  failed_when: false
 
 - name: Restrict notes .git/config permissions (contains transcrypt password)
   ansible.builtin.file:
