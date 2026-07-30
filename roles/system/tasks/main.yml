@@ -95,6 +95,7 @@
       WantedBy=local-fs.target
     dest: /etc/systemd/system/var-tmp.mount
     mode: "0644"
+  when: ansible_system == 'Linux'
   failed_when: false
 
 - name: Enable var-tmp.mount
@@ -102,6 +103,7 @@
     name: var-tmp.mount
     enabled: true
     daemon_reload: true
+  when: ansible_system == 'Linux'
   failed_when: false
 
 # --- Kernel module blacklist ---
