@@ -86,7 +86,9 @@
         name: slack
         description: Slack Desktop
         baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
-        gpgcheck: false  # packagecloud Slack repo does not sign individual RPMs; metadata signing only
+        gpgcheck: false  # packagecloud Slack repo does not sign individual RPMs; metadata signing only.
+                         # Not a dnf-automatic risk: packagecloud repos publish no updateinfo.xml,
+                         # so upgrade_type=security never matches Slack packages (no advisory metadata).
         enabled: true
   rescue:
     - name: Record Slack repo failure
