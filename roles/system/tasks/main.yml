@@ -437,11 +437,13 @@
     name: fwupd-refresh.timer
     state: started
     enabled: true
+  when: ansible_system == 'Linux'
   failed_when: false
 
 - name: Refresh LVFS firmware metadata
   ansible.builtin.command:
     cmd: fwupdmgr refresh --force
+  when: ansible_system == 'Linux'
   changed_when: false
   failed_when: false
 
@@ -449,6 +451,7 @@
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
   register: system_fwupd
+  when: ansible_system == 'Linux'
   changed_when: false
   failed_when: false
 
@@ -456,8 +459,8 @@
   ansible.builtin.debug:
     msg: "Firmware updates available: {{ system_fwupd.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
-    - system_fwupd.rc == 0
-    - "'No updates available' not in (system_fwupd.stdout | default(''))"
+    - system_fwupd.rc | default(1) == 0
+    - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
 
 # --- sshd hardening ---
 - name: Ensure sshd config drop-in directory
