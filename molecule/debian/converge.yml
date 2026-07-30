@@ -10,6 +10,8 @@
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
+        # Fake key so ssh role deploys allowed_signers in CI (vault empty → key empty without this)
+        ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
 
   roles:
     - role: common

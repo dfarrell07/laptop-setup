@@ -240,6 +240,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # LUKS disk encryption (informational — not managed by Ansible)
   if lsblk -o FSTYPE 2>/dev/null | grep -q "crypto_LUKS"; then record "luks-encryption" "PASS"
   else record "luks-encryption" "WARN" "no LUKS volumes found — full-disk encryption not confirmed"; fi
+  # Stale rd.luks.key param: if cmdline references a keyfile but it doesn't exist on /boot,
+  # that's a latent foothold — a keyfile dropped there unlocks LUKS without passphrase
+  if grep -q 'rd.luks.key' /proc/cmdline 2>/dev/null; then
+    _luks_key=$(grep -oP 'rd.luks.key=\S+?(?=/keyfile)' /proc/cmdline 2>/dev/null | head -1)
+    if [[ -f /boot/keyfile ]]; then
+      record "luks-no-keyfile" "FAIL" "rd.luks.key in cmdline AND /boot/keyfile exists — LUKS key exposed on unencrypted /boot"
+    else
+      record "luks-no-keyfile" "WARN" "stale rd.luks.key param in cmdline but no keyfile on /boot — clean up with grubby --remove-args"
+    fi
+  fi
 
   # Firewall default zone = drop, SSH port open, tailscale0 in trusted zone
   if command -v firewall-cmd &>/dev/null; then
@@ -288,10 +298,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "auditd-service" "PASS"
   else record "auditd-service" "FAIL" "auditd not active or not enabled"; fi
 
-  # Crypto policy
+  # Crypto policy (skipped on CSB — IT may enforce FIPS/FUTURE; Ansible guard deliberately omits DEFAULT:NO-SHA1 there)
   if command -v update-crypto-policies &>/dev/null; then
     cp=$(update-crypto-policies --show 2>/dev/null || echo "?")
     if [[ "$cp" == "DEFAULT:NO-SHA1" ]]; then record "crypto-policy" "PASS"
+    elif $CSB_HOST; then record "crypto-policy" "WARN" "skipped on CSB — policy is '$cp' (IT-managed; DEFAULT:NO-SHA1 not applied)"
     else record "crypto-policy" "FAIL" "'$cp', expected 'DEFAULT:NO-SHA1' (SHA1 accepted system-wide)"; fi
   fi
 
@@ -475,8 +486,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "fprintd-masked" "FAIL" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
 
   # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
+  # Skipped on CSB — Ansible guard omits this because NM/VPN manages resolv.conf on corporate networks
   if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
     record "resolv-stub" "PASS"
+  elif $CSB_HOST; then record "resolv-stub" "WARN" "skipped on CSB — NM/VPN manages resolv.conf on corporate networks"
   else record "resolv-stub" "WARN" "resolv.conf not symlinked to stub-resolv.conf"; fi
 
   # Basic DNS resolution (confirms DNS works regardless of DoT/DHCP source — critical on CSB)
@@ -607,8 +620,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
 
   # NM dns=systemd-resolved (required for Tailscale MagicDNS split-DNS)
+  # Skipped on CSB — paired with resolv.conf guard; Ansible deliberately omits both on CSB (DHCP DNS remains active)
   if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf 2>/dev/null; then
     record "nm-dns-resolved" "PASS"
+  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "skipped on CSB — DHCP DNS active via systemd-resolved without NM override"
   else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
 
   # NM wifi-powersave=2 (prevents latency spikes and drops on ThinkPad)

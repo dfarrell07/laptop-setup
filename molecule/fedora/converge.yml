@@ -15,6 +15,9 @@
         packages_networking: []
         packages_install_binaries: false
         install_virtualization: false
+        # Fake sk-ssh-ed25519 key so the ssh role deploys allowed_signers in CI
+        # (vault is empty in CI so ssh_git_signing_pubkey defaults to '' without this)
+        ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
 
   roles:
     - role: common
