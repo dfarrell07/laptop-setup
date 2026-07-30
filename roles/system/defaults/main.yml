@@ -72,5 +72,7 @@ system_lid_switch_docked: ignore
 # but role defaults guard against standalone invocation or empty env vars.
 # An empty real_user_id would produce AllowUsers with no token in sshd,
 # locking out all users on the next sshd restart.
-real_user_home: "{{ ansible_user_dir }}"
-real_user_id: "{{ ansible_user_id }}"
+# Must use lookup('env') not ansible_user_id/dir: those Ansible facts
+# resolve to root/root when the role runs with become: true at play level.
+real_user_home: "{{ lookup('env', 'HOME') }}"
+real_user_id: "{{ lookup('env', 'USER') }}"
