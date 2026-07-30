@@ -578,6 +578,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
+  _sysctl_check "net.ipv4.tcp_timestamps"            "0" "sysctl-tcp-timestamps"
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
 
