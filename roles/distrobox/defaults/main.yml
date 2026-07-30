@@ -49,11 +49,20 @@ distrobox_packages:
   - bash-completion
   - tcpdump
   - iproute
+  - iproute-tc  # tc split from iproute on Fedora 38+; required for OVS/eBPF traffic control
   - nmap-ncat
   - bind-utils
   - traceroute
   - mtr
   - nftables
+  - ethtool
+  - conntrack-tools
+  - socat
+  - iperf3
+  - strace
+  - bpftool  # eBPF program/map introspection (essential for bpfman development)
+  - libbpf-devel  # eBPF development headers
+  - llvm  # complements clang for eBPF bytecode compilation
   - gh
   - gitleaks
   - ovn
@@ -71,3 +80,4 @@ distrobox_exports:
 # Binary versions for container provisioning (Play 3)
 # Reference packages_oc_version so host and container stay in sync.
 distrobox_oc_version: "{{ packages_oc_version }}"
+distrobox_golangci_lint_version: "v2.1.6"
