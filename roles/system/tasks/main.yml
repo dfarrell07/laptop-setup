@@ -770,7 +770,11 @@
 - name: Deploy login banner
   ansible.builtin.copy:
     content: |
-      Authorized access only. All activity may be monitored and reported.
+      NOTICE: This system is for authorized users only. Unauthorized access
+      or use is strictly prohibited and may result in disciplinary action
+      and/or criminal prosecution. All activities on this system may be
+      monitored, recorded, and audited. By accessing this system, you
+      consent to such monitoring and recording.
     dest: /etc/issue
     mode: "0644"
   failed_when: false
@@ -778,7 +782,11 @@
 - name: Deploy SSH login banner
   ansible.builtin.copy:
     content: |
-      Authorized access only. All activity may be monitored and reported.
+      NOTICE: This system is for authorized users only. Unauthorized access
+      or use is strictly prohibited and may result in disciplinary action
+      and/or criminal prosecution. All activities on this system may be
+      monitored, recorded, and audited. By accessing this system, you
+      consent to such monitoring and recording.
     dest: /etc/issue.net
     mode: "0644"
   failed_when: false
