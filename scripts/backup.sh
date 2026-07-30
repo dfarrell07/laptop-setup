@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Derive GitHub username from default.config.yml (used in macOS plist filenames)
+GITHUB_USER="$(grep 'dotfiles_github_user:' "$(dirname "$0")/../default.config.yml" 2>/dev/null | awk '{print $2}' || echo "dfarrell07")"
+
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -36,9 +39,9 @@ DOTFILES=(
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
   .config/systemd/user/claude-queue.timer
-  Library/LaunchAgents/com.dfarrell07.ssh-agent.plist
-  Library/LaunchAgents/com.dfarrell07.claude-queue.plist
-  Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist
+  "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
+  "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
+  "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
 )
 
 # Machine-specific overrides and secrets (gitignored — not in the repo)
