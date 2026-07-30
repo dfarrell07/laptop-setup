@@ -9,5 +9,7 @@ ExecStart=/usr/bin/aide --check
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-SuccessExitStatus=1
+# Exit code 1 means AIDE found integrity violations — this is a genuine failure.
+# Removing SuccessExitStatus=1 lets systemd mark the unit failed on violations,
+# making them visible via 'systemctl --failed' and journalctl.
 SyslogIdentifier=aide-check

@@ -251,12 +251,15 @@
   when: "'Intel' not in (ansible_processor | join(' '))"
   failed_when: false
 
-# --- Mask cups-browsed (RCE entry point) ---
-- name: Mask cups-browsed service
+# --- Mask cups (print services; workstation is not a print server) ---
+- name: Mask cups and cups-browsed (not a print server; cups-browsed is an RCE vector)
   ansible.builtin.systemd:
-    name: cups-browsed
+    name: "{{ item }}"
     masked: true
     state: stopped
+  loop:
+    - cups
+    - cups-browsed
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
