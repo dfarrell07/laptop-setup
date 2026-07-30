@@ -200,6 +200,13 @@
     mode: "0755"
   when: ansible_os_family == 'Darwin'
 
+- name: Ensure LaunchAgents directory exists (macOS)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/Library/LaunchAgents"
+    state: directory
+    mode: "0755"
+  when: ansible_os_family == 'Darwin'
+
 - name: Deploy SSH agent launchd plist (macOS)
   ansible.builtin.template:
     src: ssh-agent.plist.j2
