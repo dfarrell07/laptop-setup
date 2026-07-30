@@ -173,6 +173,7 @@
     cmd: git config --global gpg.format
   register: verify_gpg_format
   changed_when: false
+  failed_when: false
 
 - name: Assert gpg.format is ssh
   ansible.builtin.assert:
@@ -184,6 +185,7 @@
     cmd: git config --global user.signingkey
   register: verify_signingkey
   changed_when: false
+  failed_when: false
 
 - name: Assert user.signingkey is set
   ansible.builtin.assert:

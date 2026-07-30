@@ -14,16 +14,8 @@
       ansible.builtin.include_tasks: ../shared/verify-dnf.yml
 
     # --- repos_dnf checks ---
-    - name: Verify gh-cli repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/gh-cli.repo
-      register: verify_gh_repo
-      become: true
-
-    - name: Assert gh-cli repo exists
-      ansible.builtin.assert:
-        that: verify_gh_repo.stat.exists
-        fail_msg: "gh-cli repo not configured"
+    # gh-cli repo assertion removed: gh ships in standard Fedora repos (F43+),
+    # so the third-party repo is no longer added on Fedora.
 
     - name: Verify google-chrome repo configured
       ansible.builtin.stat:
