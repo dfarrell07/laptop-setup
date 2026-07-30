@@ -5,7 +5,8 @@
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container smoke-test-fedora \
        ci syntax-check shellcheck markdownlint commitlint \
-       test-scripts test-fedora test-centos test-debian test-macos test-vm
+       test-scripts test-fedora test-centos test-debian test-macos test-vm \
+       preflight
 
 help:
 	@echo "Primary:    all minimal container container-rebuild update"
@@ -58,7 +59,7 @@ bootstrap:
 bootstrap-test: .venv
 	ansible-galaxy collection install -r requirements.yml
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
-	vagrant box add fedora/43-cloud-base --provider libvirt || true
+	vagrant box add fedora/44-cloud-base --provider libvirt || true
 
 hooks:
 	git config --local core.hooksPath .githooks
