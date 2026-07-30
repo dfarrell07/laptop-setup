@@ -49,12 +49,12 @@
 - name: Check if splunk user exists
   ansible.builtin.command:
     cmd: getent passwd splunk
-  register: _splunk_user_check
+  register: redhat_splunk_user_check
   changed_when: false
   failed_when: false
 
 - name: Restrict splunk system account shell (CIS 5.6)
-  when: _splunk_user_check.rc == 0
+  when: redhat_splunk_user_check.rc == 0
   block:
     - name: Set splunk account shell to nologin
       ansible.builtin.user:
