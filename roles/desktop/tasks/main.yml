@@ -170,7 +170,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_user_shell | default('/bin/bash') != '/bin/zsh'
+    - ansible_env.SHELL | default('/bin/bash') != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
 - name: Ensure AeroSpace config directory (macOS)
