@@ -315,6 +315,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
   else record "tmp-noexec" "FAIL" "/tmp not mounted noexec"; fi
 
+  # /dev/shm noexec (CIS 1.1.7.x)
+  if findmnt -n -o OPTIONS /dev/shm 2>/dev/null | grep -q noexec; then record "shm-noexec" "PASS"
+  else record "shm-noexec" "FAIL" "/dev/shm not mounted noexec"; fi
+
+  # /var/tmp bind-mounted to /tmp (CIS 1.1.8)
+  if findmnt -n -o OPTIONS /var/tmp 2>/dev/null | grep -q bind; then record "var-tmp-bind" "PASS"
+  else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted to /tmp"; fi
+
+  # kernel.core_pattern safety
+  if sysctl -n kernel.core_pattern 2>/dev/null | grep -q '/bin/false'; then record "core-pattern" "PASS"
+  else record "core-pattern" "FAIL" "kernel.core_pattern not set to |/bin/false"; fi
+
   # ctrl+alt+del disabled (physical security)
   if systemctl is-masked ctrl-alt-del.target &>/dev/null; then record "ctrl-alt-del-masked" "PASS"
   else record "ctrl-alt-del-masked" "FAIL" "ctrl-alt-del.target not masked"; fi

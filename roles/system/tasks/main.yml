@@ -53,23 +53,23 @@
   failed_when: false
 
 # --- Harden /dev/shm mount options ---
-# Use a systemd drop-in, NOT ansible.posix.mount/fstab — on Fedora,
-# /dev/shm is managed by the systemd dev-shm.mount unit; an fstab entry
-# conflicts silently and the noexec flag is never applied.
-- name: Ensure dev-shm.mount drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/dev-shm.mount.d
-    state: directory
-    mode: "0755"
+# Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under
+# dev-shm.mount.d/ is silently ignored. Use fstab for persistence and a
+# direct remount for immediate effect.
+- name: Ensure /dev/shm fstab entry has noexec (CIS 1.1.7.x)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^tmpfs\s+/dev/shm\s+'
+    line: 'tmpfs /dev/shm tmpfs defaults,noexec,nosuid,nodev 0 0'
+    create: false
+  when: ansible_system == 'Linux'
+  failed_when: false
 
-- name: Harden /dev/shm with noexec via systemd drop-in
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      [Mount]
-      Options=mode=1777,nosuid,nodev,noexec
-    dest: /etc/systemd/system/dev-shm.mount.d/hardening.conf
-    mode: "0644"
+- name: Apply /dev/shm noexec immediately via remount  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: mount -o remount,noexec /dev/shm
+  changed_when: true
+  when: ansible_system == 'Linux'
   failed_when: false
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
