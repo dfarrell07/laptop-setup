@@ -1406,9 +1406,9 @@
 - name: Ensure AIDE monitors sshd drop-in config directory
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/ssh/sshd_config.d'
+    regexp: '^/etc/ssh/sshd_config\.d'
     line: '/etc/ssh/sshd_config.d NORMAL'
-    insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (first-match-wins)
+    insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (longest-match-wins)
     state: present
   when: system_aide_enabled | bool
 

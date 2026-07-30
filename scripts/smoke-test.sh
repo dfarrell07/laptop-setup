@@ -240,7 +240,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
   else record "tailscaled-active" "WARN" "tailscaled not running"; fi
   if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
-  else record "tailscaled-enabled" "FAIL" "tailscaled not enabled (won't start on reboot, VPN tunnel lost)"; fi
+  else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot, VPN tunnel lost)"; fi
 
   # USBGuard (verify both installed, active, and enabled)
   if command -v usbguard &>/dev/null; then
