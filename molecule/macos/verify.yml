@@ -41,6 +41,18 @@
       ansible.builtin.command: shellcheck --version
       changed_when: false
 
+    - name: Check shfmt is installed
+      ansible.builtin.command: shfmt --version
+      changed_when: false
+
+    - name: Check ripgrep is installed
+      ansible.builtin.command: rg --version
+      changed_when: false
+
+    - name: Check fd is installed
+      ansible.builtin.command: fd --version
+      changed_when: false
+
     - name: Verify SSH sockets directory exists (macOS ControlPath)
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.ssh/sockets"
