@@ -21,6 +21,7 @@
     - name: Assert Claude work config directory exists
       ansible.builtin.assert:
         that:
+          - verify_claude_work.stat.exists
           - verify_claude_work.stat.isdir
           - verify_claude_work.stat.mode == '0700'
         fail_msg: "Claude work config dir missing or wrong permissions"
@@ -88,3 +89,4 @@
       ansible.builtin.assert:
         that: verify_rh_cert.stat.exists
         fail_msg: "Red Hat CA cert not deployed"
+      when: verify_rh_cert.stat.exists

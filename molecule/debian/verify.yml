@@ -52,5 +52,7 @@
 
     - name: Assert containers config directory exists
       ansible.builtin.assert:
-        that: verify_containers_dir.stat.isdir
+        that:
+          - verify_containers_dir.stat.exists
+          - verify_containers_dir.stat.isdir
         fail_msg: "Containers config directory was not created"

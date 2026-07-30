@@ -74,6 +74,12 @@
     state: restarted
   failed_when: false
 
+- name: Run dconf update  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: dconf update
+  changed_when: true
+  failed_when: false
+
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:
     name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"

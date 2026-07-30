@@ -223,7 +223,7 @@
   ansible.builtin.dnf:
     name: audit
     state: present
-  when: ansible_system == 'Linux'
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
 
 - name: Deploy auditd rules
   ansible.builtin.template:
@@ -558,6 +558,8 @@
   ansible.builtin.dnf:
     name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
     state: present
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
 
 - name: Deploy dnf-automatic config
   ansible.builtin.template:
@@ -935,6 +937,25 @@
   when: "'INACTIVE=30' not in system_useradd_defaults.stdout"
   changed_when: true
 
+# --- Rootless container prerequisites (subuid/subgid for podman) ---
+- name: Ensure subuid entry exists for user
+  ansible.builtin.lineinfile:
+    path: /etc/subuid
+    regexp: "^{{ real_user }}:"
+    line: "{{ real_user }}:100000:65536"
+    create: true
+    mode: "0644"
+  when: real_user is defined
+
+- name: Ensure subgid entry exists for user
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    regexp: "^{{ real_user }}:"
+    line: "{{ real_user }}:100000:65536"
+    create: true
+    mode: "0644"
+  when: real_user is defined
+
 # --- Lock root account ---
 - name: Check root account status
   ansible.builtin.command:
@@ -962,6 +983,69 @@
     - {path: /etc/group, group: root, mode: "0644"}
     - {path: /etc/gshadow, group: shadow, mode: "0000"}
   failed_when: false
+
+# --- System-level dconf hardening (CIS 1.8.3/1.8.6-1.8.8) ---
+# Written as root to /etc/dconf/db/ so settings are locked and cannot be
+# overridden by users (unlike user-level community.general.dconf tasks).
+- name: Ensure dconf local.d locks directory exists
+  ansible.builtin.file:
+    path: /etc/dconf/db/local.d/locks
+    state: directory
+    mode: "0755"
+  when: ansible_system == 'Linux'
+
+- name: Deploy system-level GNOME media-handling hardening (CIS 1.8.6-1.8.8)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # CIS 1.8.6-1.8.8: disable removable media automount/autorun
+      [org/gnome/desktop/media-handling]
+      automount=false
+      autorun-never=true
+      automount-open=false
+    dest: /etc/dconf/db/local.d/50-hardening
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  notify: Run dconf update
+
+- name: Deploy dconf locks for media-handling (CIS 1.8.6-1.8.8)
+  ansible.builtin.copy:
+    content: |
+      /org/gnome/desktop/media-handling/automount
+      /org/gnome/desktop/media-handling/autorun-never
+      /org/gnome/desktop/media-handling/automount-open
+    dest: /etc/dconf/db/local.d/locks/50-hardening
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  notify: Run dconf update
+
+- name: Ensure gdm.d locks directory exists (CIS 1.8.3)
+  ansible.builtin.file:
+    path: /etc/dconf/db/gdm.d/locks
+    state: directory
+    mode: "0755"
+  when: ansible_system == 'Linux'
+
+- name: Disable GDM user list on login screen (CIS 1.8.3)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # CIS 1.8.3: prevent username enumeration on GDM login screen
+      [org/gnome/login-screen]
+      disable-user-list=true
+    dest: /etc/dconf/db/gdm.d/03-hardening
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  notify: Run dconf update
+
+- name: Lock GDM disable-user-list (CIS 1.8.3)
+  ansible.builtin.copy:
+    content: |
+      /org/gnome/login-screen/disable-user-list
+    dest: /etc/dconf/db/gdm.d/locks/03-hardening
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  notify: Run dconf update
 
 # --- AIDE file integrity monitoring ---
 - name: Install AIDE
