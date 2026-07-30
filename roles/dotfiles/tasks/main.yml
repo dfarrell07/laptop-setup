@@ -191,13 +191,13 @@
 - name: Deploy SSH agent launchd plist (macOS)
   ansible.builtin.template:
     src: ssh-agent.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
     mode: "0644"
   when: ansible_os_family == 'Darwin'
 
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
   when: ansible_os_family == 'Darwin'
   changed_when: false
   failed_when: false

@@ -69,16 +69,6 @@
     mode: "0644"
   when: distrobox_tool != 'none'
 
-- name: Enable Podman socket for kind
-  ansible.builtin.systemd:
-    name: podman.socket
-    scope: user
-    state: started
-    enabled: true
-  register: distrobox_podman_socket
-  when: distrobox_tool != 'none'
-  failed_when: false
-
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
     cmd: systemctl --user is-active podman.socket
