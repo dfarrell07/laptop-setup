@@ -42,6 +42,8 @@ system_sysctl_hardening:
   net.bridge.bridge-nf-call-iptables: 1
   net.bridge.bridge-nf-call-ip6tables: 1
   net.netfilter.nf_conntrack_max: 131072  # prevent 'table full, dropping packet' under OVN-K/Submariner load
+  net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
+  net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
   kernel.randomize_va_space: 2
   # note: use_tempaddr omitted — SLAAC is disabled via accept_ra=0, so tempaddr has no effect
 
