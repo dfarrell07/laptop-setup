@@ -540,7 +540,7 @@
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
-      ExecStartPost=/usr/bin/bash -c 'aide --update && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz' || true
+      ExecStartPost=/usr/bin/bash -c 'aide --update && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"
     mode: "0644"
   when:
