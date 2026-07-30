@@ -269,6 +269,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q '^PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
     record "sshd-hardening" "PASS"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -306,7 +307,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
       else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
     done
-  fi
+  else record "aide-not-configured" "WARN" "/etc/aide.conf absent; run: aide --init && cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"; fi
 
   # kernel module blacklist (verify key blacklist entries)
   if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
