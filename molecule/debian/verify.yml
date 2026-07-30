@@ -34,6 +34,16 @@
       changed_when: false
 
     # --- Desktop role ---
+    - name: Verify Alacritty config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+      register: verify_alacritty
+
+    - name: Assert Alacritty config exists
+      ansible.builtin.assert:
+        that: verify_alacritty.stat.exists
+        fail_msg: "Alacritty config not deployed"
+
     - name: Verify Chrome policy deployed
       ansible.builtin.stat:
         path: /etc/opt/chrome/policies/managed/security.json

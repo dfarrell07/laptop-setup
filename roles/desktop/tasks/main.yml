@@ -245,33 +245,6 @@
     - ansible_system == 'Linux'
     - desktop_gnome_check.rc | default(1) == 0
 
-- name: Disable USB automount
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/automount
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable autorun from removable media
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/autorun-never
-    value: "true"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable automount-open
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/automount-open
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
 - name: Set screen idle timeout (CIS requires ≤900s; set to 300s)
   community.general.dconf:
     key: /org/gnome/desktop/session/idle-delay
