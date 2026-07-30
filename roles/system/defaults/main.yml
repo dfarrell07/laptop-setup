@@ -57,8 +57,14 @@ system_install_usbguard: true
 system_usbguard_whitelist:
   - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
   - "allow id 3297:1969 name \"Moonlander\" with-interface one-of { 03:*:* }"
+  # Internal devices: ThinkPad P16v Gen 1 AMD platform does not populate ACPI
+  # _UPC/_PLD tables so the kernel reports connect_type "not used" (not "hardwired").
+  # Pin by VID:PID to avoid a blanket allow on all "not used" ports.
+  - "allow id 10ab:9309 with-connect-type \"not used\""
+  - "allow id 06cb:0126 with-connect-type \"not used\""
+  - "allow id 174f:11a8 with-connect-type \"not used\""
+  # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   - "allow with-connect-type \"hardwired\""
-  - "allow with-connect-type \"direct\""
 
 # AIDE file integrity monitoring
 system_aide_enabled: true
