@@ -77,6 +77,8 @@ else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 # Tailscale daemon and connectivity
 if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
 else record "tailscaled-active" "WARN" "tailscaled not running"; fi
+if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
+else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot)"; fi
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "not connected"; fi
 
@@ -234,9 +236,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   fi
 
-  # USBGuard (verify both installed and service active)
+  # USBGuard (verify both installed, active, and enabled)
   if command -v usbguard &>/dev/null; then
-    if systemctl is-active usbguard &>/dev/null; then record "usbguard" "PASS"
+    if systemctl is-active usbguard &>/dev/null && systemctl is-enabled usbguard &>/dev/null; then
+      record "usbguard" "PASS"
+    elif systemctl is-active usbguard &>/dev/null; then
+      record "usbguard" "WARN" "usbguard active but not enabled (won't start on reboot)"
     else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
   else record "usbguard" "FAIL" "not installed"; fi
 
@@ -265,7 +270,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
   # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
   if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ')
+    _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ' || true)
     if [[ "$_allow_users" == "$USER" ]]; then record "sshd-allowusers" "PASS"
     else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$USER'"; fi
   else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
@@ -294,7 +299,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
   if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
-  else record "cups-browsed-masked" "WARN" "not masked"; fi
+  else record "cups-browsed-masked" "FAIL" "not masked (CVE-2024-47176 RCE vector — must be masked)"; fi
 
   # cups.service disabled (not masked — cups.socket must remain for Flatpak on-demand activation)
   _cups_state=$(systemctl show -p UnitFileState --value cups.service 2>/dev/null)
@@ -318,6 +323,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # Chrony NTS
   if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then record "chrony-nts" "PASS"
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
+  if systemctl is-enabled chronyd &>/dev/null && systemctl is-active chronyd &>/dev/null; then
+    record "chronyd-service" "PASS"
+  elif systemctl is-enabled chronyd &>/dev/null; then
+    record "chronyd-service" "WARN" "chronyd enabled but not active"
+  else record "chronyd-service" "WARN" "chronyd not enabled"; fi
+  # fwupd firmware update daemon
+  if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
+  else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi
 
   # pam_wheel.so
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"

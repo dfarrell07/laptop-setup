@@ -602,6 +602,7 @@
 - name: Validate sshd config syntax after deploying drop-in  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: sshd -t
+  become: true
   changed_when: false
   when: ansible_facts.services['sshd.service'] is defined
 
