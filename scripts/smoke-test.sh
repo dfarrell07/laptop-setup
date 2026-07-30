@@ -352,6 +352,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # avahi-daemon masked
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
   else record "avahi-masked" "FAIL" "not masked (mDNS service discovery leakage risk)"; fi
+  # passim masked (fwupd dependency — unauthenticated HTTP on 0.0.0.0:27500 reachable via Tailscale trusted zone)
+  if systemctl is-masked passim.service &>/dev/null; then record "passim-masked" "PASS"
+  else record "passim-masked" "FAIL" "not masked (unauthenticated HTTP server on 0.0.0.0:27500)"; fi
 
   # AIDE file integrity (timer enabled+active AND database initialized)
   if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
