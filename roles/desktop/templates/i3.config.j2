@@ -7,6 +7,7 @@ font pango:DejaVu Sans Mono 10
 
 # Autostart
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
+exec --no-startup-id dunst
 exec_always --no-startup-id nm-applet
 exec_always --no-startup-id autorandr --change
 
@@ -86,6 +87,13 @@ bindsym XF86AudioMicMute exec --no-startup-id pactl set-source-mute @DEFAULT_SOU
 # Brightness
 bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl set +5%
 bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
+
+# Manual screen lock ($mod+l is taken by focus-right)
+bindsym $mod+Ctrl+l exec --no-startup-id i3lock -c 000000
+
+# Screenshot (scrot for X11)
+bindsym Print exec --no-startup-id scrot ~/Pictures/screenshot-%F-%T.png
+bindsym $mod+Print exec --no-startup-id scrot -s ~/Pictures/screenshot-%F-%T.png
 
 # Session
 bindsym $mod+Shift+c reload
