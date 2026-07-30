@@ -220,8 +220,6 @@
   ansible.builtin.dnf:
     name: mullvad-vpn
     state: present
-  become: true
-  tags: [become]
   when:
     - system_enable_mullvad | bool
     - ansible_pkg_mgr in ['dnf', 'dnf5']
