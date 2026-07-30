@@ -294,6 +294,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
   else record "root-locked" "FAIL" "root account not locked"; fi
 
+  # authselect PAM features (verifies faillock/pwhistory are wired into PAM stack, not just configured)
+  if command -v authselect &>/dev/null; then
+    if authselect is-feature-enabled with-faillock 2>/dev/null; then record "authselect-faillock" "PASS"
+    else record "authselect-faillock" "FAIL" "authselect with-faillock not enabled (faillock settings won't apply)"; fi
+    if authselect is-feature-enabled with-pwhistory 2>/dev/null; then record "authselect-pwhistory" "PASS"
+    else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
+  fi
+
   # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)
   if grep -q '^deny = 5' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
   else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
@@ -421,6 +429,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "umask-login-defs" "FAIL" "UMASK not set to 027 in login.defs"; fi
   if grep -qE '^INACTIVE[[:space:]]+30' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
   else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
+  if grep -qE '^PASS_MIN_DAYS[[:space:]]+1' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
+  else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
+  if grep -qE '^PASS_WARN_AGE[[:space:]]+7' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
+  else record "pass-warn-age" "FAIL" "PASS_WARN_AGE not set to 7 in login.defs"; fi
 
   # WiFi MAC address randomization (privacy)
   if grep -q 'wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
