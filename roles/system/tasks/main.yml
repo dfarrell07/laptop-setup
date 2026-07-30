@@ -294,6 +294,18 @@
   changed_when: true
   failed_when: false
 
+- name: Remove stale rd.luks.key grub parameter (no keyfile on /boot — avoids LUKS UUID leakage)
+  ansible.builtin.command:
+    cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
+  register: system_luks_key_cleanup
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+  # rd.luks.key in the cmdline with no /boot/keyfile is a stale remnant — dracut
+  # falls back to passphrase correctly, but the dead param leaks the LUKS device UUID.
+
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
     msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall/init_on_free/page_alloc.shuffle). Reboot to activate."

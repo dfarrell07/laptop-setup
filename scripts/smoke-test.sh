@@ -243,7 +243,6 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # Stale rd.luks.key param: if cmdline references a keyfile but it doesn't exist on /boot,
   # that's a latent foothold — a keyfile dropped there unlocks LUKS without passphrase
   if grep -q 'rd.luks.key' /proc/cmdline 2>/dev/null; then
-    _luks_key=$(grep -oP 'rd.luks.key=\S+?(?=/keyfile)' /proc/cmdline 2>/dev/null | head -1)
     if [[ -f /boot/keyfile ]]; then
       record "luks-no-keyfile" "FAIL" "rd.luks.key in cmdline AND /boot/keyfile exists — LUKS key exposed on unencrypted /boot"
     else

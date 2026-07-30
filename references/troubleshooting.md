@@ -444,3 +444,46 @@ FIDO2 operations (ed25519-sk) go through the kernel HID driver directly and do n
 The playbook installs `yubikey-manager`, `ykpers`, and `libfido2` via the `packages` role on supported distros. If these are missing, run `make packages`.
 
 **CSB IT ticket:** Possibly, if pcscd is blocked by policy or the user cannot be added to `plugdev`.
+
+---
+
+## system: Tailscale Not Authenticated After Provisioning
+
+**Symptom:**
+```
+tailscale: WARN — not connected
+```
+The smoke test (`make smoke-test`) records this warning. Running `tailscale status` shows "not logged in" or the daemon exits immediately. The VPN tunnel is not established even though `tailscaled` is running.
+
+**Cause:**
+The playbook installs `tailscale`, configures NetworkManager to ignore Tailscale interfaces, assigns `tailscale0` to the firewall trusted zone, and enables and starts `tailscaled` — but it does not authenticate the node. Authentication requires an interactive browser step or a pre-issued auth key. This cannot be automated without storing credentials in vault, so it is intentionally left as a manual post-provisioning step.
+
+**Fix:**
+After `make all` completes, authenticate the node. For interactive (desktop) machines:
+```bash
+tailscale up
+```
+This opens a browser window. Complete the login and the node joins the tailnet immediately.
+
+For headless or SSH-only machines, generate a reusable or ephemeral auth key from the Tailscale admin console (`https://login.tailscale.com/admin/settings/keys`) and pass it directly:
+```bash
+tailscale up --auth-key=tskey-auth-...
+```
+
+For tagged/server nodes that require pre-authorization:
+```bash
+tailscale up --auth-key=tskey-auth-... --advertise-tags=tag:server
+```
+
+Verify the node is connected:
+```bash
+tailscale status
+tailscale ip -4
+```
+
+Re-run the smoke test to confirm the WARN clears:
+```bash
+make smoke-test
+```
+
+**CSB IT ticket:** No. Authentication is user-level and requires no system changes beyond what the playbook already configures. On CSB where the Tailscale repo is blocked, use the static binary with userspace networking instead (see `repos_dnf: Third-Party Repos Blocked on CSB` above).
