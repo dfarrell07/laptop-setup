@@ -116,8 +116,8 @@ else record "git-safe-directory" "PASS"; fi
 
 # git hooksPath configured
 if hp=$(run git config --global core.hooksPath 2>/dev/null) && [[ -n "$hp" ]]; then
-  record "git-hooksPath" "PASS"
-else record "git-hooksPath" "FAIL" "not configured"; fi
+  record "git-hooks-path" "PASS"
+else record "git-hooks-path" "FAIL" "not configured"; fi
 
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
