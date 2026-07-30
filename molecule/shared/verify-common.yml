@@ -424,3 +424,25 @@
     that: verify_ssh_agent.stat.exists
     fail_msg: "SSH agent systemd user service not deployed"
   when: ansible_system == 'Linux'
+
+- name: Verify ripgrep config deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/ripgrep/config"
+  register: verify_ripgreprc
+
+- name: Assert ripgrep config deployed
+  ansible.builtin.assert:
+    that: verify_ripgreprc.stat.exists
+    fail_msg: "~/.config/ripgrep/config not deployed (ripgrep config missing)"
+
+- name: Verify containers environment.d config deployed (Linux)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  register: verify_containers_envd
+  when: ansible_system == 'Linux'
+
+- name: Assert containers environment.d config deployed (Linux)
+  ansible.builtin.assert:
+    that: verify_containers_envd.stat.exists
+    fail_msg: "containers.conf not deployed (DOCKER_HOST/KIND_EXPERIMENTAL_PROVIDER missing for make kind)"
+  when: ansible_system == 'Linux'

@@ -290,6 +290,7 @@ Running `make all` fails immediately before any task executes.
 `scripts/vault-pass.sh` is a gitignored file — it is never in the repo and must be restored from backup or created manually per the template in `SECURITY.md`. Installing `ykpers` is a prerequisite (it provides `ykchalresp`) but does not auto-create the script.
 
 Bootstrap procedure for first run:
+0. Run `make bootstrap` (installs ansible-core, git, collections, git hooks; creates vault-pass.sh stub).
 1. Restore `scripts/vault-pass.sh` from backup, or follow the template in `SECURITY.md` to create it. Then `chmod 700 scripts/vault-pass.sh`.
 2. If the YubiKey is not yet configured for HMAC-SHA1 challenge-response, or as a temporary workaround, create a plaintext password file instead:
    ```bash
