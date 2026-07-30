@@ -233,12 +233,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "crypto-policy" "WARN" "'$cp', expected 'DEFAULT:NO-SHA1'"; fi
   fi
 
-  # sshd hardening
-  if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    if grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
-      record "sshd-hardening" "PASS"
-    else record "sshd-hardening" "WARN" "config deployed but PasswordAuthentication not disabled"; fi
-  else record "sshd-hardening" "FAIL" "drop-in config not deployed"; fi
+  # sshd hardening (verify key directives, not just file existence)
+  if grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q 'MaxAuthTries' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
+    record "sshd-hardening" "PASS"
+  elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+    record "sshd-hardening" "FAIL" "sshd drop-in missing key directives"
+  else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule)
   if grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
@@ -304,9 +306,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
   else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
 
-  # sudoers hardening drop-in (verify use_pty and logfile — not just file existence)
+  # sudoers hardening drop-in (verify use_pty, logfile, umask)
   if grep -q 'use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
-     grep -q 'logfile=' /etc/sudoers.d/99-hardening 2>/dev/null; then
+     grep -q 'logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
+     grep -q 'umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
     record "sudoers-hardening" "PASS"
   else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
 
@@ -404,11 +407,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # Critical kernel sysctl values
   _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }
-  _sysctl_check "kernel.kptr_restrict"       "1" "sysctl-kptr-restrict"
-  _sysctl_check "kernel.kexec_load_disabled" "1" "sysctl-kexec-disabled"
-  _sysctl_check "kernel.io_uring_disabled"   "1" "sysctl-io-uring-disabled"
-  _sysctl_check "kernel.randomize_va_space"  "2" "sysctl-aslr"
-  _sysctl_check "fs.suid_dumpable"           "0" "sysctl-suid-dumpable"
+  _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
+  _sysctl_check "kernel.kexec_load_disabled"         "1" "sysctl-kexec-disabled"
+  _sysctl_check "kernel.io_uring_disabled"           "1" "sysctl-io-uring-disabled"
+  _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
+  _sysctl_check "kernel.unprivileged_bpf_disabled"   "1" "sysctl-bpf-restrict"
+  _sysctl_check "kernel.perf_event_paranoid"         "2" "sysctl-perf-paranoid"
+  _sysctl_check "net.core.bpf_jit_harden"            "1" "sysctl-bpf-jit-harden"
+  _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
+  _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
+  _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
+  _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
+  _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
