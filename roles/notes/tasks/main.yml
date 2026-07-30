@@ -62,7 +62,13 @@
 
 - name: Initialize transcrypt
   ansible.builtin.command:
-    cmd: "transcrypt -c {{ notes_transcrypt_cipher }} -p {{ notes_transcrypt_password | quote }} -y"
+    argv:
+      - transcrypt
+      - -c
+      - "{{ notes_transcrypt_cipher }}"
+      - -p
+      - "{{ notes_transcrypt_password }}"
+      - -y
     chdir: "{{ notes_repo_path }}"
   no_log: true
   changed_when: true
