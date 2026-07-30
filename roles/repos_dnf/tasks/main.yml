@@ -163,7 +163,7 @@
         name: acli
         description: Atlassian CLI
         baseurl: "{{ repos_dnf_acli_baseurl }}"
-        gpgcheck: false
+        gpgcheck: false  # Internal Red Hat repo does not publish a GPG key
         enabled: true
   rescue:
     - name: Record acli repo failure

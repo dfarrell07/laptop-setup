@@ -57,9 +57,9 @@ make check            # Dry run (--check mode)
 
 - `make lint` — ansible-lint (production profile) + yamllint + shellcheck
 - `make syntax-check` — Playbook syntax validation
-- `make test-fedora` — Molecule Fedora 43 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
-- `make test-centos` — Molecule CentOS Stream (work profile, includes redhat role)
-- `make test-debian` — Molecule Debian 12 (apt packages, notes, desktop, claude)
+- `make test-fedora` — Molecule Fedora 44 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
+- `make test-centos` — Molecule Rocky Linux 10 (work profile, includes redhat role)
+- `make test-debian` — Molecule Debian 12 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services)
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
 - CI runs linting + Fedora/CentOS/Debian/macOS molecule tests on every PR, VM tests locally

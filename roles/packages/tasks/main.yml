@@ -333,6 +333,8 @@
     GOPATH: "{{ ansible_user_dir }}/go"
     GOBIN: "{{ ansible_user_dir }}/go/bin"
     GONOSUMDB: ""
+    HTTPS_PROXY: "{{ proxy_url | default('') }}"
+    HTTP_PROXY: "{{ proxy_url | default('') }}"
   loop: "{{ packages_go_install }}"
   register: packages_go_results
   failed_when: false
@@ -359,6 +361,7 @@
     source: "yamllint=={{ packages_yamllint_version }}"
     state: install
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
 
 - name: Install ansible-lint (pipx, version-pinned)
   community.general.pipx:
@@ -366,3 +369,4 @@
     source: "ansible-lint=={{ packages_ansible_lint_version }}"
     state: install
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false

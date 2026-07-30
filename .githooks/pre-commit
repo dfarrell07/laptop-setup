@@ -15,6 +15,8 @@ if command -v gitleaks >/dev/null 2>&1; then
   if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2; then
     failed=1
   fi
+else
+  echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
 fi
 
 # YAML lint staged files
@@ -25,6 +27,8 @@ if command -v yamllint >/dev/null 2>&1; then
       failed=1
     fi
   fi
+else
+  echo "WARNING: yamllint not found — YAML lint skipped (run 'make all' to install)" >&2
 fi
 
 # Shell lint staged scripts

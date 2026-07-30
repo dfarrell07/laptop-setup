@@ -75,7 +75,7 @@
       Check: systemctl --user status podman.socket
   when:
     - distrobox_podman_socket is defined
-    - distrobox_podman_socket is failed
+    - distrobox_podman_socket.rc | default(0) != 0
 
 # --- Check if container exists ---
 - name: Check if container exists

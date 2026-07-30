@@ -6,7 +6,7 @@ redhat_ca_certs:
 redhat_ca_dest: /etc/pki/ca-trust/source/anchors
 
 redhat_vpn_packages:
-  - redhat-internal-openvpn-profiles
+  - "{{ 'redhat-internal-globalprotect-ui' if ansible_distribution == 'Fedora' else 'redhat-internal-openvpn-profiles' }}"
 
 redhat_cert_packages:
   - redhat-internal-cert-install

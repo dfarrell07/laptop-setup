@@ -72,6 +72,18 @@
     - Reload NetworkManager
     - Restart tailscaled
 
+- name: Move primary network interface to drop zone
+  ansible.posix.firewalld:
+    zone: drop
+    interface: "{{ ansible_default_ipv4.interface | default(ansible_default_ipv6.interface) }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  when:
+    - system_firewalld_running | bool
+    - ansible_default_ipv4.interface is defined or ansible_default_ipv6.interface is defined
+  failed_when: false
+
 - name: Enable ICMP block inversion on drop zone
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: firewall-cmd --permanent --zone=drop --add-icmp-block-inversion
@@ -124,9 +136,15 @@
 - name: Enable kernel lockdown (integrity mode)
   ansible.builtin.command:
     cmd: grubby --args="lockdown=integrity" --update-kernel=ALL
+  register: system_lockdown_result
   when: "'lockdown=integrity' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
+
+- name: Notify that reboot is required for kernel lockdown
+  ansible.builtin.debug:
+    msg: "REBOOT REQUIRED: lockdown=integrity was added to kernel cmdline. Reboot to activate."
+  when: system_lockdown_result is changed
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
@@ -142,13 +160,37 @@
     mode: "0644"
 
 # --- Auditd ---
+- name: Install audit package
+  ansible.builtin.dnf:
+    name: audit
+    state: present
+  when: ansible_system == 'Linux'
+
 - name: Deploy auditd rules
   ansible.builtin.template:
     src: auditd-claude.rules.j2
     dest: /etc/audit/rules.d/claude-code.rules
     mode: "0640"
   notify: Restart auditd
-  when: ansible_facts.services['auditd.service'] is defined
+  when: ansible_system == 'Linux'
+
+# --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
+- name: Mask bluetooth service
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    masked: true
+    state: stopped
+  when: system_disable_bluetooth | default(true) | bool
+  failed_when: false
+
+# --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
+- name: Mask thermald on non-Intel hardware
+  ansible.builtin.systemd:
+    name: thermald
+    masked: true
+    state: stopped
+  when: "'Intel' not in (ansible_processor | join(' '))"
+  failed_when: false
 
 # --- Mask cups-browsed (RCE entry point) ---
 - name: Mask cups-browsed service
@@ -192,6 +234,8 @@
       value: "{{ system_lid_switch_external }}"
     - key: HandleLidSwitchDocked
       value: "{{ system_lid_switch_docked }}"
+    - key: HandleHibernateKey
+      value: ignore
     - key: HandlePowerKey
       value: lock
     - key: IdleAction
@@ -230,7 +274,9 @@
     name: mullvad-daemon
     state: started
     enabled: true
-  when: system_enable_mullvad | bool
+  when:
+    - system_enable_mullvad | bool
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
 
 # --- USBGuard ---
@@ -263,24 +309,22 @@
 # --- Firmware updates ---
 - name: Check for firmware updates
   ansible.builtin.command:
-    cmd: fwupdmgr get-updates
+    cmd: fwupdmgr get-updates --no-device-prompt
   register: system_fwupd
   changed_when: false
   failed_when: false
 
 - name: Report available firmware updates
   ansible.builtin.debug:
-    msg: "Firmware updates available. Run: sudo fwupdmgr update"
-  when:
-    - system_fwupd.rc == 0
-    - "'No updates available' not in (system_fwupd.stdout | default(''))"
+    msg: "Firmware updates available: {{ system_fwupd.stdout | default(system_fwupd.stderr) | trim }}\nRun: sudo fwupdmgr update"
+  when: system_fwupd.rc == 0
 
 # --- sshd hardening ---
 - name: Ensure sshd config drop-in directory
   ansible.builtin.file:
     path: /etc/ssh/sshd_config.d
     state: directory
-    mode: "0755"
+    mode: "0700"
 
 - name: Deploy sshd hardening config
   ansible.builtin.template:
@@ -297,8 +341,9 @@
     proto: tcp
     setype: ssh_port_t
     state: present
-  when: ssh_port | int != 22
-  failed_when: false
+  when:
+    - ssh_port | int != 22
+    - ansible_selinux.status | default('') == 'enabled'
 
 # --- Crypto policy ---
 - name: Check current crypto policy
@@ -328,7 +373,22 @@
     - ip6table_nat
     - ip_tables
     - iptable_nat
+    - br_netfilter
   failed_when: false
+
+# --- NetworkManager WiFi MAC randomization ---
+- name: Configure WiFi MAC address randomization
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [device]
+      wifi.scan-rand-mac-address=yes
+      [connection]
+      wifi.cloned-mac-address=random
+    dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    mode: "0644"
+  failed_when: false
+  notify: Reload NetworkManager
 
 # --- NetworkManager Tailscale unmanaged ---
 - name: Ensure NetworkManager conf.d exists
@@ -338,16 +398,26 @@
     mode: "0755"
   failed_when: false
 
-- name: Configure NetworkManager to ignore Tailscale interfaces
+- name: Configure NetworkManager to ignore Tailscale and kind interfaces
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       [keyfile]
-      unmanaged-devices+=interface-name:tailscale*
+      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   failed_when: false
   notify: Reload NetworkManager
+
+- name: Assign tailscale0 to firewall trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: tailscale0
+    permanent: true
+    immediate: true
+    state: enabled
+  when: system_firewalld_running | bool
+  failed_when: false
 
 # --- GNOME gcr-ssh-agent mask ---
 - name: Mask gcr-ssh-agent socket
@@ -363,7 +433,6 @@
   ansible.builtin.dnf:
     name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
     state: present
-  failed_when: false
 
 - name: Deploy dnf-automatic config
   ansible.builtin.template:
@@ -380,19 +449,27 @@
   failed_when: false
 
 # --- DNS-over-TLS ---
+- name: Enable systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: started
+    enabled: true
+  when: ansible_system == 'Linux'
+  failed_when: false
+
 - name: Ensure resolved drop-in directory
   ansible.builtin.file:
     path: /etc/systemd/resolved.conf.d
     state: directory
     mode: "0755"
-  when: ansible_facts.services['systemd-resolved.service'] is defined
+  when: ansible_system == 'Linux'
 
 - name: Deploy DNS-over-TLS resolved config
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       [Resolve]
-      DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+      DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com 2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com
       Domains=~.
       DNSOverTLS=opportunistic
       DNSSEC=allow-downgrade
@@ -401,7 +478,7 @@
       MulticastDNS=no
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
-  when: ansible_facts.services['systemd-resolved.service'] is defined
+  when: ansible_system == 'Linux'
   notify: Restart systemd-resolved
 
 # --- Verify resolv.conf symlink for split DNS ---
@@ -436,6 +513,44 @@
     state: started
     enabled: true
 
+# --- PAM faillock (account lockout after failed attempts) ---
+- name: Configure pam_faillock settings
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - { key: deny, value: "5" }
+    - { key: unlock_time, value: "900" }
+    - { key: audit, value: "" }
+    - { key: even_deny_root, value: "" }
+
+- name: Enable authselect with-faillock feature
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-faillock
+  register: system_authselect_faillock
+  changed_when: "'already enabled' not in (system_authselect_faillock.stdout | default(''))"
+  failed_when: false
+
+# --- PAM pwquality (password complexity) ---
+- name: Configure password quality requirements
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - { key: minlen, value: "14" }
+    - { key: dcredit, value: "-1" }
+    - { key: ucredit, value: "-1" }
+    - { key: lcredit, value: "-1" }
+    - { key: ocredit, value: "-1" }
+    - { key: difok, value: "4" }
+    - { key: maxrepeat, value: "3" }
+
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
   ansible.builtin.lineinfile:
@@ -443,6 +558,105 @@
     regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^#.*pam_wheel.so'
+
+# --- Journald persistent logging and retention ---
+- name: Ensure journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Ensure /var/log/journal exists for persistent storage
+  ansible.builtin.file:
+    path: /var/log/journal
+    state: directory
+    mode: "0755"
+
+- name: Deploy journald hardening config
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=4G
+      SystemKeepFree=1G
+      RateLimitIntervalSec=30s
+      RateLimitBurst=20000
+    dest: /etc/systemd/journald.conf.d/99-hardening.conf
+    mode: "0644"
+  notify: Restart systemd-journald
+
+# --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
+- name: Deploy logrotate config for sudo.log
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      /var/log/sudo.log {
+          weekly
+          rotate 8
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 root root
+      }
+    dest: /etc/logrotate.d/sudo
+    mode: "0644"
+
+# --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
+- name: Restrict cron access to root only
+  ansible.builtin.copy:
+    content: "root\n"
+    dest: /etc/cron.allow
+    mode: "0600"
+
+- name: Restrict at access to root only
+  ansible.builtin.copy:
+    content: "root\n"
+    dest: /etc/at.allow
+    mode: "0600"
+
+# --- Login banner ---
+- name: Deploy login banner
+  ansible.builtin.copy:
+    content: |
+      Authorized access only. All activity may be monitored and reported.
+    dest: /etc/issue
+    mode: "0644"
+
+- name: Deploy SSH login banner
+  ansible.builtin.copy:
+    content: |
+      Authorized access only. All activity may be monitored and reported.
+    dest: /etc/issue.net
+    mode: "0644"
+
+# --- Sudoers hardening ---
+- name: Configure sudoers security defaults
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      Defaults logfile=/var/log/sudo.log
+      Defaults log_input,log_output
+      Defaults timestamp_timeout=15
+      Defaults umask=0027
+    dest: /etc/sudoers.d/99-hardening
+    mode: "0440"
+    validate: visudo -cf %s
+  failed_when: false
+
+# --- Password aging ---
+- name: Configure password aging in login.defs
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^{{ item.key }}"
+    line: "{{ item.key }}{{ item.value }}"
+    create: false
+  loop:
+    - { key: "PASS_MAX_DAYS\t", value: "365" }
+    - { key: "PASS_MIN_DAYS\t", value: "1" }
+    - { key: "PASS_WARN_AGE\t", value: "7" }
+    - { key: "UMASK\t\t", value: "027" }
 
 # --- Lock root account ---
 - name: Check root account status
@@ -501,6 +715,7 @@
     src: aide-check.service.j2
     dest: /etc/systemd/system/aide-check.service
     mode: "0644"
+  notify: Restart aide-check timer
   when: system_aide_enabled | bool
 
 - name: Deploy AIDE check timer
@@ -508,6 +723,7 @@
     src: aide-check.timer.j2
     dest: /etc/systemd/system/aide-check.timer
     mode: "0644"
+  notify: Restart aide-check timer
   when: system_aide_enabled | bool
 
 - name: Enable AIDE check timer

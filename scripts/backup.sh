@@ -3,6 +3,7 @@ set -euo pipefail
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 DOTFILES=(
   .zshrc
@@ -46,6 +47,9 @@ OPTIONAL_FILES=(
   laptop-setup/scripts/vault-pass.sh
   laptop-setup/CLAUDE.local.md
   .config/claude/work-env
+  .boto
+  .claude.json
+  .config/gcloud/application_default_credentials.json
 )
 
 count=0

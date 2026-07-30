@@ -174,7 +174,7 @@ IS_LINUX=true
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # DNS-over-TLS
-  if resolvectl status 2>/dev/null | grep -qiE "DNS.*Over.*TLS.*(yes|opportunistic)"; then
+  if resolvectl status 2>/dev/null | grep -qE '\+DNSOverTLS'; then
     record "dns-over-tls" "PASS"
   else record "dns-over-tls" "FAIL" "not active"; fi
 
@@ -254,11 +254,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # pam_wheel.so
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
-  else record "pam-wheel" "WARN" "su not restricted to wheel group"; fi
+  else record "pam-wheel" "FAIL" "su not restricted to wheel group"; fi
 
   # Root account locked
   if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
-  else record "root-locked" "WARN" "root account not locked"; fi
+  else record "root-locked" "FAIL" "root account not locked"; fi
 
   # dnf-automatic
   timer="dnf-automatic.timer"

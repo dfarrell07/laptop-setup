@@ -14,6 +14,13 @@
     is_linux: "{{ ansible_system == 'Linux' }}"
 
 # ---------------------------------------------------------------------------
+# 1b. CSB hostname detection
+# ---------------------------------------------------------------------------
+- name: Detect CSB hostname suffix
+  ansible.builtin.set_fact:
+    csb_hostname: "{{ ansible_fqdn is search('\\.csb$') }}"
+
+# ---------------------------------------------------------------------------
 # 2. fapolicyd
 # ---------------------------------------------------------------------------
 - name: Check if fapolicyd service exists
@@ -148,9 +155,8 @@
   ansible.builtin.set_fact:
     csb_detected: >-
       {{
-        (is_rhel | bool)
-        and (fapolicyd_installed | bool)
-        and (internal_ca_present | bool)
+        ((is_rhel | bool) and (fapolicyd_installed | bool) and (internal_ca_present | bool))
+        or ((is_fedora | bool) and (csb_hostname | bool) and (internal_ca_present | bool))
       }}
     csb_restricted: >-
       {{
@@ -309,7 +315,7 @@
     needs_container_tier: >-
       {{
         'container' if (csb_restricted | bool)
-        else ('hybrid' if (is_rhel | bool)
+        else ('hybrid' if ((is_rhel | bool) or (csb_detected | bool))
         else 'host-only')
       }}
 
@@ -337,6 +343,7 @@
       USBGuard running   : {{ usbguard_running }}
       Internal CA certs  : {{ internal_ca_present | default(false) }}
       ---
+      CSB hostname (.csb): {{ csb_hostname }}
       CSB detected       : {{ csb_detected }}
       CSB restricted     : {{ csb_restricted }}
       ---

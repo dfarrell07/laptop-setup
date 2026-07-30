@@ -1,7 +1,9 @@
 # {{ ansible_managed }}
 # Audit rules for sensitive file access monitoring
 
-# Exclusion rules (MUST come before watch rules — first-match wins)
+# Exclusion rules (MUST come before syscall rules — first-match wins).
+# These suppress noise from well-known agents when syscall rules are added.
+# They have no effect on the watch (-w) rules below.
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 
@@ -29,7 +31,11 @@
 -w /etc/passwd -p wa -k identity-change
 -w /etc/shadow -p wa -k identity-change
 -w /etc/group -p wa -k identity-change
+-w /etc/gshadow -p wa -k identity-change
+-w /etc/security/opasswd -p wa -k identity-change
 -w /etc/pam.d/ -p wa -k auth-config
+-w /etc/selinux/ -p wa -k mac-policy
+-w /etc/NetworkManager/ -p wa -k network-config
 
 # Persistence mechanisms (system)
 -w /etc/cron.d/ -p wa -k persistence
@@ -56,6 +62,7 @@
 -w /etc/audit/ -p wa -k audit-config
 -w /usr/bin/auditd -p x -k audit-tools
 -w /usr/bin/auditctl -p x -k audit-tools
+-w /usr/bin/augenrules -p x -k audit-tools
 
 # Make rules immutable until next reboot.
 # WARNING: after first deployment, manual augenrules --load or auditctl -R

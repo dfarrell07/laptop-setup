@@ -272,7 +272,7 @@
     - ansible_system == 'Linux'
     - desktop_gnome_check.rc | default(1) == 0
 
-- name: Set screen idle timeout (CIS 900s max)
+- name: Set screen idle timeout (CIS requires ≤900s; set to 300s)
   community.general.dconf:
     key: /org/gnome/desktop/session/idle-delay
     value: "uint32 300"

@@ -13,9 +13,18 @@
 - name: Install Claude Code via native binary
   ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
     cmd: "curl -fsSL {{ claude_install_url }} | bash"
+  register: claude_install_result
+  failed_when: false
   when:
     - claude_version_check.rc != 0
     - claude_install_method == 'native'
+
+- name: Warn if Claude install failed
+  ansible.builtin.debug:
+    msg: "WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked). Install manually: curl -fsSL {{ claude_install_url }} | bash"
+  when:
+    - claude_install_result is defined
+    - claude_install_result.rc | default(0) != 0
 
 # --- Instance isolation directories ---
 - name: Create work instance config directory
@@ -65,8 +74,9 @@
 - name: Deploy claude-privacy tmpfiles config
   ansible.builtin.copy:
     content: |
-      # Gate ~/.claude so world cannot traverse into it.
-      # Claude Code resets this to 0755 on launch; tmpfiles restores 0700 at boot.
+      # Create ~/.claude at 0700 before first launch; restores 0700 at each boot.
+      # Claude Code resets to 0755 on launch — 'd' creates, 'z' fixes existing.
+      d %h/.claude 0700 - - -
       z %h/.claude 0700 - - -
     dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"

@@ -7,6 +7,7 @@ Type=oneshot
 ExecStart={{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh
 Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo }}
 Environment=CLAUDE_BIN={{ ansible_user_dir }}/.local/bin/claude
+Environment=CLAUDE_CONFIG_DIR={{ claude_work_config_dir }}
 UnsetEnvironment=ANTHROPIC_BASE_URL HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 MemoryMax=4G
 CPUQuota=80%

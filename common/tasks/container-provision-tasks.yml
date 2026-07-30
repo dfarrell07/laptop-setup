@@ -101,6 +101,15 @@
   loop: "{{ distrobox_host_exec_commands }}"
   when: not container_host_exec.stat.exists
 
+# Export oc and kubectl to the host after they are installed (must happen
+# after install, not in distrobox_exports init_hooks which run before Play 3).
+- name: Export oc and kubectl to host
+  ansible.builtin.command:
+    cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
+  loop: [oc, kubectl]
+  changed_when: false
+  failed_when: false
+
 # --- Verify ---
 - name: Confirm Python works
   ansible.builtin.command:

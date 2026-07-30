@@ -36,6 +36,12 @@ if echo "$msg" | grep -qE '\.$'; then
   exit 1
 fi
 
+# Require Signed-off-by (enforce 'git commit -s')
+if ! grep -q '^Signed-off-by:' "$1"; then
+  echo "ERROR: Missing Signed-off-by — use 'git commit -s'" >&2
+  exit 1
+fi
+
 # Run commitlint for remaining rules (body blank line, etc.)
 if command -v npx >/dev/null 2>&1; then
   npx --no -- commitlint --edit "$1"

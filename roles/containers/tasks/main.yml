@@ -2,6 +2,12 @@
 # roles/containers/tasks/main.yml
 # Podman/Docker config, registry auth.
 
+# Flush handlers so update-ca-trust runs before registry auth checks.
+# The redhat role notifies Update CA trust; without flushing here it
+# would fire at the end of the play — after container registry operations.
+- name: Flush handlers before container registry auth
+  ansible.builtin.meta: flush_handlers
+
 - name: Ensure containers config directory
   ansible.builtin.file:
     path: "{{ containers_config_dir }}"

@@ -8,7 +8,7 @@ zstyle ':omz:update' mode disabled
 
 plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
 
-source "$ZSH/oh-my-zsh.sh"
+[[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"
 
 # --- Environment ---
 export EDITOR=vim
@@ -16,6 +16,10 @@ export EDITOR=vim
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
 {% endif %}
 export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
+export GOPATH="$HOME/go"
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=50000
+SAVEHIST=50000
 {% if ansible_system | default('Linux') == 'Darwin' %}
 export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
 {% endif %}
@@ -26,8 +30,11 @@ export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 {% if ansible_system | default('Linux') == 'Linux' %}
-[[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
-[[ -f /usr/share/fzf/shell/completion.zsh ]] && source /usr/share/fzf/shell/completion.zsh
+command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/completion.zsh ]] && source /usr/share/fzf/shell/completion.zsh
+{% elif ansible_system == 'Darwin' %}
+command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/key-bindings.zsh ]] && source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]] && source /opt/homebrew/opt/fzf/shell/completion.zsh
 {% endif %}
 
 # --- Claude Code API endpoint guard ---
@@ -114,6 +121,9 @@ alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
 
 # --- Status ---
+{% if ansible_system | default('Linux') != 'Darwin' %}
+alias vim=vimx  # vimx has +clipboard; vim-minimal does not
+{% endif %}
 alias yk='ykman info'
 {% if ansible_system | default('Linux') == 'Darwin' %}
 alias vpn='netstat -rn | grep -E "utun|wg"'

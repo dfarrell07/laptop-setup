@@ -16,7 +16,7 @@ set -ga update-environment "WAYLAND_DISPLAY"
 set -ga update-environment "XDG_RUNTIME_DIR"
 
 # Reduce escape sequence ambiguity (default 500ms is too slow)
-set -sg escape-time 10
+set -s escape-time 10
 
 # Vi mode
 setw -g mode-keys vi
@@ -43,5 +43,5 @@ bind -T copy-mode-vi v send-keys -X begin-selection
 {% if ansible_system | default('Linux') == 'Darwin' %}
 bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
 {% else %}
-bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy"
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy 2>/dev/null || xsel --clipboard --input 2>/dev/null || xclip -selection clipboard 2>/dev/null"
 {% endif %}

@@ -64,7 +64,7 @@
   loop_control:
     label: "{{ item.item.dest }}"
 
-- name: Configure fork remotes  # noqa: command-instead-of-module no-changed-when
+- name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: >-
       git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" 2>/dev/null ||
@@ -73,6 +73,7 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
+  changed_when: false
   register: git_repos_remote_result
   failed_when:
     - git_repos_remote_result.rc != 0

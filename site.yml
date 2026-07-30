@@ -20,14 +20,17 @@
         common_project_root: >-
           {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
              | default(playbook_dir, true) }}
+      become: false
       tags: [always]
 
     - name: Load configuration
       ansible.builtin.include_vars: default.config.yml
+      become: false
       tags: [always]
 
     - name: Load user overrides
       ansible.builtin.include_vars: config.yml
+      become: false
       failed_when: false
       tags: [always]
 
@@ -79,11 +82,6 @@
     - role: redhat
       tags: [redhat]
       when: profile == 'work'
-
-    # NOTE: update-ca-trust handler fires at end of play, not here.
-    # If container_image is overridden to an internal Red Hat registry,
-    # move containers/distrobox to include_role in tasks: with a
-    # meta: flush_handlers between redhat and containers.
 
     - role: containers
       tags: [containers]

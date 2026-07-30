@@ -14,8 +14,6 @@ blacklist hfsplus
 install hfsplus /bin/false
 blacklist udf
 install udf /bin/false
-blacklist squashfs
-install squashfs /bin/false
 
 # Unused network protocols — CVE-validated attack surface
 blacklist dccp
@@ -40,3 +38,12 @@ blacklist usb_storage
 install usb_storage /bin/false
 blacklist uas
 install uas /bin/false
+
+{% if system_disable_bluetooth | default(true) | bool %}
+# Bluetooth disabled (system_disable_bluetooth=true).
+# Default is enabled — set system_disable_bluetooth: false in config.yml to re-enable.
+blacklist btusb
+install btusb /bin/false
+blacklist bluetooth
+install bluetooth /bin/false
+{% endif %}

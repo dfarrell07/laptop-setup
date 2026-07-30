@@ -38,11 +38,11 @@ backup:
 
 bootstrap:
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		brew install ansible git openssh libfido2 ykman ykpers; \
+		brew install ansible git openssh libfido2 ykman ykpers make; \
 	elif command -v apt-get >/dev/null 2>&1; then \
-		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization; \
+		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make; \
 	else \
-		sudo dnf install -y ansible-core git ykpers; \
+		sudo dnf install -y ansible-core git ykpers make; \
 	fi
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && chmod 700 scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	ansible-galaxy collection install -r requirements.yml
@@ -139,7 +139,7 @@ check:
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
-ci: lint syntax-check test-scripts test-fedora test-centos test-debian
+ci: lint syntax-check test-scripts test-fedora test-centos test-debian test-macos
 
 lint:
 	ansible-lint
