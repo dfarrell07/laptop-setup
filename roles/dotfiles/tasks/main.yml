@@ -216,7 +216,7 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
     mode: "0644"
   when: ansible_system == 'Linux'
-  # environment.d is read by pam_env at login, making these vars available to all
+  # environment.d is processed by systemd-environment-d-generator at user session start,
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or
   # Submariner finds no Docker socket and fails even though Podman is available.

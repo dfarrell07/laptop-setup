@@ -61,7 +61,7 @@ else
 fi
 
 # Dev tool presence
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli"; do
+for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "FAIL" "not found"; fi
 done
@@ -96,6 +96,16 @@ for f in .zshrc .gitconfig .tmux.conf .vimrc .bashrc; do
   if grep -q "Ansible managed" "$HOME/$f" 2>/dev/null; then record "dotfile-$f" "PASS"
   else record "dotfile-$f" "FAIL" "not deployed or not Ansible-managed"; fi
 done
+
+# environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
+if [[ "$(uname -s)" == "Linux" ]]; then
+  _ecf="$HOME/.config/environment.d/containers.conf"
+  if [[ -f "$_ecf" ]] && grep -q "DOCKER_HOST" "$_ecf" && grep -q "KIND_EXPERIMENTAL_PROVIDER" "$_ecf"; then
+    record "env-d-containers" "PASS"
+  elif [[ ! -f "$_ecf" ]]; then record "env-d-containers" "FAIL" "missing: $_ecf — 'make kind' will fail in OVN-K"
+  else record "env-d-containers" "FAIL" "DOCKER_HOST or KIND_EXPERIMENTAL_PROVIDER missing in $_ecf"; fi
+  unset _ecf
+fi
 
 # SSH config and permissions
 if [[ -f "$HOME/.ssh/config" ]]; then
