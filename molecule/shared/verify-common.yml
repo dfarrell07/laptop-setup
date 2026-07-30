@@ -267,6 +267,16 @@
     fail_msg: "allowed_signers does not contain an sk-ssh-ed25519 key — YubiKey SSH signing key not registered"
   when: verify_allowed_signers.stat.exists
 
+- name: Verify ~/.config/git/ignore exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/ignore"
+  register: verify_gitignore_global
+
+- name: Assert global gitignore exists
+  ansible.builtin.assert:
+    that: verify_gitignore_global.stat.exists
+    fail_msg: "~/.config/git/ignore was not deployed"
+
 # --- Directories ---
 - name: Verify ~/bin directory exists
   ansible.builtin.stat:
