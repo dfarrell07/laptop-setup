@@ -44,6 +44,11 @@ install uas /bin/false
 blacklist vivid
 install vivid /bin/false
 
+# n_hdlc: TTY HDLC line discipline — CVE history (privilege escalation),
+# CIS RHEL 9 Level 2 recommended blacklist, no legitimate workstation use.
+blacklist n_hdlc
+install n_hdlc /bin/false
+
 {% if system_disable_bluetooth | default(false) | bool %}
 # Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
 # Default is enabled (false). To disable BT: set system_disable_bluetooth: true.

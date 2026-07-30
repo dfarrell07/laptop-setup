@@ -32,6 +32,9 @@ system_sysctl_hardening:
   net.ipv4.tcp_syncookies: 1
   fs.protected_hardlinks: 1  # CIS — prevents hardlink-based privilege escalation in world-writable dirs
   fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
+  fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
+  fs.protected_regular: 2    # CIS — prevents writes to world-writable regular files in sticky dirs
+  kernel.sysrq: 0            # CIS — disable SysRq key (kernel emergency operations from keyboard)
   net.ipv4.tcp_rfc1337: 1
   kernel.kexec_load_disabled: 1
   net.core.bpf_jit_harden: 1

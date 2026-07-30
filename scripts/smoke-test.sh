@@ -303,7 +303,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # kernel module blacklist (verify key blacklist entries)
   if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
-     grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
+     grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null && \
+     grep -q '^blacklist vivid' /etc/modprobe.d/hardening.conf 2>/dev/null && \
+     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf 2>/dev/null; then
     record "modprobe-hardening" "PASS"
   else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
 
@@ -494,7 +496,6 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "tlp-bat-start-threshold" "PASS"
     else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi
     unset _bat_start
-    unset _bat_end
   fi
 
   # Chrome policies (verify key security settings, not just file existence)
@@ -599,6 +600,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Additional sysctl checks (CIS + hardening)
   _sysctl_check "fs.protected_hardlinks"              "1" "sysctl-protected-hardlinks"
   _sysctl_check "fs.protected_symlinks"               "1" "sysctl-protected-symlinks"
+  _sysctl_check "fs.protected_fifos"                  "1" "sysctl-protected-fifos"
+  _sysctl_check "fs.protected_regular"                "2" "sysctl-protected-regular"
+  _sysctl_check "kernel.sysrq"                        "0" "sysctl-sysrq-disabled"
   _sysctl_check "net.ipv6.conf.all.accept_ra"         "0" "sysctl-no-accept-ra"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"
