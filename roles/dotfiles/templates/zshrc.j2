@@ -29,7 +29,7 @@ export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
 export TMUX_TMPDIR="$HOME/.local/run/tmux"
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 {% if ansible_system | default('Linux') == 'Linux' %}
-export DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 # Wayland-native rendering for Qt and Electron when running under Sway
 [[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export QT_QPA_PLATFORM=wayland
 [[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export ELECTRON_OZONE_PLATFORM_HINT=wayland

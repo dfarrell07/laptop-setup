@@ -15,6 +15,12 @@ exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
 # Notification daemon
 exec mako
 
+# Polkit agent (required for GUI privilege escalation — NetworkManager, USB mounts, etc.)
+exec /usr/libexec/polkit-gnome-authentication-agent-1
+
+# Wallpaper
+output * bg #1e1e2e solid_color
+
 # Idle and lock
 exec swayidle -w \
     timeout 300 'swaylock -f -c 000000' \

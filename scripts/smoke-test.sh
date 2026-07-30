@@ -74,14 +74,17 @@ else record "gh-auth" "WARN" "not authenticated (interactive login required)"; f
 if run ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
-# Tailscale
+# Tailscale daemon and connectivity
+if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
+else record "tailscaled-active" "WARN" "tailscaled not running"; fi
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "not connected"; fi
 
-# ssh-agent has loaded keys
+# ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded
 out=$(run ssh-add -l 2>&1 || true)
-if [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* ]]; then
-  record "ssh-agent-key" "PASS"
+if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
+elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* ]]; then
+  record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"
 else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
 
 # --- Dotfiles checks ---
@@ -208,11 +211,19 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if lsblk -o FSTYPE 2>/dev/null | grep -q "crypto_LUKS"; then record "luks-encryption" "PASS"
   else record "luks-encryption" "WARN" "no LUKS volumes found — full-disk encryption not confirmed"; fi
 
-  # Firewall default zone = drop
+  # Firewall default zone = drop, SSH port open, tailscale0 in trusted zone
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
     if [[ "$zone" == "drop" ]]; then record "firewall-zone" "PASS"
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
+    _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "22")
+    if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
+    else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
+    if ip link show tailscale0 &>/dev/null; then
+      ts_zone=$(firewall-cmd --get-zone-of-interface=tailscale0 2>/dev/null || echo "?")
+      if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
+      else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
+    fi
   fi
 
   # USBGuard (verify both installed and service active)
@@ -233,13 +244,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "crypto-policy" "WARN" "'$cp', expected 'DEFAULT:NO-SHA1'"; fi
   fi
 
-  # sshd hardening (verify key directives, not just file existence)
+  # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
+  _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
   if grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q 'MaxAuthTries' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
+     grep -q 'X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q 'ClientAliveCountMax 0' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
     record "sshd-hardening" "PASS"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    record "sshd-hardening" "FAIL" "sshd drop-in missing key directives"
+    record "sshd-hardening" "FAIL" "sshd drop-in missing key directives (MaxAuthTries=$_max_auth)"
   else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule)
@@ -278,9 +292,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
   else record "avahi-masked" "WARN" "not masked"; fi
 
-  # AIDE file integrity
+  # AIDE file integrity (timer enabled AND database initialized)
   if systemctl is-enabled aide-check.timer &>/dev/null; then record "aide-timer" "PASS"
   else record "aide-timer" "WARN" "timer not enabled"; fi
+  if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
+  else record "aide-db" "WARN" "AIDE database not initialized (run: aide --init)"; fi
 
   # Chrony NTS
   if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then record "chrony-nts" "PASS"

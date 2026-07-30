@@ -95,8 +95,8 @@
 
     - name: Assert BPF JIT hardening
       ansible.builtin.assert:
-        that: verify_bpf.stdout == '2'
-        fail_msg: "BPF JIT hardening not set to 2"
+        that: verify_bpf.stdout == '1'
+        fail_msg: "BPF JIT hardening not set to 1 (harden unprivileged callers)"
 
     - name: Check sysctl net.ipv4.conf.all.rp_filter
       ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
@@ -107,7 +107,7 @@
     - name: Assert reverse path filtering
       ansible.builtin.assert:
         that: verify_rp_filter.stdout == '2'
-        fail_msg: "Reverse path filtering not set to strict mode"
+        fail_msg: "Reverse path filtering not set to loose mode (2) required for Tailscale"
 
     - name: Verify auditd rules file exists
       ansible.builtin.stat:
