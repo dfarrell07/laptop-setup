@@ -248,13 +248,35 @@
   changed_when: true
   failed_when: false
 
+- name: Zero-fill freed memory pages (init_on_free — not a Fedora default)
+  ansible.builtin.command:
+    cmd: grubby --args="init_on_free=1" --update-kernel=ALL
+  register: system_init_on_free_result
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
+- name: Randomize page allocator free-list order (heap-spray defense)
+  ansible.builtin.command:
+    cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
+  register: system_page_shuffle_result
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
-    msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall). Reboot to activate."
+    msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall/init_on_free/page_alloc.shuffle). Reboot to activate."
   when: >-
     (system_lockdown_result is changed) or
     (system_iommu_result is defined and system_iommu_result is changed) or
-    (system_vsyscall_result is defined and system_vsyscall_result is changed)
+    (system_vsyscall_result is defined and system_vsyscall_result is changed) or
+    (system_init_on_free_result is defined and system_init_on_free_result is changed) or
+    (system_page_shuffle_result is defined and system_page_shuffle_result is changed)
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
@@ -624,6 +646,30 @@
       unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:virbr*
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
+  failed_when: false
+  notify: Reload NetworkManager
+
+- name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [main]
+      dns=systemd-resolved
+    dest: /etc/NetworkManager/conf.d/99-dns.conf
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  failed_when: false
+  notify: Reload NetworkManager
+
+- name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      wifi.powersave=2
+    dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    mode: "0644"
+  when: ansible_system == 'Linux'
   failed_when: false
   notify: Reload NetworkManager
 
@@ -1029,12 +1075,13 @@
       Defaults logfile=/var/log/sudo.log
       Defaults log_input,log_output
       Defaults timestamp_timeout=15
+      Defaults passwd_timeout=5
+      Defaults passwd_tries=3
       Defaults umask=0027
       Defaults use_pty
     dest: /etc/sudoers.d/99-hardening
     mode: "0440"
     validate: visudo -cf %s
-  failed_when: false
 
 # --- Password aging ---
 - name: Configure password aging in login.defs

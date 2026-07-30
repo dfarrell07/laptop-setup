@@ -105,7 +105,7 @@ if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
 # --- Git security checks ---
-for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "gpg.format=ssh"; do
+for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub"; do
   key="${check%%=*}" expected="${check#*=}"
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
@@ -255,6 +255,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
     record "sshd-hardening" "FAIL" "sshd drop-in missing key directives (MaxAuthTries=$_max_auth)"
   else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
+  # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
+  _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null | tr -d ' ')
+  if [[ "$_allow_users" == "$USER" ]]; then record "sshd-allowusers" "PASS"
+  else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$USER'"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule)
   if grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
@@ -478,6 +482,14 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
   else record "vsyscall-none" "WARN" "vsyscall=none not in cmdline (requires reboot if grubby ran)"; fi
+  # IOMMU kernel param (AMD DMA protection)
+  if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
+  else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+  # Memory safety kernel params
+  if grep -q 'init_on_free=1' /proc/cmdline 2>/dev/null; then record "init-on-free" "PASS"
+  else record "init-on-free" "WARN" "init_on_free=1 not in cmdline (requires reboot)"; fi
+  if grep -q 'page_alloc.shuffle=1' /proc/cmdline 2>/dev/null; then record "page-alloc-shuffle" "PASS"
+  else record "page-alloc-shuffle" "WARN" "page_alloc.shuffle=1 not in cmdline (requires reboot)"; fi
 
 fi
 
