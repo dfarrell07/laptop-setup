@@ -21,6 +21,8 @@ make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
+make diff             # Dotfiles check+diff (dry run)
+make csb-audit        # Preflight + common dry-run (CSB detection audit)
 ```
 
 ## Project Structure
@@ -35,6 +37,7 @@ make check            # Dry run (--check mode)
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
+- **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS), `hybrid` (CSB or RHEL, full sudo), `container` (CSB restricted, minimal host).
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides)
 
