@@ -129,6 +129,9 @@ distrobox:
 
 # --- Audit and testing ---
 
+preflight:
+	scripts/preflight.sh
+
 csb-audit:
 	scripts/preflight.sh
 	ansible-playbook site.yml --tags common --check

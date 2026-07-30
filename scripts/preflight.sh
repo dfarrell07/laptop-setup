@@ -156,7 +156,7 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
     if "$tmpscript" &>/dev/null; then
       record "fapolicyd" "warn" "active but /tmp execution allowed"
     else
-      record "fapolicyd" "fail" "active and blocking /tmp execution — ansible.cfg already has pipelining=true"
+      record "fapolicyd" "warn" "active and blocking /tmp execution — mitigated by pipelining=true in ansible.cfg"
     fi
     rm -f "$tmpscript"
   else

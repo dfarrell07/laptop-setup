@@ -754,7 +754,15 @@
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
     regexp: '^/usr/local/bin'
-    line: '/usr/local/bin CONTENT_EX'
+    line: '/usr/local/bin NORMAL'
+    state: present
+  when: system_aide_enabled | bool
+
+- name: Ensure AIDE monitors sshd drop-in config directory
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/ssh/sshd_config.d'
+    line: '/etc/ssh/sshd_config.d NORMAL'
     state: present
   when: system_aide_enabled | bool
 
