@@ -32,6 +32,13 @@
   when: distrobox_tool == 'none'
 
 # --- kind host prerequisites ---
+- name: Ensure containers config directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/containers"
+    state: directory
+    mode: "0700"
+  when: distrobox_tool != 'none'
+
 - name: Set containers.conf log_driver for kind
   community.general.ini_file:
     path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
@@ -120,9 +127,9 @@
       ansible.builtin.command:
         cmd: >-
           toolbox create
-          --container {{ distrobox_container_name }}
           --distro {{ container_distro | default('fedora') }}
           --release {{ container_release | default('44') }}
+          {{ distrobox_container_name }}
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
 
