@@ -29,6 +29,26 @@
       's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
   when: ansible_selinux is defined
 
+# --- Harden /tmp mount options (CIS 1.1.2.x) ---
+- name: Ensure tmp.mount drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/tmp.mount.d
+    state: directory
+    mode: "0755"
+  when: ansible_system == 'Linux'
+
+- name: Harden /tmp with noexec via systemd drop-in
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Mount]
+      Options=mode=1777,strictatime,nosuid,nodev,noexec
+    dest: /etc/systemd/system/tmp.mount.d/hardening.conf
+    mode: "0644"
+  when: ansible_system == 'Linux'
+  notify: Remount /tmp
+  failed_when: false
+
 # --- Harden /dev/shm mount options ---
 - name: Harden /dev/shm with noexec
   ansible.posix.mount:
@@ -833,6 +853,7 @@
     path: /etc/login.defs
     regexp: "^{{ item.name }}\\s+"
     line: "{{ item.name }}\t{{ item.value }}"
+    insertafter: EOF
     create: false
   loop:
     - { name: PASS_MAX_DAYS, value: "365" }

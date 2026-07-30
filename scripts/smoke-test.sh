@@ -247,9 +247,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /etc/systemd/coredump.conf.d/disable.conf ]]; then record "coredump-disabled" "PASS"
   else record "coredump-disabled" "FAIL" "config not deployed"; fi
 
-  # cups-browsed masked
+  # cups-browsed masked (CVE-2024-47176 RCE vector)
   if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
   else record "cups-browsed-masked" "WARN" "not masked"; fi
+
+  # cups.service disabled (not masked — cups.socket remains for Flatpak on-demand activation)
+  if ! systemctl is-enabled cups.service &>/dev/null 2>&1; then record "cups-disabled" "PASS"
+  else record "cups-disabled" "WARN" "cups.service should be disabled (not a print server)"; fi
 
   # avahi-daemon masked
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"

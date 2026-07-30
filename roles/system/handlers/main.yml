@@ -1,4 +1,10 @@
 ---
+- name: Remount /tmp
+  ansible.posix.mount:
+    path: /tmp
+    state: remounted
+  failed_when: false
+
 - name: Reload sysctl
   ansible.builtin.command:
     cmd: sysctl --system
