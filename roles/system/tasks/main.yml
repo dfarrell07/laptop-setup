@@ -208,6 +208,17 @@
   when: system_enable_libvirtd | bool
   failed_when: false
 
+- name: Install Mullvad VPN
+  ansible.builtin.dnf:
+    name: mullvad-vpn
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - system_enable_mullvad | bool
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
 - name: Enable Mullvad VPN service
   ansible.builtin.systemd:
     name: mullvad-daemon
