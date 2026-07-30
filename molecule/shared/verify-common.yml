@@ -100,8 +100,21 @@
 
 - name: Assert SSH directory is 0700
   ansible.builtin.assert:
-    that: verify_ssh_dir.stat.mode == '0700'
+    that:
+      - verify_ssh_dir.stat.exists
+      - verify_ssh_dir.stat.mode == '0700'
     fail_msg: "SSH directory has wrong permissions"
+
+- name: Check SSH config has KexAlgorithms directive
+  ansible.builtin.command:
+    cmd: grep -q 'KexAlgorithms' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  register: verify_ssh_kex
+
+- name: Assert SSH config has KexAlgorithms with curve25519 baseline
+  ansible.builtin.assert:
+    that: verify_ssh_kex.rc == 0
+    fail_msg: "SSH config missing KexAlgorithms directive — template regression?"
 
 # --- Git security ---
 - name: Check git core.fsmonitor
