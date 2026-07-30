@@ -73,23 +73,35 @@
   failed_when: false
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
-- name: Ensure var-tmp.mount drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/var-tmp.mount.d
-    state: directory
-    mode: "0755"
-
-- name: Bind-mount /var/tmp to /tmp (inherits noexec from tmp.mount.d)
+# A complete unit file is required — /var/tmp has no base unit on Fedora
+# so a drop-in directory would be silently ignored.
+- name: Deploy var-tmp.mount unit (bind /var/tmp to /tmp)
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       # /var/tmp bind-mounted to /tmp so it inherits noexec,nosuid,nodev.
+      [Unit]
+      Description=Bind mount /var/tmp to /tmp
+      After=tmp.mount
+      Requires=tmp.mount
+
       [Mount]
       What=/tmp
+      Where=/var/tmp
       Type=none
       Options=bind,noexec,nosuid,nodev
-    dest: /etc/systemd/system/var-tmp.mount.d/hardening.conf
+
+      [Install]
+      WantedBy=local-fs.target
+    dest: /etc/systemd/system/var-tmp.mount
     mode: "0644"
+  failed_when: false
+
+- name: Enable var-tmp.mount
+  ansible.builtin.systemd:
+    name: var-tmp.mount
+    enabled: true
+    daemon_reload: true
   failed_when: false
 
 # --- Kernel module blacklist ---
