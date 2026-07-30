@@ -3,7 +3,7 @@
 system_sysctl_hardening:
   kernel.yama.ptrace_scope: 1
   kernel.kptr_restrict: 1
-  kernel.io_uring_disabled: 2
+  kernel.io_uring_disabled: 1
   kernel.unprivileged_bpf_disabled: 1
   kernel.dmesg_restrict: 1
   kernel.perf_event_paranoid: 2
@@ -32,7 +32,7 @@ system_sysctl_hardening:
   net.ipv4.tcp_rfc1337: 1
   kernel.kexec_load_disabled: 1
   net.core.bpf_jit_harden: 2
-  fs.inotify.max_user_watches: 524288
+  fs.inotify.max_user_watches: 1048576
   fs.inotify.max_user_instances: 512
 
 # Firewall
@@ -67,3 +67,10 @@ system_aide_enabled: true
 system_lid_switch: lock
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
+
+# Identity fallbacks — site.yml always sets these via set_fact from env,
+# but role defaults guard against standalone invocation or empty env vars.
+# An empty real_user_id would produce AllowUsers with no token in sshd,
+# locking out all users on the next sshd restart.
+real_user_home: "{{ ansible_user_dir }}"
+real_user_id: "{{ ansible_user_id }}"
