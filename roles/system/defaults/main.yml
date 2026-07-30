@@ -66,6 +66,13 @@ system_usbguard_whitelist:
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   - "allow with-connect-type \"hardwired\""
 
+# Machine-specific additional whitelist rules merged with the above.
+# Set in config.yml (gitignored) to add device-specific rules without
+# replacing the whole base list. Example:
+#   system_usbguard_extra_rules:
+#     - 'allow id 1234:5678 name "My USB Hub"'
+system_usbguard_extra_rules: []
+
 # AIDE file integrity monitoring
 system_aide_enabled: true
 
