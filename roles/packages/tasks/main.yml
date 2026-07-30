@@ -332,7 +332,6 @@
   environment:
     GOPATH: "{{ ansible_user_dir }}/go"
     GOBIN: "{{ ansible_user_dir }}/go/bin"
-
     HTTPS_PROXY: "{{ proxy_url | default('') }}"
     HTTP_PROXY: "{{ proxy_url | default('') }}"
   loop: "{{ packages_go_install }}"
