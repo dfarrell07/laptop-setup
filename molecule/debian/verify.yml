@@ -45,6 +45,10 @@
       ansible.builtin.command: shfmt --version
       changed_when: false
 
+    - name: Check go is installed
+      ansible.builtin.command: go version
+      changed_when: false
+
     # --- Desktop role ---
     - name: Verify Alacritty config deployed
       ansible.builtin.stat:

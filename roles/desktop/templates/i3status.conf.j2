@@ -6,6 +6,7 @@ general {
 }
 
 order += "cpu_usage"
+order += "command cpu_temp"
 order += "memory"
 order += "disk /"
 order += "battery 0"
@@ -18,6 +19,12 @@ order += "wireless _first_"
 cpu_usage {
     format = " %usage"
     max_threshold = 80
+}
+
+# AMD k10temp via stable PCI address (hwmon index varies across reboots; glob is safe in sh -c)
+command "cpu_temp" {
+    command = "awk '{printf \" %.0f°C\", $1/1000}' /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input 2>/dev/null || echo \" N/A\""
+    interval = 5
 }
 
 memory {

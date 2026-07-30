@@ -237,7 +237,7 @@
         baseurl: "https://pkgs.tailscale.com/stable/fedora/$basearch"
         gpgcheck: true
         gpgkey: "https://pkgs.tailscale.com/stable/fedora/repo.gpg"
-        state: present
+        enabled: true
   rescue:
     - name: Record Tailscale repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
