@@ -57,9 +57,9 @@
     - repo_google_cloud_sdk | default(true)
     - ansible_architecture == 'x86_64'
   block:
-    - name: Add google-cloud-sdk repo
+    - name: Add google-cloud-cli repo
       ansible.builtin.yum_repository:
-        name: google-cloud-sdk
+        name: google-cloud-cli
         description: Google Cloud CLI
         baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64"
         gpgcheck: true
