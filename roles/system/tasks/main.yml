@@ -41,8 +41,11 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
+      # IMPORTANT: Options= replaces all base unit options (no merge).
+      # Must include all options from tmp.mount + noexec.
+      # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
       [Mount]
-      Options=mode=1777,strictatime,nosuid,nodev,noexec
+      Options=mode=1777,strictatime,nosuid,nodev,noexec,size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
   when: ansible_system == 'Linux'
