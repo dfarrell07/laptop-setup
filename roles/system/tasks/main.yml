@@ -802,6 +802,7 @@
     scope: user
   become: false
   failed_when: false
+  when: not (csb_detected | default(false))  # CSB may route smart card/PIV auth through gcr-ssh-agent
 
 # --- dnf-automatic ---
 - name: Install dnf-automatic

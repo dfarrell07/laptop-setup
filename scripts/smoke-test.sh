@@ -140,6 +140,12 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
     if jq -e '.sandbox.enabled' "$d/settings.json" &>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "sandbox not enabled"; fi
+    if jq -e '.sandbox.failIfUnavailable' "$d/settings.json" &>/dev/null; then
+      record "sandbox-failsafe($label)" "PASS"
+    else record "sandbox-failsafe($label)" "FAIL" "sandbox.failIfUnavailable not true — sandbox bypass possible"; fi
+    if jq -e '.sandbox.allowUnsandboxedCommands == false' "$d/settings.json" &>/dev/null; then
+      record "sandbox-cmds($label)" "PASS"
+    else record "sandbox-cmds($label)" "FAIL" "sandbox.allowUnsandboxedCommands not false — Bash escapes sandbox"; fi
     if jq -e '.enableAllProjectMcpServers == false' "$d/settings.json" &>/dev/null; then
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
@@ -627,6 +633,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.tcp_timestamps"            "0" "sysctl-tcp-timestamps"
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
+  _sysctl_check "net.bridge.bridge-nf-call-iptables" "1" "sysctl-bridge-nf-iptables"
+  _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"

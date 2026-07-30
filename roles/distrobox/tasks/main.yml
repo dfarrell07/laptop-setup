@@ -31,6 +31,26 @@
     msg: "Neither distrobox nor toolbox found — skipping container setup"
   when: distrobox_tool == 'none'
 
+# Re-check subuid/subgid at task-time: podman_rootless_ready is set in Play 1
+# pre_tasks (csb_detect.yml) before the system role writes /etc/subuid and
+# /etc/subgid. On first provision the cached fact is stale (false), so we
+# stat the files directly here rather than trusting the Play 1 fact.
+- name: Re-check subuid entry for current user
+  ansible.builtin.command:
+    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subuid"
+  register: distrobox_subuid_check
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Re-check subgid entry for current user
+  ansible.builtin.command:
+    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subgid"
+  register: distrobox_subgid_check
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Linux'
+
 - name: Warn if rootless podman prerequisites are missing
   ansible.builtin.debug:
     msg: >-
@@ -40,7 +60,7 @@
       sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_user_id }}
   when:
     - ansible_system == 'Linux'
-    - not (podman_rootless_ready | default(true) | bool)
+    - (distrobox_subuid_check.rc | default(1) != 0) or (distrobox_subgid_check.rc | default(1) != 0)
 
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope

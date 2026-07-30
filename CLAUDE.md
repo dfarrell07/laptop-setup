@@ -11,6 +11,9 @@ make backup           # Back up dotfiles before re-provisioning
 make bootstrap        # Initial setup (install deps, collections, hooks)
 make update           # Update collections + full run
 make lint             # ansible-lint + yamllint + shellcheck
+make syntax-check     # Playbook syntax validation only
+make markdownlint     # markdownlint on all .md files
+make preflight        # Run preflight checks (CSB detection, prereqs)
 make container        # Distrobox/toolbox dev container
 make container-rebuild # Rebuild container from scratch
 make test-fedora      # Molecule Fedora tests (fast, Podman)
