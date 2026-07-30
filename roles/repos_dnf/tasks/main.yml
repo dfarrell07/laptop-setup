@@ -86,8 +86,7 @@
         name: slack
         description: Slack Desktop
         baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
-        gpgcheck: true
-        gpgkey: "https://packagecloud.io/slacktechnologies/slack/gpgkey"
+        gpgcheck: false  # packagecloud Slack repo does not sign individual RPMs; metadata signing only
         enabled: true
   rescue:
     - name: Record Slack repo failure
@@ -225,3 +224,27 @@
         _csb_action: "RPM Fusion provides multimedia codecs and drivers. Not critical for development."
         _csb_ticket_summary: "Exception request: RPM Fusion repositories"
         _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"
+
+- name: Add Tailscale repo
+  when:
+    - repo_tailscale | default(true)
+    - ansible_distribution == 'Fedora'
+  block:
+    - name: Add Tailscale stable repo
+      ansible.builtin.yum_repository:
+        name: tailscale-stable
+        description: Tailscale stable
+        baseurl: "https://pkgs.tailscale.com/stable/fedora/$basearch"
+        gpgcheck: true
+        gpgkey: "https://pkgs.tailscale.com/stable/fedora/repo.gpg"
+        state: present
+  rescue:
+    - name: Record Tailscale repo failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: repos_dnf
+        _csb_task_name: "Add Tailscale repository"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
+        _csb_action: "Install tailscale from Fedora repos (older version) or via flatpak"
+        _csb_ticket_summary: "Exception request: Tailscale RPM repository"
+        _csb_ticket_body: "Tailscale stable repo provides security-patched releases; Fedora repo may lag"

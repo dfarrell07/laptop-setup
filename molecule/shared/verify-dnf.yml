@@ -26,10 +26,12 @@
 - name: Check fd-find is installed
   ansible.builtin.command: fd --version
   changed_when: false
+  when: ansible_distribution != 'Rocky'  # no fd-find in EPEL 10
 
 - name: Check shfmt is installed
   ansible.builtin.command: shfmt --version
   changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in EPEL 10
 
 - name: Verify containers config directory
   ansible.builtin.stat:

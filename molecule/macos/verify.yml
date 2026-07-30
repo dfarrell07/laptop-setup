@@ -87,7 +87,7 @@
     # --- launchd services (macOS) ---
     - name: Verify SSH agent launchd plist deployed
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+        path: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
       register: verify_ssh_plist
 
     - name: Assert SSH agent plist exists

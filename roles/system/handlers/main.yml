@@ -9,13 +9,11 @@
   ansible.builtin.command:
     cmd: sysctl --system
   changed_when: true
-  failed_when: false
 
 - name: Reload firewalld
   ansible.builtin.command:
     cmd: firewall-cmd --reload
   changed_when: true
-  failed_when: false
 
 - name: Restart tailscaled
   ansible.builtin.systemd:
@@ -27,7 +25,6 @@
   ansible.builtin.command:
     cmd: service auditd restart
   changed_when: true
-  failed_when: false
 
 - name: Restart usbguard
   ansible.builtin.systemd:
@@ -39,7 +36,6 @@
   ansible.builtin.systemd:
     name: sshd
     state: restarted
-  failed_when: false
 
 - name: Reload NetworkManager
   ansible.builtin.systemd:

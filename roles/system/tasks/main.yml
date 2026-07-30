@@ -515,6 +515,14 @@
     - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
 
 # --- sshd hardening ---
+- name: Assert real_user_id is non-empty before deploying AllowUsers
+  ansible.builtin.assert:
+    that: real_user_id | default('') | length > 0
+    fail_msg: >-
+      real_user_id is empty — AllowUsers in sshd config would lock out all SSH users.
+      Run as your normal user with -K, not as root (which sets USER=root).
+  when: ansible_facts.services['sshd.service'] is defined
+
 - name: Ensure sshd config drop-in directory
   ansible.builtin.file:
     path: /etc/ssh/sshd_config.d
@@ -771,6 +779,13 @@
   ansible.builtin.copy:
     content: "LANG={{ system_locale }}\n"
     dest: /etc/locale.conf
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
+- name: Set console keymap
+  ansible.builtin.copy:
+    content: "KEYMAP={{ system_keymap | default('us') }}\n"
+    dest: /etc/vconsole.conf
     mode: "0644"
   when: ansible_system == 'Linux'
 
