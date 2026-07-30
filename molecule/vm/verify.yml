@@ -314,6 +314,11 @@
           - verify_sudoers_hardening.stat.mode == '0440'
         fail_msg: "sudoers hardening not deployed or wrong permissions (expected 0440)"
 
+    - name: Check sudoers hardening contains logfile directive
+      ansible.builtin.command: grep -q 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
+      changed_when: false
+      become: true
+
     # --- Session timeout ---
     - name: Verify TMOUT configured via profile.d (CIS 5.5.5)
       ansible.builtin.command: grep -q 'readonly TMOUT=600' /etc/profile.d/tmout.sh
