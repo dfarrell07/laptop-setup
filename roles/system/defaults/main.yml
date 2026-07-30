@@ -71,9 +71,9 @@ system_usbguard_whitelist:
   # Bluetooth adapter (USI 10ab:9309) — ThinkPad P16v Gen 1 AMD internal BT.
   # ACPI connect_type is "not used" (no _UPC/_PLD tables). BT stack disabled via
   # modprobe blacklist; this rule only permits the USB device past USBGuard.
-  - "allow id 10ab:9309 with-connect-type \"not used\""
-  - "allow id 06cb:0126 with-connect-type \"not used\""
-  - "allow id 174f:11a8 with-connect-type \"not used\""
+  - "allow id 10ab:9309 with-connect-type \"not used\""  # USI BT adapter (ThinkPad P16v AMD)
+  - "allow id 06cb:0126 with-connect-type \"not used\""  # Synaptics fingerprint reader
+  - "allow id 174f:11a8 with-connect-type \"not used\""  # Sunplus webcam
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   - "allow with-connect-type \"hardwired\""
 
