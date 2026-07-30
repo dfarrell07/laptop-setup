@@ -41,17 +41,6 @@
     - is_linux | bool
     - _fapolicyd_unit.rc == 0
 
-# fapolicyd ships a CLI to query its current mode. Fall back to the config
-# file when the CLI is unavailable.  Both paths run without root.
-- name: Check fapolicyd mode via fapolicyd-cli
-  ansible.builtin.command:
-    cmd: fapolicyd-cli --list
-  register: _fapolicyd_cli
-  changed_when: false
-  failed_when: false
-  when:
-    - is_linux | bool
-    - _fapolicyd_active.rc | default(1) == 0
 
 - name: Check fapolicyd config for permissive mode
   ansible.builtin.command:

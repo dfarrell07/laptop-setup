@@ -75,3 +75,23 @@
     - ansible_system == 'Linux'
     - not (install_docker | default(false))
   failed_when: false
+
+# --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---
+- name: Set containers.conf log_driver for kind (k8s-file avoids journald issues)
+  community.general.ini_file:
+    path: "{{ containers_config_dir }}/containers.conf"
+    section: containers
+    option: log_driver
+    value: '"{{ containers_kind_log_driver }}"'
+    mode: "0644"
+    create: true
+  when: ansible_system == 'Linux'
+
+- name: Set containers.conf pids_limit for kind (kind nodes spawn many processes)
+  community.general.ini_file:
+    path: "{{ containers_config_dir }}/containers.conf"
+    section: containers
+    option: pids_limit
+    value: "{{ containers_kind_pids_limit }}"
+    mode: "0644"
+  when: ansible_system == 'Linux'

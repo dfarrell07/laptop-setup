@@ -42,33 +42,6 @@
     - ansible_system == 'Linux'
     - not (podman_rootless_ready | default(true) | bool)
 
-# --- kind host prerequisites ---
-- name: Ensure containers config directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/containers"
-    state: directory
-    mode: "0700"
-  when: distrobox_tool != 'none'
-
-- name: Set containers.conf log_driver for kind
-  community.general.ini_file:
-    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
-    section: containers
-    option: log_driver
-    value: '"{{ distrobox_kind_log_driver }}"'
-    mode: "0644"
-    create: true
-  when: distrobox_tool != 'none'
-
-- name: Set containers.conf pids_limit for kind
-  community.general.ini_file:
-    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
-    section: containers
-    option: pids_limit
-    value: "{{ distrobox_kind_pids_limit }}"
-    mode: "0644"
-  when: distrobox_tool != 'none'
-
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
     cmd: systemctl --user is-active podman.socket

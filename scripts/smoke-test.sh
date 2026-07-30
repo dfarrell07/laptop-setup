@@ -112,6 +112,14 @@ for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsi
   else record "git-$key" "FAIL" "got '$actual', expected '$expected'"; fi
 done
 
+# git allowed_signers file (required for SSH commit verification)
+_as="$HOME/.config/git/allowed_signers"
+if [[ ! -f "$_as" ]]; then record "git-allowed-signers" "FAIL" "file missing: $_as"
+elif [[ ! -s "$_as" ]]; then record "git-allowed-signers" "FAIL" "file is empty: $_as"
+elif ! grep -q 'sk-ssh-ed25519' "$_as"; then record "git-allowed-signers" "FAIL" "no sk-ssh-ed25519 key in $_as"
+else record "git-allowed-signers" "PASS"; fi
+unset _as
+
 # git safe.directory should be empty
 if dirs=$(run git config --global --get-all safe.directory 2>/dev/null) && [[ -n "$dirs" ]]; then
   record "git-safe-directory" "FAIL" "set: $dirs"
@@ -256,9 +264,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "sshd-hardening" "FAIL" "sshd drop-in missing key directives (MaxAuthTries=$_max_auth)"
   else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
   # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
-  _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null | tr -d ' ')
-  if [[ "$_allow_users" == "$USER" ]]; then record "sshd-allowusers" "PASS"
-  else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$USER'"; fi
+  if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+    _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ')
+    if [[ "$_allow_users" == "$USER" ]]; then record "sshd-allowusers" "PASS"
+    else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$USER'"; fi
+  else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule)
   if grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
