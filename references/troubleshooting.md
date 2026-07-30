@@ -348,6 +348,13 @@ USBGuard blocks all USB devices not in the whitelist (`/etc/usbguard/rules.conf`
 
 **CSB IT ticket:** USBGuard may already be managed by IT. Check before modifying rules.
 
+**Thunderbolt dock USB devices blocked:** `boltd` authorizes the Thunderbolt controller, but USBGuard is a separate gate for the USB devices behind it (hub, keyboard, ethernet, etc.). Dock devices appear with `connect_type "hotplug"` and are blocked by default. Fix: add rules to `config.yml` and re-run `make system`:
+```yaml
+system_usbguard_extra_rules:
+  - 'allow id 2109:0817 name "USB3.0 Hub" with-connect-type "hotplug"'
+```
+Find blocked dock devices with `usbguard list-devices --blocked` and their VID:PID with `lsusb`.
+
 ---
 
 ## system: sshd Fails After Hardening Drop-in
