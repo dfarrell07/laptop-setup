@@ -168,20 +168,20 @@ test: test-scripts test-fedora test-centos test-debian test-vm
 test-scripts:
 	bash scripts/test-queue-poller.sh
 
-test-fedora:
-	molecule test -s fedora
+test-fedora: .venv
+	.venv/bin/molecule test -s fedora
 
-test-centos:
-	molecule test -s centos
+test-centos: .venv
+	.venv/bin/molecule test -s centos
 
-test-debian:
-	molecule test -s debian
+test-debian: .venv
+	.venv/bin/molecule test -s debian
 
-test-macos:
-	molecule test -s macos
+test-macos: .venv
+	.venv/bin/molecule test -s macos
 
-test-vm:
-	molecule test -s vm
+test-vm: .venv
+	.venv/bin/molecule test -s vm
 
 smoke-test:
 	scripts/smoke-test.sh

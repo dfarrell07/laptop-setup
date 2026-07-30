@@ -101,14 +101,23 @@
             dest: /tmp/openshift-client-linux.tar.gz
             checksum: "sha256:{{ packages_oc_sha256 }}"
             mode: "0644"
+          register: packages_oc_download
 
         - name: Extract oc and kubectl
+          # Idempotency guard: skip re-extraction when get_url reports the tarball
+          # is unchanged (sha256 matches the cached /tmp copy).  Still extracts
+          # when oc is absent from disk (rc != 0) even if the tarball is cached,
+          # covering the edge case of a manually deleted binary.  This matters
+          # most for packages_oc_version == 'stable', where the outer when-clause
+          # always fires and creates: /usr/local/bin/oc would wrongly prevent
+          # upgrades when the stable pointer advances to a new release.
           ansible.builtin.unarchive:
             src: /tmp/openshift-client-linux.tar.gz
             dest: /usr/local/bin
             remote_src: true
             extra_opts:
               - --no-same-owner
+          when: packages_oc_download.changed or packages_oc_check.rc != 0
           become: true
           tags: [become]
 
