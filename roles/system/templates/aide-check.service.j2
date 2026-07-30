@@ -16,7 +16,7 @@ SyslogIdentifier=aide-check
 
 # Systemd sandbox options compatible with full-filesystem read access:
 NoNewPrivileges=true
-CapabilityBoundingSet=
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH  # AIDE needs this to read mode-0000 files (shadow, gshadow) as root
 PrivateDevices=true
 PrivateTmp=true
 RestrictSUIDSGID=true

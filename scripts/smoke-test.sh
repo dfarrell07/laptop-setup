@@ -286,6 +286,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
   else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
+  # auditd kernel state: verify -e 2 is active in running kernel (not just in rules file)
+  if auditctl -s 2>/dev/null | grep -q '^enabled 2'; then record "auditd-immutable" "PASS"
+  else record "auditd-immutable" "WARN" "auditd not in immutable mode in kernel (may need reboot after initial deploy)"; fi
   # Auditd watch keys for new paths deployed by the system role
   for _key in power-config device-policy kernel-params kernel-modules; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
@@ -449,6 +452,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # /tmp noexec (CIS 1.1.2.x)
   if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
   else record "tmp-noexec" "FAIL" "/tmp not mounted noexec"; fi
+  _tmp_mode=$(stat -c '%a' /tmp 2>/dev/null || echo "?")
+  if [[ "$_tmp_mode" == "1777" ]]; then record "tmp-sticky-bit" "PASS"
+  else record "tmp-sticky-bit" "FAIL" "/tmp mode=$_tmp_mode expected 1777 (sticky bit)"; fi
+  unset _tmp_mode
 
   # /dev/shm noexec (CIS 1.1.7.x)
   if findmnt -n -o OPTIONS /dev/shm 2>/dev/null | grep -q noexec; then record "shm-noexec" "PASS"
@@ -602,7 +609,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "fs.protected_symlinks"               "1" "sysctl-protected-symlinks"
   _sysctl_check "fs.protected_fifos"                  "1" "sysctl-protected-fifos"
   _sysctl_check "fs.protected_regular"                "2" "sysctl-protected-regular"
-  _sysctl_check "kernel.sysrq"                        "0" "sysctl-sysrq-disabled"
+  # sysrq: read expected value from deployed config (system_sysrq in config.yml may override default 0).
+  # Hardcoding 0 here would false-FAIL on machines with system_sysrq: 176 (OVN-K kernel debugging).
+  _sysrq_expected=$(awk -F' *= *' '/^kernel\.sysrq/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.sysrq" "${_sysrq_expected:-0}" "sysctl-sysrq-disabled"
+  # kernel.panic: hardcoded 10 (reboot-after-panic); no standalone override variable in config.yml.
   _sysctl_check "kernel.panic"                        "10" "sysctl-panic-reboot"
   _sysctl_check "net.ipv6.conf.all.accept_ra"         "0" "sysctl-no-accept-ra"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
