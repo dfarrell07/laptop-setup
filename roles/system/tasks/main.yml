@@ -141,10 +141,30 @@
   changed_when: true
   failed_when: false
 
-- name: Notify that reboot is required for kernel lockdown
+- name: Enable IOMMU for DMA protection (AMD)
+  ansible.builtin.command:
+    cmd: grubby --args="amd_iommu=on iommu=pt" --update-kernel=ALL
+  register: system_iommu_result
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
+    - ansible_processor | join(' ') | lower is search('amd')
+  changed_when: true
+  failed_when: false
+
+- name: Disable legacy vsyscall page (exploit gadget source)
+  ansible.builtin.command:
+    cmd: grubby --args="vsyscall=none" --update-kernel=ALL
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
+- name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
-    msg: "REBOOT REQUIRED: lockdown=integrity was added to kernel cmdline. Reboot to activate."
-  when: system_lockdown_result is changed
+    msg: "REBOOT REQUIRED: kernel parameters changed (lockdown/iommu/vsyscall). Reboot to activate."
+  when: system_lockdown_result is changed or (system_iommu_result is defined and system_iommu_result is changed)
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
@@ -316,8 +336,10 @@
 
 - name: Report available firmware updates
   ansible.builtin.debug:
-    msg: "Firmware updates available: {{ system_fwupd.stdout | default(system_fwupd.stderr) | trim }}\nRun: sudo fwupdmgr update"
-  when: system_fwupd.rc == 0
+    msg: "Firmware updates available: {{ system_fwupd.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
+  when:
+    - system_fwupd.rc == 0
+    - "'No updates available' not in (system_fwupd.stdout | default(''))"
 
 # --- sshd hardening ---
 - name: Ensure sshd config drop-in directory
@@ -376,7 +398,14 @@
     - br_netfilter
   failed_when: false
 
-# --- NetworkManager WiFi MAC randomization ---
+# --- NetworkManager Tailscale unmanaged ---
+- name: Ensure NetworkManager conf.d exists
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    mode: "0755"
+  failed_when: false
+
 - name: Configure WiFi MAC address randomization
   ansible.builtin.copy:
     content: |
@@ -389,14 +418,6 @@
     mode: "0644"
   failed_when: false
   notify: Reload NetworkManager
-
-# --- NetworkManager Tailscale unmanaged ---
-- name: Ensure NetworkManager conf.d exists
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d
-    state: directory
-    mode: "0755"
-  failed_when: false
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces
   ansible.builtin.copy:
@@ -498,6 +519,31 @@
     not (system_resolv_conf.stat.islnk | default(false)) or
     'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
 
+# --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
+- name: Deploy session timeout via profile.d
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # Auto-logout after 10 minutes of inactivity (CIS 5.5.5 requires <=900s)
+      readonly TMOUT=600
+      export TMOUT
+    dest: /etc/profile.d/tmout.sh
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
+# --- Timezone and locale ---
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+  when: ansible_system == 'Linux'
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: "LANG={{ system_locale }}\n"
+    dest: /etc/locale.conf
+    mode: "0644"
+  when: ansible_system == 'Linux'
+
 # --- Chrony NTS (authenticated time sync) ---
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
@@ -514,7 +560,7 @@
     enabled: true
 
 # --- PAM faillock (account lockout after failed attempts) ---
-- name: Configure pam_faillock settings
+- name: Configure pam_faillock value settings
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
@@ -524,14 +570,30 @@
   loop:
     - { key: deny, value: "5" }
     - { key: unlock_time, value: "900" }
-    - { key: audit, value: "" }
-    - { key: even_deny_root, value: "" }
+
+- name: Configure pam_faillock boolean flags
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: "{{ item }}"
+    allow_no_value: true
+    mode: "0644"
+  loop:
+    - audit
+    - even_deny_root
+
+- name: Check if authselect with-faillock feature is already enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-faillock
+  register: system_authselect_faillock_check
+  changed_when: false
+  failed_when: false
 
 - name: Enable authselect with-faillock feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-faillock
-  register: system_authselect_faillock
-  changed_when: "'already enabled' not in (system_authselect_faillock.stdout | default(''))"
+  when: system_authselect_faillock_check.rc | default(1) != 0
+  changed_when: true
   failed_when: false
 
 # --- PAM pwquality (password complexity) ---
@@ -570,7 +632,9 @@
   ansible.builtin.file:
     path: /var/log/journal
     state: directory
-    mode: "0755"
+    owner: root
+    group: systemd-journal
+    mode: "2755"
 
 - name: Deploy journald hardening config
   ansible.builtin.copy:

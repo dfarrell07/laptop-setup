@@ -122,7 +122,7 @@ cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$
 
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}
-alias vim=vimx  # vimx has +clipboard; vim-minimal does not
+command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
 {% endif %}
 alias yk='ykman info'
 {% if ansible_system | default('Linux') == 'Darwin' %}

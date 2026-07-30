@@ -141,10 +141,14 @@ diff:
 
 ci: lint syntax-check test-scripts test-fedora test-centos test-debian test-macos
 
-lint:
-	ansible-lint
-	yamllint --strict .
+lint: .venv
+	.venv/bin/ansible-lint
+	.venv/bin/yamllint --strict .
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
+
+.venv: requirements-test.txt
+	python3 -m venv .venv
+	.venv/bin/pip install -r requirements-test.txt
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check

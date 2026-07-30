@@ -16,6 +16,12 @@
   changed_when: false
   failed_when: false
 
+- name: Remove stale GitHub known_hosts entries before re-seeding
+  ansible.builtin.known_hosts:
+    name: github.com
+    state: absent
+  when: ssh_github_meta.status | default(0) == 200
+
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
     name: github.com
