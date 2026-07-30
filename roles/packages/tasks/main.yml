@@ -320,6 +320,23 @@
       become: true
       tags: [become]
 
+- name: Install operator-sdk
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Download operator-sdk binary
+      vars:
+        _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
+      ansible.builtin.get_url:
+        url: "{{ _url_base }}/v{{ packages_operator_sdk_version }}/operator-sdk_linux_amd64"
+        dest: /usr/local/bin/operator-sdk
+        checksum: "sha256:{{ packages_operator_sdk_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+
 # --- Go install tools ---
 
 - name: Install Go tools
