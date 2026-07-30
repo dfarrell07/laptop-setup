@@ -522,6 +522,7 @@
     - ip_tables
     - iptable_nat
     - br_netfilter
+    - overlay
   failed_when: false
 
 - name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
@@ -1047,8 +1048,12 @@
 
 # --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
 - name: Find non-root UID 0 accounts (CIS 6.2.9)
-  ansible.builtin.shell:
-    cmd: "awk -F: '($3==0 && $1!=\"root\"){print $1}' /etc/passwd"
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($3==0 && $1!=\"root\"){print $1}"
+      - /etc/passwd
   register: system_uid0_accounts
   changed_when: false
 
@@ -1059,8 +1064,12 @@
     success_msg: "CIS 6.2.9: no non-root UID 0 accounts"
 
 - name: Find accounts with empty passwords in shadow (CIS 6.2.2)
-  ansible.builtin.shell:
-    cmd: "awk -F: '($2==\"\"){print $1}' /etc/shadow"
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($2==\"\"){print $1}"
+      - /etc/shadow
   register: system_empty_pw_accounts
   changed_when: false
 
@@ -1071,8 +1080,12 @@
     success_msg: "CIS 6.2.2: no empty passwords"
 
 - name: Find accounts with unmasked passwords in passwd (CIS 6.2.1)
-  ansible.builtin.shell:
-    cmd: "awk -F: '($2!=\"x\" && $2!=\"*\" && $2!=\"!\"){print $1}' /etc/passwd"
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($2!=\"x\" && $2!=\"*\" && $2!=\"!\"){print $1}"
+      - /etc/passwd
   register: system_unshadowed_accounts
   changed_when: false
 
