@@ -666,6 +666,7 @@
   when:
     - system_crypto_policy.rc == 0
     - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
+    - not (csb_detected | default(false))  # CSB IT may enforce FIPS/FUTURE; don't downgrade
   changed_when: true
   failed_when: false
   notify: Restart sshd
@@ -882,6 +883,7 @@
     force: true
   when:
     - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB manages resolv.conf via NM/VPN; don't override
     - >-
       not (system_resolv_conf.stat.islnk | default(false)) or
       'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
