@@ -19,6 +19,7 @@ NoNewPrivileges=true
 CapabilityBoundingSet=CAP_DAC_READ_SEARCH  # AIDE needs this to read mode-0000 files (shadow, gshadow) as root
 ProtectSystem=strict                        # aide --check is read-only; prevent any writes to /usr, /boot, /etc
 ReadWritePaths=/var/log/aide               # aide --check writes report_url=file:/var/log/aide/aide.log (default aide.conf)
+ReadOnlyPaths=/var/lib/aide/aide.db.gz     # prevent aide --check process from overwriting the reference database
 PrivateDevices=true
 PrivateTmp=true
 RestrictSUIDSGID=true

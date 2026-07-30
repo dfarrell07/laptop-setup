@@ -10,7 +10,9 @@
 
 - name: Run CSB detection
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - csb_detected is not defined
 
 - name: Ensure prerequisite directories exist
   ansible.builtin.file:

@@ -185,11 +185,19 @@ fi
 IS_LINUX=true
 [[ "$(uname -s)" == "Darwin" ]] && IS_LINUX=false
 
+# CSB detection: FQDN ends in .csb (mirrors Ansible's Fedora CSB path in csb_detect.yml)
+CSB_HOST=false
+[[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
+
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
-  # DNS-over-TLS
+  # DNS-over-TLS (skipped on CSB — Ansible intentionally omits the resolved config on CSB hosts
+  # because Domains=~. catch-all would route all DNS to Cloudflare 1.1.1.1, which is blocked
+  # on CSB corporate networks; DHCP DNS remains active and working via systemd-resolved)
   if resolvectl status 2>/dev/null | grep -qE '\+DNSOverTLS'; then
     record "dns-over-tls" "PASS"
+  elif $CSB_HOST; then
+    record "dns-over-tls" "WARN" "not active — expected on CSB (Cloudflare blocked; DHCP DNS in use)"
   else record "dns-over-tls" "FAIL" "not active"; fi
 
   # ptrace scope
@@ -439,6 +447,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
     record "resolv-stub" "PASS"
   else record "resolv-stub" "WARN" "resolv.conf not symlinked to stub-resolv.conf"; fi
+
+  # Basic DNS resolution (confirms DNS works regardless of DoT/DHCP source — critical on CSB)
+  if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"
+  else record "dns-resolves" "FAIL" "DNS resolution failed for redhat.com"; fi
 
   # cron.allow restricts cron to root only (CIS 5.1.8)
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"

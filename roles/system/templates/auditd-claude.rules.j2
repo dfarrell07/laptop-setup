@@ -78,6 +78,11 @@
 # Kernel parameter and module configuration
 -w /etc/sysctl.d/ -p wa -k kernel-params
 -w /etc/modprobe.d/ -p wa -k kernel-modules
+# /boot: grubby silently modifies BLS entries without touching /etc — these watches
+# catch kernel cmdline stripping (lockdown=integrity, vsyscall=none, etc.)
+-w /boot/loader/entries/ -p wa -k kernel-params
+-w /boot/grub2/grubenv -p wa -k kernel-params
+-w /boot/grub2/grub.cfg -p wa -k kernel-params
 
 # Privilege escalation syscalls (CIS benchmark)
 -a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -k privilege-escalation

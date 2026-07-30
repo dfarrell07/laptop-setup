@@ -583,6 +583,18 @@
   changed_when: false
   failed_when: false
 
+- name: Mask passim (fwupd P2P caching dependency — unauthenticated HTTP on 0.0.0.0:27500)
+  ansible.builtin.systemd:
+    name: passim
+    masked: true
+    state: stopped
+    daemon_reload: true
+  when: ansible_system == 'Linux'
+  failed_when: false
+  # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
+  # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
+  # Masking does not affect fwupd firmware update functionality.
+
 - name: Check for firmware updates
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
@@ -1234,6 +1246,7 @@
   ansible.builtin.command:
     cmd: loginctl enable-linger {{ real_user_id }}
   changed_when: false
+  failed_when: false  # loginctl absent on macOS; system role runs Linux-only via site.yml
   when: real_user_id is defined
   # Without linger, systemd kills the user session (and podman.socket) when the
   # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
@@ -1541,6 +1554,17 @@
   notify: Reinitialize AIDE database
   # Default aide.conf only PERMS-checks /etc; auditd watches /etc/selinux for
   # writes (-k mac-policy) but AIDE needs content-level integrity verification.
+
+- name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/boot'
+    line: '/boot NORMAL'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+  # grubby modifies /boot/loader/entries/ directly; auditd watches /boot for writes
+  # but AIDE provides the content integrity baseline to detect unauthorized changes.
 
 # Fire the AIDE reinit handler here if any conf path changed — this avoids
 # running aide --init twice on first provision (once from the handler, once
