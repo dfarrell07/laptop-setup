@@ -53,13 +53,43 @@
   failed_when: false
 
 # --- Harden /dev/shm mount options ---
-- name: Harden /dev/shm with noexec
-  ansible.posix.mount:
-    path: /dev/shm
-    src: tmpfs
-    fstype: tmpfs
-    opts: defaults,nosuid,nodev,noexec
-    state: mounted
+# Use a systemd drop-in, NOT ansible.posix.mount/fstab — on Fedora,
+# /dev/shm is managed by the systemd dev-shm.mount unit; an fstab entry
+# conflicts silently and the noexec flag is never applied.
+- name: Ensure dev-shm.mount drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/dev-shm.mount.d
+    state: directory
+    mode: "0755"
+
+- name: Harden /dev/shm with noexec via systemd drop-in
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Mount]
+      Options=mode=1777,nosuid,nodev,noexec
+    dest: /etc/systemd/system/dev-shm.mount.d/hardening.conf
+    mode: "0644"
+  failed_when: false
+
+# --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
+- name: Ensure var-tmp.mount drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/var-tmp.mount.d
+    state: directory
+    mode: "0755"
+
+- name: Bind-mount /var/tmp to /tmp (inherits noexec from tmp.mount.d)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # /var/tmp bind-mounted to /tmp so it inherits noexec,nosuid,nodev.
+      [Mount]
+      What=/tmp
+      Type=none
+      Options=bind,noexec,nosuid,nodev
+    dest: /etc/systemd/system/var-tmp.mount.d/hardening.conf
+    mode: "0644"
   failed_when: false
 
 # --- Kernel module blacklist ---
