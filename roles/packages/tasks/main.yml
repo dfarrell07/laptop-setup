@@ -141,17 +141,16 @@
     - ansible_architecture == 'x86_64'
     - profile == 'work'
   block:
-    - name: Check if opm is installed
-      ansible.builtin.command:
-        cmd: /usr/local/bin/opm version
-      register: packages_opm_check
-      changed_when: false
+    - name: Check if opm is installed and read its OCP version marker
+      ansible.builtin.slurp:
+        src: /usr/local/bin/.opm-ocp-version
+      register: packages_opm_marker
       failed_when: false
 
     - name: Download and install opm
       when: >-
-        packages_opm_check.rc != 0 or
-        packages_oc_version not in (packages_opm_check.stdout | default(''))
+        packages_opm_marker.failed | default(true) or
+        packages_oc_version not in (packages_opm_marker.content | default('') | b64decode)
       block:
         - name: Fetch OPM sha256sum.txt
           ansible.builtin.uri:
@@ -188,6 +187,14 @@
           ansible.builtin.file:
             path: /usr/local/bin/opm
             mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Write OCP version marker for opm (enables idempotent version-drift detection)
+          ansible.builtin.copy:
+            content: "{{ packages_oc_version }}"
+            dest: /usr/local/bin/.opm-ocp-version
+            mode: "0644"
           become: true
           tags: [become]
 
