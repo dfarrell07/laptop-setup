@@ -195,7 +195,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(cat /sys/kernel/security/lockdown)
     if echo "$ld" | grep -q '\[integrity\]'; then record "kernel-lockdown" "PASS"
-    else record "kernel-lockdown" "FAIL" "$ld"; fi
+    else record "kernel-lockdown" "WARN" "lockdown not in integrity mode ($ld) — requires Secure Boot"; fi
   fi
 
   # Secure Boot (informational — not managed by Ansible, but critical to verify)
@@ -377,9 +377,17 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-enabled "$timer" &>/dev/null; then record "dnf-automatic" "PASS"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
-  # Chrome policies
-  if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
+  # Chrome policies (verify key security settings, not just file existence)
+  if python3 -c "
+import json, sys
+p = json.load(open('/etc/opt/chrome/policies/managed/security.json'))
+assert p.get('ExtensionInstallBlocklist') == ['*'], 'ExtensionInstallBlocklist not [\"*\"]'
+assert p.get('RemoteDebuggingAllowed') is False, 'RemoteDebuggingAllowed not false'
+assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLevel not >= 1'
+" 2>/dev/null; then
     record "chrome-policies" "PASS"
+  elif [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
+    record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
   else record "chrome-policies" "WARN" "not deployed"; fi
 
   # Unexpected listening ports (non-loopback)
