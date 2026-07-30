@@ -55,7 +55,7 @@
   loop_control:
     label: "{{ item.dest }}"
   register: git_repos_clone_results
-  ignore_errors: true
+  ignore_errors: true  # noqa: ignore-errors — per-item failure must be captured in .results for the Report task below
 
 - name: Report failed clones
   ansible.builtin.debug:
