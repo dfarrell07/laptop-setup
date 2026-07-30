@@ -1,8 +1,8 @@
 ---
 - name: Remount /tmp
-  ansible.posix.mount:
-    path: /tmp
-    state: remounted
+  ansible.builtin.command:
+    cmd: mount -o remount,nosuid,nodev,noexec /tmp
+  changed_when: true
   failed_when: false
 
 - name: Reload sysctl
