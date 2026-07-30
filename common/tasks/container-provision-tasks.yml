@@ -8,6 +8,7 @@
   ansible.builtin.dnf:
     name: "{{ distrobox_packages }}"
     state: present
+  become: true  # distrobox containers have passwordless sudo; without this dnf5 refuses non-root install
 
 # --- Binary downloads ---
 - name: Create /usr/local/bin if absent
