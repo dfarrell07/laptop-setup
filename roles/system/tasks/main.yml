@@ -210,11 +210,10 @@
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
 
-- name: Enable bolt service
+- name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
   ansible.builtin.systemd:
     name: bolt
     state: started
-    enabled: true
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
 
