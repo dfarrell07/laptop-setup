@@ -131,7 +131,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
   else
-    if grep -q '"enabled"[[:space:]]*:[[:space:]]*true' "$d/settings.json" 2>/dev/null; then
+    if python3 -c "import json,sys; d=json.load(open('$d/settings.json')); sys.exit(0 if d.get('sandbox',{}).get('enabled') else 1)" 2>/dev/null; then
       record "sandbox($label)" "PASS"
     else record "sandbox($label)" "FAIL" "not enabled in $d/settings.json"; fi
   fi
@@ -302,9 +302,23 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
   else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
 
-  # pwquality.conf (minlen=14)
+  # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
   else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
+  if grep -q '^dcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-dcredit" "PASS"
+  else record "pwquality-dcredit" "FAIL" "pwquality dcredit not set to -1"; fi
+  if grep -q '^ucredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ucredit" "PASS"
+  else record "pwquality-ucredit" "FAIL" "pwquality ucredit not set to -1"; fi
+  if grep -q '^lcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-lcredit" "PASS"
+  else record "pwquality-lcredit" "FAIL" "pwquality lcredit not set to -1"; fi
+  if grep -q '^ocredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ocredit" "PASS"
+  else record "pwquality-ocredit" "FAIL" "pwquality ocredit not set to -1"; fi
+  if grep -q '^difok = 4' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-difok" "PASS"
+  else record "pwquality-difok" "FAIL" "pwquality difok not set to 4"; fi
+  if grep -q '^maxrepeat = 3' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-maxrepeat" "PASS"
+  else record "pwquality-maxrepeat" "FAIL" "pwquality maxrepeat not set to 3"; fi
+  if grep -q '^enforce_for_root' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-enforce-root" "PASS"
+  else record "pwquality-enforce-root" "FAIL" "pwquality enforce_for_root not set (CIS 5.3.4)"; fi
 
   # sudoers hardening drop-in (verify use_pty, logfile, umask)
   if grep -q 'use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
@@ -321,8 +335,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
   else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
 
-  # yescrypt cost factor (CIS 5.4.1)
-  if grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs 2>/dev/null; then record "yescrypt-cost" "PASS"
+  # yescrypt cost factor (CIS 5.4.1) — use $ to avoid prefix match against e.g. 50
+  if grep -qE '^YESCRYPT_COST_FACTOR 5$' /etc/login.defs 2>/dev/null; then record "yescrypt-cost" "PASS"
   else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
 
   # fprintd masked (prevents fingerprint from bypassing faillock)
@@ -346,10 +360,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$gshadow_mode" == "0" ]]; then record "gshadow-perms" "PASS"
   else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000"; fi
 
-  # TMOUT session timeout (CIS 5.5.5) — verify readonly attribute and <=900s value
-  if grep -qE '^readonly TMOUT=[1-9][0-9]*' /etc/profile.d/tmout.sh 2>/dev/null; then
+  # TMOUT session timeout (CIS 5.5.5) — verify readonly, numeric value, and <=900s upper bound
+  _tmout_val=$(grep -oP '^readonly TMOUT=\K[0-9]+' /etc/profile.d/tmout.sh 2>/dev/null || echo "")
+  if [[ -n "$_tmout_val" && "$_tmout_val" -gt 0 && "$_tmout_val" -le 900 ]]; then
     record "tmout" "PASS"
-  else record "tmout" "FAIL" "tmout.sh missing, not readonly, or TMOUT not set"; fi
+  elif [[ -z "$_tmout_val" ]]; then
+    record "tmout" "FAIL" "tmout.sh missing, not readonly, or TMOUT not set"
+  else
+    record "tmout" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
+  fi
 
   # /tmp noexec (CIS 1.1.2.x)
   if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
