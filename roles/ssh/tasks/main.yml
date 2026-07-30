@@ -73,6 +73,13 @@
     - rh_git_key | default('') | length > 0
     - profile == 'work'
 
+- name: Ensure ~/.config/git directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/git"
+    state: directory
+    mode: "0755"
+  when: ssh_git_signing_pubkey | default('') | length > 0
+
 - name: Deploy allowed signers file
   ansible.builtin.template:
     src: allowed_signers.j2

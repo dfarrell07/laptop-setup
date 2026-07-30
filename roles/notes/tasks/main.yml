@@ -4,25 +4,21 @@
     path: "{{ notes_repo_path }}/.git"
   register: notes_repo_stat
 
-- name: Clone notes repo
-  ansible.builtin.git:  # noqa: latest[git]
-    repo: "{{ notes_remote_url }}"
-    dest: "{{ notes_repo_path }}"
-    update: false
+- name: Clone notes repo (SSH, then HTTPS fallback)
   when: not notes_repo_stat.stat.exists
-  failed_when: false
-  register: notes_clone_result
-
-- name: Clone notes repo via HTTPS (SSH fallback)
-  ansible.builtin.git:  # noqa: latest[git]
-    repo: "{{ notes_remote_url_https }}"
-    dest: "{{ notes_repo_path }}"
-    update: false
-  when:
-    - not notes_repo_stat.stat.exists
-    - notes_clone_result.failed | default(false)
-  failed_when: false
-  register: notes_clone_https_result
+  block:
+    - name: Clone notes repo via SSH
+      ansible.builtin.git:  # noqa: latest[git]
+        repo: "{{ notes_remote_url }}"
+        dest: "{{ notes_repo_path }}"
+        update: false
+  rescue:
+    - name: Clone notes repo via HTTPS (SSH fallback)
+      ansible.builtin.git:  # noqa: latest[git]
+        repo: "{{ notes_remote_url_https }}"
+        dest: "{{ notes_repo_path }}"
+        update: false
+      failed_when: false
 
 - name: Re-check if notes repo exists after clone attempts
   ansible.builtin.stat:
@@ -77,6 +73,13 @@
     - notes_transcrypt_bin.rc | default(1) == 0
     - notes_transcrypt_check.rc | default(1) != 0
     - notes_transcrypt_password | default('') | length > 0
+
+- name: Restrict notes repo directory permissions (transcrypt plaintext in working tree)
+  ansible.builtin.file:
+    path: "{{ notes_repo_path }}"
+    mode: "0700"
+  when: notes_repo_available | bool
+  failed_when: false
 
 - name: Restrict notes .git/config permissions (contains transcrypt password)
   ansible.builtin.file:
