@@ -523,10 +523,10 @@
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: firewall-cmd --zone=libvirt --remove-service=ssh --permanent
   register: system_libvirt_ssh
-  changed_when: "'ALREADY_DISABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
+  changed_when: "'NOT_ENABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
   failed_when:
     - system_libvirt_ssh.rc != 0
-    - "'ALREADY_DISABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
+    - "'NOT_ENABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
   when:
     - system_firewalld_running | bool
     - system_enable_libvirtd | bool
