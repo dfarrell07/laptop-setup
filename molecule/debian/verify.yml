@@ -33,6 +33,14 @@
       ansible.builtin.command: fzf --version
       changed_when: false
 
+    - name: Check ripgrep is installed
+      ansible.builtin.command: rg --version
+      changed_when: false
+
+    - name: Check shfmt is installed
+      ansible.builtin.command: shfmt --version
+      changed_when: false
+
     # --- Desktop role ---
     - name: Verify Alacritty config deployed
       ansible.builtin.stat:
