@@ -76,5 +76,7 @@
   changed_when: false
   register: git_repos_remote_result
   failed_when:
+    - git_repos_remote_result.rc is not none
     - git_repos_remote_result.rc != 0
     - "'No such file' not in ((git_repos_remote_result.msg | default('')) + (git_repos_remote_result.stderr | default('')))"
+    - "'Unable to change directory' not in (git_repos_remote_result.msg | default(''))"

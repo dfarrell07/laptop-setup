@@ -15,7 +15,13 @@ Host *
 {% endif %}
     ControlPersist 120
 
-Host github.com gist.github.com gh gist
+Host github.com gist.github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentitiesOnly yes
+    PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
+
+Host gh gist
     HostName github.com
     User git
     IdentityFile ~/.ssh/id_ed25519_sk
