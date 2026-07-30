@@ -72,7 +72,9 @@
 
 # Kernel module loading (sign of rootkit installation or unauthorized driver)
 -a always,exit -F arch=b64 -S init_module -S finit_module -k kernel-module-load
+-a always,exit -F arch=b32 -S init_module -S finit_module -k kernel-module-load
 -a always,exit -F arch=b64 -S delete_module -k kernel-module-unload
+-a always,exit -F arch=b32 -S delete_module -k kernel-module-unload
 
 # Process execution with setuid/setgid (privileged command audit)
 -a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
