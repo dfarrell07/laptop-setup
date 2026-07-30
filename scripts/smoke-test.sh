@@ -247,6 +247,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /etc/systemd/coredump.conf.d/disable.conf ]]; then record "coredump-disabled" "PASS"
   else record "coredump-disabled" "FAIL" "config not deployed"; fi
 
+  # journald persistent storage (log lost on reboot if not persistent)
+  if [[ -f /etc/systemd/journald.conf.d/99-hardening.conf ]]; then record "journald-persistent" "PASS"
+  else record "journald-persistent" "FAIL" "journald hardening config not deployed"; fi
+
   # cups-browsed masked (CVE-2024-47176 RCE vector)
   if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
   else record "cups-browsed-masked" "WARN" "not masked"; fi
