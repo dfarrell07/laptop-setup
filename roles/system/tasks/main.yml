@@ -37,6 +37,7 @@
     fstype: tmpfs
     opts: defaults,nosuid,nodev,noexec
     state: mounted
+  failed_when: false
 
 # --- Kernel module blacklist ---
 - name: Deploy kernel module blacklist
@@ -824,6 +825,13 @@
     path: /var/lib/aide/aide.db.gz
   register: system_aide_db
   when: system_aide_enabled | bool
+
+- name: Warn that AIDE initialization takes 5-10 minutes
+  ansible.builtin.debug:
+    msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+  when:
+    - system_aide_enabled | bool
+    - not (system_aide_db.stat.exists | default(false))
 
 - name: Initialize AIDE database (first run only)
   ansible.builtin.command:
