@@ -622,6 +622,7 @@
   loop:
     - audit
     - even_deny_root
+    - local_users_only  # prevent double-lockout with SSSD/IPA domain users
   failed_when: false
 
 - name: Check if authselect with-faillock feature is already enabled
