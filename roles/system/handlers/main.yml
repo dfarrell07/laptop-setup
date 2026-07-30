@@ -92,3 +92,13 @@
     state: restarted
     daemon_reload: true
   failed_when: false
+
+- name: Reinitialize AIDE database
+  ansible.builtin.shell:  # noqa: command-instead-of-module
+    cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+  changed_when: true
+  failed_when: false
+  when: system_aide_enabled | bool
+  # Triggered when aide.conf paths change so new entries take effect immediately.
+  # Without this, added paths are written to the config but the database never
+  # includes them until a manual 'aide --init'.

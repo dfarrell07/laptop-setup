@@ -1445,6 +1445,7 @@
     line: '/usr/local/bin NORMAL'
     state: present
   when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Ensure AIDE monitors sshd drop-in config directory
   ansible.builtin.lineinfile:
@@ -1454,6 +1455,7 @@
     insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (longest-match-wins)
     state: present
   when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Add NetworkManager conf.d to AIDE monitoring (MAC randomization and DNS policy)
   ansible.builtin.lineinfile:
@@ -1463,6 +1465,7 @@
     insertbefore: '^/etc\s'
     state: present
   when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Add systemd resolved conf.d to AIDE monitoring (DNS-over-TLS policy)
   ansible.builtin.lineinfile:
@@ -1472,6 +1475,7 @@
     insertbefore: '^/etc\s'
     state: present
   when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Add systemd logind conf.d to AIDE monitoring (session timeout policy)
   ansible.builtin.lineinfile:
@@ -1481,6 +1485,7 @@
     insertbefore: '^/etc\s'
     state: present
   when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
   ansible.builtin.lineinfile:
@@ -1492,17 +1497,19 @@
   when:
     - system_aide_enabled | bool
     - system_tlp_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/tlp\.conf'
+    regexp: '^/etc/tlp\.conf\s'  # whitespace-anchor prevents matching /etc/tlp.conf.bak etc.
     line: '/etc/tlp.conf NORMAL'
     insertbefore: '^/etc\s'
     state: present
   when:
     - system_aide_enabled | bool
     - system_tlp_enabled | bool
+  notify: Reinitialize AIDE database
 
 - name: Check if AIDE database exists
   ansible.builtin.stat:
