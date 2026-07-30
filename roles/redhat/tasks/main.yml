@@ -42,3 +42,21 @@
   tags: [become]
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
+
+# --- CSB system account hardening (CIS 5.6) ---
+# splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
+# CIS 5.6 requires non-login system accounts use /sbin/nologin or be locked.
+- name: Restrict splunk system account shell (CIS 5.6)
+  block:
+    - name: Set splunk account shell to nologin
+      ansible.builtin.user:
+        name: splunk
+        shell: /sbin/nologin
+      become: true
+      tags: [become]
+  rescue:
+    - name: Record splunk account hardening failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: redhat
+        _csb_task_name: "Restrict splunk system account shell"
