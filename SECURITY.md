@@ -50,6 +50,23 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
   600s display off)
 
+## Known Limitations
+
+- **claude.ai install.sh** — installed via `curl | bash` with no SHA256
+  verification; Anthropic uses a rolling installer without pinned releases
+  (note: binary SHA256 verification in the Scope section refers to other
+  tools; the Claude Code installer is the deliberate exception)
+- **Secure Boot** — not managed by Ansible (BIOS/firmware setting); kernel
+  `lockdown=integrity` is weakened without a Secure Boot chain of trust
+- **GRUB bootloader password** — not set (CIS 1.4.2); an attacker with
+  physical console access can edit kernel boot parameters
+- **LUKS TRIM/discard** — not managed by this playbook; if `rd.luks.options=discard`
+  was set at OS install time, the storage controller can infer free blocks
+  (SSD longevity vs. data remanence tradeoff)
+- **Vault + CI** — encrypting vault.yml with a real YubiKey-derived password
+  will break CI syntax-check (which uses the dummy password stub); this is
+  a known design tradeoff, not a bug
+
 ## Vault Security
 
 - Vault ships as a plaintext stub (`vault_placeholder`) — encrypt after
