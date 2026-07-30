@@ -203,6 +203,16 @@
   notify: Restart auditd
   when: ansible_system == 'Linux'
 
+- name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
+  ansible.builtin.template:
+    src: auditd.conf.j2
+    dest: /etc/audit/auditd.conf
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart auditd
+  when: ansible_system == 'Linux'
+
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
   ansible.builtin.dnf:
@@ -251,15 +261,24 @@
   when: "'Intel' not in (ansible_processor | join(' '))"
   failed_when: false
 
-# --- Mask cups (print services; workstation is not a print server) ---
-- name: Mask cups and cups-browsed (not a print server; cups-browsed is an RCE vector)
+# --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable cups.service ---
+# cups-browsed is masked (not just disabled) because it's an active RCE target.
+# cups.service is disabled/stopped but NOT masked — Flatpak print dialogs use
+# cups.socket for activation and masking cups.service while leaving cups.socket
+# enabled creates a broken half-masked state (socket accepts, activation fails).
+# If this machine will never print, also mask cups.socket and cups.path.
+- name: Mask cups-browsed (RCE entry point)
   ansible.builtin.systemd:
-    name: "{{ item }}"
+    name: cups-browsed
     masked: true
     state: stopped
-  loop:
-    - cups
-    - cups-browsed
+  failed_when: false
+
+- name: Disable cups.service (not a print server)
+  ansible.builtin.systemd:
+    name: cups
+    state: stopped
+    enabled: false
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
@@ -820,6 +839,20 @@
     - { name: PASS_MIN_DAYS, value: "1" }
     - { name: PASS_WARN_AGE, value: "7" }
     - { name: UMASK, value: "027" }
+    - { name: INACTIVE, value: "30" }
+
+# --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
+- name: Check useradd default INACTIVE setting
+  ansible.builtin.command:
+    cmd: useradd -D
+  register: system_useradd_defaults
+  changed_when: false
+
+- name: Set default inactive days for new accounts to 30
+  ansible.builtin.command:
+    cmd: useradd -D -f 30
+  when: "'INACTIVE=30' not in system_useradd_defaults.stdout"
+  changed_when: true
 
 # --- Lock root account ---
 - name: Check root account status
