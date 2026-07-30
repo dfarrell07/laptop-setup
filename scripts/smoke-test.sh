@@ -254,10 +254,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
   _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
-  if grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q 'X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q 'ClientAliveCountMax 0' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+  if grep -q '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
     record "sshd-hardening" "PASS"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -272,23 +272,23 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # auditd rules (verify immutability flag and sentinel watch rule)
   if grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
-     grep -q 'claude-sensitive-write' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
+     grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
   else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
 
   # kernel module blacklist (verify key blacklist entries)
-  if grep -q 'install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
-     grep -q 'blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
+  if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
+     grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
     record "modprobe-hardening" "PASS"
   else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
 
   # core dump disabled (verify Storage=none not just file existence)
-  if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
+  if grep -q '^Storage=none' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
     record "coredump-disabled" "PASS"
   else record "coredump-disabled" "FAIL" "coredump Storage=none not configured"; fi
 
   # journald persistent storage (verify Storage=persistent, not just file existence)
-  if grep -q 'Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
+  if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-persistent" "PASS"
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
 
@@ -306,8 +306,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
   else record "avahi-masked" "WARN" "not masked"; fi
 
-  # AIDE file integrity (timer enabled AND database initialized)
-  if systemctl is-enabled aide-check.timer &>/dev/null; then record "aide-timer" "PASS"
+  # AIDE file integrity (timer enabled+active AND database initialized)
+  if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
+    record "aide-timer" "PASS"
+  elif systemctl is-enabled aide-check.timer &>/dev/null; then
+    record "aide-timer" "WARN" "timer enabled but not active (reboot or: systemctl start aide-check.timer)"
   else record "aide-timer" "WARN" "timer not enabled"; fi
   if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
   else record "aide-db" "WARN" "AIDE database not initialized (run: aide --init)"; fi
@@ -359,9 +362,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "pwquality-enforce-root" "FAIL" "pwquality enforce_for_root not set (CIS 5.3.4)"; fi
 
   # sudoers hardening drop-in (verify use_pty, logfile, umask)
-  if grep -q 'use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
-     grep -q 'logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
-     grep -q 'umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
+  if grep -qE '^Defaults[[:space:]].*use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
+     grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
+     grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
     record "sudoers-hardening" "PASS"
   else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
 
@@ -421,8 +424,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted to /tmp"; fi
 
   # kernel.core_pattern safety
-  if sysctl -n kernel.core_pattern 2>/dev/null | grep -q '/bin/false'; then record "core-pattern" "PASS"
-  else record "core-pattern" "FAIL" "kernel.core_pattern not set to |/bin/false"; fi
+  if [[ "$(sysctl -n kernel.core_pattern 2>/dev/null)" == "|/bin/false" ]]; then record "core-pattern" "PASS"
+  else record "core-pattern" "FAIL" "kernel.core_pattern expected '|/bin/false' (pipe prefix required)"; fi
 
   # ctrl+alt+del disabled (physical security)
   if systemctl is-masked ctrl-alt-del.target &>/dev/null; then record "ctrl-alt-del-masked" "PASS"
@@ -453,19 +456,19 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 
   # login.defs password aging (CIS 5.4.x)
-  if grep -qE '^PASS_MAX_DAYS[[:space:]]+365' /etc/login.defs 2>/dev/null; then record "pass-max-days" "PASS"
+  if grep -qE '^PASS_MAX_DAYS[[:space:]]+365$' /etc/login.defs 2>/dev/null; then record "pass-max-days" "PASS"
   else record "pass-max-days" "FAIL" "PASS_MAX_DAYS not set to 365 in login.defs"; fi
-  if grep -qE '^UMASK[[:space:]]+027' /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
+  if grep -qE '^UMASK[[:space:]]+027$' /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
   else record "umask-login-defs" "FAIL" "UMASK not set to 027 in login.defs"; fi
-  if grep -qE '^INACTIVE[[:space:]]+30' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
+  if grep -qE '^INACTIVE[[:space:]]+30$' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
   else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
-  if grep -qE '^PASS_MIN_DAYS[[:space:]]+1' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
+  if grep -qE '^PASS_MIN_DAYS[[:space:]]+1$' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
   else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
-  if grep -qE '^PASS_WARN_AGE[[:space:]]+7' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
+  if grep -qE '^PASS_WARN_AGE[[:space:]]+7$' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
   else record "pass-warn-age" "FAIL" "PASS_WARN_AGE not set to 7 in login.defs"; fi
 
   # WiFi MAC address randomization (privacy)
-  if grep -q 'wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
+  if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
     record "wifi-mac-rand" "PASS"
   else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
 
