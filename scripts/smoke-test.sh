@@ -277,11 +277,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
   else record "root-locked" "FAIL" "root account not locked"; fi
 
-  # faillock.conf (deny=5, local_users_only for SSSD safety)
+  # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)
   if grep -q '^deny = 5' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
   else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
   if grep -q '^local_users_only' /etc/security/faillock.conf 2>/dev/null; then record "faillock-local-only" "PASS"
   else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
+  if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
+  else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
 
   # pwquality.conf (minlen=14)
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
@@ -298,6 +300,23 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # yescrypt password hashing (CIS 5.3.6)
   if grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
   else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
+
+  # yescrypt cost factor (CIS 5.4.1)
+  if grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs 2>/dev/null; then record "yescrypt-cost" "PASS"
+  else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
+
+  # fprintd masked (prevents fingerprint from bypassing faillock)
+  if systemctl is-masked fprintd.service &>/dev/null; then record "fprintd-masked" "PASS"
+  else record "fprintd-masked" "WARN" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
+
+  # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
+  if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
+    record "resolv-stub" "PASS"
+  else record "resolv-stub" "WARN" "resolv.conf not symlinked to stub-resolv.conf"; fi
+
+  # cron.allow restricts cron to root only (CIS 5.1.8)
+  if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
+  else record "cron-allow-root" "WARN" "/etc/cron.allow missing or not restricted to root"; fi
 
   # Critical file permissions (CIS 6.1.x)
   shadow_mode=$(stat -c '%a' /etc/shadow 2>/dev/null || echo "?")
