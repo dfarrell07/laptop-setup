@@ -64,6 +64,20 @@
 -w /usr/bin/auditctl -p x -k audit-tools
 -w /usr/bin/augenrules -p x -k audit-tools
 
+# Privilege escalation syscalls (CIS benchmark)
+-a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -k privilege-escalation
+-a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -k privilege-escalation
+-a always,exit -F arch=b64 -S setgid -S setregid -S setresgid -k privilege-escalation
+-a always,exit -F arch=b32 -S setgid -S setregid -S setresgid -k privilege-escalation
+
+# Kernel module loading (sign of rootkit installation or unauthorized driver)
+-a always,exit -F arch=b64 -S init_module -S finit_module -k kernel-module-load
+-a always,exit -F arch=b64 -S delete_module -k kernel-module-unload
+
+# Process execution with setuid/setgid (privileged command audit)
+-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
+-a always,exit -F arch=b32 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
+
 # Make rules immutable until next reboot.
 # WARNING: after first deployment, manual augenrules --load or auditctl -R
 # will silently fail (EPERM) without a full service restart. Use 'make system'

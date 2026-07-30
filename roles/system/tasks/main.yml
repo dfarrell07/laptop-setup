@@ -521,6 +521,34 @@
     enabled: true
   failed_when: false
 
+# --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
+- name: Ensure dnf-automatic service drop-in directory exists
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d"
+    state: directory
+    mode: "0755"
+  when:
+    - ansible_system == 'Linux'
+    - system_aide_enabled | bool
+  failed_when: false
+
+- name: Deploy AIDE update hook for dnf-automatic
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # Run aide --update after dnf-automatic applies security updates.
+      # Without this, every update causes AIDE false-positive alerts that
+      # train operators to ignore them, defeating the purpose of AIDE.
+      [Service]
+      ExecStartPost=/usr/bin/bash -c 'aide --update && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz' || true
+    dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"
+    mode: "0644"
+  when:
+    - ansible_system == 'Linux'
+    - system_aide_enabled | bool
+  notify: Restart dnf-automatic timer
+  failed_when: false
+
 # --- DNS-over-TLS ---
 - name: Enable systemd-resolved
   ansible.builtin.systemd:
