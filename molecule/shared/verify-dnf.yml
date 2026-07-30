@@ -33,6 +33,10 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in EPEL 10
 
+- name: Check ykpers is installed (ykchalresp)
+  ansible.builtin.command: which ykchalresp
+  changed_when: false
+
 - name: Verify containers config directory
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/containers"

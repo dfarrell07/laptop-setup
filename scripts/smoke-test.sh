@@ -80,10 +80,10 @@ else record "tailscaled-active" "WARN" "tailscaled not running"; fi
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "not connected"; fi
 
-# ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded
-out=$(run ssh-add -l 2>&1 || true)
+# ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
+out=$(run ssh-add -L 2>&1 || true)
 if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
-elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* ]]; then
+elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "$out" != *"Error"* ]]; then
   record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"
 else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
 
@@ -543,7 +543,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     _pstate=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver)
     if [[ "$_pstate" == "amd-pstate-epp" ]]; then record "amd-pstate-epp" "PASS"
     elif [[ "$_pstate" == "amd-pstate" ]]; then
-      record "amd-pstate-epp" "WARN" "guided mode ($\_pstate) not EPP — check BIOS CPPC setting"
+      record "amd-pstate-epp" "WARN" "guided mode ($_pstate) not EPP — check BIOS CPPC setting"
     elif [[ "$_pstate" == "acpi-cpufreq" ]]; then
       record "amd-pstate-epp" "FAIL" "legacy acpi-cpufreq — kernel regression or BIOS CPPC disabled"
     else record "amd-pstate-epp" "WARN" "driver=$_pstate (unexpected)"; fi

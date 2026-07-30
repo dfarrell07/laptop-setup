@@ -49,6 +49,10 @@
       ansible.builtin.command: go version
       changed_when: false
 
+    - name: Check wl-clipboard is installed
+      ansible.builtin.command: which wl-copy
+      changed_when: false
+
     # --- Desktop role ---
     - name: Verify Alacritty config deployed
       ansible.builtin.stat:
