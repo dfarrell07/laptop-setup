@@ -80,6 +80,31 @@
 -a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
 -a always,exit -F arch=b32 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
 
+# Date/time modification (CIS 4.1.x)
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time-change
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -k time-change
+-a always,exit -F arch=b64 -S clock_settime -k time-change
+-a always,exit -F arch=b32 -S clock_settime -k time-change
+-w /etc/localtime -p wa -k time-change
+
+# Unauthorized file access attempts (EACCES/EPERM) — CIS 4.1.x
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
+
+# File deletion by users (CIS 4.1.x)
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=-1 -k delete
+-a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=-1 -k delete
+
+# Filesystem mounts (CIS 4.1.x)
+-a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=-1 -k mounts
+-a always,exit -F arch=b32 -S mount -F auid>=1000 -F auid!=-1 -k mounts
+
+# Login/logout events (CIS 4.1.x)
+-w /var/log/lastlog -p wa -k logins
+-w /var/run/faillock -p wa -k logins
+
 # Make rules immutable until next reboot.
 # WARNING: after first deployment, manual augenrules --load or auditctl -R
 # will silently fail (EPERM) without a full service restart. Use 'make system'
