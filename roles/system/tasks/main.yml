@@ -1160,6 +1160,17 @@
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
 
+- name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
+  ansible.builtin.file:
+    path: "{{ real_user_home }}"
+    mode: "0750"
+    state: directory
+  when:
+    - real_user_home is defined
+    - real_user_home | length > 0
+    - real_user_home != '/'
+  failed_when: false
+
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - name: Check useradd default INACTIVE setting
   ansible.builtin.command:

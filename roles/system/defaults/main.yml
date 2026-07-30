@@ -41,6 +41,7 @@ system_sysctl_hardening:
   net.ipv6.conf.all.forwarding: 1
   net.bridge.bridge-nf-call-iptables: 1
   net.bridge.bridge-nf-call-ip6tables: 1
+  net.netfilter.nf_conntrack_max: 131072  # prevent 'table full, dropping packet' under OVN-K/Submariner load
   kernel.randomize_va_space: 2
   # note: use_tempaddr omitted — SLAAC is disabled via accept_ra=0, so tempaddr has no effect
 
