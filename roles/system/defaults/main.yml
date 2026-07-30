@@ -33,8 +33,9 @@ system_sysctl_hardening:
   fs.protected_hardlinks: 1  # CIS — prevents hardlink-based privilege escalation in world-writable dirs
   fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
-  fs.protected_regular: 2    # CIS — prevents writes to world-writable regular files in sticky dirs
-  kernel.sysrq: 0            # CIS — disable SysRq key (kernel emergency operations from keyboard)
+  fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
+  kernel.sysrq: 0            # CIS — disable SysRq; set 176 for sync+remount-ro+reboot if needed for kernel debugging
+  kernel.panic: 10           # reboot after 10s panic; set 0 to preserve panic state for kernel debugging
   net.ipv4.tcp_rfc1337: 1
   kernel.kexec_load_disabled: 1
   net.core.bpf_jit_harden: 1
@@ -111,6 +112,10 @@ system_lid_switch: suspend
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
 system_disable_bluetooth: false  # Set true in config.yml to blacklist btusb/bluetooth kernel modules
+# SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
+# Dangerous bits omitted from 176: raw-console(4), proc-signals/OOM-kill(64), crash(not in std bitmask).
+# Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
+system_sysrq: 0
 
 # Identity fallbacks — site.yml always sets these via set_fact from env,
 # but role defaults guard against standalone invocation or empty env vars.

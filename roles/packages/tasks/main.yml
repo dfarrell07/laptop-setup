@@ -149,8 +149,8 @@
 
     - name: Download and install opm
       when: >-
-        packages_opm_marker.failed | default(true) or
-        packages_oc_version not in (packages_opm_marker.content | default('') | b64decode)
+        'content' not in packages_opm_marker or
+        packages_oc_version not in (packages_opm_marker.content | b64decode)
       block:
         - name: Fetch OPM sha256sum.txt
           ansible.builtin.uri:

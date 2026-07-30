@@ -603,6 +603,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "fs.protected_fifos"                  "1" "sysctl-protected-fifos"
   _sysctl_check "fs.protected_regular"                "2" "sysctl-protected-regular"
   _sysctl_check "kernel.sysrq"                        "0" "sysctl-sysrq-disabled"
+  _sysctl_check "kernel.panic"                        "10" "sysctl-panic-reboot"
   _sysctl_check "net.ipv6.conf.all.accept_ra"         "0" "sysctl-no-accept-ra"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"

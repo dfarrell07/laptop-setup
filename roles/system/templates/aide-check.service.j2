@@ -13,8 +13,13 @@ IOSchedulingPriority=7
 # Removing SuccessExitStatus=1 lets systemd mark the unit failed on violations,
 # making them visible via 'systemctl --failed' and journalctl.
 SyslogIdentifier=aide-check
+
 # Systemd sandbox options compatible with full-filesystem read access:
 NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateDevices=true
+PrivateTmp=true
+RestrictSUIDSGID=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
