@@ -330,6 +330,31 @@
       - verify_claude_settings.stat.mode == '0600'
     fail_msg: "Claude settings.json not deployed or wrong permissions (expected 0600)"
 
+- name: Validate Claude settings.json is valid JSON and has sandbox.enabled
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "
+      import json, sys
+      d = json.load(open('{{ ansible_user_dir }}/.claude-personal/settings.json'))
+      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
+      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+      assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
+      "
+  changed_when: false
+  when: verify_claude_settings.stat.exists
+
+- name: Verify claude-privacy tmpfiles config deployed (Linux)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+  register: verify_claude_tmpfiles
+  when: ansible_system == 'Linux'
+
+- name: Assert claude-privacy tmpfiles config deployed (Linux)
+  ansible.builtin.assert:
+    that: verify_claude_tmpfiles.stat.exists
+    fail_msg: "claude-privacy.conf tmpfiles config not deployed — ~/.claude permissions won't be enforced at boot"
+  when: ansible_system == 'Linux'
+
 - name: Verify Claude CLAUDE.md deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"

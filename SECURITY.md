@@ -27,7 +27,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   `transfer.fsckObjects=true`, `core.symlinks=false`,
   `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit
 - **Claude Code isolation** — instance separation, sandbox config, file
-  access deny lists (22 read + 24 write paths incl. /proc/environ,
+  access deny lists (43 read + 44 write paths incl. /proc/environ,
   .git/config, settings.json self-modify protection), API endpoint guard,
   telemetry controls, `enableAllProjectMcpServers=false`, auditd monitoring
 - **Supply chain** — `.npmrc ignore-scripts=true`, Ansible collection
