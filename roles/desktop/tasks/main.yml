@@ -89,12 +89,12 @@
     mode: "0755"
   when: desktop_effective == 'sway'
 
-- name: Ensure Pictures directory exists for grim screenshots
+- name: Ensure Pictures directory exists for screenshots
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/Pictures"
     state: directory
     mode: "0755"
-  when: desktop_effective == 'sway'
+  when: desktop_effective in ['sway', 'i3']
 
 - name: Deploy Sway config
   ansible.builtin.template:
