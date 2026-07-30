@@ -14,11 +14,13 @@
 
     # --- Fedora-specific: package checks ---
     - name: Check vim is installed
-      ansible.builtin.command: vim --version
+      ansible.builtin.command:
+        cmd: vim --version
       changed_when: false
 
     - name: Check curl is installed
-      ansible.builtin.command: which curl
+      ansible.builtin.command:
+        cmd: which curl
       changed_when: false
 
     # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
