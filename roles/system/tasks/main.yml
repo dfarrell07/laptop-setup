@@ -85,6 +85,9 @@
     enabled: true
   failed_when: false
 
+- name: Re-gather service facts after firewalld start
+  ansible.builtin.service_facts:
+
 - name: Set firewalld running fact
   ansible.builtin.set_fact:
     system_firewalld_running: >-

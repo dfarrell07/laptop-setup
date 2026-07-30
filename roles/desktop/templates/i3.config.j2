@@ -7,6 +7,9 @@ font pango:DejaVu Sans Mono 10
 
 # Autostart
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
+exec --no-startup-id xautolock -time 5 -locker 'i3lock -c 000000'
+exec --no-startup-id xset dpms 0 0 600
+exec --no-startup-id xset r rate 200 50
 exec --no-startup-id dunst
 exec_always --no-startup-id nm-applet
 exec_always --no-startup-id autorandr --change
