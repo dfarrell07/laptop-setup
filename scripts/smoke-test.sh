@@ -354,8 +354,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
   else record "aide-db" "WARN" "AIDE database not initialized (run: aide --init)"; fi
 
-  # Chrony NTS
-  if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then record "chrony-nts" "PASS"
+  # Chrony NTS: first verify config, then verify actual NTS cookies established
+  # (port 4460 is required for NTS-KE; may be blocked on CSB corporate networks)
+  if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then
+    if chronyc -c authdata 2>/dev/null | awk -F, '$5 > 0 {found=1} END {exit !found}'; then
+      record "chrony-nts" "PASS"
+    else record "chrony-nts" "WARN" "NTS configured but no authenticated sources (port 4460 blocked? needs boot?)"; fi
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
   if systemctl is-enabled chronyd &>/dev/null && systemctl is-active chronyd &>/dev/null; then
     record "chronyd-service" "PASS"
