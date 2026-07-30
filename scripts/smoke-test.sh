@@ -299,7 +299,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
   # Auditd watch keys for new paths deployed by the system role
-  for _key in power-config device-policy kernel-params kernel-modules; do
+  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
       record "auditd-watch-${_key}" "PASS"
     else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
@@ -458,21 +458,29 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "tmout" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
   fi
 
-  # /tmp noexec (CIS 1.1.2.x)
-  if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
-  else record "tmp-noexec" "FAIL" "/tmp not mounted noexec"; fi
+  # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
+  _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")
+  if echo "$_tmp_opts" | grep -q noexec && echo "$_tmp_opts" | grep -q nosuid && echo "$_tmp_opts" | grep -q nodev; then
+    record "tmp-hardening" "PASS"
+  else record "tmp-hardening" "FAIL" "/tmp missing hardening options: $_tmp_opts"; fi
+  unset _tmp_opts
   _tmp_mode=$(stat -c '%a' /tmp 2>/dev/null || echo "?")
   if [[ "$_tmp_mode" == "1777" ]]; then record "tmp-sticky-bit" "PASS"
   else record "tmp-sticky-bit" "FAIL" "/tmp mode=$_tmp_mode expected 1777 (sticky bit)"; fi
   unset _tmp_mode
 
-  # /dev/shm noexec (CIS 1.1.7.x)
-  if findmnt -n -o OPTIONS /dev/shm 2>/dev/null | grep -q noexec; then record "shm-noexec" "PASS"
-  else record "shm-noexec" "FAIL" "/dev/shm not mounted noexec"; fi
+  # /dev/shm hardening (CIS 1.1.7.x) — noexec/nosuid/nodev all required
+  _shm_opts=$(findmnt -n -o OPTIONS /dev/shm 2>/dev/null || echo "")
+  if echo "$_shm_opts" | grep -q noexec && echo "$_shm_opts" | grep -q nosuid && echo "$_shm_opts" | grep -q nodev; then
+    record "shm-hardening" "PASS"
+  else record "shm-hardening" "FAIL" "/dev/shm missing hardening options: $_shm_opts"; fi
+  unset _shm_opts
 
-  # /var/tmp bind-mounted to /tmp (CIS 1.1.8)
-  if findmnt -n -o OPTIONS /var/tmp 2>/dev/null | grep -q bind; then record "var-tmp-bind" "PASS"
-  else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted to /tmp"; fi
+  # /var/tmp bind-mounted to /tmp with noexec (CIS 1.1.8)
+  _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
+  if echo "$_vt_opts" | grep -q bind && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
+  else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
+  unset _vt_opts
 
   # kernel.core_pattern safety
   if [[ "$(sysctl -n kernel.core_pattern 2>/dev/null)" == "|/bin/false" ]]; then record "core-pattern" "PASS"
@@ -569,6 +577,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-lock" "PASS"
   else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock"; fi
+
+  # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
+  if loginctl show-user "$USER" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
+    record "session-linger" "PASS"
+  else record "session-linger" "FAIL" "linger not enabled — podman.socket dies when provisioning SSH session ends"; fi
 
   # Critical kernel sysctl values
   _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }

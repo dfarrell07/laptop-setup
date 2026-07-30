@@ -65,11 +65,21 @@
   when: ansible_system == 'Linux'
   failed_when: false
 
+- name: Check /dev/shm current mount options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /dev/shm
+  register: system_devshm_opts
+  changed_when: false
+  when: ansible_system == 'Linux'
+  failed_when: false
+
 - name: Apply /dev/shm noexec immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,noexec /dev/shm
   changed_when: true
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - "'noexec' not in (system_devshm_opts.stdout | default(''))"
   failed_when: false
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---

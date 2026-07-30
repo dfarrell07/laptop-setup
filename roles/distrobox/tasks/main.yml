@@ -97,7 +97,9 @@
           {{ '--replace' if distrobox_container_replace | bool else '' }}
           --file {{ distrobox_ini_path }}
       register: distrobox_create_result
-      changed_when: "'already exists' not in (distrobox_create_result.stderr | default(''))"
+      changed_when: >-
+        'already exists' not in
+        ((distrobox_create_result.stdout | default('')) + (distrobox_create_result.stderr | default('')))
 
 # --- Toolbx path ---
 - name: Create container via Toolbx
