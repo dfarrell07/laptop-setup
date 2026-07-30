@@ -177,6 +177,12 @@
   ansible.builtin.set_fact:
     dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in (dotfiles_ssh_kex_check.stdout | default('')) }}"
 
+- name: Ensure ~/.ssh directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.ssh"
+    state: directory
+    mode: "0700"
+
 - name: Deploy SSH client config
   ansible.builtin.template:
     src: ssh_config.j2
