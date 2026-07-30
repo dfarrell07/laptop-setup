@@ -307,7 +307,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # fprintd masked (prevents fingerprint from bypassing faillock)
   if systemctl is-masked fprintd.service &>/dev/null; then record "fprintd-masked" "PASS"
-  else record "fprintd-masked" "WARN" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
+  else record "fprintd-masked" "FAIL" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
 
   # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
   if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
