@@ -6,7 +6,8 @@ set $term {{ desktop_i3_terminal }}
 font pango:DejaVu Sans Mono 10
 
 # HiDPI output scaling (override desktop_sway_hidpi_scale in config.yml)
-output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }}
+# adaptive_sync enables VRR/FreeSync on Radeon 780M; silently ignored when display is off (docked)
+output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }} adaptive_sync enabled
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode
 exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi
@@ -133,6 +134,8 @@ input "type:keyboard" {
     repeat_delay 200
     repeat_rate 50
 }
+
+seat seat0 xcursor_theme Adwaita 24
 
 input "type:touchpad" {
     tap enabled
