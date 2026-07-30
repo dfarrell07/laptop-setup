@@ -915,12 +915,14 @@
     mode: "0644"
     backup: true
   notify: Restart chronyd
+  when: ansible_system == 'Linux'
 
 - name: Ensure chronyd is enabled
   ansible.builtin.systemd:
     name: chronyd
     state: started
     enabled: true
+  when: ansible_system == 'Linux'
 
 # --- PAM faillock (account lockout after failed attempts) ---
 - name: Configure pam_faillock value settings
@@ -1539,6 +1541,12 @@
   notify: Reinitialize AIDE database
   # Default aide.conf only PERMS-checks /etc; auditd watches /etc/selinux for
   # writes (-k mac-policy) but AIDE needs content-level integrity verification.
+
+# Fire the AIDE reinit handler here if any conf path changed — this avoids
+# running aide --init twice on first provision (once from the handler, once
+# from the first-run block below when stat shows DB absent after handler built it).
+- name: Flush AIDE handlers before database existence check
+  ansible.builtin.meta: flush_handlers
 
 - name: Check if AIDE database exists
   ansible.builtin.stat:

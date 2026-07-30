@@ -88,6 +88,26 @@
         cmd: grep -q 'xkb_layout us' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
+    - name: Verify sway config uses exec_always for mako
+      ansible.builtin.command:
+        cmd: grep -q 'exec_always mako' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config enables adaptive_sync on built-in display
+      ansible.builtin.command:
+        cmd: grep -q 'adaptive_sync enabled' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config exports AMD VA-API environment variables
+      ansible.builtin.command:
+        cmd: grep -q 'LIBVA_DRIVER_NAME=radeonsi' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config sets cursor theme for XWayland consistency
+      ansible.builtin.command:
+        cmd: grep -q 'xcursor_theme Adwaita' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
     - name: Verify portals.conf deployed
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
