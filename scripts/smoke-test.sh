@@ -234,7 +234,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
     if [[ "$zone" == "drop" ]]; then record "firewall-zone" "PASS"
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
-    _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "22")
+    _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
+    if [[ "$_ssh_port" == "722" ]]; then record "sshd-port" "PASS"
+    else record "sshd-port" "FAIL" "Port='$_ssh_port' expected '722' (default ssh_port in playbook)"; fi
     if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
     else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
     if ip link show tailscale0 &>/dev/null; then
@@ -284,6 +286,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q '^X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^AllowTcpForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
     record "sshd-hardening" "PASS"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then

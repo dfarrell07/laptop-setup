@@ -161,7 +161,9 @@
   loop:
     - gcr-ssh-agent.socket
     - gcr-ssh-agent.service
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB may route smart card/PIV auth through gcr-ssh-agent
   failed_when: false
 
 - name: Deploy SSH agent systemd user service

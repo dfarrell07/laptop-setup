@@ -171,6 +171,16 @@
       changed_when: false
       become: true
 
+    - name: Check sshd config disables keyboard-interactive auth
+      ansible.builtin.command: grep -q 'KbdInteractiveAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config disables empty passwords
+      ansible.builtin.command: grep -q 'PermitEmptyPasswords no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
     - name: Extract AllowUsers value from sshd config
       ansible.builtin.command: grep -oP '(?<=AllowUsers )\S+' /etc/ssh/sshd_config.d/00-hardening.conf
       register: verify_sshd_allowusers
