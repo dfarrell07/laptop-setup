@@ -23,6 +23,15 @@ install_virtualization: true
 #   system_timezone: America/New_York  (roles/system/defaults) — set your local timezone
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
+#   system_tlp_enabled: true           (roles/system/defaults) — install/enable TLP; disable on non-ThinkPad
+#   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
+#   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
+#   system_keymap: us                  (no role default) — console keymap for /etc/vconsole.conf
+#   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
+#   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
+#   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
+#   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
+#   desktop_sway_trackpoint_id: ""     (roles/desktop/defaults) — enable TrackPoint scroll (find with swaymsg -t get_inputs)
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true

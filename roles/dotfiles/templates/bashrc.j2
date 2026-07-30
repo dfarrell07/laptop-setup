@@ -10,6 +10,7 @@ HISTCONTROL=ignoredups:erasedups
 shopt -s histappend
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"
 command -v zoxide &>/dev/null && eval "$(zoxide init bash)"

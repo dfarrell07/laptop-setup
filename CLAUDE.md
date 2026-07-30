@@ -41,7 +41,7 @@ make commitlint       # Validate commit messages from origin/main..HEAD
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
-- **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS — everything on host), `hybrid` (CSB/RHEL with sudo — basics on host + dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
+- **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host + dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides)
 

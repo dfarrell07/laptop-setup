@@ -171,6 +171,22 @@
       changed_when: false
       become: true
 
+    - name: Extract AllowUsers value from sshd config
+      ansible.builtin.command: grep -oP '(?<=AllowUsers )\S+' /etc/ssh/sshd_config.d/00-hardening.conf
+      register: verify_sshd_allowusers
+      changed_when: false
+      become: true
+
+    - name: Assert AllowUsers is set to the real user (not empty, not root)
+      ansible.builtin.assert:
+        that:
+          - verify_sshd_allowusers.stdout | length > 0
+          - verify_sshd_allowusers.stdout != 'root'
+          - verify_sshd_allowusers.stdout == lookup('env', 'USER')
+        fail_msg: >-
+          AllowUsers is '{{ verify_sshd_allowusers.stdout }}',
+          expected '{{ lookup('env', 'USER') }}' (non-empty, non-root)
+
     - name: Verify crypto-policy
       ansible.builtin.command: update-crypto-policies --show
       register: verify_crypto

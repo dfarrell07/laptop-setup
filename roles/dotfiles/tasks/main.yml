@@ -79,8 +79,11 @@
     mode: "0755"
     content: |
       #!/bin/sh
+      # Use '# gitleaks:allow' on a line to suppress a false positive
       if command -v gitleaks >/dev/null 2>&1; then
         gitleaks git --pre-commit --staged --redact --max-decode-depth 2
+      else
+        echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
       fi
 
 - name: Ensure gh config directory

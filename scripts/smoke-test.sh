@@ -434,8 +434,27 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # dnf-automatic
   timer="dnf-automatic.timer"
   command -v dnf5 &>/dev/null && timer="dnf5-automatic.timer"
-  if systemctl is-enabled "$timer" &>/dev/null; then record "dnf-automatic" "PASS"
+  if systemctl is-enabled "$timer" &>/dev/null && systemctl is-active "$timer" &>/dev/null; then
+    record "dnf-automatic" "PASS"
+  elif systemctl is-enabled "$timer" &>/dev/null; then
+    record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
+
+  # TLP power management (ThinkPad battery care)
+  if systemctl is-enabled tlp.service &>/dev/null && systemctl is-active tlp.service &>/dev/null; then
+    record "tlp-service" "PASS"
+  elif systemctl is-enabled tlp.service &>/dev/null; then
+    record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
+  else record "tlp-service" "WARN" "tlp.service not enabled"; fi
+  if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
+  else record "tlp-config" "FAIL" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
+  # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
+  if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
+    _bat_end=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo "?")
+    if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
+    else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
+    unset _bat_end
+  fi
 
   # Chrome policies (verify key security settings, not just file existence)
   if python3 -c "

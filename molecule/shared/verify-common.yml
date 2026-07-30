@@ -192,6 +192,32 @@
     that: verify_signingkey.stdout | length > 0
     fail_msg: "git user.signingkey is not configured — SSH signing key not set"
 
+- name: Verify ~/.config/git/allowed_signers exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/allowed_signers"
+  register: verify_allowed_signers
+
+- name: Assert allowed_signers exists and is non-empty
+  ansible.builtin.assert:
+    that:
+      - verify_allowed_signers.stat.exists
+      - verify_allowed_signers.stat.size > 0
+    fail_msg: "~/.config/git/allowed_signers missing or empty — SSH signature verification not configured"
+
+- name: Check allowed_signers contains sk-ssh-ed25519 key
+  ansible.builtin.command:
+    cmd: grep -q 'sk-ssh-ed25519' "{{ ansible_user_dir }}/.config/git/allowed_signers"
+  register: verify_allowed_signers_key
+  changed_when: false
+  failed_when: false
+  when: verify_allowed_signers.stat.exists
+
+- name: Assert allowed_signers contains sk-ssh-ed25519 key
+  ansible.builtin.assert:
+    that: verify_allowed_signers_key.rc == 0
+    fail_msg: "allowed_signers does not contain an sk-ssh-ed25519 key — YubiKey SSH signing key not registered"
+  when: verify_allowed_signers.stat.exists
+
 # --- Directories ---
 - name: Verify ~/bin directory exists
   ansible.builtin.stat:
