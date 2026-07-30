@@ -37,6 +37,10 @@
       ansible.builtin.command: rg --version
       changed_when: false
 
+    - name: Check fd-find is installed (Debian binary is fdfind, not fd)
+      ansible.builtin.command: fdfind --version
+      changed_when: false
+
     - name: Check shfmt is installed
       ansible.builtin.command: shfmt --version
       changed_when: false
