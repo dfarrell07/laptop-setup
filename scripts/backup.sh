@@ -50,6 +50,11 @@ OPTIONAL_FILES=(
   .boto
   .claude.json
   .config/gcloud/application_default_credentials.json
+  .kube/config
+  .aws/credentials
+  .aws/config
+  .config/containers/auth.json
+  .claude/.credentials.json
 )
 
 count=0

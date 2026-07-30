@@ -78,6 +78,13 @@
   notify: Reload sysctl
 
 # --- Firewall (drop zone) ---
+- name: Ensure firewalld is installed and running
+  ansible.builtin.systemd:
+    name: firewalld
+    state: started
+    enabled: true
+  failed_when: false
+
 - name: Set firewalld running fact
   ansible.builtin.set_fact:
     system_firewalld_running: >-

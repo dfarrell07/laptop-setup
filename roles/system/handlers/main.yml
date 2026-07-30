@@ -36,6 +36,7 @@
   ansible.builtin.systemd:
     name: sshd
     state: restarted
+  failed_when: false
 
 - name: Reload NetworkManager
   ansible.builtin.systemd:
@@ -58,6 +59,7 @@
   ansible.builtin.systemd:
     name: chronyd
     state: restarted
+  failed_when: false
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
