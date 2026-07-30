@@ -30,7 +30,7 @@ DOTFILES=(
   .claude-work/CLAUDE.md
   .config/i3/config
   .config/sway/config
-  .config/i3status-rust/config.toml
+  .config/i3status/config
   .config/aerospace/aerospace.toml
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
@@ -40,8 +40,26 @@ DOTFILES=(
   Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist
 )
 
+# Machine-specific overrides and secrets (gitignored — not in the repo)
+OPTIONAL_FILES=(
+  laptop-setup/config.yml
+  laptop-setup/scripts/vault-pass.sh
+  laptop-setup/CLAUDE.local.md
+  .config/claude/work-env
+)
+
 count=0
 for f in "${DOTFILES[@]}"; do
+  src="${HOME}/${f}"
+  if [ -f "$src" ]; then
+    dest="${BACKUP_DIR}/${f}"
+    mkdir -p "$(dirname "$dest")"
+    cp "$src" "$dest"
+    count=$((count + 1))
+  fi
+done
+
+for f in "${OPTIONAL_FILES[@]}"; do
   src="${HOME}/${f}"
   if [ -f "$src" ]; then
     dest="${BACKUP_DIR}/${f}"
