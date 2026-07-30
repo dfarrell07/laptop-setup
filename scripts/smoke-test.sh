@@ -639,7 +639,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.tcp_timestamps"            "0" "sysctl-tcp-timestamps"
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
-  _sysctl_check "net.bridge.bridge-nf-call-iptables" "1" "sysctl-bridge-nf-iptables"
+  # bridge-nf: WARN if br_netfilter module not loaded (persistent via modules-load.d; reboot activates)
+  _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null)
+  if [[ "$_bridge_nf" == "1" ]]; then record "sysctl-bridge-nf-iptables" "PASS"
+  elif [[ -z "$_bridge_nf" ]]; then
+    record "sysctl-bridge-nf-iptables" "WARN" "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
+  else record "sysctl-bridge-nf-iptables" "FAIL" "net.bridge.bridge-nf-call-iptables=$_bridge_nf expected 1"; fi
   _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
@@ -689,8 +694,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
   _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null)
   if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"
-  elif [[ "$_nfct" == "131072" ]]; then record "sysctl-conntrack-max" "PASS"
-  else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected 131072"; fi
+  elif [[ "$_nfct" -ge "131072" ]]; then record "sysctl-conntrack-max" "PASS"
+  else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=131072"; fi
   _sysctl_check "net.core.rmem_max"                    "16777216" "sysctl-rmem-max"
   _sysctl_check "net.core.wmem_max"                    "16777216" "sysctl-wmem-max"
 

@@ -373,6 +373,85 @@
       become: true
       tags: [become]
 
+- name: Install cosign (image signing and verification for Konflux pipelines)
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Download cosign binary
+      ansible.builtin.get_url:
+        url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-amd64"
+        dest: /usr/local/bin/cosign
+        checksum: "sha256:{{ packages_cosign_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+
+- name: Install tkn (Tekton CLI for Konflux pipeline inspection)
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if tkn is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/tkn version --component=cli
+      register: packages_tkn_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install tkn
+      when: packages_tkn_version not in (packages_tkn_check.stdout | default(''))
+      block:
+        - name: Download tkn tarball
+          vars:
+            _tkn_base: "https://github.com/tektoncd/cli/releases/download"
+            _tkn_file: "tkn_{{ packages_tkn_version }}_Linux_x86_64.tar.gz"
+          ansible.builtin.get_url:
+            url: "{{ _tkn_base }}/v{{ packages_tkn_version }}/{{ _tkn_file }}"
+            dest: /tmp/tkn.tar.gz
+            checksum: "sha256:{{ packages_tkn_sha256 }}"
+            mode: "0644"
+
+        - name: Extract tkn binary
+          ansible.builtin.unarchive:
+            src: /tmp/tkn.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: [tkn]
+          become: true
+          tags: [become]
+
+        - name: Set permissions on tkn
+          ansible.builtin.file:
+            path: /usr/local/bin/tkn
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Clean up tkn tarball
+          ansible.builtin.file:
+            path: /tmp/tkn.tar.gz
+            state: absent
+
+- name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
+  # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+    - profile == 'work'
+  block:
+    - name: Download ec binary
+      ansible.builtin.get_url:
+        url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_amd64"
+        dest: /usr/local/bin/ec
+        checksum: "sha256:{{ packages_ec_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+
 # --- Go install tools ---
 
 - name: Install Go tools

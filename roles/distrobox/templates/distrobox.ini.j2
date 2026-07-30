@@ -11,7 +11,7 @@ additional_packages="{{ distrobox_packages | join(' ') }}"
 
 # Host delegation symlinks
 {% for cmd in distrobox_host_exec_commands %}
-init_hooks=ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }};
+init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }} || true;
 {% endfor %}
 
 # Exports to host
