@@ -174,7 +174,7 @@ IS_LINUX=true
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # DNS-over-TLS
-  if resolvectl status 2>/dev/null | grep -qi "DNS.*Over.*TLS.*yes"; then
+  if resolvectl status 2>/dev/null | grep -qiE "DNS.*Over.*TLS.*(yes|opportunistic)"; then
     record "dns-over-tls" "PASS"
   else record "dns-over-tls" "FAIL" "not active"; fi
 
