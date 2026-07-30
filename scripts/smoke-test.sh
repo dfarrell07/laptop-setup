@@ -286,9 +286,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
   else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
-  # auditd kernel state: verify -e 2 is active in running kernel (requires root; WARN if not root or not immutable)
-  if auditctl -s 2>/dev/null | grep -q '^enabled 2'; then record "auditd-immutable" "PASS"
-  else record "auditd-immutable" "WARN" "auditd not in immutable mode (run as root to verify; or needs reboot after first deploy)"; fi
+  # auditd kernel state: verify -e 2 is active in running kernel (requires root/CAP_AUDIT_CONTROL)
+  if [[ $EUID -eq 0 ]]; then
+    if auditctl -s 2>/dev/null | grep -q '^enabled 2'; then record "auditd-immutable" "PASS"
+    else record "auditd-immutable" "WARN" "auditd not in immutable mode (may need reboot after initial deploy)"; fi
+  else
+    record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
+  fi
   # Auditd watch keys for new paths deployed by the system role
   for _key in power-config device-policy kernel-params kernel-modules; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
