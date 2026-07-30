@@ -44,3 +44,23 @@
       - verify_containers_dir.stat.exists
       - verify_containers_dir.stat.isdir
     fail_msg: "Containers config directory was not created"
+
+- name: Verify containers.conf is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  register: verify_containers_conf
+
+- name: Assert containers.conf exists
+  ansible.builtin.assert:
+    that: verify_containers_conf.stat.exists
+    fail_msg: "containers.conf was not deployed (log_driver and pids_limit needed for kind)"
+
+- name: Assert containers.conf sets log_driver to k8s-file
+  ansible.builtin.command:
+    cmd: grep -q 'log_driver.*k8s-file' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Assert containers.conf sets pids_limit to 65536
+  ansible.builtin.command:
+    cmd: grep -q 'pids_limit = 65536' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
