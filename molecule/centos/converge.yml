@@ -10,7 +10,8 @@
     - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
-        # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng not in Rocky 10 repos
+        # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng, fd-find not in Rocky 10 repos
+        # (fd-find has no EPEL 10 package; ripgrep IS in EPEL 10 and is included below)
         packages_cli:
           - git
           - make
@@ -27,6 +28,7 @@
           - socat
           - pipx
           - ShellCheck
+          - ripgrep
         packages_languages:
           - golang
           - python3
