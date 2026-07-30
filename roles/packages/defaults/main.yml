@@ -104,9 +104,10 @@ packages_apt:
   - ripgrep
   - fd-find
   - shfmt
+  - golang  # needed for packages_go_install; Debian 12 ships 1.19 (sufficient to bootstrap)
   - wl-clipboard  # wl-copy for tmux copy-pipe on Wayland (tmux.conf Linux clipboard chain)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
-  # yq is not in Debian stable repos (available in Ubuntu/unofficial PPAs only)
+  # yq: Debian 12 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
 
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
@@ -197,6 +198,7 @@ packages_brew:
   - gnupg
   - age
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
+  - nmap
   - transcrypt
   - ripgrep
   - fd  # fd-find on Linux; Homebrew package is 'fd'
