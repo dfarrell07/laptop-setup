@@ -330,9 +330,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$gshadow_mode" == "0" ]]; then record "gshadow-perms" "PASS"
   else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000"; fi
 
-  # TMOUT session timeout (CIS 5.5.5)
-  if [[ -f /etc/profile.d/tmout.sh ]]; then record "tmout" "PASS"
-  else record "tmout" "FAIL" "TMOUT not configured in /etc/profile.d/tmout.sh"; fi
+  # TMOUT session timeout (CIS 5.5.5) — verify readonly attribute and <=900s value
+  if grep -qE '^readonly TMOUT=[1-9][0-9]*' /etc/profile.d/tmout.sh 2>/dev/null; then
+    record "tmout" "PASS"
+  else record "tmout" "FAIL" "tmout.sh missing, not readonly, or TMOUT not set"; fi
 
   # /tmp noexec (CIS 1.1.2.x)
   if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
