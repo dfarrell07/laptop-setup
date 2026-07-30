@@ -85,8 +85,8 @@ else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
 
 # --- Dotfiles checks ---
 for f in .zshrc .gitconfig .tmux.conf .vimrc .bashrc; do
-  if [[ -f "$HOME/$f" ]]; then record "dotfile-$f" "PASS"
-  else record "dotfile-$f" "FAIL" "not deployed"; fi
+  if grep -q "Ansible managed" "$HOME/$f" 2>/dev/null; then record "dotfile-$f" "PASS"
+  else record "dotfile-$f" "FAIL" "not deployed or not Ansible-managed"; fi
 done
 
 # SSH config and permissions

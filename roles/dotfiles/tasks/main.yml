@@ -137,10 +137,11 @@
     mode: "0644"
   when: ansible_system == 'Linux'
 
-- name: Mask gcr-ssh-agent socket (GNOME 50+ activates via gnome-session-services.target)
+- name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
   ansible.builtin.systemd:
     name: "{{ item }}"
     scope: user
+    state: stopped
     masked: true
   loop:
     - gcr-ssh-agent.socket
