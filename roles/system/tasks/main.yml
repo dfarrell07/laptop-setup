@@ -898,6 +898,31 @@
     dest: /etc/at.allow
     mode: "0600"
 
+- name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
+  ansible.builtin.file:
+    path: /etc/cron.deny
+    state: absent
+
+- name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
+  ansible.builtin.file:
+    path: /etc/at.deny
+    state: absent
+
+- name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/crontab, mode: "0600"}
+    - {path: /etc/cron.hourly, mode: "0700"}
+    - {path: /etc/cron.daily, mode: "0700"}
+    - {path: /etc/cron.weekly, mode: "0700"}
+    - {path: /etc/cron.monthly, mode: "0700"}
+    - {path: /etc/cron.d, mode: "0700"}
+  failed_when: false
+
 # --- Login banner ---
 - name: Deploy login banner
   ansible.builtin.copy:
@@ -1012,6 +1037,43 @@
   when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
   changed_when: true
   failed_when: false
+
+# --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
+- name: Find non-root UID 0 accounts (CIS 6.2.9)
+  ansible.builtin.shell:
+    cmd: "awk -F: '($3==0 && $1!=\"root\"){print $1}' /etc/passwd"
+  register: system_uid0_accounts
+  changed_when: false
+
+- name: Assert no non-root UID 0 accounts (CIS 6.2.9)
+  ansible.builtin.assert:
+    that: system_uid0_accounts.stdout | length == 0
+    fail_msg: "Non-root UID 0 accounts found: {{ system_uid0_accounts.stdout }}"
+    success_msg: "CIS 6.2.9: no non-root UID 0 accounts"
+
+- name: Find accounts with empty passwords in shadow (CIS 6.2.2)
+  ansible.builtin.shell:
+    cmd: "awk -F: '($2==\"\"){print $1}' /etc/shadow"
+  register: system_empty_pw_accounts
+  changed_when: false
+
+- name: Assert no empty password accounts (CIS 6.2.2)
+  ansible.builtin.assert:
+    that: system_empty_pw_accounts.stdout | length == 0
+    fail_msg: "Accounts with empty passwords: {{ system_empty_pw_accounts.stdout }}"
+    success_msg: "CIS 6.2.2: no empty passwords"
+
+- name: Find accounts with unmasked passwords in passwd (CIS 6.2.1)
+  ansible.builtin.shell:
+    cmd: "awk -F: '($2!=\"x\" && $2!=\"*\" && $2!=\"!\"){print $1}' /etc/passwd"
+  register: system_unshadowed_accounts
+  changed_when: false
+
+- name: Assert all passwd entries use shadowed passwords (CIS 6.2.1)
+  ansible.builtin.assert:
+    that: system_unshadowed_accounts.stdout | length == 0
+    fail_msg: "Unshadowed passwd entries: {{ system_unshadowed_accounts.stdout }}"
+    success_msg: "CIS 6.2.1: all passwd entries shadowed"
 
 # --- Critical file permissions (CIS 6.1.2/6.1.4/6.1.6/6.1.8) ---
 - name: Enforce permissions on critical auth files
