@@ -5,6 +5,16 @@ set $term {{ desktop_i3_terminal }}
 
 font pango:DejaVu Sans Mono 10
 
+# HiDPI output scaling (override desktop_sway_hidpi_scale in config.yml)
+output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }}
+
+# Wayland-native rendering for Qt and Electron apps
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway
+exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+
+# Notification daemon
+exec mako
+
 # Idle and lock
 exec swayidle -w \
     timeout 300 'swaylock -f -c 000000' \
