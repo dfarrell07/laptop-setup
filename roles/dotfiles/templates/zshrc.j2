@@ -21,6 +21,7 @@ export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000
+unsetopt SHARE_HISTORY  # oh-my-zsh sets this; unset so APPEND_HISTORY controls write behavior
 setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 {% if ansible_system | default('Linux') == 'Darwin' %}
 export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
@@ -91,7 +92,7 @@ ccp() {
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
-ca() { local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
+ca() { command -v fzf &>/dev/null || { echo "ca: fzf not installed" >&2; return 1; }; local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
 {% if profile == 'work' %}
 cwt() {
   local n="${1:?Usage: cwt <worktree-name>}"
@@ -126,10 +127,13 @@ alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
 
 # --- Kubernetes tool completions ---
+# Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit }
 command -v kubectl &>/dev/null && source <(kubectl completion zsh)
 command -v oc &>/dev/null && source <(oc completion zsh)
 command -v helm &>/dev/null && source <(helm completion zsh)
 command -v kind &>/dev/null && source <(kind completion zsh)
+command -v kustomize &>/dev/null && source <(kustomize completion zsh)
 
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}
