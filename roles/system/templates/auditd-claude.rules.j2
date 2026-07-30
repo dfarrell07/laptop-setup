@@ -68,6 +68,10 @@
 -w /var/lib/aide/ -p wa -k aide-integrity
 -w /etc/aide.conf -p wa -k aide-integrity
 
+# TLP battery/power configuration changes
+-w /etc/tlp.d/ -p wa -k power-config
+-w /etc/tlp.conf -p wa -k power-config
+
 # Privilege escalation syscalls (CIS benchmark)
 -a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -k privilege-escalation
 -a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -k privilege-escalation

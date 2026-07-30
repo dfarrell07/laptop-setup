@@ -37,7 +37,7 @@ if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
   case "$ID" in
-    fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|alma) OS_FAMILY="rhel" ;;
+    fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
 record "os_family" "pass" "$OS_FAMILY"

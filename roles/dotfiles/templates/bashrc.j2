@@ -9,8 +9,19 @@ HISTFILESIZE=50000
 HISTCONTROL=ignoredups:erasedups
 shopt -s histappend
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
+export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output on every cd
+export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
+command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
+{% if ansible_system | default('Linux') == 'Linux' %}
 export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
+{% else %}
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
+{% endif %}
+{% if profile == 'work' %}
+export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+{% endif %}
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"
 command -v zoxide &>/dev/null && eval "$(zoxide init bash)"
