@@ -25,6 +25,10 @@ export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 # --- Tool hooks (silently skip if not installed) ---
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+{% if ansible_system | default('Linux') == 'Linux' %}
+[[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+[[ -f /usr/share/fzf/shell/completion.zsh ]] && source /usr/share/fzf/shell/completion.zsh
+{% endif %}
 
 # --- Claude Code API endpoint guard ---
 _claude_check_base_url() {

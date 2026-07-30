@@ -76,4 +76,4 @@
   register: git_repos_remote_result
   failed_when:
     - git_repos_remote_result.rc != 0
-    - "'No such file' not in (git_repos_remote_result.stderr | default(''))"
+    - "'No such file' not in ((git_repos_remote_result.msg | default('')) + (git_repos_remote_result.stderr | default('')))"
