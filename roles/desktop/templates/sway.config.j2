@@ -89,6 +89,13 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
+# Manual screen lock ($mod+l is taken by focus-right; use $mod+Ctrl+l)
+bindsym $mod+Ctrl+l exec swaylock -f -c 000000
+
+# Screenshot (grim + slurp)
+bindsym Print exec grim ~/Pictures/screenshot-$(date +%F-%T).png
+bindsym $mod+Print exec grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%F-%T).png
+
 # Audio (PipeWire via pactl)
 bindsym XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +5%
 bindsym XF86AudioLowerVolume exec pactl set-sink-volume @DEFAULT_SINK@ -5%
