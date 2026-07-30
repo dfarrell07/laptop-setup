@@ -114,6 +114,13 @@
     mode: "0644"
 
 # --- Sysctl hardening ---
+# Merge system_sysrq into the dict so config.yml can override without replacing
+# the entire system_sysctl_hardening dict. Default is 0 (CIS); set 176 in
+# config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
+- name: Merge system_sysrq into sysctl hardening dict
+  ansible.builtin.set_fact:
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'kernel.sysrq': system_sysrq | int}) }}"
+
 - name: Deploy sysctl hardening config
   ansible.builtin.template:
     src: sysctl-hardening.conf.j2
