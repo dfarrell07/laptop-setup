@@ -55,6 +55,15 @@
       Use rootless Podman or rootless Docker instead.
   when: "'docker' in containers_user_groups.stdout.split()"
 
+- name: Enable podman user socket (needed for kind, docker-compatible CLIs, devcontainers)
+  ansible.builtin.systemd:
+    name: podman.socket
+    state: started
+    enabled: true
+    scope: user
+  when: ansible_system == 'Linux'
+  failed_when: false
+
 - name: Disable Docker socket by default
   ansible.builtin.systemd:
     name: docker.socket
