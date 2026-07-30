@@ -19,6 +19,14 @@
   ansible.builtin.command: fzf --version
   changed_when: false
 
+- name: Check ripgrep is installed
+  ansible.builtin.command: rg --version
+  changed_when: false
+
+- name: Check fd-find is installed
+  ansible.builtin.command: fd --version
+  changed_when: false
+
 - name: Verify containers config directory
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/containers"
