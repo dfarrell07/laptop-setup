@@ -1,12 +1,12 @@
 ---
 # Sysctl hardening values
 system_sysctl_hardening:
-  kernel.yama.ptrace_scope: 1
-  kernel.kptr_restrict: 1
-  kernel.io_uring_disabled: 1
-  kernel.unprivileged_bpf_disabled: 1
-  kernel.dmesg_restrict: 1
-  kernel.perf_event_paranoid: 2
+  kernel.yama.ptrace_scope: 1      # CIS — restrict ptrace to parent process; value 2=admin-only, 3=none
+  kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
+  kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
+  kernel.unprivileged_bpf_disabled: 1  # CIS — prevent unprivileged eBPF program loading (frequent exploit path)
+  kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
+  kernel.perf_event_paranoid: 2    # CIS — deny unprivileged perf_event_open; CAP_PERFMON required for profiling
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0
@@ -25,8 +25,8 @@ system_sysctl_hardening:
   net.ipv4.conf.default.secure_redirects: 0
   net.ipv6.conf.all.accept_ra: 0
   net.ipv6.conf.default.accept_ra: 0
-  fs.suid_dumpable: 0
-  kernel.core_pattern: "|/bin/false"
+  fs.suid_dumpable: 0           # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks)
+  kernel.core_pattern: "|/bin/false"  # pipe core dumps to exit-immediately process (silently discard)
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
   net.ipv4.tcp_syncookies: 1
@@ -34,21 +34,20 @@ system_sysctl_hardening:
   fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
-  kernel.sysrq: 0            # CIS — disable SysRq; set 176 for sync+remount-ro+reboot if needed for kernel debugging
   kernel.panic: 10           # reboot after 10s panic; set 0 to preserve panic state for kernel debugging
-  net.ipv4.tcp_rfc1337: 1
-  kernel.kexec_load_disabled: 1
-  net.core.bpf_jit_harden: 1
+  net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
+  kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust)
+  net.core.bpf_jit_harden: 1      # mitigates Spectre-class JIT leaks; value 1=unprivileged only (equiv to 2 since unprivileged_bpf=1)
   fs.inotify.max_user_watches: 1048576
   fs.inotify.max_user_instances: 8192
   net.ipv4.ip_forward: 1  # required for Kubernetes/OVN-K pod routing and Tailscale subnet routing
   net.ipv6.conf.all.forwarding: 1  # required for Kubernetes/OVN-K pod routing and Tailscale subnet routing
-  net.bridge.bridge-nf-call-iptables: 1
-  net.bridge.bridge-nf-call-ip6tables: 1
+  net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
+  net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
   net.netfilter.nf_conntrack_max: 131072  # prevent 'table full, dropping packet' under OVN-K/Submariner load
   net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
   net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
-  kernel.randomize_va_space: 2
+  kernel.randomize_va_space: 2    # CIS — full ASLR (value 2=stack+VDSO+mmap+heap; value 1=partial)
   # note: use_tempaddr omitted — SLAAC is disabled via accept_ra=0, so tempaddr has no effect
 
 # Firewall

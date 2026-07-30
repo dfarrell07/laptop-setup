@@ -141,7 +141,14 @@
     - ansible_architecture == 'x86_64'
     - profile == 'work'
   block:
-    - name: Check if opm is installed and read its OCP version marker
+    - name: Check if opm binary exists
+      ansible.builtin.command:
+        cmd: /usr/local/bin/opm version
+      register: packages_opm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Read opm OCP version marker
       ansible.builtin.slurp:
         src: /usr/local/bin/.opm-ocp-version
       register: packages_opm_marker
@@ -149,6 +156,7 @@
 
     - name: Download and install opm
       when: >-
+        packages_opm_check.rc != 0 or
         'content' not in packages_opm_marker or
         packages_oc_version not in (packages_opm_marker.content | b64decode)
       block:

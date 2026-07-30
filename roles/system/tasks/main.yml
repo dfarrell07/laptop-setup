@@ -1249,7 +1249,7 @@
     argv:
       - awk
       - "-F:"
-      - "($4==0 && $1!=\"root\"){print $1}"
+      - "($4==0 && $1!~/^(root|sync|shutdown|halt|operator)$/){print $1}"
       - /etc/passwd
   register: system_gid0_accounts
   changed_when: false
