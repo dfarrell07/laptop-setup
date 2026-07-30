@@ -235,21 +235,27 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "sshd-hardening" "WARN" "config deployed but PasswordAuthentication not disabled"; fi
   else record "sshd-hardening" "FAIL" "drop-in config not deployed"; fi
 
-  # auditd rules
-  if [[ -f /etc/audit/rules.d/claude-code.rules ]]; then record "auditd-rules" "PASS"
-  else record "auditd-rules" "FAIL" "not deployed"; fi
+  # auditd rules (verify immutability flag and sentinel watch rule)
+  if grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
+     grep -q 'claude-sensitive-write' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
+    record "auditd-rules" "PASS"
+  else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
 
-  # kernel module blacklist
-  if [[ -f /etc/modprobe.d/hardening.conf ]]; then record "modprobe-hardening" "PASS"
-  else record "modprobe-hardening" "FAIL" "not deployed"; fi
+  # kernel module blacklist (verify key blacklist entries)
+  if grep -q 'install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
+     grep -q 'blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
+    record "modprobe-hardening" "PASS"
+  else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
 
-  # core dump disabled
-  if [[ -f /etc/systemd/coredump.conf.d/disable.conf ]]; then record "coredump-disabled" "PASS"
-  else record "coredump-disabled" "FAIL" "config not deployed"; fi
+  # core dump disabled (verify Storage=none not just file existence)
+  if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
+    record "coredump-disabled" "PASS"
+  else record "coredump-disabled" "FAIL" "coredump Storage=none not configured"; fi
 
-  # journald persistent storage (log lost on reboot if not persistent)
-  if [[ -f /etc/systemd/journald.conf.d/99-hardening.conf ]]; then record "journald-persistent" "PASS"
-  else record "journald-persistent" "FAIL" "journald hardening config not deployed"; fi
+  # journald persistent storage (verify Storage=persistent, not just file existence)
+  if grep -q 'Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
+    record "journald-persistent" "PASS"
+  else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
   if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
@@ -293,9 +299,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
   else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
 
-  # sudoers hardening drop-in
-  if [[ -f /etc/sudoers.d/99-hardening ]]; then record "sudoers-hardening" "PASS"
-  else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing"; fi
+  # sudoers hardening drop-in (verify use_pty and logfile — not just file existence)
+  if grep -q 'use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
+     grep -q 'logfile=' /etc/sudoers.d/99-hardening 2>/dev/null; then
+    record "sudoers-hardening" "PASS"
+  else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
 
   # pwhistory remember=24 (CIS 5.3.5)
   if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
