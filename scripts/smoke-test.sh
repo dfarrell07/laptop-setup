@@ -215,11 +215,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
   fi
 
-  # USBGuard
+  # USBGuard (verify both installed and service active)
   if command -v usbguard &>/dev/null; then
-    if usbguard list-rules &>/dev/null; then record "usbguard" "PASS"
-    else record "usbguard" "WARN" "installed but cannot list rules"; fi
+    if systemctl is-active usbguard &>/dev/null; then record "usbguard" "PASS"
+    else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
   else record "usbguard" "FAIL" "not installed"; fi
+
+  # auditd service enabled and running
+  if systemctl is-active auditd &>/dev/null && systemctl is-enabled auditd &>/dev/null; then
+    record "auditd-service" "PASS"
+  else record "auditd-service" "FAIL" "auditd not active or not enabled"; fi
 
   # Crypto policy
   if command -v update-crypto-policies &>/dev/null; then
