@@ -106,9 +106,8 @@
 - name: Export oc and kubectl to host
   ansible.builtin.command:
     cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
+    creates: "{{ ansible_env.HOME }}/.local/bin/{{ item }}"
   loop: [oc, kubectl]
-  changed_when: false
-  failed_when: false
 
 # --- Verify ---
 - name: Confirm Python works
@@ -116,7 +115,12 @@
     cmd: python3 --version
   changed_when: false
 
-- name: Confirm oc is available
+- name: Confirm oc exported to host shell
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.local/bin/oc"
+  register: container_oc_export_stat
+
+- name: Confirm oc is available (container side)
   ansible.builtin.command:
     cmd: /usr/local/bin/oc version --client
   register: container_oc_version
