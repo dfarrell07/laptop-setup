@@ -73,13 +73,16 @@
   when: ansible_system == 'Linux'
   failed_when: false
 
-- name: Apply /dev/shm noexec immediately via remount  # noqa: command-instead-of-module
+- name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: mount -o remount,noexec /dev/shm
+    cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
   changed_when: true
   when:
     - ansible_system == 'Linux'
-    - "'noexec' not in (system_devshm_opts.stdout | default(''))"
+    - >-
+      'noexec' not in (system_devshm_opts.stdout | default('')) or
+      'nosuid' not in (system_devshm_opts.stdout | default('')) or
+      'nodev' not in (system_devshm_opts.stdout | default(''))
   failed_when: false
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
@@ -847,7 +850,9 @@
       MulticastDNS=no
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
 
@@ -1510,6 +1515,30 @@
     - system_aide_enabled | bool
     - system_tlp_enabled | bool
   notify: Reinitialize AIDE database
+
+- name: Add crypto-policies to AIDE monitoring (system-wide crypto algorithm enforcement)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/crypto-policies'
+    line: '/etc/crypto-policies NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+  # Default aide.conf only PERMS-checks /etc; without this, root silently
+  # re-enabling SHA1 (update-crypto-policies --set DEFAULT) goes undetected.
+
+- name: Add SELinux policy directory to AIDE monitoring
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/selinux'
+    line: '/etc/selinux NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+  # Default aide.conf only PERMS-checks /etc; auditd watches /etc/selinux for
+  # writes (-k mac-policy) but AIDE needs content-level integrity verification.
 
 - name: Check if AIDE database exists
   ansible.builtin.stat:
