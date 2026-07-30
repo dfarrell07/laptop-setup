@@ -4,6 +4,10 @@ export GOPATH="$HOME/go"
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
 export TMUX_TMPDIR="$HOME/.local/run/tmux"
+HISTSIZE=50000
+HISTFILESIZE=50000
+HISTCONTROL=ignoredups:erasedups
+shopt -s histappend
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"

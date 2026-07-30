@@ -21,6 +21,7 @@ export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000
+setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 {% if ansible_system | default('Linux') == 'Darwin' %}
 export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
 {% endif %}
