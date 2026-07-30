@@ -117,3 +117,4 @@
       ansible.builtin.command:
         cmd: which pactl
       changed_when: false
+      when: (desktop_sway_packages | default([])) | length > 0  # packages emptied in converge; skip if not installed
