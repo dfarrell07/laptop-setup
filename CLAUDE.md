@@ -23,6 +23,10 @@ make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
+make ci               # Lint + syntax + all non-VM molecule tests (mirrors CI pipeline)
+make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
+make hooks            # Re-install git hooks without full bootstrap
+make commitlint       # Validate commit messages from origin/main..HEAD
 ```
 
 ## Project Structure
@@ -30,14 +34,14 @@ make csb-audit        # Preflight + common dry-run (CSB detection audit)
 - **site.yml** — 3 plays: system (become), user (no become), container (podman connection)
 - **13 roles**: common, repos_dnf, system, dotfiles, packages, ssh, git_repos, notes, redhat, containers, desktop, distrobox, claude
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
-- **scripts/** — preflight.sh, smoke-test.sh, backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
+- **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks), backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
 - **molecule/** — Test scenarios (fedora, centos, debian, vm, macos) + shared verify includes
 
 ## Key Patterns
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
-- **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS), `hybrid` (CSB or RHEL, full sudo), `container` (CSB restricted, minimal host).
+- **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS — everything on host), `hybrid` (CSB/RHEL with sudo — basics on host + dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides)
 
