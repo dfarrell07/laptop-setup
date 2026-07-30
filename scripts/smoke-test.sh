@@ -260,6 +260,20 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
   else record "root-locked" "FAIL" "root account not locked"; fi
 
+  # faillock.conf (deny=5, local_users_only for SSSD safety)
+  if grep -q '^deny = 5' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
+  else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
+  if grep -q '^local_users_only' /etc/security/faillock.conf 2>/dev/null; then record "faillock-local-only" "PASS"
+  else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
+
+  # pwquality.conf (minlen=14)
+  if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
+  else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
+
+  # sudoers hardening drop-in
+  if [[ -f /etc/sudoers.d/99-hardening ]]; then record "sudoers-hardening" "PASS"
+  else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing"; fi
+
   # dnf-automatic
   timer="dnf-automatic.timer"
   command -v dnf5 &>/dev/null && timer="dnf5-automatic.timer"
