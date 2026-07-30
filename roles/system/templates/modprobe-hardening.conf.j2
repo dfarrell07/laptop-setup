@@ -39,6 +39,11 @@ install usb_storage /bin/false
 blacklist uas
 install uas /bin/false
 
+# vivid: virtual video test driver — CVE history (OOB write, privilege escalation),
+# ships in every Fedora kernel, no legitimate use on workstations.
+blacklist vivid
+install vivid /bin/false
+
 {% if system_disable_bluetooth | default(false) | bool %}
 # Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
 # Default is enabled (false). To disable BT: set system_disable_bluetooth: true.
