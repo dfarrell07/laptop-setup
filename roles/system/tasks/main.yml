@@ -491,6 +491,7 @@
   when:
     - ssh_port | int != 22
     - ansible_selinux.status | default('') == 'enabled'
+  failed_when: false
 
 # --- Crypto policy ---
 - name: Check current crypto policy
@@ -507,6 +508,7 @@
     - system_crypto_policy.rc == 0
     - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
   changed_when: true
+  failed_when: false
   notify: Restart sshd
 
 # --- Kernel modules for kind ---

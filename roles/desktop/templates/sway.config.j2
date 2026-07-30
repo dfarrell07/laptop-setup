@@ -9,7 +9,7 @@ font pango:DejaVu Sans Mono 10
 output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }}
 
 # Wayland-native rendering for Qt and Electron apps
-exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland
 exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
 
 # Notification daemon
