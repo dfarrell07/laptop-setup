@@ -88,18 +88,18 @@
     mode: "0644"
   when: desktop_effective == 'sway'
 
-# --- i3status-rust config (shared by i3 and Sway) ---
-- name: Ensure i3status-rust config directory
+# --- i3status config (shared by i3 and Sway) ---
+- name: Ensure i3status config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/i3status-rust"
+    path: "{{ ansible_user_dir }}/.config/i3status"
     state: directory
     mode: "0755"
   when: desktop_effective in ['i3', 'sway']
 
-- name: Deploy i3status-rust config
+- name: Deploy i3status config
   ansible.builtin.template:
-    src: i3status-rust.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/i3status-rust/config.toml"
+    src: i3status.conf.j2
+    dest: "{{ ansible_user_dir }}/.config/i3status/config"
     mode: "0644"
   when: desktop_effective in ['i3', 'sway']
 

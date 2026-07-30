@@ -38,6 +38,7 @@
   community.general.homebrew:
     name: "{{ packages_brew }}"
     state: present
+    update_homebrew: true
   when: ansible_os_family == 'Darwin'
 
 - name: Add Homebrew taps (macOS)

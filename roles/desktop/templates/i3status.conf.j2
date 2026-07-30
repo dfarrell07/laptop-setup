@@ -1,0 +1,59 @@
+# {{ ansible_managed }}
+
+general {
+    colors = true
+    interval = 5
+}
+
+order += "cpu_usage"
+order += "memory"
+order += "disk /"
+order += "battery 0"
+order += "volume master"
+order += "time"
+order += "ethernet _first_"
+order += "wireless _first_"
+
+cpu_usage {
+    format = " %usage"
+    max_threshold = 80
+}
+
+memory {
+    format = " %used / %total"
+    threshold_degraded = "10%"
+    format_degraded = " LOW (%available)"
+}
+
+disk "/" {
+    format = " %avail"
+    low_threshold = 10
+}
+
+battery 0 {
+    format = " %status %percentage %remaining"
+    last_full_capacity = true
+    status_chr = "⚡"
+    status_bat = "🔋"
+    status_full = "✓"
+}
+
+volume master {
+    format = " %volume"
+    format_muted = "🔇 muted"
+    device = "default"
+}
+
+time {
+    format = " %a %d %b %H:%M"
+}
+
+ethernet _first_ {
+    format_up = " %ip"
+    format_down = ""
+}
+
+wireless _first_ {
+    format_up = " (%quality) %ip"
+    format_down = ""
+}
