@@ -102,6 +102,10 @@ sshdir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%Lp' "$HOME/.ss
 if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
+homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
+if [[ "$homedir_perms" == "750" ]]; then record "home-dir-perms" "PASS"
+else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected 750 (CIS)"; fi
+
 # --- Git security checks ---
 for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub"; do
   key="${check%%=*}" expected="${check#*=}"
@@ -153,6 +157,11 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
   if [[ "$perms" == "700" ]]; then record "perms(${d##*/})" "PASS"
   else record "perms(${d##*/})" "FAIL" "permissions $perms, expected 700"; fi
 done
+
+# Home directory permissions (CIS 6.2.x — 750 or stricter)
+home_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
+if [[ "$home_perms" == "750" ]]; then record "home-dir-perms" "PASS"
+else record "home-dir-perms" "WARN" "home dir permissions $home_perms, CIS recommends 750"; fi
 
 # Config file validation
 if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
@@ -577,6 +586,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.all.log_martians"      "1" "sysctl-log-martians"
   _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
+  # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
+  _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null)
+  if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"
+  elif [[ "$_nfct" == "131072" ]]; then record "sysctl-conntrack-max" "PASS"
+  else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected 131072"; fi
 
 fi
 

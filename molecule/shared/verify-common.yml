@@ -117,6 +117,30 @@
     that: verify_ssh_kex.rc == 0
     fail_msg: "SSH config missing KexAlgorithms directive — template regression?"
 
+- name: Check SSH config has Ciphers directive
+  ansible.builtin.command:
+    cmd: grep -q 'Ciphers' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  failed_when: false
+  register: verify_ssh_ciphers
+
+- name: Assert SSH config has Ciphers directive
+  ansible.builtin.assert:
+    that: verify_ssh_ciphers.rc == 0
+    fail_msg: "SSH config missing Ciphers directive — template regression?"
+
+- name: Check SSH config has MACs directive
+  ansible.builtin.command:
+    cmd: grep -q '^    MACs' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  failed_when: false
+  register: verify_ssh_macs
+
+- name: Assert SSH config has MACs directive
+  ansible.builtin.assert:
+    that: verify_ssh_macs.rc == 0
+    fail_msg: "SSH config missing MACs directive — template regression?"
+
 # --- Git security ---
 - name: Check git core.fsmonitor
   ansible.builtin.command: git config --global core.fsmonitor
