@@ -14,7 +14,7 @@ make lint             # ansible-lint + yamllint + shellcheck
 make container        # Distrobox/toolbox dev container
 make container-rebuild # Rebuild container from scratch
 make test-fedora      # Molecule Fedora tests (fast, Podman)
-make test-centos      # Molecule CentOS Stream tests
+make test-centos      # Molecule Rocky Linux 10 tests
 make test-debian      # Molecule Debian tests
 make test-macos       # Molecule macOS tests
 make test-vm          # Molecule VM tests (full, Vagrant+libvirt)

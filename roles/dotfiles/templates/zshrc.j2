@@ -17,6 +17,7 @@ export AWS_PROFILE="{{ dotfiles_aws_profile }}"
 {% endif %}
 export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
 export GOPATH="$HOME/go"
+export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000
@@ -119,6 +120,12 @@ alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 
 # --- Task queue ---
 cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
+
+# --- Kubernetes tool completions ---
+command -v kubectl &>/dev/null && source <(kubectl completion zsh)
+command -v oc &>/dev/null && source <(oc completion zsh)
+command -v helm &>/dev/null && source <(helm completion zsh)
+command -v kind &>/dev/null && source <(kind completion zsh)
 
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}

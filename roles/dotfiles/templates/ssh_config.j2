@@ -15,12 +15,24 @@ Host *
 {% endif %}
     ControlPersist 120
 
-Host github.com gh gist
+Host github.com gist.github.com gh gist
     HostName github.com
     User git
     IdentityFile ~/.ssh/id_ed25519_sk
     IdentitiesOnly yes
     PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
+
+{% if profile == 'work' %}
+Host code.engineering.redhat.com
+    User dfarrell
+    IdentityFile ~/.ssh/id_rsa_redhat
+    IdentitiesOnly yes
+
+Host gitlab.cee.redhat.com
+    User git
+    IdentityFile ~/.ssh/id_rsa_redhat
+    IdentitiesOnly yes
+{% endif %}
 
 {% if profile == 'work' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
 Host internal-git

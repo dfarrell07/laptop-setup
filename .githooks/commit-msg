@@ -3,6 +3,11 @@
 msg=$(head -1 "$1")
 first=$(echo "$msg" | awk '{print $1}')
 
+# Allow git autosquash prefixes unchanged
+case "$msg" in
+  squash!*|fixup!*|amend!*) exit 0 ;;
+esac
+
 # Check capitalized
 if ! echo "$msg" | grep -qE '^[A-Z]'; then
   echo "ERROR: Capitalize the subject line" >&2

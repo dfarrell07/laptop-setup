@@ -235,6 +235,9 @@
 - name: Deploy safe direnv config
   ansible.builtin.copy:
     content: |
+      # strict_env scrubs the environment before loading .envrc.
+      # Your .envrc must explicitly export PATH, GOPATH, etc. or they will be missing.
+      # Example minimal .envrc: source_env_if_exists .env; PATH_add bin
       [global]
       strict_env = true
       disable_stdin = true

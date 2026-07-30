@@ -68,14 +68,22 @@
   when: distrobox_tool != 'none'
   failed_when: false
 
+- name: Check Podman socket is active
+  ansible.builtin.command:
+    cmd: systemctl --user is-active podman.socket
+  register: distrobox_podman_socket_active
+  changed_when: false
+  failed_when: false
+  when: distrobox_tool != 'none'
+
 - name: Warn if Podman socket failed
   ansible.builtin.debug:
     msg: >-
-      Podman socket enablement failed. kind will not work without it.
+      Podman socket is not active. kind will not work without it.
       Check: systemctl --user status podman.socket
   when:
-    - distrobox_podman_socket is defined
-    - distrobox_podman_socket.rc | default(0) != 0
+    - distrobox_tool != 'none'
+    - distrobox_podman_socket_active.rc | default(1) != 0
 
 # --- Check if container exists ---
 - name: Check if container exists
