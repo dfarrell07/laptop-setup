@@ -15,6 +15,7 @@
   ansible.builtin.command:
     cmd: firewall-cmd --reload
   changed_when: true
+  failed_when: false
 
 - name: Restart tailscaled
   ansible.builtin.systemd:
@@ -56,6 +57,7 @@
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
   changed_when: true
+  failed_when: false
 
 - name: Restart chronyd
   ansible.builtin.systemd:

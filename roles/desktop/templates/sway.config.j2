@@ -121,11 +121,18 @@ input "type:touchpad" {
     middle_emulation enabled
 }
 
-input "type:pointer" {
+# TrackPoint scroll: on_button_down (hold middle button) must be scoped to the
+# TrackPoint device only — applying it via 'type:pointer' breaks Bluetooth mice.
+# Find the exact identifier with: swaymsg -t get_inputs | grep -A2 TrackPoint
+# Then set desktop_sway_trackpoint_id in config.yml, e.g.:
+#   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"
+{% if desktop_sway_trackpoint_id is defined %}
+input "{{ desktop_sway_trackpoint_id }}" {
     scroll_method on_button_down
     scroll_button 274
     scroll_factor 0.5
 }
+{% endif %}
 
 # Status bar
 bar {
