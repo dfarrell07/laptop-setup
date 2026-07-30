@@ -21,7 +21,9 @@
 
 - name: Warn if Claude install failed
   ansible.builtin.debug:
-    msg: "WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked). Install manually: curl -fsSL {{ claude_install_url }} | bash"
+    msg: >-
+      WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
+      Install manually: curl -fsSL {{ claude_install_url }} | bash
   when:
     - claude_install_result is defined
     - claude_install_result.rc | default(0) != 0
