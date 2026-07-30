@@ -172,6 +172,16 @@
     that: verify_auto_remote.stdout == 'true'
     fail_msg: "git push.autoSetupRemote not set"
 
+- name: Check git fetch.prune
+  ansible.builtin.command: git config --global fetch.prune
+  register: verify_fetch_prune
+  changed_when: false
+
+- name: Assert fetch.prune is true
+  ansible.builtin.assert:
+    that: verify_fetch_prune.stdout == 'true'
+    fail_msg: "git fetch.prune not set to true — stale remote-tracking branches will accumulate"
+
 - name: Check git commit.gpgsign
   ansible.builtin.command: git config --global commit.gpgsign
   register: verify_gpgsign

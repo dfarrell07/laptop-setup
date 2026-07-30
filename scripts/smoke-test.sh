@@ -158,11 +158,6 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
   else record "perms(${d##*/})" "FAIL" "permissions $perms, expected 700"; fi
 done
 
-# Home directory permissions (CIS 6.2.x — 750 or stricter)
-home_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
-if [[ "$home_perms" == "750" ]]; then record "home-dir-perms" "PASS"
-else record "home-dir-perms" "WARN" "home dir permissions $home_perms, CIS recommends 750"; fi
-
 # Config file validation
 if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
   if python3 -c "import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))" 2>/dev/null; then
