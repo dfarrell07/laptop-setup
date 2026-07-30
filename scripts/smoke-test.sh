@@ -485,11 +485,27 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
   if grep -qE '^PASS_WARN_AGE[[:space:]]+7$' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
   else record "pass-warn-age" "FAIL" "PASS_WARN_AGE not set to 7 in login.defs"; fi
+  if grep -qE '^HOME_MODE[[:space:]]+0750$' /etc/login.defs 2>/dev/null; then record "home-mode" "PASS"
+  else record "home-mode" "FAIL" "HOME_MODE not set to 0750 in login.defs (CIS: explicit home dir permissions)"; fi
 
   # WiFi MAC address randomization (privacy)
   if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
     record "wifi-mac-rand" "PASS"
   else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
+
+  # NM dns=systemd-resolved (required for Tailscale MagicDNS split-DNS)
+  if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf 2>/dev/null; then
+    record "nm-dns-resolved" "PASS"
+  else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
+
+  # NM wifi-powersave=2 (prevents latency spikes and drops on ThinkPad)
+  if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf 2>/dev/null; then
+    record "nm-wifi-powersave" "PASS"
+  else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
+
+  # Console keymap
+  if grep -q '^KEYMAP=us' /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
+  else record "vconsole-keymap" "WARN" "KEYMAP=us not set in /etc/vconsole.conf"; fi
 
   # logind IdleAction=lock (physical security)
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then

@@ -226,17 +226,21 @@
         _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"
 
 - name: Add Tailscale repo
-  when:
-    - repo_tailscale | default(true)
-    - ansible_distribution == 'Fedora'
+  when: repo_tailscale | default(true)
   block:
     - name: Add Tailscale stable repo
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable
-        baseurl: "https://pkgs.tailscale.com/stable/fedora/$basearch"
+        baseurl: >-
+          https://pkgs.tailscale.com/stable/{{
+          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
+          }}/$basearch
         gpgcheck: true
-        gpgkey: "https://pkgs.tailscale.com/stable/fedora/repo.gpg"
+        gpgkey: >-
+          https://pkgs.tailscale.com/stable/{{
+          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
+          }}/repo.gpg
         enabled: true
   rescue:
     - name: Record Tailscale repo failure
