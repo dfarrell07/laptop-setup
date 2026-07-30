@@ -34,6 +34,12 @@
       failed_when: false
       tags: [always]
 
+    - name: Run CSB detection (makes csb_detected available to system role tasks)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+      become: false
+      when: ansible_system == 'Linux'
+      tags: [always]
+
   roles:
     - role: repos_dnf
       tags: [repos_dnf]

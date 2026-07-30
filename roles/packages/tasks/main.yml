@@ -2,6 +2,16 @@
 # roles/packages/tasks/main.yml
 # Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
+# On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
+# outside dnf won't be in fapolicyd's trust database and will be blocked at runtime.
+# Downloads would succeed but every invocation would fail with EPERM.
+- name: Disable binary downloads on fapolicyd-enforcing CSB container tier
+  ansible.builtin.set_fact:
+    packages_install_binaries: false
+  when:
+    - needs_container_tier is defined
+    - needs_container_tier == 'container'
+
 - name: Install dnf packages
   ansible.builtin.dnf:
     name: >-
