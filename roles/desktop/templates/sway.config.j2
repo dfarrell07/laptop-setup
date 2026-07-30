@@ -8,15 +8,15 @@ font pango:DejaVu Sans Mono 10
 # HiDPI output scaling (override desktop_sway_hidpi_scale in config.yml)
 output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }}
 
-# Wayland-native rendering for Qt and Electron apps
-exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland
+# Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi
 exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
 
-# Notification daemon
-exec mako
+# Notification daemon (exec_always so it restarts after 'swaymsg reload')
+exec_always mako
 
 # Polkit agent (required for GUI privilege escalation — NetworkManager, USB mounts, etc.)
-exec /usr/libexec/polkit-gnome-authentication-agent-1
+exec_always /usr/libexec/polkit-gnome-authentication-agent-1
 
 # Wallpaper
 output * bg #1e1e2e solid_color
