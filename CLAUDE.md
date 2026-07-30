@@ -47,6 +47,7 @@ make commitlint       # Validate commit messages from origin/main..HEAD
 - **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present) or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only` (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host + dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides)
+- **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc` (interactive shells) AND `~/.config/environment.d/containers.conf` (systemd user session generator). The environment.d path is critical for OVN-K/Submariner `make kind` since `make` spawns `sh` not `zsh` — see `troubleshooting.md` for the failure mode
 
 ## Commit Conventions
 

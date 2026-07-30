@@ -488,3 +488,32 @@ make smoke-test
 ```
 
 **CSB IT ticket:** No. Authentication is user-level and requires no system changes beyond what the playbook already configures. On CSB where the Tailscale repo is blocked, use the static binary with userspace networking instead (see `repos_dnf: Third-Party Repos Blocked on CSB` above).
+
+## kind: Cannot Connect to Docker/Podman Socket
+
+**Symptom:** `make kind` or `kind create cluster` in OVN-K/Submariner fails with:
+```
+ERROR: failed to create cluster: failed to create node with docker: command "docker create ..." failed: ...
+```
+or silently tries Docker instead of Podman.
+
+**Cause:** `KIND_EXPERIMENTAL_PROVIDER=podman` and `DOCKER_HOST` must be in the shell environment when `make` runs. `make` spawns `sh` (not `zsh`), so `.zshrc` is not sourced. The environment.d config at `~/.config/environment.d/containers.conf` injects these via the systemd user session manager — but only after a **fresh login**.
+
+**Fix:**
+```bash
+# Verify the environment.d config is deployed:
+cat ~/.config/environment.d/containers.conf
+
+# Log out and back in to pick up the session-level environment.
+# Or source the vars manually in your current terminal:
+export DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+export KIND_EXPERIMENTAL_PROVIDER=podman
+
+# Verify the Podman socket is active:
+ls -la "${XDG_RUNTIME_DIR}/podman/podman.sock"
+
+# Then retry:
+kind create cluster --config path/to/kind-config.yaml
+```
+
+**CSB IT ticket:** No. This is a user-session environment variable issue resolved by re-login.
