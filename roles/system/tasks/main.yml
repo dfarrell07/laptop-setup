@@ -7,6 +7,14 @@
 - name: Gather service facts
   ansible.builtin.service_facts:
 
+# --- Prerequisites (needed by seport and other system tasks) ---
+- name: Ensure policycoreutils-python-utils is installed
+  ansible.builtin.dnf:
+    name: policycoreutils-python-utils
+    state: present
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
 # --- SELinux enforcement check ---
 - name: Verify SELinux is enforcing
   ansible.builtin.assert:
