@@ -1415,7 +1415,7 @@
 - name: Add NetworkManager conf.d to AIDE monitoring (MAC randomization and DNS policy)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/NetworkManager/conf.d'
+    regexp: '^/etc/NetworkManager/conf\.d'
     line: '/etc/NetworkManager/conf.d NORMAL'
     insertbefore: '^/etc\s'
     state: present
@@ -1424,7 +1424,7 @@
 - name: Add systemd resolved conf.d to AIDE monitoring (DNS-over-TLS policy)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/systemd/resolved.conf.d'
+    regexp: '^/etc/systemd/resolved\.conf\.d'
     line: '/etc/systemd/resolved.conf.d NORMAL'
     insertbefore: '^/etc\s'
     state: present
@@ -1433,7 +1433,7 @@
 - name: Add systemd logind conf.d to AIDE monitoring (session timeout policy)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/systemd/logind.conf.d'
+    regexp: '^/etc/systemd/logind\.conf\.d'
     line: '/etc/systemd/logind.conf.d NORMAL'
     insertbefore: '^/etc\s'
     state: present
@@ -1442,11 +1442,24 @@
 - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf
-    regexp: '^/etc/tlp.d'
+    regexp: '^/etc/tlp\.d'
     line: '/etc/tlp.d NORMAL'
     insertbefore: '^/etc\s'
     state: present
-  when: system_aide_enabled | bool
+  when:
+    - system_aide_enabled | bool
+    - system_tlp_enabled | bool
+
+- name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/tlp\.conf'
+    line: '/etc/tlp.conf NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when:
+    - system_aide_enabled | bool
+    - system_tlp_enabled | bool
 
 - name: Check if AIDE database exists
   ansible.builtin.stat:

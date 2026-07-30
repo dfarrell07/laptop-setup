@@ -72,6 +72,13 @@
 -w /etc/tlp.d/ -p wa -k power-config
 -w /etc/tlp.conf -p wa -k power-config
 
+# USBGuard device whitelist (allow new devices to avoid silent privilege escalation)
+-w /etc/usbguard/ -p wa -k device-policy
+
+# Kernel parameter and module configuration
+-w /etc/sysctl.d/ -p wa -k kernel-params
+-w /etc/modprobe.d/ -p wa -k kernel-modules
+
 # Privilege escalation syscalls (CIS benchmark)
 -a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -k privilege-escalation
 -a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -k privilege-escalation

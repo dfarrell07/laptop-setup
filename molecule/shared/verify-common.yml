@@ -58,6 +58,21 @@
     that: verify_bashrc.stat.exists
     fail_msg: ".bashrc was not deployed"
 
+- name: Check bashrc has Ansible managed marker
+  ansible.builtin.command:
+    cmd: grep -q 'Ansible managed' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
+- name: Check bashrc has FZF_DEFAULT_OPTS
+  ansible.builtin.command:
+    cmd: grep -q 'FZF_DEFAULT_OPTS' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
+- name: Check bashrc has DIRENV_LOG_FORMAT
+  ansible.builtin.command:
+    cmd: grep -q 'DIRENV_LOG_FORMAT' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
 - name: Verify oh-my-zsh is installed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.oh-my-zsh"

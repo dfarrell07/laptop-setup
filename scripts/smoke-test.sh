@@ -240,7 +240,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
   else record "tailscaled-active" "WARN" "tailscaled not running"; fi
   if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
-  else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot)"; fi
+  else record "tailscaled-enabled" "FAIL" "tailscaled not enabled (won't start on reboot, VPN tunnel lost)"; fi
 
   # USBGuard (verify both installed, active, and enabled)
   if command -v usbguard &>/dev/null; then
@@ -333,7 +333,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "chronyd-service" "PASS"
   elif systemctl is-enabled chronyd &>/dev/null; then
     record "chronyd-service" "FAIL" "chronyd enabled but not active (time sync required for FIDO2/TLS)"
-  else record "chronyd-service" "FAIL" "chronyd not enabled (no time sync = FIDO2/TLS breaks on reboot)"; fi
+  else record "chronyd-service" "FAIL" "chronyd not enabled or started (time sync absent = FIDO2/TLS breaks)"; fi
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
   else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi
@@ -579,6 +579,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "fs.protected_symlinks"               "1" "sysctl-protected-symlinks"
   _sysctl_check "net.ipv6.conf.all.accept_ra"         "0" "sysctl-no-accept-ra"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
+  _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"
   _sysctl_check "net.ipv4.conf.all.log_martians"      "1" "sysctl-log-martians"
   _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
