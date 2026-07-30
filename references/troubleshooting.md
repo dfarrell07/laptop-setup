@@ -224,25 +224,23 @@ SSH operations fail despite the YubiKey being plugged in and the correct key bei
 GNOME Keyring (on GNOME < 46 / RHEL 9) or its replacement `gcr-ssh-agent` (on GNOME 46+ / Fedora 42 / RHEL 10) advertise themselves as SSH agents and load `~/.ssh/*.pub` keys. Neither supports FIDO2 key operations (ed25519-sk, ecdsa-sk). When `SSH_AUTH_SOCK` points to the GNOME agent instead of OpenSSH's ssh-agent, FIDO2 signing silently fails.
 
 **Fix:**
-1. Disable the conflicting agent:
-   - GNOME < 46 (RHEL 9): create `~/.config/autostart/gnome-keyring-ssh.desktop` with `Hidden=true`
-   - GNOME 46+ (Fedora 42, RHEL 10): `systemctl --user disable --now gcr-ssh-agent.socket gcr-ssh-agent.service`
-2. Start OpenSSH ssh-agent via systemd user service:
-   ```ini
-   # ~/.config/systemd/user/ssh-agent.service
-   [Unit]
-   Description=OpenSSH Agent
-   [Service]
-   Type=simple
-   ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket
-   [Install]
-   WantedBy=default.target
-   ```
-3. Set `SSH_AUTH_SOCK` in `~/.config/environment.d/ssh-agent.conf`:
-   ```
-   SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket
-   ```
-4. Verify after login: `echo $SSH_AUTH_SOCK` should point to the OpenSSH socket, not a GNOME/gcr path.
+All steps are handled automatically by the playbook — no manual intervention is required after `make dotfiles` or `make all`:
+
+- `roles/dotfiles`: deploys `~/.config/autostart/gnome-keyring-ssh.desktop` with `Hidden=true` (suppresses GNOME Keyring SSH component on GNOME < 46 / RHEL 9)
+- `roles/system`: masks `gcr-ssh-agent.socket` via systemd user scope (prevents socket-activation on GNOME 46+ / Fedora 42 / RHEL 10)
+- `roles/dotfiles`: deploys `~/.config/systemd/user/ssh-agent.service`, enables and starts it, and writes `~/.config/environment.d/ssh-agent.conf`
+
+If the issue persists after re-provisioning, log out and back in — `environment.d` changes require a fresh login session. Verify the correct socket is set:
+```
+echo $SSH_AUTH_SOCK
+# Expected: /run/user/<uid>/ssh-agent.socket
+# Wrong:    /run/user/<uid>/gcr/ssh  (or any gnome/gcr path)
+```
+
+If `SSH_AUTH_SOCK` still points to a gcr path, check that the gcr socket is masked:
+```
+systemctl --user status gcr-ssh-agent.socket
+```
 
 **CSB IT ticket:** No. All changes are user-level (systemd user units, autostart overrides, environment.d).
 
@@ -286,19 +284,21 @@ ERROR! The vault password file /home/user/laptop-setup/scripts/vault-pass.sh was
 Running `make all` fails immediately before any task executes.
 
 **Cause:**
-`ansible.cfg` references `vault_password_file = scripts/vault-pass.sh`. On a fresh machine, the vault password script does not exist yet because it depends on `ykpers` being installed (for YubiKey HMAC-SHA1 challenge-response).
+`ansible.cfg` references `vault_password_file = scripts/vault-pass.sh`. This file is gitignored — it is never committed to the repo. On a fresh machine (or after a fresh clone without restoring from backup), the script will not exist.
 
 **Fix:**
+`scripts/vault-pass.sh` is a gitignored file — it is never in the repo and must be restored from backup or created manually per the template in `SECURITY.md`. Installing `ykpers` is a prerequisite (it provides `ykchalresp`) but does not auto-create the script.
+
 Bootstrap procedure for first run:
-1. Install `ykpers` first (`sudo dnf install ykpers`), then the vault password script works automatically.
-2. If YubiKey is not available yet, create a temporary password file:
+1. Restore `scripts/vault-pass.sh` from backup, or follow the template in `SECURITY.md` to create it. Then `chmod 700 scripts/vault-pass.sh`.
+2. If the YubiKey is not yet configured for HMAC-SHA1 challenge-response, or as a temporary workaround, create a plaintext password file instead:
    ```bash
    echo "your-vault-password" > ~/.vault_pass && chmod 0600 ~/.vault_pass
    ```
 3. Run `make all`.
-4. After setup completes, delete the temporary password file (`rm ~/.vault_pass`) and use the vault password script that derives the password from YubiKey challenge-response.
+4. After setup completes, remove the temporary file (`rm ~/.vault_pass`) and ensure `scripts/vault-pass.sh` is in place for future runs.
 
-The `scripts/preflight.sh` should detect missing vault password sources and guide the user through bootstrap.
+`scripts/preflight.sh` detects both the script and the `~/.vault_pass` fallback, and reports which vault source is active.
 
 **CSB IT ticket:** No. This is a bootstrap ordering issue, not a CSB restriction.
 
@@ -390,3 +390,50 @@ The notes repo is private and encrypted with transcrypt. Clone requires GitHub a
 - To rekey (e.g., switch to YubiKey): `cd ~/notes && transcrypt --rekey`
 
 **CSB IT ticket:** No. The notes repo is personal and does not require system changes.
+
+---
+
+## system: Bluetooth Not Working After Provisioning
+
+**Symptom:**
+Bluetooth is unavailable after running the playbook. `bluetoothctl` shows no adapter, or `rfkill list` shows the Bluetooth device hard-blocked. GNOME Bluetooth panel may be missing entirely.
+
+**Cause:**
+The `system` role conditionally masks `bluetooth.service` and blacklists the `btusb`/`bluetooth` kernel modules when `system_disable_bluetooth: true` is set in `config.yml`. If this was set intentionally for a machine without Bluetooth, re-enabling it requires an explicit config change.
+
+**Fix:**
+To re-enable Bluetooth, set in `config.yml` (gitignored, per-machine):
+```yaml
+system_disable_bluetooth: false
+```
+Then re-run `make system` or `make all`. The mask on `bluetooth.service` will be removed and the kernel modules will no longer be blacklisted.
+
+Note: `system_disable_bluetooth` defaults to `false` (Bluetooth enabled). It only gets masked if explicitly set to `true` in `config.yml` or passed via `-e system_disable_bluetooth=true`.
+
+**CSB IT ticket:** No. This is a per-machine playbook configuration setting.
+
+---
+
+## packages: YubiKey Not Detected by pcscd / FIDO2
+
+**Symptom:**
+```
+ykman info
+Error: No YubiKey detected!
+```
+or SSH signing with an ed25519-sk key fails immediately (not the GNOME agent issue — the YubiKey itself is not seen). `lsusb` may show the device but `ykman` cannot communicate with it.
+
+**Cause:**
+FIDO2 operations (ed25519-sk) go through the kernel HID driver directly and do not require pcscd. However, YubiKey Manager (`ykman`) and challenge-response (`ykchalresp`) use the PCSC interface, which requires `pcscd` to be running. On a fresh machine, pcscd may not be started or the user may lack access to the PCSC socket.
+
+**Fix:**
+1. Verify the YubiKey is visible to the kernel: `lsusb | grep -i yubico`
+2. Check pcscd is running: `systemctl status pcscd`
+3. If pcscd is stopped: `sudo systemctl enable --now pcscd`
+4. Verify the user is in the `plugdev` group (required on some distros): `groups | grep plugdev`
+5. For FIDO2/SSH (ed25519-sk), pcscd is not required — check that the kernel `u2f_hid` module is loaded: `lsmod | grep u2f_hid`
+6. USBGuard: ensure the YubiKey's VID:PID (`1050:*`) is in the whitelist — re-run `make system` or check `/etc/usbguard/rules.conf`
+
+The playbook installs `yubikey-manager`, `ykpers`, and `libfido2` via the `packages` role on supported distros. If these are missing, run `make packages`.
+
+**CSB IT ticket:** Possibly, if pcscd is blocked by policy or the user cannot be added to `plugdev`.

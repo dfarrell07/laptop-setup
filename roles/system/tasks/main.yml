@@ -202,6 +202,37 @@
   notify: Restart auditd
   when: ansible_system == 'Linux'
 
+# --- Bolt (Thunderbolt device authorization daemon) ---
+- name: Install bolt for Thunderbolt device authorization
+  ansible.builtin.dnf:
+    name: bolt
+    state: present
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
+- name: Enable bolt service
+  ansible.builtin.systemd:
+    name: bolt
+    state: started
+    enabled: true
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
+# --- Disable fingerprint auth (bypasses pam_faillock; no enrolled prints expected) ---
+- name: Check if authselect with-fingerprint feature is enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-fingerprint
+  register: system_authselect_fingerprint_check
+  changed_when: false
+  failed_when: false
+
+- name: Disable authselect with-fingerprint feature
+  ansible.builtin.command:
+    cmd: authselect disable-feature with-fingerprint
+  when: system_authselect_fingerprint_check.rc | default(1) == 0
+  changed_when: true
+  failed_when: false
+
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
 - name: Mask bluetooth service
   ansible.builtin.systemd:
@@ -578,6 +609,7 @@
   loop:
     - { key: deny, value: "5" }
     - { key: unlock_time, value: "900" }
+  failed_when: false
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -589,6 +621,7 @@
   loop:
     - audit
     - even_deny_root
+  failed_when: false
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -620,6 +653,7 @@
     - { key: ocredit, value: "-1" }
     - { key: difok, value: "4" }
     - { key: maxrepeat, value: "3" }
+  failed_when: false
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
@@ -695,6 +729,7 @@
       Authorized access only. All activity may be monitored and reported.
     dest: /etc/issue
     mode: "0644"
+  failed_when: false
 
 - name: Deploy SSH login banner
   ansible.builtin.copy:
@@ -702,6 +737,7 @@
       Authorized access only. All activity may be monitored and reported.
     dest: /etc/issue.net
     mode: "0644"
+  failed_when: false
 
 # --- Sudoers hardening ---
 - name: Configure sudoers security defaults
@@ -742,6 +778,7 @@
     cmd: passwd -l root
   when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
   changed_when: true
+  failed_when: false
 
 # --- AIDE file integrity monitoring ---
 - name: Install AIDE

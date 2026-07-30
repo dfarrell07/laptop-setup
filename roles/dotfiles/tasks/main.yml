@@ -128,7 +128,7 @@
     mode: "0755"
   when: ansible_system == 'Linux'
 
-- name: Disable GNOME Keyring SSH agent (use hardened ssh-agent.service instead)
+- name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
   ansible.builtin.copy:
     content: |
       [Desktop Entry]
@@ -136,6 +136,17 @@
     dest: "{{ ansible_user_dir }}/.config/autostart/gnome-keyring-ssh.desktop"
     mode: "0644"
   when: ansible_system == 'Linux'
+
+- name: Mask gcr-ssh-agent socket (GNOME 50+ activates via gnome-session-services.target)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    scope: user
+    masked: true
+  loop:
+    - gcr-ssh-agent.socket
+    - gcr-ssh-agent.service
+  when: ansible_system == 'Linux'
+  failed_when: false
 
 - name: Deploy SSH agent systemd user service
   ansible.builtin.template:
