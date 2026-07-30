@@ -60,7 +60,7 @@
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
-    line: 'tmpfs /dev/shm tmpfs defaults,noexec,nosuid,nodev 0 0'
+    line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,x-systemd.graceful-option=usrquota 0 0'
     create: false
   when: ansible_system == 'Linux'
   failed_when: false
