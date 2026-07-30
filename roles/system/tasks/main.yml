@@ -273,6 +273,13 @@
   changed_when: true
   failed_when: false
 
+- name: Mask fprintd.service (PAM fingerprint disabled; prevent D-Bus activation)
+  ansible.builtin.systemd:
+    name: fprintd.service
+    masked: true
+    state: stopped
+  failed_when: false
+
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
 - name: Mask bluetooth service
   ansible.builtin.systemd:
@@ -417,7 +424,27 @@
   when: system_install_usbguard | default(true) | bool
   failed_when: false
 
-# --- Firmware updates ---
+# --- Firmware updates (LVFS/fwupd) ---
+- name: Install fwupd
+  ansible.builtin.dnf:
+    name: fwupd
+    state: present
+  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  failed_when: false
+
+- name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
+  ansible.builtin.systemd:
+    name: fwupd-refresh.timer
+    state: started
+    enabled: true
+  failed_when: false
+
+- name: Refresh LVFS firmware metadata
+  ansible.builtin.command:
+    cmd: fwupdmgr refresh --force
+  changed_when: false
+  failed_when: false
+
 - name: Check for firmware updates
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
@@ -544,6 +571,13 @@
   when: system_firewalld_running | bool
   failed_when: false
 
+- name: Enable and start tailscaled
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+  failed_when: false
+
 # --- GNOME gcr-ssh-agent mask ---
 - name: Mask gcr-ssh-agent socket
   ansible.builtin.systemd:
@@ -644,16 +678,18 @@
     path: /etc/resolv.conf
   register: system_resolv_conf
 
-- name: Warn if resolv.conf is not stub-resolv
-  ansible.builtin.debug:
-    msg: >-
-      /etc/resolv.conf {{ 'points to ' + (system_resolv_conf.stat.lnk_source | default('unknown'))
-      if (system_resolv_conf.stat.islnk | default(false)) else 'is a regular file (not a symlink)' }}.
-      For proper split DNS, it should symlink to /run/systemd/resolve/stub-resolv.conf.
-      Fix: ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-  when: >-
-    not (system_resolv_conf.stat.islnk | default(false)) or
-    'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
+- name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
+  ansible.builtin.file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
+  when:
+    - ansible_system == 'Linux'
+    - >-
+      not (system_resolv_conf.stat.islnk | default(false)) or
+      'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
+  failed_when: false
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - name: Deploy session timeout via profile.d

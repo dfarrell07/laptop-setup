@@ -39,10 +39,11 @@ battery 0 {
     status_full = "✓"
 }
 
-volume master {
-    format = " %volume"
-    format_muted = "🔇 muted"
-    device = "default"
+# volume master block removed — ALSA 'default' shows N/A on PipeWire.
+# Use pactl keybindings in i3.config for volume control.
+command {
+    command = "vol=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oP '\\d+%' | head -1); mute=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null); [ \"$mute\" = 'Mute: yes' ] && echo '🔇 muted' || echo \" $vol\""
+    interval = 5
 }
 
 time {
