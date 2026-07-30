@@ -197,6 +197,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "kernel-lockdown" "FAIL" "$ld"; fi
   fi
 
+  # Secure Boot (informational — not managed by Ansible, but critical to verify)
+  if command -v mokutil &>/dev/null; then
+    if mokutil --sb-state 2>/dev/null | grep -q "SecureBoot enabled"; then record "secure-boot" "PASS"
+    else record "secure-boot" "WARN" "disabled — kernel lockdown weakened without Secure Boot chain of trust"; fi
+  fi
+
+  # LUKS disk encryption (informational — not managed by Ansible)
+  if lsblk -o FSTYPE 2>/dev/null | grep -q "crypto_LUKS"; then record "luks-encryption" "PASS"
+  else record "luks-encryption" "WARN" "no LUKS volumes found — full-disk encryption not confirmed"; fi
+
   # Firewall default zone = drop
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")

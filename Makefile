@@ -55,9 +55,7 @@ bootstrap:
 	git config --local core.hooksPath .githooks
 	@echo "Bootstrap complete. Git hooks active."
 
-bootstrap-test:
-	python3 -m venv .venv
-	.venv/bin/pip install -r requirements-test.txt
+bootstrap-test: .venv
 	ansible-galaxy collection install -r requirements.yml
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
 	vagrant box add fedora/43-cloud-base --provider libvirt || true

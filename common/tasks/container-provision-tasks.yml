@@ -103,11 +103,14 @@
 
 # Export oc and kubectl to the host after they are installed (must happen
 # after install, not in distrobox_exports init_hooks which run before Play 3).
+# No `creates:` guard: always overwrite so the wrapper points to the current
+# container. A stale wrapper from a renamed/old container would otherwise
+# silently persist. distrobox-export is idempotent when the container matches.
 - name: Export oc and kubectl to host
   ansible.builtin.command:
     cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
-    creates: "{{ ansible_env.HOME }}/.local/bin/{{ item }}"
   loop: [oc, kubectl]
+  changed_when: false
 
 # --- Verify ---
 - name: Confirm Python works
@@ -119,6 +122,13 @@
   ansible.builtin.stat:
     path: "{{ ansible_env.HOME }}/.local/bin/oc"
   register: container_oc_export_stat
+
+- name: Assert oc host wrapper exists
+  ansible.builtin.assert:
+    that: container_oc_export_stat.stat.exists
+    fail_msg: >-
+      oc was not exported to {{ ansible_env.HOME }}/.local/bin —
+      distrobox-export may have failed or the path is not writable.
 
 - name: Confirm oc is available (container side)
   ansible.builtin.command:
@@ -138,6 +148,7 @@
   ansible.builtin.debug:
     msg: |
       === Container Provisioning Summary ===
-      oc client  : {{ container_oc_version.stdout | default('not installed') | trim }}
-      Host podman: {{ container_host_podman.stdout | default('not available') | trim }}
+      oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
+      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists else 'MISSING' }}
+      Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
       ======================================
