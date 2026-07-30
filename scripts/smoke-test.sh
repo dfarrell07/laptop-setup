@@ -500,6 +500,30 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "init-on-free" "WARN" "init_on_free=1 not in cmdline (requires reboot)"; fi
   if grep -q 'page_alloc.shuffle=1' /proc/cmdline 2>/dev/null; then record "page-alloc-shuffle" "PASS"
   else record "page-alloc-shuffle" "WARN" "page_alloc.shuffle=1 not in cmdline (requires reboot)"; fi
+  # AMD CPU power driver (amd-pstate-epp is default on Fedora 44 + Zen 4)
+  if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver ]]; then
+    _pstate=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver)
+    if [[ "$_pstate" == "amd-pstate-epp" ]]; then record "amd-pstate-epp" "PASS"
+    elif [[ "$_pstate" == "amd-pstate" ]]; then
+      record "amd-pstate-epp" "WARN" "guided mode ($\_pstate) not EPP — check BIOS CPPC setting"
+    elif [[ "$_pstate" == "acpi-cpufreq" ]]; then
+      record "amd-pstate-epp" "FAIL" "legacy acpi-cpufreq — kernel regression or BIOS CPPC disabled"
+    else record "amd-pstate-epp" "WARN" "driver=$_pstate (unexpected)"; fi
+  fi
+  # amdgpu runtime PM (-1=auto is correct; 0=off wastes power)
+  if [[ -f /sys/module/amdgpu/parameters/runpm ]]; then
+    _runpm=$(cat /sys/module/amdgpu/parameters/runpm)
+    if [[ "$_runpm" == "-1" ]]; then record "amdgpu-runpm-auto" "PASS"
+    elif [[ "$_runpm" == "0" ]]; then record "amdgpu-runpm-auto" "FAIL" "runpm=0 disables dGPU PM"
+    else record "amdgpu-runpm-auto" "WARN" "runpm=$_runpm — prefer -1 (ACPI auto)"; fi
+  fi
+  # Additional sysctl checks (CIS + hardening)
+  _sysctl_check "fs.protected_hardlinks"              "1" "sysctl-protected-hardlinks"
+  _sysctl_check "fs.protected_symlinks"               "1" "sysctl-protected-symlinks"
+  _sysctl_check "net.ipv6.conf.all.accept_ra"         "0" "sysctl-no-accept-ra"
+  _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
+  _sysctl_check "net.ipv4.conf.all.log_martians"      "1" "sysctl-log-martians"
+  _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
 
 fi
 

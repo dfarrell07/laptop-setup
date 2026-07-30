@@ -67,18 +67,43 @@
         cmd: "python3 -c \"import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))\""
       changed_when: false
 
-    # --- Desktop WM configs (converge sets desktop_environment: i3) ---
-    - name: Verify i3 config deployed
+    # --- Desktop WM configs (converge sets desktop_environment: sway) ---
+    - name: Verify sway config deployed
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/i3/config"
-      register: verify_i3
+        path: "{{ ansible_user_dir }}/.config/sway/config"
+      register: verify_sway
 
-    - name: Assert i3 config exists
+    - name: Assert sway config exists
       ansible.builtin.assert:
-        that: verify_i3.stat.exists
-        fail_msg: "i3 config not deployed"
+        that: verify_sway.stat.exists
+        fail_msg: "sway config not deployed"
 
-    - name: Verify i3status config deployed
+    - name: Verify sway config contains polkit exec
+      ansible.builtin.command:
+        cmd: grep -q 'polkit-gnome' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config contains xkb_layout
+      ansible.builtin.command:
+        cmd: grep -q 'xkb_layout us' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify portals.conf deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+      register: verify_portals
+
+    - name: Assert portals.conf exists
+      ansible.builtin.assert:
+        that: verify_portals.stat.exists
+        fail_msg: "portals.conf not deployed (screen sharing broken)"
+
+    - name: Verify portals.conf routes ScreenCast to wlr backend
+      ansible.builtin.command:
+        cmd: grep -q 'ScreenCast=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+      changed_when: false
+
+    - name: Verify i3status config deployed (shared by sway)
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.config/i3status/config"
       register: verify_i3status

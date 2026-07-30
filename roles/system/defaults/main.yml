@@ -30,6 +30,8 @@ system_sysctl_hardening:
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
   net.ipv4.tcp_syncookies: 1
+  fs.protected_hardlinks: 1  # CIS — prevents hardlink-based privilege escalation in world-writable dirs
+  fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
   net.ipv4.tcp_rfc1337: 1
   kernel.kexec_load_disabled: 1
   net.core.bpf_jit_harden: 1
