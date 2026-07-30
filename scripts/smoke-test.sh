@@ -254,6 +254,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     # silently breaking IPv6 NDP (neighbour-solicitation/advertisement) and PMTU discovery.
     if firewall-cmd --zone=drop --query-icmp-block-inversion &>/dev/null; then record "firewall-icmp-inversion" "PASS"
     else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone — NDP and PMTU discovery broken"; fi
+    # libvirt zone must not have ssh enabled (VMs could reach host sshd — lateral movement path)
+    if firewall-cmd --get-zones 2>/dev/null | grep -q '\blibvirt\b'; then
+      if firewall-cmd --zone=libvirt --query-service=ssh &>/dev/null 2>&1; then
+        record "firewall-libvirt-no-ssh" "FAIL" "ssh service in libvirt zone — VMs on virbr0 can reach host sshd"
+      else record "firewall-libvirt-no-ssh" "PASS"; fi
+    fi
   fi
 
   # tailscaled service state (Linux systemd — on macOS tailscale uses launchd, handled by connectivity check above)
