@@ -16,6 +16,7 @@
     path: /usr/local/bin
     state: directory
     mode: "0755"
+  become: true
 
 - name: Check if oc is installed
   ansible.builtin.command:
@@ -26,6 +27,7 @@
 
 - name: Download and install oc + kubectl
   when: container_oc_check.rc != 0
+  become: true
   block:
     - name: Fetch OpenShift client SHA256 checksums
       ansible.builtin.uri:
@@ -90,6 +92,7 @@
     force: true
   loop: "{{ distrobox_host_exec_commands }}"
   when: container_host_exec.stat.exists
+  become: true
 
 - name: Deploy flatpak-spawn wrapper scripts (Toolbx fallback)
   ansible.builtin.copy:
@@ -100,6 +103,7 @@
       exec flatpak-spawn --host {{ item }} "$@"
   loop: "{{ distrobox_host_exec_commands }}"
   when: not container_host_exec.stat.exists
+  become: true
 
 # Export oc and kubectl to the host after they are installed (must happen
 # after install, not in distrobox_exports init_hooks which run before Play 3).

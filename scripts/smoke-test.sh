@@ -278,7 +278,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
   _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
   if grep -q '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^KbdInteractiveAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -q '^PermitEmptyPasswords no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -391,6 +393,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # authselect PAM features (verifies faillock/pwhistory are wired into PAM stack, not just configured)
   if command -v authselect &>/dev/null; then
+    # Profile must be 'sssd' — if drifted to 'local' or custom, features may behave differently
+    if authselect current 2>/dev/null | grep -q 'sssd'; then record "authselect-profile" "PASS"
+    else record "authselect-profile" "FAIL" "authselect profile is not sssd (faillock/pwhistory may not wire correctly)"; fi
     if authselect is-feature-enabled with-faillock 2>/dev/null; then record "authselect-faillock" "PASS"
     else record "authselect-faillock" "FAIL" "authselect with-faillock not enabled (faillock settings won't apply)"; fi
     if authselect is-feature-enabled with-pwhistory 2>/dev/null; then record "authselect-pwhistory" "PASS"

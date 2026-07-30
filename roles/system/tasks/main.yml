@@ -62,6 +62,7 @@
     regexp: '^tmpfs\s+/dev/shm\s+'
     line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,usrquota 0 0'
     create: false
+    backup: true  # fstab corruption causes non-recoverable boot failure without console access
   when: ansible_system == 'Linux'
   failed_when: false
 
@@ -111,10 +112,11 @@
   when: ansible_system == 'Linux'
   failed_when: false
 
-- name: Enable var-tmp.mount
+- name: Enable and start var-tmp.mount
   ansible.builtin.systemd:
     name: var-tmp.mount
     enabled: true
+    state: started
     daemon_reload: true
   when: ansible_system == 'Linux'
   failed_when: false
@@ -173,6 +175,7 @@
   when:
     - system_firewalld_running | bool
     - system_fw_default_zone.stdout | default('') != 'drop'
+    - not (csb_detected | default(false))  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Reload firewalld
     - Reload NetworkManager
@@ -188,6 +191,7 @@
   when:
     - system_firewalld_running | bool
     - ansible_default_ipv4.interface is defined or ansible_default_ipv6.interface is defined
+    - not (csb_detected | default(false))  # paired with zone guard above
   failed_when: false
 
 - name: Enable ICMP block inversion on drop zone
@@ -336,7 +340,9 @@
     group: root
     mode: "0640"
   notify: Restart auditd
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB may send events to a SIEM via audisp-remote; don't overwrite
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
@@ -512,6 +518,19 @@
     enabled: true
   when: system_enable_libvirtd | bool
   failed_when: false
+
+- name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: firewall-cmd --zone=libvirt --remove-service=ssh --permanent
+  register: system_libvirt_ssh
+  changed_when: "'ALREADY_DISABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
+  failed_when:
+    - system_libvirt_ssh.rc != 0
+    - "'ALREADY_DISABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
+  when:
+    - system_firewalld_running | bool
+    - system_enable_libvirtd | bool
+  notify: Reload firewalld
 
 - name: Install Mullvad VPN
   ansible.builtin.dnf:
@@ -740,7 +759,9 @@
       dns=systemd-resolved
     dest: /etc/NetworkManager/conf.d/99-dns.conf
     mode: "0644"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # paired with resolv.conf guard — both or neither to avoid broken half-state
   failed_when: false
   notify: Reload NetworkManager
 
@@ -929,7 +950,9 @@
     mode: "0644"
     backup: true
   notify: Restart chronyd
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB may use IPA-enrolled Kerberos NTP; replacing chrony.conf breaks kinit
 
 - name: Ensure chronyd is enabled
   ansible.builtin.systemd:
