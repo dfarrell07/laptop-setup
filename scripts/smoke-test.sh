@@ -23,6 +23,7 @@ fi
 
 declare -a RESULTS=()
 FAILURES=0
+WARNS=0
 
 record() { # name status [detail]
   local n="$1" s="$2" d="${3:-}"
@@ -30,7 +31,7 @@ record() { # name status [detail]
   RESULTS+=("$(printf '{"name":"%s","status":"%s","detail":"%s"}' "$n" "$s" "${d//\"/\\\"}")")
   case "$s" in
     PASS) $JSON || printf "${P}PASS${R}  %s\n" "$n" ;;
-    WARN) $JSON || printf "${W}WARN${R}  %s — %s\n" "$n" "$d" ;;
+    WARN) $JSON || printf "${W}WARN${R}  %s — %s\n" "$n" "$d"; WARNS=$((WARNS + 1)) ;;
     FAIL) $JSON || printf "${F}FAIL${R}  %s — %s\n" "$n" "$d"; FAILURES=$((FAILURES + 1)) ;;
   esac
 }
@@ -307,11 +308,11 @@ if $JSON; then
   printf '{"results":[%s],"failures":%d}\n' "$(IFS=,; echo "${RESULTS[*]}")" "$FAILURES"
 else
   total=${#RESULTS[@]}
-  passed=$((total - FAILURES))
+  passes=$((total - FAILURES - WARNS))
   if [[ $FAILURES -gt 0 ]]; then
-    printf "\n--- %d/%d passed (${F}%d FAILED${R}) ---\n" "$passed" "$total" "$FAILURES"
+    printf "\n--- %d PASS / %d WARN / ${F}%d FAIL${R} (total %d) ---\n" "$passes" "$WARNS" "$FAILURES" "$total"
   else
-    printf "\n--- %d/%d passed (${P}all passed${R}) ---\n" "$passed" "$total"
+    printf "\n--- %d PASS / %d WARN (total %d) ---\n" "$passes" "$WARNS" "$total"
   fi
 fi
 exit $(( FAILURES > 0 ? 1 : 0 ))

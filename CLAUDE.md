@@ -62,7 +62,7 @@ make check            # Dry run (--check mode)
 - `make test-debian` — Molecule Debian 12 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services)
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
-- CI runs linting + Fedora/CentOS/Debian/macOS molecule tests on every PR, VM tests locally
+- CI runs linting + Fedora/Rocky/Debian/macOS molecule tests on every PR, VM tests locally
 - CI skips molecule on doc-only PRs (shell-based git diff, no third-party action)
 
 ## CI Security
