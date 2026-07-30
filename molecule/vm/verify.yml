@@ -282,6 +282,65 @@
         that: verify_aide_timer.status.UnitFileState == 'enabled'
         fail_msg: "AIDE check timer not enabled"
 
+    # --- PAM faillock ---
+    - name: Check faillock deny=5
+      ansible.builtin.command: grep -q '^deny = 5' /etc/security/faillock.conf
+      changed_when: false
+      become: true
+
+    - name: Check faillock local_users_only (prevent SSSD double-lockout)
+      ansible.builtin.command: grep -q '^local_users_only' /etc/security/faillock.conf
+      changed_when: false
+      become: true
+
+    - name: Check authselect with-faillock is active
+      ansible.builtin.command: authselect is-feature-enabled with-faillock
+      register: verify_faillock_authselect
+      changed_when: false
+      failed_when: verify_faillock_authselect.rc != 0
+      become: true
+
+    # --- Sudoers hardening ---
+    - name: Verify sudoers hardening file exists with correct mode
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/99-hardening
+      register: verify_sudoers_hardening
+      become: true
+
+    - name: Assert sudoers hardening deployed with mode 0440
+      ansible.builtin.assert:
+        that:
+          - verify_sudoers_hardening.stat.exists
+          - verify_sudoers_hardening.stat.mode == '0440'
+        fail_msg: "sudoers hardening not deployed or wrong permissions (expected 0440)"
+
+    # --- Session timeout ---
+    - name: Verify TMOUT configured via profile.d (CIS 5.5.5)
+      ansible.builtin.command: grep -q 'readonly TMOUT=600' /etc/profile.d/tmout.sh
+      changed_when: false
+      become: true
+
+    # --- Password quality ---
+    - name: Check pwquality minlen=14
+      ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
+      changed_when: false
+      become: true
+
+    # --- Journald persistence ---
+    - name: Verify /var/log/journal exists for persistent logging
+      ansible.builtin.stat:
+        path: /var/log/journal
+      register: verify_journal_dir
+      become: true
+
+    - name: Assert journal directory exists with correct mode
+      ansible.builtin.assert:
+        that:
+          - verify_journal_dir.stat.exists
+          - verify_journal_dir.stat.isdir
+          - verify_journal_dir.stat.mode == '2755'
+        fail_msg: "/var/log/journal missing or wrong mode (expected 2755)"
+
     # --- Service masking ---
     - name: Check cups-browsed service state
       ansible.builtin.systemd:
