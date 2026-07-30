@@ -69,7 +69,8 @@ distrobox_exports:
   - /usr/bin/vim
 
 # Binary versions for container provisioning (Play 3)
-distrobox_oc_version: "4.22.6"
+# Reference packages_oc_version so host and container stay in sync.
+distrobox_oc_version: "{{ packages_oc_version }}"
 
 # kind host prerequisites
 distrobox_kind_log_driver: "k8s-file"

@@ -68,7 +68,7 @@ done
 
 # GitHub CLI authenticated
 if run gh auth status &>/dev/null 2>&1; then record "gh-auth" "PASS"
-else record "gh-auth" "FAIL" "not authenticated"; fi
+else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 
 # YubiKey
 if run ykman info &>/dev/null; then record "yubikey" "PASS"
@@ -290,6 +290,34 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # sudoers hardening drop-in
   if [[ -f /etc/sudoers.d/99-hardening ]]; then record "sudoers-hardening" "PASS"
   else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing"; fi
+
+  # pwhistory remember=24 (CIS 5.3.5)
+  if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
+  else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
+
+  # yescrypt password hashing (CIS 5.3.6)
+  if grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
+  else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
+
+  # Critical file permissions (CIS 6.1.x)
+  shadow_mode=$(stat -c '%a' /etc/shadow 2>/dev/null || echo "?")
+  if [[ "$shadow_mode" == "0" ]]; then record "shadow-perms" "PASS"
+  else record "shadow-perms" "FAIL" "permissions $shadow_mode, expected 0000"; fi
+  gshadow_mode=$(stat -c '%a' /etc/gshadow 2>/dev/null || echo "?")
+  if [[ "$gshadow_mode" == "0" ]]; then record "gshadow-perms" "PASS"
+  else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000"; fi
+
+  # TMOUT session timeout (CIS 5.5.5)
+  if [[ -f /etc/profile.d/tmout.sh ]]; then record "tmout" "PASS"
+  else record "tmout" "FAIL" "TMOUT not configured in /etc/profile.d/tmout.sh"; fi
+
+  # /tmp noexec (CIS 1.1.2.x)
+  if findmnt -n -o OPTIONS /tmp 2>/dev/null | grep -q noexec; then record "tmp-noexec" "PASS"
+  else record "tmp-noexec" "FAIL" "/tmp not mounted noexec"; fi
+
+  # ctrl+alt+del disabled (physical security)
+  if systemctl is-masked ctrl-alt-del.target &>/dev/null; then record "ctrl-alt-del-masked" "PASS"
+  else record "ctrl-alt-del-masked" "FAIL" "ctrl-alt-del.target not masked"; fi
 
   # dnf-automatic
   timer="dnf-automatic.timer"
