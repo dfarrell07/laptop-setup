@@ -45,7 +45,7 @@ system_sysctl_hardening:
   net.ipv6.conf.all.forwarding: 1  # required for Kubernetes/OVN-K pod routing and Tailscale subnet routing
   net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
   net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
-  net.netfilter.nf_conntrack_max: 131072  # prevent 'table full, dropping packet' under OVN-K/Submariner load
+  net.netfilter.nf_conntrack_max: 524288  # prevent 'table full, dropping packet' under OVN-K/Submariner load
   net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
   net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
   kernel.randomize_va_space: 2    # CIS — full ASLR (value 2=stack+VDSO+mmap+heap; value 1=partial)

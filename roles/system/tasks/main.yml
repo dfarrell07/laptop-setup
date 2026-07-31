@@ -655,6 +655,16 @@
   failed_when: false
   notify: Restart usbguard
 
+- name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
+  ansible.builtin.lineinfile:
+    path: /etc/usbguard/usbguard-daemon.conf
+    regexp: '^ImplicitPolicyTarget='
+    line: 'ImplicitPolicyTarget=block'
+    state: present
+  when: system_install_usbguard | default(true) | bool
+  failed_when: false
+  notify: Restart usbguard
+
 - name: Enable USBGuard service
   ansible.builtin.systemd:
     name: usbguard

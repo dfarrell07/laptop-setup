@@ -246,6 +246,11 @@
     path: "{{ ansible_user_dir }}/.config/git/allowed_signers"
   register: verify_allowed_signers
 
+- name: Assert allowed_signers file exists
+  ansible.builtin.assert:
+    that: verify_allowed_signers.stat.exists
+    fail_msg: "~/.config/git/allowed_signers was not deployed — SSH signing verification will not work"
+
 - name: Assert allowed_signers exists and is non-empty
   ansible.builtin.assert:
     that:

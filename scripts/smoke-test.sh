@@ -767,8 +767,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
   _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null)
   if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"
-  elif [[ "$_nfct" -ge "131072" ]]; then record "sysctl-conntrack-max" "PASS"
-  else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=131072"; fi
+  elif [[ "$_nfct" -ge "524288" ]]; then record "sysctl-conntrack-max" "PASS"
+  else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=524288"; fi
   _sysctl_check "net.core.rmem_max"                    "16777216" "sysctl-rmem-max"
   _sysctl_check "net.core.wmem_max"                    "16777216" "sysctl-wmem-max"
 

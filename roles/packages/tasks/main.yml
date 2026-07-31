@@ -265,6 +265,7 @@
             dest: /usr/local/bin
             remote_src: true
             extra_opts:
+              - --no-same-owner
               - --strip-components=1
               - linux-amd64/helm
           become: true
@@ -312,6 +313,8 @@
             src: /tmp/kustomize.tar.gz
             dest: /usr/local/bin
             remote_src: true
+            extra_opts:
+              - --no-same-owner
           become: true
           tags: [become]
 
@@ -419,7 +422,7 @@
             src: /tmp/tkn.tar.gz
             dest: /usr/local/bin
             remote_src: true
-            extra_opts: [tkn]
+            extra_opts: ["--no-same-owner", "tkn"]
           become: true
           tags: [become]
 
