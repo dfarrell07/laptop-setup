@@ -109,6 +109,10 @@ if grep -q "Ansible managed" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc"
 else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
 unset _rg
 
+# ~/.cargo/bin in PATH (added by dotfiles role — required for Rust/bpfman toolchain)
+if grep -q '\.cargo/bin' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "cargo-path" "PASS"
+else record "cargo-path" "FAIL" "~/.cargo/bin not in PATH exports (.zshrc/.bashrc) — Rust toolchain binaries unavailable"; fi
+
 # environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
 if [[ "$(uname -s)" == "Linux" ]]; then
   _ecf="$HOME/.config/environment.d/containers.conf"
@@ -869,12 +873,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
   # bridge-nf: WARN if br_netfilter module not loaded (persistent via modules-load.d; reboot activates)
-  _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null)
+  _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null) || true
   if [[ "$_bridge_nf" == "1" ]]; then record "sysctl-bridge-nf-iptables" "PASS"
   elif [[ -z "$_bridge_nf" ]]; then
     record "sysctl-bridge-nf-iptables" "WARN" "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
   else record "sysctl-bridge-nf-iptables" "FAIL" "net.bridge.bridge-nf-call-iptables=$_bridge_nf expected 1"; fi
-  _bridge_nf6=$(sysctl -n net.bridge.bridge-nf-call-ip6tables 2>/dev/null)
+  _bridge_nf6=$(sysctl -n net.bridge.bridge-nf-call-ip6tables 2>/dev/null) || true
   if [[ "$_bridge_nf6" == "1" ]]; then record "sysctl-bridge-nf-ip6tables" "PASS"
   elif [[ -z "$_bridge_nf6" ]]; then
     record "sysctl-bridge-nf-ip6tables" "WARN" "br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"
@@ -908,7 +912,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -f /sys/module/amdgpu/parameters/runpm ]]; then
     _runpm=$(cat /sys/module/amdgpu/parameters/runpm)
     if [[ "$_runpm" == "-1" ]]; then record "amdgpu-runpm-auto" "PASS"
-    elif [[ "$_runpm" == "0" ]]; then record "amdgpu-runpm-auto" "FAIL" "runpm=0 disables dGPU PM"
+    elif [[ "$_runpm" == "0" ]]; then record "amdgpu-runpm-auto" "FAIL" "runpm=0 disables GPU runtime PM"
     else record "amdgpu-runpm-auto" "WARN" "runpm=$_runpm — prefer -1 (ACPI auto)"; fi
   fi
   # Additional sysctl checks (CIS + hardening)
@@ -928,7 +932,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.all.log_martians"      "1" "sysctl-log-martians"
   _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
-  _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null)
+  _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
   if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"
   elif [[ "$_nfct" -ge "524288" ]]; then record "sysctl-conntrack-max" "PASS"
   else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=524288"; fi

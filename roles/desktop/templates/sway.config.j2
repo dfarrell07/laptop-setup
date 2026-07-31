@@ -155,7 +155,7 @@ input "type:touchpad" {
 # Find the exact identifier with: swaymsg -t get_inputs | grep -A2 TrackPoint
 # Then set desktop_sway_trackpoint_id in config.yml, e.g.:
 #   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"
-{% if desktop_sway_trackpoint_id is defined %}
+{% if desktop_sway_trackpoint_id is defined and desktop_sway_trackpoint_id %}
 input "{{ desktop_sway_trackpoint_id }}" {
     scroll_method on_button_down
     scroll_button 274

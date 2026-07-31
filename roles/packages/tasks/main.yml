@@ -200,8 +200,16 @@
             remote_src: true
             extra_opts:
               - --no-same-owner
+              - opm-rhel8
           become: true
           tags: [become]
+
+        - name: Rename opm-rhel8 to opm  # noqa: command-instead-of-module
+          ansible.builtin.command:
+            cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm
+          become: true
+          tags: [become]
+          changed_when: true
 
         - name: Set permissions on opm
           ansible.builtin.file:
@@ -470,8 +478,8 @@
   environment:
     GOPATH: "{{ ansible_user_dir }}/go"
     GOBIN: "{{ ansible_user_dir }}/go/bin"
-    HTTPS_PROXY: "{{ proxy_url | default('') }}"
-    HTTP_PROXY: "{{ proxy_url | default('') }}"
+    HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
+    HTTP_PROXY: "{{ proxy_url | default(omit) }}"
   loop: "{{ packages_go_install }}"
   register: packages_go_results
   failed_when: false
