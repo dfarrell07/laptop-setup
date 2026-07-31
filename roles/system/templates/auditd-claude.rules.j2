@@ -1,9 +1,15 @@
 # {{ ansible_managed }}
 # Audit rules for sensitive file access monitoring
 
-# Exclusion rules (MUST come before syscall rules — first-match wins).
+# Exclusion rules (MUST come before -a always,exit syscall rules — first-match wins).
 # These suppress noise from well-known agents when syscall rules are added.
-# They have no effect on the watch (-w) rules below.
+# They have NO effect on the -w watch rules below: -w rules use audit_inode_hash
+# (a separate kernel data structure from AUDIT_FILTER_EXIT). At syscall exit,
+# audit_filter_inodes() runs after audit_filter_syscall() and overrides the
+# DISABLED state when a watched inode is accessed. Result: getpid/mmap noise
+# from ssh-agent is suppressed, but writes to ~/.ssh/ are still audited.
+# NOTE: this guarantee does NOT hold for -a always,exit -F dir=... rules —
+# those live in AUDIT_FILTER_EXIT and WOULD be suppressed by these exclusions.
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 
