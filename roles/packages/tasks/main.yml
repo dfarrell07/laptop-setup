@@ -127,6 +127,8 @@
             remote_src: true
             extra_opts:
               - --no-same-owner
+              - oc
+              - kubectl
           when: packages_oc_download.changed or packages_oc_check.rc != 0
           become: true
           tags: [become]
