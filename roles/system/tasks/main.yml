@@ -1665,6 +1665,36 @@
   # so config mutations by root must be content-verified, not just perm-checked.
   # Paired with the auditd -w /etc/bpfman/ watch in auditd-claude.rules.j2.
 
+- name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/usbguard'
+    line: '/etc/usbguard NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+
+- name: Add /etc/audit to AIDE monitoring (audit rules and config integrity)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/audit'
+    line: '/etc/audit NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+
+- name: Add /etc/aide.conf to AIDE monitoring (self-reference — detect config tampering)
+  ansible.builtin.lineinfile:
+    path: /etc/aide.conf
+    regexp: '^/etc/aide\.conf\s'
+    line: '/etc/aide.conf NORMAL'
+    insertbefore: '^/etc\s'
+    state: present
+  when: system_aide_enabled | bool
+  notify: Reinitialize AIDE database
+
 - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
   ansible.builtin.lineinfile:
     path: /etc/aide.conf

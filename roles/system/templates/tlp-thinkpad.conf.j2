@@ -21,8 +21,13 @@ STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop }}
 # NM's 99-wifi-powersave.conf pins wifi.powersave=2 (disabled) — NM config wins.
 
 # PCIe/NVMe power management on battery (ASPM + runtime PM)
-# powersupersave enables L1 substates (L1.1/L1.2) for PCIe; auto activates
-# kernel runtime suspend for PCIe and USB devices including the NVMe controller.
+# PCIE_ASPM_ON_BAT=powersupersave enables L1 substates (L1.1/L1.2) for PCIe links.
+# RUNTIME_PM_ON_BAT=auto enables kernel runtime suspend for PCIe devices (NVMe, etc.)
+# but NOT USB — USB autosuspend is a separate TLP mechanism (USB_AUTOSUSPEND, on by
+# default). The Radeon 780M is excluded from RUNTIME_PM by TLP's RUNTIME_PM_DRIVER_DENYLIST
+# (contains amdgpu); GPU manages its own runtime PM independently via amdgpu.runpm.
+# Note: RUNTIME_PM_ON_AC and RUNTIME_PM_ON_BAT match TLP defaults — listed here
+# explicitly to document the intended state alongside the PCIE_ASPM override.
 PCIE_ASPM_ON_AC=default
 PCIE_ASPM_ON_BAT=powersupersave
 RUNTIME_PM_ON_AC=on
