@@ -13,7 +13,7 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
-	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-vm smoke-test smoke-test-container check"
+	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-macos test-vm smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
 	@echo "Other:      backup csb-audit diff vault-edit"

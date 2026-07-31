@@ -8,6 +8,22 @@
 profile: work
 ssh_port: 722
 
+# ============================================================
+# USER IDENTITY — override ALL of these in config.yml
+# ============================================================
+# These drive git commit attribution, SSH key comments, shell aliases
+# that reference your GitHub username, and the notes repo clone URL.
+# Without overriding them, you will get commits attributed to
+# "Daniel Farrell", aliases pointing to dfarrell07's repos, and a
+# notes clone that fails (private repo).
+#
+# Add these lines to config.yml (no leading #) with your real values:
+#
+#   dotfiles_github_user: "your-github-username"
+#   dotfiles_user_name: "Your Name"
+#   dotfiles_user_email_work: "you@work.example.com"
+#   dotfiles_user_email_personal: "you@personal.example.com"
+
 # Feature toggles (naming: install_<feature>)
 install_docker: false
 install_vpn: true
@@ -19,7 +35,8 @@ install_virtualization: true
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   packages_install_binaries: true    (roles/packages/defaults)
 #   desktop_deploy_chrome_policies: true (roles/desktop/defaults)
-#   desktop_environment: auto          (roles/desktop/defaults)
+#   desktop_environment: auto          (roles/desktop/defaults) — set to sway/i3/gnome explicitly on first provision;
+#                                       auto-detection reads the running session, which fails before the WM is installed
 #   system_timezone: America/New_York  (roles/system/defaults) — set your local timezone
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
