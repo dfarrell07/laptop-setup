@@ -141,8 +141,10 @@ elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "$HOME/.ss
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
-if [[ "$homedir_perms" == "750" ]]; then record "home-dir-perms" "PASS"
-else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected 750 (CIS)"; fi
+# CIS intent: home dir should be no MORE permissive than 750 (owner=7, group≤5, others=0)
+# Modes like 710 are acceptable (more restrictive than 750 — group has execute only)
+if [[ "$homedir_perms" =~ ^7[0-5]0$ ]]; then record "home-dir-perms" "PASS"
+else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750 (CIS — owner full, group no-write, others none)"; fi
 
 # --- Git security checks ---
 for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub"; do

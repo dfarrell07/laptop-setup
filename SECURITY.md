@@ -20,8 +20,11 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
   DNS-over-TLS/DNSSEC (empty FallbackDNS), core dump disable, kernel
   module blacklist (incl. usb-storage/uas), cups-browsed/avahi masking,
-  dnf-automatic, /dev/shm noexec, /home nosuid (CIS 1.1.9), pam_wheel.so (su restricted to wheel),
-  root account locked, AIDE file integrity monitoring (daily), chrony NTS
+  dnf-automatic, /dev/shm noexec, /home nosuid (CIS 1.1.9), NFS server /
+  rpcbind masked (CIS 2.2.7), auditd user-mgmt tool watches — chsh/chfn/newgrp/su
+  (CIS 4.1.3.8), pam_wheel.so (su restricted to wheel),
+  root account locked, inactive account lockout chage -I 30 (CIS 5.5.1.5),
+  AIDE file integrity monitoring (daily), chrony NTS
   (authenticated time sync)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
   `transfer.fsckObjects=true`, `core.symlinks=false`,

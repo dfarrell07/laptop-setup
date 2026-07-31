@@ -207,6 +207,28 @@
     that: verify_gpgsign.stdout == 'true'
     fail_msg: "git commit.gpgsign not enabled"
 
+- name: Check git tag.gpgsign setting
+  ansible.builtin.command: git config --global tag.gpgsign
+  register: verify_tag_gpgsign
+  changed_when: false
+
+- name: Assert tag.gpgsign is true
+  ansible.builtin.assert:
+    that: verify_tag_gpgsign.stdout == 'true'
+    fail_msg: "git tag.gpgsign not enabled — tags would be unsigned"
+
+- name: Check git gpg.ssh.allowedSignersFile setting
+  ansible.builtin.command: git config --global gpg.ssh.allowedSignersFile
+  register: verify_signers_file_path
+  changed_when: false
+
+- name: Assert gpg.ssh.allowedSignersFile points to allowed_signers
+  ansible.builtin.assert:
+    that: verify_signers_file_path.stdout == '~/.config/git/allowed_signers'
+    fail_msg: >-
+      git gpg.ssh.allowedSignersFile is '{{ verify_signers_file_path.stdout }}',
+      expected '~/.config/git/allowed_signers'
+
 - name: Check git safe.bareRepository setting
   ansible.builtin.command: git config --global safe.bareRepository
   register: verify_bare_repo
