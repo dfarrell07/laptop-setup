@@ -44,6 +44,9 @@ bindsym $mod+Shift+q kill
 # Launcher
 bindsym $mod+d exec wofi --show drun
 
+# Clipboard history picker (cliphist stores history via wl-paste daemon)
+bindsym $mod+Shift+v exec cliphist list | wofi --show dmenu | cliphist decode | wl-copy
+
 # Display configuration (wdisplays — Wayland equivalent of arandr)
 bindsym $mod+Shift+d exec wdisplays
 
