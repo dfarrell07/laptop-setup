@@ -566,3 +566,21 @@
         that: verify_cron_daily.stat.mode == '0700'
         fail_msg: "/etc/cron.daily wrong permissions (expected 0700)"
       when: verify_cron_daily.stat.exists
+
+    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
+    - name: Check notes repo directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes/.git"
+      register: verify_notes_vm
+
+    - name: Assert notes .git/config has 0600 when repo exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes/.git/config"
+      register: verify_notes_config_vm
+      when: verify_notes_vm.stat.exists
+
+    - name: Verify notes .git/config permissions
+      ansible.builtin.assert:
+        that: verify_notes_config_vm.stat.mode == '0600'
+        fail_msg: "notes .git/config should be 0600"
+      when: verify_notes_vm.stat.exists and verify_notes_config_vm.stat.exists
