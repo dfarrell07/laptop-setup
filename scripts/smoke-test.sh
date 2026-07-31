@@ -122,6 +122,10 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ ! -f "$_saf" ]]; then record "env-d-ssh-agent" "FAIL" "missing: $_saf — SSH_AUTH_SOCK not set in systemd session"
   else record "env-d-ssh-agent" "FAIL" "SSH_AUTH_SOCK missing from $_saf"; fi
   unset _saf
+  # subuid/subgid required for rootless Podman user namespaces (/etc/subuid is world-readable)
+  if grep -q "^${USER}:" /etc/subuid 2>/dev/null && grep -q "^${USER}:" /etc/subgid 2>/dev/null; then
+    record "subuid-subgid" "PASS"
+  else record "subuid-subgid" "FAIL" "subuid/subgid not configured for $USER — rootless Podman will fail with cryptic namespace errors"; fi
 fi
 
 # SSH config and permissions
@@ -133,6 +137,7 @@ else record "ssh-config" "FAIL" "not deployed"; fi
 
 sshdir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || echo "?")
 if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
+elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "~/.ssh/ directory not deployed"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
@@ -391,7 +396,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
   # Auditd watch keys for new paths deployed by the system role
-  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy; do
+  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy user-mgmt; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
       record "auditd-watch-${_key}" "PASS"
     else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
@@ -603,6 +608,16 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
   unset _vt_opts
 
+  # /home nosuid (CIS 1.1.9) — nosuid prevents setuid binaries copied into $HOME from gaining elevated privileges
+  # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
+  if findmnt -n /home &>/dev/null; then
+    _home_opts=$(findmnt -n -o OPTIONS /home 2>/dev/null || echo "")
+    if echo "$_home_opts" | grep -q nosuid; then record "home-nosuid" "PASS"
+    elif $CSB_HOST; then record "home-nosuid" "WARN" "skipped on CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
+    else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid not set: $_home_opts"; fi
+    unset _home_opts
+  else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
+
   # kernel.core_pattern safety
   if [[ "$(sysctl -n kernel.core_pattern 2>/dev/null)" == "|/bin/false" ]]; then record "core-pattern" "PASS"
   else record "core-pattern" "FAIL" "kernel.core_pattern expected '|/bin/false' (pipe prefix required)"; fi
@@ -752,11 +767,6 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
-  # subuid/subgid required for rootless Podman user namespaces
-  if grep -q "^${USER}:" /etc/subuid 2>/dev/null && grep -q "^${USER}:" /etc/subgid 2>/dev/null; then
-    record "subuid-subgid" "PASS"
-  else record "subuid-subgid" "FAIL" "subuid/subgid not configured for $USER — rootless Podman will fail with cryptic namespace errors"; fi
-
   # Critical kernel sysctl values
   _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"

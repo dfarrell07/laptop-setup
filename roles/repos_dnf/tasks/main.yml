@@ -141,10 +141,14 @@
           Continuing playbook execution.
       when: not (csb_detected | default(false))
 
+# Mullvad is a personal privacy VPN whose purpose is to bypass network monitoring —
+# adding it on CSB could trigger SIEM/DLP alerts and violates corporate policy intent.
+# Skip entirely on CSB (not just rescue-on-failure) unlike other consumer repos.
 - name: Add Mullvad VPN repo
   when:
     - repo_mullvad | default(true)
     - ansible_distribution == 'Fedora'
+    - not (csb_detected | default(false))
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:

@@ -168,7 +168,10 @@ markdownlint:
 commitlint:
 	npx --no -- commitlint --from origin/main --to HEAD
 
-test: test-scripts test-fedora test-centos test-debian test-vm
+# Container-based molecule tests only (Podman, no libvirt required).
+# Matches CI molecule coverage (test-macos excluded — requires macOS runner).
+# For VM tests: make test-vm (requires: make bootstrap-test first).
+test: test-scripts test-fedora test-centos test-debian
 
 test-scripts:
 	bash scripts/test-queue-poller.sh

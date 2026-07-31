@@ -20,7 +20,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
   DNS-over-TLS/DNSSEC (empty FallbackDNS), core dump disable, kernel
   module blacklist (incl. usb-storage/uas), cups-browsed/avahi masking,
-  dnf-automatic, /dev/shm noexec, pam_wheel.so (su restricted to wheel),
+  dnf-automatic, /dev/shm noexec, /home nosuid (CIS 1.1.9), pam_wheel.so (su restricted to wheel),
   root account locked, AIDE file integrity monitoring (daily), chrony NTS
   (authenticated time sync)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
@@ -43,7 +43,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   force push and deletion blocked; linear history enforced
 - **Secret scanning** — GitHub secret scanning and push protection
   enabled (server-side complement to gitleaks pre-commit hook)
-- **Browser hardening** — 37 Chrome/Chromium managed policies (HTTPS-only,
+- **Browser hardening** — 41 Chrome/Chromium managed policies (HTTPS-only,
   site isolation, WebRTC, download restrictions, remote debugging blocked)
 - **Desktop hardening** — GNOME lock screen notifications hidden, USB
   automount disabled, RDP/VNC disabled, idle lock at 300s (GNOME dconf,

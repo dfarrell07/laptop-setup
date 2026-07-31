@@ -105,7 +105,7 @@
 
       [Service]
       Type=oneshot
-      ExecStart=mount -o remount,nosuid,nodev,noexec /dev/shm
+      ExecStart=/usr/bin/mount -o remount,nosuid,nodev,noexec /dev/shm
       RemainAfterExit=yes
 
       [Install]
@@ -522,7 +522,7 @@
   ansible.builtin.command:
     cmd: authselect select sssd --force
   when:
-    - ansible_system == 'Linux'
+    - ansible_pkg_mgr in ['dnf', 'dnf5']  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
     - system_authselect_current.stdout | default('') is not search('^sssd\b')
   changed_when: true
   failed_when: false
@@ -637,8 +637,8 @@
     - avahi-daemon.socket
   failed_when: false
 
-# --- Mask NFS server and rpcbind (CIS 2.2.2 — no NFS server needed on a workstation) ---
-- name: Mask NFS server and rpcbind (CIS 2.2.2)
+# --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
+- name: Mask NFS server and rpcbind (CIS 2.2.7)
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: true
@@ -1057,6 +1057,7 @@
   when:
     - ansible_system == 'Linux'
     - system_aide_enabled | bool
+    - not (csb_detected | default(false))  # dnf-automatic not installed on CSB
   notify: Restart dnf-automatic timer
   failed_when: false
 

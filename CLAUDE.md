@@ -26,6 +26,7 @@ make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
+make test             # Container molecule tests (Fedora/Rocky/Debian, Podman, no libvirt needed)
 make ci               # Lint + syntax + all non-VM molecule tests (mirrors CI pipeline)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
@@ -68,10 +69,12 @@ make commitlint       # Validate commit messages from origin/main..HEAD
 
 - `make lint` — ansible-lint (production profile) + yamllint + shellcheck
 - `make syntax-check` — Playbook syntax validation
+- `make test` — Container-based molecule tests (Fedora/Rocky/Debian); Podman only, no libvirt required. Matches CI molecule coverage (macOS excluded — needs macOS runner)
+- `make ci` — Full CI pipeline locally: lint + syntax-check + test + test-macos (macOS runner required for macos scenario)
 - `make test-fedora` — Molecule Fedora 44 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-centos` — Molecule Rocky Linux 10 (work profile, includes redhat role)
 - `make test-debian` — Molecule Debian 12 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
-- `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services)
+- `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services); requires `make bootstrap-test` first
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
 - CI runs linting + Fedora/Rocky/Debian/macOS molecule tests on every PR, VM tests locally
 - CI skips molecule on doc-only PRs (shell-based git diff, no third-party action)
