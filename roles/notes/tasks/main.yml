@@ -68,6 +68,7 @@
     chdir: "{{ notes_repo_path }}"
   no_log: true
   changed_when: true
+  failed_when: false
   when:
     - notes_repo_available | bool
     - notes_transcrypt_bin.rc | default(1) == 0
