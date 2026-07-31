@@ -161,6 +161,6 @@
     msg: |
       === Container Provisioning Summary ===
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
-      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists else 'MISSING' }}
+      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else 'MISSING' }}
       Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
       ======================================
