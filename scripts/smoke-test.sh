@@ -752,6 +752,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
+  # subuid/subgid required for rootless Podman user namespaces
+  if grep -q "^${USER}:" /etc/subuid 2>/dev/null && grep -q "^${USER}:" /etc/subgid 2>/dev/null; then
+    record "subuid-subgid" "PASS"
+  else record "subuid-subgid" "FAIL" "subuid/subgid not configured for $USER — rootless Podman will fail with cryptic namespace errors"; fi
 
   # Critical kernel sysctl values
   _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }

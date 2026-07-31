@@ -56,6 +56,8 @@
         remote_src: true
         extra_opts:
           - --no-same-owner
+          - oc
+          - kubectl
 
     - name: Set permissions on oc and kubectl
       ansible.builtin.file:
@@ -110,11 +112,15 @@
 # No `creates:` guard: always overwrite so the wrapper points to the current
 # container. A stale wrapper from a renamed/old container would otherwise
 # silently persist. distrobox-export is idempotent when the container matches.
+# distrobox-export is only available inside distrobox containers (not toolbox).
+# container_host_exec.stat.exists is true for distrobox (distrobox-host-exec present),
+# false for toolbox. Without the guard, this hard-fails Play 3 for toolbox users.
 - name: Export oc and kubectl to host
   ansible.builtin.command:
     cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
   loop: [oc, kubectl]
   changed_when: false
+  when: container_host_exec.stat.exists
 
 # --- Verify ---
 - name: Confirm Python works
