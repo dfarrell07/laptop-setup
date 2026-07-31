@@ -427,8 +427,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax=0 not configured"; fi
 
   # journald persistent storage (verify Storage=persistent, not just file existence)
+  # Skipped on CSB — Ansible omits journald config to avoid suppressing SIEM-forwarded events
+  # (RateLimitBurst in the drop-in could drop audit events before audisp-remote ships them)
   if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-persistent" "PASS"
+  elif $CSB_HOST; then record "journald-persistent" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
@@ -540,11 +543,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
 
   # yescrypt password hashing (CIS 5.3.6)
+  # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
   if grep -q '^ENCRYPT_METHOD YESCRYPT$' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
+  elif $CSB_HOST; then record "yescrypt" "WARN" "skipped on CSB — login.defs not modified; IPA/SSSD governs password policy"
   else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
 
   # yescrypt cost factor (CIS 5.4.1) — use $ to avoid prefix match against e.g. 50
+  # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
   if grep -qE '^YESCRYPT_COST_FACTOR 5$' /etc/login.defs 2>/dev/null; then record "yescrypt-cost" "PASS"
+  elif $CSB_HOST; then record "yescrypt-cost" "WARN" "skipped on CSB — login.defs not modified; IPA/SSSD governs password policy"
   else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
 
   # fprintd masked (prevents fingerprint from bypassing faillock)
@@ -563,8 +570,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "dns-resolves" "FAIL" "DNS resolution failed for redhat.com"; fi
 
   # cron.allow restricts cron to root only (CIS 5.1.8)
+  # Skipped on CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
+  # non-root system users; cron.allow=root-only would silently break those IT management jobs
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
+  elif $CSB_HOST; then record "cron-allow-root" "WARN" "skipped on CSB — IT monitoring agents use cron; cron.allow not restricted to root"
   else record "cron-allow-root" "WARN" "/etc/cron.allow missing or not restricted to root"; fi
+
+  # Login banner deployed to /etc/issue (CIS 1.7.1)
+  # Skipped on CSB — IT deploys a mandated corporate legal banner; Ansible guard intentionally
+  # omits this task so the IT-managed banner is not overwritten
+  if grep -qi 'authorized users' /etc/issue 2>/dev/null; then record "login-banner" "PASS"
+  elif $CSB_HOST; then record "login-banner" "WARN" "skipped on CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
+  else record "login-banner" "FAIL" "login banner not deployed or missing expected text (/etc/issue)"; fi
 
   # Critical file permissions (CIS 6.1.x)
   shadow_mode=$(stat -c '%a' /etc/shadow 2>/dev/null || echo "?")
@@ -715,17 +732,26 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 
   # login.defs password aging (CIS 5.4.x)
+  # Skipped on CSB — login.defs is not modified on CSB; IPA/SSSD + IT group policy governs local
+  # accounts. INACTIVE=30 in particular could lock IT-managed service accounts that don't rotate
+  # passwords, so Ansible deliberately skips all login.defs writes when csb_detected is true.
   if grep -qE '^PASS_MAX_DAYS[[:space:]]+365$' /etc/login.defs 2>/dev/null; then record "pass-max-days" "PASS"
+  elif $CSB_HOST; then record "pass-max-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-max-days" "FAIL" "PASS_MAX_DAYS not set to 365 in login.defs"; fi
   if grep -qE '^UMASK[[:space:]]+027$' /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
+  elif $CSB_HOST; then record "umask-login-defs" "WARN" "skipped on CSB — login.defs not modified"
   else record "umask-login-defs" "FAIL" "UMASK not set to 027 in login.defs"; fi
   if grep -qE '^INACTIVE[[:space:]]+30$' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
+  elif $CSB_HOST; then record "inactive-lock" "WARN" "skipped on CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
   else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
   if grep -qE '^PASS_MIN_DAYS[[:space:]]+1$' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
+  elif $CSB_HOST; then record "pass-min-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
   if grep -qE '^PASS_WARN_AGE[[:space:]]+7$' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
+  elif $CSB_HOST; then record "pass-warn-age" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-warn-age" "FAIL" "PASS_WARN_AGE not set to 7 in login.defs"; fi
   if grep -qE '^HOME_MODE[[:space:]]+0750$' /etc/login.defs 2>/dev/null; then record "home-mode" "PASS"
+  elif $CSB_HOST; then record "home-mode" "WARN" "skipped on CSB — login.defs not modified"
   else record "home-mode" "FAIL" "HOME_MODE not set to 0750 in login.defs (CIS: explicit home dir permissions)"; fi
 
   # WiFi MAC address randomization (privacy)
