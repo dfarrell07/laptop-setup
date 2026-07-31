@@ -361,6 +361,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
   else record "usbguard" "FAIL" "not installed"; fi
 
+  # bpfman.socket enabled (socket-activated daemon — socket must be enabled for bpfman load/list to work)
+  if systemctl is-enabled bpfman.socket &>/dev/null && systemctl is-active bpfman.socket &>/dev/null; then
+    record "bpfman-socket" "PASS"
+  elif systemctl is-enabled bpfman.socket &>/dev/null; then record "bpfman-socket" "WARN" "bpfman.socket enabled but not active (first client connect will start it)"
+  else record "bpfman-socket" "FAIL" "bpfman.socket not enabled — bpfman load/list will fail at runtime"; fi
+
   # auditd service enabled and running
   if systemctl is-active auditd &>/dev/null && systemctl is-enabled auditd &>/dev/null; then
     record "auditd-service" "PASS"
@@ -863,7 +869,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.kexec_load_disabled"         "1" "sysctl-kexec-disabled"
   _sysctl_check "kernel.io_uring_disabled"           "1" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
-  _sysctl_check "kernel.unprivileged_bpf_disabled"   "1" "sysctl-bpf-restrict"
+  # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
+  # Integrity lockdown mode locks the value to 2 and makes it read-only (permission denied).
+  _bpf_disabled=$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null) || true
+  if [[ "$_bpf_disabled" -ge "1" ]] 2>/dev/null; then record "sysctl-bpf-restrict" "PASS"
+  elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
+  else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
   _sysctl_check "kernel.perf_event_paranoid"         "2" "sysctl-perf-paranoid"
   _sysctl_check "net.core.bpf_jit_harden"            "1" "sysctl-bpf-jit-harden"
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"

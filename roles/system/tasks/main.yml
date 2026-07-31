@@ -771,6 +771,18 @@
   when: system_install_usbguard | default(true) | bool
   failed_when: false
 
+# bpfman.socket uses socket-activation: the socket must be enabled so the
+# bpfman daemon starts on-demand when a client connects. Without this enable,
+# the binary is present and 'bpfman --version' returns 0, but 'bpfman load'
+# and 'bpfman list' fail because the socket is not listening.
+- name: Enable bpfman socket for on-demand daemon activation
+  ansible.builtin.systemd:
+    name: bpfman.socket
+    state: started
+    enabled: true
+  when: ansible_system == 'Linux'
+  failed_when: false
+
 # --- Firmware updates (LVFS/fwupd) ---
 - name: Install fwupd
   ansible.builtin.dnf:
