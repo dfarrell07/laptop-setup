@@ -281,17 +281,23 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
     if [[ "$_ssh_port" == "722" ]]; then record "sshd-port" "PASS"
     else record "sshd-port" "FAIL" "Port='$_ssh_port' expected '722' (default ssh_port in playbook)"; fi
-    if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
+    if [[ "$zone" == "drop" ]]; then
+      # Only check drop-zone-specific rules when the drop zone is actually active
+      if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
+      else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
+    elif $CSB_HOST; then record "firewall-ssh-port" "WARN" "skipped on CSB — drop zone not active (IT manages zones)"
     else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
     if ip link show tailscale0 &>/dev/null; then
       ts_zone=$(firewall-cmd --get-zone-of-interface=tailscale0 2>/dev/null || echo "?")
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
       else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
     fi
-    # ICMP block-inversion must be enabled: without it the allow-list becomes a block-list,
-    # silently breaking IPv6 NDP (neighbour-solicitation/advertisement) and PMTU discovery.
-    if firewall-cmd --zone=drop --query-icmp-block-inversion &>/dev/null; then record "firewall-icmp-inversion" "PASS"
-    else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone — NDP and PMTU discovery broken"; fi
+    # ICMP block-inversion must be enabled when drop zone is active
+    if [[ "$zone" == "drop" ]]; then
+      if firewall-cmd --zone=drop --query-icmp-block-inversion &>/dev/null; then record "firewall-icmp-inversion" "PASS"
+      else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone — NDP and PMTU discovery broken"; fi
+    elif $CSB_HOST; then record "firewall-icmp-inversion" "WARN" "skipped on CSB — drop zone not active"
+    else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone"; fi
     # libvirt zone must not have ssh enabled (VMs could reach host sshd — lateral movement path)
     if firewall-cmd --get-zones 2>/dev/null | grep -q '\blibvirt\b'; then
       if firewall-cmd --zone=libvirt --query-service=ssh &>/dev/null 2>&1; then
