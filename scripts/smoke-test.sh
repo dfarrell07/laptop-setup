@@ -462,9 +462,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
   else record "pam-wheel" "FAIL" "su not restricted to wheel group"; fi
 
-  # Root account locked
-  if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
-  else record "root-locked" "FAIL" "root account not locked"; fi
+  # Root account locked (passwd -S root requires root — WARN not FAIL when non-root)
+  if [[ "$EUID" -eq 0 ]]; then
+    if passwd -S root 2>/dev/null | grep -qE '\bLK\b|\bL\b'; then record "root-locked" "PASS"
+    else record "root-locked" "FAIL" "root account not locked"; fi
+  else record "root-locked" "WARN" "skipped — passwd -S root requires root (run with sudo for full check)"; fi
 
   # authselect PAM features (verifies faillock/pwhistory are wired into PAM stack, not just configured)
   if command -v authselect &>/dev/null; then
@@ -506,12 +508,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^enforce_for_root' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-enforce-root" "PASS"
   else record "pwquality-enforce-root" "FAIL" "pwquality enforce_for_root not set (CIS 5.3.4)"; fi
 
-  # sudoers hardening drop-in (verify use_pty, logfile, umask)
-  if grep -qE '^Defaults[[:space:]].*use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
-     grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
-     grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
-    record "sudoers-hardening" "PASS"
-  else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
+  # sudoers hardening drop-in (mode 0440 — unreadable by non-root; WARN not FAIL)
+  if [[ "$EUID" -eq 0 ]]; then
+    if grep -qE '^Defaults[[:space:]].*use_pty' /etc/sudoers.d/99-hardening 2>/dev/null && \
+       grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
+       grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
+      record "sudoers-hardening" "PASS"
+    else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
+  else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
   # pwhistory remember=24 (CIS 5.3.5)
   if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"

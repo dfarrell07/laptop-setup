@@ -25,6 +25,8 @@ DOTFILES=(
   .config/git/config-work
   .config/git/config-personal
   .config/git/allowed_signers
+  .config/git/ignore
+  .config/ripgrep/config
   .config/alacritty/alacritty.toml
   .config/gh/config.yml
   .config/gh/hosts.yml
