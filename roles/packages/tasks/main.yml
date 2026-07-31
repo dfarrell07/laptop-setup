@@ -460,12 +460,13 @@
 # --- Go install tools ---
 
 - name: Install Go tools
+  # No 'creates:' guard — version bumps in packages_go_install would be silently
+  # ignored if the binary already exists. 'go install' with a pinned version is
+  # fast when the module cache is warm (skips recompile). 'changed_when: false'
+  # suppresses the always-changed noise since go install has no stable stdout.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
-    creates: >-
-      {{ ansible_user_dir }}/go/bin/{{
-        item | regex_replace('.*/([^@]+)@.*', '\1')
-      }}
+  changed_when: false
   environment:
     GOPATH: "{{ ansible_user_dir }}/go"
     GOBIN: "{{ ansible_user_dir }}/go/bin"
