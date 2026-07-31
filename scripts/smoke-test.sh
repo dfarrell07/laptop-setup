@@ -82,7 +82,7 @@ else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
 # Tailscale connectivity (cross-platform via CLI)
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
-else record "tailscale" "WARN" "not connected"; fi
+else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 out=$(run ssh-add -L 2>&1 || true)
