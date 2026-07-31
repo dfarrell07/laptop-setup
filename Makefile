@@ -6,7 +6,7 @@
        smoke-test-container smoke-test-fedora \
        ci syntax-check shellcheck markdownlint commitlint \
        test-scripts test-fedora test-centos test-debian test-macos test-vm \
-       preflight
+       preflight guard-not-root
 
 help:
 	@echo "Primary:    all minimal container container-rebuild update"
@@ -30,10 +30,10 @@ all: guard-not-root
 minimal: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
 
-container:
+container: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox
 
-container-rebuild:
+container-rebuild: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox -e container_replace=true
 
 backup:
@@ -69,7 +69,7 @@ hooks:
 	git config --local core.hooksPath .githooks
 	@echo "Git hooks installed (core.hooksPath = .githooks)"
 
-update:
+update: guard-not-root
 	ansible-galaxy collection install -r requirements.yml --force
 	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
 	ansible-playbook site.yml --ask-become-pass
@@ -88,28 +88,28 @@ repos: guard-not-root
 notes: guard-not-root
 	ansible-playbook site.yml --tags common,notes
 
-repos-ovnk:
+repos-ovnk: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=ovnk
 
-repos-konflux:
+repos-konflux: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=konflux
 
-repos-personal:
+repos-personal: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=personal
 
-repos-bpfman:
+repos-bpfman: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=bpfman
 
-repos-downstream:
+repos-downstream: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=downstream
 
-repos-cncf:
+repos-cncf: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=cncf
 
-ssh:
+ssh: guard-not-root
 	ansible-playbook site.yml --tags common,ssh
 
-desktop:
+desktop: guard-not-root
 	ansible-playbook site.yml --tags common,desktop --ask-become-pass
 
 system:
@@ -124,10 +124,10 @@ redhat:
 containers:
 	ansible-playbook site.yml --tags common,containers --ask-become-pass
 
-claude:
+claude: guard-not-root
 	ansible-playbook site.yml --tags common,claude
 
-distrobox:
+distrobox: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox
 
 # --- Audit and testing ---

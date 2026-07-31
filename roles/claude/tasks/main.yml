@@ -29,6 +29,12 @@
     - claude_install_result.rc | default(0) != 0
 
 # --- Instance isolation directories ---
+- name: Create default instance config directory (~/.claude)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.claude"
+    state: directory
+    mode: "0700"
+
 - name: Create work instance config directory
   ansible.builtin.file:
     path: "{{ claude_work_config_dir }}"

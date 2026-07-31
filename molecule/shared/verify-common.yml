@@ -328,6 +328,18 @@
       - verify_claude_dir.stat.mode == '0700'
     fail_msg: "Claude personal config dir missing or wrong permissions"
 
+- name: Verify Claude default settings.json exists (~/.claude)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude/settings.json"
+  register: verify_claude_default_settings
+
+- name: Assert Claude default settings.json deployed (0600)
+  ansible.builtin.assert:
+    that:
+      - verify_claude_default_settings.stat.exists
+      - verify_claude_default_settings.stat.mode == '0600'
+    fail_msg: "~/.claude/settings.json not deployed — default claude instance has no deny lists or sandbox"
+
 - name: Verify Claude settings.json exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
