@@ -769,12 +769,15 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
   if [[ "$EUID" -eq 0 ]]; then
     _chage_user="${SUDO_USER:-$USER}"
-    _inactive_val=$(awk -F: -v u="$_chage_user" '$1==u{print $7}' /etc/shadow 2>/dev/null)
-    if [[ "$_inactive_val" == "30" ]]; then record "chage-inactive-user" "PASS"
-    elif [[ -z "$_inactive_val" ]]; then
-      record "chage-inactive-user" "WARN" "could not read shadow INACTIVE for '$_chage_user' (SSSD/IPA domain account?)"
-    else record "chage-inactive-user" "FAIL" "shadow INACTIVE=$_inactive_val for '$_chage_user', expected 30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
-    unset _chage_user _inactive_val
+    _shadow_line=$(awk -F: -v u="$_chage_user" '$1==u' /etc/shadow 2>/dev/null)
+    if [[ -z "$_shadow_line" ]]; then
+      record "chage-inactive-user" "WARN" "no shadow entry for '$_chage_user' (SSSD/IPA domain account?)"
+    else
+      _inactive_val=$(awk -F: '{print $7}' <<< "$_shadow_line")
+      if [[ "$_inactive_val" == "30" ]]; then record "chage-inactive-user" "PASS"
+      else record "chage-inactive-user" "FAIL" "shadow INACTIVE='$_inactive_val' for '$_chage_user', expected 30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
+    fi
+    unset _chage_user _inactive_val _shadow_line
   else record "chage-inactive-user" "WARN" "skipped — reading /etc/shadow requires root (re-run with sudo for full check)"; fi
   if grep -qE '^PASS_MIN_DAYS[[:space:]]+1$' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
   elif $CSB_HOST; then record "pass-min-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
