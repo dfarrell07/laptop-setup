@@ -36,7 +36,7 @@ Host gh gist
 
 {% if profile == 'work' %}
 Host code.engineering.redhat.com
-    User {{ ansible_user }}
+    User {{ real_user_id | default(ansible_user_id) }}
     IdentityFile ~/.ssh/id_rsa_redhat
     IdentitiesOnly yes
 

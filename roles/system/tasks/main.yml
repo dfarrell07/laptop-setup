@@ -899,6 +899,8 @@
   when: system_firewalld_running | bool
   failed_when: false
 
+# failed_when: false — on CSB where the Tailscale repo is blocked, the package
+# may not be installed; silently skip rather than fail the play.
 - name: Enable and start tailscaled
   ansible.builtin.systemd:
     name: tailscaled

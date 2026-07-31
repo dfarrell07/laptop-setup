@@ -298,6 +298,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
     elif $CSB_HOST; then record "firewall-ssh-port" "WARN" "skipped on CSB — drop zone not active (IT manages zones)"
     else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
+    # Check permanent rule regardless of whether tailscale0 is up (catches post-snapshot regressions)
+    if firewall-cmd --permanent --zone=trusted --query-interface=tailscale0 &>/dev/null; then
+      record "firewall-tailscale-permanent" "PASS"
+    else record "firewall-tailscale-permanent" "FAIL" "tailscale0 not in permanent trusted zone config"; fi
     if ip link show tailscale0 &>/dev/null; then
       ts_zone=$(firewall-cmd --get-zone-of-interface=tailscale0 2>/dev/null || echo "?")
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"

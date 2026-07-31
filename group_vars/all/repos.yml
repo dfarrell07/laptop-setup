@@ -135,17 +135,17 @@ git_repos_list:
     enabled: false  # archived since 2023-04-04
 
   # --- downstream internal (VPN required) ---
-  - url: "ssh://dfarrell@code.engineering.redhat.com:22/submariner-operator.git"
+  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/submariner-operator.git"
     dest: ds/submariner-operator
     category: downstream
     enabled: true
 
-  - url: "ssh://dfarrell@code.engineering.redhat.com:22/submariner.git"
+  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/submariner.git"
     dest: ds/submariner
     category: downstream
     enabled: true
 
-  - url: "ssh://dfarrell@code.engineering.redhat.com:22/lighthouse.git"
+  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/lighthouse.git"
     dest: ds/lighthouse
     category: downstream
     enabled: true
