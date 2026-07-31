@@ -66,6 +66,7 @@
       - "{{ notes_transcrypt_password }}"
       - -y
     chdir: "{{ notes_repo_path }}"
+  register: notes_transcrypt_init_result
   no_log: true
   changed_when: true
   failed_when: false
@@ -74,6 +75,18 @@
     - notes_transcrypt_bin.rc | default(1) == 0
     - notes_transcrypt_check.rc | default(1) != 0
     - notes_transcrypt_password | default('') | length > 0
+
+- name: Warn if transcrypt initialization failed
+  ansible.builtin.debug:
+    msg: >-
+      transcrypt initialization exited {{ notes_transcrypt_init_result.rc }} —
+      notes may not be decrypted. Check the password in vault.yml.
+  when:
+    - notes_repo_available | bool
+    - notes_transcrypt_bin.rc | default(1) == 0
+    - notes_transcrypt_check.rc | default(1) != 0
+    - notes_transcrypt_password | default('') | length > 0
+    - notes_transcrypt_init_result.rc | default(0) != 0
 
 - name: Restrict notes repo directory permissions (transcrypt plaintext in working tree)
   ansible.builtin.file:
