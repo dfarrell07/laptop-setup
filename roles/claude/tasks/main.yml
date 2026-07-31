@@ -191,7 +191,6 @@
     scope: user
     state: stopped
     enabled: false
-    daemon_reload: true
   when:
     - not (claude_queue_enabled | bool)
     - ansible_system == 'Linux'
@@ -207,6 +206,15 @@
   when:
     - not (claude_queue_enabled | bool)
     - ansible_system == 'Linux'
+
+- name: Reload systemd user daemon after removing task queue unit files
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  when:
+    - not (claude_queue_enabled | bool)
+    - ansible_system == 'Linux'
+  failed_when: false
 
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)

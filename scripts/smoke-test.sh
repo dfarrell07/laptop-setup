@@ -233,9 +233,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
     record "cliphist" "WARN" "not installed — desktop is '${XDG_CURRENT_DESKTOP:-unknown}', not sway (cliphist is sway-only)"
   else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
-  # wl-paste: used by cliphist daemon and wl-copy used by cliphist picker keybinding
+  # wl-paste/wl-copy (wl-clipboard): installed for ALL desktops via packages_containers
+  # (tmux copy-pipe Wayland clipboard chain) and additionally via desktop_sway_packages
+  # (cliphist daemon + clipboard picker keybinding in sway). Not sway-only — a FAIL here
+  # means wl-clipboard was not installed even from the common packages_containers list.
   if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
-  else record "wl-paste" "FAIL" "not found (wl-clipboard missing — cliphist daemon and clipboard copy broken)"; fi
+  else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
 fi
 
 # ---- System-level checks (skipped with --user-only, --container, or macOS) ----

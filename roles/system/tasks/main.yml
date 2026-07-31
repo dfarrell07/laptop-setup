@@ -1041,7 +1041,7 @@
     state: directory
     mode: "0755"
   when:
-    - ansible_system == 'Linux'
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
     - system_aide_enabled | bool
     - not (csb_detected | default(false))
   failed_when: false
@@ -1058,7 +1058,7 @@
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"
     mode: "0644"
   when:
-    - ansible_system == 'Linux'
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
     - system_aide_enabled | bool
     - not (csb_detected | default(false))  # dnf-automatic not installed on CSB
   notify: Restart dnf-automatic timer

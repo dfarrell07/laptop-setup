@@ -4,6 +4,10 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 
 ## Quick Reference
 
+**First time on a new machine: `make bootstrap` before `make all`** (installs Ansible
+collections, creates vault-pass.sh stub, and sets up git hooks; skipping this gives a
+cryptic "collection not found" error mid-playbook).
+
 ```bash
 make all              # Full run (asks for sudo password)
 make minimal          # Dotfiles + SSH + repos only (no sudo)
