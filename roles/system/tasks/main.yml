@@ -1479,7 +1479,11 @@
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
     cmd: chage -I 30 {{ real_user_id }}
-  when: real_user_id is defined
+  when:
+    - real_user_id is defined
+    # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
+    # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
+    - not (csb_detected | default(false))
   changed_when: false
   failed_when: false
 
