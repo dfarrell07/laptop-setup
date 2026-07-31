@@ -16,6 +16,9 @@ exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
 # Notification daemon (exec_always so it restarts after 'swaymsg reload')
 exec_always mako
 
+# Clipboard history (clipboard contents survive source application close)
+exec wl-paste --watch cliphist store
+
 # Polkit agent (required for GUI privilege escalation — NetworkManager, USB mounts, etc.)
 exec_always /usr/libexec/polkit-gnome-authentication-agent-1
 

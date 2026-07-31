@@ -61,9 +61,12 @@
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
     line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,usrquota 0 0'
-    create: false
-    backup: true  # fstab corruption causes non-recoverable boot failure without console access
-  when: ansible_system == 'Linux'
+    create: true   # must be true on Fedora 44 — /dev/shm has no fstab line by default
+    backup: true   # fstab corruption causes non-recoverable boot failure without console access
+    mode: "0644"
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))  # CSB manages fstab; don't add entries IT doesn't control
   failed_when: false
 
 - name: Check /dev/shm current mount options

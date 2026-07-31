@@ -276,6 +276,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
     if [[ "$zone" == "drop" ]]; then record "firewall-zone" "PASS"
+    elif $CSB_HOST; then record "firewall-zone" "WARN" "zone='$zone' — IT manages zone policy on CSB; drop zone not applied"
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
     _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
     if [[ "$_ssh_port" == "722" ]]; then record "sshd-port" "PASS"
