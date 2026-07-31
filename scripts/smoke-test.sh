@@ -451,6 +451,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-masked passim.service &>/dev/null; then record "passim-masked" "PASS"
   else record "passim-masked" "FAIL" "not masked (unauthenticated HTTP server on 0.0.0.0:27500)"; fi
 
+  # NFS server and rpcbind masked (CIS 2.2.7 — workstation must not run an NFS server)
+  if systemctl is-masked nfs-server.service &>/dev/null; then record "nfs-server-masked" "PASS"
+  else record "nfs-server-masked" "FAIL" "nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)"; fi
+  if systemctl is-masked rpcbind.service &>/dev/null; then record "rpcbind-masked" "PASS"
+  else record "rpcbind-masked" "FAIL" "rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)"; fi
+
   # AIDE file integrity (timer enabled+active AND database initialized)
   if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
     record "aide-timer" "PASS"
