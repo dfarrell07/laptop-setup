@@ -243,7 +243,9 @@
   failed_when:
     - system_icmp_inversion.rc != 0
     - "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
-  when: system_firewalld_running | bool
+  when:
+    - system_firewalld_running | bool
+    - not (csb_detected | default(false))  # drop zone has no interface on CSB — rule is a no-op
   notify:
     - Reload firewalld
     - Restart tailscaled
@@ -259,11 +261,16 @@
   failed_when:
     - system_icmp_types.rc != 0
     - "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
-  when: system_firewalld_running | bool
+  when:
+    - system_firewalld_running | bool
+    - not (csb_detected | default(false))  # drop zone has no interface on CSB — rule is a no-op
   notify:
     - Reload firewalld
     - Restart tailscaled
 
+# On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
+# so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; whether
+# SSH on 722 is reachable from non-Tailscale sources depends on IT's zone policy.
 - name: Open SSH port in firewall
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
@@ -271,7 +278,9 @@
     permanent: true
     immediate: true
     state: enabled
-  when: system_firewalld_running | bool
+  when:
+    - system_firewalld_running | bool
+    - not (csb_detected | default(false))
   notify:
     - Reload firewalld
     - Restart tailscaled
@@ -834,6 +843,10 @@
   failed_when: false
   notify: Reload NetworkManager
 
+# tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
+# interface, not controlled by IT's firewalld policy. Trusted zone is required for
+# Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale
+# peers can reach any listening port on this machine (passim, etc. are masked separately).
 - name: Assign tailscale0 to firewall trusted zone
   ansible.posix.firewalld:
     zone: trusted
