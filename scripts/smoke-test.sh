@@ -137,7 +137,7 @@ else record "ssh-config" "FAIL" "not deployed"; fi
 
 sshdir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || echo "?")
 if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
-elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "~/.ssh/ directory not deployed"
+elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "$HOME/.ssh/ directory not deployed"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
