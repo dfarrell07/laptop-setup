@@ -47,6 +47,16 @@
           The redhat-internal-cert-install package could not be installed.
           Red Hat internal CA certificates may be missing, which can break
           access to internal services and HTTPS endpoints.
+      when: csb_detected | default(false)
+
+    - name: Warn cert package install failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Red Hat cert packages in role redhat.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Install VPN packages
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
@@ -70,6 +80,16 @@
           The VPN package (redhat-internal-globalprotect-ui on Fedora,
           redhat-internal-openvpn-profiles otherwise) could not be installed.
           VPN access to internal Red Hat networks may be unavailable.
+      when: csb_detected | default(false)
+
+    - name: Warn VPN package install failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install VPN packages in role redhat.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
