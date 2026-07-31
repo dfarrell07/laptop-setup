@@ -352,7 +352,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^ClientAliveCountMax 0$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -qP '^ClientAliveCountMax [1-9]$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^AllowTcpForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -475,6 +475,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "authselect-faillock" "FAIL" "authselect with-faillock not enabled (faillock settings won't apply)"; fi
     if authselect is-feature-enabled with-pwhistory 2>/dev/null; then record "authselect-pwhistory" "PASS"
     else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
+    # authselect check verifies actual PAM files match profile+features — is-feature-enabled only checks state file
+    if authselect check 2>/dev/null; then record "authselect-check" "PASS"
+    else record "authselect-check" "FAIL" "authselect PAM files differ from profile — run: authselect select sssd --force"; fi
   fi
 
   # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)

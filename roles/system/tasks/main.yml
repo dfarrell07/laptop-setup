@@ -422,6 +422,27 @@
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
 
+# --- Authselect profile baseline ---
+# authselect enable-feature requires the 'sssd' profile to be active; 'minimal' and
+# 'local' (used by some Vagrant boxes and minimal installs) don't have with-faillock
+# or with-pwhistory feature snippets and silently fail. Also required for Anaconda-
+# installed systems where PAM files may have been edited outside authselect (dirty state).
+- name: Check current authselect profile
+  ansible.builtin.command:
+    cmd: authselect current --raw
+  register: system_authselect_current
+  changed_when: false
+  failed_when: false
+
+- name: Select authselect sssd profile and clear PAM drift
+  ansible.builtin.command:
+    cmd: authselect select sssd --force
+  when:
+    - ansible_system == 'Linux'
+    - system_authselect_current.stdout | default('') is not search('^sssd\b')
+  changed_when: true
+  failed_when: false
+
 # --- Disable fingerprint auth (bypasses pam_faillock; no enrolled prints expected) ---
 - name: Check if authselect with-fingerprint feature is enabled
   ansible.builtin.command:
