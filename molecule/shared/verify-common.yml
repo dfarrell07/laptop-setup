@@ -161,6 +161,7 @@
   ansible.builtin.command: git config --global core.fsmonitor
   register: verify_fsmonitor
   changed_when: false
+  failed_when: false
 
 - name: Assert git core.fsmonitor is false
   ansible.builtin.assert:
@@ -171,6 +172,7 @@
   ansible.builtin.command: git config --global core.hooksPath
   register: verify_hooks_path
   changed_when: false
+  failed_when: false
 
 - name: Assert core.hooksPath is set
   ansible.builtin.assert:
@@ -181,6 +183,7 @@
   ansible.builtin.command: git config --global push.autoSetupRemote
   register: verify_auto_remote
   changed_when: false
+  failed_when: false
 
 - name: Assert push.autoSetupRemote is true
   ansible.builtin.assert:
@@ -191,6 +194,7 @@
   ansible.builtin.command: git config --global fetch.prune
   register: verify_fetch_prune
   changed_when: false
+  failed_when: false
 
 - name: Assert fetch.prune is true
   ansible.builtin.assert:
@@ -236,6 +240,7 @@
   ansible.builtin.command: git config --global safe.bareRepository
   register: verify_bare_repo
   changed_when: false
+  failed_when: false
 
 - name: Assert git safe.bareRepository is explicit
   ansible.builtin.assert:
