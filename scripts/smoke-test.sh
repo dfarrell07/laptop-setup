@@ -52,8 +52,8 @@ run() { # execute locally or inside container
 
 # ---- User-level checks (always run) ----
 
-# SSH auth to GitHub
-out=$(run timeout 10 ssh -T git@github.com 2>&1 || true)
+# SSH auth to GitHub (bypass run() — GitHub's success message is on stderr, which run() discards)
+out=$(timeout 10 ssh -T git@github.com 2>&1 || true)
 if echo "$out" | grep -q "successfully authenticated"; then
   record "github-ssh-auth" "PASS"
 else
@@ -69,7 +69,7 @@ done
 # ec CLI (work-profile only — guard on binary presence)
 if [[ -x /usr/local/bin/ec ]]; then
   if run ec version &>/dev/null; then record "ec" "PASS"
-  else record "ec" "FAIL" "not executable"; fi
+  else record "ec" "FAIL" "ec version command failed (binary present but not functional)"; fi
 fi
 
 # GitHub CLI authenticated
@@ -356,7 +356,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
      grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -qP '^ClientAliveCountMax [1-9]$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+     grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
      grep -q '^AllowTcpForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -530,7 +530,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
 
   # yescrypt password hashing (CIS 5.3.6)
-  if grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
+  if grep -q '^ENCRYPT_METHOD YESCRYPT$' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
   else record "yescrypt" "FAIL" "ENCRYPT_METHOD YESCRYPT not set in login.defs"; fi
 
   # yescrypt cost factor (CIS 5.4.1) — use $ to avoid prefix match against e.g. 50
@@ -726,7 +726,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
 
   # Console keymap
-  if grep -q '^KEYMAP=us' /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
+  if grep -q '^KEYMAP=us$' /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
   else record "vconsole-keymap" "WARN" "KEYMAP=us not set in /etc/vconsole.conf"; fi
 
   # logind IdleAction=lock (physical security)
@@ -775,6 +775,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # IOMMU kernel param (AMD DMA protection)
   if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
   else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+  if grep -q 'iommu=pt' /proc/cmdline 2>/dev/null; then record "iommu-pt" "PASS"
+  else record "iommu-pt" "WARN" "iommu=pt not in cmdline (requires reboot; needed for IOMMU passthrough)"; fi
   # Memory safety kernel params
   if grep -q 'init_on_free=1' /proc/cmdline 2>/dev/null; then record "init-on-free" "PASS"
   else record "init-on-free" "WARN" "init_on_free=1 not in cmdline (requires reboot)"; fi

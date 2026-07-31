@@ -123,6 +123,14 @@
         fail_msg: "Auditd rules not deployed or wrong permissions (expected 0640)"
       when: ansible_facts.services['auditd.service'] is defined
 
+    - name: Check auditd rules are immutable (-e 2 is last rule)
+      ansible.builtin.command: grep -q '^\-e 2$' /etc/audit/rules.d/claude-code.rules
+      changed_when: false
+      become: true
+      when:
+        - ansible_facts.services['auditd.service'] is defined
+        - verify_auditd.stat.exists
+
     - name: Verify DNS-over-TLS config exists
       ansible.builtin.stat:
         path: /etc/systemd/resolved.conf.d/99-dot.conf
@@ -178,6 +186,26 @@
 
     - name: Check sshd config disables empty passwords
       ansible.builtin.command: grep -q 'PermitEmptyPasswords no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config disables X11 forwarding
+      ansible.builtin.command: grep -q 'X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config disables agent forwarding
+      ansible.builtin.command: grep -q 'AllowAgentForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config disables TCP forwarding
+      ansible.builtin.command: grep -q 'AllowTcpForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sshd config uses non-default port 722
+      ansible.builtin.command: grep -q '^Port 722$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 

@@ -22,6 +22,12 @@
     state: restarted
   failed_when: false
 
+- name: Reload NetworkManager
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: reloaded
+  failed_when: false
+
 - name: Restart tailscaled
   ansible.builtin.systemd:
     name: tailscaled
@@ -43,12 +49,6 @@
   ansible.builtin.systemd:
     name: sshd
     state: restarted
-
-- name: Reload NetworkManager
-  ansible.builtin.systemd:
-    name: NetworkManager
-    state: reloaded
-  failed_when: false
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
