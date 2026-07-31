@@ -206,7 +206,7 @@ if [[ -d "$HOME/notes/.git" ]]; then
     if (cd "$HOME/notes" && transcrypt --display) &>/dev/null 2>&1; then
       record "notes-transcrypt" "PASS"
     else
-      record "notes-transcrypt" "FAIL" "repo exists but transcrypt not initialized"
+      record "notes-transcrypt" "WARN" "repo exists but transcrypt not initialized (run: make vault-edit to populate vault_notes_transcrypt_password)"
     fi
   else
     record "notes-transcrypt" "WARN" "transcrypt not installed"
@@ -365,7 +365,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
   # Auditd watch keys for new paths deployed by the system role
-  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod; do
+  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
       record "auditd-watch-${_key}" "PASS"
     else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi

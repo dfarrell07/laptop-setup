@@ -35,6 +35,7 @@
 -w /etc/security/opasswd -p wa -k identity-change
 -w /etc/pam.d/ -p wa -k auth-config
 -w /etc/selinux/ -p wa -k mac-policy
+-w /etc/crypto-policies/ -p wa -k crypto-policy  # watch for unauthorized policy downgrade (e.g. re-enabling SHA1)
 -w /etc/NetworkManager/ -p wa -k network-config
 
 # Persistence mechanisms (system)
@@ -152,10 +153,10 @@
 -w /usr/bin/setfacl -p x -k perm_mod
 
 # MAC (SELinux) policy changes (CIS 4.1.3.14)
--a always,exit -F path=/usr/sbin/semanage -F perm=x -F auid>=1000 -F auid!=-1 -k MAC-policy
--a always,exit -F path=/usr/sbin/setsebool -F perm=x -F auid>=1000 -F auid!=-1 -k MAC-policy
--a always,exit -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=-1 -k MAC-policy
--a always,exit -F path=/usr/sbin/setfiles -F perm=x -F auid>=1000 -F auid!=-1 -k MAC-policy
+-a always,exit -F path=/usr/sbin/semanage -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/sbin/setsebool -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/sbin/setfiles -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
 
 # sudo log watch (CIS 4.1.3.3)
 -w /var/log/sudo.log -p wa -k actions
