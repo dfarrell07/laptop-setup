@@ -149,9 +149,8 @@
       }}
     csb_restricted: >-
       {{
-        (is_rhel | bool)
+        (csb_detected | bool)
         and (fapolicyd_enforcing | bool)
-        and (internal_ca_present | bool)
       }}
 
 # ---------------------------------------------------------------------------
