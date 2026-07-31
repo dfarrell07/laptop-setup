@@ -143,7 +143,7 @@ else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
 # CIS intent: home dir should be no MORE permissive than 750 (owner=7, group≤5, others=0)
 # Modes like 710 are acceptable (more restrictive than 750 — group has execute only)
-if [[ "$homedir_perms" =~ ^[0-9]?7[0-5]0$ ]]; then record "home-dir-perms" "PASS"
+if [[ "$homedir_perms" =~ ^[0-9]?7[0145]0$ ]]; then record "home-dir-perms" "PASS"
 else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750 (CIS — owner full, group no-write, others none)"; fi
 
 # --- Git security checks ---
@@ -389,6 +389,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     _expected_user="${SUDO_USER:-$USER}"
     if [[ "$_allow_users" == "$_expected_user" ]]; then record "sshd-allowusers" "PASS"
     else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$_expected_user'"; fi
+    unset _allow_users _expected_user
   else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule)

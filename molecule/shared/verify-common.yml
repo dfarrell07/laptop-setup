@@ -201,6 +201,7 @@
   ansible.builtin.command: git config --global commit.gpgsign
   register: verify_gpgsign
   changed_when: false
+  failed_when: false
 
 - name: Assert commit.gpgsign is true
   ansible.builtin.assert:
@@ -211,6 +212,7 @@
   ansible.builtin.command: git config --global tag.gpgsign
   register: verify_tag_gpgsign
   changed_when: false
+  failed_when: false
 
 - name: Assert tag.gpgsign is true
   ansible.builtin.assert:
@@ -221,6 +223,7 @@
   ansible.builtin.command: git config --global gpg.ssh.allowedSignersFile
   register: verify_signers_file_path
   changed_when: false
+  failed_when: false
 
 - name: Assert gpg.ssh.allowedSignersFile points to allowed_signers
   ansible.builtin.assert:
