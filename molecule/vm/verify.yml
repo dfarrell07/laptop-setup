@@ -220,10 +220,10 @@
         that:
           - verify_sshd_allowusers.stdout | length > 0
           - verify_sshd_allowusers.stdout != 'root'
-          - verify_sshd_allowusers.stdout == real_user_id
+          - verify_sshd_allowusers.stdout == ansible_user_id
         fail_msg: >-
           AllowUsers is '{{ verify_sshd_allowusers.stdout }}',
-          expected '{{ real_user_id }}' (non-empty, non-root)
+          expected '{{ ansible_user_id }}' (non-empty, non-root)
 
     - name: Verify crypto-policy
       ansible.builtin.command: update-crypto-policies --show
@@ -494,13 +494,13 @@
       when: verify_logind.stat.exists
 
     # --- subuid/subgid (rootless Podman) ---
-    - name: Check /etc/subuid has entry for real_user_id
-      ansible.builtin.command: grep -q '^{{ real_user_id }}:' /etc/subuid
+    - name: Check /etc/subuid has entry for ansible_user_id
+      ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subuid
       changed_when: false
       become: true
 
-    - name: Check /etc/subgid has entry for real_user_id
-      ansible.builtin.command: grep -q '^{{ real_user_id }}:' /etc/subgid
+    - name: Check /etc/subgid has entry for ansible_user_id
+      ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subgid
       changed_when: false
       become: true
 

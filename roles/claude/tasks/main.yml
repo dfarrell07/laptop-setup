@@ -202,6 +202,13 @@
     - claude_queue_enabled | bool
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
+  # 'launchctl load -w' is deprecated since macOS 10.10 (Yosemite) but remains
+  # functional for user LaunchAgents in ~/Library/LaunchAgents/ on Sonoma 14+.
+  # The -w flag overrides Disabled=true in a plist; since this plist has no
+  # Disabled key, -w is a no-op.  The modern replacement is:
+  #   launchctl bootstrap gui/$(id -u) <plist>
+  # Migration can be deferred until Apple removes the legacy subcommands.
+  # failed_when: false handles the non-zero exit when the agent is already loaded.
   ansible.builtin.command:
     cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
   when:
@@ -220,6 +227,9 @@
     - claude_remote_control_enabled | bool
 
 - name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
+  # See queue plist task above for deprecation note.  Same applies here:
+  # 'launchctl load -w' still works for ~/Library/LaunchAgents/ on Sonoma 14+.
+  # Modern replacement: launchctl bootstrap gui/$(id -u) <plist>
   ansible.builtin.command:
     cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
   when:

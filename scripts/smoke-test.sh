@@ -465,6 +465,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "aide-timer" "WARN" "timer not enabled"; fi
   if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
   else record "aide-db" "WARN" "AIDE database not initialized (run: aide --init)"; fi
+  # AIDE service sandbox: RestrictAddressFamilies=none prevents network access from aide --check
+  # (defense-in-depth: if AIDE binary is compromised, it cannot exfiltrate findings)
+  if grep -q '^RestrictAddressFamilies=none$' /etc/systemd/system/aide-check.service 2>/dev/null; then
+    record "aide-service-no-network" "PASS"
+  elif [[ -f /etc/systemd/system/aide-check.service ]]; then
+    record "aide-service-no-network" "FAIL" "RestrictAddressFamilies=none missing from aide-check.service (AIDE can make network calls)"
+  else record "aide-service-no-network" "WARN" "aide-check.service not deployed"; fi
 
   # Chrony NTS: first verify config, then verify actual NTS cookies established
   # (port 4460 is required for NTS-KE; may be blocked on CSB corporate networks)
@@ -624,6 +631,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "shm-hardening" "PASS"
   else record "shm-hardening" "FAIL" "/dev/shm missing hardening options: $_shm_opts"; fi
   unset _shm_opts
+  # On CSB, fstab is IT-managed so Ansible deploys dev-shm-harden.service to re-apply
+  # hardening on each boot. Verify the service is enabled — if it isn't, a reboot loses
+  # nosuid/nodev/noexec and the shm-hardening check above would pass until next reboot.
+  if $CSB_HOST; then
+    if systemctl is-enabled dev-shm-harden.service &>/dev/null; then record "dev-shm-harden-enabled" "PASS"
+    else record "dev-shm-harden-enabled" "FAIL" "dev-shm-harden.service not enabled on CSB — /dev/shm hardening lost on reboot"; fi
+  fi
 
   # /var/tmp bind-mounted to /tmp with noexec (CIS 1.1.8)
   _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
@@ -750,6 +764,18 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -qE '^INACTIVE[[:space:]]+30$' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
   elif $CSB_HOST; then record "inactive-lock" "WARN" "skipped on CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
   else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
+  # CIS 5.5.1.5: verify chage -I 30 was applied to the existing user account (not just new-account default).
+  # login.defs INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
+  # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
+  if [[ "$EUID" -eq 0 ]]; then
+    _chage_user="${SUDO_USER:-$USER}"
+    _inactive_val=$(awk -F: -v u="$_chage_user" '$1==u{print $7}' /etc/shadow 2>/dev/null)
+    if [[ "$_inactive_val" == "30" ]]; then record "chage-inactive-user" "PASS"
+    elif [[ -z "$_inactive_val" ]]; then
+      record "chage-inactive-user" "WARN" "could not read shadow INACTIVE for '$_chage_user' (SSSD/IPA domain account?)"
+    else record "chage-inactive-user" "FAIL" "shadow INACTIVE=$_inactive_val for '$_chage_user', expected 30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
+    unset _chage_user _inactive_val
+  else record "chage-inactive-user" "WARN" "skipped — reading /etc/shadow requires root (re-run with sudo for full check)"; fi
   if grep -qE '^PASS_MIN_DAYS[[:space:]]+1$' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
   elif $CSB_HOST; then record "pass-min-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
