@@ -230,6 +230,8 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # cliphist: clipboard history manager — exec wl-paste --watch cliphist store in sway config;
   # clipboard contents die with source app if this is missing
   if command -v cliphist &>/dev/null; then record "cliphist" "PASS"
+  elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
+    record "cliphist" "WARN" "not installed — desktop is '${XDG_CURRENT_DESKTOP:-unknown}', not sway (cliphist is sway-only)"
   else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
   # wl-paste: used by cliphist daemon and wl-copy used by cliphist picker keybinding
   if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
@@ -834,7 +836,14 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
   # Critical kernel sysctl values
-  _sysctl_check() { local k="$1" v="$2" n="$3"; local got; got=$(sysctl -n "$k" 2>/dev/null || echo "?"); [[ "$got" == "$v" ]] && record "$n" "PASS" || record "$n" "FAIL" "$k=$got expected $v"; }
+  _sysctl_check() {
+    local k="$1" v="$2" n="$3"; local got
+    got=$(sysctl -n "$k" 2>/dev/null || echo "?")
+    if [[ "$got" == "$v" ]]; then record "$n" "PASS"
+    elif [[ "$got" == "?" && "$EUID" -ne 0 ]]; then
+      record "$n" "WARN" "$k unreadable as non-root (re-run with sudo to verify value=$v)"
+    else record "$n" "FAIL" "$k=$got expected $v"; fi
+  }
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
   _sysctl_check "kernel.kexec_load_disabled"         "1" "sysctl-kexec-disabled"
   _sysctl_check "kernel.io_uring_disabled"           "1" "sysctl-io-uring-disabled"
