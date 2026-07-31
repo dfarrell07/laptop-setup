@@ -52,6 +52,7 @@ OPTIONAL_FILES=(
   laptop-setup/scripts/vault-pass.sh
   laptop-setup/CLAUDE.local.md
   .config/claude/work-env
+  .config/claude/queue-repos.conf
   .boto
   .claude.json
   .config/gcloud/application_default_credentials.json
