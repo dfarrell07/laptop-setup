@@ -192,10 +192,10 @@
         that:
           - verify_sshd_allowusers.stdout | length > 0
           - verify_sshd_allowusers.stdout != 'root'
-          - verify_sshd_allowusers.stdout == lookup('env', 'USER')
+          - verify_sshd_allowusers.stdout == real_user_id
         fail_msg: >-
           AllowUsers is '{{ verify_sshd_allowusers.stdout }}',
-          expected '{{ lookup('env', 'USER') }}' (non-empty, non-root)
+          expected '{{ real_user_id }}' (non-empty, non-root)
 
     - name: Verify crypto-policy
       ansible.builtin.command: update-crypto-policies --show

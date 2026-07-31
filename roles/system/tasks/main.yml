@@ -896,11 +896,16 @@
   when: not (csb_detected | default(false))  # CSB may route smart card/PIV auth through gcr-ssh-agent
 
 # --- dnf-automatic ---
+# CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
+# maintenance windows. Running dnf-automatic in parallel could install packages
+# ahead of IT's approval cycle or outside maintenance windows.
 - name: Install dnf-automatic
   ansible.builtin.dnf:
     name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
     state: present
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - not (csb_detected | default(false))
   failed_when: false
 
 - name: Deploy dnf-automatic config
@@ -909,13 +914,18 @@
     dest: /etc/dnf/automatic.conf
     mode: "0644"
   notify: Restart dnf-automatic timer
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']  # /etc/dnf/ doesn't exist on Debian/macOS
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - not (csb_detected | default(false))
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
     name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
     state: started
     enabled: true
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - not (csb_detected | default(false))
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
@@ -937,7 +947,7 @@
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
-      ExecStartPost=/usr/bin/bash -c 'aide --update && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
+      ExecStartPost=/usr/bin/bash -c 'aide --update; mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"
     mode: "0644"
   when:
