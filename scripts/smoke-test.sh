@@ -141,7 +141,7 @@ else record "ssh-config" "FAIL" "not deployed"; fi
 
 # SSH signing key file (required for git commit signing — deployed by ssh role from vault)
 if [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]]; then record "ssh-signing-key-file" "PASS"
-else record "ssh-signing-key-file" "FAIL" "$HOME/.ssh/id_ed25519_sk_signing.pub missing — git commit signing broken (ssh role not run or vault has no keys)"; fi
+else record "ssh-signing-key-file" "WARN" "$HOME/.ssh/id_ed25519_sk_signing.pub missing — git commit signing unavailable (YubiKey enrollment required or vault has no keys)"; fi
 
 sshdir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || echo "?")
 if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
