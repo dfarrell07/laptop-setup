@@ -215,6 +215,17 @@ else
   record "notes-repo" "WARN" "notes repo not cloned — run 'make notes'"
 fi
 
+# --- Wayland desktop tools (Linux only — not installed on macOS) ---
+if [[ "$(uname -s)" == "Linux" ]]; then
+  # cliphist: clipboard history manager — exec wl-paste --watch cliphist store in sway config;
+  # clipboard contents die with source app if this is missing
+  if command -v cliphist &>/dev/null; then record "cliphist" "PASS"
+  else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
+  # wl-paste: used by cliphist daemon and wl-copy used by cliphist picker keybinding
+  if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
+  else record "wl-paste" "FAIL" "not found (wl-clipboard missing — cliphist daemon and clipboard copy broken)"; fi
+fi
+
 # ---- System-level checks (skipped with --user-only, --container, or macOS) ----
 IS_LINUX=true
 [[ "$(uname -s)" == "Darwin" ]] && IS_LINUX=false

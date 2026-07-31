@@ -78,9 +78,9 @@
         that: verify_sway.stat.exists
         fail_msg: "sway config not deployed"
 
-    - name: Verify sway config contains polkit exec
+    - name: Verify sway config uses exec_always for polkit agent
       ansible.builtin.command:
-        cmd: grep -q 'polkit-gnome' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'exec_always.*polkit-gnome' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config contains xkb_layout
@@ -106,6 +106,16 @@
     - name: Verify sway config sets cursor theme for XWayland consistency
       ansible.builtin.command:
         cmd: grep -q 'xcursor_theme Adwaita' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config starts cliphist clipboard history daemon
+      ansible.builtin.command:
+        cmd: grep -q 'wl-paste --watch cliphist store' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway config has cliphist keybinding to access history
+      ansible.builtin.command:
+        cmd: grep -q 'cliphist list.*wofi.*cliphist decode.*wl-copy' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify portals.conf deployed

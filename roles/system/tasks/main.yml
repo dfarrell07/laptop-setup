@@ -89,6 +89,44 @@
       'nodev' not in (system_devshm_opts.stdout | default(''))
   failed_when: false
 
+# On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
+# Deploy a one-shot service to re-apply hardening on every boot instead.
+- name: Deploy dev-shm-harden.service (CSB — fstab not modified)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
+      # /dev/shm with nosuid,nodev,noexec at every boot (CIS 1.1.7.x).
+      [Unit]
+      Description=Harden /dev/shm mount options (CIS 1.1.7.x)
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=sysinit.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=mount -o remount,nosuid,nodev,noexec /dev/shm
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=sysinit.target
+    dest: /etc/systemd/system/dev-shm-harden.service
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - ansible_system == 'Linux'
+    - csb_detected | default(false)
+
+- name: Enable dev-shm-harden.service (CSB)
+  ansible.builtin.systemd:
+    name: dev-shm-harden.service
+    enabled: true
+    daemon_reload: true
+  when:
+    - ansible_system == 'Linux'
+    - csb_detected | default(false)
+
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
 # A complete unit file is required — /var/tmp has no base unit on Fedora
 # so a drop-in directory would be silently ignored.
