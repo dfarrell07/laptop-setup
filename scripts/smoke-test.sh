@@ -408,6 +408,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^Storage=none' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
     record "coredump-disabled" "PASS"
   else record "coredump-disabled" "FAIL" "coredump Storage=none not configured"; fi
+  if grep -q '^ProcessSizeMax=0' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
+    record "coredump-processsizemax" "PASS"
+  else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax=0 not configured"; fi
 
   # journald persistent storage (verify Storage=persistent, not just file existence)
   if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
@@ -446,6 +449,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if chronyc -c authdata 2>/dev/null | awk -F, '$5 > 0 {found=1} END {exit !found}'; then
       record "chrony-nts" "PASS"
     else record "chrony-nts" "WARN" "NTS configured but no authenticated sources (port 4460 blocked? needs boot?)"; fi
+  elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
   if systemctl is-enabled chronyd &>/dev/null && systemctl is-active chronyd &>/dev/null; then
     record "chronyd-service" "PASS"
@@ -725,6 +729,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-lock" "PASS"
   else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock"; fi
+  if grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
+    record "logind-idle-sec" "PASS"
+  else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined)"; fi
 
   # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
   if loginctl show-user "${SUDO_USER:-$USER}" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
