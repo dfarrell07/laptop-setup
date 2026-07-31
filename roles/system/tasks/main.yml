@@ -241,6 +241,7 @@
     src: modprobe-hardening.conf.j2
     dest: /etc/modprobe.d/hardening.conf
     mode: "0644"
+  when: ansible_system == 'Linux'
 
 # --- Sysctl hardening ---
 # Merge system_sysrq into the dict so config.yml can override without replacing
@@ -1041,6 +1042,7 @@
   when:
     - ansible_system == 'Linux'
     - system_aide_enabled | bool
+    - not (csb_detected | default(false))
   failed_when: false
 
 - name: Deploy AIDE update hook for dnf-automatic
@@ -1304,6 +1306,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
+  when: not (csb_detected | default(false))  # CSB may forward to SIEM; RateLimitBurst could suppress events
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
@@ -1324,27 +1327,34 @@
     mode: "0644"
 
 # --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
+# CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
+# cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
+# would silently block those IT management jobs. Skip on CSB entirely.
 - name: Restrict cron access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/cron.allow
     mode: "0600"
+  when: not (csb_detected | default(false))
 
 - name: Restrict at access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/at.allow
     mode: "0600"
+  when: not (csb_detected | default(false))
 
 - name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
   ansible.builtin.file:
     path: /etc/cron.deny
     state: absent
+  when: not (csb_detected | default(false))
 
 - name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
   ansible.builtin.file:
     path: /etc/at.deny
     state: absent
+  when: not (csb_detected | default(false))
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -1372,6 +1382,7 @@
       consent to such monitoring and recording.
     dest: /etc/issue
     mode: "0644"
+  when: not (csb_detected | default(false))  # CSB IT deploys mandated legal banner; don't overwrite
   failed_when: false
 
 - name: Deploy SSH login banner
@@ -1384,6 +1395,7 @@
       consent to such monitoring and recording.
     dest: /etc/issue.net
     mode: "0644"
+  when: not (csb_detected | default(false))  # CSB IT deploys mandated legal banner; don't overwrite
   failed_when: false
 
 # --- Sudoers hardening ---
@@ -1403,6 +1415,9 @@
     validate: visudo -cf %s
 
 # --- Password aging ---
+# CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
+# service accounts that don't rotate passwords. YESCRYPT is the RHEL 9 default already.
+# Skip on CSB and rely on IPA/SSSD + IT group policy for account management.
 - name: Configure password aging in login.defs
   ansible.builtin.lineinfile:
     path: /etc/login.defs
@@ -1417,6 +1432,7 @@
     - { name: UMASK, value: "027" }
     - { name: HOME_MODE, value: "0750" }  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - { name: INACTIVE, value: "30" }
+  when: not (csb_detected | default(false))
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -1424,6 +1440,7 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
+  when: not (csb_detected | default(false))
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -1431,6 +1448,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
+  when: not (csb_detected | default(false))
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
