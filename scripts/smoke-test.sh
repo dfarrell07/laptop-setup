@@ -779,6 +779,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     else
       _inactive_val=$(awk -F: '{print $7}' <<< "$_shadow_line")
       if [[ "$_inactive_val" == "30" ]]; then record "chage-inactive-user" "PASS"
+      elif $CSB_HOST; then record "chage-inactive-user" "WARN" "skipped on CSB — Ansible intentionally omits chage -I 30 (IPA krbPwdPolicy manages inactive lockout centrally)"
       else record "chage-inactive-user" "FAIL" "shadow INACTIVE='$_inactive_val' for '$_chage_user', expected 30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
     fi
     unset _chage_user _inactive_val _shadow_line
