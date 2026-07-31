@@ -716,6 +716,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # WiFi MAC address randomization (privacy)
   if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
     record "wifi-mac-rand" "PASS"
+  elif $CSB_HOST; then record "wifi-mac-rand" "WARN" "skipped on CSB — IT may use MAC-based NAC; stable-ssid not deployed"
   else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
 
   # NM dns=systemd-resolved (required for Tailscale MagicDNS split-DNS)
@@ -728,6 +729,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # NM wifi-powersave=2 (prevents latency spikes and drops on ThinkPad)
   if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf 2>/dev/null; then
     record "nm-wifi-powersave" "PASS"
+  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "skipped on CSB — IT manages power saving config"
   else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
 
   # Console keymap

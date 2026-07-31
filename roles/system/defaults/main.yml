@@ -115,7 +115,9 @@ system_tlp_bat0_stop: 80    # stop charging at this % (Li-ion longevity: keep 20
 system_lid_switch: suspend
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
-system_disable_bluetooth: false  # Set true in config.yml to blacklist btusb/bluetooth kernel modules
+# CIS 2.1.5: disable BT on machines with no BT peripherals. Default false (enabled) —
+# required for ThinkPad P16v AMD Bluetooth mouse. Set true in config.yml to blacklist BT.
+system_disable_bluetooth: false
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
 # Dangerous bits omitted from 176: raw-console(4), proc-signals/OOM-kill(64), crash(not in std bitmask).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.

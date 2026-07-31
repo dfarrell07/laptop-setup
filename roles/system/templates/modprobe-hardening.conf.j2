@@ -54,7 +54,8 @@ install n_hdlc /bin/false
 
 {% if system_disable_bluetooth | default(false) | bool %}
 # Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
-# Default is enabled (false). To disable BT: set system_disable_bluetooth: true.
+# CIS RHEL 9 2.1.5: blacklist BT modules on machines with no BT peripherals.
+# Default is false (enabled) — required for Bluetooth peripherals (e.g. ThinkPad P16v AMD BT mouse).
 blacklist btusb
 install btusb /bin/false
 blacklist bluetooth

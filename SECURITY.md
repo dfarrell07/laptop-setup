@@ -52,6 +52,12 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 
 ## Known Limitations
 
+- **Bluetooth enabled (CIS RHEL 9 2.1.5)** — CIS 2.1.5 recommends disabling
+  Bluetooth by blacklisting the `btusb`/`bluetooth` kernel modules.
+  `system_disable_bluetooth` defaults to `false` (enabled) because this
+  ThinkPad P16v Gen 1 AMD requires Bluetooth for its Bluetooth mouse.
+  Set `system_disable_bluetooth: true` in `config.yml` on machines that
+  have no Bluetooth peripherals.
 - **claude.ai install.sh** — installed via `curl | bash` with no SHA256
   verification; Anthropic uses a rolling installer without pinned releases
   (note: binary SHA256 verification in the Scope section refers to other
