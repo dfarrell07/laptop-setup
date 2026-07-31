@@ -1,0 +1,29 @@
+# ~/.config/claude/queue-repos.conf
+# Repo map for claude-queue-poller.sh (deployed by Ansible; edit to add your repos).
+#
+# Each key is the short name used in GitHub issue bodies:
+#   repo: <key>
+#
+# Format (bash associative arrays — one block per repo):
+#   REPO_PATH[key]="/absolute/path/to/local/clone"
+#   REPO_REMOTE[key]="github-owner/repo-name"
+#   REPO_ALLOWED_TOOLS[key]="Read,Edit,Write,Bash(git *)"   # optional; defaults shown
+#   REPO_DEFAULT_BRANCH[key]="main"                          # optional; default: main
+#
+# REPO_ALLOWED_TOOLS controls what Claude Code is permitted to call.
+# Use a restrictive allow-list; omit Bash entirely for read-only review tasks.
+#
+# Task queue repo: {{ claude_queue_repo if claude_queue_repo else '<set claude_queue_repo in config.yml>' }}
+# GitHub user:     {{ dotfiles_github_user }}
+#
+# Example — uncomment and adjust:
+#
+# REPO_PATH[laptop-setup]="{{ ansible_user_dir }}/laptop-setup"
+# REPO_REMOTE[laptop-setup]="{{ dotfiles_github_user }}/laptop-setup"
+# REPO_ALLOWED_TOOLS[laptop-setup]="Read,Edit,Write,Bash(git *),Bash(make lint),Bash(make syntax-check)"
+# REPO_DEFAULT_BRANCH[laptop-setup]="main"
+#
+# REPO_PATH[my-project]="{{ ansible_user_dir }}/repos/my-project"
+# REPO_REMOTE[my-project]="{{ dotfiles_github_user }}/my-project"
+# REPO_ALLOWED_TOOLS[my-project]="Read,Edit,Write,Bash(git *)"
+# REPO_DEFAULT_BRANCH[my-project]="main"

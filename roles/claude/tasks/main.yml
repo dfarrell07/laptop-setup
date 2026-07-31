@@ -124,6 +124,29 @@
   failed_when: false
 
 # --- Task queue (systemd timer + poller script) ---
+- name: Install util-linux for flock (macOS, queue enabled)
+  community.general.homebrew:
+    name: util-linux
+    state: present
+  when:
+    - claude_queue_enabled | bool
+    - ansible_os_family == 'Darwin'
+
+- name: Ensure ~/.config/claude directory exists (queue config)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/claude"
+    state: directory
+    mode: "0700"
+  when: claude_queue_enabled | bool
+
+- name: Deploy queue-repos.conf stub (first run only — edit to add repos)
+  ansible.builtin.template:
+    src: queue-repos.conf.j2
+    dest: "{{ ansible_user_dir }}/.config/claude/queue-repos.conf"
+    mode: "0600"
+    force: false
+  when: claude_queue_enabled | bool
+
 - name: Deploy task queue poller script
   ansible.builtin.copy:
     src: claude-queue-poller.sh
