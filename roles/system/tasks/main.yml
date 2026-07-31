@@ -838,6 +838,7 @@
     path: /etc/ssh/sshd_config.d
     state: directory
     mode: "0700"
+  when: ansible_facts.services['sshd.service'] is defined
 
 - name: Deploy sshd hardening config
   ansible.builtin.template:
