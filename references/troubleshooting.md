@@ -63,12 +63,12 @@ Ansible's `firewalld` module or `firewall-cmd --permanent` commands fail.
 CSB manages the firewall centrally. STIG requires the `drop` zone and admin-managed rules. The local user may not have sudo permission for firewall modifications, or the firewall configuration may be locked by policy.
 
 **Fix:**
-- Wrap firewall tasks in `block/rescue` and record failures for the CSB compatibility report.
+- On CSB, the playbook detects `csb_detected` and skips the drop-zone, ICMP-inversion, and SSH-port tasks entirely — they are omitted, not rescued. Port 722 is never added to the drop zone on CSB (the drop zone has no interface there), so the task would create a dead rule. Provisioning completes without a firewall failure on CSB.
 - Do not attempt to set the default zone or add custom rules without confirmed sudo access.
 - For Tailscale: userspace networking mode avoids all firewall changes.
 - On non-CSB machines (Fedora, macOS), firewall tasks should work normally with `--ask-become-pass`.
 
-**CSB IT ticket:** Yes. Request permission to add a non-default SSH port and any required service exceptions to the drop zone.
+**CSB IT ticket:** Only if SSH on port 722 must be reachable from non-Tailscale sources on CSB. The playbook skips the drop-zone and SSH-port tasks on CSB (no provisioning failure). Port 722 over Tailscale requires no IT ticket.
 
 ---
 

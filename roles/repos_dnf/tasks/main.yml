@@ -27,6 +27,16 @@
         _csb_action: "Install gh binary manually or inside container"
         _csb_ticket_summary: "Exception request: GitHub CLI RPM repository"
         _csb_ticket_body: "GitHub CLI repo needed for PR workflows"
+      when: csb_detected | default(false)
+
+    - name: Warn gh-cli repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add GitHub CLI repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Google Chrome repo
   when:
@@ -51,6 +61,16 @@
         _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
         _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
         _csb_ticket_body: "Google Chrome needed for web development and testing"
+      when: csb_detected | default(false)
+
+    - name: Warn Google Chrome repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Google Chrome repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Google Cloud SDK repo
   when:
@@ -75,6 +95,16 @@
         _csb_action: "Install gcloud manually or inside container"
         _csb_ticket_summary: "Exception request: Google Cloud SDK RPM repository"
         _csb_ticket_body: "Google Cloud SDK needed for GCP workflows"
+      when: csb_detected | default(false)
+
+    - name: Warn Google Cloud SDK repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Google Cloud SDK repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Slack repo
   when:
@@ -100,6 +130,16 @@
         _csb_action: "Install Slack via Flatpak or download RPM directly"
         _csb_ticket_summary: "Exception request: Slack RPM repository"
         _csb_ticket_body: "Slack desktop app for team communication"
+      when: csb_detected | default(false)
+
+    - name: Warn Slack repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Slack repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Mullvad VPN repo
   when:
@@ -124,6 +164,16 @@
         _csb_action: "Download Mullvad RPM directly from mullvad.net"
         _csb_ticket_summary: "Exception request: Mullvad VPN RPM repository"
         _csb_ticket_body: "Mullvad VPN for privacy-preserving internet access"
+      when: csb_detected | default(false)
+
+    - name: Warn Mullvad VPN repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Mullvad VPN repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Docker CE repo
   when: repo_docker_ce | default(false)
@@ -152,6 +202,16 @@
         _csb_action: "Use rootless Podman instead (recommended)"
         _csb_ticket_summary: "Exception request: Docker CE RPM repository"
         _csb_ticket_body: "Docker CE for container builds requiring Docker-specific features"
+      when: csb_detected | default(false)
+
+    - name: Warn Docker CE repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Docker CE repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add acli repo
   when:
@@ -176,6 +236,16 @@
         _csb_action: "Install acli via pip: pip install atlassian-cli"
         _csb_ticket_summary: "Exception request: acli RPM repository"
         _csb_ticket_body: "acli for Atlassian CLI workflows"
+      when: csb_detected | default(false)
+
+    - name: Warn acli repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add acli repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Red Hat internal repos
   when:
@@ -201,6 +271,16 @@
         _csb_action: "Install Red Hat internal tools manually or request VPN access"
         _csb_ticket_summary: "Exception request: Red Hat internal RPM repository"
         _csb_ticket_body: "Internal tools repo needed for Red Hat development workflows"
+      when: csb_detected | default(false)
+
+    - name: Warn Red Hat internal repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Red Hat internal repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Enable RPM Fusion repos
   when:
@@ -226,6 +306,16 @@
         _csb_action: "RPM Fusion provides multimedia codecs and drivers. Not critical for development."
         _csb_ticket_summary: "Exception request: RPM Fusion repositories"
         _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"
+      when: csb_detected | default(false)
+
+    - name: Warn RPM Fusion failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Enable RPM Fusion repositories in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Add Tailscale repo
   when: repo_tailscale | default(true)
@@ -256,3 +346,13 @@
         _csb_action: "Install tailscale from Fedora repos (older version) or via flatpak"
         _csb_ticket_summary: "Exception request: Tailscale RPM repository"
         _csb_ticket_body: "Tailscale stable repo provides security-patched releases; Fedora repo may lag"
+      when: csb_detected | default(false)
+
+    - name: Warn Tailscale repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Tailscale repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))

@@ -177,6 +177,17 @@
   ansible.builtin.set_fact:
     system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'kernel.sysrq': system_sysrq | int}) }}"
 
+# CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
+# On CSB, Red Hat IT network diagnostics rely on TCP timestamps for RTT measurement
+# (tcpdump analysis, network quality monitoring, PAWS). Restore to the kernel default
+# (1) so IT tooling is not silently broken. The fingerprinting risk is accepted: CSB
+# hosts are on a managed corporate network where uptime disclosure is low-risk, and
+# disabling timestamps has measurable latency/throughput impact on high-BDP links.
+- name: Restore tcp_timestamps to kernel default on CSB (IT network diagnostics require timestamps)
+  ansible.builtin.set_fact:
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'net.ipv4.tcp_timestamps': 1}) }}"
+  when: csb_detected | default(false)
+
 - name: Deploy sysctl hardening config
   ansible.builtin.template:
     src: sysctl-hardening.conf.j2
@@ -894,16 +905,6 @@
     state: started
     enabled: true
   failed_when: false
-
-# --- GNOME gcr-ssh-agent mask ---
-- name: Mask gcr-ssh-agent socket
-  ansible.builtin.systemd:
-    name: gcr-ssh-agent.socket
-    masked: true
-    scope: user
-  become: false
-  failed_when: false
-  when: not (csb_detected | default(false))  # CSB may route smart card/PIV auth through gcr-ssh-agent
 
 # --- dnf-automatic ---
 # CSB machines are managed by Red Hat IT via RHSM/Satellite with their own

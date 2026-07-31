@@ -36,6 +36,7 @@ system_sysctl_hardening:
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   kernel.panic: 10           # reboot after 10s panic; set 0 to preserve panic state for kernel debugging
   net.ipv4.tcp_timestamps: 0      # CIS 3.3.9 — prevent TCP timestamp-based OS fingerprinting and uptime disclosure
+  # NOTE: overridden to 1 (kernel default) on CSB in tasks/main.yml — IT network diagnostics require timestamps
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust)
   net.core.bpf_jit_harden: 1      # mitigates Spectre-class JIT leaks; value 1=unprivileged only (equiv to 2 since unprivileged_bpf=1)

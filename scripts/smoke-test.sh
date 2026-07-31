@@ -643,6 +643,44 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
   else record "chrome-policies" "WARN" "not deployed"; fi
 
+  # dconf system policies (CIS 1.8.3-1.8.8)
+  # Source key files checked directly — no D-Bus session required for smoke tests.
+  # Compiled databases are produced by 'dconf update'; absence means it never ran.
+  if [[ -f /etc/dconf/db/local ]]; then record "dconf-db-local" "PASS"
+  else record "dconf-db-local" "FAIL" "compiled database /etc/dconf/db/local missing (run: dconf update)"; fi
+  # GDM database — WARN not FAIL: Sway uses greetd, not GDM
+  if [[ -f /etc/dconf/db/gdm ]]; then record "dconf-db-gdm" "PASS"
+  else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing (GDM not installed? Sway/greetd systems not affected)"; fi
+  # Media-handling automount/autorun (CIS 1.8.6-1.8.8)
+  if grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
+     grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening 2>/dev/null; then
+    record "dconf-media-handling" "PASS"
+  elif [[ -f /etc/dconf/db/local.d/50-hardening ]]; then
+    record "dconf-media-handling" "FAIL" "automount=false or autorun-never=true missing in /etc/dconf/db/local.d/50-hardening"
+  else record "dconf-media-handling" "FAIL" "/etc/dconf/db/local.d/50-hardening not deployed"; fi
+  # Media-handling policy locks (CIS 1.8.6-1.8.8)
+  if grep -q '^/org/gnome/desktop/media-handling/automount$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null; then
+    record "dconf-media-locks" "PASS"
+  else record "dconf-media-locks" "FAIL" "media-handling keys not locked in /etc/dconf/db/local.d/locks/50-hardening"; fi
+  # Screensaver idle-delay + lock-enabled (CIS 1.8.4/1.8.5)
+  if grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver 2>/dev/null && \
+     grep -q '^idle-delay=uint32 300' /etc/dconf/db/local.d/51-screensaver 2>/dev/null; then
+    record "dconf-screensaver" "PASS"
+  elif [[ -f /etc/dconf/db/local.d/51-screensaver ]]; then
+    record "dconf-screensaver" "FAIL" "lock-enabled=true or idle-delay=uint32 300 missing in /etc/dconf/db/local.d/51-screensaver"
+  else record "dconf-screensaver" "FAIL" "/etc/dconf/db/local.d/51-screensaver not deployed"; fi
+  # Screensaver policy locks (CIS 1.8.5)
+  if grep -q '^/org/gnome/desktop/screensaver/lock-enabled$' /etc/dconf/db/local.d/locks/51-screensaver 2>/dev/null && \
+     grep -q '^/org/gnome/desktop/session/idle-delay$' /etc/dconf/db/local.d/locks/51-screensaver 2>/dev/null; then
+    record "dconf-screensaver-locks" "PASS"
+  else record "dconf-screensaver-locks" "FAIL" "screensaver/idle keys not locked in /etc/dconf/db/local.d/locks/51-screensaver"; fi
+  # GDM login screen: hide user list (CIS 1.8.3) — WARN not FAIL: Sway uses greetd, not GDM
+  if grep -q '^disable-user-list=true' /etc/dconf/db/gdm.d/03-hardening 2>/dev/null; then
+    record "dconf-gdm-user-list" "PASS"
+  elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
+    record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed (GDM not installed? Sway/greetd systems not affected)"
+  else record "dconf-gdm-user-list" "FAIL" "disable-user-list=true missing in /etc/dconf/db/gdm.d/03-hardening"; fi
+
   # Unexpected listening ports (non-loopback)
   listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | tail -n +2 || true)
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"

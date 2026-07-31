@@ -12,6 +12,7 @@
     is_fedora: "{{ ansible_distribution == 'Fedora' }}"
     is_macos: "{{ ansible_os_family == 'Darwin' }}"
     is_linux: "{{ ansible_system == 'Linux' }}"
+  become: false
 
 # ---------------------------------------------------------------------------
 # 1b. CSB hostname detection
@@ -19,6 +20,7 @@
 - name: Detect CSB hostname suffix
   ansible.builtin.set_fact:
     csb_hostname: "{{ ansible_fqdn is search('\\.csb$') }}"
+  become: false
 
 # ---------------------------------------------------------------------------
 # 2. fapolicyd
@@ -29,6 +31,7 @@
   register: _fapolicyd_unit
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Check fapolicyd active state
@@ -37,6 +40,7 @@
   register: _fapolicyd_active
   changed_when: false
   failed_when: false
+  become: false
   when:
     - is_linux | bool
     - _fapolicyd_unit.rc == 0
@@ -48,6 +52,7 @@
   register: _fapolicyd_permissive_grep
   changed_when: false
   failed_when: false
+  become: false
   when:
     - is_linux | bool
     - _fapolicyd_active.rc | default(1) == 0
@@ -66,6 +71,7 @@
           (_fapolicyd_permissive_grep.stdout | default('')) is match('(?i)permissive\s*=\s*1')
         )
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 3. Sudo capability
@@ -76,6 +82,7 @@
   register: _sudo_list
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set sudo facts
@@ -96,6 +103,7 @@
       }}
     sudo_none: >-
       {{ (is_linux | bool) and (_sudo_list.rc | default(1) != 0) }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 4. USBGuard
@@ -106,12 +114,14 @@
   register: _usbguard_active
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set USBGuard fact
   ansible.builtin.set_fact:
     usbguard_running: >-
       {{ (is_linux | bool) and (_usbguard_active.rc | default(1) == 0) }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 5. Internal CA certificates (Red Hat specific)
@@ -124,6 +134,7 @@
     - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
     - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
     - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
+  become: false
   when: is_linux | bool
 
 - name: Set internal CA fact
@@ -136,6 +147,7 @@
              | selectattr('stat.exists')
              | list | length > 0)
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 6. CSB heuristic: RHEL + fapolicyd + internal CA
@@ -152,6 +164,7 @@
         (csb_detected | bool)
         and (fapolicyd_enforcing | bool)
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 7. Rootless container readiness (subuid / subgid)
@@ -162,6 +175,7 @@
   register: _subuid
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Check subgid entry for current user
@@ -170,6 +184,7 @@
   register: _subgid
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set rootless container facts
@@ -180,6 +195,7 @@
         and (_subuid.rc | default(1) == 0)
         and (_subgid.rc | default(1) == 0)
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 8. Toolbx and Distrobox availability
@@ -190,6 +206,7 @@
   register: _toolbox_bin
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Check for distrobox binary
@@ -198,6 +215,7 @@
   register: _distrobox_bin
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set container tool facts
@@ -206,6 +224,7 @@
       {{ (is_linux | bool) and (_toolbox_bin.rc | default(1) == 0) }}
     distrobox_installed: >-
       {{ (is_linux | bool) and (_distrobox_bin.rc | default(1) == 0) }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 9. Network proxy detection
@@ -227,6 +246,7 @@
         | default(ansible_env.HTTP_PROXY
         | default(''))))
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 10. Firewall zone
@@ -237,16 +257,19 @@
   register: _fw_zone
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set firewall zone fact
   ansible.builtin.set_fact:
     firewall_zone: "{{ _fw_zone.stdout | default('unknown') | trim }}"
+  become: false
   when: is_linux | bool
 
 - name: Set firewall zone fact (non-Linux)
   ansible.builtin.set_fact:
     firewall_zone: "n/a"
+  become: false
   when: not (is_linux | bool)
 
 # ---------------------------------------------------------------------------
@@ -258,6 +281,7 @@
   register: _oscap_applied
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Check for STIG packages
@@ -266,6 +290,7 @@
   register: _ssg_pkg
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Check for aide (STIG file-integrity indicator)
@@ -274,6 +299,7 @@
   register: _aide_pkg
   changed_when: false
   failed_when: false
+  become: false
   when: is_linux | bool
 
 - name: Set STIG/OSCAP facts
@@ -290,6 +316,7 @@
           or (usbguard_running | bool)
         )
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 12. Derived: container tier strategy
@@ -306,6 +333,7 @@
         else ('hybrid' if ((is_rhel | bool) or (csb_detected | bool))
         else 'host-only')
       }}
+  become: false
 
 # ---------------------------------------------------------------------------
 # 13. Summary for the user
@@ -348,3 +376,4 @@
       ---
       Container tier     : {{ needs_container_tier }}
       ================================
+  become: false

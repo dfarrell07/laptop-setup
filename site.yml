@@ -37,7 +37,6 @@
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
       when: ansible_system == 'Linux'
-      become: false  # csb_detect.yml probes are user-context; Play 1 become:true would run as root
       tags: [always]
 
   roles:
