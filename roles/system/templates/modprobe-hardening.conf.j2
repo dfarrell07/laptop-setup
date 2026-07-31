@@ -2,6 +2,9 @@
 # Blacklist unused filesystem and DMA modules (CIS/STIG)
 
 # Unused filesystems — attack surface via crafted images
+# squashfs is NOT blacklisted — Flatpak runtime images require it. Without it
+# all Flatpak app launches fail. CIS 1.1.1.6 calls for squashfs; this is the
+# intentional exception matching the SCTP pattern in the network section below.
 blacklist cramfs
 install cramfs /bin/false
 blacklist freevxfs

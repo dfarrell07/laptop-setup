@@ -117,6 +117,11 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ ! -f "$_ecf" ]]; then record "env-d-containers" "FAIL" "missing: $_ecf — 'make kind' will fail in OVN-K"
   else record "env-d-containers" "FAIL" "DOCKER_HOST or KIND_EXPERIMENTAL_PROVIDER missing in $_ecf"; fi
   unset _ecf
+  _saf="$HOME/.config/environment.d/ssh-agent.conf"
+  if [[ -f "$_saf" ]] && grep -q "SSH_AUTH_SOCK" "$_saf"; then record "env-d-ssh-agent" "PASS"
+  elif [[ ! -f "$_saf" ]]; then record "env-d-ssh-agent" "FAIL" "missing: $_saf — SSH_AUTH_SOCK not set in systemd session"
+  else record "env-d-ssh-agent" "FAIL" "SSH_AUTH_SOCK missing from $_saf"; fi
+  unset _saf
 fi
 
 # SSH config and permissions
