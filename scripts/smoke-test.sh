@@ -588,6 +588,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
   elif $CSB_HOST; then record "cron-allow-root" "WARN" "skipped on CSB — IT monitoring agents use cron; cron.allow not restricted to root"
   else record "cron-allow-root" "WARN" "/etc/cron.allow missing or not restricted to root"; fi
+  # at.allow restricts 'at' command to root only (CIS 5.1.9)
+  if grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
+  elif $CSB_HOST; then record "at-allow-root" "WARN" "skipped on CSB — IT monitoring agents may use at; at.allow not restricted to root"
+  else record "at-allow-root" "WARN" "/etc/at.allow missing or not restricted to root"; fi
 
   # Login banner deployed to /etc/issue (CIS 1.7.1)
   # Skipped on CSB — IT deploys a mandated corporate legal banner; Ansible guard intentionally
