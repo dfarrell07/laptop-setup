@@ -25,23 +25,51 @@
     - item.stat.exists
 
 - name: Install Red Hat cert packages
-  ansible.builtin.dnf:
-    name: "{{ redhat_cert_packages }}"
-    state: present
-  become: true
-  tags: [become]
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
-  notify: Update CA trust
+  block:
+    - name: Install Red Hat cert packages
+      ansible.builtin.dnf:
+        name: "{{ redhat_cert_packages }}"
+        state: present
+      become: true
+      tags: [become]
+      notify: Update CA trust
+  rescue:
+    - name: Record cert package install failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: redhat
+        _csb_task_name: "Install Red Hat cert packages"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "Red Hat internal CA certs may be missing; request redhat-internal-cert-install access or install manually"
+        _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
+        _csb_ticket_body: >-
+          The redhat-internal-cert-install package could not be installed.
+          Red Hat internal CA certificates may be missing, which can break
+          access to internal services and HTTPS endpoints.
 
 - name: Install VPN packages
-  ansible.builtin.dnf:
-    name: "{{ redhat_vpn_packages }}"
-    state: present
-  become: true
-  tags: [become]
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
+  block:
+    - name: Install VPN packages
+      ansible.builtin.dnf:
+        name: "{{ redhat_vpn_packages }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Record VPN package install failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: redhat
+        _csb_task_name: "Install VPN packages"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "VPN client not installed; request redhat-internal-globalprotect-ui or redhat-internal-openvpn-profiles access"
+        _csb_ticket_summary: "Cannot install VPN packages on CSB"
+        _csb_ticket_body: >-
+          The VPN package (redhat-internal-globalprotect-ui on Fedora,
+          redhat-internal-openvpn-profiles otherwise) could not be installed.
+          VPN access to internal Red Hat networks may be unavailable.
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
