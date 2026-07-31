@@ -539,3 +539,55 @@ make all
 The playbook uses `--ask-become-pass` for tasks that need root and `become: true` at the play/task level. The `make all` command itself must run as the actual user.
 
 **CSB IT ticket:** No. This is a local invocation issue.
+
+---
+
+## system: PAM Hardening Silently Inactive (authselect Not on sssd Profile)
+
+**Symptom:**
+```
+authselect check
+```
+Fails post-provisioning, or `make smoke-test` reports `authselect-profile: FAIL` or `authselect-check: FAIL`. `faillock.conf` contains the correct values (`deny = 5`, `unlock_time = 900`) but account lockout does not trigger — `pam_faillock.so` is not present in the PAM stack.
+
+**Cause:**
+`authselect enable-feature with-faillock` and `authselect enable-feature with-pwhistory` require the `sssd` profile to be active. On systems using the `minimal` or `local` profile (Vagrant boxes, some Fedora minimal installs), `enable-feature` exits 0 without modifying PAM files. On Anaconda-installed systems, manual PAM edits may cause `authselect check` to report drift even when `sssd` is nominally selected.
+
+**Fix:**
+The playbook runs `authselect select sssd --force` before the feature-enable tasks. If the smoke test still fails, run manually:
+```bash
+sudo authselect select sssd --force
+sudo authselect enable-feature with-faillock
+sudo authselect enable-feature with-pwhistory
+sudo authselect check
+```
+Verify `pam_faillock.so` is wired into the stack:
+```bash
+grep pam_faillock /etc/pam.d/system-auth
+```
+If absent, the `--force` flag did not apply — check for other active authselect overrides.
+
+**CSB IT ticket:** No. `authselect` is user-space PAM configuration. On CSB with restricted sudo, contact IT if `authselect select sssd --force` is denied.
+
+---
+
+## system: OVN-K / Submariner Packet Drops ("nf_conntrack: table full")
+
+**Symptom:**
+```
+kernel: nf_conntrack: table full, dropping packet
+```
+or intermittent connection failures, retransmits, and `curl` timeouts during OVN-K or Submariner `make kind` test runs. May also appear as `make smoke-test` reporting `sysctl-conntrack-max: FAIL`.
+
+**Cause:**
+The kernel auto-sizes `nf_conntrack_max` from RAM at boot. On a 62 GB machine the auto-calculated value is 262144. A playbook value below the auto-calculated default actively shrinks the table. OVN-K and Submariner generate high conntrack state (encapsulated pods, service IPs, gateway routes) and overflow a small table under load.
+
+**Fix:**
+The playbook sets `net.netfilter.nf_conntrack_max: 524288` via `90-hardening.conf`. Verify:
+```bash
+sysctl net.netfilter.nf_conntrack_max
+# Expected: >= 524288
+```
+If the value is lower, the `nf_conntrack` module may not have been loaded when the sysctl was applied. The playbook explicitly loads `nf_conntrack` via `modprobe` before sysctl; re-running `make system` should fix it.
+
+**CSB IT ticket:** No. Sysctl changes are applied by the playbook with sudo.
