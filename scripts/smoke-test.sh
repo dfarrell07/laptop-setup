@@ -396,7 +396,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
   # Auditd watch keys for new paths deployed by the system role
-  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy user-mgmt; do
+  for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy user-mgmt aide-integrity mac-policy network-config; do
     if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
       record "auditd-watch-${_key}" "PASS"
     else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
