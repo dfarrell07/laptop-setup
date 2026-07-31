@@ -4,9 +4,16 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 
 ## Quick Reference
 
-**First time on a new machine: `make bootstrap` before `make all`** (installs Ansible
-collections, creates vault-pass.sh stub, and sets up git hooks; skipping this gives a
-cryptic "collection not found" error mid-playbook).
+**First time on a new machine:**
+1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
+2. Create `config.yml` with at minimum `desktop_environment: sway` (or `i3`/`gnome`).
+   Without this, `desktop_environment: auto` tries to detect the running WM, which fails
+   on first provision before any WM is installed, and zero WM packages are deployed.
+3. Populate `group_vars/all/vault.yml` with real SSH keys (see Vault section below)
+   *then* `ansible-vault encrypt group_vars/all/vault.yml` and replace `scripts/vault-pass.sh`
+   with your YubiKey HMAC-SHA1 implementation. For a first provision without real secrets,
+   vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
+4. `make all` — full provisioning (asks for sudo password)
 
 ```bash
 make all              # Full run (asks for sudo password)
@@ -31,7 +38,7 @@ make check            # Dry run (--check mode)
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test             # Container molecule tests (Fedora/Rocky/Debian, Podman, no libvirt needed)
-make ci               # Lint + syntax + all non-VM molecule tests (mirrors CI pipeline)
+make ci               # Lint + syntax + test-scripts + all non-VM molecule tests (includes macos)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD

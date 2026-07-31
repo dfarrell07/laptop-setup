@@ -132,6 +132,7 @@
   ansible.builtin.stat:
     path: "{{ ansible_env.HOME }}/.local/bin/oc"
   register: container_oc_export_stat
+  when: container_host_exec.stat.exists
 
 - name: Assert oc host wrapper exists
   ansible.builtin.assert:
@@ -139,6 +140,7 @@
     fail_msg: >-
       oc was not exported to {{ ansible_env.HOME }}/.local/bin —
       distrobox-export may have failed or the path is not writable.
+  when: container_host_exec.stat.exists
 
 - name: Confirm oc is available (container side)
   ansible.builtin.command:
