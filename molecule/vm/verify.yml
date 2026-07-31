@@ -264,6 +264,19 @@
           - "'nodev' in verify_shm.stdout"
         fail_msg: "/dev/shm missing required mount options (noexec,nosuid,nodev)"
 
+    - name: Check /home mount options (CIS 1.1.9)
+      ansible.builtin.command: findmnt -n -o OPTIONS /home
+      register: verify_home
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert /home has nosuid (CIS 1.1.9)
+      ansible.builtin.assert:
+        that: "'nosuid' in verify_home.stdout"
+        fail_msg: "/home missing nosuid mount option (CIS 1.1.9)"
+      when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
+
     - name: Verify modprobe blacklists usb_storage
       ansible.builtin.command: grep -q usb_storage /etc/modprobe.d/hardening.conf
       changed_when: false

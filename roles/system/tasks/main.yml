@@ -127,6 +127,79 @@
     - ansible_system == 'Linux'
     - csb_detected | default(false)
 
+# --- Harden /home mount options (CIS 1.1.9) ---
+# nosuid prevents any setuid binary a user copies into their home directory from
+# gaining elevated privileges on exec. No standard Fedora package installs setuid
+# binaries in /home; the only setuid files found there are container image overlay
+# layers (~/.local/share/containers/storage/overlay/) which are unaffected because:
+# (1) overlayfs/fuse-overlayfs creates independent submounts with their own flags —
+# nosuid on /home does NOT propagate to those submounts; (2) rootless Podman uses
+# user namespaces so setuid inside containers has no host-level effect regardless.
+#
+# CSB: RHEL CSB home directories may be NFS/autofs-mounted for LDAP users.
+# fstab is IT-managed and remounting NFS with nosuid may break home directory
+# access entirely. Skip on CSB — IT's mount policy governs /home there.
+#
+# Implementation uses backrefs (not create: true) because /home has an existing
+# fstab entry from the Fedora installer; we append nosuid to the options field.
+# Separate fstab vs live-mount checks allow the fstab and remount tasks to be
+# independently idempotent (e.g. fstab updated on prior run but not yet rebooted).
+- name: Check if /home is a separate mountpoint (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n /home
+  register: system_home_mountpoint
+  changed_when: false
+  when: ansible_system == 'Linux'
+  failed_when: false
+
+- name: Check /home fstab options (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS --fstab /home
+  register: system_home_fstab_opts
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - system_home_mountpoint.rc | default(1) == 0
+  failed_when: false
+
+- name: Add nosuid to /home fstab entry (CIS 1.1.9)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nosuid\3'
+    backup: true
+    mode: "0644"
+  when:
+    - ansible_system == 'Linux'
+    - system_home_mountpoint.rc | default(1) == 0
+    - not (csb_detected | default(false))
+    - >-
+      'nosuid' not in (system_home_fstab_opts.stdout | default(''))
+  failed_when: false
+
+- name: Check /home current mount options (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /home
+  register: system_home_opts
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - system_home_mountpoint.rc | default(1) == 0
+  failed_when: false
+
+- name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: mount -o remount,nosuid /home
+  changed_when: true
+  when:
+    - ansible_system == 'Linux'
+    - system_home_mountpoint.rc | default(1) == 0
+    - not (csb_detected | default(false))
+    - >-
+      'nosuid' not in (system_home_opts.stdout | default(''))
+  failed_when: false
+
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
 # A complete unit file is required — /var/tmp has no base unit on Fedora
 # so a drop-in directory would be silently ignored.
