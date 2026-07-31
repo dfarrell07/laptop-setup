@@ -517,3 +517,25 @@ kind create cluster --config path/to/kind-config.yaml
 ```
 
 **CSB IT ticket:** No. This is a user-session environment variable issue resolved by re-login.
+
+## Makefile: ERROR when running as root
+
+**Symptom:**
+```
+ERROR: Do not run as root. Use -K for privilege escalation (make all).
+make: *** [Makefile:24: guard-not-root] Error 1
+```
+
+**Cause:**
+The Makefile has a `guard-not-root` safety check on all targets that install files into `$HOME` (`all`, `minimal`, `dotfiles`, `packages`, `repos`, `ssh`, `claude`, `distrobox`, `container`, etc.). Running `sudo -i && make all` sets `USER=root`, causing all dotfiles, git repos, and configs to be installed to `/root/` instead of the actual user's home directory. The guard prevents this silent misconfiguration.
+
+**Fix:**
+Run without sudo at the top level — Ansible handles privilege escalation internally:
+```bash
+# Correct: Ansible prompts for sudo password via -K
+make all
+```
+
+The playbook uses `--ask-become-pass` for tasks that need root and `become: true` at the play/task level. The `make all` command itself must run as the actual user.
+
+**CSB IT ticket:** No. This is a local invocation issue.
