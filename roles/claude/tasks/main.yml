@@ -184,13 +184,39 @@
     - ansible_system == 'Linux'
   failed_when: false
 
+# --- Disable task queue when not enabled (cleanup if previously enabled) ---
+- name: Stop and disable task queue timer (when disabled)
+  ansible.builtin.systemd:
+    name: claude-queue.timer
+    scope: user
+    state: stopped
+    enabled: false
+    daemon_reload: true
+  when:
+    - not (claude_queue_enabled | bool)
+    - ansible_system == 'Linux'
+  failed_when: false
+
+- name: Remove task queue systemd unit files (when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+    state: absent
+  loop:
+    - claude-queue.service
+    - claude-queue.timer
+  when:
+    - not (claude_queue_enabled | bool)
+    - ansible_system == 'Linux'
+
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.local/share/log"
     state: directory
     mode: "0755"
-  when: ansible_os_family == 'Darwin'
+  when:
+    - ansible_os_family == 'Darwin'
+    - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
 - name: Deploy task queue launchd plist (macOS)
   ansible.builtin.template:
