@@ -25,6 +25,11 @@ AllowTcpForwarding no
 
 ClientAliveInterval 300
 ClientAliveCountMax 2
+# ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
+# Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
+# OpenSSH 10.3 (bz3827) fixed UnusedConnectionTimeout firing prematurely after a
+# ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
+# close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
 ChannelTimeout session=10m
 UnusedConnectionTimeout 600
 TCPKeepAlive no
