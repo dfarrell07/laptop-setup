@@ -367,6 +367,11 @@
       failed_when: verify_faillock_authselect.rc != 0
       become: true
 
+    - name: Run authselect check to verify PAM files match profile
+      ansible.builtin.command: authselect check
+      changed_when: false
+      become: true
+
     # --- Sudoers hardening ---
     - name: Verify sudoers hardening file exists with correct mode
       ansible.builtin.stat:
@@ -451,6 +456,53 @@
       ansible.builtin.assert:
         that: verify_coredump.stat.exists
         fail_msg: "Core dump disable config not deployed"
+
+    - name: Check coredump config contains Storage=none
+      ansible.builtin.command: grep -q '^Storage=none' /etc/systemd/coredump.conf.d/disable.conf
+      changed_when: false
+      become: true
+      when: verify_coredump.stat.exists
+
+    - name: Check coredump config contains ProcessSizeMax=0
+      ansible.builtin.command: grep -q '^ProcessSizeMax=0' /etc/systemd/coredump.conf.d/disable.conf
+      changed_when: false
+      become: true
+      when: verify_coredump.stat.exists
+
+    # --- logind hardening ---
+    - name: Verify logind hardening config exists
+      ansible.builtin.stat:
+        path: /etc/systemd/logind.conf.d/99-hardening.conf
+      register: verify_logind
+      become: true
+
+    - name: Assert logind hardening config deployed
+      ansible.builtin.assert:
+        that: verify_logind.stat.exists
+        fail_msg: "logind hardening config not deployed"
+
+    - name: Check logind config contains IdleAction=lock
+      ansible.builtin.command: grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
+      changed_when: false
+      become: true
+      when: verify_logind.stat.exists
+
+    - name: Check logind config contains IdleActionSec
+      ansible.builtin.command: grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf
+      changed_when: false
+      become: true
+      when: verify_logind.stat.exists
+
+    # --- subuid/subgid (rootless Podman) ---
+    - name: Check /etc/subuid has entry for real_user_id
+      ansible.builtin.command: grep -q '^{{ real_user_id }}:' /etc/subuid
+      changed_when: false
+      become: true
+
+    - name: Check /etc/subgid has entry for real_user_id
+      ansible.builtin.command: grep -q '^{{ real_user_id }}:' /etc/subgid
+      changed_when: false
+      become: true
 
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled

@@ -779,7 +779,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
-  _sysctl_check "net.ipv4.tcp_timestamps"            "0" "sysctl-tcp-timestamps"
+  # tcp_timestamps: CIS=0, but CSB sets it to 1 (IT network diagnostics require timestamps)
+  _ts=$(sysctl -n net.ipv4.tcp_timestamps 2>/dev/null || echo "?")
+  if [[ "$_ts" == "0" ]]; then record "sysctl-tcp-timestamps" "PASS"
+  elif $CSB_HOST && [[ "$_ts" == "1" ]]; then record "sysctl-tcp-timestamps" "WARN" "CSB: tcp_timestamps=1 (IT network diagnostics override CIS default 0)"
+  else record "sysctl-tcp-timestamps" "FAIL" "net.ipv4.tcp_timestamps=$_ts expected 0 (or 1 on CSB)"; fi
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
   # bridge-nf: WARN if br_netfilter module not loaded (persistent via modules-load.d; reboot activates)
@@ -788,6 +792,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   elif [[ -z "$_bridge_nf" ]]; then
     record "sysctl-bridge-nf-iptables" "WARN" "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
   else record "sysctl-bridge-nf-iptables" "FAIL" "net.bridge.bridge-nf-call-iptables=$_bridge_nf expected 1"; fi
+  _bridge_nf6=$(sysctl -n net.bridge.bridge-nf-call-ip6tables 2>/dev/null)
+  if [[ "$_bridge_nf6" == "1" ]]; then record "sysctl-bridge-nf-ip6tables" "PASS"
+  elif [[ -z "$_bridge_nf6" ]]; then
+    record "sysctl-bridge-nf-ip6tables" "WARN" "br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"
+  else record "sysctl-bridge-nf-ip6tables" "FAIL" "net.bridge.bridge-nf-call-ip6tables=$_bridge_nf6 expected 1"; fi
   _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)

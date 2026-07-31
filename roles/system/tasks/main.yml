@@ -1456,6 +1456,15 @@
   when: "'INACTIVE=30' not in system_useradd_defaults.stdout"
   changed_when: true
 
+# useradd -D -f 30 only governs future accounts. Apply the same 30-day
+# inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
+- name: Set inactive lock for existing user account (CIS 5.5.1.5)
+  ansible.builtin.command:
+    cmd: chage -I 30 {{ real_user_id }}
+  when: real_user_id is defined
+  changed_when: false
+  failed_when: false
+
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure subuid entry exists for user
   ansible.builtin.lineinfile:

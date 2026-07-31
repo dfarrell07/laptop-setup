@@ -159,25 +159,15 @@
         gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
         enabled: true
   rescue:
-    - name: Record Mullvad repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Mullvad VPN repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Download Mullvad RPM directly from mullvad.net"
-        _csb_ticket_summary: "Exception request: Mullvad VPN RPM repository"
-        _csb_ticket_body: "Mullvad VPN for privacy-preserving internet access"
-      when: csb_detected | default(false)
-
-    - name: Warn Mullvad VPN repo failed (non-CSB network error)
+    # No CSB handler here: the block-level 'when' already excludes CSB machines,
+    # so csb_detected is always false when rescue runs (network failure on non-CSB host).
+    - name: Warn Mullvad VPN repo failed (network error)
       ansible.builtin.debug:
         msg: >-
           REPO SETUP FAILED: Add Mullvad VPN repository in role repos_dnf.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
 
 - name: Add Docker CE repo
   when: repo_docker_ce | default(false)
