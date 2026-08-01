@@ -15,7 +15,4 @@ additional_packages="{{ distrobox_packages | join(' ') }}"
 init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }} || true;
 {% endfor %}
 
-# Exports to host
-{% for bin in distrobox_exports %}
-init_hooks=distrobox-export --bin {{ bin }} --export-path {{ ansible_user_dir }}/.local/bin 2>/dev/null || true;
-{% endfor %}
+
