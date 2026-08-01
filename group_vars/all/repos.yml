@@ -124,15 +124,6 @@ git_repos_list:
     category: downstream
     enabled: true
 
-  - url: https://github.com/stolostron/acm-threat-model
-    dest: stolostron/acm-threat-model
-    category: downstream
-    enabled: false  # 404 — repo deleted or made private
-
-  - url: https://github.com/stolostron/secure-engineering-container
-    dest: stolostron/secure-engineering-container
-    category: downstream
-    enabled: false  # archived since 2023-04-04
 
   # --- downstream internal (VPN required) ---
   - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/submariner-operator.git"
@@ -212,6 +203,8 @@ git_repos_list:
 
   - url: https://github.com/openshift/multus-cni
     dest: ovnk/openshift/multus-cni
+    category: ovnk
+    enabled: true
 
   - url: https://github.com/k8snetworkplumbingwg/multus-cni
     dest: ovnk/k8snetworkplumbingwg/multus-cni
@@ -345,6 +338,8 @@ git_repos_list:
 
   - url: https://github.com/openvswitch/ovs
     dest: ovnk/openvswitch/ovs
+    category: ovnk
+    enabled: true
 
   - url: https://github.com/containernetworking/plugins
     dest: ovnk/containernetworking/plugins
@@ -451,20 +446,11 @@ git_repos_list:
     enabled: true
 
   # --- disabled (do not clone) ---
-  - url: https://github.com/z0al/dependent-issues
-    dest: misc/dependent-issues
-    category: personal
-    enabled: false
-
   - url: https://github.com/dfarrell07/ipset-go
     dest: dfarrell07/ipset-go
     category: personal
     enabled: false
 
-  - url: https://github.com/dfarrell07/Huberman-Lab-Podcast-Transcripts
-    dest: dfarrell07/Huberman-Lab-Podcast-Transcripts
-    category: personal
-    enabled: false
 
   # --- cncf ---
   - url: https://github.com/cncf/foundation
