@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+# ~/.config/direnv/direnvrc — user-level direnv stdlib extensions
+# Sourced before every .envrc evaluation.
+# Usage: add 'layout go' to a per-repo .envrc, then run 'direnv allow'.
+
+# layout_go: isolate GOPATH per-repo under .direnv/go
+# Prevents cross-repo module cache pollution and go install binary collisions.
+# After 'layout go' in .envrc, 'go install ./...' populates .direnv/go/bin/
+# which is auto-added to PATH only while inside that repo tree.
+layout_go() {
+  export GOPATH="${PWD}/.direnv/go"
+  export GOBIN="${GOPATH}/bin"
+  PATH_add "${GOBIN}"
+  PATH_add "$(go env GOROOT)/bin"
+}

@@ -1,7 +1,7 @@
 ---
 # Sysctl hardening values
 system_sysctl_hardening:
-  kernel.yama.ptrace_scope: 1      # CIS — restrict ptrace to parent process; value 2=admin-only, 3=none
+  # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
   kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
   kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
   kernel.unprivileged_bpf_disabled: 2  # CIS — prevent unprivileged eBPF program loading;
@@ -154,6 +154,10 @@ system_bpf_jit_harden: 1
 # Set both to 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging.
 system_kernel_panic: 10       # set 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging
 system_kernel_panic_on_oops: 1  # CIS 1.5.3; set 0 in config.yml to allow system to continue after non-fatal oops
+# ptrace scope: 1=restrict to parent process only (CIS; value 2=admin-only, 3=none); 0=unrestricted within
+# user namespace (Fedora workstation default). For OVN-K/bpfman kernel development, set 0 in config.yml
+# to allow gdb -p and strace -p on your own running processes without sudo.
+system_ptrace_scope: 1
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all

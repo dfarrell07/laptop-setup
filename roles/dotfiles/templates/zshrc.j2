@@ -184,7 +184,14 @@ klogs() {
 kenv() {
   local cfg="${1:-$KUBECONFIG}"
   [[ -z "$cfg" ]] && { echo "kenv: no KUBECONFIG set or given" >&2; return 1; }
-  echo "export KUBECONFIG=$cfg" >> "${PWD}/.envrc" && direnv allow .
+  local envrc="${PWD}/.envrc"
+  # Replace existing KUBECONFIG line or append — prevents duplicate entries on repeated calls
+  if grep -q "^export KUBECONFIG=" "$envrc" 2>/dev/null; then
+    sed -i "s|^export KUBECONFIG=.*|export KUBECONFIG=$cfg|" "$envrc"
+  else
+    echo "export KUBECONFIG=$cfg" >> "$envrc"
+  fi
+  direnv allow .
 }
 # sp: tmux project sessionizer — jump to ~/src project with fzf, create session if needed
 sp() {
