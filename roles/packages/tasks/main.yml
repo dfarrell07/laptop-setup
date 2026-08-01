@@ -122,6 +122,22 @@
     - "'libvirt' in (packages_virtualization | default([]))"
   failed_when: false
 
+- name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
+  ansible.builtin.user:
+    name: "{{ real_user_id }}"
+    groups: [libvirt, kvm]
+    append: true
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_system == 'Linux'
+    - install_virtualization | default(true) | bool
+    - real_user_id is defined
+    - real_user_id | length > 0
+  # System role (Play 1) attempts this with failed_when:false because libvirt/kvm groups
+  # do not exist until packages are installed here. This task completes the membership.
+
 - name: Install apt packages (Debian/Ubuntu)
   when: ansible_pkg_mgr == 'apt'
   block:

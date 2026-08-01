@@ -84,7 +84,7 @@
       when:
         - ansible_system == 'Linux'
         - ansible_virtualization_type not in ['container', 'docker', 'podman']
-      tags: [always]
+      tags: [system, repos_dnf]
 
     - name: Warn if DNS is not resolving after NetworkManager restart
       ansible.builtin.debug:
@@ -96,7 +96,7 @@
         - ansible_system == 'Linux'
         - system_dns_liveness is defined
         - system_dns_liveness.rc | default(1) != 0
-      tags: [always]
+      tags: [system, repos_dnf]
 
 # Play 2 — Host user (no play-level become)
 # Individual tasks escalate with become: true + tags: [become] as needed.

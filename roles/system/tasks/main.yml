@@ -759,6 +759,15 @@
   when: system_tlp_enabled | bool
   failed_when: false
 
+- name: Unmask power-profiles-daemon (TLP disabled — restore default power management)
+  ansible.builtin.systemd:
+    name: power-profiles-daemon
+    masked: false
+    enabled: true
+    state: started
+  when: not (system_tlp_enabled | bool)
+  failed_when: false
+
 - name: Deploy TLP ThinkPad charge threshold config
   ansible.builtin.template:
     src: tlp-thinkpad.conf.j2
