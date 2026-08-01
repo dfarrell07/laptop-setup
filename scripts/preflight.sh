@@ -261,8 +261,13 @@ else record "ram" "fail" "${ram_gb}GB — insufficient"; fi
 # --- SSH session safety check ---
 # make all restarts sshd mid-play; an SSH session gets SIGHUP and dies, leaving
 # provisioning incomplete. Run from a local console or inside tmux/screen.
+# Inside tmux/screen the multiplexer session survives sshd restart — safe to continue.
 if [[ -n "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}" ]]; then
-  record "ssh_session" "fail" "running over SSH — sshd will restart mid-play and drop this connection. Use a local console or run inside tmux: tmux new-session 'make all'"
+  if [[ -n "${TMUX:-}${STY:-}" ]]; then
+    record "ssh_session" "warn" "running over SSH inside tmux/screen — sshd restart drops the SSH connection but the multiplexer session survives; reconnect and reattach after provisioning"
+  else
+    record "ssh_session" "fail" "running over SSH — sshd will restart mid-play and drop this connection. Use a local console or run inside tmux: tmux new-session 'make all'"
+  fi
 fi
 
 # --- Existing installations ---

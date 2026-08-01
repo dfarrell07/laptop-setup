@@ -26,6 +26,8 @@
         system_install_usbguard: false
         install_virtualization: false  # libvirt not needed in CI container
         system_var_tmp_noexec: false   # var-tmp.mount unit fails in containers without systemd
+        system_disable_fingerprint: false  # fprintd masking fails silently in containers; skip entirely
+        system_tlp_enabled: false   # TLP/ppd service ops fail in containers
         real_user_id: molecule  # containers connect as root; override to avoid sshd AllowUsers assert
 
   roles:
