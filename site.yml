@@ -68,6 +68,36 @@
       tags: [system]
       when: ansible_system == 'Linux'
 
+  post_tasks:
+    # NetworkManager restart and systemd-resolved restart handlers fire here (end of Play 1).
+    # Wait for DNS connectivity before Play 2 begins — Play 2 needs DNS for git clones,
+    # binary downloads, and SSH host key fetches.
+    - name: Wait for DNS resolution after NetworkManager and systemd-resolved restart
+      ansible.builtin.command:
+        cmd: getent hosts github.com
+      changed_when: false
+      failed_when: false
+      retries: 6
+      delay: 5
+      register: system_dns_liveness
+      until: system_dns_liveness.rc == 0
+      when:
+        - ansible_system == 'Linux'
+        - ansible_virtualization_type not in ['container', 'docker', 'podman']
+      tags: [always]
+
+    - name: Warn if DNS is not resolving after NetworkManager restart
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: DNS resolution for github.com failed after NetworkManager/systemd-resolved
+          restart. Play 2 (git clones, binary downloads) may fail. Check NM and resolved status:
+          systemctl status NetworkManager systemd-resolved; resolvectl status
+      when:
+        - ansible_system == 'Linux'
+        - system_dns_liveness is defined
+        - system_dns_liveness.rc | default(1) != 0
+      tags: [always]
+
 # Play 2 — Host user (no play-level become)
 # Individual tasks escalate with become: true + tags: [become] as needed.
 - name: User setup
@@ -108,11 +138,13 @@
         that:
           - dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME'
           - dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_user_email_work | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME'
         fail_msg: >-
-          Set dotfiles_user_name and dotfiles_github_user in config.yml before
-          running make all. These are currently 'CHANGE_ME' (default.config.yml
-          placeholder values), which produces a silently broken gitconfig, wrong
-          zshrc aliases, and misnamed macOS plists.
+          Set dotfiles_user_name, dotfiles_github_user, dotfiles_user_email_work,
+          and dotfiles_user_email_personal in config.yml before running make all.
+          These are currently 'CHANGE_ME' placeholder values — git commits will be
+          attributed to 'CHANGE_ME' and email notifications will go to wrong addresses.
       when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
       tags: [always]
 

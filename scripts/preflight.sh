@@ -258,6 +258,13 @@ if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GB"
 elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GB — 8GB+ recommended"
 else record "ram" "fail" "${ram_gb}GB — insufficient"; fi
 
+# --- SSH session safety check ---
+# make all restarts sshd mid-play; an SSH session gets SIGHUP and dies, leaving
+# provisioning incomplete. Run from a local console or inside tmux/screen.
+if [[ -n "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}" ]]; then
+  record "ssh_session" "fail" "running over SSH — sshd will restart mid-play and drop this connection. Use a local console or run inside tmux: tmux new-session 'make all'"
+fi
+
 # --- Existing installations ---
 for tool in claude podman distrobox toolbox; do
   if command -v "$tool" &>/dev/null; then

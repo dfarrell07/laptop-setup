@@ -167,7 +167,7 @@ system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; 
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
-system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h"
+system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
@@ -205,3 +205,8 @@ system_dns_domains: "~."
 # /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
 # Set false if workloads require executable files in /var/tmp (some RPM scriptlets, build tools).
 system_var_tmp_noexec: true
+# LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
+# LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
+# If rd.luks.key is active and you set this true, the machine will require manual LUKS
+# passphrase entry on every reboot after provisioning. Default: false (preserve keyfile auth).
+system_remove_luks_key: false

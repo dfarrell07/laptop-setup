@@ -17,13 +17,19 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    with your YubiKey HMAC-SHA1 implementation. For a first provision without real secrets,
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
 4. `make all` — full provisioning (asks for sudo password)
+   **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
+   sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
+   must use SSH, run inside tmux first: `tmux new-session -s provision 'make all'`
 5. After provisioning, see `references/troubleshooting.md` for common surprises:
    SSH now on port 722, CUPS masked, TMOUT=600 in shells, USB storage kernel-blocked,
    AllowTcpForwarding no (VS Code port panel needs `system_ssh_allow_tcp_forwarding: local`)
 6. Required manual actions after `make all`:
+   - **Reboot** — kernel security params (lockdown, IOMMU, vsyscall, init_on_free) only
+     take effect after a reboot. SSH will be on port 722 after reboot.
    - `tailscale up` to authenticate (interactive browser step)
    - Log out and back in for group membership changes (libvirt, kvm groups)
    - For CSB/hybrid machines: `make container` to provision dev container
+   - `make smoke-test` to verify the provisioning succeeded
 
 ```bash
 make all              # Full run (asks for sudo password)

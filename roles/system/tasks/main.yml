@@ -527,43 +527,69 @@
   changed_when: true
   failed_when: false
 
-- name: Remove stale rd.luks.key grub parameter (no keyfile on /boot — avoids LUKS UUID leakage)
+- name: Remove rd.luks.key grub parameter (leaks LUKS UUID; dracut falls back to passphrase)
   ansible.builtin.command:
     cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
   register: system_luks_key_cleanup
   when:
     - system_grubby_info.rc | default(1) == 0
     - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
+    - system_remove_luks_key | bool
   changed_when: true
   failed_when: false
-  # rd.luks.key in the cmdline with no /boot/keyfile is a stale remnant — dracut
-  # falls back to passphrase correctly, but the dead param leaks the LUKS device UUID.
+  # WARNING: set system_remove_luks_key: true in config.yml only if this machine does NOT
+  # use a LUKS keyfile for auto-unlock at boot. Removing rd.luks.key from the cmdline means
+  # LUKS will require manual passphrase entry on every reboot. Default: false (preserve keyfile auth).
 
-- name: Remove stale rd.luks.key from /etc/default/grub (prevents grub2-mkconfig re-introducing the leak)
+- name: Remove rd.luks.key from /etc/default/grub (prevents grub2-mkconfig re-introducing it)
   ansible.builtin.replace:
     path: /etc/default/grub
     regexp: '\s*rd\.luks\.key=\S+'
     replace: ''
-  when: system_grubby_info.rc | default(1) == 0
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - system_remove_luks_key | bool
   failed_when: false
 
-# Persist security params to /etc/kernel/cmdline so new kernel installs via
-# 'dnf update kernel' include them automatically. Without this, grubby only
-# patches existing BLS entries — new kernels created by kernel-install use
-# /etc/kernel/cmdline as their source and would silently lack all hardening.
-- name: Deploy /etc/kernel/cmdline with security hardening params
-  ansible.builtin.template:
-    src: kernel-cmdline.j2
-    dest: /etc/kernel/cmdline
-    owner: root
-    group: root
-    mode: "0644"
+# Merge security hardening params into /etc/kernel/cmdline so new kernel installs
+# via 'dnf update kernel' include them automatically. Uses append-only logic to
+# PRESERVE existing essential boot params (root=UUID, rd.luks.uuid, rootflags, etc.)
+# that would be lost if the file were replaced with only the hardening params.
+- name: Merge security hardening params into /etc/kernel/cmdline  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      # Seed from existing file; fall back to current cmdline (strip BOOT_IMAGE= entry)
+      if [[ -f /etc/kernel/cmdline ]]; then
+        current=$(cat /etc/kernel/cmdline)
+      else
+        current=$(sed 's|BOOT_IMAGE=[^ ]* ||g' /proc/cmdline)
+      fi
+      new="$current"
+      # Append each missing hardening param (check by key prefix only)
+      _add() { local p="$1" k="${1%%=*}"; echo "$new" | grep -qE "(^| )${k}(=| |$)" || new="$new $p"; }
+      {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else '' }}
+      _add "vsyscall=none"
+      _add "init_on_free=1"
+      _add "page_alloc.shuffle=1"
+      {% set is_amd = ansible_processor | join(' ') | lower is search('amd') %}
+      {% set is_intel = ansible_processor | join(' ') | lower is search('intel') %}
+      {{ '_add "amd_iommu=on"' if is_amd else '' }}
+      {{ '_add "iommu=pt"' if is_amd or is_intel else '' }}
+      {{ '_add "intel_iommu=on"' if is_intel else '' }}
+      new=$(echo "$new" | tr -s ' ' | sed 's/^ //;s/ $//')
+      if [[ "$new" != "$current" ]]; then
+        echo "$new" > /etc/kernel/cmdline
+        echo changed
+      fi
+    executable: /bin/bash
+  register: system_kernel_cmdline_result
+  changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
   when:
     - ansible_system == 'Linux'
     - ansible_pkg_mgr in ['dnf', 'dnf5']
+  become: true
   failed_when: false
-  # kernel-install reads /etc/kernel/cmdline independently of grubby — deploy
-  # unconditionally so new kernel installs get security params even on systemd-boot hosts.
 
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
@@ -956,8 +982,26 @@
     mode: "0600"
     backup: true
   when: system_install_usbguard | default(true) | bool
-  failed_when: false
   notify: Restart usbguard
+  # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
+  # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
+  # including the keyboard. Template failure must be a hard stop.
+
+- name: Verify USBGuard rules.conf is non-empty before enabling service
+  ansible.builtin.stat:
+    path: /etc/usbguard/rules.conf
+  register: system_usbguard_rules_stat
+  when: system_install_usbguard | default(true) | bool
+
+- name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
+  ansible.builtin.assert:
+    that:
+      - system_usbguard_rules_stat.stat.exists | default(false)
+      - system_usbguard_rules_stat.stat.size | default(0) > 0
+    fail_msg: >-
+      /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
+      ALL USB devices including the keyboard. Fix the template and re-run before enabling.
+  when: system_install_usbguard | default(true) | bool
 
 - name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
   ansible.builtin.lineinfile:
@@ -1148,7 +1192,23 @@
   when:
     - ssh_port | int != 22
     - ansible_selinux.status | default('') == 'enabled'
-  failed_when: false
+  # No failed_when: false — if the SELinux port label fails, sshd CANNOT bind the
+  # new port under SELinux enforcing. Without this label, the sshd restart handler
+  # will kill sshd (stop succeeds, start denied by SELinux) leaving the machine
+  # SSH-inaccessible. Make this a hard failure so the operator sees it before restart.
+
+- name: Verify SELinux ssh_port_t label was applied before sshd can restart
+  ansible.builtin.assert:
+    that: not (system_seport_result.failed | default(false))
+    fail_msg: >-
+      SELinux port label for port {{ ssh_port }}/tcp failed. sshd cannot bind this port
+      under SELinux enforcing. Fix the semanage issue before proceeding — otherwise sshd
+      will be killed and the machine will be SSH-inaccessible. Verify with:
+      semanage port -l | grep ssh
+  when:
+    - ssh_port | int != 22
+    - ansible_selinux.status | default('') == 'enabled'
+    - system_seport_result is defined
 
 # --- Crypto policy ---
 - name: Check current crypto policy
