@@ -32,7 +32,6 @@ packages_cli:
   - ShellCheck
   - shfmt
   - gh
-  - golangci-lint
   - tailscale
   - ripgrep
   - fd-find
@@ -63,7 +62,6 @@ packages_containers:
   - buildah
   - skopeo
   - distrobox
-  - wl-clipboard
 
 packages_virtualization:
   - libvirt
@@ -93,6 +91,7 @@ packages_networking:
   - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
   - strace         # system call tracer; needed on host for bpfman daemon debugging (not just container)
   - perf
+  - bpftrace       # eBPF dynamic tracing (bpftrace scripts); must be on host for kernel access like bpfman/strace
   - sos            # Red Hat support diagnostic bundle tool (sos report); required for CSB/RHEL support cases
 
 packages_apt:

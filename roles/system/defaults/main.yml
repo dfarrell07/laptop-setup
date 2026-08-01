@@ -8,30 +8,23 @@ system_sysctl_hardening:
   # value 2=write-once locked (Fedora 44 kernel default via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
   # value 1 allows root to re-enable at runtime
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
-  kernel.perf_event_paranoid: 2    # CIS — deny unprivileged perf_event_open; CAP_PERFMON required for profiling
+  kernel.perf_event_paranoid: 1    # value 1 = require CAP_PERFMON for kernel profiling (value 2 also blocks CPU counters for root)
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
-  net.ipv4.conf.lo.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0
   net.ipv4.conf.default.accept_redirects: 0
-  net.ipv4.conf.lo.accept_redirects: 0
   net.ipv6.conf.all.accept_redirects: 0
   net.ipv6.conf.default.accept_redirects: 0
-  net.ipv6.conf.lo.accept_redirects: 0
   net.ipv4.conf.all.accept_source_route: 0
   net.ipv4.conf.default.accept_source_route: 0
-  net.ipv4.conf.lo.accept_source_route: 0   # CIS 3.3.1 — lo interface also required
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
-  net.ipv6.conf.lo.accept_source_route: 0   # CIS 3.3.1 — lo interface also required
   net.ipv4.conf.all.rp_filter: 2  # loose mode (not CIS strict=1): Tailscale and OVN-K overlay use asymmetric routes
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
-  net.ipv4.conf.lo.log_martians: 1      # CIS 3.3.7 — log_martians on all interfaces (kernel ORs all+lo)
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
-  net.ipv4.conf.lo.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
   fs.suid_dumpable: 0           # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks)
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
@@ -44,8 +37,7 @@ system_sysctl_hardening:
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
-  net.ipv4.tcp_timestamps: 0      # CIS 3.3.9 — prevent TCP timestamp-based OS fingerprinting and uptime disclosure
-  # NOTE: overridden to 1 (kernel default) on CSB in tasks/main.yml — IT network diagnostics require timestamps
+  net.ipv4.tcp_timestamps: 1      # kernel default; 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust);
   # set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump impossible even with kdump-utils installed
@@ -65,8 +57,7 @@ system_sysctl_hardening:
 
 # Firewall
 system_firewall_icmp_types:
-  - destination-unreachable
-  - fragmentation-needed
+  - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed
   - packet-too-big
   - time-exceeded
   - echo-request  # Required for ping — OVN-K/kind pod-to-host-gw connectivity testing

@@ -326,11 +326,6 @@
 # (1) so IT tooling is not silently broken. The fingerprinting risk is accepted: CSB
 # hosts are on a managed corporate network where uptime disclosure is low-risk, and
 # disabling timestamps has measurable latency/throughput impact on high-BDP links.
-- name: Restore tcp_timestamps to kernel default on CSB (IT network diagnostics require timestamps)
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'net.ipv4.tcp_timestamps': 1}) }}"
-  when: csb_detected | default(false)
-
 - name: Deploy sysctl hardening config
   ansible.builtin.template:
     src: sysctl-hardening.conf.j2

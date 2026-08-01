@@ -70,6 +70,8 @@ distrobox_packages:
   - iperf3
   - strace
   - bpftool  # eBPF program/map introspection (essential for bpfman development)
+  - bpftrace  # eBPF dynamic tracing (container-side; shares host kernel with distrobox)
+  - perf      # kernel performance profiling; CAP_PERFMON granted by distrobox additional_flags
   - libbpf-devel  # eBPF development headers
   - llvm  # complements clang for eBPF bytecode compilation
   - gh
@@ -85,6 +87,7 @@ distrobox_host_exec_commands:
 distrobox_exports:
   - /usr/bin/jq
   - /usr/bin/vim
+  - /usr/sbin/bpftool
 
 # Binary versions for container provisioning (Play 3)
 # Reference packages_oc_version so host and container stay in sync.
