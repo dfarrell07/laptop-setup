@@ -1,6 +1,6 @@
 .PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes repos-ovnk repos-konflux repos-personal \
-       repos-bpfman repos-downstream repos-cncf \
+       repos-bpfman repos-downstream \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container \
@@ -19,7 +19,7 @@ help:
 	@echo "Primary:    all minimal offline container container-rebuild update"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
-	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
+	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
@@ -114,9 +114,6 @@ repos-bpfman: guard-not-root
 
 repos-downstream: guard-not-root
 	ansible-playbook site.yml --tags common,repos -e repo_category=downstream
-
-repos-cncf: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=cncf
 
 ssh: guard-not-root
 	ansible-playbook site.yml --tags common,ssh
