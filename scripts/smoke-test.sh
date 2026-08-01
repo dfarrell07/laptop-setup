@@ -467,7 +467,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "usbguard" "FAIL" "not installed"; fi
   if command -v usbguard &>/dev/null; then
     grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-implicit-policy' 'FAIL' 'ImplicitPolicyTarget is not block — all unmatched devices may be allowed'
+    grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-audit-backend' 'FAIL' 'AuditBackend is not LinuxAudit — USBGuard events not forwarded to auditd'
+    grep -q '^IPCAllowedGroups=wheel' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-ipc-groups' 'FAIL' 'IPCAllowedGroups is not wheel — non-root users cannot manage USBGuard'
     grep -q '1050:' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-yubikey-rule' 'FAIL' 'YubiKey whitelist rule missing from rules.conf'
+    grep -q '3297:1969' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-moonlander-rule' 'WARN' 'Moonlander whitelist rule missing from rules.conf'
+    grep -q '0483:df11' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-stm32-dfu-rule' 'WARN' 'STM32 DFU whitelist rule missing from rules.conf (needed for Moonlander firmware flashing)'
   fi
 
   # bpfman.socket enabled (socket-activated daemon — socket must be enabled for bpfman load/list to work)
@@ -599,6 +603,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "nfs-server-masked" "FAIL" "nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)"; fi
   if systemctl is-masked rpcbind.service &>/dev/null; then record "rpcbind-masked" "PASS"
   else record "rpcbind-masked" "FAIL" "rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)"; fi
+  # Cockpit web console masked (port 9090 reachable from Tailscale peers if unmasked)
+  if systemctl is-masked cockpit.service &>/dev/null; then record "cockpit-service-masked" "PASS"
+  else record "cockpit-service-masked" "FAIL" "cockpit.service not masked — port 9090 reachable from Tailscale peers"; fi
+  if systemctl is-masked cockpit.socket &>/dev/null; then record "cockpit-socket-masked" "PASS"
+  else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked — web console activation possible"; fi
 
   # AIDE file integrity — only check if aide-check.timer is deployed (skips cleanly when AIDE disabled)
   if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then

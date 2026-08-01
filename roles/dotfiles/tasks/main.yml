@@ -115,14 +115,20 @@
     content: |
       #!/bin/sh
       # Use '# gitleaks:allow' on a line to suppress a false positive
+      _gitleaks_rc=0
       if command -v gitleaks >/dev/null 2>&1; then
         gitleaks git --pre-commit --staged --redact --max-decode-depth 2
+        _gitleaks_rc=$?
       else
         echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
       fi
       # Chain to per-repo hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
+      # Per-repo hook failure blocks the commit; gitleaks failure also blocks even if per-repo hook passes.
       _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/pre-commit"
-      if [ -f "$_repo_hook" ]; then exec "$_repo_hook"; fi
+      if [ -f "$_repo_hook" ]; then
+        "$_repo_hook" || exit $?
+      fi
+      exit $_gitleaks_rc
 
 - name: Ensure gh config directory
   ansible.builtin.file:
@@ -326,7 +332,9 @@
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
+    cmd: >-
+      launchctl bootstrap gui/{{ ansible_user_uid }}
+      {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
   when: ansible_os_family == 'Darwin'
   changed_when: false
   failed_when: false
