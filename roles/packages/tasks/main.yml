@@ -913,13 +913,15 @@
     - ansible_system == 'Linux'
     - ansible_architecture == 'x86_64'
   block:
-    - name: Check if krew is installed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.krew/bin/krew"
-      register: packages_krew_stat
+    - name: Check if krew is installed at target version
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.krew/bin/krew version"
+      register: packages_krew_check
+      changed_when: false
+      failed_when: false
 
     - name: Download krew tarball
-      when: not packages_krew_stat.stat.exists
+      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.get_url:
         url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_version }}/krew-linux_amd64.tar.gz"
         dest: /tmp/krew.tar.gz
@@ -931,20 +933,20 @@
       until: packages_krew_download is succeeded
 
     - name: Extract krew installer
-      when: not packages_krew_stat.stat.exists
+      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.unarchive:
         src: /tmp/krew.tar.gz
         dest: /tmp
         remote_src: true
 
     - name: Run krew installer
-      when: not packages_krew_stat.stat.exists
+      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.command:
         cmd: /tmp/krew-linux_amd64 install krew
       changed_when: true
 
     - name: Clean up krew installer files
-      when: not packages_krew_stat.stat.exists
+      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
