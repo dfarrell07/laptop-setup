@@ -1536,7 +1536,9 @@
     content: "KEYMAP={{ system_keymap }}\n"
     dest: /etc/vconsole.conf
     mode: "0644"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system | default('Linux') == 'Linux'
+    - system_keymap != 'us'  # Fedora default is already 'us'; skip to avoid clobbering other vconsole settings
 
 # --- Chrony NTS (authenticated time sync) ---
 - name: Deploy NTS-authenticated chrony config

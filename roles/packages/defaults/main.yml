@@ -70,19 +70,26 @@ packages_virtualization:
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
+  # packet capture
   - tcpdump
-  - conntrack-tools
-  - ethtool
-  - iperf3
+  - wireshark-cli   # tshark — scripting-safe CLI capture; GUI wireshark belongs in distrobox
+  # path analysis
   - traceroute
-  - iproute
-  - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
-  - nmap            # network scanner (moved from packages_cli)
-  - socat           # socket relay utility (moved from packages_cli)
   - mtr
+  # socket/connection
+  - socat           # socket relay utility (moved from packages_cli)
+  - conntrack-tools
+  # interface/routing
+  - iproute
+  - ethtool
+  # scanning/perf
+  - nmap            # network scanner (moved from packages_cli)
+  - iperf3
+  # firewall/DNS
   - nftables
   - bind-utils
-  - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark belongs in distrobox
+  # VPN
+  - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
 
 # Work-profile-only networking tools (OVN-K/bpfman development at Red Hat)
 packages_networking_work:

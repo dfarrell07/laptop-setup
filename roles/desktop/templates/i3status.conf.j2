@@ -21,9 +21,10 @@ cpu_usage {
     max_threshold = 80
 }
 
-# AMD k10temp via stable PCI address (hwmon index varies across reboots; glob is safe in sh -c)
+# AMD k10temp via configurable PCI path (hwmon index varies across reboots; glob is safe in sh -c)
+# Override desktop_i3status_cpu_temp_path in config.yml for different PCI topologies.
 command "cpu_temp" {
-    command = "awk '{printf \" %.0f°C\", $1/1000}' /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input 2>/dev/null || echo \" N/A\""
+    command = "awk '{printf \" %.0f°C\", $1/1000}' {{ desktop_i3status_cpu_temp_path }} 2>/dev/null || echo \" N/A\""
     interval = 5
 }
 

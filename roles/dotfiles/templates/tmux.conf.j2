@@ -43,7 +43,7 @@ bind r source-file ~/.config/tmux/tmux.conf \; display "Config reloaded"
 set -g status-interval 5
 set -g status-left-length 40
 set -g status-left "[#S] "
-set -g status-right "%H:%M %d-%b"
+set -g status-right "#{?pane_synchronized,#[fg=colour226 bold]SYNC#[fg=default nobold] ,}%H:%M %d-%b"
 set -g status-style "fg=colour250,bg=colour235"
 set -g window-status-current-style "fg=colour255,bg=colour33,bold"
 set -g window-status-activity-style "fg=colour226,bg=colour235"
@@ -51,6 +51,9 @@ set -g window-status-activity-style "fg=colour226,bg=colour235"
 # Split panes
 bind | split-window -h -c "#{pane_current_path}"
 bind - split-window -v -c "#{pane_current_path}"
+
+# Synchronized panes — send same keystrokes to all panes (multi-node kind/OVN-K)
+bind S setw synchronize-panes \; display "Sync: #{?pane_synchronized,ON,OFF}"
 
 # Vi copy mode
 bind -T copy-mode-vi v send-keys -X begin-selection

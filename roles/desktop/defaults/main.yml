@@ -8,6 +8,12 @@ desktop_wm_font_size: 10
 desktop_terminal: alacritty
 
 desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.yml; check with: swaymsg -t get_outputs
+
+# AMD k10temp PCI path for i3status CPU temperature block.
+# hwmon index varies across reboots; the glob (hwmon*) is intentional and safe.
+# ThinkPad P16v AMD default — override in config.yml for different PCI topologies.
+# Find the path with: ls /sys/devices/pci*/*/hwmon/hwmon*/temp1_input
+desktop_i3status_cpu_temp_path: "/sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input"
 desktop_sway_output: "eDP-1"  # built-in display identifier (AMD ThinkPad)
 # Workspace-to-output assignments for multi-monitor setups; empty = no assignments written.
 # Example (config.yml):

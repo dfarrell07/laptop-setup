@@ -70,7 +70,7 @@ command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]
 [[ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 {% endif %}
 
-# --- Claude Code API endpoint guard ---
+# --- Claude Code ---
 _claude_check_base_url() {
   if [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
     if [[ "${ANTHROPIC_BASE_URL}" != https://* ]]; then
@@ -85,7 +85,7 @@ _claude_check_base_url() {
   fi
 }
 
-# --- Claude Code instance guard ---
+# Instance guard + tmux launchers:
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
     echo "ERROR: CLAUDE_CONFIG_DIR not set. Use 'cw' (work) or 'ccp' (personal)." >&2
@@ -95,7 +95,7 @@ claude() {
   command claude "$@"
 }
 
-# --- Claude Code in tmux (sessions survive disconnects) ---
+#
 {% if profile == 'work' %}
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
@@ -153,7 +153,7 @@ alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 # --- Task queue ---
 cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
 
-# --- Kubernetes tool completions ---
+# --- Kubernetes ---
 # Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)
 (( $+functions[compdef] )) || { autoload -Uz compinit && compinit }
 command -v kubectl &>/dev/null && source <(kubectl completion zsh)
@@ -173,7 +173,7 @@ command -v bpfman &>/dev/null && alias bpl='bpfman list'
 command -v bpfman &>/dev/null && alias bpg='bpfman get'
 command -v bpfman &>/dev/null && alias bpld='bpfman load'
 
-# --- Kubernetes helpers ---
+# helpers:
 # kctx: fzf kubeconfig file picker — exports selected file as KUBECONFIG
 kctx() {
   command -v fzf &>/dev/null || { echo "kctx: fzf required" >&2; return 1; }
