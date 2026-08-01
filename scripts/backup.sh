@@ -70,6 +70,7 @@ DOTFILES=(
 OPTIONAL_FILES=(
   laptop-setup/config.yml
   laptop-setup/scripts/vault-pass.sh
+  laptop-setup/group_vars/all/vault.yml
   laptop-setup/CLAUDE.local.md
   .config/claude/work-env
   .config/claude/queue-repos.conf
@@ -83,6 +84,8 @@ OPTIONAL_FILES=(
   .config/containers/auth.json
   .claude/.credentials.json
   .claude/settings.json
+  .gnupg/trustdb.gpg
+  .gnupg/pubring.kbx
 )
 
 count=0
@@ -111,8 +114,43 @@ for f in "${OPTIONAL_FILES[@]}"; do
       cp -p "$src" "$dest"
     fi
     count=$((count + 1))
+  elif [ -L "$src" ]; then
+    echo "[warn] broken symlink, skipping: $src" >&2
   fi
 done
+
+# Catch-all: any private key in ~/.ssh/ not explicitly listed above
+for key in "${HOME}/.ssh"/id_*; do
+  case "$key" in
+    *.pub) continue ;;
+    */id_ed25519_sk|*/id_ed25519_sk_signing|*/id_rsa_redhat) continue ;;
+  esac
+  [ -f "$key" ] || continue
+  dest="${BACKUP_DIR}/.ssh/$(basename "$key")"
+  if [ "$DRY_RUN" = true ]; then
+    echo "[dry-run] would copy $key -> $dest"
+  else
+    mkdir -p "${BACKUP_DIR}/.ssh"
+    cp -p "$key" "$dest"
+  fi
+  count=$((count + 1))
+done
+
+# ~/.gnupg/private-keys-v1.d/ (directory of subkeys — copy all files)
+_gpg_dir="${HOME}/.gnupg/private-keys-v1.d"
+if [ -d "$_gpg_dir" ]; then
+  for key in "$_gpg_dir"/*.key; do
+    [ -f "$key" ] || continue
+    dest="${BACKUP_DIR}/.gnupg/private-keys-v1.d/$(basename "$key")"
+    if [ "$DRY_RUN" = true ]; then
+      echo "[dry-run] would copy $key -> $dest"
+    else
+      mkdir -p "${BACKUP_DIR}/.gnupg/private-keys-v1.d"
+      cp -p "$key" "$dest"
+    fi
+    count=$((count + 1))
+  done
+fi
 
 if [ "$DRY_RUN" = true ]; then
   echo "[dry-run] would back up ${count} files to ${BACKUP_DIR}"

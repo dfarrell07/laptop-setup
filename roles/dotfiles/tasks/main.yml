@@ -17,6 +17,21 @@
     msg: "WARNING: oh-my-zsh clone failed (network issue?). Zsh config will deploy but OMZ features won't work until cloned."
   when: dotfiles_ohmyzsh_result.failed | default(false)
 
+- name: Install forgit oh-my-zsh plugin (not bundled — requires separate clone)
+  ansible.builtin.git:
+    repo: https://github.com/wfxr/forgit.git
+    dest: "{{ ansible_user_dir }}/.local/share/oh-my-zsh/custom/plugins/forgit"
+    version: main
+    depth: 1
+    update: false
+  register: dotfiles_forgit_result
+  failed_when: false
+
+- name: Warn if forgit clone failed
+  ansible.builtin.debug:
+    msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
+  when: dotfiles_forgit_result.failed | default(false)
+
 - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.oh-my-zsh"
