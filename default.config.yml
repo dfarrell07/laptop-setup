@@ -59,6 +59,9 @@ install_virtualization: true
 #   system_kernel_panic: 10            (roles/system/defaults) — seconds before auto-reboot after panic;
 #                                        set 0 to disable auto-reboot (preserves crash state for kdump/OVN-K/bpfman debugging)
 #   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; set 0 to allow system to continue after non-fatal oops
+#   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=unrestricted within
+#                                        user ns, Fedora workstation default — set 0 in config.yml for gdb -p / strace -p
+#                                        on own running processes without sudo, needed for OVN-K/bpfman kernel debugging)
 #                                        (useful for OVN-K/bpfman development with KASAN/UBSAN)
 #   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
 #                                        (default: kernel-blocked, no override via USBGuard)
