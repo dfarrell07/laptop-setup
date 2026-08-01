@@ -12,6 +12,7 @@
 # those live in AUDIT_FILTER_EXIT and WOULD be suppressed by these exclusions.
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
+-a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
 
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
@@ -32,6 +33,8 @@
 -w /etc/sudoers.d/ -p wa -k privilege-escalation
 -w /etc/ssh/sshd_config -p wa -k privilege-escalation
 -w /etc/ssh/sshd_config.d/ -p wa -k privilege-escalation
+-w /etc/ssh/ssh_config -p wa -k network-config
+-w /etc/ssh/ssh_config.d/ -p wa -k network-config
 
 # System identity and authentication files
 -w /etc/passwd -p wa -k identity-change
@@ -43,6 +46,7 @@
 -w /etc/selinux/ -p wa -k mac-policy
 -w /etc/crypto-policies/ -p wa -k crypto-policy  # watch for unauthorized policy downgrade (e.g. re-enabling SHA1)
 -w /etc/NetworkManager/ -p wa -k network-config
+-w /etc/firewalld/ -p wa -k network-config
 
 # Persistence mechanisms (system)
 -w /etc/cron.d/ -p wa -k persistence
@@ -67,6 +71,7 @@
 
 # Audit infrastructure protection
 -w /etc/audit/ -p wa -k audit-config
+-w /etc/systemd/journald.conf.d/ -p wa -k audit-config
 -w /usr/bin/auditd -p x -k audit-tools
 -w /usr/bin/auditctl -p x -k audit-tools
 -w /usr/bin/augenrules -p x -k audit-tools
@@ -86,6 +91,7 @@
 -w /etc/bpfman/ -p wa -k bpfman-config
 
 # Kernel parameter and module configuration
+-w /etc/sysctl.conf -p wa -k kernel-params
 -w /etc/sysctl.d/ -p wa -k kernel-params
 -w /etc/modprobe.d/ -p wa -k kernel-modules
 # /boot: grubby silently modifies BLS entries without touching /etc — these watches
@@ -110,7 +116,23 @@
 -w /sbin/rmmod -p x -k kernel-module-unload
 -w /sbin/modprobe -p x -k kernel-module-load
 
+# eBPF program load/map/attach via bpf() syscall (syscall 321 on x86_64, 357 on x86)
+# bpfman itself is excluded above; these catch direct bpf() calls that bypass bpfman.
+-a always,exit -F arch=b64 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
+-a always,exit -F arch=b32 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
+# Also audit root-initiated bpf() (auid=-1 covers daemon/service context)
+-a always,exit -F arch=b64 -S bpf -F uid=0 -k bpf-syscall
+-a always,exit -F arch=b32 -S bpf -F uid=0 -k bpf-syscall
+
 # User account management tool execution (CIS 4.1.3.8)
+-w /usr/bin/useradd -p x -k user-mgmt
+-w /usr/bin/usermod -p x -k user-mgmt
+-w /usr/bin/userdel -p x -k user-mgmt
+-w /usr/bin/groupadd -p x -k user-mgmt
+-w /usr/bin/groupmod -p x -k user-mgmt
+-w /usr/bin/groupdel -p x -k user-mgmt
+-w /usr/bin/gpasswd -p x -k user-mgmt
+-w /usr/bin/passwd -p x -k user-mgmt
 -w /usr/bin/chsh -p x -k user-mgmt
 -w /usr/bin/chfn -p x -k user-mgmt
 -w /usr/bin/newgrp -p x -k user-mgmt
@@ -128,13 +150,13 @@
 -w /etc/localtime -p wa -k time-change
 
 # Unauthorized file access attempts (EACCES/EPERM) — CIS 4.1.x
--a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
 -a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
--a always,exit -F arch=b64 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
 -a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
 
 # File deletion by users (CIS 4.1.x)
--a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=-1 -k delete
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F auid>=1000 -F auid!=-1 -k delete
 -a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=-1 -k delete
 
 # Filesystem mounts (CIS 4.1.x)
@@ -179,6 +201,7 @@
 
 # sudo log watch (CIS 4.1.3.3)
 -w /var/log/sudo.log -p wa -k actions
+-w /usr/bin/sudo -p x -k actions
 
 # Make rules immutable until next reboot.
 # WARNING: after first deployment, manual augenrules --load or auditctl -R

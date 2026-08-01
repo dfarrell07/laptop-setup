@@ -1,6 +1,8 @@
 ---
+distrobox_enabled: true  # set false in config.yml to skip container creation and Play 3 entirely
+
 distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
-distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:44') }}"
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ ansible_distribution_major_version) }}"  # yamllint disable-line rule:line-length
 distrobox_container_replace: "{{ container_replace | default(false) }}"
 
 distrobox_ini_path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
@@ -88,3 +90,6 @@ distrobox_exports:
 # Reference packages_oc_version so host and container stay in sync.
 distrobox_oc_version: "{{ packages_oc_version | default('4.22.6') }}"
 distrobox_golangci_lint_version: "v2.12.2"
+distrobox_oc_fetch_timeout: 30
+distrobox_oc_fetch_retries: 3
+distrobox_oc_fetch_delay: 10

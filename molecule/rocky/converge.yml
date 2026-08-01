@@ -42,8 +42,24 @@
         install_virtualization: false
         ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
 
+    # Create a minimal mock notes repo so the notes role skips cloning (private
+    # repo, no SSH key in CI) but still runs the chmod tasks that set notes/
+    # to 0700 and notes/.git/config to 0600 — which the verify assertions check.
+    - name: Create mock notes .git directory for CI permission testing
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/notes/.git"
+        state: directory
+        mode: "0755"
+
+    - name: Create mock notes .git/config for CI permission testing
+      ansible.builtin.copy:
+        content: "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"  # noqa: no-tabs
+        dest: "{{ ansible_user_dir }}/notes/.git/config"
+        mode: "0644"
+
   roles:
     - role: common
+    - role: repos_dnf
     - role: packages
     - role: dotfiles
     - role: ssh
@@ -59,6 +75,12 @@
         desktop_common_packages: []
         desktop_sway_packages: []
         desktop_i3_packages: []
+        desktop_deploy_chrome_policies: true
     - role: claude
       vars:
         claude_install_method: skip
+
+  post_tasks:
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
+      tags: [always]

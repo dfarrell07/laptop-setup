@@ -1,0 +1,110 @@
+---
+name: Galaxy Drift Check
+
+on:
+  schedule:
+    - cron: '17 4 1 * *'  # Monthly on the 1st
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - requirements.yml
+
+concurrency:
+  group: galaxy-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  galaxy-drift:
+    name: Ansible Galaxy Version Drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+
+      - name: Install Ansible
+        run: pip install -r requirements-test.txt
+
+      - name: Install latest collection versions
+        run: |
+          WORK_DIR=$(mktemp -d)
+          echo "GALAXY_WORK_DIR=$WORK_DIR" >> "$GITHUB_ENV"
+          while IFS= read -r coll; do
+            ansible-galaxy collection install "$coll" --collections-path "$WORK_DIR"
+          done < <(python3 -c 'import re
+          with open("requirements.yml") as f:
+              for line in f:
+                  m = re.match(r"^\s*-\s*name:\s*(\S+)", line)
+                  if m:
+                      print(m.group(1))
+          ')
+
+      - name: Check for version drift
+        run: |
+          python3 - "$GALAXY_WORK_DIR" <<'PYEOF'
+          import json, sys, pathlib, re
+
+          work_dir = pathlib.Path(sys.argv[1])
+          pinned = {}
+          current_name = None
+          with open('requirements.yml') as f:
+              for line in f:
+                  m = re.match(r'^\s*-\s*name:\s*(\S+)', line)
+                  if m:
+                      current_name = m.group(1)
+                  v = re.match(r'^\s+version:\s*["\']?([^"\']+)["\']?', line)
+                  if v and current_name:
+                      pinned[current_name] = v.group(1).strip()
+                      current_name = None
+
+          drift = []
+          errors = []
+          for fqcn, pinned_ver in sorted(pinned.items()):
+              namespace, name = fqcn.split('.')
+              manifest = work_dir / 'ansible_collections' / namespace / name / 'MANIFEST.json'
+              if not manifest.exists():
+                  print(f'::error::{fqcn}: MANIFEST.json not found after latest install — cannot verify')
+                  errors.append(fqcn)
+                  continue
+              data = json.loads(manifest.read_text())
+              latest = data['collection_info']['version']
+              if latest != pinned_ver:
+                  drift.append((fqcn, pinned_ver, latest))
+                  print(f'::warning::{fqcn}: pinned {pinned_ver} -> latest {latest}')
+              else:
+                  print(f'OK  {fqcn} == {pinned_ver}')
+
+          if errors:
+              print(f'ERROR: could not verify {len(errors)} collection(s): {errors}')
+              sys.exit(1)
+          if drift:
+              print()
+              print('Version drift detected. Update requirements.yml:')
+              for fqcn, old, new in drift:
+                  print(f'  {fqcn}: {old} -> {new}')
+              sys.exit(1)
+          print('All pinned collections are current.')
+          PYEOF
+
+      - name: Create drift issue (scheduled run only)
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Galaxy collection drift detected ($(date +%Y-%m-%d))" \
+            --body "Monthly drift check found version mismatch or verification error. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --label "dependencies" 2>/dev/null || true

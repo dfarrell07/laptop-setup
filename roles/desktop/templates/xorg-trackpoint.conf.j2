@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# Persistent libinput configuration for ThinkPad TrackPoint on X11/i3.
+# Find device name: xinput list | grep -i trackpoint
+# Changes take effect on next login (or: sudo systemctl restart display-manager).
+Section "InputClass"
+    Identifier "ThinkPad TrackPoint"
+    MatchProduct "{{ desktop_i3_trackpoint_id }}"
+    MatchDriver "libinput"
+    Option "AccelProfile" "{{ desktop_i3_trackpoint_accel_profile }}"
+    Option "AccelSpeed" "{{ desktop_i3_trackpoint_pointer_accel }}"
+EndSection

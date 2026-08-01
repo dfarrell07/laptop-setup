@@ -4,10 +4,7 @@ profile: production
 exclude_paths:
   - collections/
   - .github/
-  - molecule/
-  - "*.md"
-  - common/tasks/csb_detect.yml
-  - common/tasks/csb-failure-handler.yml
+  - molecule/shared/  # task-include files; not standalone playbooks — linted via scenario verify.yml inclusion
 
 skip_list:
   - yaml[line-length]  # yamllint handles this with 140 char limit

@@ -22,8 +22,22 @@
       ansible.builtin.set_fact:
         common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
 
-    - name: Gather service facts
-      ansible.builtin.service_facts:
+    - name: Signal that usbguard is expected (system role included in this scenario)
+      ansible.builtin.set_fact:
+        usbguard_expected: true
+        system_aide_enabled: true  # VM scenario exercises AIDE (full kernel access, real timer)
+
+    # Vagrant boxes ship sshd_config with '#Port 22' (commented-out, implicit default).
+    # The system role deploys Port 722 in a drop-in and restarts sshd.  If no explicit
+    # Port 22 is present, sshd switches to port 722 only, breaking Molecule's connection
+    # through Vagrant's port-22 forwarding.  Making Port 22 explicit here ensures the
+    # drop-in Port 722 is additive (sshd listens on both) rather than a replacement.
+    - name: Make Port 22 explicit in sshd_config so Port 722 drop-in is additive
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Port\s+22$'
+        line: 'Port 22'
+        state: present
 
   roles:
     - role: repos_dnf
@@ -43,10 +57,25 @@
       ansible.builtin.set_fact:
         profile: personal
 
+    # Create a minimal mock notes repo so the notes role skips cloning (private
+    # repo, no SSH key in CI) but still runs the chmod tasks that set notes/
+    # to 0700 and notes/.git/config to 0600 — which the verify assertions check.
+    - name: Create mock notes .git directory for CI permission testing
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/notes/.git"
+        state: directory
+        mode: "0755"
+
+    - name: Create mock notes .git/config for CI permission testing
+      ansible.builtin.copy:
+        content: "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"  # noqa: no-tabs
+        dest: "{{ ansible_user_dir }}/notes/.git/config"
+        mode: "0644"
+
   roles:
     - role: common
-    - role: dotfiles
     - role: packages
+    - role: dotfiles
     - role: ssh
       vars:
         ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
@@ -55,12 +84,19 @@
       vars:
         notes_transcrypt_password: ""
     - role: containers
+    - role: distrobox
     - role: desktop
       vars:
         desktop_environment: 'unknown'
         desktop_common_packages: []
         desktop_sway_packages: []
         desktop_i3_packages: []
+        desktop_deploy_chrome_policies: true
     - role: claude
       vars:
         claude_install_method: skip
+
+  post_tasks:
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
+      tags: [always]

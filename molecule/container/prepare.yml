@@ -1,0 +1,70 @@
+---
+# Prepare: stub out binaries that require internet downloads so converge stays
+# fast and deterministic. The stubs satisfy the 'creates:' and rc-check guards
+# in container-provision-tasks.yml, letting the surrounding task logic execute
+# without hitting mirror.openshift.com or pkg.go.dev.
+- name: Prepare (container provisioning)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Create stub oc binary (bypasses OCP client download in converge)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/oc
+        content: |
+          #!/bin/sh
+          # Molecule stub — satisfies container_oc_check rc=0 so the download block is skipped.
+          echo "Client Version: stub-4.22.6 (molecule test)"
+          exit 0
+        mode: "0755"
+      become: true
+
+    - name: Create stub kubectl binary (bypasses OCP client download in converge)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/kubectl
+        content: |
+          #!/bin/sh
+          # Molecule stub — satisfies verify assertion so the download block is skipped.
+          echo "Client Version: stub-4.22.6 (molecule test)"
+          exit 0
+        mode: "0755"
+      become: true
+
+    - name: Ensure go bin directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/go/bin"
+        state: directory
+        mode: "0755"
+
+    - name: "Create stub golangci-lint binary (satisfies 'creates:' guard in converge)"
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
+        content: |
+          #!/bin/sh
+          # Molecule stub — satisfies the 'creates:' guard so go install is skipped.
+          echo "golangci-lint version stub (molecule test)"
+          exit 0
+        mode: "0755"
+
+    - name: Create stub distrobox-host-exec (exercises symlink branch in converge)
+      ansible.builtin.copy:
+        dest: /usr/bin/distrobox-host-exec
+        content: |
+          #!/bin/sh
+          # Molecule stub — simulates real distrobox-host-exec so the symlink branch runs.
+          exec "$@"
+        mode: "0755"
+      become: true
+
+    - name: Create stub distrobox-export (satisfies export task and downstream assert)
+      ansible.builtin.copy:
+        dest: /usr/bin/distrobox-export
+        content: |
+          #!/bin/sh
+          # Molecule stub
+          mkdir -p "$HOME/.local/bin"
+          cp /usr/local/bin/oc "$HOME/.local/bin/oc" 2>/dev/null || true
+          cp /usr/local/bin/kubectl "$HOME/.local/bin/kubectl" 2>/dev/null || true
+          exit 0
+        mode: "0755"
+      become: true

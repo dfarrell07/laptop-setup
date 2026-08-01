@@ -7,6 +7,7 @@ driver:
 platforms:
   - name: fedora-test
     box: githubixx/fedora-44
+    box_version: '20260727.0.0'
     memory: 4096
     cpus: 2
 
@@ -19,6 +20,9 @@ provisioner:
     defaults:
       vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      pipelining: true
+      gathering: smart
     privilege_escalation:
       become: true
 

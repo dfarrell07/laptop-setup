@@ -16,13 +16,26 @@
   ansible.builtin.set_fact:
     desktop_effective: "{{ desktop_environment if desktop_environment != 'auto' else desktop_detected | default('unknown') }}"
 
-- name: Warn when desktop detection falls through to unknown
+- name: Warn when desktop_environment explicitly set to unknown
   ansible.builtin.debug:
     msg: >-
-      Desktop environment could not be detected (desktop_effective=unknown).
-      For remote/SSH provisioning, set desktop_environment: i3 or
-      desktop_environment: sway in config.yml to deploy WM configs explicitly.
-  when: desktop_effective == 'unknown'
+      desktop_environment is set to 'unknown' — no WM packages will be installed.
+      Set desktop_environment: sway, i3, or gnome in config.yml if a WM is needed.
+  when: desktop_effective == 'unknown' and desktop_environment != 'auto'
+
+- name: Fail when auto-detection falls through to unknown on Linux
+  ansible.builtin.fail:
+    msg: >-
+      desktop_environment is 'auto' but no desktop session was detected
+      (XDG_SESSION_TYPE='{{ ansible_env.XDG_SESSION_TYPE | default('') }}',
+      XDG_CURRENT_DESKTOP='{{ ansible_env.XDG_CURRENT_DESKTOP | default('') }}').
+      Set desktop_environment: sway, i3, or gnome in config.yml before running
+      make all — auto-detection requires an active desktop session and will not
+      work on bare installs or remote SSH provisioning.
+  when:
+    - desktop_effective == 'unknown'
+    - desktop_environment == 'auto'
+    - ansible_system == 'Linux'
 
 - name: Install common desktop packages
   ansible.builtin.dnf:
@@ -52,6 +65,35 @@
     - ansible_pkg_mgr in ['dnf', 'dnf5']
     - desktop_effective == 'i3'
 
+- name: Install GNOME packages
+  ansible.builtin.dnf:
+    name: "{{ desktop_gnome_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - desktop_effective == 'gnome'
+
+- name: Install desktop packages (apt)
+  when: ansible_pkg_mgr == 'apt'
+  block:
+    - name: Install desktop packages (apt)
+      ansible.builtin.apt:
+        name: "{{ desktop_apt_packages }}"
+        state: present
+        update_cache: true
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt desktop package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install desktop packages in role desktop.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory
   ansible.builtin.file:
@@ -79,6 +121,31 @@
     dest: "{{ ansible_user_dir }}/.config/i3/config"
     mode: "0644"
   when: desktop_effective == 'i3'
+
+# --- i3 TrackPoint config (X11 persistent, via xorg.conf.d) ---
+- name: Ensure /etc/X11/xorg.conf.d exists (i3 TrackPoint)
+  ansible.builtin.file:
+    path: /etc/X11/xorg.conf.d
+    state: directory
+    mode: "0755"
+  become: true
+  tags: [become]
+  when:
+    - desktop_effective == 'i3'
+    - desktop_i3_trackpoint_id is defined
+    - desktop_i3_trackpoint_id
+
+- name: Deploy TrackPoint libinput config (i3/X11)
+  ansible.builtin.template:
+    src: xorg-trackpoint.conf.j2
+    dest: /etc/X11/xorg.conf.d/90-trackpoint.conf
+    mode: "0644"
+  become: true
+  tags: [become]
+  when:
+    - desktop_effective == 'i3'
+    - desktop_i3_trackpoint_id is defined
+    - desktop_i3_trackpoint_id
 
 # --- Sway config ---
 - name: Ensure Sway config directory
@@ -142,7 +209,7 @@
     path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
   register: desktop_csb_chrome
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
+    - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
 
 - name: Create Chrome managed policies directory
@@ -153,7 +220,7 @@
   become: true
   tags: [become]
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
+    - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
 
@@ -166,7 +233,7 @@
   become: true
   tags: [become]
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
+    - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
 
@@ -178,7 +245,7 @@
   become: true
   tags: [become]
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
+    - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
 
@@ -191,7 +258,7 @@
   become: true
   tags: [become]
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
+    - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
 
@@ -203,6 +270,7 @@
   become: true
   tags: [become]
   when:
+    - ansible_system == 'Linux'
     - ansible_env.SHELL | default('/bin/bash') != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
@@ -327,6 +395,24 @@
   community.general.dconf:
     key: /org/gnome/desktop/remote-desktop/vnc/enable
     value: "false"
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Set keyboard repeat delay (match Sway/i3 200ms)
+  community.general.dconf:
+    key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
+    value: "uint32 200"
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - desktop_gnome_check.rc | default(1) == 0
+
+- name: Set keyboard repeat interval (match Sway/i3 50 rep/s → 20ms)
+  community.general.dconf:
+    key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
+    value: "uint32 20"
   failed_when: false
   when:
     - ansible_system == 'Linux'

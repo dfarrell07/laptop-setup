@@ -1,0 +1,76 @@
+---
+# molecule/shared/verify-containers.yml
+# Assertions for containers role (containers.conf).
+# Included by verify-dnf.yml and debian/verify.yml.
+
+- name: Verify containers config directory
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers"
+  register: verify_containers_dir
+
+- name: Assert containers config directory exists
+  ansible.builtin.assert:
+    that:
+      - verify_containers_dir.stat.exists
+      - verify_containers_dir.stat.isdir
+    fail_msg: "Containers config directory was not created"
+
+- name: Verify containers.conf is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  register: verify_containers_conf
+
+- name: Assert containers.conf exists
+  ansible.builtin.assert:
+    that: verify_containers_conf.stat.exists
+    fail_msg: "containers.conf was not deployed (log_driver and pids_limit needed for kind)"
+
+- name: Assert containers.conf sets log_driver to k8s-file
+  ansible.builtin.command:
+    cmd: grep -q 'log_driver.*k8s-file' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Assert containers.conf sets pids_limit to 65536
+  ansible.builtin.command:
+    cmd: grep -q 'pids_limit = 65536' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Verify environment.d containers.conf is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  register: verify_env_containers_conf
+
+- name: Assert environment.d/containers.conf exists
+  ansible.builtin.assert:
+    that: verify_env_containers_conf.stat.exists
+    fail_msg: "environment.d/containers.conf was not deployed (DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER needed for make kind)"
+
+- name: Assert environment.d/containers.conf sets DOCKER_HOST
+  ansible.builtin.command:
+    cmd: grep -q 'DOCKER_HOST=unix://' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  changed_when: false
+
+- name: Assert environment.d/containers.conf sets KIND_EXPERIMENTAL_PROVIDER
+  ansible.builtin.command:
+    cmd: grep -q 'KIND_EXPERIMENTAL_PROVIDER=podman' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  changed_when: false
+
+- name: Verify podman-prune.service unit file is deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.service"
+  register: verify_prune_service
+
+- name: Assert podman-prune.service unit file exists
+  ansible.builtin.assert:
+    that: verify_prune_service.stat.exists
+    fail_msg: "podman-prune.service was not deployed to ~/.config/systemd/user/"
+
+- name: Verify podman-prune.timer unit file is deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.timer"
+  register: verify_prune_timer
+
+- name: Assert podman-prune.timer unit file exists
+  ansible.builtin.assert:
+    that: verify_prune_timer.stat.exists
+    fail_msg: "podman-prune.timer was not deployed to ~/.config/systemd/user/"

@@ -4,29 +4,37 @@ system_sysctl_hardening:
   kernel.yama.ptrace_scope: 1      # CIS — restrict ptrace to parent process; value 2=admin-only, 3=none
   kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
   kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
-  kernel.unprivileged_bpf_disabled: 1  # CIS — prevent unprivileged eBPF program loading (frequent exploit path)
+  kernel.unprivileged_bpf_disabled: 2  # CIS — prevent unprivileged eBPF program loading;
+  # value 2=write-once locked (Fedora 44 kernel default via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
+  # value 1 allows root to re-enable at runtime
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   kernel.perf_event_paranoid: 2    # CIS — deny unprivileged perf_event_open; CAP_PERFMON required for profiling
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.lo.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0
   net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.lo.accept_redirects: 0
   net.ipv6.conf.all.accept_redirects: 0
   net.ipv6.conf.default.accept_redirects: 0
+  net.ipv6.conf.lo.accept_redirects: 0
   net.ipv4.conf.all.accept_source_route: 0
   net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.lo.accept_source_route: 0   # CIS 3.3.1 — lo interface also required
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
+  net.ipv6.conf.lo.accept_source_route: 0   # CIS 3.3.1 — lo interface also required
   net.ipv4.conf.all.rp_filter: 2  # loose mode (not CIS strict=1): Tailscale and OVN-K overlay use asymmetric routes
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
+  net.ipv4.conf.lo.log_martians: 1      # CIS 3.3.7 — log_martians on all interfaces (kernel ORs all+lo)
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
-  net.ipv6.conf.all.accept_ra: 0
-  net.ipv6.conf.default.accept_ra: 0
+  net.ipv4.conf.lo.secure_redirects: 0
+  # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
   fs.suid_dumpable: 0           # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks)
-  kernel.core_pattern: "|/bin/false"  # pipe core dumps to exit-immediately process (silently discard)
+  # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
   net.ipv4.tcp_syncookies: 1
@@ -35,11 +43,13 @@ system_sysctl_hardening:
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   kernel.panic: 10           # reboot after 10s panic; set 0 to preserve panic state for kernel debugging
+  kernel.panic_on_oops: 1   # CIS 1.5.3 — halt immediately on kernel OOPS instead of continuing in unstable state
   net.ipv4.tcp_timestamps: 0      # CIS 3.3.9 — prevent TCP timestamp-based OS fingerprinting and uptime disclosure
   # NOTE: overridden to 1 (kernel default) on CSB in tasks/main.yml — IT network diagnostics require timestamps
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust)
-  net.core.bpf_jit_harden: 1      # mitigates Spectre-class JIT leaks; value 1=unprivileged only (equiv to 2 since unprivileged_bpf=1)
+  # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
+  # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   fs.inotify.max_user_watches: 1048576
   fs.inotify.max_user_instances: 8192
   net.ipv4.ip_forward: 1  # required for Kubernetes/OVN-K pod routing and Tailscale subnet routing
@@ -50,7 +60,7 @@ system_sysctl_hardening:
   net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
   net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
   kernel.randomize_va_space: 2    # CIS — full ASLR (value 2=stack+VDSO+mmap+heap; value 1=partial)
-  # note: use_tempaddr omitted — SLAAC is disabled via accept_ra=0, so tempaddr has no effect
+  # note: use_tempaddr omitted — SLAAC is disabled via system_ipv6_accept_ra, so tempaddr has no effect
 
 # Firewall
 system_firewall_icmp_types:
@@ -58,6 +68,7 @@ system_firewall_icmp_types:
   - fragmentation-needed
   - packet-too-big
   - time-exceeded
+  - echo-request  # Required for ping — OVN-K/kind pod-to-host-gw connectivity testing
   - echo-reply
   - parameter-problem
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
@@ -102,19 +113,28 @@ system_usbguard_extra_rules: []
 system_timezone: America/New_York
 system_locale: en_US.UTF-8
 system_keymap: us
+system_tmout: 600  # CIS 5.5.5: session inactivity timeout in seconds (must be <= 900); set 0 to disable
 
 # AIDE file integrity monitoring
-system_aide_enabled: true
+system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
 
 # TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
-system_tlp_enabled: true
+# Auto-detected from ansible_form_factor (Notebook/Portable/Laptop = true, Desktop = false).
+# Override in config.yml: system_tlp_enabled: true/false
+system_tlp_enabled: "{{ ansible_form_factor is defined and ansible_form_factor in ['Notebook', 'Portable', 'Laptop'] }}"
 system_tlp_bat0_start: 20   # start charging when battery drops below this %
 system_tlp_bat0_stop: 80    # stop charging at this % (Li-ion longevity: keep 20-80%)
+system_tlp_platform_profile_ac: performance   # ACPI platform profile on AC (performance/balanced/low-power)
+system_tlp_platform_profile_bat: balanced     # ACPI platform profile on battery
 
 # Logind
 system_lid_switch: suspend
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
+# CUPS socket activation: mask cups.socket and cups.path so socket activation cannot
+# restart the CUPS daemon even when cups.service is disabled. Set false only if a
+# Flatpak print dialog is required on this machine.
+system_disable_printing: true
 # CIS 2.1.5: disable BT on machines with no BT peripherals. Default false (enabled) —
 # required for ThinkPad P16v AMD Bluetooth mouse. Set true in config.yml to blacklist BT.
 system_disable_bluetooth: false
@@ -122,6 +142,28 @@ system_disable_bluetooth: false
 # Dangerous bits omitted from 176: raw-console(4), proc-signals/OOM-kill(64), crash(not in std bitmask).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
 system_sysrq: 0
+
+# IPv6 Router Advertisement acceptance: 0=disabled (CIS — prevents SLAAC), 1=enabled (needed for
+# SLAAC-based IPv6 addressing on networks that provide IPv6 only via RAs).
+# Set system_ipv6_accept_ra: 1 in config.yml on networks where SLAAC IPv6 is required.
+system_ipv6_accept_ra: 0
+# BPF JIT hardening: 2=constant blinding for all users including root (CIS/STIG default),
+# 1=unprivileged users only (safe here because unprivileged_bpf_disabled=2 blocks them anyway).
+# Set 1 in config.yml for bpfman/eBPF JIT debugging — bpftool prog dump jited output
+# differs from production at value 2; operations (load/list/get) work correctly either way.
+system_bpf_jit_harden: 2
+system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
+# Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
+# and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
+# core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
+# SUID processes from dumping regardless of core_pattern.
+system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h"
+# Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
+# debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
+# for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
+# 'integrity' or '' (not 'confidentiality'). Set '' in config.yml if lockdown breaks
+# debugging workflows (KGDB, /sys/kernel/debug access, etc.).
+system_kernel_lockdown: integrity
 
 # Identity fallbacks — site.yml always sets these via set_fact from env,
 # but role defaults guard against standalone invocation or empty env vars.
@@ -133,4 +175,23 @@ real_user_home: "{{ lookup('env', 'HOME') }}"  # noqa: var-naming[no-role-prefix
 real_user_id: "{{ lookup('env', 'USER') }}"  # noqa: var-naming[no-role-prefix]
 
 # Fallback for standalone invocation — site.yml loads default.config.yml first.
+# Must match ssh_port in default.config.yml (currently 722); update both together.
 ssh_port: 722  # noqa: var-naming[no-role-prefix]
+system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
+system_ssh_allow_tcp_forwarding: "no"  # 'local' for VS Code port-forwarding panel / ssh -L; 'remote' for ssh -R; 'yes' for both
+system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
+
+# DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
+# opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)
+# yes: mandatory TLS — DNS fails completely on networks blocking port 853; only use on fully controlled networks
+system_dot_mode: opportunistic
+system_dns_primary: >-
+  1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+  2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com
+system_dns_fallback: "9.9.9.9 8.8.8.8"
+# ~. = catch-all required for Tailscale MagicDNS; VPN routing domains (redhat.com, ts.net) always win by specificity
+system_dns_domains: "~."
+
+# /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
+# Set false if workloads require executable files in /var/tmp (some RPM scriptlets, build tools).
+system_var_tmp_noexec: true

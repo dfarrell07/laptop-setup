@@ -1,5 +1,12 @@
 ---
+profile: work  # noqa: var-naming[no-role-prefix] — fallback for standalone invocation
+
 git_repos_base_dir: "{{ ansible_user_dir }}/src"
+
+# Pull existing repos after cloning. False by default so re-runs are safe and
+# fast (clone-once semantics). Set true via -e git_repos_pull=true (done
+# automatically by `make update`) to fetch upstream changes with --ff-only.
+git_repos_pull: false
 
 # Filter: set via -e repo_category=ovnk to clone only one category.
 # Empty string means "all enabled repos for this profile."

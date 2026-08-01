@@ -5,10 +5,11 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 concurrency:
-  group: lint-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,19 +21,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install ansible-lint
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
       - name: Create vault password script for CI
         run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
@@ -46,19 +47,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install yamllint
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
       - name: Run yamllint
         run: yamllint --strict .
@@ -69,7 +70,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -94,7 +95,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -137,7 +138,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -159,28 +160,84 @@ jobs:
           done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*')
           exit $failed
 
+      - name: Ensure vault is not encrypted with CI dummy password
+        run: |
+          python3 - <<'PYEOF'
+          # Verify no vault file was encrypted with the known CI dummy password.
+          # Ansible vault 1.1 AES256 format: vault body = hexlify(hexlify(salt) + b'\n'
+          # + hmac_hexdigest_bytes + b'\n' + hexlify(ciphertext)).
+          # PBKDF2-HMAC-SHA256(password, salt, 10000, 80) derives: AES key (0:32),
+          # HMAC key (32:64), IV (64:80).  HMAC = SHA256(hmac_key, ciphertext).
+          import sys, hashlib, hmac as _hmac, binascii, subprocess
+
+          dummy = 'ci-dummy-vault-password'
+          result = subprocess.run(
+              ['find', '.', '-name', '*vault.yml',
+               '-not', '-path', './node_modules/*',
+               '-not', '-path', './collections/*'],
+              capture_output=True, text=True)
+          if result.returncode != 0:
+              print(f"find failed: {result.stderr}", file=sys.stderr); sys.exit(1)
+          found = result.stdout.splitlines()
+          failed = False
+          for f in found:
+              try:
+                  with open(f) as fh:
+                      lines = fh.readlines()
+              except Exception:
+                  continue
+              if not lines or not lines[0].startswith('$ANSIBLE_VAULT'):
+                  continue
+              body = ''.join(l.strip() for l in lines[1:])
+              try:
+                  inner = binascii.unhexlify(body)
+              except Exception:
+                  continue
+              parts = inner.split(b'\n', 2)
+              if len(parts) != 3:
+                  continue
+              try:
+                  salt = binascii.unhexlify(parts[0])
+                  stored_hmac = parts[1]
+                  ciphertext = binascii.unhexlify(parts[2])
+              except Exception:
+                  continue
+              dk = hashlib.pbkdf2_hmac('sha256', dummy.encode(), salt, 10000, 80)
+              computed = _hmac.new(dk[32:64], ciphertext, hashlib.sha256).hexdigest().encode()
+              if _hmac.compare_digest(computed, stored_hmac):
+                  print(f'::error file={f}::{f} is encrypted with the CI dummy password'
+                        ' — re-encrypt using vault-pass.sh')
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PYEOF
+
   syntax-check:
     name: Ansible Syntax Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install Ansible
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
-      - name: Install collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Create vault password script for CI
         run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
@@ -194,12 +251,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: '22'
           cache: npm
@@ -216,7 +273,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -231,7 +288,7 @@ jobs:
           chmod +x gitleaks
 
       - name: Run gitleaks
-        run: ./gitleaks git . --redact
+        run: ./gitleaks git . --redact --config .gitleaks.toml
 
   actionlint:
     name: Action Lint
@@ -239,7 +296,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -261,7 +318,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -284,13 +341,13 @@ jobs:
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: '22'
           cache: npm
@@ -310,6 +367,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           failed=0
+          # shellcheck disable=SC2046
           for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
             msg=$(git log -1 --format=%s "$sha")
             first=$(echo "$msg" | awk '{print $1}')
@@ -329,5 +387,20 @@ jobs:
                 echo "::error::Commit $sha: Use imperative mood, not '$first'"
                 failed=1 ;;
             esac
+          done
+          exit $failed
+
+      - name: Check Signed-off-by
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          # shellcheck disable=SC2046
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            if ! git log -1 --format=%B "$sha" | grep -q '^Signed-off-by:'; then
+              echo "::error::Commit $sha is missing Signed-off-by: trailer (use git commit -s)"
+              failed=1
+            fi
           done
           exit $failed

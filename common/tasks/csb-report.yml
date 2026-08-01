@@ -1,26 +1,16 @@
 # common/tasks/csb-report.yml
 #
-# Final reporting play: renders a summary of all CSB failures and
-# generates IT ticket templates for each blocked operation.
-# Include this at the end of site.yml as a dedicated play.
-#
-# Usage in site.yml:
-#   - name: CSB compatibility report
-#     hosts: all
-#     gather_facts: false
-#     tasks:
-#       - name: Generate CSB report
-#         ansible.builtin.include_tasks: common/tasks/csb-report.yml
+# Renders a summary of all CSB failures and generates IT ticket templates
+# for each blocked operation. Included as a post_task of Play 2 (site.yml),
+# which has gather_facts: true — ansible_user_dir and ansible_date_time are
+# always available.
 
 ---
 - name: Check for CSB failures
   ansible.builtin.set_fact:
     _csb_has_failures: "{{ (csb_failures | default([])) | length > 0 }}"
 
-- name: Report — no CSB failures detected
-  ansible.builtin.debug:
-    msg: "All tasks completed successfully. No CSB restrictions encountered."
-  when: not _csb_has_failures | bool
+# No-failures message removed: a clean run with no output is self-evidently successful.
 
 - name: Report — CSB failure summary
   ansible.builtin.debug:
@@ -55,6 +45,8 @@
       Category:  {{ item.ticket.category }}
 
       {{ item.ticket.body }}
+
+      Diagnostic error: {{ item.error | truncate(300) }}
       ────────────────────────────────────────────────────────────────
 
   loop: "{{ csb_failures }}"
@@ -66,12 +58,9 @@
   ansible.builtin.copy:
     content: |
       # CSB Compatibility Report
-      # Generated: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -Iseconds')) }}
+      # Generated: {{ ansible_date_time.iso8601 }}
       # Host: {{ inventory_hostname }}
 
-      {% if csb_failures | default([]) | length == 0 %}
-      No CSB restrictions encountered. All tasks completed successfully.
-      {% else %}
       ## Summary
 
       Total failures: {{ csb_failures | length }}
@@ -96,17 +85,19 @@
 
       {{ failure.ticket.body }}
 
+      Diagnostic error: {{ failure.error | truncate(300) }}
+
       ---
       {% endfor %}
-      {% endif %}
-    dest: "{{ ansible_user_dir | default(lookup('env', 'HOME')) }}/csb-report.md"
+    dest: "{{ ansible_user_dir }}/csb-report.md"
     mode: "0600"
+    backup: true
   when: _csb_has_failures | bool
 
 - name: Display report file location
   ansible.builtin.debug:
     msg: >-
       CSB report written to
-      {{ ansible_user_dir | default(lookup('env', 'HOME')) }}/csb-report.md
+      {{ ansible_user_dir }}/csb-report.md
       — review and file {{ csb_failures | default([]) | length }} IT ticket(s).
   when: _csb_has_failures | bool

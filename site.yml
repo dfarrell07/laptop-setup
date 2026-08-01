@@ -34,6 +34,26 @@
       failed_when: false
       tags: [always]
 
+    - name: Load user config for vault key inspection
+      ansible.builtin.include_vars:
+        file: config.yml
+        name: _user_config
+      become: false
+      failed_when: false
+      tags: [always]
+
+    - name: Assert config.yml contains no vault_* keys
+      ansible.builtin.assert:
+        that: >-
+          _user_config is not defined or
+          (_user_config.keys() | select('match', '^vault_') | list | length == 0)
+        fail_msg: >-
+          config.yml must not define vault_* variables — include_vars outranks
+          group_vars (precedence 17 vs 4), so these keys silently shadow
+          vault.yml: {{ (_user_config | default({})).keys() | select('match', '^vault_') | list }}
+      become: false
+      tags: [always]
+
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
       when: ansible_system == 'Linux'
@@ -65,15 +85,46 @@
       failed_when: false
       tags: [always]
 
-  roles:
-    - role: common
+    - name: Load user config for vault key inspection
+      ansible.builtin.include_vars:
+        file: config.yml
+        name: _user_config
+      failed_when: false
       tags: [always]
 
-    - role: dotfiles
-      tags: [dotfiles]
+    - name: Assert config.yml contains no vault_* keys
+      ansible.builtin.assert:
+        that: >-
+          _user_config is not defined or
+          (_user_config.keys() | select('match', '^vault_') | list | length == 0)
+        fail_msg: >-
+          config.yml must not define vault_* variables — include_vars outranks
+          group_vars (precedence 17 vs 4), so these keys silently shadow
+          vault.yml: {{ (_user_config | default({})).keys() | select('match', '^vault_') | list }}
+      tags: [always]
+
+    - name: Assert identity vars are not CHANGE_ME placeholder values
+      ansible.builtin.assert:
+        that:
+          - dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME'
+        fail_msg: >-
+          Set dotfiles_user_name and dotfiles_github_user in config.yml before
+          running make all. These are currently 'CHANGE_ME' (default.config.yml
+          placeholder values), which produces a silently broken gitconfig, wrong
+          zshrc aliases, and misnamed macOS plists.
+      when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [common, always]
 
     - role: packages
       tags: [packages]
+
+    - role: dotfiles
+      tags: [dotfiles]
 
     - role: ssh
       tags: [ssh]
@@ -86,7 +137,7 @@
 
     - role: redhat
       tags: [redhat]
-      when: profile == 'work'
+      when: profile == 'work' and ansible_os_family == 'RedHat'
 
     - role: containers
       tags: [containers]
@@ -96,15 +147,16 @@
 
     - role: distrobox
       tags: [distrobox]
-      when: ansible_system == 'Linux'
+      when: ansible_system == 'Linux' and distrobox_enabled | bool
 
     - role: claude
       tags: [claude]
 
   post_tasks:
     - name: Generate CSB compatibility report
-      ansible.builtin.include_tasks: common/tasks/csb-report.yml
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-report.yml"
       tags: [always]
+      when: csb_detected | default(false)
 
 # Play 3 — Container provisioning (podman connection)
 # Only runs when the distrobox role registered a container via add_host.
@@ -120,12 +172,14 @@
         common_project_root: >-
           {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
              | default(playbook_dir, true) }}
+      tags: [always]
 
     - name: Bootstrap Python inside container
       ansible.builtin.raw: |
         dnf install -y python3 python3-libdnf5 2>/dev/null || \
         dnf install -y python3 python3-dnf 2>/dev/null || true
       changed_when: false
+      tags: [always]
 
     - name: Gather minimal facts
       ansible.builtin.setup:
@@ -134,6 +188,7 @@
           - "!min"
           - distribution
           - env
+      tags: [always]
 
   tasks:
     - name: Provision dev container

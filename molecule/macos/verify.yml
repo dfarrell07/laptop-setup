@@ -8,6 +8,9 @@
     - name: Include common verify assertions
       ansible.builtin.include_tasks: ../shared/verify-common.yml
 
+    - name: Include smoke-test verification
+      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+
     # --- macOS-specific ---
     - name: Check tmux is installed
       ansible.builtin.command: tmux -V
@@ -64,7 +67,9 @@
 
     - name: Assert SSH sockets directory exists
       ansible.builtin.assert:
-        that: verify_ssh_sockets.stat.isdir
+        that:
+          - verify_ssh_sockets.stat.exists
+          - verify_ssh_sockets.stat.isdir
         fail_msg: "SSH sockets directory missing for macOS ControlPath"
 
     # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
@@ -116,3 +121,8 @@
       ansible.builtin.assert:
         that: verify_ssh_plist.stat.exists
         fail_msg: "SSH agent launchd plist not deployed"
+
+    # --- brew autoupdate (packages role) ---
+    - name: Assert brew autoupdate formula is installed
+      ansible.builtin.command: brew list autoupdate
+      changed_when: false

@@ -36,11 +36,16 @@ install firewire-ohci /bin/false
 blacklist firewire-sbp2
 install firewire-sbp2 /bin/false
 
-# USB mass storage — close boot-time window before USBGuard
+{% if system_disable_usb_storage | default(true) | bool %}
+# USB mass storage: kernel-blocked (system_disable_usb_storage=true in config.yml).
+# USBGuard cannot override kernel-level blocking — USB drives will not mount even with USBGuard rules.
+# Set system_disable_usb_storage: false in config.yml to allow USB storage.
+# Recovery without re-provisioning: sudo modprobe usb_storage && sudo modprobe uas
 blacklist usb_storage
 install usb_storage /bin/false
 blacklist uas
 install uas /bin/false
+{% endif %}
 
 # vivid: virtual video test driver — CVE history (OOB write, privilege escalation),
 # ships in every Fedora kernel, no legitimate use on workstations.

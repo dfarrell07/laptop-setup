@@ -1,18 +1,29 @@
 #!/bin/bash
 set -euo pipefail
 
-# Derive GitHub username from roles/dotfiles/defaults/main.yml (used in macOS plist filenames)
-GITHUB_USER="$(grep 'dotfiles_github_user:' "$(dirname "$0")/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "dfarrell07")"
+DRY_RUN=false
+for arg in "$@"; do
+  case $arg in
+    --dry-run) DRY_RUN=true ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
+GITHUB_USER="$(grep 'dotfiles_github_user:' "$(dirname "$0")/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep 'dotfiles_github_user:' "$(dirname "$0")/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "dfarrell07")"
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
+if [ "$DRY_RUN" = false ]; then
+  mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
+fi
 
 DOTFILES=(
   .zshrc
-  .gitconfig
-  .tmux.conf
+  .config/git/config
+  .config/tmux/tmux.conf
   .vimrc
+  .config/nvim/init.vim
   .bashrc
   .ssh/config
   .ssh/known_hosts
@@ -22,10 +33,15 @@ DOTFILES=(
   .ssh/id_ed25519_sk_signing.pub
   .ssh/id_rsa_redhat
   .config/direnv/direnv.toml
+  .config/environment.d/ssh-agent.conf
+  .config/environment.d/containers.conf
+  .config/environment.d/xdg.conf
   .config/git/config-work
   .config/git/config-personal
   .config/git/allowed_signers
   .config/git/ignore
+  .config/git/template/hooks/pre-commit
+  .local/state/zsh/history
   .config/ripgrep/config
   .config/alacritty/alacritty.toml
   .config/gh/config.yml
@@ -37,10 +53,14 @@ DOTFILES=(
   .config/i3/config
   .config/sway/config
   .config/i3status/config
+  .config/autostart/gnome-keyring-ssh.desktop
+  .config/xdg-desktop-portal/portals.conf
   .config/aerospace/aerospace.toml
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
   .config/systemd/user/claude-queue.timer
+  .config/user-tmpfiles.d/ssh-sockets.conf
+  .config/user-tmpfiles.d/claude-privacy.conf
   "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
   "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
   "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
@@ -70,8 +90,12 @@ for f in "${DOTFILES[@]}"; do
   src="${HOME}/${f}"
   if [ -f "$src" ]; then
     dest="${BACKUP_DIR}/${f}"
-    mkdir -p "$(dirname "$dest")"
-    cp "$src" "$dest"
+    if [ "$DRY_RUN" = true ]; then
+      echo "[dry-run] would copy $src -> $dest"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp -p "$src" "$dest"
+    fi
     count=$((count + 1))
   fi
 done
@@ -80,10 +104,18 @@ for f in "${OPTIONAL_FILES[@]}"; do
   src="${HOME}/${f}"
   if [ -f "$src" ]; then
     dest="${BACKUP_DIR}/${f}"
-    mkdir -p "$(dirname "$dest")"
-    cp "$src" "$dest"
+    if [ "$DRY_RUN" = true ]; then
+      echo "[dry-run] would copy $src -> $dest"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp -p "$src" "$dest"
+    fi
     count=$((count + 1))
   fi
 done
 
-echo "Backed up ${count} files to ${BACKUP_DIR}"
+if [ "$DRY_RUN" = true ]; then
+  echo "[dry-run] would back up ${count} files to ${BACKUP_DIR}"
+else
+  echo "Backed up ${count} files to ${BACKUP_DIR}"
+fi

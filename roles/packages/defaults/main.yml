@@ -1,5 +1,10 @@
 ---
+profile: work  # noqa: var-naming[no-role-prefix] — fallback for standalone invocation
+
 # Package lists by category. Override in config.yml or group_vars.
+# All lists below are work-profile-oriented. Personal users should override
+# heavy work-specific categories (e.g. packages_networking, packages_virtualization)
+# in config.yml to trim unneeded packages.
 
 packages_cli:
   - git
@@ -15,8 +20,11 @@ packages_cli:
   - nmap
   - meld
   - direnv
-  - vim
+  - vim-enhanced
+  - neovim
   - zsh
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
   - fzf
   - socat
   - pipx
@@ -28,6 +36,7 @@ packages_cli:
   - tailscale
   - ripgrep
   - fd-find
+  - bat
 
 packages_languages:
   - golang
@@ -67,7 +76,6 @@ packages_virtualization:
 
 packages_networking:
   - tcpdump
-  - bridge-utils
   - conntrack-tools
   - ethtool
   - iperf3
@@ -100,7 +108,10 @@ packages_apt:
   - meld
   - direnv
   - vim-nox  # full-featured vim with +clipboard; 'vim' pkg on Debian lacks clipboard support
+  - neovim
   - zsh
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
   - fzf
   - zoxide
   - socat
@@ -108,11 +119,12 @@ packages_apt:
   - shellcheck
   - ripgrep
   - fd-find
+  - bat
   - shfmt
-  - golang  # needed for packages_go_install; Debian 12 ships 1.19 (sufficient to bootstrap)
+  - golang  # needed for packages_go_install; Debian 13 ships 1.22 (sufficient to bootstrap)
   - wl-clipboard  # wl-copy for tmux copy-pipe on Wayland (tmux.conf Linux clipboard chain)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
-  # yq: Debian 12 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
+  # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
 
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
@@ -121,9 +133,11 @@ packages_kind_sha256: "50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa94637
 
 packages_helm_version: "4.2.3"
 packages_helm_sha256: "e9b88b4ee95b18c706839c28d3a0220e5bc470e9cd9262410c90793c45ff8b7c"
+packages_helm_sha256_arm64: "21abd9354d39b2cd79a8d76be6912cd137a983cbf997193503fb8a6a6e2f2785"
 
 packages_kustomize_version: "5.8.1"
 packages_kustomize_sha256: "029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d"
+packages_kustomize_sha256_arm64: "0953ea3e476f66d6ddfcd911d750f5167b9365aa9491b2326398e289fef2c142"
 packages_kustomize_url_base: "https://github.com/kubernetes-sigs/kustomize/releases/download"
 
 packages_transcrypt_version: "2.3.2"
@@ -148,7 +162,12 @@ packages_ec_sha256: "7f452e5a7cee5030f157d2073c15e5ad70f35f71e7e17ac112de60ff47c
 packages_yamllint_version: "1.38.0"
 packages_ansible_lint_version: "26.6.0"
 
-# Also governs opm download — opm co-releases with oc on mirror.openshift.com
+# Also governs opm download — opm co-releases with oc on mirror.openshift.com.
+# kubectl is extracted from the same OCP tarball (openshift-client-linux.tar.gz)
+# and therefore tracks the OCP release cadence, not upstream Kubernetes.  OCP 4.22
+# ships Kubernetes 1.31.  If you need a newer kubectl for upstream clusters, replace
+# the Extract task in tasks/main.yml with a standalone dl.k8s.io download and pin
+# packages_kubectl_version independently.
 packages_oc_version: "4.22.6"
 
 packages_go_install:
@@ -161,11 +180,23 @@ packages_go_install:
   - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
   - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
   - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
-  # The remaining tools produce no committed artifacts — @latest is safe.
-  - github.com/submariner-io/subctl/cmd/subctl@latest
+  # The remaining tools produce no committed artifacts and are intentionally
+  # unpinned. Known non-idempotent: each run may install a different version
+  # of these three tools. Pin to an explicit version (e.g. gofumpt@v0.7.0) to
+  # make provisioning fully reproducible.
+  # Pin to match the broker API version in active Submariner cluster deployments.
+  - github.com/submariner-io/subctl/cmd/subctl@v0.18.0
   - mvdan.cc/gofumpt@latest
   - golang.org/x/vuln/cmd/govulncheck@latest
   - github.com/daixiang0/gci@latest
+  - golang.org/x/tools/gopls@latest
+  - github.com/stern/stern@latest
+
+packages_k9s_version: "0.51.0"
+packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
+
+packages_krew_version: "0.5.0"
+packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
 
 packages_install_binaries: true
 
@@ -215,5 +246,15 @@ packages_brew:
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - nmap
   - transcrypt
+  - sops
   - ripgrep
   - fd  # fd-find on Linux; Homebrew package is 'fd'
+  - bat
+  - neovim
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
+  - domt4/autoupdate/autoupdate
+  - kubectl
+  - kind
+  - helm
+  - kustomize

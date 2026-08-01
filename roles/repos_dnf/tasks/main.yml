@@ -4,7 +4,7 @@
 # Uses block/rescue to handle CSB restrictions gracefully.
 
 - name: Add GitHub CLI repo
-  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/CentOS
+  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
   when:
     - repo_gh_cli | default(true)
     - ansible_distribution != 'Fedora'
@@ -15,6 +15,7 @@
         description: GitHub CLI
         baseurl: "https://cli.github.com/packages/rpm"
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
         enabled: true
   rescue:
@@ -26,7 +27,12 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install gh binary manually or inside container"
         _csb_ticket_summary: "Exception request: GitHub CLI RPM repository"
-        _csb_ticket_body: "GitHub CLI repo needed for PR workflows"
+        _csb_ticket_body: >-
+          GitHub CLI (gh) is the official command-line tool for GitHub, used for PR
+          creation/review, issue management, and CI workflow dispatch.
+          Repo URL: https://cli.github.com/packages/rpm.
+          RHEL/Rocky ship no gh package; Fedora ships gh in standard repos but this handler does not run on Fedora.
+          Blocked workflows: all PR review automation and CI trigger scripts.
       when: csb_detected | default(false)
 
     - name: Warn gh-cli repo failed (non-CSB network error)
@@ -49,6 +55,7 @@
         description: Google Chrome
         baseurl: "{{ repos_dnf_google_chrome_repo }}"
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
         enabled: true
   rescue:
@@ -60,7 +67,12 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
         _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
-        _csb_ticket_body: "Google Chrome needed for web development and testing"
+        _csb_ticket_body: >-
+          Google Chrome is the reference browser required for web development testing
+          against the dominant production browser engine.
+          Repo URL: https://dl.google.com/linux/chrome/rpm/stable/x86_64.
+          Chromium from Fedora repos lacks Widevine DRM and Google-specific APIs needed for compatibility testing.
+          Blocked workflows: web application testing, DRM-gated content, browser-specific debugging.
       when: csb_detected | default(false)
 
     - name: Warn Google Chrome repo failed (non-CSB network error)
@@ -81,8 +93,9 @@
       ansible.builtin.yum_repository:
         name: google-cloud-cli
         description: Google Cloud CLI
-        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64"
+        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if (ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 40) or (ansible_distribution != 'Fedora' and ansible_distribution_major_version | int >= 10) else 'el9' }}-x86_64"  # yamllint disable-line rule:line-length
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
         enabled: true
   rescue:
@@ -94,7 +107,11 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install gcloud manually or inside container"
         _csb_ticket_summary: "Exception request: Google Cloud SDK RPM repository"
-        _csb_ticket_body: "Google Cloud SDK needed for GCP workflows"
+        _csb_ticket_body: >-
+          Google Cloud SDK (gcloud/gsutil/bq) provides CLI tools for Google Cloud Platform resource management.
+          Repo URL: https://packages.cloud.google.com/yum/repos/cloud-sdk-el10-x86_64 (el9 on older releases).
+          Fedora does not ship gcloud; pip install lacks some SDK components and shell integration scripts.
+          Blocked workflows: GCP resource management, container image publishing to GCR, GKE cluster access.
       when: csb_detected | default(false)
 
     - name: Warn Google Cloud SDK repo failed (non-CSB network error)
@@ -115,10 +132,12 @@
       ansible.builtin.yum_repository:
         name: slack
         description: Slack Desktop
+        # packagecloud uses fedora/21 as a static bucket for all Fedora versions — intentional, not stale
         baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
-        gpgcheck: false  # packagecloud Slack repo does not sign individual RPMs; metadata signing only.
-                         # Not a dnf-automatic risk: packagecloud repos publish no updateinfo.xml,
-                         # so upgrade_type=security never matches Slack packages (no advisory metadata).
+        # packagecloud Slack repo does not sign individual RPMs; repo_gpgcheck also unsafe
+        # (packagecloud metadata signing inconsistent). Not a dnf-automatic risk: packagecloud repos
+        # publish no updateinfo.xml, so upgrade_type=security never matches Slack (no advisory metadata).
+        gpgcheck: false
         enabled: true
   rescue:
     - name: Record Slack repo failure
@@ -129,7 +148,12 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install Slack via Flatpak or download RPM directly"
         _csb_ticket_summary: "Exception request: Slack RPM repository"
-        _csb_ticket_body: "Slack desktop app for team communication"
+        _csb_ticket_body: >-
+          Slack Desktop is the primary team communication client used across Red Hat engineering.
+          Repo URL: https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64.
+          Flatpak Slack has degraded screen sharing on Wayland and missing system tray integration;
+          the browser app lacks desktop notifications and file-upload drag-and-drop.
+          Blocked workflows: team communication, incident response, meeting coordination.
       when: csb_detected | default(false)
 
     - name: Warn Slack repo failed (non-CSB network error)
@@ -156,6 +180,7 @@
         description: Mullvad VPN
         baseurl: "https://repository.mullvad.net/rpm/stable/$basearch"
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
         enabled: true
   rescue:
@@ -181,6 +206,7 @@
           'fedora' if ansible_distribution == 'Fedora' else 'rhel'
           }}/$releasever/$basearch/stable
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: >-
           https://download.docker.com/linux/{{
           'fedora' if ansible_distribution == 'Fedora' else 'rhel'
@@ -195,7 +221,12 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Use rootless Podman instead (recommended)"
         _csb_ticket_summary: "Exception request: Docker CE RPM repository"
-        _csb_ticket_body: "Docker CE for container builds requiring Docker-specific features"
+        _csb_ticket_body: >-
+          Docker CE provides the Docker daemon and CLI for container builds requiring Docker-specific APIs.
+          Repo URL: https://download.docker.com/linux/fedora/$releasever/$basearch/stable (rhel/ for RHEL hosts).
+          Rootless Podman satisfies most use cases but lacks Docker BuildKit and compose v2 features
+          required by upstream CI scripts that invoke docker directly.
+          Blocked workflows: building images with Docker-native CI pipelines, testing Docker-specific tooling.
       when: csb_detected | default(false)
 
     - name: Warn Docker CE repo failed (non-CSB network error)
@@ -227,9 +258,14 @@
         _csb_role: repos_dnf
         _csb_task_name: "Add acli repository"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install acli via pip: pip install atlassian-cli"
+        _csb_action: "Install acli via pipx: pipx install atlassian-cli"
         _csb_ticket_summary: "Exception request: acli RPM repository"
-        _csb_ticket_body: "acli for Atlassian CLI workflows"
+        _csb_ticket_body: >-
+          acli is a Red Hat-internal command-line tool for Jira and Confluence automation.
+          Repo URL: {{ repos_dnf_acli_baseurl }} (internal Red Hat package repository).
+          No public RPM is available; the internal repo is the only supported distribution channel.
+          pip install atlassian-cli is a different third-party project and not a drop-in replacement.
+          Blocked workflows: Jira ticket management, Confluence updates, sprint planning scripts.
       when: csb_detected | default(false)
 
     - name: Warn acli repo failed (non-CSB network error)
@@ -264,7 +300,11 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install Red Hat internal tools manually or request VPN access"
         _csb_ticket_summary: "Exception request: Red Hat internal RPM repository"
-        _csb_ticket_body: "Internal tools repo needed for Red Hat development workflows"
+        _csb_ticket_body: >-
+          The Red Hat internal tools repository provides packages for Red Hat engineering workflows.
+          Repo URL: {{ repos_dnf_redhat_baseurl }} (internal Red Hat package repository).
+          Internal packages are not available through RHSM, EPEL, or any public repository.
+          Blocked workflows: internal tooling installation, debugging packages, Red Hat-specific dev utilities.
       when: csb_detected | default(false)
 
     - name: Warn Red Hat internal repo failed (non-CSB network error)
@@ -299,7 +339,12 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "RPM Fusion provides multimedia codecs and drivers. Not critical for development."
         _csb_ticket_summary: "Exception request: RPM Fusion repositories"
-        _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"
+        _csb_ticket_body: >-
+          RPM Fusion provides multimedia codecs, firmware, and proprietary drivers excluded from Fedora
+          due to patent/licensing constraints (H.264, AAC, NVIDIA proprietary drivers).
+          Repo URLs: https://download1.rpmfusion.org/free/fedora/ and .../nonfree/fedora/.
+          No equivalent licensed source exists in Fedora or RHEL; these packages require RPM Fusion.
+          Blocked workflows: video conferencing codec support, GPU-accelerated builds, media playback.
       when: csb_detected | default(false)
 
     - name: Warn RPM Fusion failed (non-CSB network error)
@@ -324,6 +369,7 @@
           else 'fedora'
           }}/$basearch
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: >-
           https://pkgs.tailscale.com/stable/{{
           'rhel/' ~ ansible_distribution_major_version if ansible_distribution != 'Fedora'
@@ -337,9 +383,14 @@
         _csb_role: repos_dnf
         _csb_task_name: "Add Tailscale repository"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install tailscale from Fedora repos (older version) or via flatpak"
+        _csb_action: "Install tailscale from Fedora standard repos (older version): sudo dnf install tailscale"
         _csb_ticket_summary: "Exception request: Tailscale RPM repository"
-        _csb_ticket_body: "Tailscale stable repo provides security-patched releases; Fedora repo may lag"
+        _csb_ticket_body: >-
+          Tailscale provides a WireGuard-based mesh VPN for secure access to development infrastructure.
+          Repo URL: https://pkgs.tailscale.com/stable/fedora/$basearch (rhel/$releasever for RHEL hosts).
+          Fedora ships Tailscale but lags upstream by 1-3 releases; current releases include security patches
+          and WireGuard improvements not present in the Fedora-packaged version.
+          Blocked workflows: access to personal dev servers, home lab resources, cross-network development.
       when: csb_detected | default(false)
 
     - name: Warn Tailscale repo failed (non-CSB network error)

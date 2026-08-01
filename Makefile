@@ -1,22 +1,29 @@
-.PHONY: help all minimal backup bootstrap bootstrap-test lint check diff test smoke-test \
+.PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes repos-ovnk repos-konflux repos-personal \
        repos-bpfman repos-downstream repos-cncf \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
-       smoke-test-container smoke-test-fedora \
+       smoke-test-container \
        ci syntax-check shellcheck markdownlint commitlint \
-       test-scripts test-fedora test-centos test-debian test-macos test-vm \
-       preflight guard-not-root
+       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline \
+       preflight guard-not-root \
+       pip-lock pip-sync
+
+CONTAINER ?= fedora-dev
+
+# display_ok_hosts is a callback plugin option not in the core config schema;
+# ansible-config validate rejects it in [defaults]. Use the env var instead.
+export ANSIBLE_DISPLAY_OK_HOSTS = false
 
 help:
-	@echo "Primary:    all minimal container container-rebuild update"
+	@echo "Primary:    all minimal offline container container-rebuild update"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-cncf"
-	@echo "Testing:    lint ci test test-scripts test-fedora test-centos test-debian test-macos test-vm smoke-test smoke-test-container check"
+	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
-	@echo "Other:      backup csb-audit diff vault-edit"
+	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
@@ -24,11 +31,14 @@ guard-not-root:
 	@[ "$$(id -u)" != "0" ] || \
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
-all: guard-not-root
+all: guard-not-root preflight
 	ansible-playbook site.yml --ask-become-pass
 
 minimal: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
+
+offline: guard-not-root
+	ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox
@@ -39,19 +49,22 @@ container-rebuild: guard-not-root
 backup:
 	bash scripts/backup.sh
 
+backup-dry-run:
+	bash scripts/backup.sh --dry-run
+
 # --- Bootstrap ---
 
 bootstrap:
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		brew install ansible git openssh libfido2 ykman ykpers make; \
 	elif command -v apt-get >/dev/null 2>&1; then \
-		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make; \
+		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
 	else \
-		sudo dnf install -y ansible-core git ykpers make; \
+		sudo dnf install -y ansible-core git ykpers make ShellCheck; \
 	fi
-	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && chmod 700 scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
-	ansible-galaxy collection install -r requirements.yml
-	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
+	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
+	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
+	ansible-galaxy collection install -r requirements.yml -p ./collections
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \
@@ -61,18 +74,17 @@ bootstrap:
 	@echo "Bootstrap complete. Git hooks active."
 
 bootstrap-test: .venv
-	ansible-galaxy collection install -r requirements.yml
+	ansible-galaxy collection install -r requirements.yml -p ./collections
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
-	vagrant box add githubixx/fedora-44 --provider libvirt || true
+	vagrant box add githubixx/fedora-44 --provider libvirt --box-version 20260727.0.0 || true
 
 hooks:
 	git config --local core.hooksPath .githooks
 	@echo "Git hooks installed (core.hooksPath = .githooks)"
 
-update: guard-not-root
-	ansible-galaxy collection install -r requirements.yml --force
-	find collections -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; ansible-galaxy collection verify community.general containers.podman ansible.posix
-	ansible-playbook site.yml --ask-become-pass
+update: guard-not-root preflight
+	ansible-galaxy collection install -r requirements.yml --force -p ./collections
+	ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---
 
@@ -112,16 +124,16 @@ ssh: guard-not-root
 desktop: guard-not-root
 	ansible-playbook site.yml --tags common,desktop --ask-become-pass
 
-system:
+system: guard-not-root
 	ansible-playbook site.yml --tags common,system --ask-become-pass
 
-repos-dnf:
+repos-dnf: guard-not-root
 	ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
 
-redhat:
+redhat: guard-not-root
 	ansible-playbook site.yml --tags common,redhat --ask-become-pass
 
-containers:
+containers: guard-not-root
 	ansible-playbook site.yml --tags common,containers --ask-become-pass
 
 claude: guard-not-root
@@ -137,24 +149,33 @@ preflight:
 
 csb-audit:
 	scripts/preflight.sh
-	ansible-playbook site.yml --tags common --check
+	ansible-playbook site.yml --tags common --check -v
 
 check:
-	ansible-playbook site.yml --check --ask-become-pass
+	ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
-ci: lint syntax-check test-scripts test-fedora test-centos test-debian test-macos
+ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline
 
 lint: .venv
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
-.venv: requirements-test.txt
+.venv: requirements-test.lock
 	python3 -m venv .venv
-	.venv/bin/pip install -r requirements-test.txt
+	.venv/bin/pip install -r requirements-test.lock
+
+# Regenerate the lockfile from the current .venv (run after editing requirements-test.txt)
+pip-lock: .venv
+	.venv/bin/pip freeze > requirements-test.lock
+
+# Create .venv from the exact lockfile for reproducible CI builds
+pip-sync:
+	python3 -m venv .venv
+	.venv/bin/pip install -r requirements-test.lock
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check
@@ -163,30 +184,48 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
 markdownlint:
+	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm install --ignore-scripts"; exit 0; }
 	npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
 commitlint:
+	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm install --ignore-scripts"; exit 0; }
 	npx --no -- commitlint --from origin/main --to HEAD
 
-# Container-based molecule tests only (Podman, no libvirt required).
+# Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
 # For VM tests: make test-vm (requires: make bootstrap-test first).
-test: test-scripts test-fedora test-centos test-debian
+test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline
 
+# Syntax-check the scripts/ directory (bash -n: parse only, no execution).
 test-scripts:
+	bash -n scripts/preflight.sh
+	bash -n scripts/smoke-test.sh
+	bash -n scripts/backup.sh
+
+# Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
+test-poller:
 	bash scripts/test-queue-poller.sh
 
 test-fedora: .venv
 	.venv/bin/molecule test -s fedora
 
-test-centos: .venv
-	.venv/bin/molecule test -s centos
+test-rocky: .venv
+	.venv/bin/molecule test -s rocky
 
 test-debian: .venv
 	.venv/bin/molecule test -s debian
 
 test-macos: .venv
 	.venv/bin/molecule test -s macos
+
+test-container: .venv
+	.venv/bin/molecule test -s container
+
+# Rescue/degradation path test: no stubs, invalid oc version forces 404 → rescue.
+# Confirms graceful degradation when the mirror is unreachable.
+# Idempotence skipped (download always fails, rescue debug fires every run).
+test-container-offline: .venv
+	.venv/bin/molecule test -s container-offline
 
 test-vm: .venv
 	.venv/bin/molecule test -s vm
@@ -195,9 +234,7 @@ smoke-test:
 	scripts/smoke-test.sh
 
 smoke-test-container:
-	scripts/smoke-test.sh --container fedora-dev
-
-smoke-test-fedora: smoke-test-container
+	scripts/smoke-test.sh --container $(CONTAINER)
 
 # --- Vault ---
 

@@ -17,11 +17,14 @@ provisioner:
     defaults:
       vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      gathering: smart
   inventory:
     host_vars:
       macos-instance:
         ansible_connection: local
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        dotfiles_github_user: 'CHANGE_ME'
 
 verifier:
   name: ansible

@@ -13,43 +13,133 @@
     - needs_container_tier == 'container'
 
 - name: Install dnf packages
-  ansible.builtin.dnf:
-    name: >-
-      {{ packages_cli
-         + packages_languages
-         + packages_security
-         + packages_containers
-         + packages_networking }}
-    state: present
-  become: true
-  tags: [become]
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  block:
+    - name: Install dnf packages
+      ansible.builtin.dnf:
+        name: >-
+          {{ packages_cli
+             + packages_languages
+             + packages_security
+             + packages_containers
+             + packages_networking }}
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Record dnf package install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "Install dnf packages"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          One or more packages in packages_cli/languages/security/containers/networking
+          could not be installed; check repo access or install manually
+        _csb_ticket_summary: "Cannot install core dnf packages on CSB"
+        _csb_ticket_body: >-
+          One or more packages from packages_cli, packages_languages, packages_security,
+          packages_containers, or packages_networking could not be installed.
+          This may be due to fapolicyd repo policy or a missing repository.
+      when: csb_detected | default(false)
 
-- name: Install virtualization packages
-  ansible.builtin.dnf:
-    name: "{{ packages_virtualization }}"
-    state: present
+    - name: Warn dnf package install failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install dnf packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
+
+# Enable bpfman.socket here (Play 2 packages role) in addition to system role (Play 1).
+# On first provision, bpfman isn't installed when Play 1 runs, so the system role's
+# enable attempt silently fails. This task enables the socket after the binary is present.
+- name: Enable bpfman.socket after package install (required for bpfman load/list to work)
+  ansible.builtin.systemd:
+    name: bpfman.socket
+    state: started
+    enabled: true
   become: true
   tags: [become]
   when:
     - ansible_pkg_mgr in ['dnf', 'dnf5']
-    - install_virtualization | default(true) | bool
+    - ansible_system == 'Linux'
+    - "'bpfman' in (packages_networking | default([]))"
+  failed_when: false
 
-- name: Install apt packages (Debian/Ubuntu)
-  ansible.builtin.apt:
-    name: "{{ packages_apt }}"
-    state: present
-    update_cache: true
+- name: Install virtualization packages
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - install_virtualization | default(true) | bool
+  block:
+    - name: Install virtualization packages
+      ansible.builtin.dnf:
+        name: "{{ packages_virtualization }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Record virtualization package install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "Install virtualization packages"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Virtualization packages could not be installed; request repo access
+          or install libvirt/QEMU/virt-manager manually
+        _csb_ticket_summary: "Cannot install virtualization packages on CSB"
+        _csb_ticket_body: >-
+          One or more virtualization packages (libvirt, QEMU, virt-manager, etc.)
+          could not be installed. This may affect container and VM workflows.
+      when: csb_detected | default(false)
+
+    - name: Warn virtualization package install failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install virtualization packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
+
+# Enable virtqemud.socket here (Play 2) in addition to system role (Play 1).
+# On first provision, libvirt isn't installed when Play 1 runs, so the system role's
+# enable attempt silently fails (failed_when: false). This task enables the socket
+# after the package is present. Mirrors the bpfman.socket pattern above.
+- name: Enable virtqemud.socket after libvirt package install
+  ansible.builtin.systemd:
+    name: virtqemud.socket
+    state: started
+    enabled: true
   become: true
   tags: [become]
-  when: ansible_pkg_mgr == 'apt'
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_system == 'Linux'
+    - install_virtualization | default(true) | bool
+    - "'libvirt' in (packages_virtualization | default([]))"
+  failed_when: false
 
-- name: Install Homebrew packages (macOS)
-  community.general.homebrew:
-    name: "{{ packages_brew }}"
-    state: present
-    update_homebrew: true
-  when: ansible_os_family == 'Darwin'
+- name: Install apt packages (Debian/Ubuntu)
+  when: ansible_pkg_mgr == 'apt'
+  block:
+    - name: Install apt packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: "{{ packages_apt }}"
+        state: present
+        update_cache: true
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install apt packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
 
 - name: Add Homebrew taps (macOS)
   community.general.homebrew_tap:
@@ -58,17 +148,61 @@
   loop: "{{ packages_brew_taps }}"
   when: ansible_os_family == 'Darwin'
 
-- name: Install Homebrew cask packages (macOS)
-  community.general.homebrew_cask:
-    name: "{{ packages_brew_cask }}"
-    state: present
+- name: Install Homebrew packages (macOS)
   when: ansible_os_family == 'Darwin'
+  block:
+    - name: Install Homebrew packages (macOS)
+      community.general.homebrew:
+        name: "{{ packages_brew }}"
+        state: present
+        update_homebrew: "{{ packages_brew_update | default(false) }}"
+  rescue:
+    - name: Warn Homebrew package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing formula.
+          Continuing playbook execution.
+
+- name: Install Homebrew cask packages (macOS)
+  when: ansible_os_family == 'Darwin'
+  block:
+    - name: Install Homebrew cask packages (macOS)
+      community.general.homebrew_cask:
+        name: "{{ packages_brew_cask }}"
+        state: present
+  rescue:
+    - name: Warn Homebrew cask package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew cask packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing cask.
+          Continuing playbook execution.
 
 - name: Install ssh-askpass (macOS)
   community.general.homebrew:
     name: theseal/ssh-askpass/ssh-askpass
     state: present
   when: ansible_os_family == 'Darwin'
+
+- name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: brew autoupdate start 43200 --upgrade --cleanup
+  when: ansible_os_family == 'Darwin'
+  changed_when: false
+  failed_when: false
+  register: _packages_brew_autoupdate
+
+- name: Warn if brew autoupdate failed (may need interactive trust step)
+  ansible.builtin.debug:
+    msg: >-
+      brew autoupdate start failed (rc={{ _packages_brew_autoupdate.rc }}).
+      Run 'brew autoupdate' interactively to complete trust if this is the first run.
+  when:
+    - ansible_os_family == 'Darwin'
+    - _packages_brew_autoupdate.rc | default(0) != 0
 
 # --- Binary downloads (SHA256-verified, pinned versions) ---
 
@@ -96,6 +230,9 @@
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
             return_content: true
           register: packages_oc_sha256sums
+          retries: 3
+          delay: 10
+          until: packages_oc_sha256sums.status == 200
 
         - name: Extract SHA256 for openshift-client-linux.tar.gz
           ansible.builtin.set_fact:
@@ -103,7 +240,12 @@
               {{ packages_oc_sha256sums.content
                  | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
                                 '\1', multiline=True)
-                 | first }}
+                 | default([]) | first | default('') }}
+
+        - name: Assert oc SHA256 was found
+          ansible.builtin.assert:
+            that: packages_oc_sha256 | length == 64
+            fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file"
 
         - name: Download OpenShift client tarball (SHA256-verified)
           ansible.builtin.get_url:
@@ -112,6 +254,9 @@
             checksum: "sha256:{{ packages_oc_sha256 }}"
             mode: "0644"
           register: packages_oc_download
+          retries: 3
+          delay: 10
+          until: packages_oc_download is succeeded
 
         - name: Extract oc and kubectl
           # Idempotency guard: skip re-extraction when get_url reports the tarball
@@ -146,6 +291,13 @@
             path: /tmp/openshift-client-linux.tar.gz
             state: absent
 
+  rescue:
+    - name: Warn oc/kubectl download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download oc/kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+
 - name: Install opm (Operator Package Manager)
   when:
     - packages_install_binaries | default(true) | bool
@@ -177,6 +329,9 @@
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
             return_content: true
           register: packages_opm_sha256sums
+          retries: 3
+          delay: 10
+          until: packages_opm_sha256sums.status == 200
 
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:
@@ -184,7 +339,12 @@
               {{ packages_opm_sha256sums.content
                  | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
                                 '\1', multiline=True)
-                 | first }}
+                 | default([]) | first | default('') }}
+
+        - name: Assert opm SHA256 was found
+          ansible.builtin.assert:
+            that: packages_opm_sha256 | length == 64
+            fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file"
 
         - name: Download opm tarball (SHA256-verified)
           ansible.builtin.get_url:
@@ -192,6 +352,10 @@
             dest: /tmp/opm-linux.tar.gz
             checksum: "sha256:{{ packages_opm_sha256 }}"
             mode: "0644"
+          register: packages_opm_download
+          retries: 3
+          delay: 10
+          until: packages_opm_download is succeeded
 
         - name: Extract opm binary
           ansible.builtin.unarchive:
@@ -204,17 +368,19 @@
           become: true
           tags: [become]
 
-        - name: Rename opm-rhel8 to opm  # noqa: command-instead-of-module
-          ansible.builtin.command:
-            cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm
+        - name: Rename opm-rhel8 to opm
+          ansible.builtin.copy:
+            src: /usr/local/bin/opm-rhel8
+            dest: /usr/local/bin/opm
+            remote_src: true
+            mode: "0755"
           become: true
           tags: [become]
-          changed_when: true
 
-        - name: Set permissions on opm
+        - name: Remove opm-rhel8 source after rename
           ansible.builtin.file:
-            path: /usr/local/bin/opm
-            mode: "0755"
+            path: /usr/local/bin/opm-rhel8
+            state: absent
           become: true
           tags: [become]
 
@@ -231,13 +397,28 @@
             path: /tmp/opm-linux.tar.gz
             state: absent
 
+  rescue:
+    - name: Warn opm download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download opm: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+
 - name: Install kind
   when:
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
     - ansible_architecture == 'x86_64'
   block:
+    - name: Check if kind is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kind version
+      register: packages_kind_check
+      changed_when: false
+      failed_when: false
+
     - name: Download kind binary
+      when: "packages_kind_version not in (packages_kind_check.stdout | default(''))"
       ansible.builtin.get_url:
         url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-amd64"
         dest: /usr/local/bin/kind
@@ -245,12 +426,26 @@
         mode: "0755"
       become: true
       tags: [become]
+      register: packages_kind_download
+      retries: 3
+      delay: 10
+      until: packages_kind_download is succeeded
+
+  rescue:
+    - name: Warn kind download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download kind: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://kind.sigs.k8s.io/dl/.
 
 - name: Install helm
   when:
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
+    - ansible_architecture in ['x86_64', 'aarch64']
+  vars:
+    _helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    _helm_sha256: "{{ packages_helm_sha256_arm64 if ansible_architecture == 'aarch64' else packages_helm_sha256 }}"
   block:
     - name: Check if helm is installed at target version
       ansible.builtin.command:
@@ -264,10 +459,14 @@
       block:
         - name: Download helm tarball
           ansible.builtin.get_url:
-            url: "https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-amd64.tar.gz"
+            url: "https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-{{ _helm_arch }}.tar.gz"
             dest: /tmp/helm.tar.gz
-            checksum: "sha256:{{ packages_helm_sha256 }}"
+            checksum: "sha256:{{ _helm_sha256 }}"
             mode: "0644"
+          register: packages_helm_download
+          retries: 3
+          delay: 10
+          until: packages_helm_download is succeeded
 
         - name: Extract helm binary
           ansible.builtin.unarchive:
@@ -277,7 +476,7 @@
             extra_opts:
               - --no-same-owner
               - --strip-components=1
-              - linux-amd64/helm
+              - "linux-{{ _helm_arch }}/helm"
           become: true
           tags: [become]
 
@@ -293,11 +492,21 @@
             path: /tmp/helm.tar.gz
             state: absent
 
+  rescue:
+    - name: Warn helm download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download helm: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://helm.sh/docs/intro/install/.
+
 - name: Install kustomize
   when:
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
+    - ansible_architecture in ['x86_64', 'aarch64']
+  vars:
+    _kustomize_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    _kustomize_sha256: "{{ packages_kustomize_sha256_arm64 if ansible_architecture == 'aarch64' else packages_kustomize_sha256 }}"
   block:
     - name: Check if kustomize is installed at target version
       ansible.builtin.command:
@@ -313,10 +522,14 @@
           vars:
             _ver: "{{ packages_kustomize_version }}"
           ansible.builtin.get_url:
-            url: "{{ packages_kustomize_url_base }}/kustomize%2Fv{{ _ver }}/kustomize_v{{ _ver }}_linux_amd64.tar.gz"
+            url: "{{ packages_kustomize_url_base }}/kustomize%2Fv{{ _ver }}/kustomize_v{{ _ver }}_linux_{{ _kustomize_arch }}.tar.gz"
             dest: /tmp/kustomize.tar.gz
-            checksum: "sha256:{{ packages_kustomize_sha256 }}"
+            checksum: "sha256:{{ _kustomize_sha256 }}"
             mode: "0644"
+          register: packages_kustomize_download
+          retries: 3
+          delay: 10
+          until: packages_kustomize_download is succeeded
 
         - name: Extract kustomize binary
           ansible.builtin.unarchive:
@@ -340,19 +553,38 @@
             path: /tmp/kustomize.tar.gz
             state: absent
 
+  rescue:
+    - name: Warn kustomize download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download kustomize: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/.
+
 # --- Standalone script/binary downloads ---
 
 - name: Install transcrypt
-  ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
-    dest: /usr/local/bin/transcrypt
-    checksum: "sha256:{{ packages_transcrypt_sha256 }}"
-    mode: "0755"
-  become: true
-  tags: [become]
   when:
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
+  block:
+    - name: Download transcrypt script
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
+        dest: /usr/local/bin/transcrypt
+        checksum: "sha256:{{ packages_transcrypt_sha256 }}"
+        mode: "0755"
+      become: true
+      tags: [become]
+      register: packages_transcrypt_download
+      retries: 3
+      delay: 10
+      until: packages_transcrypt_download is succeeded
+  rescue:
+    - name: Warn transcrypt download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download transcrypt: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/elasticdog/transcrypt.
 
 - name: Install SOPS
   when:
@@ -368,6 +600,17 @@
         mode: "0755"
       become: true
       tags: [become]
+      register: packages_sops_download
+      retries: 3
+      delay: 10
+      until: packages_sops_download is succeeded
+
+  rescue:
+    - name: Warn sops download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download sops: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/getsops/sops/releases.
 
 - name: Install operator-sdk
   when:
@@ -385,6 +628,17 @@
         mode: "0755"
       become: true
       tags: [become]
+      register: packages_operator_sdk_download
+      retries: 3
+      delay: 10
+      until: packages_operator_sdk_download is succeeded
+
+  rescue:
+    - name: Warn operator-sdk download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download operator-sdk: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/operator-framework/operator-sdk/releases.
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
@@ -392,7 +646,15 @@
     - ansible_system == 'Linux'
     - ansible_architecture == 'x86_64'
   block:
+    - name: Check if cosign is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/cosign version
+      register: packages_cosign_check
+      changed_when: false
+      failed_when: false
+
     - name: Download cosign binary
+      when: packages_cosign_version not in (packages_cosign_check.stdout | default(''))
       ansible.builtin.get_url:
         url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-amd64"
         dest: /usr/local/bin/cosign
@@ -400,6 +662,17 @@
         mode: "0755"
       become: true
       tags: [become]
+      register: packages_cosign_download
+      retries: 3
+      delay: 10
+      until: packages_cosign_download is succeeded
+
+  rescue:
+    - name: Warn cosign download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download cosign: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/sigstore/cosign/releases.
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
@@ -426,6 +699,10 @@
             dest: /tmp/tkn.tar.gz
             checksum: "sha256:{{ packages_tkn_sha256 }}"
             mode: "0644"
+          register: packages_tkn_download
+          retries: 3
+          delay: 10
+          until: packages_tkn_download is succeeded
 
         - name: Extract tkn binary
           ansible.builtin.unarchive:
@@ -448,6 +725,13 @@
             path: /tmp/tkn.tar.gz
             state: absent
 
+  rescue:
+    - name: Warn tkn download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download tkn: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/tektoncd/cli/releases.
+
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
   when:
@@ -464,17 +748,88 @@
         mode: "0755"
       become: true
       tags: [become]
+      register: packages_ec_download
+      retries: 3
+      delay: 10
+      until: packages_ec_download is succeeded
+
+  rescue:
+    - name: Warn ec download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download ec: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/conforma/cli/releases.
+
+- name: Install k9s (Kubernetes TUI)
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if k9s is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k9s version --short
+      register: packages_k9s_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install k9s
+      when: packages_k9s_version not in (packages_k9s_check.stdout | default(''))
+      block:
+        - name: Download k9s tarball
+          ansible.builtin.get_url:
+            url: "https://github.com/derailed/k9s/releases/download/v{{ packages_k9s_version }}/k9s_Linux_amd64.tar.gz"
+            dest: /tmp/k9s.tar.gz
+            checksum: "sha256:{{ packages_k9s_sha256 }}"
+            mode: "0644"
+          register: packages_k9s_download
+          retries: 3
+          delay: 10
+          until: packages_k9s_download is succeeded
+
+        - name: Extract k9s binary
+          ansible.builtin.unarchive:
+            src: /tmp/k9s.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: ["--no-same-owner", "k9s"]
+          become: true
+          tags: [become]
+
+        - name: Set permissions on k9s
+          ansible.builtin.file:
+            path: /usr/local/bin/k9s
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Clean up k9s tarball
+          ansible.builtin.file:
+            path: /tmp/k9s.tar.gz
+            state: absent
+
+  rescue:
+    - name: Warn k9s download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download k9s: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/derailed/k9s/releases.
 
 # --- Go install tools ---
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps in packages_go_install would be silently
   # ignored if the binary already exists. 'go install' with a pinned version is
-  # fast when the module cache is warm (skips recompile). 'changed_when: false'
-  # suppresses the always-changed noise since go install has no stable stdout.
+  # fast when the module cache is warm (skips recompile). 'changed_when: true'
+  # reports every run as changed; for pinned tools this is a minor false positive,
+  # but it is necessary so that @latest entries (gofumpt, govulncheck, gci, gopls,
+  # stern) give the operator a visible signal when a binary actually changes.
+  # NOTE: entries using @latest are intentionally non-idempotent — the installed
+  # binary can change on each run.
+  # See packages_go_install in defaults/main.yml for rationale and pinning guidance.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
-  changed_when: false
+  changed_when: true
   environment:
     GOPATH: "{{ ansible_user_dir }}/go"
     GOBIN: "{{ ansible_user_dir }}/go/bin"
@@ -485,7 +840,7 @@
   failed_when: false
   when:
     - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
+    - ansible_system == 'Linux' or ansible_system == 'Darwin'
 
 - name: Report failed Go tool installs
   ansible.builtin.debug:
@@ -500,18 +855,77 @@
 
 # --- pip/pipx installs ---
 
-- name: Install yamllint (pipx, version-pinned)
-  community.general.pipx:
-    name: yamllint
-    source: "yamllint=={{ packages_yamllint_version }}"
-    state: install
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
+- name: Install pipx packages (yamllint, ansible-lint)
+  when: ansible_pkg_mgr in ['dnf', 'dnf5', 'apt']
+  block:
+    - name: Install yamllint (pipx, version-pinned)
+      community.general.pipx:
+        name: yamllint
+        source: "yamllint=={{ packages_yamllint_version }}"
+        state: install
 
-- name: Install ansible-lint (pipx, version-pinned)
-  community.general.pipx:
-    name: ansible-lint
-    source: "ansible-lint=={{ packages_ansible_lint_version }}"
-    state: install
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
+    - name: Install ansible-lint (pipx, version-pinned)
+      community.general.pipx:
+        name: ansible-lint
+        source: "ansible-lint=={{ packages_ansible_lint_version }}"
+        state: install
+  rescue:
+    - name: Warn pipx install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install pipx packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing pipx/pip access.
+          Continuing playbook execution.
+
+- name: Install krew
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+  block:
+    - name: Check if krew is installed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.krew/bin/krew"
+      register: packages_krew_stat
+
+    - name: Download krew tarball
+      when: not packages_krew_stat.stat.exists
+      ansible.builtin.get_url:
+        url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_version }}/krew-linux_amd64.tar.gz"
+        dest: /tmp/krew.tar.gz
+        checksum: "sha256:{{ packages_krew_sha256 }}"
+        mode: "0644"
+      register: packages_krew_download
+      retries: 3
+      delay: 10
+      until: packages_krew_download is succeeded
+
+    - name: Extract krew installer
+      when: not packages_krew_stat.stat.exists
+      ansible.builtin.unarchive:
+        src: /tmp/krew.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Run krew installer
+      when: not packages_krew_stat.stat.exists
+      ansible.builtin.command:
+        cmd: /tmp/krew-linux_amd64 install krew
+      changed_when: true
+
+    - name: Clean up krew installer files
+      when: not packages_krew_stat.stat.exists
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/krew.tar.gz
+        - /tmp/krew-linux_amd64
+
+  rescue:
+    - name: Warn krew installation failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.

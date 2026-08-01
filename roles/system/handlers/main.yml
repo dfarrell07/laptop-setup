@@ -2,105 +2,161 @@
 - name: Remount /tmp  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /tmp
+  become: true
   changed_when: true
   failed_when: false
 
 - name: Reload sysctl
   ansible.builtin.command:
     cmd: sysctl --system
+  become: true
   changed_when: true
   failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
 
 - name: Reload firewalld
   ansible.builtin.command:
     cmd: firewall-cmd --reload
+  become: true
   changed_when: true
+  register: system_firewalld_reload_result
+  failed_when:
+    - system_firewalld_reload_result.rc != 0
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart tlp
   ansible.builtin.systemd:
     name: tlp
     state: restarted
-  failed_when: false
+  become: true
+  register: system_tlp_restart_result
+  failed_when:
+    - system_tlp_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Reload NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager
     state: reloaded
-  failed_when: false
+  become: true
+  register: system_nm_reload_result
+  failed_when:
+    - system_nm_reload_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart tailscaled
   ansible.builtin.systemd:
     name: tailscaled
     state: restarted
+  become: true
   failed_when: false
 
+# Must use SysV wrapper, not 'systemctl restart auditd': the SysV script calls
+# auditctl to reload rules into the kernel; systemctl sends SIGTERM and skips
+# that step, leaving new rules defined in config but not loaded at runtime.
 - name: Restart auditd  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: service auditd restart
+  become: true
   changed_when: true
-  failed_when: false  # auditd cannot restart inside molecule containers (no kernel access)
+  register: system_auditd_restart_result
+  failed_when:
+    - system_auditd_restart_result.rc != 0
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart usbguard
   ansible.builtin.systemd:
     name: usbguard
     state: restarted
-  failed_when: false
+  become: true
+  register: system_usbguard_restart_result
+  failed_when:
+    - system_usbguard_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart sshd
   ansible.builtin.systemd:
     name: sshd
     state: restarted
-  failed_when: false  # sshd may not be installed (e.g., crypto-policy notify path has no sshd guard)
+  become: true
+  register: system_sshd_restart_result
+  failed_when:
+    - system_sshd_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
-  failed_when: false
+  become: true
+  register: system_resolved_restart_result
+  failed_when:
+    - system_resolved_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart logind  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
+  become: true
   changed_when: true
-  failed_when: false
+  register: system_logind_restart_result
+  failed_when:
+    - system_logind_restart_result.rc != 0
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart chronyd
   ansible.builtin.systemd:
     name: chronyd
     state: restarted
-  failed_when: false
+  become: true
+  register: system_chronyd_restart_result
+  failed_when:
+    - system_chronyd_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
     name: aide-check.timer
     state: restarted
     daemon_reload: true
-  failed_when: false
+  become: true
+  register: system_aide_timer_result
+  failed_when:
+    - system_aide_timer_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart systemd-journald
   ansible.builtin.systemd:
     name: systemd-journald
     state: restarted
-  failed_when: false
+  become: true
+  register: system_journald_restart_result
+  failed_when:
+    - system_journald_restart_result.failed | default(false)
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Run dconf update  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: dconf update
+  become: true
   changed_when: true
+  failed_when: false  # dconf may be absent on non-GNOME hosts; notifying tasks run on all Linux
 
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:
     name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
     state: restarted
     daemon_reload: true
+  become: true
   failed_when: false
 
 - name: Reinitialize AIDE database
   ansible.builtin.shell:  # noqa: command-instead-of-module
     cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+  become: true
   changed_when: true
-  failed_when: false
-  when: system_aide_enabled | bool
+  when:
+    - system_aide_enabled | bool
+    - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't overwrite
   # Triggered when aide.conf paths change so new entries take effect immediately.
   # Without this, added paths are written to the config but the database never
   # includes them until a manual 'aide --init'.

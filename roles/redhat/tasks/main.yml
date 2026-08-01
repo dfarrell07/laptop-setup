@@ -10,22 +10,48 @@
   delegate_to: localhost
 
 - name: Deploy Red Hat CA certificates
-  ansible.builtin.copy:
-    src: "{{ item.item }}"
-    dest: "{{ redhat_ca_dest }}/{{ item.item }}"
-    mode: "0644"
-  loop: "{{ redhat_ca_stat.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  become: true
-  tags: [become]
-  notify: Update CA trust
   when:
-    - ansible_os_family == 'RedHat'
-    - item.stat.exists
+    - is_rhel | default(false) | bool or csb_detected | default(false)
+  block:
+    - name: Deploy Red Hat CA certificates
+      ansible.builtin.copy:
+        src: "{{ item.item }}"
+        dest: "{{ redhat_ca_dest }}/{{ item.item }}"
+        mode: "0644"
+      loop: "{{ redhat_ca_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      become: true
+      tags: [become]
+      notify: Update CA trust
+      when: item.stat.exists
+  rescue:
+    - name: Record CA certificate deploy failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: redhat
+        _csb_task_name: "Deploy Red Hat CA certificates"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "Red Hat internal CA certs may be missing; verify /etc/pki/ca-trust/source/anchors/ exists and is writable"
+        _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
+        _csb_ticket_body: >-
+          Red Hat CA certificate files could not be copied to
+          /etc/pki/ca-trust/source/anchors/. Internal CA trust may be
+          broken, affecting access to internal HTTPS services.
+      when: csb_detected | default(false)
+
+    - name: Warn CA certificate deploy failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          TASK FAILED: Deploy Red Hat CA certificates in role redhat.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))
 
 - name: Install Red Hat cert packages
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - is_rhel | default(false) | bool or csb_detected | default(false)
   block:
     - name: Install Red Hat cert packages
       ansible.builtin.dnf:
@@ -42,11 +68,19 @@
         _csb_task_name: "Install Red Hat cert packages"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: "Red Hat internal CA certs may be missing; request redhat-internal-cert-install access or install manually"
+        _csb_ticket_priority: High
         _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
         _csb_ticket_body: >-
           The redhat-internal-cert-install package could not be installed.
-          Red Hat internal CA certificates may be missing, which can break
-          access to internal services and HTTPS endpoints.
+          Affected CA cert files: 2022-IT-Root-CA.pem and Eng-CA.crt
+          (deployed to /etc/pki/ca-trust/source/anchors/).
+          Without these certificates, internal HTTPS endpoints fail:
+          Jira, Confluence, and internal container registries all require
+          the Red Hat internal CA chain.
+          The redhat-internal-cert-install package is the supported
+          distribution mechanism for these certs on CSB systems.
+          Blocked workflows: internal web services, container image pulls
+          from internal registries, authenticated internal API calls.
       when: csb_detected | default(false)
 
     - name: Warn cert package install failed (non-CSB network error)
@@ -59,7 +93,10 @@
       when: not (csb_detected | default(false))
 
 - name: Install VPN packages
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - install_vpn | default(true)
+    - is_rhel | default(false) | bool or csb_detected | default(false)
   block:
     - name: Install VPN packages
       ansible.builtin.dnf:
@@ -77,9 +114,14 @@
         _csb_action: "VPN client not installed; request redhat-internal-globalprotect-ui or redhat-internal-openvpn-profiles access"
         _csb_ticket_summary: "Cannot install VPN packages on CSB"
         _csb_ticket_body: >-
-          The VPN package (redhat-internal-globalprotect-ui on Fedora,
-          redhat-internal-openvpn-profiles otherwise) could not be installed.
-          VPN access to internal Red Hat networks may be unavailable.
+          The VPN client package could not be installed. Package name:
+          redhat-internal-globalprotect-ui (Fedora) or
+          redhat-internal-openvpn-profiles (RHEL/other).
+          Without VPN, all internal Red Hat network access is blocked
+          off-site: internal registries, Jira, Confluence, source repos,
+          and build infrastructure are unreachable without an active tunnel.
+          Blocked workflows: all internal network access when off the
+          Red Hat corporate network.
       when: csb_detected | default(false)
 
     - name: Warn VPN package install failed (non-CSB network error)
@@ -100,9 +142,10 @@
   register: redhat_splunk_user_check
   changed_when: false
   failed_when: false
+  when: is_rhel | default(false) | bool or csb_detected | default(false)
 
 - name: Restrict splunk system account shell (CIS 5.6)
-  when: redhat_splunk_user_check.rc == 0
+  when: redhat_splunk_user_check.rc | default(1) == 0
   block:
     - name: Set splunk account shell to nologin
       ansible.builtin.user:
@@ -118,7 +161,25 @@
         _csb_task_name: "Restrict splunk system account shell"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: "Splunk shell remains default; account may be used for login"
+        _csb_ticket_priority: High
         _csb_ticket_summary: "Cannot restrict splunk account shell on CSB"
         _csb_ticket_body: >-
           The splunk service account shell could not be set to /sbin/nologin.
-          This may allow interactive login via the splunk account.
+          CIS Benchmark 5.6 requires non-login system accounts use
+          /sbin/nologin or be locked to prevent interactive login.
+          Root cause: the splunk-managed CSB package creates the splunk
+          user with /bin/bash, allowing interactive login via a service
+          account — a privilege escalation risk if the account is
+          compromised or misconfigured.
+          Remediation: request IT/CSB modify the splunk-managed package
+          to set shell=/sbin/nologin at install time.
+          Blocked workflows: CIS 5.6 compliance cannot be achieved while
+          the CSB splunk package sets an interactive shell.
+      when: csb_detected | default(false)
+    - name: Warn splunk account hardening failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          TASK FAILED: Restrict splunk system account shell in role redhat.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          Continuing playbook execution.
+      when: not (csb_detected | default(false))

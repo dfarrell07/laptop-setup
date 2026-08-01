@@ -5,10 +5,14 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "37 5 * * 1"
 
 concurrency:
-  group: molecule-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -22,7 +26,7 @@ jobs:
       ansible: ${{ steps.filter.outputs.ansible }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -34,11 +38,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "${EVENT_NAME}" = "push" ]; then
+          if [ "${EVENT_NAME}" = "push" ] || [ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "schedule" ]; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -qE '^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml|requirements\.yml|requirements-test\.txt|molecule/|scripts/|\.github/workflows/)'; then
+          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -qE '^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml|requirements\.yml|requirements-test\.(txt|lock)|molecule/|scripts/|\.github/workflows/)'; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
           else
             echo "ansible=false" >> "$GITHUB_OUTPUT"
@@ -47,111 +51,197 @@ jobs:
   fedora:
     name: Molecule (Fedora)
     needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.ansible == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install test dependencies
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run Molecule Fedora scenario
         run: molecule test -s fedora
 
-  centos:
-    name: Molecule (CentOS Stream)
+  rocky:
+    name: Molecule (Rocky Linux 10)
     needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.ansible == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install test dependencies
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
-      - name: Run Molecule CentOS Stream scenario
-        run: molecule test -s centos
+      - name: Run Molecule Rocky Linux 10 scenario
+        run: molecule test -s rocky
 
   debian:
     name: Molecule (Debian)
     needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.ansible == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install test dependencies
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run Molecule Debian scenario
         run: molecule test -s debian
 
-  macos:
-    name: Molecule (macOS)
+  container:
+    name: Molecule (container provisioning)
     needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
-    runs-on: macos-14
+    if: needs.changes.outputs.ansible == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.13'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install test dependencies
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.lock
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Run Molecule container provisioning scenario
+        run: molecule test -s container
+
+  container-offline:
+    name: Molecule (container-offline rescue path)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.lock
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.lock
+
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
+
+      - name: Run Molecule container-offline scenario
+        run: molecule test -s container-offline
+
+  macos:
+    name: Molecule (macOS)
+    needs: changes
+    if: needs.changes.outputs.ansible == 'true'
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.lock
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.lock
+
+      - name: Install Ansible collections (with retry)
+        run: |
+          for attempt in 1 2 3; do
+            ansible-galaxy collection install -r requirements.yml && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Run Molecule macOS scenario
         run: molecule test -s macos

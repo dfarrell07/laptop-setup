@@ -1,8 +1,9 @@
 ---
 # noqa: var-naming[no-role-prefix] — fallback for standalone invocation (--tags claude)
-dotfiles_github_user: "dfarrell07"
-claude_install_method: native  # native (recommended) or npm (deprecated)
-claude_install_url: "https://claude.ai/install.sh"
+profile: work  # noqa: var-naming[no-role-prefix] — fallback for standalone invocation
+dotfiles_github_user: "dfarrell07"  # noqa: var-naming[no-role-prefix] — shared cross-role variable, intentionally unprefixed
+claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
+claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 
 claude_work_config_dir: "{{ ansible_user_dir }}/.claude-work"
 claude_personal_config_dir: "{{ ansible_user_dir }}/.claude-personal"
@@ -41,6 +42,8 @@ claude_deny_read:
   - "~/.claude-personal/**"
   - "~/.claude/.credentials.json"
   - "~/.claude/history.jsonl"
+  - "~/.claude/shell-snapshots/**"
+  - "~/.claude/file-history/**"
   - "~/.claude/session-env/**"
   - "~/.config/helm/**"
   - "~/.azure/**"
@@ -64,7 +67,7 @@ claude_deny_read:
   - "~/.pki/**"
   - "~/.local/share/gnome-keyring/**"
   - "~/.Xauthority"
-  - "~/.zsh_history"
+  - "~/.local/state/zsh/history"
   - "~/.bash_history"
   - "/run/host/**"
   - "/etc/shadow"
@@ -113,6 +116,6 @@ claude_deny_write:
   - "~/.pki/**"
   - "~/.local/share/gnome-keyring/**"
   - "~/.Xauthority"
-  - "~/.zsh_history"
+  - "~/.local/state/zsh/history"
   - "~/.bash_history"
   - "/run/host/**"

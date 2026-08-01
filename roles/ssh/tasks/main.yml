@@ -15,12 +15,15 @@
   register: ssh_github_meta
   changed_when: false
   failed_when: false
+  retries: 3
+  delay: 10
+  until: ssh_github_meta.status | default(0) == 200
 
 - name: Remove stale GitHub known_hosts entries before re-seeding
   ansible.builtin.known_hosts:
     name: github.com
     state: absent
-  when: ssh_github_meta.status | default(0) == 200
+  when: ssh_github_meta.status | default(0) == 200 and (ssh_github_meta.json.ssh_keys | default([])) | length > 0
 
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
@@ -30,6 +33,92 @@
     hash_host: true
   loop: "{{ (ssh_github_meta.json.ssh_keys | default([])) }}"
   when: ssh_github_meta.status | default(0) == 200
+
+- name: Restrict known_hosts to owner-only
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.ssh/known_hosts"
+    state: file
+    mode: "0600"
+  failed_when: false
+
+- name: Pre-seed GitHub known_hosts from fallback keys
+  ansible.builtin.known_hosts:
+    name: github.com
+    key: "github.com {{ item }}"
+    state: present
+    hash_host: true
+  loop: "{{ ssh_github_known_hosts_fallback }}"
+  when: ssh_github_meta.status | default(0) != 200
+
+- name: Warn if GitHub SSH key fetch failed (used pinned fallback)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Could not fetch GitHub SSH host keys from api.github.com
+      (status: {{ ssh_github_meta.status | default('no response') }}).
+      Seeded github.com known_hosts from pinned fallback keys instead.
+  when: ssh_github_meta.status | default(0) != 200
+
+- name: Pre-seed gitlab.cee.redhat.com known_hosts
+  when: profile == 'work'
+  block:
+    - name: Fetch gitlab.cee.redhat.com SSH host keys
+      ansible.builtin.command:
+        cmd: ssh-keyscan -T 10 gitlab.cee.redhat.com
+      register: ssh_gitlab_cee_keyscan
+      changed_when: false
+      failed_when: >-
+        ssh_gitlab_cee_keyscan.rc != 0 or
+        ssh_gitlab_cee_keyscan.stdout | length == 0
+
+    - name: Seed gitlab.cee.redhat.com known_hosts entries
+      ansible.builtin.known_hosts:
+        name: gitlab.cee.redhat.com
+        key: "{{ item }}"
+        state: present
+        hash_host: true
+      loop: >-
+        {{ ssh_gitlab_cee_keyscan.stdout_lines
+           | select('match', '^gitlab\\.cee\\.redhat\\.com')
+           | list }}
+
+  rescue:
+    - name: Warn that gitlab.cee.redhat.com host key fetch failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Could not fetch gitlab.cee.redhat.com SSH host keys
+          (VPN may be required). known_hosts not pre-seeded — git clone
+          for gitlab.cee.redhat.com repos will prompt on first connection.
+
+- name: Pre-seed code.engineering.redhat.com known_hosts
+  when: profile == 'work'
+  block:
+    - name: Fetch code.engineering.redhat.com SSH host keys
+      ansible.builtin.command:
+        cmd: ssh-keyscan -T 10 code.engineering.redhat.com
+      register: ssh_code_eng_keyscan
+      changed_when: false
+      failed_when: >-
+        ssh_code_eng_keyscan.rc != 0 or
+        ssh_code_eng_keyscan.stdout | length == 0
+
+    - name: Seed code.engineering.redhat.com known_hosts entries
+      ansible.builtin.known_hosts:
+        name: code.engineering.redhat.com
+        key: "{{ item }}"
+        state: present
+        hash_host: true
+      loop: >-
+        {{ ssh_code_eng_keyscan.stdout_lines
+           | select('match', '^code\\.engineering\\.redhat\\.com')
+           | list }}
+
+  rescue:
+    - name: Warn that code.engineering.redhat.com host key fetch failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Could not fetch code.engineering.redhat.com SSH host keys
+          (VPN may be required). known_hosts not pre-seeded — git clone
+          for code.engineering.redhat.com repos will prompt on first connection.
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
@@ -45,6 +134,13 @@
     dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk.pub"
     mode: "0644"
   no_log: true
+  when: ssh_auth_key_pub | default('') | length > 0
+
+- name: Add SSH auth public key to authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ ansible_user_id }}"
+    key: "{{ ssh_auth_key_pub }}"
+    state: present
   when: ssh_auth_key_pub | default('') | length > 0
 
 - name: Deploy SSH signing key

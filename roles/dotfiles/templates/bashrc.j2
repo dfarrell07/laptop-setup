@@ -1,9 +1,9 @@
 # {{ ansible_managed }}
-export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
-export TMUX_TMPDIR="$HOME/.local/run/tmux"
+export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 HISTSIZE=50000
 HISTFILESIZE=50000
 HISTCONTROL=ignoredups:erasedups

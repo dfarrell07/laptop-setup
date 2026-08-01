@@ -9,6 +9,13 @@
     - name: Include common verify assertions
       ansible.builtin.include_tasks: ../shared/verify-common.yml
 
+    # NOTE: verify-smoke.yml hardcodes --user-only. A second play below (become: true)
+    # runs smoke-test.sh without --user-only as root to cover system-level checks
+    # (auditd watch keys, pwquality details, chrony NTS cookies, pwhistory, yescrypt,
+    # TMOUT bounds, /var/tmp bind-mount) that the user-only run cannot reach.
+    - name: Include smoke-test verification
+      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
       ansible.builtin.include_tasks: ../shared/verify-dnf.yml
@@ -28,6 +35,23 @@
         that: verify_chrome_repo.stat.exists
         fail_msg: "google-chrome repo not configured"
 
+    - name: Verify Chrome security policy deployed
+      ansible.builtin.stat:
+        path: /etc/opt/chrome/policies/managed/security.json
+      register: verify_chrome_policy
+
+    - name: Assert Chrome security policy exists
+      ansible.builtin.assert:
+        that: verify_chrome_policy.stat.exists
+        fail_msg: "Chrome security policy not deployed — desktop role did not deploy chrome policies"
+
+    - name: Validate Chrome security policy JSON
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
+          assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
+      changed_when: false
+
     - name: Verify mullvad repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/mullvad.repo
@@ -38,6 +62,71 @@
       ansible.builtin.assert:
         that: verify_mullvad_repo.stat.exists
         fail_msg: "mullvad repo not configured"
+
+    - name: Verify tailscale-stable repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/tailscale-stable.repo
+      register: verify_tailscale_repo
+      become: true
+      when: repo_tailscale | default(true)
+
+    - name: Assert tailscale-stable repo exists
+      ansible.builtin.assert:
+        that: verify_tailscale_repo.stat.exists
+        fail_msg: "tailscale-stable repo not configured"
+      when: repo_tailscale | default(true)
+
+    - name: Verify slack repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/slack.repo
+      register: verify_slack_repo
+      become: true
+      when: (repo_slack | default(true)) and ansible_architecture == 'x86_64'
+
+    - name: Assert slack repo exists
+      ansible.builtin.assert:
+        that: verify_slack_repo.stat.exists
+        fail_msg: "slack repo not configured"
+      when: (repo_slack | default(true)) and ansible_architecture == 'x86_64'
+
+    - name: Verify google-cloud-cli repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/google-cloud-cli.repo
+      register: verify_gcloud_repo
+      become: true
+      when: (repo_google_cloud_sdk | default(true)) and ansible_architecture == 'x86_64'
+
+    - name: Assert google-cloud-cli repo exists
+      ansible.builtin.assert:
+        that: verify_gcloud_repo.stat.exists
+        fail_msg: "google-cloud-cli repo not configured"
+      when: (repo_google_cloud_sdk | default(true)) and ansible_architecture == 'x86_64'
+
+    - name: Verify rpmfusion-free repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/rpmfusion-free.repo
+      register: verify_rpmfusion_free_repo
+      become: true
+      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+
+    - name: Assert rpmfusion-free repo exists
+      ansible.builtin.assert:
+        that: verify_rpmfusion_free_repo.stat.exists
+        fail_msg: "rpmfusion-free repo not configured"
+      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+
+    - name: Verify rpmfusion-nonfree repo configured
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/rpmfusion-nonfree.repo
+      register: verify_rpmfusion_nonfree_repo
+      become: true
+      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+
+    - name: Assert rpmfusion-nonfree repo exists
+      ansible.builtin.assert:
+        that: verify_rpmfusion_nonfree_repo.stat.exists
+        fail_msg: "rpmfusion-nonfree repo not configured"
+      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
 
     - name: Verify sysctl hardening config deployed
       ansible.builtin.stat:
@@ -59,6 +148,32 @@
       ansible.builtin.command: grep -q 'kernel.dmesg_restrict = 1' /etc/sysctl.d/90-hardening.conf
       changed_when: false
       become: true
+
+    - name: Check fs.inotify.max_user_watches (system role)
+      ansible.builtin.command: sysctl -n fs.inotify.max_user_watches
+      register: verify_inotify_watches
+      changed_when: false
+      become: true
+
+    - name: Assert fs.inotify.max_user_watches >= 524288
+      ansible.builtin.assert:
+        that: verify_inotify_watches.stdout | int >= 524288
+        fail_msg: >-
+          fs.inotify.max_user_watches={{ verify_inotify_watches.stdout }},
+          expected >=524288 (required for IDE/file-watcher tools)
+
+    - name: Check fs.inotify.max_user_instances (system role)
+      ansible.builtin.command: sysctl -n fs.inotify.max_user_instances
+      register: verify_inotify_instances
+      changed_when: false
+      become: true
+
+    - name: Assert fs.inotify.max_user_instances >= 512
+      ansible.builtin.assert:
+        that: verify_inotify_instances.stdout | int >= 512
+        fail_msg: >-
+          fs.inotify.max_user_instances={{ verify_inotify_instances.stdout }},
+          expected >=512
 
     - name: Verify modprobe hardening config deployed
       ansible.builtin.stat:
@@ -95,8 +210,28 @@
 
     - name: Assert BPF JIT hardening
       ansible.builtin.assert:
-        that: verify_bpf.stdout == '1'
-        fail_msg: "BPF JIT hardening not set to 1 (harden unprivileged callers)"
+        that: verify_bpf.stdout == '2'
+        fail_msg: "BPF JIT hardening not set to 2 (harden all callers including root)"
+
+    - name: Check bpfman binary is present
+      ansible.builtin.command: which bpfman
+      register: verify_bpfman_bin
+      changed_when: false
+      failed_when: false
+
+    - name: Check bpfman.socket is enabled
+      ansible.builtin.command: systemctl is-enabled bpfman.socket  # noqa: command-instead-of-module
+      register: verify_bpfman_socket
+      changed_when: false
+      become: true
+      failed_when: false
+      when: verify_bpfman_bin.rc == 0
+
+    - name: Assert bpfman.socket is enabled
+      ansible.builtin.assert:
+        that: verify_bpfman_socket.rc == 0
+        fail_msg: "bpfman.socket is not enabled — bpfman load/list will fail at runtime"
+      when: verify_bpfman_bin.rc == 0
 
     - name: Check sysctl net.ipv4.conf.all.rp_filter
       ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
@@ -195,12 +330,12 @@
       become: true
 
     - name: Check sshd config disables agent forwarding
-      ansible.builtin.command: grep -q 'AllowAgentForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+      ansible.builtin.command: grep -qP '^AllowAgentForwarding (yes|no)$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 
     - name: Check sshd config disables TCP forwarding
-      ansible.builtin.command: grep -q 'AllowTcpForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+      ansible.builtin.command: grep -qP '^AllowTcpForwarding (yes|no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 
@@ -208,6 +343,19 @@
       ansible.builtin.command: grep -q '^Port 722$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
+
+    - name: Verify port 722 is labeled ssh_port_t
+      ansible.builtin.command:
+        cmd: semanage port -l
+      register: verify_semanage
+      changed_when: false
+      failed_when: false
+      become: true
+
+    - name: Assert SSH port 722 is labeled ssh_port_t
+      ansible.builtin.assert:
+        that: verify_semanage.rc == 0 and verify_semanage.stdout | regex_search('ssh_port_t.*722|722.*ssh_port_t')
+        fail_msg: "Port 722 not labeled ssh_port_t — sshd will fail to bind"
 
     - name: Extract AllowUsers value from sshd config
       ansible.builtin.command: grep -oP '(?<=AllowUsers )\S+' /etc/ssh/sshd_config.d/00-hardening.conf
@@ -264,6 +412,31 @@
           - "'nodev' in verify_shm.stdout"
         fail_msg: "/dev/shm missing required mount options (noexec,nosuid,nodev)"
 
+    - name: Verify /tmp hardening drop-in exists (CIS 1.1.2.x)
+      ansible.builtin.stat:
+        path: /etc/systemd/system/tmp.mount.d/hardening.conf
+      register: verify_tmp_dropin
+      become: true
+
+    - name: Assert /tmp hardening drop-in deployed
+      ansible.builtin.assert:
+        that: verify_tmp_dropin.stat.exists
+        fail_msg: "/etc/systemd/system/tmp.mount.d/hardening.conf not deployed"
+
+    - name: Check /tmp mount options (CIS 1.1.2.x)
+      ansible.builtin.command: findmnt -n -o OPTIONS /tmp
+      register: verify_tmp
+      changed_when: false
+      become: true
+
+    - name: Assert /tmp has noexec (CIS 1.1.2.x)
+      ansible.builtin.assert:
+        that:
+          - "'noexec' in verify_tmp.stdout"
+          - "'nosuid' in verify_tmp.stdout"
+          - "'nodev' in verify_tmp.stdout"
+        fail_msg: "/tmp missing required mount options (noexec,nosuid,nodev) — CIS 1.1.2.x"
+
     - name: Check /home mount options (CIS 1.1.9)
       ansible.builtin.command: findmnt -n -o OPTIONS /home
       register: verify_home
@@ -298,6 +471,17 @@
       ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
       changed_when: false
       become: true
+
+    - name: Check SELinux enforcing mode
+      ansible.builtin.command: getenforce
+      register: verify_selinux
+      changed_when: false
+      become: true
+
+    - name: Assert SELinux is enforcing
+      ansible.builtin.assert:
+        that: verify_selinux.stdout == 'Enforcing'
+        fail_msg: "SELinux is '{{ verify_selinux.stdout }}', expected 'Enforcing'"
 
     - name: Verify chrony NTS config
       ansible.builtin.command: grep -q nts /etc/chrony.conf
@@ -349,6 +533,31 @@
         that: verify_aide_timer.status.UnitFileState == 'enabled'
         fail_msg: "AIDE check timer not enabled"
 
+    - name: Stat AIDE database
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: verify_aide_db
+      become: true
+
+    - name: Assert AIDE database is initialized
+      ansible.builtin.assert:
+        that: verify_aide_db.stat.exists
+        fail_msg: "AIDE database /var/lib/aide/aide.db.gz not initialized"
+
+    - name: Check AIDE service RestrictAddressFamilies sandbox setting
+      ansible.builtin.command: grep -q 'RestrictAddressFamilies=none' /etc/systemd/system/aide-check.service
+      changed_when: false
+      become: true
+
+    - name: Check AIDE conf includes security-critical paths
+      ansible.builtin.command: grep -q '{{ item }}' /etc/aide.conf
+      loop:
+        - /etc/bpfman
+        - /etc/crypto-policies
+        - /etc/selinux
+      changed_when: false
+      become: true
+
     # --- PAM faillock ---
     - name: Check faillock deny=5
       ansible.builtin.command: grep -q '^deny = 5' /etc/security/faillock.conf
@@ -392,8 +601,13 @@
       become: true
 
     # --- Session timeout ---
-    - name: Verify TMOUT configured via profile.d (CIS 5.5.5)
-      ansible.builtin.command: grep -q 'readonly TMOUT=600' /etc/profile.d/tmout.sh
+    - name: Verify TMOUT configured via profile.d (CIS 5.5.5 — bash login shells)
+      ansible.builtin.command: grep -qE '^TMOUT=600([^0-9]|$)' /etc/profile.d/tmout.sh
+      changed_when: false
+      become: true
+
+    - name: Verify TMOUT configured via /etc/zshrc (CIS 5.5.5 — zsh interactive shells)
+      ansible.builtin.command: grep -qE '^TMOUT=600([^0-9]|$)' /etc/zshrc
       changed_when: false
       become: true
 
@@ -504,6 +718,43 @@
       changed_when: false
       become: true
 
+    # --- packages_security (ykpers / YubiKey challenge-response) ---
+    - name: Check ykpers is installed (provides ykchalresp for vault HMAC-SHA1)
+      ansible.builtin.command: rpm -q ykpers  # noqa: command-instead-of-module
+      changed_when: false
+
+    # --- distrobox role ---
+    - name: Check for distrobox binary
+      ansible.builtin.command:
+        cmd: which distrobox
+      register: verify_distrobox_bin
+      changed_when: false
+      failed_when: false
+
+    - name: Check for toolbox binary
+      ansible.builtin.command:
+        cmd: which toolbox
+      register: verify_toolbox_bin
+      changed_when: false
+      failed_when: false
+
+    - name: Resolve distrobox_tool for verify
+      ansible.builtin.set_fact:
+        verify_distrobox_tool: >-
+          {{ 'distrobox' if (verify_distrobox_bin.rc == 0)
+             else ('toolbox' if (verify_toolbox_bin.rc == 0)
+             else 'none') }}
+
+    - name: Assert distrobox_tool fact resolves to a known value
+      ansible.builtin.assert:
+        that: verify_distrobox_tool in ['distrobox', 'toolbox', 'none']
+        fail_msg: "distrobox_tool resolved to unexpected value: {{ verify_distrobox_tool }}"
+
+    - name: Assert distrobox binary is present (installed by packages role)
+      ansible.builtin.assert:
+        that: verify_distrobox_bin.rc == 0
+        fail_msg: "distrobox binary not found in PATH — packages role should install it"
+
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled
       ansible.builtin.systemd:
@@ -584,3 +835,39 @@
         that: verify_notes_config_vm.stat.mode == '0600'
         fail_msg: "notes .git/config should be 0600"
       when: verify_notes_vm.stat.exists and verify_notes_config_vm.stat.exists
+
+- name: Verify (VM) — root smoke-test
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    # Run the full smoke-test as root so system-level checks that require root or
+    # EUID=0 (auditd watch keys, pwquality detail params, chrony NTS cookie count,
+    # pwhistory remember=24, yescrypt/YESCRYPT_COST_FACTOR, TMOUT bounds, /var/tmp
+    # bind-mount noexec) are exercised.  MOLECULE_PROJECT_DIRECTORY is forwarded so
+    # tool-presence failures are demoted to WARN (some tools are skipped in the VM
+    # converge, e.g. claude_install_method: skip).
+    - name: Run smoke-test.sh as root (full system checks)
+      ansible.builtin.script:
+        cmd: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/scripts/smoke-test.sh --json"
+      environment:
+        MOLECULE_PROJECT_DIRECTORY: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+      register: smoke_root
+      changed_when: false
+      failed_when: false
+
+    - name: Show root smoke-test warns and results
+      ansible.builtin.debug:
+        msg: >-
+          warns={{ smoke_root.stdout | from_json | json_query('warns') }}
+          results={{ smoke_root.stdout | from_json | json_query("results[?status!='PASS']") }}
+      when: smoke_root.stdout | default('') | length > 0
+
+    - name: Assert root smoke-test passed
+      ansible.builtin.assert:
+        that: smoke_root.rc == 0
+        fail_msg: >-
+          smoke-test.sh (root) exited {{ smoke_root.rc }}:
+          {{ (smoke_root.stdout | from_json | json_query("results[?status=='FAIL']") | to_nice_json)
+             if smoke_root.stdout | default('') | length > 0 else '(no output)' }}

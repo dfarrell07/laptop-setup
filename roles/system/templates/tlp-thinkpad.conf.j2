@@ -18,7 +18,8 @@ START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start }}
 STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop }}
 
 # WiFi power: leave at TLP default (auto).
-# NM's 99-wifi-powersave.conf pins wifi.powersave=2 (disabled) — NM config wins.
+# NM's 99-wifi-powersave.conf pins wifi.powersave=2 (disabled) on all hosts — NM config wins.
+# wifi.powersave=2 does not conflict with IT 802.1X/NAC policy (auth vs. client power state).
 
 # PCIe/NVMe power management on battery (ASPM + runtime PM)
 # PCIE_ASPM_ON_BAT=powersupersave enables L1 substates (L1.1/L1.2) for PCIe links.
@@ -32,6 +33,13 @@ PCIE_ASPM_ON_AC=default
 PCIE_ASPM_ON_BAT=powersupersave
 RUNTIME_PM_ON_AC=on
 RUNTIME_PM_ON_BAT=auto
+
+# ACPI platform profile — controls firmware-level TDP and thermal policy
+# 'performance' on AC maximises boost; 'low-power' on battery reduces TDP envelope.
+# Requires kernel >= 5.18 + platform_profile sysfs (present on Fedora 44 + P16v).
+# Without this, UEFI defaults after PPD is masked are undefined.
+PLATFORM_PROFILE_ON_AC={{ system_tlp_platform_profile_ac }}
+PLATFORM_PROFILE_ON_BAT={{ system_tlp_platform_profile_bat }}
 
 # CPU power (AMD Ryzen 7840U — amd-pstate-epp active mode)
 # With amd-pstate-epp, the scaling_governor is locked to 'powersave'.

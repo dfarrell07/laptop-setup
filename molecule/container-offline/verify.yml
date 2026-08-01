@@ -1,0 +1,55 @@
+---
+- name: Verify (container provisioning — offline rescue path)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Confirm python3 is available (non-download path unaffected by rescue)
+      ansible.builtin.command:
+        cmd: python3 --version
+      changed_when: false
+
+    - name: Stat oc at /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc_absent
+
+    - name: Assert oc absent — rescue block ran and play continued gracefully
+      ansible.builtin.assert:
+        that: not verify_oc_absent.stat.exists
+        fail_msg: >-
+          /usr/local/bin/oc exists after an intentional download failure.
+          Either the rescue block did not execute, a pre-existing oc binary is present
+          in the image, or the invalid version accidentally resolved to a real release.
+
+    - name: Stat golangci-lint at ~/go/bin/golangci-lint
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
+      register: verify_golangci_absent
+
+    - name: Assert golangci-lint absent — go install failed and failed_when swallowed it
+      ansible.builtin.assert:
+        that: not verify_golangci_absent.stat.exists
+        fail_msg: >-
+          golangci-lint exists after an intentional offline run.
+          Either go is installed and the network was reachable, or a stub was placed
+          unexpectedly (check that no prepare.yml exists for this scenario).
+
+    - name: Stat flatpak-spawn wrapper for podman
+      ansible.builtin.stat:
+        path: /usr/local/bin/podman
+      register: verify_podman_wrapper
+
+    - name: Assert podman wrapper present and executable (non-download path unaffected)
+      ansible.builtin.assert:
+        that:
+          - verify_podman_wrapper.stat.exists
+          - verify_podman_wrapper.stat.mode == '0755'
+        fail_msg: >-
+          /usr/local/bin/podman wrapper is absent or has wrong permissions.
+          A download block failure must not break the flatpak-spawn wrapper path.
+
+    - name: Verify podman wrapper contains flatpak-spawn delegation
+      ansible.builtin.command:
+        cmd: grep -q 'flatpak-spawn --host podman' /usr/local/bin/podman
+      changed_when: false

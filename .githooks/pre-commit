@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 # Pre-commit checks: vault encryption, secrets, YAML, shell, JSON
 failed=0
 
 # Block unencrypted vault files
-for f in $(git diff --cached --name-only -z -- '*vault.yml' | tr '\0' '\n'); do
+for f in $(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml' | tr '\0' '\n'); do
   if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
     failed=1
@@ -12,7 +12,7 @@ done
 
 # Secret scanning
 if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2; then
+  if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2 --config .gitleaks.toml; then
     failed=1
   fi
 else
@@ -48,15 +48,12 @@ if command -v shellcheck >/dev/null 2>&1; then
 fi
 
 # JSON validation on staged files
-json_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.json' | grep -v node_modules | grep -v package-lock)
-if [ -n "$json_files" ]; then
-  for f in $json_files; do
-    if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
-      echo "ERROR: $f is not valid JSON" >&2
-      failed=1
-    fi
-  done
-fi
+while IFS= read -r -d '' f; do
+  if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+    echo "ERROR: $f is not valid JSON" >&2
+    failed=1
+  fi
+done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v package-lock)
 
 # Lockfile integrity (only when package-lock.json is staged)
 if git diff --cached --name-only | grep -q 'package-lock.json'; then

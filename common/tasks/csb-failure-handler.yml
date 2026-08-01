@@ -5,11 +5,16 @@
 #
 # Required variables (set by the calling rescue block):
 #   _csb_task_name      - human-readable task name
-#   _csb_error           - the ansible_failed_result or error message
 #   _csb_action          - suggested remediation action
 #   _csb_ticket_summary  - one-line IT ticket summary
 #   _csb_ticket_body     - multi-line IT ticket description
 #   _csb_role            - role that failed (repos_dnf, packages, system, etc.)
+#
+# Optional variables (defaults shown):
+#   _csb_error           - the ansible_failed_result or error message (default: 'unknown error')
+#   _csb_ticket_priority - IT ticket priority (default: 'Normal'); pass 'High' for
+#                          severe failures such as CA cert install or security hardening
+#   _csb_ticket_category - IT ticket category (default: 'Software Installation')
 
 ---
 - name: Record CSB failure
@@ -31,10 +36,10 @@
         }]
       }}
 
-- name: "Warn: {{ _csb_task_name }} failed (CSB restriction)"
+- name: "CSB restriction warn: {{ _csb_task_name }}"
   ansible.builtin.debug:
     msg: >-
       CSB BLOCKED: {{ _csb_task_name }} in role {{ _csb_role }}.
-      Error: {{ _csb_error | default('unknown') | truncate(200) }}.
+      Error: {{ _csb_error | default('unknown error') | truncate(200) }}.
       Suggested action: {{ _csb_action }}.
       Continuing playbook execution.

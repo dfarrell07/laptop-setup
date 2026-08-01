@@ -8,6 +8,9 @@
     - name: Include common verify assertions
       ansible.builtin.include_tasks: ../shared/verify-common.yml
 
+    - name: Include smoke-test verification
+      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
       ansible.builtin.include_tasks: ../shared/verify-dnf.yml
@@ -26,20 +29,20 @@
           - verify_claude_work.stat.mode == '0700'
         fail_msg: "Claude work config dir missing or wrong permissions"
 
-    - name: Verify Claude work settings.json exists
+    - name: Verify Claude work settings.local.json exists
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-work/settings.json"
+        path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
       register: verify_claude_work_settings
 
-    - name: Assert Claude work settings.json exists with 0600
+    - name: Assert Claude work settings.local.json exists with 0600
       ansible.builtin.assert:
         that:
           - verify_claude_work_settings.stat.exists
           - verify_claude_work_settings.stat.mode == '0600'
-        fail_msg: "Claude work settings.json not deployed or wrong permissions"
+        fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
 
     - name: Check git user.email is work email
-      ansible.builtin.command: git config --global user.email
+      ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
       register: verify_git_email
       changed_when: false
 
@@ -97,13 +100,34 @@
         that: verify_chrome.stat.exists
         fail_msg: "Chrome security policy not deployed"
 
-    # --- Redhat role ---
-    - name: Verify Red Hat CA cert deployed
-      ansible.builtin.stat:
-        path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
-      register: verify_rh_cert
+    - name: Validate Chrome security policy JSON
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
+          assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
+      changed_when: false
 
-    - name: Assert Red Hat CA cert exists
+    # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---
+    # Rocky has ansible_distribution='Rocky' not 'RedHat', so is_rhel=False and
+    # redhat role skips internal CA cert deployment. These assertions are skipped.
+    - name: Note that Red Hat internal CA certs are not deployed on Rocky
+      ansible.builtin.debug:
+        msg: "Skipping RH CA cert assertions — Rocky is not RHEL (is_rhel=False, certs not deployed)"
+
+    # --- CSB detection: Rocky is NOT RedHat (ansible_distribution='Rocky' != 'RedHat') ---
+    # is_rhel=False on Rocky → needs_container_tier='host-only' (not 'hybrid').
+    # verify-common.yml re-includes csb_detect.yml so facts are populated in verify phase.
+    - name: Assert csb_detected is false on Rocky molecule host
       ansible.builtin.assert:
-        that: verify_rh_cert.stat.exists
-        fail_msg: "Red Hat CA cert not deployed"
+        that: not (csb_detected | default(true))
+        fail_msg: "csb_detected is true on Rocky molecule host — csb_detect.yml regression"
+
+    - name: Assert needs_container_tier is host-only on Rocky (not RedHat, not CSB)
+      ansible.builtin.assert:
+        that: needs_container_tier | default('unknown') == 'host-only'
+        fail_msg: "needs_container_tier is not host-only on Rocky — is_rhel detection broken (Rocky != RedHat)"
+
+    - name: Assert fapolicyd is not installed on Rocky molecule host
+      ansible.builtin.assert:
+        that: not (fapolicyd_installed | default(true))
+        fail_msg: "fapolicyd_installed is true on Rocky molecule host — CSB detection false positive"

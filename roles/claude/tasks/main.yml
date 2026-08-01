@@ -3,6 +3,11 @@
 # Claude Code install, instance isolation, settings.
 
 # --- Install Claude Code ---
+- name: Fail if claude_install_method is npm (removed, not implemented)
+  ansible.builtin.fail:
+    msg: "npm install method is removed; set claude_install_method to native"
+  when: claude_install_method == 'npm'
+
 - name: Check if Claude Code is installed
   ansible.builtin.command:
     cmd: claude --version
@@ -11,22 +16,44 @@
   failed_when: false
 
 - name: Install Claude Code via native binary
-  ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
-    cmd: "curl -fsSL {{ claude_install_url }} | bash"
-  register: claude_install_result
-  failed_when: false
   when:
     - claude_version_check.rc != 0
     - claude_install_method == 'native'
+    - packages_install_binaries | default(true) | bool
+  block:
+    - name: Install Claude Code via native binary
+      ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
+        cmd: "set -o pipefail && curl -fsSL {{ claude_install_url }} | bash"
+  rescue:
+    - name: Record Claude install failure (CSB restriction)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: claude
+        _csb_task_name: "Install Claude Code via native binary"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install Claude Code manually after provisioning:
+          curl -fsSL {{ claude_install_url }} | bash
+        _csb_ticket_summary: "Cannot install Claude Code on CSB (fapolicyd blocks curl | bash)"
+        _csb_ticket_body: >-
+          The Claude Code installer could not run ({{ claude_install_url }} may be blocked
+          by fapolicyd). Install manually after provisioning:
+          curl -fsSL {{ claude_install_url }} | bash
+      when: csb_detected | default(false)
 
-- name: Warn if Claude install failed
+    - name: Warn if Claude install failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
+          Install manually: curl -fsSL {{ claude_install_url }} | bash
+      when: not (csb_detected | default(false))
+
+- name: Warn when install method is unrecognized
   ansible.builtin.debug:
     msg: >-
-      WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
-      Install manually: curl -fsSL {{ claude_install_url }} | bash
-  when:
-    - claude_install_result is defined
-    - claude_install_result.rc | default(0) != 0
+      claude_install_method '{{ claude_install_method }}' is unrecognized;
+      Claude was not installed. Set 'claude_install_method: native' in config.yml and re-run.
+  when: claude_install_method not in ['native', 'skip']
 
 # --- Instance isolation directories ---
 - name: Create default instance config directory (~/.claude)
@@ -49,26 +76,28 @@
     mode: "0700"
 
 # --- Settings ---
-# Also deploy settings to the default ~/.claude instance — without this,
-# invoking claude without --config-dir uses ~/.claude with no deny lists,
-# no sandbox config, and no telemetry suppression.
+# Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
+# to settings.local.json, not settings.json.  Claude Code's /config command
+# overwrites settings.json (theme, model, etc.) but does NOT touch
+# settings.local.json, so security policy survives user preference changes.
+# Claude Code merges both files; settings.local.json takes precedence.
 - name: Deploy default instance settings (~/.claude)
   ansible.builtin.template:
     src: settings.json.j2
-    dest: "{{ ansible_user_dir }}/.claude/settings.json"
+    dest: "{{ ansible_user_dir }}/.claude/settings.local.json"
     mode: "0600"
 
 - name: Deploy work instance settings
   ansible.builtin.template:
     src: settings.json.j2
-    dest: "{{ claude_work_config_dir }}/settings.json"
+    dest: "{{ claude_work_config_dir }}/settings.local.json"
     mode: "0600"
   when: profile == 'work'
 
 - name: Deploy personal instance settings
   ansible.builtin.template:
     src: settings.json.j2
-    dest: "{{ claude_personal_config_dir }}/settings.json"
+    dest: "{{ claude_personal_config_dir }}/settings.local.json"
     mode: "0600"
 
 # --- Instance CLAUDE.md ---
@@ -219,7 +248,7 @@
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.local/share/log"
+    path: "{{ ansible_user_dir }}/.local/state/log"
     state: directory
     mode: "0755"
   when:
@@ -236,15 +265,11 @@
     - claude_queue_enabled | bool
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
-  # 'launchctl load -w' is deprecated since macOS 10.10 (Yosemite) but remains
-  # functional for user LaunchAgents in ~/Library/LaunchAgents/ on Sonoma 14+.
-  # The -w flag overrides Disabled=true in a plist; since this plist has no
-  # Disabled key, -w is a no-op.  The modern replacement is:
-  #   launchctl bootstrap gui/$(id -u) <plist>
-  # Migration can be deferred until Apple removes the legacy subcommands.
-  # failed_when: false handles the non-zero exit when the agent is already loaded.
+  # 'launchctl bootstrap' is the modern replacement for the deprecated
+  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
   when:
     - ansible_os_family == 'Darwin'
     - claude_queue_enabled | bool
@@ -261,30 +286,16 @@
     - claude_remote_control_enabled | bool
 
 - name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
-  # See queue plist task above for deprecation note.  Same applies here:
-  # 'launchctl load -w' still works for ~/Library/LaunchAgents/ on Sonoma 14+.
-  # Modern replacement: launchctl bootstrap gui/$(id -u) <plist>
+  # 'launchctl bootstrap' is the modern replacement for the deprecated
+  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
     - ansible_os_family == 'Darwin'
     - claude_remote_control_enabled | bool
   changed_when: false
   failed_when: false
 
-- name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: brew autoupdate start 43200 --upgrade --cleanup
-  when: ansible_os_family == 'Darwin'
-  changed_when: false
-  failed_when: false
-  register: _claude_brew_autoupdate
-
-- name: Warn if brew autoupdate failed (may need trust step)
-  ansible.builtin.debug:
-    msg: >-
-      brew autoupdate start failed (rc={{ _claude_brew_autoupdate.rc }}).
-      Run 'brew autoupdate' interactively to complete trust if this is the first run.
-  when:
-    - ansible_os_family == 'Darwin'
-    - _claude_brew_autoupdate.rc | default(0) != 0
+# brew autoupdate moved to roles/packages/tasks/main.yml — it manages all Homebrew
+# packages, not Claude-specific functionality, and belongs with the packages role.

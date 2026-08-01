@@ -1,6 +1,6 @@
 ---
 # molecule/shared/verify-dnf.yml
-# Assertions for dnf-based platforms (Fedora, CentOS, VM).
+# Assertions for dnf-based platforms (Fedora, Rocky Linux, VM).
 # Include after verify-common.yml.
 
 - name: Check zsh is installed
@@ -23,6 +23,11 @@
   ansible.builtin.command: rg --version
   changed_when: false
 
+- name: Check bat is installed
+  ansible.builtin.command: bat --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge packages_cli subset
+
 - name: Check fd-find is installed
   ansible.builtin.command: fd --version
   changed_when: false
@@ -33,40 +38,121 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in EPEL 10
 
-- name: Check ykpers is installed (ykchalresp)
-  ansible.builtin.command: which ykchalresp
+- name: Check go is installed
+  ansible.builtin.command: go version
   changed_when: false
-  # packages_security not in scope in verify play; default([]) prevents UndefinedVariable
-  when: packages_security | default([]) | length > 0
+  # golang is in packages_languages on all dnf platforms including Rocky
 
-- name: Verify containers config directory
+- name: Check gcc is installed
+  ansible.builtin.command: gcc --version
+  changed_when: false
+
+- name: Check clang is installed
+  ansible.builtin.command: clang --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge packages_languages subset
+
+- name: Check python3 is installed
+  ansible.builtin.command: python3 --version
+  changed_when: false
+
+- name: Check pip3 is installed
+  ansible.builtin.command: pip3 --version
+  changed_when: false
+
+- name: Check direnv is installed
+  ansible.builtin.command: direnv version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 repos
+
+- name: Check zoxide is installed
+  ansible.builtin.command: zoxide --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 repos
+
+- name: Check gh is installed
+  ansible.builtin.command: gh --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
+
+- name: Check yq is installed
+  ansible.builtin.command: yq --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
+
+- name: Check golangci-lint is installed
+  ansible.builtin.command: golangci-lint --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in EPEL 10 (and not in Rocky 10 converge subset)
+
+- name: Check kubectl binary presence
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.config/containers"
-  register: verify_containers_dir
+    path: /usr/local/bin/kubectl
+  register: verify_kubectl_bin
 
-- name: Assert containers config directory exists
-  ansible.builtin.assert:
-    that:
-      - verify_containers_dir.stat.exists
-      - verify_containers_dir.stat.isdir
-    fail_msg: "Containers config directory was not created"
+- name: Check kubectl client version when installed
+  ansible.builtin.command: kubectl version --client
+  changed_when: false
+  when: verify_kubectl_bin.stat.exists
 
-- name: Verify containers.conf is deployed by containers role
+- name: Check kind binary presence
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
-  register: verify_containers_conf
+    path: /usr/local/bin/kind
+  register: verify_kind_bin
 
-- name: Assert containers.conf exists
+- name: Assert kind binary is executable when present
   ansible.builtin.assert:
-    that: verify_containers_conf.stat.exists
-    fail_msg: "containers.conf was not deployed (log_driver and pids_limit needed for kind)"
+    that: verify_kind_bin.stat.executable
+    fail_msg: 'kind binary exists but is not executable'
+  when: verify_kind_bin.stat.exists
 
-- name: Assert containers.conf sets log_driver to k8s-file
-  ansible.builtin.command:
-    cmd: grep -q 'log_driver.*k8s-file' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+- name: Check gpg is installed
+  ansible.builtin.command: gpg --version
   changed_when: false
 
-- name: Assert containers.conf sets pids_limit to 65536
-  ansible.builtin.command:
-    cmd: grep -q 'pids_limit = 65536' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+- name: Check openssl is installed
+  ansible.builtin.command: openssl version
   changed_when: false
+
+- name: Check age binary presence
+  ansible.builtin.stat:
+    path: /usr/bin/age
+  register: verify_age_bin
+
+- name: Check age version when installed
+  ansible.builtin.command: age --version
+  changed_when: false
+  when: verify_age_bin.stat.exists
+
+- name: Check pass binary presence
+  ansible.builtin.stat:
+    path: /usr/bin/pass
+  register: verify_pass_bin
+
+- name: Check pass version when installed
+  ansible.builtin.command: pass version
+  changed_when: false
+  when: verify_pass_bin.stat.exists
+
+- name: Check ykman binary presence
+  ansible.builtin.stat:
+    path: /usr/bin/ykman
+  register: verify_ykman_bin
+
+- name: Check ykman version when installed
+  ansible.builtin.command: ykman --version
+  changed_when: false
+  when: verify_ykman_bin.stat.exists
+
+- name: Check bwrap binary presence
+  ansible.builtin.stat:
+    path: /usr/bin/bwrap
+  register: verify_bwrap_bin
+
+- name: Check bwrap version when installed
+  ansible.builtin.command: bwrap --version
+  changed_when: false
+  when: verify_bwrap_bin.stat.exists
+
+- name: Include containers.conf assertions
+  ansible.builtin.include_tasks: verify-containers.yml

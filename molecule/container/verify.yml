@@ -1,0 +1,75 @@
+---
+- name: Verify (container provisioning)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Confirm python3 is available
+      ansible.builtin.command:
+        cmd: python3 --version
+      changed_when: false
+
+    - name: Verify oc stub is present at /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc
+
+    - name: Assert oc present and executable
+      ansible.builtin.assert:
+        that:
+          - verify_oc.stat.exists
+          - verify_oc.stat.mode == '0755'
+        fail_msg: "/usr/local/bin/oc missing or wrong permissions after converge"
+
+    - name: Verify kubectl is present at /usr/local/bin/kubectl
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: verify_kubectl
+
+    - name: Assert kubectl present and executable
+      ansible.builtin.assert:
+        that:
+          - verify_kubectl.stat.exists
+          - verify_kubectl.stat.mode == '0755'
+        fail_msg: "/usr/local/bin/kubectl missing or wrong permissions after converge"
+
+    - name: Verify distrobox-host-exec symlink created for podman
+      ansible.builtin.stat:
+        path: /usr/local/bin/podman
+        follow: false
+      register: verify_podman_symlink
+
+    - name: Assert podman is a symlink to distrobox-host-exec
+      ansible.builtin.assert:
+        that:
+          - verify_podman_symlink.stat.exists
+          - verify_podman_symlink.stat.islnk
+          - verify_podman_symlink.stat.lnk_target == '/usr/bin/distrobox-host-exec'
+        fail_msg: "/usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec"
+
+    - name: Check git is installed
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: git --version
+      changed_when: false
+
+    - name: Check vim is installed
+      ansible.builtin.command:
+        cmd: vim --version
+      changed_when: false
+
+    - name: Check curl is installed
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: curl --version
+      changed_when: false
+
+    - name: Verify golangci-lint stub present (go install was skipped)
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
+      register: verify_golangci
+
+    - name: Assert golangci-lint stub present and executable
+      ansible.builtin.assert:
+        that:
+          - verify_golangci.stat.exists
+          - verify_golangci.stat.mode == '0755'
+        fail_msg: "golangci-lint binary missing or wrong permissions — go install may have failed or creates: guard broke"

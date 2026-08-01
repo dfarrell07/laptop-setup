@@ -40,7 +40,7 @@ if [[ -f /etc/os-release ]]; then
     fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
-record "os_family" "pass" "$OS_FAMILY"
+[[ "$OS_FAMILY" == "unknown" ]] && record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/darwin" || record "os_family" "pass" "$OS_FAMILY"
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   has_certs=false has_fapolicyd=false
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
@@ -56,9 +56,15 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ "$fqdn" == *.csb && "$has_certs" == true ]] && IS_CSB=true
   fi
 fi
-[[ "$IS_CSB" == true ]] \
-  && record "csb_detected" "warn" "CSB detected — expect fapolicyd/sudo constraints" \
-  || record "csb_detected" "pass" "not CSB"
+if [[ "$IS_CSB" == true ]]; then
+  if [[ "$has_fapolicyd" == true ]]; then
+    record "csb_detected" "warn" "CSB detected (fapolicyd installed) — expect sudo and fapolicyd constraints"
+  else
+    record "csb_detected" "warn" "CSB detected (no fapolicyd) — hybrid mode; may need --ask-become-pass"
+  fi
+else
+  record "csb_detected" "pass" "not CSB"
+fi
 if [[ -z "$PROFILE" ]]; then
   [[ "$IS_CSB" == true ]] && PROFILE="work" || PROFILE="personal"
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
@@ -66,12 +72,18 @@ fi
 record "profile" "pass" "$PROFILE"
 
 # --- Required tools ---
-for tool in ansible-playbook git python3 curl make ssh; do
+for tool in ansible-playbook ansible-vault git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     record "required_${tool}" "pass" "$ver"
   else
-    record "required_${tool}" "fail" "not installed — run: make bootstrap"
+    if [[ "$tool" == "make" ]]; then
+      record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
+    elif command -v make &>/dev/null; then
+      record "required_${tool}" "fail" "not installed — run: make bootstrap"
+    else
+      record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
+    fi
   fi
 done
 
@@ -79,7 +91,7 @@ done
 if command -v ansible-galaxy &>/dev/null; then
   missing_cols=()
   for col in community.general containers.podman ansible.posix; do
-    ansible-galaxy collection list "$col" &>/dev/null || missing_cols+=("$col")
+    ansible-galaxy collection list "$col" 2>/dev/null | grep -q "^$col " || missing_cols+=("$col")
   done
   if [[ ${#missing_cols[@]} -eq 0 ]]; then
     record "ansible_collections" "pass" "all required collections installed"
@@ -136,6 +148,7 @@ fi
 # --- Vault encryption check ---
 VAULT_FILE="$(cd "$(dirname "$0")/.." && pwd)/group_vars/all/vault.yml"
 if [[ -f "$VAULT_FILE" ]]; then
+  # shellcheck disable=SC2016  # Intentional: matching literal $ANSIBLE_VAULT header
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
@@ -143,8 +156,33 @@ if [[ -f "$VAULT_FILE" ]]; then
   fi
 fi
 
+# --- config.yml ---
+CONFIG_FILE="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  record "config_yml" "warn" "config.yml missing — create it with at least 'desktop_environment: sway' before running make all"
+elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
+  record "config_yml" "warn" "config.yml exists but does not set desktop_environment — default 'auto' may fail on first provision before a WM is installed"
+else
+  record "config_yml" "pass" "desktop_environment is set"
+fi
+
+# --- Identity vars CHANGE_ME check ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  for _ivar in dotfiles_user_name dotfiles_github_user; do
+    if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
+      record "identity_${_ivar}" "warn" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
+    elif grep -qE "^${_ivar}:[[:space:]]*CHANGE_ME" "$CONFIG_FILE"; then
+      record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
+    else
+      record "identity_${_ivar}" "pass" "${_ivar} is set in config.yml"
+    fi
+  done
+fi
+
 # --- Network connectivity ---
-for netlabel_url in github=https://github.com galaxy=https://galaxy.ansible.com registry=https://registry.redhat.io; do
+net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
+[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if command -v curl &>/dev/null; then
     if curl -sSL --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
@@ -156,6 +194,7 @@ for netlabel_url in github=https://github.com galaxy=https://galaxy.ansible.com 
 done
 
 # --- fapolicyd detection (Linux only) ---
+FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" != "darwin" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
     tmpscript=$(mktemp /tmp/preflight-fap-XXXXXX.sh)
@@ -163,12 +202,24 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
     if "$tmpscript" &>/dev/null; then
       record "fapolicyd" "warn" "active but /tmp execution allowed"
     else
+      FAPOLICYD_BLOCKING=true
       record "fapolicyd" "warn" "active and blocking /tmp execution — mitigated by pipelining=true in ansible.cfg"
     fi
     rm -f "$tmpscript"
   else
     record "fapolicyd" "pass" "not active"
   fi
+fi
+
+# --- Container tier derivation ---
+if [[ "$IS_CSB" == true ]]; then
+  if [[ "$FAPOLICYD_BLOCKING" == true ]]; then
+    record "container_tier" "warn" "container — fapolicyd enforcing: run 'make container' for dev tools; 'make all' will be restricted"
+  else
+    record "container_tier" "warn" "hybrid — run 'make all' for host setup, then 'make container' for dev tools"
+  fi
+else
+  record "container_tier" "pass" "host-only — run 'make all' for full provisioning"
 fi
 
 # --- Transcrypt (for notes repo) ---

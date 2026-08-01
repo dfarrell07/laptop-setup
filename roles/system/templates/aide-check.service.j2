@@ -2,6 +2,7 @@
 [Unit]
 Description=AIDE file integrity check
 ConditionPathExists=/var/lib/aide/aide.db.gz
+OnFailure=aide-notify@%n.service
 
 [Service]
 Type=oneshot

@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Security kernel parameters persisted for new kernel installs.
+# kernel-install reads this file when creating BLS entries for new kernels.
+# grubby --update-kernel=ALL patches only existing entries; this file ensures
+# new kernels from 'dnf update kernel' inherit the same hardening params.
+{% set params = [] %}
+{% if system_kernel_lockdown | default('') | length > 0 %}
+{% set _ = params.append('lockdown=' ~ system_kernel_lockdown) %}
+{% endif %}
+{% set _ = params.append('vsyscall=none') %}
+{% set _ = params.append('init_on_free=1') %}
+{% set _ = params.append('page_alloc.shuffle=1') %}
+{% if ansible_processor | join(' ') | lower is search('amd') %}
+{% set _ = params.append('amd_iommu=on iommu=pt') %}
+{% endif %}
+{{ params | join(' ') }}

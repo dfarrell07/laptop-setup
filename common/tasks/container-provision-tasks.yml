@@ -9,6 +9,8 @@
     name: "{{ distrobox_packages }}"
     state: present
   become: true  # distrobox containers have passwordless sudo; without this dnf5 refuses non-root install
+  failed_when: false
+  register: container_dnf_result
 
 # --- Binary downloads ---
 - name: Create /usr/local/bin if absent
@@ -33,14 +35,23 @@
       ansible.builtin.uri:
         url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ distrobox_oc_version }}/sha256sum.txt"
         return_content: true
+        timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
       register: container_oc_checksums
+      retries: "{{ distrobox_oc_fetch_retries | default(3) }}"
+      delay: "{{ distrobox_oc_fetch_delay | default(10) }}"
+      until: container_oc_checksums.status == 200
 
     - name: Extract oc tarball checksum
       ansible.builtin.set_fact:
         container_oc_sha256: >-
           {{ container_oc_checksums.content |
              regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-             '\1', multiline=True) | first }}
+             '\1', multiline=True) | default([]) | first | default('') }}
+
+    - name: Assert oc SHA256 was found
+      ansible.builtin.assert:
+        that: container_oc_sha256 | length == 64
+        fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file"
 
     - name: Download OpenShift client tarball
       ansible.builtin.get_url:
@@ -48,6 +59,11 @@
         dest: /tmp/openshift-client-linux.tar.gz
         checksum: "sha256:{{ container_oc_sha256 }}"
         mode: "0644"
+        timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
+      register: container_oc_download
+      retries: "{{ distrobox_oc_fetch_retries | default(3) }}"
+      delay: "{{ distrobox_oc_fetch_delay | default(10) }}"
+      until: container_oc_download is succeeded
 
     - name: Extract oc and kubectl
       ansible.builtin.unarchive:
@@ -70,6 +86,18 @@
         path: /tmp/openshift-client-linux.tar.gz
         state: absent
 
+  rescue:
+    - name: Warn that oc + kubectl download failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Failed to download oc/kubectl from the OpenShift mirror
+          (network unreachable or mirror unavailable inside the container).
+          Play 3 continues — oc will not be available until the next provision run.
+
+    - name: Record that oc was not installed
+      ansible.builtin.set_fact:
+        container_oc_installed: false
+
 # --- Go tools (not in Fedora repos) ---
 - name: Install golangci-lint via go install
   ansible.builtin.command:
@@ -79,6 +107,7 @@
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
+  failed_when: false
 
 # --- Host-command delegation ---
 - name: Check for distrobox-host-exec
@@ -120,7 +149,8 @@
     cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
   loop: [oc, kubectl]
   changed_when: false
-  when: container_host_exec.stat.exists
+  failed_when: false
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
 
 # --- Verify ---
 - name: Confirm Python works
@@ -132,7 +162,7 @@
   ansible.builtin.stat:
     path: "{{ ansible_env.HOME }}/.local/bin/oc"
   register: container_oc_export_stat
-  when: container_host_exec.stat.exists
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
 
 - name: Assert oc host wrapper exists
   ansible.builtin.assert:
@@ -140,7 +170,7 @@
     fail_msg: >-
       oc was not exported to {{ ansible_env.HOME }}/.local/bin —
       distrobox-export may have failed or the path is not writable.
-  when: container_host_exec.stat.exists
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
 
 - name: Confirm oc is available (container side)
   ansible.builtin.command:
@@ -156,11 +186,14 @@
   changed_when: false
   failed_when: false
 
+# yamllint disable rule:line-length
 - name: Provisioning summary
   ansible.builtin.debug:
     msg: |
       === Container Provisioning Summary ===
+      packages     : {{ 'OK' if container_dnf_result.rc == 0 else 'FAILED (rc=' + (container_dnf_result.rc | string) + ')' }}
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
-      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else 'MISSING' }}
+      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING') }}
       Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
       ======================================
+# yamllint enable rule:line-length

@@ -1,0 +1,103 @@
+---
+# molecule/shared/verify-smoke.yml
+# Runs scripts/smoke-test.sh --user-only on the provisioned molecule host so
+# that smoke checks and inline verify assertions share CI coverage.
+# --user-only skips root-requiring checks that container scenarios cannot satisfy.
+# Include from each scenario's verify.yml after verify-common.yml.
+
+- name: Run smoke-test.sh --user-only
+  ansible.builtin.script:
+    cmd: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/scripts/smoke-test.sh --json --user-only"
+  environment:
+    MOLECULE_PROJECT_DIRECTORY: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  register: smoke_result
+  changed_when: false
+  failed_when: false
+
+- name: Assert smoke-test.sh produced output
+  ansible.builtin.assert:
+    that: smoke_result.stdout | length > 0
+    fail_msg: 'smoke-test.sh produced no output (rc={{ smoke_result.rc }}, stderr={{ smoke_result.stderr }})'
+
+- name: Show smoke-test.sh warns and results
+  ansible.builtin.debug:
+    msg: >-
+      warns={{ smoke_result.stdout | from_json | json_query('warns') }}
+      results={{ smoke_result.stdout | from_json | json_query("results[?status!='PASS']") }}
+  when: smoke_result.stdout | length > 0
+
+- name: Assert smoke-test.sh --user-only passed
+  ansible.builtin.assert:
+    that: smoke_result.rc == 0
+    fail_msg: >-
+      smoke-test.sh exited {{ smoke_result.rc }}:
+      {{ smoke_result.stdout | from_json | json_query("results[?status=='FAIL']") | to_nice_json }}
+  when: smoke_result.stdout | length > 0
+
+# --- USBGuard inline assertions ---
+# Gated on package presence so these fire in VM/bare-metal scenarios where the
+# system role installs usbguard, and are skipped in container scenarios where
+# the system role is not included in converge.
+- name: Check usbguard package presence (shared)
+  ansible.builtin.command: rpm -q usbguard  # noqa: command-instead-of-module
+  register: verify_usbguard_pkg_shared
+  changed_when: false
+  failed_when: false
+  when: ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+
+- name: Assert usbguard package is installed
+  ansible.builtin.assert:
+    that: verify_usbguard_pkg_shared.rc == 0
+    fail_msg: "usbguard package not installed — system role not exercised or package regression"
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - usbguard_expected | default(false)
+
+- name: Stat /etc/usbguard/rules.conf (shared)
+  ansible.builtin.stat:
+    path: /etc/usbguard/rules.conf
+  register: verify_usbguard_rules_shared
+  become: true
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
+- name: Assert /etc/usbguard/rules.conf exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - verify_usbguard_rules_shared.stat.exists
+      - verify_usbguard_rules_shared.stat.mode == '0600'
+    fail_msg: "/etc/usbguard/rules.conf missing or wrong permissions (expected 0600)"
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
+- name: Check ImplicitPolicyTarget=block in usbguard-daemon.conf (shared)
+  ansible.builtin.command: grep -q 'ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
+  changed_when: false
+  become: true
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
+- name: Check usbguard.service is enabled (active skipped — systemd mocked in containers)
+  ansible.builtin.command: systemctl is-enabled usbguard.service  # noqa: command-instead-of-module
+  register: verify_usbguard_svc_shared
+  changed_when: false
+  failed_when: false
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
+- name: Assert usbguard.service is enabled
+  ansible.builtin.assert:
+    that: verify_usbguard_svc_shared.rc == 0
+    fail_msg: "usbguard.service is not enabled"
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0

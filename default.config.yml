@@ -3,10 +3,19 @@
 # Uses Geerling's config override pattern:
 #   default.config.yml (this file, checked in)
 #   config.yml (gitignored, per-machine overrides)
+#
+# WARNING: Do NOT define vault_* prefixed variables in config.yml.
+# Those names are reserved for group_vars/all/vault.yml. config.yml is
+# loaded via include_vars (precedence level 17) which outranks group_vars
+# (level 4-5), so any vault_* key here would shadow the vault-encrypted
+# value silently, leaking secrets in plaintext. A runtime assert in
+# site.yml enforces this — it will fail the play if any vault_* key
+# appears in config.yml.
 
 # Valid values: work, personal
 profile: work
-ssh_port: 722
+ssh_port: 722  # mirrored in roles/system/defaults/main.yml as a defensive fallback for standalone role invocation
+desktop_environment: auto  # CHANGE TO: sway, i3, or gnome on first provision; auto fails before any WM is installed
 
 # ============================================================
 # USER IDENTITY — override ALL of these in config.yml
@@ -17,42 +26,86 @@ ssh_port: 722
 # "Daniel Farrell", aliases pointing to dfarrell07's repos, and a
 # notes clone that fails (private repo).
 #
-# Add these lines to config.yml (no leading #) with your real values:
-#
-#   dotfiles_github_user: "your-github-username"
-#   dotfiles_user_name: "Your Name"
-#   dotfiles_user_email_work: "you@work.example.com"
-#   dotfiles_user_email_personal: "you@personal.example.com"
+dotfiles_github_user: 'CHANGE_ME'
+dotfiles_user_name: 'CHANGE_ME'
+dotfiles_user_email_work: 'CHANGE_ME'
+dotfiles_user_email_personal: 'CHANGE_ME'
 
 # Feature toggles (naming: install_<feature>)
-install_docker: false
+install_docker: false  # true = leave docker.socket unmasked; does NOT install docker-ce (use repo_docker_ce)
 install_vpn: true
 install_virtualization: true
 
 # Additional toggles available via role defaults (override in config.yml):
 #   system_install_usbguard: true      (roles/system/defaults)
-#   system_aide_enabled: true          (roles/system/defaults)
+#   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   packages_install_binaries: true    (roles/packages/defaults)
-#   desktop_deploy_chrome_policies: true (roles/desktop/defaults)
-#   desktop_environment: auto          (roles/desktop/defaults) — set to sway/i3/gnome explicitly on first provision;
-#                                       auto-detection reads the running session, which fails before the WM is installed
+#   desktop_deploy_chrome_policies: false (roles/desktop/defaults) — set true to deploy managed Chrome policy JSON
 #   system_timezone: America/New_York  (roles/system/defaults) — set your local timezone
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
+#   system_disable_printing: true      (roles/system/defaults) — masks cups.socket/cups.path; set false if printing needed
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
-#   system_tlp_enabled: true           (roles/system/defaults) — install/enable TLP; disable on non-ThinkPad
+#   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (roles/system/defaults) — 0=disabled (CIS), 176=emergency recovery
+#   system_tmout: 600                  (roles/system/defaults) — session inactivity timeout seconds (CIS<=900); 0=disabled
+#   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS), 1=accept Router Advertisements for IPv6
+#   system_bpf_jit_harden: 2           (roles/system/defaults) — BPF JIT hardening (2=all incl root,
+#                                        1=unprivileged only; use 1 for bpfman JIT debugging with bpftool)
+#   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
+#                                        (default: kernel-blocked, no override via USBGuard)
+#   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
+#                                        (VS Code Remote needs >=10)
+#   system_ssh_allow_tcp_forwarding: "no"   (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
+#                                            'remote' for ssh -R, 'yes' for both
+#   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
+#   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
+#   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
+#   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
+#   system_dns_fallback: "9.9.9.9 8.8.8.8"  (roles/system/defaults) — fallback DNS when Cloudflare unreachable
+#   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec (set false if RPM scriptlets need exec)
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
 #   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  # P16v Gen 1 AMD example
+#   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
+#   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
+#   desktop_terminal: alacritty          (roles/desktop/defaults) — terminal emulator (alacritty/kitty/etc)
+#   desktop_alacritty_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — Alacritty font family
+#   desktop_alacritty_font_size: 12.0   (roles/desktop/defaults) — Alacritty font size
+#   desktop_wm_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — WM status-bar font
 #   system_lid_switch: suspend         (roles/system/defaults) — action on lid close (suspend/lock/ignore)
 #   system_lid_switch_external: lock   (roles/system/defaults) — lid close action when external monitor connected
 #   system_lid_switch_docked: ignore   (roles/system/defaults) — lid close action when docked (ignore keeps display on)
+#   git_repos_pull: false              (roles/git_repos/defaults) — clone-once by default;
+#     set true to fetch upstream with --ff-only (done automatically by `make update`)
+#   git_repos_work_categories: [personal, bpfman, ...]     (roles/git_repos/defaults) — repo categories cloned on work profile
+#   git_repos_personal_categories: [personal, ...]         (roles/git_repos/defaults) — repo categories cloned on personal profile
+#   notes_enabled: true                (roles/notes/defaults) — set false to skip the notes role
+#     entirely (required for new users without access to the private notes repo)
+#   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
+#     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
+#   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
+#     (test-queue-poller.sh systemd user service)
+#   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
+#     that allow external triggering of Claude sessions
+#   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
+#     container creation and Play 3 entirely (Linux users who do not want a dev container)
+#   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:
+#   dotfiles_oh_my_zsh_theme: gallois     — oh-my-zsh theme name
+#   dotfiles_oh_my_zsh_plugins: [git, python, history-substring-search]  — oh-my-zsh plugin list
+#   dotfiles_tmux_prefix: "C-a"           — tmux prefix key (e.g. "C-b" for default)
+#   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
+#   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
+#   dotfiles_aws_profile: aws-acm-subm   — default AWS CLI profile name
+#   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
+#     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
+#     packages_kubebuilder_version, packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
+#     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true
@@ -65,9 +118,17 @@ repo_acli: true
 repo_docker_ce: false  # false: prefer rootless Podman (ships with Fedora); Docker CE conflicts with Podman
 repo_mullvad: true
 repo_redhat: true
+# Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
+# Set these in config.yml to activate the acli and redhat-internal repo tasks:
+#   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror
+#   repos_dnf_redhat_baseurl: "https://..."      # Red Hat internal RPM repo
+#   repos_dnf_redhat_gpgkey: "https://..."       # GPG key URL for the above repo
+# Without them the tasks are silently skipped (guarded by `is defined`).
 
 # Container settings
 container_name: fedora-dev
+# container_image and container_release track the host Fedora major version.
+# Bump both manually when upgrading to a new Fedora release (e.g. 44 → 45).
 container_image: "registry.fedoraproject.org/fedora-toolbox:44"
 container_distro: fedora
 container_release: "44"

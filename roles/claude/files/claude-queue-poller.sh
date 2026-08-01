@@ -168,6 +168,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
     log "Issue #$ISSUE_NUM: subshell failed"
+    fail_issue "$ISSUE_NUM" "Internal error: git-push or PR creation failed. Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
     rm -f "$TMPFILE"
   }
 done

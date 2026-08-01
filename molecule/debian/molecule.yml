@@ -4,9 +4,9 @@ driver:
 
 platforms:
   - name: debian-test
-    # To update digest: podman pull docker.io/geerlingguy/docker-debian12-ansible:latest
-    # then: podman inspect --format='{{.Digest}}' docker.io/geerlingguy/docker-debian12-ansible:latest
-    image: docker.io/geerlingguy/docker-debian12-ansible@sha256:8b793fa389d669952cc95b5d455b4d2c7fea0a5fc911d5e5497c85c79418cc89
+    # To update digest: podman pull docker.io/geerlingguy/docker-debian13-ansible:latest
+    # then: podman inspect --format='{{.Digest}}' docker.io/geerlingguy/docker-debian13-ansible:latest
+    image: docker.io/geerlingguy/docker-debian13-ansible@sha256:32aea259e42294f7fffbb29ce401692f56ae75917f15793bbe486e403ce41152
     pre_build_image: true
     privileged: true
     command: /usr/sbin/init
@@ -22,6 +22,8 @@ provisioner:
     defaults:
       vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      gathering: smart
 
 verifier:
   name: ansible

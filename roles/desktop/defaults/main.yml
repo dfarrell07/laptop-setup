@@ -1,8 +1,10 @@
 ---
 desktop_environment: auto  # auto, sway, i3, gnome
 
+desktop_alacritty_font_family: DejaVu Sans Mono
 desktop_alacritty_font_size: 12.0
-desktop_i3_terminal: alacritty
+desktop_wm_font_family: DejaVu Sans Mono
+desktop_terminal: alacritty
 
 desktop_sway_hidpi_scale: "1.0"  # override in config.yml for HiDPI (e.g. 1.5 for 2560x1600)
 desktop_sway_output: "eDP-1"  # built-in display identifier (AMD ThinkPad)
@@ -10,6 +12,15 @@ desktop_sway_output: "eDP-1"  # built-in display identifier (AMD ThinkPad)
 # TrackPoint scroll device identifier (intentionally undefined — no TrackPoint config
 # applied unless set). Find with: swaymsg -t get_inputs | grep -A2 TrackPoint
 # Example: desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"
+desktop_sway_trackpoint_accel_profile: flat  # flat avoids libinput adaptive curve that makes TrackPoint erratic
+desktop_sway_trackpoint_pointer_accel: "-0.5"  # negative = slower; tune between -0.4 and -0.6 for ThinkPads
+
+# TrackPoint libinput config for X11/i3 (/etc/X11/xorg.conf.d/90-trackpoint.conf).
+# Intentionally undefined — no xorg.conf.d file written unless set.
+# Find device name with: xinput list | grep -i trackpoint
+# Example: desktop_i3_trackpoint_id: "TPPS/2 IBM TrackPoint"
+desktop_i3_trackpoint_accel_profile: flat
+desktop_i3_trackpoint_pointer_accel: "-0.5"
 
 desktop_sway_packages:
   - sway
@@ -50,6 +61,11 @@ desktop_i3_packages:
   - xautolock
   - xset          # X11 DPMS + keyboard repeat rate (used in i3 config autostart)
 
+desktop_gnome_packages:
+  - gnome-tweaks
+  - gnome-extensions-app
+  - dconf-editor
+
 desktop_common_packages:
   - alacritty
   - gvim
@@ -57,7 +73,49 @@ desktop_common_packages:
   - terminus-fonts
   - gnome-keyring
 
-desktop_deploy_chrome_policies: true
+desktop_apt_packages:
+  - alacritty
+  - vim-gtk3
+  - fonts-dejavu-core
+  - fonts-terminus
+  - gnome-keyring
+
+desktop_deploy_chrome_policies: false
+
+# Alacritty terminal color scheme — Dracula defaults; override any key in config.yml
+desktop_alacritty_color_bg: "#282a36"
+desktop_alacritty_color_fg: "#f8f8f2"
+desktop_alacritty_color_normal_black: "#21222c"
+desktop_alacritty_color_normal_red: "#ff5555"
+desktop_alacritty_color_normal_green: "#50fa7b"
+desktop_alacritty_color_normal_yellow: "#f1fa8c"
+desktop_alacritty_color_normal_blue: "#bd93f9"
+desktop_alacritty_color_normal_magenta: "#ff79c6"
+desktop_alacritty_color_normal_cyan: "#8be9fd"
+desktop_alacritty_color_normal_white: "#f8f8f2"
+desktop_alacritty_color_bright_black: "#6272a4"
+desktop_alacritty_color_bright_red: "#ff6e6e"
+desktop_alacritty_color_bright_green: "#69ff94"
+desktop_alacritty_color_bright_yellow: "#ffffa5"
+desktop_alacritty_color_bright_blue: "#d6acff"
+desktop_alacritty_color_bright_magenta: "#ff92df"
+desktop_alacritty_color_bright_cyan: "#a4ffff"
+desktop_alacritty_color_bright_white: "#ffffff"
+
+# Bar theme colors — Catppuccin Mocha defaults; override any key in config.yml
+desktop_bar_bg: "#1e1e2e"
+desktop_bar_fg: "#cdd6f4"
+desktop_bar_separator: "#585b70"
+desktop_bar_focused_ws_bg: "#89b4fa"
+desktop_bar_focused_ws_text: "#1e1e2e"
+desktop_bar_active_ws_bg: "#313244"
+desktop_bar_active_ws_text: "#cdd6f4"
+desktop_bar_inactive_ws_bg: "#1e1e2e"
+desktop_bar_inactive_ws_text: "#6c7086"
+desktop_bar_urgent_ws_bg: "#f38ba8"
+desktop_bar_urgent_ws_text: "#1e1e2e"
+desktop_bar_binding_mode_bg: "#cba6f7"
+desktop_bar_binding_mode_text: "#1e1e2e"
 
 desktop_macos_defaults:
   - domain: NSGlobalDomain

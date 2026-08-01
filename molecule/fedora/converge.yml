@@ -1,4 +1,21 @@
 ---
+- name: Converge — System setup (Fedora)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+  roles:
+    - role: repos_dnf
+      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+
 - name: Converge (Fedora)
   hosts: all
   gather_facts: true
@@ -9,7 +26,7 @@
 
     - name: Override for container testing
       ansible.builtin.set_fact:
-        profile: personal
+        profile: work
         packages_security: []
         packages_containers: []
         packages_networking: []
@@ -18,6 +35,21 @@
         # Fake sk-ssh-ed25519 key so the ssh role deploys allowed_signers in CI
         # (vault is empty in CI so ssh_git_signing_pubkey defaults to '' without this)
         ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
+
+    # Create a minimal mock notes repo so the notes role skips cloning (private
+    # repo, no SSH key in CI) but still runs the chmod tasks that set notes/
+    # to 0700 and notes/.git/config to 0600 — which the verify assertions check.
+    - name: Create mock notes .git directory for CI permission testing
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/notes/.git"
+        state: directory
+        mode: "0755"
+
+    - name: Create mock notes .git/config for CI permission testing
+      ansible.builtin.copy:
+        content: "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"  # noqa: no-tabs
+        dest: "{{ ansible_user_dir }}/notes/.git/config"
+        mode: "0644"
 
   roles:
     - role: common
@@ -35,6 +67,21 @@
         desktop_common_packages: []
         desktop_sway_packages: []
         desktop_i3_packages: []
+        desktop_deploy_chrome_policies: true
+    - role: desktop
+      vars:
+        desktop_environment: i3
+        desktop_common_packages: []
+        desktop_sway_packages: []
+        desktop_i3_packages: []
+        desktop_deploy_chrome_policies: true
     - role: claude
       vars:
         claude_install_method: skip
+        claude_queue_enabled: true
+        claude_queue_repo: "dfarrell07/laptop-setup"
+
+  post_tasks:
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
+      tags: [always]

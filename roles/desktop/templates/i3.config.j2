@@ -1,9 +1,9 @@
 # {{ ansible_managed }}
 
 set $mod Mod4
-set $term {{ desktop_i3_terminal }}
+set $term {{ desktop_terminal }}
 
-font pango:DejaVu Sans Mono 10
+font pango:{{ desktop_wm_font_family }} 10
 
 # Autostart
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
@@ -118,14 +118,14 @@ bar {
     status_command i3status --config {{ ansible_user_dir }}/.config/i3status/config
     position top
     colors {
-        background #282a36
-        statusline #f8f8f2
-        separator #6272a4
-        # Workspace button colors (Dracula theme: border / background / text)
-        focused_workspace  #6272a4 #6272a4 #f8f8f2
-        active_workspace   #44475a #44475a #f8f8f2
-        inactive_workspace #282a36 #282a36 #6272a4
-        urgent_workspace   #ff5555 #ff5555 #f8f8f2
-        binding_mode       #ff79c6 #ff79c6 #282a36
+        background {{ desktop_bar_bg }}
+        statusline {{ desktop_bar_fg }}
+        separator {{ desktop_bar_separator }}
+        # Workspace button colors (border / background / text)
+        focused_workspace  {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_text }}
+        active_workspace   {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_text }}
+        inactive_workspace {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_text }}
+        urgent_workspace   {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_text }}
+        binding_mode       {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_text }}
     }
 }

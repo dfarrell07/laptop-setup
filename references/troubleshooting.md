@@ -4,6 +4,26 @@ Known failure patterns organized by Ansible role. Each entry includes the sympto
 
 ---
 
+## Post-Provisioning Checklist
+
+Steps required after every `make all`. Complete these in order before the machine is considered provisioned.
+
+1. **Verify provisioning succeeded:** `make smoke-test` — review any WARN/FAIL entries before proceeding.
+
+2. **Authenticate Tailscale:** `tailscale up` opens a browser window to join the tailnet. Required on every new node. For headless machines use `tailscale up --auth-key=tskey-auth-...`. See [Tailscale Not Authenticated After Provisioning](#system-tailscale-not-authenticated-after-provisioning).
+
+3. **Log out and log back in** — group membership changes (libvirt, kvm, podman groups) take effect only on new login sessions. Use `newgrp libvirt` for an in-session reload if a full logout is inconvenient. See [Group Membership Changes Require Logout](#make-test-vm-group-membership-changes-require-logout).
+
+4. **CSB/hybrid machines only: `make container`** — provisions the Distrobox dev container with dev tools that cannot run on the hardened host. Required before OVN-K, bpfman, or Konflux workflows. See [distrobox: fapolicyd Blocks Container Startup](#distrobox-fapolicyd-blocks-container-startup).
+
+5. **If notes are enabled: `gh auth login` then `make notes`** — the private notes repo requires GitHub authentication for the initial clone. Decryption requires `vault_notes_transcrypt_password` populated in vault. See [notes: Transcrypt Clone/Decrypt Failures](#notes-transcrypt-clonedecrypt-failures).
+
+6. **If using YubiKey for vault or SSH signing: verify pcscd** — on a fresh machine pcscd may not be running. Check with `systemctl status pcscd`; enable with `sudo systemctl enable --now pcscd`. See [YubiKey Not Detected by pcscd / FIDO2](#packages-yubikey-not-detected-by-pcscd--fido2).
+
+7. **Re-run `make smoke-test`** — confirms Tailscale WARN clears and no new failures appeared after login/container steps.
+
+---
+
 ## repos_dnf: Third-Party Repos Blocked on CSB
 
 **Symptom:**
@@ -227,7 +247,7 @@ GNOME Keyring (on GNOME < 46 / RHEL 9) or its replacement `gcr-ssh-agent` (on GN
 All steps are handled automatically by the playbook — no manual intervention is required after `make dotfiles` or `make all`:
 
 - `roles/dotfiles`: deploys `~/.config/autostart/gnome-keyring-ssh.desktop` with `Hidden=true` (suppresses GNOME Keyring SSH component on GNOME < 46 / RHEL 9)
-- `roles/system`: masks `gcr-ssh-agent.socket` via systemd user scope (prevents socket-activation on GNOME 46+ / Fedora 42 / RHEL 10)
+- `roles/dotfiles`: masks `gcr-ssh-agent.socket` and `gcr-ssh-agent.service` via systemd user scope (prevents socket-activation on GNOME 50+ / Fedora 42 / RHEL 10)
 - `roles/dotfiles`: deploys `~/.config/systemd/user/ssh-agent.service`, enables and starts it, and writes `~/.config/environment.d/ssh-agent.conf`
 
 If the issue persists after re-provisioning, log out and back in — `environment.d` changes require a fresh login session. Verify the correct socket is set:
@@ -272,6 +292,8 @@ Requirements for pipelining:
 - The target must have Python available (it does -- RHEL ships Python).
 
 **CSB IT ticket:** No. `pipelining = true` is a client-side Ansible configuration change.
+
+**Note:** This project's `ansible.cfg` already includes `pipelining = true`. If you see this error, verify the ansible.cfg is present and being picked up (run from the repo root) — do not copy it to a different directory.
 
 ---
 
@@ -379,6 +401,24 @@ The sshd hardening drop-in restricts `AllowUsers` to the current Ansible user. I
 
 ---
 
+## notes: Clone Fails with Permission Denied (Not the dfarrell07 Account)
+
+**Symptom:** Notes role fails with `Permission denied (publickey)` or `Repository not found` cloning `git@github.com:dfarrell07/notes`.
+
+**Cause:** The notes repo (`dfarrell07/notes`) is private. If you are not `dfarrell07`, your SSH keys have no access to it.
+
+**Fix:** Add to `config.yml`:
+
+```yaml
+notes_enabled: false
+```
+
+Then re-run `make notes` (or `make all`). The notes role will skip entirely.
+
+If you want your own private notes repo, set `dotfiles_notes_repo` to your own repository in `config.yml` and ensure transcrypt is initialized.
+
+---
+
 ## notes: Transcrypt Clone/Decrypt Failures
 
 **Symptom:**
@@ -448,6 +488,36 @@ The playbook installs `yubikey-manager`, `ykpers`, and `libfido2` via the `packa
 
 ---
 
+## system: USB Drives Not Mounting After Provisioning
+
+**Symptom:**
+
+USB drives are not recognized. `lsblk` shows nothing when a USB drive is plugged in. `dmesg` may show `usb_storage: module is disabled`.
+
+**Root Cause:**
+
+The `system` role blacklists `usb_storage` and `uas` kernel modules at the `/bin/false` level via `/etc/modprobe.d/hardening.conf` when `system_disable_usb_storage: true` (the default). This is a kernel-level block — USBGuard policies cannot override it. Any USB mass-storage device, even one in the USBGuard whitelist, will not mount.
+
+**Fix:**
+
+Set in `config.yml` (gitignored, per-machine):
+
+```yaml
+system_disable_usb_storage: false
+```
+
+Then re-run `make system` to regenerate `/etc/modprobe.d/hardening.conf`. The modprobe change takes effect for new device connections immediately; existing plugged devices may need to be re-plugged. If the initramfs includes usb_storage (check with `lsinitrd | grep usb_storage`), run `sudo dracut -f` to regenerate.
+
+**Without re-provisioning (temporary):**
+
+```bash
+sudo modprobe usb_storage && sudo modprobe uas
+```
+
+This re-enables USB storage for the current boot session only. It reverts at the next reboot unless you re-provision with `system_disable_usb_storage: false`.
+
+---
+
 ## system: Tailscale Not Authenticated After Provisioning
 
 **Symptom:**
@@ -506,7 +576,7 @@ cat ~/.config/environment.d/containers.conf
 
 # Log out and back in to pick up the session-level environment.
 # Or source the vars manually in your current terminal:
-export DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman
 
 # Verify the Podman socket is active:
@@ -518,12 +588,39 @@ kind create cluster --config path/to/kind-config.yaml
 
 **CSB IT ticket:** No. This is a user-session environment variable issue resolved by re-login.
 
+---
+
+## make test-vm: Group Membership Changes Require Logout
+
+**Symptom:**
+`make test-vm` fails with a permission error immediately after `make all` on an existing session (e.g., libvirt socket access denied or `virsh` returns permission errors).
+
+**Cause:**
+Group membership changes — such as adding the current user to the `libvirt` group — take effect only in new login sessions. The running shell inherited its group list at login and does not pick up additions made mid-session by the playbook.
+
+**Fix:**
+Use `newgrp libvirt` for an immediate in-session reload without logging out:
+```bash
+newgrp libvirt
+make test-vm
+```
+Or log out and back in, then re-run `make test-vm`.
+
+Verify your active groups after either approach:
+```bash
+groups | grep libvirt
+```
+
+**CSB IT ticket:** No. Group membership is managed by the playbook and requires no IT intervention.
+
+---
+
 ## Makefile: ERROR when running as root
 
 **Symptom:**
 ```
 ERROR: Do not run as root. Use -K for privilege escalation (make all).
-make: *** [Makefile:24: guard-not-root] Error 1
+make: *** [Makefile:<N>: guard-not-root] Error 1
 ```
 
 **Cause:**
@@ -591,3 +688,220 @@ sysctl net.netfilter.nf_conntrack_max
 If the value is lower, the `nf_conntrack` module may not have been loaded when the sysctl was applied. The playbook explicitly loads `nf_conntrack` via `modprobe` before sysctl; re-running `make system` should fix it.
 
 **CSB IT ticket:** No. Sysctl changes are applied by the playbook with sudo.
+
+---
+
+## bpfman-socket: smoke-test check requires manual host verification
+
+**Symptom:** `make smoke-test` reports `bpfman-socket: FAIL` or `bpfman-socket: WARN`.
+
+**Context:** The `bpfman-socket` check in `scripts/smoke-test.sh` is host-only — molecule runs in containers without a live systemd, so this check is not covered by any molecule scenario. The molecule Fedora verify asserts `bpfman.socket` is enabled only when the binary is present; in CI the `packages_networking` list is emptied so the assertion is skipped. This is expected: the check exists to catch regressions on real hosts.
+
+**Manual test (after `make all` on a Fedora host with bpfman installed):**
+```bash
+systemctl is-enabled bpfman.socket   # expected: enabled
+systemctl is-active bpfman.socket    # may be inactive until first client connect — that is OK
+bpfman list                          # triggers socket activation; should return without error
+```
+
+**Fix:** If `bpfman.socket` is not enabled, re-run the playbook (`make all`) to re-trigger the `Enable bpfman socket` task in `roles/system/tasks/main.yml`. The task has `failed_when: false` to allow headless/container provisioning where systemd is absent.
+
+**CSB IT ticket:** No. Socket enable is a user-space systemd unit requiring only sudo.
+
+---
+
+## system: Printing Not Working After Provisioning
+
+**Symptom:** Print dialogs fail to open, CUPS is not running, `lpq` returns an error.
+
+**Root Cause:** The `system` role masks `cups.service`, `cups.socket`, and `cups.path` when `system_disable_printing: true` (the default). Masking prevents socket activation — even Flatpak print dialogs that trigger CUPS via socket will fail silently.
+
+**Fix:** Set in `config.yml`:
+
+```yaml
+system_disable_printing: false
+```
+
+Then re-run `make system`. This unmasks CUPS and restores printing.
+
+**Note:** `cups-browsed` remains masked regardless (it has CVE-2024-47176 history and no legitimate use on a workstation). Standard printing via `cups.socket` works without it.
+
+---
+
+## system: Shell Sessions Terminate After 10 Minutes of Inactivity
+
+**Symptom:** SSH sessions or terminal emulator shells die after 10 minutes idle. Interactive prompts close unexpectedly. Long-running `ansible-playbook` runs are killed by the shell.
+
+**Root Cause:** The `system` role deploys `TMOUT=600` (600 seconds = 10 minutes) to `/etc/profile.d/tmout.sh` (bash) and `/etc/zshrc` (zsh). This causes the shell to auto-logout when the interactive prompt is idle. Background processes in the shell's job control survive, but the shell itself exits when `TMOUT` fires at the next prompt.
+
+**Fix (permanent):** Set in `config.yml`:
+
+```yaml
+system_tmout: 0  # 0 = disabled
+```
+
+Then re-run `make system`. Valid values are 0 (disabled) or 1–900 (seconds, CIS max 900).
+
+**Fix (current session):** Open a subshell and unset TMOUT: `bash --norc` or start a `tmux` session (tmux panes are independent processes and are not killed by the parent shell's TMOUT).
+
+---
+
+## system: VS Code Remote SSH Port Forwarding Fails
+
+**Symptom:** The VS Code Remote SSH "Ports" tab shows no ports, or port forwarding (`ssh -L`) fails with `channel 3: open failed: administratively prohibited`.
+
+**Root Cause:** The sshd drop-in sets `AllowTcpForwarding no` (default). This prevents both local (`-L`) and remote (`-R`) SSH port forwarding into this machine. The core VS Code Remote SSH connection still works, but the port-forwarding feature does not.
+
+**Fix:** Set in `config.yml`:
+
+```yaml
+system_ssh_allow_tcp_forwarding: "local"  # allows -L (VS Code port panel); use 'yes' for -R too
+```
+
+Then re-run `make system`. Valid values: `no` (default, secure), `local` (outbound only, VS Code), `remote` (`-R` tunnels), `yes` (all forwarding).
+
+---
+
+## system: SSH Connection Refused (Port Changed to 722)
+
+**Symptom:** `ssh hostname` or `ssh user@machine` returns `Connection refused` immediately. The machine was reachable via SSH before provisioning.
+
+**Root Cause:** The `system` role deploys a drop-in at `/etc/ssh/sshd_config.d/00-hardening.conf` that changes the SSH port from 22 to `{{ ssh_port }}` (default: 722). Port 22 is no longer open. `ssh` clients default to port 22.
+
+**Fix (connect after provisioning):**
+
+```bash
+ssh -p 722 user@hostname
+```
+
+**Fix (add to ~/.ssh/config for convenience):**
+
+```
+Host myserver
+    HostName hostname
+    Port 722
+    User user
+```
+
+**Fix (revert to port 22):** Set in `config.yml`:
+
+```yaml
+ssh_port: 22
+```
+
+Then re-run `make system`. This redeploys the drop-in with `Port 22` and relabels SELinux.
+
+**Note:** The firewall opens port `{{ ssh_port }}` in the drop zone and SELinux labels it `ssh_port_t`. If you change the port, both are updated automatically.
+
+---
+
+## system: DNS Failures or Slow Resolution After Provisioning
+
+**Symptom:** Websites time out, `curl` hangs, `resolvectl query example.com` is slow or fails with `SERVFAIL`. DNS worked before provisioning.
+
+**Root Cause:** The `system` role deploys `/etc/systemd/resolved.conf.d/99-dot.conf` routing all DNS through Cloudflare (1.1.1.1) with DNS-over-TLS (`DNSOverTLS=opportunistic`). On corporate VPNs, restricted hotel/conference networks, or ISPs that block outbound to 1.1.1.1 or port 853, DNS may be slow (TLS negotiation failing, falling back to plain DNS) or broken entirely.
+
+**Diagnosis:**
+
+```bash
+resolvectl status              # shows active DNS servers and DoT status
+resolvectl query example.com   # tests resolution with timing
+resolvectl query --type=A redhat.com  # tests internal hostname on VPN
+```
+
+**Fix (disable DoT):** Set in `config.yml`:
+
+```yaml
+system_dot_mode: "no"   # disable DNS-over-TLS entirely
+```
+
+**Fix (use different DNS servers):** Set in `config.yml`:
+
+```yaml
+system_dns_primary: "192.168.1.1"  # your router or internal DNS
+system_dot_mode: "no"
+```
+
+**Fix (VPN split-DNS issue):** If internal hostnames fail on VPN, check whether the VPN pushes DNS search domains via `resolvectl status`. VPN-pushed specific domains (e.g., `~redhat.com`) win over the `~.` catch-all automatically — if split-DNS is failing, the VPN may not be integrating with systemd-resolved correctly. Run `make system` with `system_dns_domains: ""` to remove the catch-all if needed.
+
+**CSB note:** This resolved config is skipped entirely on CSB hosts (the task has `when: not csb_detected`).
+
+---
+
+## system: Build Fails with "Permission denied" in /var/tmp
+
+**Symptom:** `pip install`, `cargo build`, `dnf install`, or other build tools fail with `Permission denied` or `EPERM` errors when writing to `/var/tmp`. Some RPM post-install scriptlets fail mid-transaction leaving packages half-installed.
+
+**Root Cause:** The `system` role bind-mounts `/var/tmp` to `/tmp` with `noexec,nosuid,nodev` options (CIS 1.1.8). Some tools use `/var/tmp` as a working directory for executable binaries (pip wheel builds, cargo compilation artifacts, some RPM scriptlets). With `noexec`, anything that writes a binary to `/var/tmp` and then tries to execute it will fail.
+
+**Fix (permanent):** Set in `config.yml`:
+
+```yaml
+system_var_tmp_noexec: false
+```
+
+Then re-run `make system`. This stops and disables the var-tmp.mount bind-mount unit.
+
+**Fix (per-session):** Override `TMPDIR` for the specific tool:
+
+```bash
+TMPDIR=/tmp pip install somepackage
+CARGO_TARGET_DIR=/tmp/cargo-build cargo build
+```
+
+**Fix (per dnf transaction):** Most dnf/rpm scriptlet issues can be avoided by ensuring the failing package's scriptlet uses `$RPM_BUILD_ROOT` correctly. Contact the package maintainer if `/var/tmp` usage in scriptlets is required.
+
+---
+
+## system: bpf_jit_harden=2 Causes JIT Constant Blinding (bpfman/eBPF Development)
+
+**Symptom:** `bpftool prog dump jited` shows blinded constants (XOR'd with random values) rather than actual literal values. JIT output differs from an unhardened host, making JIT-level debugging difficult.
+
+**Root Cause:** The `system` role sets `net.core.bpf_jit_harden=2` (CIS/STIG hardening). Value 2 applies constant blinding in the BPF JIT to **all users including root**. The Fedora kernel default is 0 (no blinding). This is more restrictive than needed given that `kernel.unprivileged_bpf_disabled=2` already blocks unprivileged BPF loading entirely.
+
+**Practical impact by operation:**
+- `bpfman load / list / unload / get` — **not affected** — programs load and run correctly
+- `bpftool prog dump jited` — constants are XOR-blinded; harder to read JIT output
+- Comparing JIT output to a default Fedora host — output differs due to blinding
+
+Value 1 restricts blinding to unprivileged users only, which is effectively a no-op here since unprivileged BPF is already disabled.
+
+**Fix:** Set in `config.yml`:
+
+```yaml
+system_bpf_jit_harden: 1   # 1 = unprivileged only (effectively disabled); safe for bpfman JIT debugging
+```
+
+Then re-run `make system`. For a non-persistent change: `sudo sysctl -w net.core.bpf_jit_harden=1`.
+
+**CSB IT ticket:** No. Applied by the playbook with sudo.
+
+## system: SSH Fails to Legacy RHEL 7 / Old Servers After Provisioning
+
+**Symptom:** `ssh user@old-server` fails with `no matching key exchange method found` or `algorithm negotiation failed`. This affects RHEL 7 servers, older network appliances, and any host that only supports SHA-1-based algorithms.
+
+**Root Cause:** The `system` role sets `DEFAULT:NO-SHA1` as the system-wide crypto policy, which removes SHA-1 from all TLS/SSH algorithm negotiations. This is a security improvement (SHA-1 is broken), but RHEL 7 and many legacy systems require SHA-1 key exchange (`diffie-hellman-group14-sha1`) or host key algorithms (`ssh-rsa` with SHA-1).
+
+**Connect to a specific host without changing system policy:**
+
+```bash
+ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 user@legacy-server
+# Or for old host key type:
+ssh -o HostKeyAlgorithms=+ssh-rsa user@legacy-server
+```
+
+**Add to `~/.ssh/config` for a permanent per-host workaround:**
+
+```
+Host *.rhel7.internal
+    KexAlgorithms +diffie-hellman-group14-sha1
+    HostKeyAlgorithms +ssh-rsa
+```
+
+**Revert to a less strict policy system-wide** (not recommended; reduces security posture):
+
+```bash
+sudo update-crypto-policies --set DEFAULT
+```
+
+**CSB IT ticket:** No. Applied by the playbook with sudo.

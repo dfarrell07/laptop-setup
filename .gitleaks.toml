@@ -1,4 +1,5 @@
 [allowlist]
-  paths = [
-    '''scripts/vault-pass-ci\.sh''',
-  ]
+  description = "Suppress dummy CI vault password string in vault-pass-ci.sh"
+  condition = "AND"
+  regexes = ['''ci-dummy-vault-password''']
+  paths = ['''scripts/vault-pass-ci\.sh''']

@@ -1,8 +1,10 @@
 ---
+profile: work  # noqa: var-naming[no-role-prefix] — fallback for standalone invocation
+
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 
-# Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored).
-# When defined, these are used by the acli and redhat-internal repo tasks.
-# repos_dnf_acli_baseurl: ""
-# repos_dnf_redhat_baseurl: ""
-# repos_dnf_redhat_gpgkey: ""
+# Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
+# If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
+# Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard
+# and passes an empty baseurl to yum_repository, causing a cryptic failure.
+# See default.config.yml Additional toggles for the correct override location.

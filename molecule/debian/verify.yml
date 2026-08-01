@@ -8,6 +8,9 @@
     - name: Include common verify assertions
       ansible.builtin.include_tasks: ../shared/verify-common.yml
 
+    - name: Include smoke-test verification
+      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+
     # --- Packages (apt) ---
     - name: Check vim is installed
       ansible.builtin.command: vim --version
@@ -37,6 +40,10 @@
       ansible.builtin.command: rg --version
       changed_when: false
 
+    - name: Check bat is installed (Debian package installs as batcat)
+      ansible.builtin.command: batcat --version
+      changed_when: false
+
     - name: Check fd-find is installed (Debian binary is fdfind, not fd)
       ansible.builtin.command: fdfind --version
       changed_when: false
@@ -47,6 +54,14 @@
 
     - name: Check go is installed
       ansible.builtin.command: go version
+      changed_when: false
+
+    - name: Check direnv is installed
+      ansible.builtin.command: direnv version
+      changed_when: false
+
+    - name: Check zoxide is installed
+      ansible.builtin.command: zoxide --version
       changed_when: false
 
     - name: Check wl-clipboard is installed
@@ -92,15 +107,13 @@
         that: verify_chrome.stat.exists
         fail_msg: "Chrome security policy not deployed"
 
-    # --- Containers ---
-    - name: Verify containers config directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/containers"
-      register: verify_containers_dir
+    - name: Validate Chrome security policy JSON
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
+          assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
+      changed_when: false
 
-    - name: Assert containers config directory exists
-      ansible.builtin.assert:
-        that:
-          - verify_containers_dir.stat.exists
-          - verify_containers_dir.stat.isdir
-        fail_msg: "Containers config directory was not created"
+    # --- Containers ---
+    - name: Include containers.conf assertions
+      ansible.builtin.include_tasks: ../shared/verify-containers.yml

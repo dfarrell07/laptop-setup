@@ -28,6 +28,7 @@
 
 - name: Skip container setup if no tool available
   ansible.builtin.debug:
+    verbosity: 1
     msg: "Neither distrobox nor toolbox found — skipping container setup"
   when: distrobox_tool == 'none'
 
@@ -74,7 +75,8 @@
   ansible.builtin.debug:
     msg: >-
       Podman socket is not active. kind will not work without it.
-      Check: systemctl --user status podman.socket
+      Fix: systemctl --user enable --now podman.socket.
+      If that fails, check: systemctl --user status podman.socket
   when:
     - distrobox_tool != 'none'
     - distrobox_podman_socket_active.rc | default(1) != 0
@@ -120,6 +122,16 @@
       changed_when: >-
         'already exists' not in
         ((distrobox_create_result.stdout | default('')) + (distrobox_create_result.stderr | default('')))
+  rescue:
+    - name: Warn on distrobox assemble create failure
+      ansible.builtin.debug:
+        msg: >-
+          distrobox assemble create failed — container will not be available.
+          Check registry connectivity and available disk space.
+          Re-run 'make container' once the issue is resolved.
+    - name: Mark container unavailable after distrobox failure
+      ansible.builtin.set_fact:
+        distrobox_tool: "none"
 
 # --- Toolbx path ---
 - name: Create container via Toolbx
@@ -132,10 +144,20 @@
         cmd: >-
           toolbox create
           --distro {{ container_distro | default('fedora') }}
-          --release {{ container_release | default('44') }}
+          --release {{ container_release | default(ansible_distribution_major_version) }}
           {{ distrobox_container_name }}
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
+  rescue:
+    - name: Warn on toolbox create failure
+      ansible.builtin.debug:
+        msg: >-
+          toolbox create failed — container will not be available.
+          Check registry connectivity and available disk space.
+          Re-run 'make container' once the issue is resolved.
+    - name: Mark container unavailable after toolbox failure
+      ansible.builtin.set_fact:
+        distrobox_tool: "none"
 
 # --- Start and register for Play 3 ---
 - name: Check if container is running
@@ -152,11 +174,24 @@
   when: distrobox_tool != 'none'
 
 - name: Start container
-  ansible.builtin.command:  # noqa: no-changed-when
+  ansible.builtin.command:
     cmd: "podman start {{ distrobox_container_name }}"
+  register: distrobox_start_result
+  changed_when: distrobox_start_result.rc == 0
+  failed_when: false
   when:
     - distrobox_tool != 'none'
     - (distrobox_running.stdout | default('') | trim | lower) != 'true'
+
+- name: Warn if container start failed
+  ansible.builtin.debug:
+    msg: >-
+      podman start {{ distrobox_container_name }} failed (rc={{ distrobox_start_result.rc | default('') }}).
+      Container provisioning (Play 3) may be skipped.
+      Check: podman logs {{ distrobox_container_name }}
+  when:
+    - distrobox_tool != 'none'
+    - distrobox_start_result.rc | default(0) != 0
 
 - name: Detect Python inside container
   ansible.builtin.command:
@@ -175,7 +210,6 @@
     ansible_connection: containers.podman.podman
     ansible_host: "{{ distrobox_container_name }}"
     ansible_python_interpreter: "{{ distrobox_python.stdout | default('/usr/bin/python3') | trim }}"
-    ansible_remote_tmp: /tmp/.ansible/tmp
     distrobox_packages: "{{ distrobox_packages }}"
     distrobox_host_exec_commands: "{{ distrobox_host_exec_commands }}"
     distrobox_oc_version: "{{ distrobox_oc_version }}"

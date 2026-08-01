@@ -1,6 +1,6 @@
 ---
 # roles/git_repos/tasks/main.yml
-# Clone repos via HTTPS, add fork remotes. Filter by category.
+# Clone repos (HTTPS or SSH), add fork remotes. Filter by category.
 
 - name: Check gh auth status
   ansible.builtin.command:
@@ -37,7 +37,26 @@
 
 - name: Display repos to clone
   ansible.builtin.debug:
+    verbosity: 1
     msg: "Will clone {{ git_repos_filtered | length }} repos (categories: {{ git_repos_active_categories | join(', ') }})"
+
+- name: Check SSH agent has loaded identities
+  ansible.builtin.command:
+    cmd: ssh-add -l
+  register: git_repos_ssh_agent
+  changed_when: false
+  failed_when: false
+
+- name: Warn if SSH agent has no identities loaded
+  ansible.builtin.debug:
+    msg: >-
+      SSH agent not ready (rc={{ git_repos_ssh_agent.rc }} —
+      {{ 'no identities loaded' if git_repos_ssh_agent.rc == 1 else 'cannot connect to agent' }}).
+      Run 'ssh-add' before 'make repos'. The following filtered repos use SSH and will likely fail:
+      {{ git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | map(attribute='dest') | list | join(', ') }}
+  when:
+    - git_repos_ssh_agent.rc in [1, 2]
+    - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
 
 - name: Ensure base directory exists
   ansible.builtin.file:
@@ -55,6 +74,8 @@
   loop_control:
     label: "{{ item.dest }}"
   register: git_repos_clone_results
+  retries: 3
+  delay: 5
   ignore_errors: true  # noqa: ignore-errors — per-item failure must be captured in .results for the Report task below
 
 - name: Report failed clones
@@ -64,17 +85,49 @@
   loop_control:
     label: "{{ item.item.dest }}"
 
+- name: Pull upstream changes (ff-only)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: git pull --ff-only
+    chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
+  environment:
+    LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
+  loop: "{{ git_repos_filtered }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  when:
+    - git_repos_pull | bool
+    - >-
+      git_repos_clone_results.results
+      | selectattr('item.dest', 'equalto', item.dest)
+      | selectattr('failed', 'equalto', false)
+      | list | length > 0
+  register: git_repos_pull_results
+  changed_when: "git_repos_pull_results.rc == 0 and 'Already up to date' not in git_repos_pull_results.stdout"
+  failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
+
+- name: Report failed pulls
+  ansible.builtin.debug:
+    msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
+  loop: "{{ git_repos_pull_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+  when: git_repos_pull | bool
+
 - name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: >-
-      git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" 2>/dev/null ||
-      git remote add "{{ item.1.name }}" "{{ item.1.url }}"
+      old=$(git remote get-url "{{ item.1.name }}" 2>/dev/null);
+      if [ "$old" = "{{ item.1.url }}" ]; then true;
+      elif [ -n "$old" ]; then git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" && echo updated;
+      else git remote add "{{ item.1.name }}" "{{ item.1.url }}" && echo added; fi
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
-  changed_when: false
   register: git_repos_remote_result
+  changed_when: >-
+    'added' in git_repos_remote_result.stdout or
+    'updated' in git_repos_remote_result.stdout
   failed_when:
     - git_repos_remote_result.rc is not none
     - git_repos_remote_result.rc != 0
