@@ -159,9 +159,9 @@ fi
 # --- config.yml ---
 CONFIG_FILE="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
 if [[ ! -f "$CONFIG_FILE" ]]; then
-  record "config_yml" "warn" "config.yml missing — create it with at least 'desktop_environment: sway' before running make all"
+  record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
-  record "config_yml" "warn" "config.yml exists but does not set desktop_environment — default 'auto' may fail on first provision before a WM is installed"
+  record "config_yml" "fail" "config.yml exists but does not set desktop_environment — 'auto' detection fails before any WM is installed; set 'desktop_environment: sway' (or i3/gnome)"
 else
   record "config_yml" "pass" "desktop_environment is set"
 fi
