@@ -60,6 +60,9 @@ command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && 
 command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/key-bindings.zsh ]] && source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
 command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]] && source /opt/homebrew/opt/fzf/shell/completion.zsh
 {% endif %}
+{% if ansible_system | default('Linux') != 'Darwin' %}
+command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
+{% endif %}
 
 # --- zsh quality-of-life plugins ---
 {% if ansible_system | default('Linux') == 'Linux' %}
@@ -244,9 +247,6 @@ kind-load() {
 {% endif %}
 
 # --- Status ---
-{% if ansible_system | default('Linux') != 'Darwin' %}
-command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
-{% endif %}
 alias yk='ykman info'
 {% if ansible_system | default('Linux') == 'Darwin' %}
 alias vpn='netstat -rn | grep -E "utun|wg"'
