@@ -24,6 +24,8 @@
         system_kernel_lockdown: ''
         system_aide_enabled: false
         system_install_usbguard: false
+        install_virtualization: false  # libvirt not needed in CI container
+        system_var_tmp_noexec: false   # var-tmp.mount unit fails in containers without systemd
         real_user_id: molecule  # containers connect as root; override to avoid sshd AllowUsers assert
 
   roles:

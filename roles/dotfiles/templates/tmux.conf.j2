@@ -36,6 +36,15 @@ setw -g pane-base-index 1
 # Quick reload
 bind r source-file ~/.config/tmux/tmux.conf \; display "Config reloaded"
 
+# Status bar — session name left, time right, active window highlighted
+set -g status-interval 5
+set -g status-left-length 40
+set -g status-left "[#S] "
+set -g status-right "%H:%M %d-%b"
+set -g status-style "fg=colour250,bg=colour235"
+set -g window-status-current-style "fg=colour255,bg=colour33,bold"
+set -g window-status-activity-style "fg=colour226,bg=colour235"
+
 # Split panes
 bind | split-window -h -c "#{pane_current_path}"
 bind - split-window -v -c "#{pane_current_path}"

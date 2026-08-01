@@ -201,6 +201,29 @@ if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
 elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "$HOME/.ssh/ directory not deployed"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
+# authorized_keys: exclusive:true removes stale keys on every re-provision — verify count and mode.
+# File absent is a WARN not FAIL: the authorized_key task is guarded by
+# `when: ssh_auth_key_pub | length > 0`, so first provision with plaintext vault leaves no file.
+_ak="$HOME/.ssh/authorized_keys"
+if [[ ! -f "$_ak" ]]; then
+  record "authorized-keys-exists" "WARN" "$_ak missing — vault may have no auth key (ssh_auth_key_pub empty) or ssh role not yet run"
+else
+  _ak_perms=$(stat -c '%a' "$_ak" 2>/dev/null || stat -f '%Lp' "$_ak" 2>/dev/null || echo "?")
+  if [[ "$_ak_perms" == "600" ]]; then record "authorized-keys-perms" "PASS"
+  else record "authorized-keys-perms" "FAIL" "permissions $_ak_perms, expected 600"; fi
+  _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || echo "0")
+  if [[ "$_ak_total" -gt 1 ]]; then
+    record "authorized-keys-exclusive" "FAIL" "$_ak_total keys present, expected 1 — exclusive:true drift or manual key added; inspect: cat $_ak"
+  elif [[ "$_ak_total" -eq 0 ]]; then
+    record "authorized-keys-exclusive" "WARN" "$_ak exists but has no key entries"
+  elif grep -qE '^(sk-)?ssh-ed25519' "$_ak" 2>/dev/null; then
+    record "authorized-keys-exclusive" "PASS"
+  else
+    record "authorized-keys-exclusive" "WARN" "one key present but not sk-ssh-ed25519 type — unexpected key type in $_ak"
+  fi
+fi
+unset _ak _ak_perms _ak_total
+
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
 # CIS intent: home dir should be no MORE permissive than 750 (owner=7, group≤5, others=0)
 # Modes like 710 are acceptable (more restrictive than 750 — group has execute only)

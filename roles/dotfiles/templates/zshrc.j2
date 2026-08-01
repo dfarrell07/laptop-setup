@@ -160,6 +160,25 @@ command -v oc &>/dev/null && source <(oc completion zsh)
 command -v helm &>/dev/null && source <(helm completion zsh)
 command -v kind &>/dev/null && source <(kind completion zsh)
 command -v kustomize &>/dev/null && source <(kustomize completion zsh)
+command -v bpfman &>/dev/null && source <(bpfman completion zsh) 2>/dev/null
+
+# --- Kubernetes helpers ---
+# kctx: fzf kubeconfig file picker — exports selected file as KUBECONFIG
+kctx() {
+  command -v fzf &>/dev/null || { echo "kctx: fzf required" >&2; return 1; }
+  local f
+  f=$(find "$HOME/.kube" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' -o -name 'config*' \) 2>/dev/null \
+      | fzf --prompt="kubeconfig: " --height=40%) || return
+  export KUBECONFIG="$f"
+}
+# klogs: fzf pod picker then kubectl logs -f (pass extra args e.g. --container, --previous)
+klogs() {
+  command -v fzf &>/dev/null || { echo "klogs: fzf required" >&2; return 1; }
+  local sel ns pod
+  sel=$(kubectl get pods -A 2>/dev/null | fzf --header-lines=1 --prompt="pod: " --height=50%) || return
+  ns=$(awk '{print $1}' <<<"$sel"); pod=$(awk '{print $2}' <<<"$sel")
+  kubectl logs -f -n "$ns" "$pod" "$@"
+}
 
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}

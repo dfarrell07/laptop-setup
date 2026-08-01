@@ -27,6 +27,10 @@
 [pull]
 	rebase = true
 
+[rebase]
+	autosquash = true
+	autostash = true
+
 [merge]
 	conflictStyle = zdiff3
 
@@ -38,6 +42,10 @@
 
 [alias]
 	logg = log --oneline --graph --decorate --all
+	uncommit = reset HEAD~1
+	unstage = restore --staged
+	pushf = push --force-with-lease
+	recent = branch --sort=-committerdate
 
 [diff]
 	tool = meld

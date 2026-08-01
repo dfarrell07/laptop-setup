@@ -116,13 +116,13 @@ install_virtualization: true
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
-repo_gh_cli: true
+repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky
 repo_google_chrome: true
 repo_google_cloud_sdk: true
 repo_rpmfusion: true
 repo_slack: false   # packagecloud Slack RPM repo has gpgcheck=false — opt in explicitly or use Flatpak instead
 repo_tailscale: true
-repo_acli: true
+repo_acli: true  # no-op without repos_dnf_acli_baseurl in config.yml (internal Red Hat Jira/Confluence CLI mirror)
 repo_docker_ce: false  # false: prefer rootless Podman (ships with Fedora); Docker CE conflicts with Podman
 repo_mullvad: true
 repo_redhat: true

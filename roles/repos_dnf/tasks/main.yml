@@ -125,7 +125,7 @@
 
 - name: Add Slack repo
   when:
-    - repo_slack | default(true)
+    - repo_slack | default(false)
     - ansible_architecture == 'x86_64'
   block:
     - name: Add slack repo

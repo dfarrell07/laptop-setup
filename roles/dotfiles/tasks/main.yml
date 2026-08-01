@@ -86,7 +86,6 @@
     mode: "0644"
   when:
     - not dotfiles_gitconfig.stat.exists
-    - ansible_user_dir ~ '/.gitconfig' is file
 
 - name: Remove legacy ~/.gitconfig when migrating to XDG path
   ansible.builtin.file:
