@@ -35,12 +35,12 @@
         _csb_task_name: "Install dnf packages"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
-          One or more packages in packages_cli/languages/security/containers/networking
+          One or more packages in packages_cli/languages/security/containers/networking/networking_work
           could not be installed; check repo access or install manually
         _csb_ticket_summary: "Cannot install core dnf packages on CSB"
         _csb_ticket_body: >-
           One or more packages from packages_cli, packages_languages, packages_security,
-          packages_containers, or packages_networking could not be installed.
+          packages_containers, packages_networking, or packages_networking_work could not be installed.
           This may be due to fapolicyd repo policy or a missing repository.
       when: csb_detected | default(false)
 
@@ -769,7 +769,15 @@
     - ansible_architecture == 'x86_64'
     - profile == 'work'
   block:
+    - name: Check if ec is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/ec version
+      register: packages_ec_check
+      changed_when: false
+      failed_when: false
+
     - name: Download ec binary
+      when: packages_ec_version not in (packages_ec_check.stdout | default(''))
       ansible.builtin.get_url:
         url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_amd64"
         dest: /usr/local/bin/ec
