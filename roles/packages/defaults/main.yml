@@ -79,20 +79,23 @@ packages_networking:
   - iperf3
   - traceroute
   - iproute
-  - ovn
-  - openvswitch
   - mtr
   - nftables
   - bind-utils
-  - bpfman       # bpfman daemon for eBPF program management — must run on host to interact with kernel eBPF subsystem
-  - bpftool
   - wireshark
   - wireshark-cli  # tshark — scripting-safe CLI capture; wireshark pkg may not install on headless CSB
+
+# Work-profile-only networking tools (OVN-K/bpfman development at Red Hat)
+packages_networking_work:
+  - ovn            # Open Virtual Network control plane (OVN-K dependency)
+  - openvswitch    # Open vSwitch dataplane (OVN-K dependency)
+  - bpfman         # bpfman daemon for eBPF program management; must run on host for kernel BPF access
+  - bpftool        # eBPF program/map introspection
   - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
-  - strace         # system call tracer; needed on host for bpfman daemon debugging (not just container)
-  - perf
-  - bpftrace       # eBPF dynamic tracing (bpftrace scripts); must be on host for kernel access like bpfman/strace
-  - sos            # Red Hat support diagnostic bundle tool (sos report); required for CSB/RHEL support cases
+  - strace         # system call tracer; needed on host for bpfman daemon debugging
+  - perf           # kernel performance profiling
+  - bpftrace       # eBPF dynamic tracing; must be on host for kernel access
+  - sos            # Red Hat support diagnostic bundle tool; required for CSB/RHEL support cases
 
 packages_apt:
   - git
@@ -170,6 +173,15 @@ packages_ansible_lint_version: "26.6.0"
 packages_oc_version: "4.22.6"
 
 packages_go_install:
+  # General Go development tools (all profiles)
+  - mvdan.cc/gofumpt@v0.7.0
+  - golang.org/x/vuln/cmd/govulncheck@v1.4.0
+  - github.com/daixiang0/gci@v0.13.6
+  - golang.org/x/tools/gopls@v0.23.0
+  - github.com/stern/stern@v1.32.0
+
+# Work-profile-only Go tools (OVN-K codegen + Submariner)
+packages_go_install_work:
   # Pin controller-gen and code-generator tools to match OVN-K's go.mod
   # (hack/update-codegen.sh uses v0.36.2). Bump together when OVN-K upgrades k8s.
   - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
@@ -179,17 +191,8 @@ packages_go_install:
   - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
   - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
   - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
-  # The remaining tools produce no committed artifacts and are intentionally
-  # unpinned. Known non-idempotent: each run may install a different version
-  # of these three tools. Pin to an explicit version (e.g. gofumpt@v0.7.0) to
-  # make provisioning fully reproducible.
   # Pin to match the broker API version in active Submariner cluster deployments.
   - github.com/submariner-io/subctl/cmd/subctl@v0.18.0
-  - mvdan.cc/gofumpt@v0.7.0
-  - golang.org/x/vuln/cmd/govulncheck@v1.4.0
-  - github.com/daixiang0/gci@v0.13.6
-  - golang.org/x/tools/gopls@v0.23.0
-  - github.com/stern/stern@v1.32.0
 
 packages_k9s_version: "0.51.0"
 packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"

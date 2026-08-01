@@ -1,6 +1,8 @@
 # {{ ansible_managed }}
 [Unit]
 Description=Claude Code Task Queue Poller
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot

@@ -27,6 +27,8 @@
             repo: "{{ notes_remote_url_https }}"
             dest: "{{ notes_repo_path }}"
             update: false  # Never auto-pull: transcrypt init required first; do not overwrite plaintext working tree
+          environment:
+            GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make all
           failed_when: false
 
     - name: Re-check if notes repo exists after clone attempts

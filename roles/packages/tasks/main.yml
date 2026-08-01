@@ -22,7 +22,8 @@
              + packages_languages
              + packages_security
              + packages_containers
-             + packages_networking }}
+             + packages_networking
+             + (packages_networking_work | default([]) if profile == 'work' else []) }}
         state: present
       become: true
       tags: [become]
@@ -65,7 +66,7 @@
   when:
     - ansible_pkg_mgr in ['dnf', 'dnf5']
     - ansible_system == 'Linux'
-    - "'bpfman' in (packages_networking | default([]))"
+    - "'bpfman' in ((packages_networking | default([])) + (packages_networking_work | default([])))"
   failed_when: false
 
 - name: Install virtualization packages
@@ -862,7 +863,7 @@
     GOBIN: "{{ ansible_user_dir }}/go/bin"
     HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
     HTTP_PROXY: "{{ proxy_url | default(omit) }}"
-  loop: "{{ packages_go_install }}"
+  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   register: packages_go_results
   failed_when: false
   when:
