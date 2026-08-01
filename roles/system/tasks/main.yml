@@ -416,9 +416,7 @@
   when:
     - system_firewalld_running | bool
     - not (csb_detected | default(false))  # drop zone has no interface on CSB — rule is a no-op
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
+  notify: Apply firewall rules
 
 # NOTE: With icmp-block-inversion enabled, --add-icmp-block ALLOWS these types
 # (semantics are inverted). Without inversion, this command would block them.
@@ -434,9 +432,7 @@
   when:
     - system_firewalld_running | bool
     - not (csb_detected | default(false))  # drop zone has no interface on CSB — rule is a no-op
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
+  notify: Apply firewall rules
 
 # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
 # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; whether
@@ -451,9 +447,7 @@
   when:
     - system_firewalld_running | bool
     - not (csb_detected | default(false))
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
+  notify: Apply firewall rules
 
 # --- Kernel lockdown ---
 - name: Check current kernel cmdline
@@ -1355,9 +1349,7 @@
     state: enabled
   when: system_firewalld_running | bool
   failed_when: false  # tailscale0 doesn't exist on first provision; permanent config succeeds, immediate fails
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
+  notify: Apply firewall rules
 
 # failed_when: false — on CSB where the Tailscale repo is blocked, the package
 # may not be installed; silently skip rather than fail the play.

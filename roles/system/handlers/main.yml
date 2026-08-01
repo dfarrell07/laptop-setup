@@ -14,6 +14,7 @@
   failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
 
 - name: Reload firewalld
+  listen: Apply firewall rules
   ansible.builtin.command:
     cmd: firewall-cmd --reload
   become: true
@@ -54,6 +55,7 @@
     - ansible_virtualization_type not in ['container', 'docker', 'podman']
 
 - name: Restart tailscaled
+  listen: Apply firewall rules
   ansible.builtin.systemd:
     name: tailscaled
     state: restarted

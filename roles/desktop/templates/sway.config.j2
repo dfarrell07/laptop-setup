@@ -19,7 +19,7 @@ workspace {{ wo.workspace }} output {{ wo.output }}
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode
 exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi
-exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+# Note: --systemd flag already propagates to systemd user session; no separate import-environment needed
 
 # Notification daemon (exec_always so it restarts after 'swaymsg reload')
 exec_always mako
@@ -74,6 +74,7 @@ bindsym $mod+Shift+l move right
 # Split
 bindsym $mod+b splith
 bindsym $mod+v splitv
+bindsym $mod+Shift+b exec google-chrome
 
 # Layout
 bindsym $mod+s layout stacking
