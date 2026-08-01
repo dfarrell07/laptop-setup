@@ -152,6 +152,13 @@
   failed_when: false
   when: container_host_exec.stat.exists and container_oc_installed | default(true)
 
+- name: Export golangci-lint to host (pinned version from container, not dnf)
+  ansible.builtin.command:
+    cmd: "distrobox-export --bin {{ ansible_env.HOME }}/go/bin/golangci-lint --export-path {{ ansible_env.HOME }}/.local/bin"
+  changed_when: false
+  failed_when: false
+  when: container_host_exec.stat.exists
+
 # --- Verify ---
 - name: Confirm Python works
   ansible.builtin.command:

@@ -17,9 +17,11 @@ STOP_CHARGE_THRESH_BAT0={{ system_tlp_bat0_stop }}
 START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start }}
 STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop }}
 
-# WiFi power: leave at TLP default (auto).
-# NM's 99-wifi-powersave.conf pins wifi.powersave=2 (disabled) on all hosts — NM config wins.
-# wifi.powersave=2 does not conflict with IT 802.1X/NAC policy (auth vs. client power state).
+# WiFi power: explicitly disable to match NM's 99-wifi-powersave.conf setting.
+# TLP fires on every AC→BAT udev event after NM sets the interface, overriding NM's
+# wifi.powersave=2. Pinning here ensures low-latency wifi on both AC and battery.
+WIFI_PWR_ON_AC=off
+WIFI_PWR_ON_BAT=off
 
 # PCIe/NVMe power management on battery (ASPM + runtime PM)
 # PCIE_ASPM_ON_BAT=powersupersave enables L1 substates (L1.1/L1.2) for PCIe links.

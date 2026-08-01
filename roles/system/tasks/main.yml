@@ -703,12 +703,15 @@
   register: system_authselect_fingerprint_check
   changed_when: false
   failed_when: false
-  when: system_authselect_bin.stat.exists
+  when:
+    - system_authselect_bin.stat.exists
+    - system_disable_fingerprint | bool
 
 - name: Disable authselect with-fingerprint feature
   ansible.builtin.command:
     cmd: authselect disable-feature with-fingerprint
   when:
+    - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc | default(1) == 0
   changed_when: true
@@ -719,6 +722,7 @@
     name: fprintd.service
     masked: true
     state: stopped
+  when: system_disable_fingerprint | bool
   failed_when: false
 
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
