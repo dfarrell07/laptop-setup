@@ -9,6 +9,13 @@ desktop_terminal: alacritty
 
 desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.yml; check with: swaymsg -t get_outputs
 desktop_sway_output: "eDP-1"  # built-in display identifier (AMD ThinkPad)
+# Workspace-to-output assignments for multi-monitor setups; empty = no assignments written.
+# Example (config.yml):
+#   desktop_sway_workspace_outputs:
+#     - { workspace: 1, output: eDP-1 }
+#     - { workspace: 2, output: HDMI-A-1 }
+# Find output names with: swaymsg -t get_outputs | grep name
+desktop_sway_workspace_outputs: []
 
 # TrackPoint scroll device identifier (intentionally undefined — no TrackPoint config
 # applied unless set). Find with: swaymsg -t get_inputs | grep -A2 TrackPoint
@@ -34,7 +41,7 @@ desktop_sway_packages:
   - brightnessctl
   - i3status
   - mako
-  - polkit  # polkit-gnome was removed from Fedora 41+; polkit provides the authentication agent
+  - lxpolkit  # polkit-gnome removed from Fedora 41+; lxpolkit is the lightweight graphical polkit agent
   - network-manager-applet
   - xdg-desktop-portal
   - xdg-desktop-portal-wlr
@@ -58,7 +65,7 @@ desktop_i3_packages:
   - brightnessctl
   - playerctl
   - network-manager-applet
-  - polkit  # polkit-gnome was removed from Fedora 41+; polkit provides the authentication agent
+  - lxpolkit  # polkit-gnome removed from Fedora 41+; lxpolkit is the lightweight graphical polkit agent
   - arandr
   - dunst
   - scrot

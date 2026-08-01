@@ -8,6 +8,14 @@ font pango:{{ desktop_wm_font_family }} {{ desktop_wm_font_size }}
 # HiDPI output scaling (override desktop_sway_hidpi_scale in config.yml)
 # adaptive_sync enables VRR/FreeSync on Radeon 780M; silently ignored when display is off (docked)
 output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }} adaptive_sync enabled
+xwayland enable
+{% if desktop_sway_workspace_outputs | default([]) | length > 0 %}
+
+# Workspace-to-output assignments (set desktop_sway_workspace_outputs list in config.yml)
+{% for wo in desktop_sway_workspace_outputs %}
+workspace {{ wo.workspace }} output {{ wo.output }}
+{% endfor %}
+{% endif %}
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode
 exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi
@@ -20,7 +28,7 @@ exec_always mako
 exec wl-paste --watch cliphist store
 
 # Polkit agent (required for GUI privilege escalation — NetworkManager, USB mounts, etc.)
-exec_always /usr/libexec/polkit-gnome-authentication-agent-1
+exec_always /usr/bin/lxpolkit  # lightweight polkit agent (lxpolkit pkg); polkit-gnome removed Fedora 41+
 exec_always nm-applet
 
 # Wallpaper

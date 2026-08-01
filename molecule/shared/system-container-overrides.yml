@@ -13,3 +13,5 @@
     system_disable_fingerprint: false     # fprintd masking fails silently in containers; skip entirely
     system_tlp_enabled: false             # TLP/ppd service ops fail in containers
     real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert
+    packages_install_binaries: false      # no binary downloads in container CI
+    ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
