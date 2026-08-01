@@ -118,13 +118,13 @@ install_virtualization: true
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky
 repo_google_chrome: true
-repo_google_cloud_sdk: true
-repo_rpmfusion: true
+repo_google_cloud_sdk: true  # enables 'dnf install google-cloud-sdk'; nothing auto-installed — set false if you do not use GCP
+repo_rpmfusion: true  # Fedora-only; multimedia codecs (H.264/AAC), firmware, proprietary GPU drivers; nothing auto-installed
 repo_slack: false   # packagecloud Slack RPM repo has gpgcheck=false — opt in explicitly or use Flatpak instead
 repo_tailscale: true
 repo_acli: true  # no-op without repos_dnf_acli_baseurl in config.yml (internal Red Hat Jira/Confluence CLI mirror)
 repo_docker_ce: false  # false: prefer rootless Podman (ships with Fedora); Docker CE conflicts with Podman
-repo_mullvad: true
+repo_mullvad: true  # privacy/anonymity VPN (distinct from Tailscale); Fedora-only, skipped on RHEL/Rocky and CSB
 repo_redhat: true
 # Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
 # Set these in config.yml to activate the acli and redhat-internal repo tasks:

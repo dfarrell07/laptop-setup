@@ -80,11 +80,6 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
 
-- name: Check golangci-lint is installed
-  ansible.builtin.command: golangci-lint --version
-  changed_when: false
-  when: ansible_distribution != 'Rocky'  # not in EPEL 10 (and not in Rocky 10 converge subset)
-
 - name: Check kubectl binary presence
   ansible.builtin.stat:
     path: /usr/local/bin/kubectl

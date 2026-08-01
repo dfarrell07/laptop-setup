@@ -98,6 +98,10 @@ bindsym $mod+Shift+8 move container to workspace number 8
 bindsym $mod+Shift+9 move container to workspace number 9
 bindsym $mod+Shift+0 move container to workspace number 10
 
+# Scratchpad
+bindsym $mod+Shift+minus move scratchpad
+bindsym $mod+minus scratchpad show
+
 # Resize mode
 mode "resize" {
     bindsym h resize shrink width 10px
@@ -114,7 +118,7 @@ bindsym $mod+Ctrl+l exec swaylock -f -c 000000
 
 # Screenshot (grim + slurp)
 bindsym Print exec grim ~/Pictures/screenshot-$(date +%F-%T).png
-bindsym $mod+Print exec grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%F-%T).png
+bindsym $mod+Print exec grim -g "$(slurp)" - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy
 
 # Audio (PipeWire via pactl)
 bindsym XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +5%

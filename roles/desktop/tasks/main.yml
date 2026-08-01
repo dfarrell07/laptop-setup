@@ -169,6 +169,20 @@
     mode: "0644"
   when: desktop_effective == 'sway'
 
+- name: Ensure swaylock config directory
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config/swaylock"
+    state: directory
+    mode: "0755"
+  when: desktop_effective == 'sway'
+
+- name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
+  ansible.builtin.template:
+    src: swaylock.config.j2
+    dest: "{{ ansible_user_dir }}/.config/swaylock/config"
+    mode: "0644"
+  when: desktop_effective == 'sway'
+
 - name: Ensure xdg-desktop-portal config directory (Sway)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal"

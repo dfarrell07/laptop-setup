@@ -180,6 +180,21 @@ klogs() {
   ns=$(awk '{print $1}' <<<"$sel"); pod=$(awk '{print $2}' <<<"$sel")
   kubectl logs -f -n "$ns" "$pod" "$@"
 }
+# kenv: seed a per-repo .envrc with KUBECONFIG for direnv auto-switching
+kenv() {
+  local cfg="${1:-$KUBECONFIG}"
+  [[ -z "$cfg" ]] && { echo "kenv: no KUBECONFIG set or given" >&2; return 1; }
+  echo "export KUBECONFIG=$cfg" >> "${PWD}/.envrc" && direnv allow .
+}
+# sp: tmux project sessionizer — jump to ~/src project with fzf, create session if needed
+sp() {
+  command -v fzf &>/dev/null || { echo "sp: fzf required" >&2; return 1; }
+  local dir
+  dir=$(find "$HOME/src" -mindepth 1 -maxdepth 3 -type d 2>/dev/null | fzf --prompt="project: " --height=50%) || return
+  local name
+  name=$(basename "$dir" | tr '.' '_')
+  tmux new-session -As "$name" -c "$dir"
+}
 
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}
