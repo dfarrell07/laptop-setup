@@ -62,6 +62,7 @@ command -v fzf &>/dev/null && [[ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]
 {% endif %}
 {% if ansible_system | default('Linux') != 'Darwin' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
+command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # syntax-highlighted man pages
 {% endif %}
 
 # --- zsh quality-of-life plugins ---

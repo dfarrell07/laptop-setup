@@ -371,9 +371,8 @@
     - system_fw_default_zone.stdout | default('') != 'drop'
     - not (csb_detected | default(false))  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
-    - Reload firewalld
+    - Apply firewall rules
     - Reload NetworkManager
-    - Restart tailscaled
 
 - name: Move primary network interface to drop zone
   ansible.posix.firewalld:

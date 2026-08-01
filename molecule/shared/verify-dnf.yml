@@ -119,15 +119,5 @@
   changed_when: false
   when: verify_ykman_bin.stat.exists
 
-- name: Check bwrap binary presence
-  ansible.builtin.stat:
-    path: /usr/bin/bwrap
-  register: verify_bwrap_bin
-
-- name: Check bwrap version when installed
-  ansible.builtin.command: bwrap --version
-  changed_when: false
-  when: verify_bwrap_bin.stat.exists
-
 - name: Include containers.conf assertions
   ansible.builtin.include_tasks: verify-containers.yml
