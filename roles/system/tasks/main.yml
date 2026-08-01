@@ -567,7 +567,7 @@
       fi
       new="$current"
       # Append each missing hardening param (check by key prefix only)
-      _add() { local p="$1" k="${1%%=*}"; echo "$new" | grep -qE "(^| )${k}(=| |$)" || new="$new $p"; }
+      _add() { local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p"; }
       {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else '' }}
       _add "vsyscall=none"
       _add "init_on_free=1"
@@ -600,7 +600,8 @@
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or
     (system_init_on_free_result is defined and system_init_on_free_result is changed) or
     (system_page_shuffle_result is defined and system_page_shuffle_result is changed) or
-    (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed)
+    (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed) or
+    (system_kernel_cmdline_result is defined and system_kernel_cmdline_result is changed)
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
@@ -930,6 +931,11 @@
     groups: [libvirt, kvm]
     append: true
   when: system_enable_libvirtd | bool
+  failed_when: false
+  # libvirt/kvm groups are created by package install in Play 2 (packages role).
+  # On first provision this task runs in Play 1 before the packages exist — usermod
+  # fails with "group does not exist". failed_when: false prevents play abort;
+  # the packages role re-runs this after installing libvirt, completing membership.
 
 - name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
   ansible.builtin.command:  # noqa: command-instead-of-module

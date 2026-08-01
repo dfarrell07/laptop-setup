@@ -8,7 +8,24 @@ Known failure patterns organized by Ansible role. Each entry includes the sympto
 
 Steps required after every `make all`. Complete these in order before the machine is considered provisioned.
 
-1. **Verify provisioning succeeded:** `make smoke-test` — review any WARN/FAIL entries before proceeding.
+> **Before running `make all`:** Run from a **local console or inside `tmux`**, not a bare SSH session.
+> The system role restarts sshd mid-play (port 22 → 722), which kills the SSH connection and leaves
+> provisioning incomplete. If you must use SSH: `tmux new-session -s prov 'make all'` — reconnect
+> with `ssh -p 722 user@host tmux attach -t prov` after the port changes.
+
+> **After `make all`, reboot before testing anything.** Kernel security parameters
+> (lockdown=integrity, IOMMU, vsyscall=none, init_on_free) only take effect after reboot.
+> SSH will be on **port 722** after reboot — update `~/.ssh/config` on other machines:
+> ```
+> Host mybox
+>     HostName mybox.example.com
+>     Port 722
+>     IdentityFile ~/.ssh/id_ed25519_sk
+> ```
+
+1. **Reboot** — activates kernel security params and confirms sshd starts cleanly on port 722 with SELinux label applied.
+
+2. **Verify provisioning succeeded:** `make smoke-test` — review any WARN/FAIL entries before proceeding.
 
 2. **Authenticate Tailscale:** `tailscale up` opens a browser window to join the tailnet. Required on every new node. For headless machines use `tailscale up --auth-key=tskey-auth-...`. See [Tailscale Not Authenticated After Provisioning](#system-tailscale-not-authenticated-after-provisioning).
 

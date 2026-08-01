@@ -807,6 +807,22 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
   if echo "$_vt_opts" | grep -q bind && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
   else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
+
+  # ~/tmp must exist and allow exec (GOTMPDIR — go test compiles binaries here, /tmp is noexec)
+  if [[ ! -d "$HOME/tmp" ]]; then
+    record "home-tmp-dir" "FAIL" "$HOME/tmp does not exist — run: mkdir -p ~/tmp (or make dotfiles)"
+  else
+    _htmp_test=$(mktemp "$HOME/tmp/smoke-exec-XXXXXX" 2>/dev/null) || _htmp_test=""
+    if [[ -z "$_htmp_test" ]]; then
+      record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
+    else
+      cp /bin/true "$_htmp_test" && chmod +x "$_htmp_test"
+      if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
+      else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
+      rm -f "$_htmp_test"
+    fi
+    unset _htmp_test
+  fi
   unset _vt_opts
 
   # /home nosuid (CIS 1.1.9) — nosuid prevents setuid binaries copied into $HOME from gaining elevated privileges
