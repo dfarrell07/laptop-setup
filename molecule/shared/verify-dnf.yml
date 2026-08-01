@@ -109,26 +109,6 @@
   ansible.builtin.command: openssl version
   changed_when: false
 
-- name: Check age binary presence
-  ansible.builtin.stat:
-    path: /usr/bin/age
-  register: verify_age_bin
-
-- name: Check age version when installed
-  ansible.builtin.command: age --version
-  changed_when: false
-  when: verify_age_bin.stat.exists
-
-- name: Check pass binary presence
-  ansible.builtin.stat:
-    path: /usr/bin/pass
-  register: verify_pass_bin
-
-- name: Check pass version when installed
-  ansible.builtin.command: pass version
-  changed_when: false
-  when: verify_pass_bin.stat.exists
-
 - name: Check ykman binary presence
   ansible.builtin.stat:
     path: /usr/bin/ykman
