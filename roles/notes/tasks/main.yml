@@ -53,6 +53,19 @@
       failed_when: false
       when: notes_repo_available | bool
 
+    - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
+      ansible.builtin.copy:
+        dest: "{{ notes_repo_path }}/.gitleaks.toml"
+        mode: "0644"
+        content: |
+          # Allow all blobs — transcrypt encrypts file contents before staging.
+          # The global pre-commit hook (core.hooksPath) would otherwise flag
+          # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
+          [allowlist]
+            description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
+            paths = ['.*']
+      when: notes_repo_available | bool
+
     - name: Check if transcrypt is initialized
       ansible.builtin.command:
         cmd: transcrypt --display
@@ -120,18 +133,6 @@
         - notes_transcrypt_password | default('') | length > 0
         - notes_transcrypt_password != 'REPLACE_ME'
 
-    - name: Deploy gitleaks allowlist for notes repo (transcrypt blobs are intentionally encrypted)
-      ansible.builtin.copy:
-        dest: "{{ notes_repo_path }}/.gitleaks.toml"
-        mode: "0644"
-        content: |
-          # Allow all blobs — transcrypt encrypts file contents before staging.
-          # The global pre-commit hook (core.hooksPath) would otherwise flag
-          # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
-          [allowlist]
-            description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
-            paths = ['.*']
-      when: notes_repo_available | bool
 
     - name: Restrict notes repo directory permissions (transcrypt plaintext in working tree)
       ansible.builtin.file:

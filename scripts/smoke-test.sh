@@ -234,12 +234,19 @@ elif [[ "$homedir_perms" =~ ^[0-9]?7[0145]0$ ]]; then record "home-dir-perms" "P
 else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750 (CIS — owner full, group no-write, others none)"; fi
 
 # --- Git security checks ---
+# Non-signing checks always FAIL if wrong. Signing checks downgrade to WARN when
+# the signing key is absent (expected on first provision with plaintext vault).
+_signing_key_present=false
+[[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]] && _signing_key_present=true
 for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub"; do
   key="${check%%=*}" expected="${check#*=}"
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
+  elif [[ "$key" =~ ^(commit|tag|gpg)\. ]] && [[ "$_signing_key_present" == "false" ]]; then
+    record "git-$key" "WARN" "signing key absent (populate vault + re-provision) — got '$actual'"
   else record "git-$key" "FAIL" "got '$actual', expected '$expected'"; fi
 done
+unset _signing_key_present
 
 # git allowed_signers file (required for SSH commit verification)
 _as="$HOME/.config/git/allowed_signers"
