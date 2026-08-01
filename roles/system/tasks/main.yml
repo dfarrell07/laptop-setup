@@ -1076,7 +1076,7 @@
     enabled: true
   when:
     - ansible_system == 'Linux'
-    - "'bpfman' in ((packages_networking | default([])) + (packages_networking_work | default([])))"
+    - "'bpfman' in (packages_networking_work | default([]))"
   failed_when: false
 
 # --- Firmware updates (LVFS/fwupd) ---
@@ -1532,13 +1532,15 @@
   when: ansible_system == 'Linux'
 
 - name: Set console keymap
-  ansible.builtin.copy:
-    content: "KEYMAP={{ system_keymap }}\n"
-    dest: /etc/vconsole.conf
+  ansible.builtin.lineinfile:
+    path: /etc/vconsole.conf
+    regexp: '^KEYMAP='
+    line: "KEYMAP={{ system_keymap }}"
+    create: true
     mode: "0644"
-  when:
-    - ansible_system | default('Linux') == 'Linux'
-    - system_keymap != 'us'  # Fedora default is already 'us'; skip to avoid clobbering other vconsole settings
+  when: ansible_system | default('Linux') == 'Linux'
+  # lineinfile: manages only the KEYMAP line; preserves FONT and other vconsole.conf settings
+  # (copy would overwrite the entire file, destroying eurlatgr FONT on fresh Fedora)
 
 # --- Chrony NTS (authenticated time sync) ---
 - name: Deploy NTS-authenticated chrony config
