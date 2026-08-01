@@ -427,7 +427,7 @@ The sshd hardening drop-in restricts `AllowUsers` to the current Ansible user. I
 **Fix:** Add to `config.yml`:
 
 ```yaml
-notes_enabled: false
+notes_enabled: false  # or remove `notes_enabled: true` from config.yml (false is now the default)
 ```
 
 Then re-run `make notes` (or `make all`). The notes role will skip entirely.
@@ -712,7 +712,7 @@ If the value is lower, the `nf_conntrack` module may not have been loaded when t
 
 **Symptom:** `make smoke-test` reports `bpfman-socket: FAIL` or `bpfman-socket: WARN`.
 
-**Context:** The `bpfman-socket` check in `scripts/smoke-test.sh` is host-only — molecule runs in containers without a live systemd, so this check is not covered by any molecule scenario. The molecule Fedora verify asserts `bpfman.socket` is enabled only when the binary is present; in CI the `packages_networking` list is emptied so the assertion is skipped. This is expected: the check exists to catch regressions on real hosts.
+**Context:** The `bpfman-socket` check in `scripts/smoke-test.sh` is host-only — molecule runs in containers without a live systemd, so this check is not covered by any molecule scenario. The molecule Fedora verify asserts `bpfman.socket` is enabled only when the binary is present; in CI both `packages_networking` and `packages_networking_work` are emptied so the assertion is skipped. This is expected: the check exists to catch regressions on real hosts.
 
 **Manual test (after `make all` on a Fedora host with bpfman installed):**
 ```bash

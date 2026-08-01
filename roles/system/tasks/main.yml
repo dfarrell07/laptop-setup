@@ -1076,7 +1076,7 @@
     enabled: true
   when:
     - ansible_system == 'Linux'
-    - "'bpfman' in (packages_networking | default([]))"
+    - "'bpfman' in ((packages_networking | default([])) + (packages_networking_work | default([])))"
   failed_when: false
 
 # --- Firmware updates (LVFS/fwupd) ---
