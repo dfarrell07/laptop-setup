@@ -42,12 +42,13 @@ system_sysctl_hardening:
   fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
-  kernel.panic: 10           # reboot after 10s panic; set 0 to preserve panic state for kernel debugging
-  kernel.panic_on_oops: 1   # CIS 1.5.3 — halt immediately on kernel OOPS instead of continuing in unstable state
+  # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
+  # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
   net.ipv4.tcp_timestamps: 0      # CIS 3.3.9 — prevent TCP timestamp-based OS fingerprinting and uptime disclosure
   # NOTE: overridden to 1 (kernel default) on CSB in tasks/main.yml — IT network diagnostics require timestamps
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
-  kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust)
+  kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust);
+  # set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump impossible even with kdump-utils installed
   # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
   # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   fs.inotify.max_user_watches: 1048576
@@ -143,15 +144,24 @@ system_disable_bluetooth: false
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
 system_sysrq: 0
 
-# IPv6 Router Advertisement acceptance: 0=disabled (CIS — prevents SLAAC), 1=enabled (needed for
-# SLAAC-based IPv6 addressing on networks that provide IPv6 only via RAs).
-# Set system_ipv6_accept_ra: 1 in config.yml on networks where SLAAC IPv6 is required.
+# IPv6 Router Advertisement acceptance: 0=disabled (CIS — prevents SLAAC).
+# To enable SLAAC: set system_ipv6_accept_ra: 2 in config.yml (value 2, NOT 1).
+# The Linux kernel suppresses RA processing when accept_ra<=1 AND forwarding=1 (always
+# set by this playbook for Kubernetes/OVN-K). Only value 2 accepts RAs with forwarding=1.
 system_ipv6_accept_ra: 0
-# BPF JIT hardening: 2=constant blinding for all users including root (CIS/STIG default),
-# 1=unprivileged users only (safe here because unprivileged_bpf_disabled=2 blocks them anyway).
-# Set 1 in config.yml for bpfman/eBPF JIT debugging — bpftool prog dump jited output
-# differs from production at value 2; operations (load/list/get) work correctly either way.
-system_bpf_jit_harden: 2
+# BPF JIT hardening: 1=constant blinding for unprivileged users only (default here —
+# security-equivalent to 2 because unprivileged_bpf_disabled=2 blocks all unprivileged
+# BPF loading). Value 2 blinds all callers including root, making bpftool prog dump jited
+# output unreadable. Use 1 here; set 2 in config.yml for strict CIS/STIG compliance if
+# you don't need to inspect JIT-compiled BPF programs.
+system_bpf_jit_harden: 1
+# Kernel panic behavior: auto-reboot delay and oops halt behavior.
+# system_kernel_panic: seconds before auto-reboot after panic (0=disable auto-reboot; preserves crash state
+# for kdump or live analysis). system_kernel_panic_on_oops: 1=halt on OOPS (CIS 1.5.3); 0=log and continue
+# (useful for OVN-K/bpfman development with KASAN/UBSAN where a non-fatal oops should not crash the host).
+# Set both to 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging.
+system_kernel_panic: 10       # set 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging
+system_kernel_panic_on_oops: 1  # CIS 1.5.3; set 0 in config.yml to allow system to continue after non-fatal oops
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all

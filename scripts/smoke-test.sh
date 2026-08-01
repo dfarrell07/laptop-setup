@@ -67,7 +67,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli" "bpfman:bpfman --version" "sops:sops --version"; do
+for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli" "bpfman:bpfman --version" "sops:sops --version" "bpftool:bpftool version" "operator-sdk:operator-sdk version" "k9s:k9s version" "krew:kubectl krew version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
@@ -810,9 +810,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     unset _home_opts
   else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
 
-  # kernel.core_pattern safety
-  if [[ "$(sysctl -n kernel.core_pattern 2>/dev/null)" == "|/bin/false" ]]; then record "core-pattern" "PASS"
-  else record "core-pattern" "FAIL" "kernel.core_pattern expected '|/bin/false' (pipe prefix required)"; fi
+  # kernel.core_pattern safety — must begin with | (pipe to handler), never a raw path
+  _core_pattern="$(sysctl -n kernel.core_pattern 2>/dev/null)"
+  if [[ "$_core_pattern" == "|"* ]]; then record "core-pattern" "PASS"
+  else record "core-pattern" "FAIL" "kernel.core_pattern='$_core_pattern' does not start with | (pipe handler required; raw core files expose data)"; fi
 
   # inotify limits (required for IDE/file-watcher tools — system role sets these)
   _inotify_watches=$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")

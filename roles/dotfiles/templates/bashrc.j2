@@ -1,6 +1,7 @@
 # {{ ansible_managed }}
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
+export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp is noexec on this host
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"

@@ -141,6 +141,7 @@
     user: "{{ ansible_user_id }}"
     key: "{{ ssh_auth_key_pub }}"
     state: present
+    exclusive: true
   when: ssh_auth_key_pub | default('') | length > 0
 
 - name: Deploy SSH signing key

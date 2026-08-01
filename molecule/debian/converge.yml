@@ -1,4 +1,33 @@
 ---
+- name: Converge — System role (Debian)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Capture real user identity
+      ansible.builtin.set_fact:
+        real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_id: "{{ lookup('env', 'USER') }}"
+      become: false
+
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+    - name: Override for container testing (system role)
+      ansible.builtin.set_fact:
+        system_disable_usb_storage: false
+        system_kernel_lockdown: ''
+        system_aide_enabled: false
+        system_install_usbguard: false
+
+  roles:
+    - role: system
+
 - name: Converge (Debian/ChromeOS Crostini)
   hosts: all
   gather_facts: true

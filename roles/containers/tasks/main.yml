@@ -119,7 +119,7 @@
 
       [Service]
       Type=oneshot
-      ExecStart=/usr/bin/podman system prune --force
+      ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
   when: ansible_system == 'Linux'
   register: containers_prune_service
 

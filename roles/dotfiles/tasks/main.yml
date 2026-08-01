@@ -21,6 +21,7 @@
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.oh-my-zsh"
     state: absent
+  when: not (dotfiles_ohmyzsh_result.failed | default(false))
 
 - name: Ensure macOS SSH sockets directory exists
   ansible.builtin.file:
@@ -53,6 +54,12 @@
     state: directory
     mode: "0700"
 
+- name: Ensure ~/tmp exists for GOTMPDIR (go test exec path must not be noexec)
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/tmp"
+    state: directory
+    mode: "0700"
+
 - name: Deploy zshrc
   ansible.builtin.template:
     src: zshrc.j2
@@ -70,6 +77,16 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/config"
   register: dotfiles_gitconfig
+
+- name: Back up legacy ~/.gitconfig before XDG migration
+  ansible.builtin.copy:
+    src: "{{ ansible_user_dir }}/.gitconfig"
+    dest: "{{ ansible_user_dir }}/.gitconfig.pre-xdg-migration"
+    remote_src: true
+    mode: "0644"
+  when:
+    - not dotfiles_gitconfig.stat.exists
+    - ansible_user_dir ~ '/.gitconfig' is file
 
 - name: Remove legacy ~/.gitconfig when migrating to XDG path
   ansible.builtin.file:
@@ -103,6 +120,9 @@
       else
         echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
       fi
+      # Chain to per-repo hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
+      _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/pre-commit"
+      if [ -f "$_repo_hook" ]; then exec "$_repo_hook"; fi
 
 - name: Ensure gh config directory
   ansible.builtin.file:

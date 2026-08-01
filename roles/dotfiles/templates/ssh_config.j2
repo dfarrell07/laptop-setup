@@ -1,6 +1,4 @@
 # {{ ansible_managed }}
-# User-local overrides (not managed by Ansible — place hand-written stanzas here):
-Include ~/.ssh/config.local
 
 Host *
     VisualHostKey yes
@@ -58,3 +56,8 @@ Host internal-git
     IdentityFile ~/.ssh/id_rsa_redhat
     IdentitiesOnly yes
 {% endif %}
+
+# User-local overrides (not managed by Ansible).
+# Host-specific stanzas here take effect because specific hostnames match before Host *.
+# This Include is placed after Host * so local settings cannot override the cipher/MAC policy above.
+Include ~/.ssh/config.local

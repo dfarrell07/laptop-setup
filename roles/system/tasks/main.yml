@@ -308,6 +308,14 @@
   ansible.builtin.set_fact:
     system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'net.core.bpf_jit_harden': system_bpf_jit_harden | int}) }}"
 
+- name: Merge system_kernel_panic into sysctl hardening dict
+  ansible.builtin.set_fact:
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'kernel.panic': system_kernel_panic | int}) }}"
+
+- name: Merge system_kernel_panic_on_oops into sysctl hardening dict
+  ansible.builtin.set_fact:
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'kernel.panic_on_oops': system_kernel_panic_on_oops | int}) }}"
+
 - name: Merge system_core_pattern into sysctl hardening dict
   ansible.builtin.set_fact:
     system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'kernel.core_pattern': system_core_pattern}) }}"
@@ -379,6 +387,23 @@
     - system_firewalld_running | bool
     - ansible_default_ipv4.interface is defined or ansible_default_ipv6.interface is defined
     - not (csb_detected | default(false))  # paired with zone guard above
+  failed_when: false
+
+- name: Remove default services from public zone
+  ansible.posix.firewalld:
+    zone: public
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - ssh
+    - dhcpv6-client
+    - mdns
+    - cockpit
+  when:
+    - system_firewalld_running | bool
+    - not (csb_detected | default(false))
   failed_when: false
 
 - name: Enable ICMP block inversion on drop zone
@@ -458,6 +483,16 @@
     - system_grubby_info.rc | default(1) == 0
     - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_processor | join(' ') | lower is search('amd')
+  changed_when: true
+  failed_when: false
+
+- name: Enable IOMMU for DMA protection (Intel)
+  ansible.builtin.command:
+    cmd: grubby --args="intel_iommu=on iommu=pt" --update-kernel=ALL
+  when:
+    - system_grubby_info.rc | default(1) == 0
+    - "'intel_iommu=on' not in (system_grubby_info.stdout | default(''))"
+    - ansible_processor | join(' ') | lower is search('intel')
   changed_when: true
   failed_when: false
 
@@ -582,6 +617,17 @@
   when:
     - ansible_system == 'Linux'
     - not (csb_detected | default(false))  # CSB may send events to a SIEM via audisp-remote; don't overwrite
+
+- name: Ensure auditd is enabled and started
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
+  become: true
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
@@ -762,6 +808,18 @@
     - nfs-server.service
     - rpcbind.service
     - rpcbind.socket
+  failed_when: false
+  when: ansible_system == 'Linux'
+
+# --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
+- name: Mask cockpit service and socket (CIS 2.2 — web console not needed on workstation)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - cockpit.service
+    - cockpit.socket
   failed_when: false
   when: ansible_system == 'Linux'
 
@@ -988,6 +1046,17 @@
     - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
 
 # --- sshd hardening ---
+- name: Ensure sshd is enabled and started
+  ansible.builtin.systemd:
+    name: sshd
+    enabled: true
+    state: started
+  become: true
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_facts.services['sshd.service'] is defined
+
 - name: Assert real_user_id is non-empty and not root before deploying AllowUsers
   ansible.builtin.assert:
     that:
@@ -1158,7 +1227,7 @@
     - ansible_system == 'Linux'
     - not (csb_detected | default(false))  # paired with resolv.conf guard — both or neither to avoid broken half-state
   failed_when: false
-  notify: Reload NetworkManager
+  notify: Restart NetworkManager
 
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:

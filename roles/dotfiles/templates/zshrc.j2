@@ -19,6 +19,7 @@ export GOPRIVATE="gitlab.cee.redhat.com,pkgs.devel.redhat.com"
 {% endif %}
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
+export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp is noexec on this host
 export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
 HISTSIZE=50000
