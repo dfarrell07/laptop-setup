@@ -816,10 +816,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if [[ -z "$_htmp_test" ]]; then
       record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
     else
+      # Guard cleanup with trap so set -e abort doesn't leak the temp file
+      trap 'rm -f "$_htmp_test"' EXIT
       cp /bin/true "$_htmp_test" && chmod +x "$_htmp_test"
       if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
       else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
       rm -f "$_htmp_test"
+      trap - EXIT
     fi
     unset _htmp_test
   fi

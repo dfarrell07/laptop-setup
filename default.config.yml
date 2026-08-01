@@ -72,6 +72,9 @@ install_virtualization: true
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
 #   system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"  (roles/system/defaults) — fallback DoT servers (IP#hostname required)
 #   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec (set false if RPM scriptlets need exec)
+#   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
+#                                        for LUKS auto-unlock (e.g. no keyfile partition). WARNING: setting true when
+#                                        rd.luks.key is active will require manual LUKS passphrase on every reboot.
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
