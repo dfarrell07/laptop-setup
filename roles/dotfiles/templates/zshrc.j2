@@ -213,6 +213,36 @@ sp() {
   tmux new-session -As "$name" -c "$dir"
 }
 
+{% if profile == 'work' %}
+# --- OVN-K/bpfman workflow ---
+# Namespace-pinned kubectl: typing -n ovn-kubernetes on every command is the #1 daily friction.
+alias kovnk='kubectl -n ovn-kubernetes'
+alias kbpf='kubectl -n bpfman'
+
+# Watch pod state transitions in real time (spot CrashLoopBackOff, Pending→Running, etc.)
+alias kwatch='kubectl get pods -A -w'
+alias kovnkwatch='kubectl get pods -n ovn-kubernetes -w'
+
+# stern: concurrent log streaming across all matching pods — the right way to watch OVN-K logs.
+# '.' matches every pod in the namespace; narrower patterns isolate a single component.
+# stern is installed via packages_go_install (github.com/stern/stern).
+command -v stern &>/dev/null && {
+  alias skovnk='stern -n ovn-kubernetes .'          # all OVN-K pods at once, color-coded by pod
+  alias sknode='stern -n ovn-kubernetes ovnkube-node'
+  alias skctrl='stern -n ovn-kubernetes ovnkube-controller'
+  alias skbpf='stern -n bpfman .'
+}
+
+# kind-load: push a locally-built image into the kind cluster without a registry round-trip.
+# Needed after every 'make build' cycle when testing OVN-K or bpfman images in kind.
+# Usage: kind-load <image:tag> [cluster-name]
+kind-load() {
+  local img="${1:?Usage: kind-load <image:tag> [cluster-name]}"
+  local cluster="${2:-${KIND_CLUSTER_NAME:-kind}}"
+  kind load docker-image "$img" --name "$cluster"
+}
+{% endif %}
+
 # --- Status ---
 {% if ansible_system | default('Linux') != 'Darwin' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
@@ -227,7 +257,7 @@ alias ts='tailscale status'
 
 # --- General aliases ---
 alias gv="gvim -vp"
-alias gi="grep -rniI --color=always --exclude-dir=vendor"
+alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
 alias ping="ping -i .2"
 alias pingg="ping www.google.com"
 alias ping8="ping 8.8.8.8"

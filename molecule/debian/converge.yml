@@ -18,17 +18,8 @@
       ansible.builtin.set_fact:
         common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
 
-    - name: Override for container testing (system role)
-      ansible.builtin.set_fact:
-        system_disable_usb_storage: false
-        system_kernel_lockdown: ''
-        system_aide_enabled: false
-        system_install_usbguard: false
-        install_virtualization: false  # libvirt not needed in CI container
-        system_var_tmp_noexec: false   # var-tmp.mount unit fails in containers without systemd
-        system_disable_fingerprint: false  # fprintd masking fails silently in containers; skip entirely
-        system_tlp_enabled: false   # TLP/ppd service ops fail in containers
-        real_user_id: molecule  # containers connect as root; override to avoid sshd AllowUsers assert
+    - name: Apply container-safe system role overrides
+      ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
   roles:
     - role: system

@@ -1,0 +1,15 @@
+---
+# Shared container-safe overrides for the system role in all molecule CI scenarios.
+# Included by molecule/{fedora,rocky,debian}/converge.yml system role pre_tasks.
+# Prevents container-incompatible tasks from running in Podman-based CI scenarios.
+- name: Override for container testing (system role)
+  ansible.builtin.set_fact:
+    system_disable_usb_storage: false    # USB modprobe blacklisting is meaningless in containers
+    system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
+    system_aide_enabled: false            # AIDE DB init takes 5-10 min; useless in CI
+    system_install_usbguard: false        # no USB devices to guard in containers
+    install_virtualization: false         # libvirt not needed in CI container
+    system_var_tmp_noexec: false          # var-tmp.mount unit fails in containers without systemd
+    system_disable_fingerprint: false     # fprintd masking fails silently in containers; skip entirely
+    system_tlp_enabled: false             # TLP/ppd service ops fail in containers
+    real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert

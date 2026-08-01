@@ -17,7 +17,6 @@ packages_cli:
   - jq
   - yq
   - procps-ng
-  - nmap
   - meld
   - direnv
   - vim-enhanced
@@ -26,7 +25,6 @@ packages_cli:
   - zsh-autosuggestions
   - zsh-syntax-highlighting
   - fzf
-  - socat
   - pipx
   - zoxide
   - ShellCheck
@@ -79,6 +77,8 @@ packages_networking:
   - iperf3
   - traceroute
   - iproute
+  - nmap            # network scanner (moved from packages_cli — it's a networking tool)
+  - socat           # socket relay utility (moved from packages_cli — networking tool)
   - mtr
   - nftables
   - bind-utils
@@ -93,6 +93,7 @@ packages_networking_work:
   - bpftool        # eBPF program/map introspection
   - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
   - strace         # system call tracer; needed on host for bpfman daemon debugging
+  - gdb            # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
   - perf           # kernel performance profiling
   - bpftrace       # eBPF dynamic tracing; must be on host for kernel access
   - sos            # Red Hat support diagnostic bundle tool; required for CSB/RHEL support cases
