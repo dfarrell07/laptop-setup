@@ -35,9 +35,7 @@
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
-        packages_install_binaries: false
-        # Fake key so ssh role deploys allowed_signers in CI (vault empty → key empty without this)
-        ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
+        # packages_install_binaries and ssh_git_signing_pubkey are in molecule/shared/system-container-overrides.yml
 
     # Create a minimal mock notes repo so the notes role skips cloning (private
     # repo, no SSH key in CI) but still runs the chmod tasks that set notes/
