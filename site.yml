@@ -56,7 +56,7 @@
 
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-      when: ansible_system == 'Linux'
+      when: ansible_system | default('Linux') == 'Linux'
       tags: [always]
 
   roles:
@@ -66,7 +66,7 @@
 
     - role: system
       tags: [system]
-      when: ansible_system == 'Linux'
+      when: ansible_system | default('Linux') == 'Linux'
 
   post_tasks:
     # NetworkManager restart and systemd-resolved restart handlers fire here (end of Play 1).
@@ -179,7 +179,7 @@
 
     - role: distrobox
       tags: [distrobox]
-      when: ansible_system == 'Linux' and distrobox_enabled | bool
+      when: ansible_system | default('Linux') == 'Linux' and distrobox_enabled | bool
 
     - role: claude
       tags: [claude]
