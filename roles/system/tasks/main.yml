@@ -1629,6 +1629,22 @@
 # CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
 # cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
 # would silently block those IT management jobs. Skip on CSB entirely.
+- name: Warn if non-root user crontabs exist before restricting cron access
+  ansible.builtin.find:
+    paths: /var/spool/cron
+    excludes: root
+    file_type: file
+  register: system_existing_crontabs
+  failed_when: false
+
+- name: Alert operator about user crontabs that will be silently blocked
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Non-root crontabs found and will be silently blocked by cron.allow=root:
+      {{ system_existing_crontabs.files | map(attribute='path') | list }}.
+      Review these jobs before proceeding.
+  when: (system_existing_crontabs.files | default([])) | length > 0
+
 - name: Restrict cron access to root only
   ansible.builtin.copy:
     content: "root\n"

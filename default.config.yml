@@ -70,7 +70,7 @@ install_virtualization: true
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
-#   system_dns_fallback: "9.9.9.9 8.8.8.8"  (roles/system/defaults) — fallback DNS when Cloudflare unreachable
+#   system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"  (roles/system/defaults) — fallback DoT servers (IP#hostname required)
 #   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec (set false if RPM scriptlets need exec)
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit

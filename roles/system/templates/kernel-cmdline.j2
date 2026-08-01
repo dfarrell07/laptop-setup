@@ -12,5 +12,7 @@
 {% set _ = params.append('page_alloc.shuffle=1') %}
 {% if ansible_processor | join(' ') | lower is search('amd') %}
 {% set _ = params.append('amd_iommu=on iommu=pt') %}
+{% elif ansible_processor | join(' ') | lower is search('intel') %}
+{% set _ = params.append('intel_iommu=on iommu=pt') %}
 {% endif %}
 {{ params | join(' ') }}
