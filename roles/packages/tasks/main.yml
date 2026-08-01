@@ -608,7 +608,15 @@
     - ansible_system == 'Linux'
     - ansible_architecture == 'x86_64'
   block:
+    - name: Check if sops is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/sops --version
+      register: packages_sops_check
+      changed_when: false
+      failed_when: false
+
     - name: Download SOPS binary
+      when: packages_sops_version not in (packages_sops_check.stdout | default(''))
       ansible.builtin.get_url:
         url: "https://github.com/getsops/sops/releases/download/v{{ packages_sops_version }}/sops-v{{ packages_sops_version }}.linux.amd64"
         dest: /usr/local/bin/sops

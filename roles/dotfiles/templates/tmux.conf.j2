@@ -25,6 +25,9 @@ setw -g mode-keys vi
 set -g history-limit {{ dotfiles_tmux_history_limit }}
 set -g renumber-windows on       # close middle window → no gaps in numbering
 set -g focus-events on           # allows vim/neovim autoread and focus autocommands inside tmux
+setw -g monitor-activity on     # flag panes with output while you're elsewhere
+set -g visual-activity on       # show activity indicator in status bar
+set -g word-separators " /@\"<>()[]{}|;"  # double-click selects path components, not whole paths
 
 # Mouse
 set -g mouse on

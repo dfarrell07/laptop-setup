@@ -139,8 +139,7 @@ containers: guard-not-root
 claude: guard-not-root
 	ansible-playbook site.yml --tags common,claude
 
-distrobox: guard-not-root
-	ansible-playbook site.yml --tags common,distrobox
+distrobox: container  # alias for backwards compatibility
 
 # --- Audit and testing ---
 
@@ -159,10 +158,9 @@ diff:
 
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline
 
-lint: .venv
+lint: .venv shellcheck
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
-	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
 
 .venv: requirements-test.lock
 	python3 -m venv .venv
