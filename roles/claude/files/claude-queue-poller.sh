@@ -142,12 +142,12 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     if [[ "$CLAUDE_EXIT" -ne 0 ]]; then
       fail_issue "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`"
       git push origin "$BRANCH_NAME" 2>/dev/null || true
-      exit 1
+      exit 0  # already handled — exit 0 prevents outer || handler from double-calling fail_issue
     fi
 
     if git diff --quiet "$DEFAULT_BRANCH"..."$BRANCH_NAME" 2>/dev/null; then
       fail_issue "$ISSUE_NUM" "Claude completed but made no changes (${DURATION}s)."
-      exit 1
+      exit 0  # already handled — exit 0 prevents outer || handler from double-calling fail_issue
     fi
 
     git push -u origin "$BRANCH_NAME"

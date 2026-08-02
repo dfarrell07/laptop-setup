@@ -106,6 +106,7 @@
     src: CLAUDE.md.j2
     dest: "{{ claude_work_config_dir }}/CLAUDE.md"
     mode: "0600"
+    force: false
   when: profile == 'work'
 
 - name: Deploy personal instance CLAUDE.md
@@ -113,6 +114,7 @@
     src: CLAUDE.md.j2
     dest: "{{ claude_personal_config_dir }}/CLAUDE.md"
     mode: "0600"
+    force: false
 
 # --- Security: ~/.claude permissions ---
 # Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time

@@ -174,9 +174,8 @@ packages_go_install:
   - golang.org/x/vuln/cmd/govulncheck@v1.4.0
   - github.com/daixiang0/gci@v0.13.6
   - golang.org/x/tools/gopls@v0.23.0
-  - github.com/stern/stern@v1.32.0
 
-# Work-profile-only Go tools (OVN-K codegen + Submariner)
+# Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes)
 packages_go_install_work:
   # Pin controller-gen and code-generator tools to match OVN-K's go.mod
   # (hack/update-codegen.sh uses v0.36.2). Bump together when OVN-K upgrades k8s.
@@ -189,6 +188,8 @@ packages_go_install_work:
   - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
   # Pin to match the broker API version in active Submariner cluster deployments.
   - github.com/submariner-io/subctl/cmd/subctl@v0.18.0
+  # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
+  - github.com/stern/stern@v1.32.0
 
 packages_k9s_version: "0.51.0"
 packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
