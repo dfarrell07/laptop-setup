@@ -875,19 +875,17 @@ CARGO_TARGET_DIR=/tmp/cargo-build cargo build
 
 **Symptom:** `bpftool prog dump jited` shows blinded constants (XOR'd with random values) rather than actual literal values. JIT output differs from an unhardened host, making JIT-level debugging difficult.
 
-**Root Cause:** The `system` role sets `net.core.bpf_jit_harden=2` (CIS/STIG hardening). Value 2 applies constant blinding in the BPF JIT to **all users including root**. The Fedora kernel default is 0 (no blinding). This is more restrictive than needed given that `kernel.unprivileged_bpf_disabled=2` already blocks unprivileged BPF loading entirely.
+**Root Cause:** `net.core.bpf_jit_harden=2` applies constant blinding in the BPF JIT to **all users including root**, making JIT-level debugging impossible. The default is 1 (unprivileged-only blinding), which is effectively a no-op since unprivileged BPF is already blocked. Value 2 is only relevant if you explicitly set `system_bpf_jit_harden: 2` in `config.yml` for strict CIS/STIG compliance.
 
-**Practical impact by operation:**
+**Practical impact by operation (when harden=2 is set):**
 - `bpfman load / list / unload / get` — **not affected** — programs load and run correctly
 - `bpftool prog dump jited` — constants are XOR-blinded; harder to read JIT output
 - Comparing JIT output to a default Fedora host — output differs due to blinding
 
-Value 1 restricts blinding to unprivileged users only, which is effectively a no-op here since unprivileged BPF is already disabled.
-
-**Fix:** Set in `config.yml`:
+**Fix:** Remove or lower `system_bpf_jit_harden` in `config.yml` (default is already 1):
 
 ```yaml
-system_bpf_jit_harden: 1   # 1 = unprivileged only (effectively disabled); safe for bpfman JIT debugging
+system_bpf_jit_harden: 1   # 1 = unprivileged only (default); safe for bpfman JIT debugging
 ```
 
 Then re-run `make system`. For a non-persistent change: `sudo sysctl -w net.core.bpf_jit_harden=1`.
@@ -898,21 +896,19 @@ Then re-run `make system`. For a non-persistent change: `sudo sysctl -w net.core
 
 **Symptom:** `sudo sysctl -w kernel.unprivileged_bpf_disabled=0` returns `sysctl: setting key "kernel.unprivileged_bpf_disabled": Operation not permitted` even as root.
 
-**Root Cause:** The `system` role sets `kernel.unprivileged_bpf_disabled=2`. Value 2 is write-once: once applied at boot (or by the first `sysctl -w` after kernel init), the kernel locks the sysctl and rejects any subsequent write — including from root — with EPERM. This is intentional: it prevents privilege-escalation attacks that attempt to re-enable unprivileged BPF after hardening is applied.
+**Root Cause:** `kernel.unprivileged_bpf_disabled=2` is write-once: once applied, the kernel locks the sysctl and rejects any subsequent write — including from root — with EPERM. The default is value 1 (root can re-enable at runtime). Value 2 only applies if explicitly set via `system_unprivileged_bpf_disabled: 2` in `config.yml` for strict CIS/STIG lockdown.
 
 **Normal bpfman and OVN-K development is unaffected.** Both workloads use privileged BPF via root-level processes (bpfman daemon with CAP_BPF, ovnkube-node as root), so unprivileged BPF is never needed at runtime.
 
-**Affected case:** bpfman contributors who need to test BPF program rejection behavior (i.e., verify that unprivileged BPF is correctly denied) cannot lower this sysctl at runtime.
-
-**Fix:** To temporarily allow testing on a single boot, reboot and override the sysctl via kernel cmdline:
+**If you have set value=2 and need to test BPF rejection:** reboot and override the sysctl via kernel cmdline:
 
 ```
 kernel.unprivileged_bpf_disabled=0
 ```
 
-Add to `GRUB_CMDLINE_LINUX` in `/etc/default/grub` (or use `grubby`) for a one-time test, then revert. Do not set this in `config.yml` — that would permanently downgrade the security posture.
+Add to `GRUB_CMDLINE_LINUX` in `/etc/default/grub` (or use `grubby`) for a one-time test, then revert.
 
-Alternatively, run the tests in a throwaway VM or container that has not yet applied the write-once sysctl.
+**If you only need value=1 (the default):** with `system_unprivileged_bpf_disabled: 1`, root can change the sysctl at runtime without rebooting: `sudo sysctl -w kernel.unprivileged_bpf_disabled=0`.
 
 **CSB IT ticket:** No. This is expected behavior; no provisioning change needed.
 

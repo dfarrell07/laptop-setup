@@ -223,6 +223,19 @@
         that: verify_bpf.stdout == '1'
         fail_msg: "BPF JIT hardening not set to 1 (unprivileged-only blinding; see system_bpf_jit_harden)"
 
+    - name: Check sysctl kernel.unprivileged_bpf_disabled
+      ansible.builtin.command: sysctl -n kernel.unprivileged_bpf_disabled
+      register: verify_bpf_unpriv
+      changed_when: false
+      become: true
+
+    - name: Assert unprivileged BPF is disabled but root-re-enable-able
+      ansible.builtin.assert:
+        that: verify_bpf_unpriv.stdout | int in [1, 2]
+        fail_msg: >-
+          kernel.unprivileged_bpf_disabled={{ verify_bpf_unpriv.stdout }} (expected 1 or 2).
+          Value 0 allows unprivileged BPF loading — security regression.
+
     - name: Check bpfman binary is present
       ansible.builtin.command: which bpfman
       register: verify_bpfman_bin
