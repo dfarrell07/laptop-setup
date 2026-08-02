@@ -1453,81 +1453,76 @@
   failed_when: false
 
 # --- USBGuard ---
-- name: Install USBGuard
-  ansible.builtin.dnf:
-    name:
-      - usbguard
-      - usbguard-selinux
-    state: present
-  when: system_install_usbguard | default(true) | bool
+- name: Configure USBGuard
+  when: system_install_usbguard | bool
+  block:
+    - name: Install USBGuard
+      ansible.builtin.dnf:
+        name:
+          - usbguard
+          - usbguard-selinux
+        state: present
 
-- name: Deploy USBGuard whitelist rules
-  ansible.builtin.template:
-    src: usbguard-rules.conf.j2
-    dest: /etc/usbguard/rules.conf
-    owner: root
-    group: root
-    mode: "0600"
-  when: system_install_usbguard | default(true) | bool
-  notify: Restart usbguard
-  # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
-  # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
-  # including the keyboard. Template failure must be a hard stop.
+    - name: Deploy USBGuard whitelist rules
+      ansible.builtin.template:
+        src: usbguard-rules.conf.j2
+        dest: /etc/usbguard/rules.conf
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Restart usbguard
+      # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
+      # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
+      # including the keyboard. Template failure must be a hard stop.
 
-- name: Verify USBGuard rules.conf is non-empty before enabling service
-  ansible.builtin.stat:
-    path: /etc/usbguard/rules.conf
-  register: system_usbguard_rules_stat
-  when: system_install_usbguard | default(true) | bool
+    - name: Verify USBGuard rules.conf is non-empty before enabling service
+      ansible.builtin.stat:
+        path: /etc/usbguard/rules.conf
+      register: system_usbguard_rules_stat
 
-- name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
-  ansible.builtin.assert:
-    that:
-      - system_usbguard_rules_stat.stat.exists | default(false)
-      - system_usbguard_rules_stat.stat.size | default(0) > 0
-    fail_msg: >-
-      /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
-      ALL USB devices including the keyboard. Fix the template and re-run before enabling.
-  when: system_install_usbguard | default(true) | bool
+    - name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
+      ansible.builtin.assert:
+        that:
+          - system_usbguard_rules_stat.stat.exists | default(false)
+          - system_usbguard_rules_stat.stat.size | default(0) > 0
+        fail_msg: >-
+          /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
+          ALL USB devices including the keyboard. Fix the template and re-run before enabling.
 
-- name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
-  ansible.builtin.lineinfile:
-    path: /etc/usbguard/usbguard-daemon.conf
-    regexp: '^ImplicitPolicyTarget='
-    line: 'ImplicitPolicyTarget=block'
-    state: present
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-  notify: Restart usbguard
+    - name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^ImplicitPolicyTarget='
+        line: 'ImplicitPolicyTarget=block'
+        state: present
+      failed_when: false
+      notify: Restart usbguard
 
-- name: Enforce AuditBackend=LinuxAudit in usbguard-daemon.conf
-  ansible.builtin.lineinfile:
-    path: /etc/usbguard/usbguard-daemon.conf
-    regexp: '^AuditBackend='
-    line: 'AuditBackend=LinuxAudit'
-    state: present
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-  notify: Restart usbguard
+    - name: Enforce AuditBackend=LinuxAudit in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^AuditBackend='
+        line: 'AuditBackend=LinuxAudit'
+        state: present
+      failed_when: false
+      notify: Restart usbguard
 
-- name: Enforce IPCAllowedGroups=wheel in usbguard-daemon.conf
-  ansible.builtin.lineinfile:
-    path: /etc/usbguard/usbguard-daemon.conf
-    regexp: '^IPCAllowedGroups='
-    line: 'IPCAllowedGroups=wheel'
-    state: present
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-  notify: Restart usbguard
+    - name: Enforce IPCAllowedGroups=wheel in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^IPCAllowedGroups='
+        line: 'IPCAllowedGroups=wheel'
+        state: present
+      failed_when: false
+      notify: Restart usbguard
 
-- name: Enable USBGuard service
-  ansible.builtin.systemd:
-    name: usbguard
-    state: started
-    enabled: true
-    daemon_reload: true
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
+    - name: Enable USBGuard service
+      ansible.builtin.systemd:
+        name: usbguard
+        state: started
+        enabled: true
+        daemon_reload: true
+      failed_when: false
 
 # --- Firmware updates (LVFS/fwupd) ---
 - name: Install fwupd
