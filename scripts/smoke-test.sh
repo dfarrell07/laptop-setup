@@ -67,7 +67,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "strace:strace --version" "cosign:cosign version" "tkn:tkn version --component=cli" "sops:sops --version" "bpftool:bpftool version" "operator-sdk:operator-sdk version" "k9s:k9s version" "krew:kubectl krew version"; do
+for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "tc:tc -V" "cosign:cosign version" "tkn:tkn version --component=cli" "sops:sops --version" "operator-sdk:operator-sdk version" "k9s:k9s version" "krew:kubectl krew version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
@@ -512,6 +512,17 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "bpfman-socket" "WARN" "bpfman.socket enabled but not active (first client connect will start it)"
     else record "bpfman-socket" "FAIL" "bpfman.socket not enabled — bpfman load/list will fail at runtime"; fi
   fi  # bpfman absent = not installed on this profile — no record emitted
+
+  # strace (work-profile only — guard on binary presence, emit nothing when absent)
+  if command -v strace &>/dev/null; then
+    if run strace --version &>/dev/null; then record "strace" "PASS"
+    else record "strace" "FAIL" "strace binary present but --version failed"; fi
+  fi
+  # bpftool (work-profile only — guard on binary presence, emit nothing when absent)
+  if command -v bpftool &>/dev/null; then
+    if run bpftool version &>/dev/null; then record "bpftool" "PASS"
+    else record "bpftool" "FAIL" "bpftool binary present but version failed"; fi
+  fi
 
   # auditd service enabled and running
   if systemctl is-active auditd &>/dev/null && systemctl is-enabled auditd &>/dev/null; then

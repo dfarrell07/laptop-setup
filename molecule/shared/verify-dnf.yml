@@ -47,11 +47,6 @@
   ansible.builtin.command: gcc --version
   changed_when: false
 
-- name: Check clang is installed
-  ansible.builtin.command: clang --version
-  changed_when: false
-  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge packages_languages subset
-
 - name: Check python3 is installed
   ansible.builtin.command: python3 --version
   changed_when: false

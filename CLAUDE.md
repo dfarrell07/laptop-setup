@@ -12,6 +12,9 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    any WM is installed. Without the identity vars, commits are attributed to `dfarrell07` and
    the notes repo clone fails (private repo). If this IS the `dfarrell07` account and you want
    notes provisioned, add `notes_enabled: true` to `config.yml` (disabled by default).
+   For HiDPI displays (e.g. ThinkPad P16v 2560x1600), also add
+   `desktop_sway_hidpi_scale: 1.5` — without it, Sway defaults to 1.0 scale and fonts
+   are microscopic on a 16-inch screen.
 3. Populate `group_vars/all/vault.yml` with real SSH keys (see Vault section below)
    *then* `ansible-vault encrypt group_vars/all/vault.yml` and replace `scripts/vault-pass.sh`
    with your YubiKey HMAC-SHA1 implementation. For a first provision without real secrets,
