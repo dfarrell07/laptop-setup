@@ -59,6 +59,8 @@ DOTFILES=(
   .config/sway/config
   .config/swaylock/config
   .config/i3status/config
+  .config/gtk-3.0/settings.ini
+  .config/gtk-4.0/settings.ini
   .config/autostart/gnome-keyring-ssh.desktop
   .config/xdg-desktop-portal/portals.conf
   .config/aerospace/aerospace.toml
