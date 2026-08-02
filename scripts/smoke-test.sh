@@ -78,12 +78,16 @@ else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
 
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
-for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version"; do
+for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "subctl:version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   [[ -x "$_gobin" ]] && {
     if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"
     else record "go-$name" "FAIL" "$_gobin present but command failed"; fi
   }
+done
+# Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
+for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
+  [[ -x "$_bin" ]] && { run "$_bin" version &>/dev/null && record "$(basename "$_bin")" "PASS" || record "$(basename "$_bin")" "FAIL" "$_bin present but version failed"; }
 done
 
 # oc (work-profile only — guard on binary presence, emit nothing when absent)
@@ -133,6 +137,15 @@ fi
 if command -v gh &>/dev/null; then
   if run gh auth status &>/dev/null 2>&1; then record "gh-auth" "PASS"
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
+fi
+
+# registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
+if [[ "${profile:-work}" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
+  if podman login --get-login registry.redhat.io &>/dev/null 2>&1; then
+    record "registry-redhat-auth" "PASS"
+  else
+    record "registry-redhat-auth" "WARN" "not authenticated — RH subctl oc image extract will silently fail (run: podman login registry.redhat.io)"
+  fi
 fi
 
 # YubiKey
@@ -635,7 +648,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       unset _iface_zone
     fi
     unset _primary_iface
-    _ssh_port="?"  # initialized here so firewall checks below are never unbound when run as non-root
+    _ssh_port=""  # empty so ${_ssh_port:-722} at the listeners check substitutes 722 on non-root runs
     if [[ "$EUID" -ne 0 ]]; then
       record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
     else

@@ -177,3 +177,15 @@
           - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install regression"
+
+    - name: Stat subctl18 binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.local/bin/subctl18"
+      register: verify_subctl18
+
+    - name: Assert subctl18 exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_subctl18.stat.exists
+          - verify_subctl18.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
