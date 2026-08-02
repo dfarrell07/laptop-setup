@@ -968,3 +968,14 @@
         msg: >-
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
+
+- name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
+  ansible.builtin.command:
+    cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew install {{ item }}"
+  loop: [ctx, ns]
+  changed_when: false
+  failed_when: false
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'

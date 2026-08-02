@@ -44,6 +44,7 @@ packages_security:
   - libfido2
   - openssl
   - gitleaks
+  - sos            # Red Hat support diagnostic bundle tool (sosreport); required for CSB/RHEL support cases
 
 packages_containers:
   - podman
@@ -86,7 +87,6 @@ packages_networking_work:
   - gdb            # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
   - perf           # kernel performance profiling
   - bpftrace       # eBPF dynamic tracing; must be on host for kernel access
-  - sos            # Red Hat support diagnostic bundle tool; required for CSB/RHEL support cases
 
 packages_apt:
   - git
@@ -107,10 +107,11 @@ packages_apt:
   - fzf
   - zoxide
   - gnupg          # Debian does not auto-install gnupg; needed for SSH role and git commit signing
+  # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
-  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - socat
   - nmap
+  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - pipx
   - shellcheck
   - ripgrep

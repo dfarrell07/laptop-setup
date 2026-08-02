@@ -99,7 +99,6 @@ claude() {
   command claude "$@"
 }
 
-#
 {% if profile == 'work' %}
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
@@ -178,12 +177,13 @@ command -v bpfman &>/dev/null && alias bpg='bpfman get'
 command -v bpfman &>/dev/null && alias bpld='bpfman load'
 
 # helpers:
-# kctx: fzf kubeconfig file picker — exports selected file as KUBECONFIG
-kctx() {
-  command -v fzf &>/dev/null || { echo "kctx: fzf required" >&2; return 1; }
+# kfiles: fzf kubeconfig FILE picker — exports selected file as KUBECONFIG
+# (for context switching within a kubeconfig, use: kubectl ctx / kubectl krew install ctx)
+kfiles() {
+  command -v fzf &>/dev/null || { echo "kfiles: fzf required" >&2; return 1; }
   local f
   f=$(find "$HOME/.kube" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' -o -name 'config*' \) 2>/dev/null \
-      | fzf --prompt="kubeconfig: " --height=40%) || return
+      | fzf --prompt="kubeconfig file: " --height=40%) || return
   export KUBECONFIG="$f"
 }
 # klogs: fzf pod picker then kubectl logs -f (pass extra args e.g. --container, --previous)
