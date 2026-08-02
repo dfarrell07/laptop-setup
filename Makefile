@@ -162,17 +162,18 @@ lint: .venv shellcheck
 
 .venv: requirements-test.lock
 	python3 -m venv .venv
-	.venv/bin/pip install -r requirements-test.lock
+	.venv/bin/pip install pip-tools
+	.venv/bin/pip install --require-hashes -r requirements-test.lock
 
 # Regenerate the hash-pinned lockfile (run after editing requirements-test.txt)
-# Requires pip-tools: .venv/bin/pip install pip-tools
 pip-lock: .venv
 	.venv/bin/pip-compile --generate-hashes --output-file=requirements-test.lock requirements-test.txt
 
 # Create .venv from the exact lockfile for reproducible CI builds
 pip-sync:
 	python3 -m venv .venv
-	.venv/bin/pip install -r requirements-test.lock
+	.venv/bin/pip install pip-tools
+	.venv/bin/pip install --require-hashes -r requirements-test.lock
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check
