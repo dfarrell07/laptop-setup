@@ -154,7 +154,7 @@ alias ovnk='cd ~/src/ovnk'
 alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
 
 # --- Task queue ---
-cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
+cq() { gh issue create --repo {{ dotfiles_claude_queue_repo }} --title "$1" --body "$2"; }
 
 # --- Kubernetes ---
 # Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)

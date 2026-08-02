@@ -2080,6 +2080,16 @@
   when: system_faillock_even_deny_root | bool
   failed_when: false
 
+- name: Remove pam_faillock even_deny_root flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: even_deny_root
+    state: absent
+    mode: "0644"
+  when: not (system_faillock_even_deny_root | bool)
+  failed_when: false
+
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
     cmd: authselect is-feature-enabled with-faillock

@@ -19,7 +19,7 @@ workspace {{ wo.workspace }} output {{ wo.output }}
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode;
 # XCURSOR vars propagated so XWayland apps pick up cursor theme and size.
-exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi XCURSOR_THEME=Adwaita XCURSOR_SIZE={{ desktop_sway_cursor_size | default(24) }}
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }} VDPAU_DRIVER={{ desktop_sway_vdpau_driver }} XCURSOR_THEME=Adwaita XCURSOR_SIZE={{ desktop_sway_cursor_size }}
 # Note: --systemd flag already propagates to systemd user session; no separate import-environment needed
 
 # Notification daemon (exec_always so it restarts after 'swaymsg reload')
@@ -33,14 +33,14 @@ exec_always /usr/libexec/lxqt-policykit-agent  # Qt6 Wayland-native polkit agent
 exec_always nm-applet
 
 # Wallpaper
-output * bg #1e1e2e solid_color
+output * bg {{ desktop_bar_bg }} solid_color
 
 # Idle and lock
 exec swayidle -w \
-    timeout 300 'swaylock -f -c 000000' \
-    timeout 600 'swaymsg "output * power off"' \
+    timeout {{ desktop_sway_idle_lock_timeout }} 'swaylock -f -c {{ desktop_sway_lock_color }}' \
+    timeout {{ desktop_sway_idle_display_timeout }} 'swaymsg "output * power off"' \
     resume 'swaymsg "output * power on"' \
-    before-sleep 'swaylock -f -c 000000'
+    before-sleep 'swaylock -f -c {{ desktop_sway_lock_color }}'
 
 # Floating window drag/resize with mouse
 floating_modifier $mod
@@ -75,7 +75,7 @@ bindsym $mod+Shift+l move right
 # Split
 bindsym $mod+b splith
 bindsym $mod+v splitv
-bindsym $mod+Shift+b exec google-chrome
+bindsym $mod+Shift+b exec {{ desktop_sway_browser }}
 
 # Layout
 bindsym $mod+s layout stacking
@@ -124,7 +124,7 @@ mode "resize" {
 bindsym $mod+r mode "resize"
 
 # Manual screen lock ($mod+l is taken by focus-right; use $mod+Ctrl+l)
-bindsym $mod+Ctrl+l exec swaylock -f -c 000000
+bindsym $mod+Ctrl+l exec swaylock -f -c {{ desktop_sway_lock_color }}
 
 # Screenshot (grim + slurp)
 bindsym Print exec grim ~/Pictures/screenshot-$(date +%F-%T).png
@@ -160,9 +160,9 @@ focus_follows_mouse no
 
 # Input
 input "type:keyboard" {
-    xkb_layout us
-    repeat_delay 200
-    repeat_rate 50
+    xkb_layout {{ desktop_sway_keyboard_layout }}
+    repeat_delay {{ desktop_sway_repeat_delay }}
+    repeat_rate {{ desktop_sway_repeat_rate }}
 }
 
 seat seat0 xcursor_theme Adwaita {{ desktop_sway_cursor_size }}
