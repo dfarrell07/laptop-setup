@@ -310,8 +310,6 @@
   ansible.builtin.copy:
     content: |
       " Managed by Ansible — edit roles/dotfiles/templates/vimrc.j2
-      set runtimepath^=~/.vim runtimepath+=~/.vim/after
-      let &packpath = &runtimepath
       source ~/.vimrc
     dest: "{{ ansible_user_dir }}/.config/nvim/init.vim"
     mode: "0644"

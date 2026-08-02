@@ -27,7 +27,7 @@ WIFI_PWR_ON_BAT=off
 # PCIE_ASPM_ON_BAT=powersupersave enables L1 substates (L1.1/L1.2) for PCIe links.
 # RUNTIME_PM_ON_BAT=auto enables kernel runtime suspend for PCIe devices (NVMe, etc.)
 # but NOT USB — USB autosuspend is a separate TLP mechanism (USB_AUTOSUSPEND, on by
-# default). The Radeon 780M is excluded from RUNTIME_PM by TLP's RUNTIME_PM_DRIVER_DENYLIST
+# default). The AMD Radeon RX 6500M (dGPU) is excluded from RUNTIME_PM by TLP's RUNTIME_PM_DRIVER_DENYLIST
 # (contains amdgpu); GPU manages its own runtime PM independently via amdgpu.runpm.
 # Note: RUNTIME_PM_ON_AC and RUNTIME_PM_ON_BAT match TLP defaults — listed here
 # explicitly to document the intended state alongside the PCIE_ASPM override.
@@ -43,7 +43,7 @@ RUNTIME_PM_ON_BAT=auto
 PLATFORM_PROFILE_ON_AC={{ system_tlp_platform_profile_ac }}
 PLATFORM_PROFILE_ON_BAT={{ system_tlp_platform_profile_bat }}
 
-# CPU power (AMD Ryzen 7840U — amd-pstate-epp active mode)
+# CPU power (AMD Ryzen PRO 6950HX — amd-pstate-epp active mode)
 # With amd-pstate-epp, the scaling_governor is locked to 'powersave'.
 # CPU_SCALING_GOVERNOR_ON_BAT is ignored; EPP is the only effective CPU power knob.
 # balance_power on battery reduces CPU power draw at the cost of burst performance.
