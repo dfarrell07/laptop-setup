@@ -208,6 +208,9 @@ install_virtualization: true
 #   dotfiles_gonosumdb: '*.redhat.com,*.engineering.redhat.com'  — GONOSUMDB for internal Go modules
 #   dotfiles_goprivate: 'gitlab.cee.redhat.com,pkgs.devel.redhat.com'  — GOPRIVATE for internal Go modules
 #   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
+#   dotfiles_work_src_dirs: [submariner-io, stolostron, ovnk, konflux, bpfman, ds]  — work org dirs under
+#     ~/src/ used for git identity routing (gitconfig.j2 includeIf) and Claude personal guard (zshrc.j2);
+#     add new orgs here instead of editing templates
 #   ssh_git_signing_pubkey: ""            — SSH public key for git commit signing; set in config.yml to the literal pubkey or
 #     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
 #     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
