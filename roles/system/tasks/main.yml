@@ -589,7 +589,7 @@
   notify: Reload sysctl
 
 # --- Firewall (drop zone) ---
-- name: Ensure firewalld is installed and running
+- name: Ensure firewalld is running
   ansible.builtin.systemd:
     name: firewalld
     state: started
@@ -604,6 +604,14 @@
     system_firewalld_running: >-
       {{ ansible_facts.services['firewalld.service'] is defined and
          ansible_facts.services['firewalld.service'].state == 'running' }}
+
+- name: Warn that firewalld is not running — all firewall hardening tasks will be skipped
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: firewalld is not running. All firewall hardening tasks (drop zone,
+      port 722, ICMP rules, tailscale0, libvirt zone) will be skipped. Install
+      and start firewalld before re-running if firewall management is required.
+  when: not (system_firewalld_running | bool)
 
 - name: Check current default firewall zone
   ansible.builtin.command:  # noqa: command-instead-of-module
@@ -726,7 +734,7 @@
     port: "{{ ssh_port }}/tcp"
     zone: redhat
     permanent: true
-    immediate: false
+    immediate: true
     state: enabled
   when:
     - system_firewalld_running | bool
@@ -954,6 +962,7 @@
     (system_lockdown_remove_result is defined and system_lockdown_remove_result is changed) or
     (system_iommu_amd_result is defined and system_iommu_amd_result is changed) or
     (system_iommu_intel_result is defined and system_iommu_intel_result is changed) or
+    (system_iommu_pt_result is defined and system_iommu_pt_result is changed) or
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or
     (system_init_on_free_result is defined and system_init_on_free_result is changed) or
     (system_page_shuffle_result is defined and system_page_shuffle_result is changed) or
@@ -1525,6 +1534,7 @@
   ansible.builtin.dnf:
     name: fwupd
     state: present
+  register: system_fwupd_install_result
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
   failed_when: false
 
@@ -1539,7 +1549,7 @@
 - name: Refresh LVFS firmware metadata
   ansible.builtin.command:
     cmd: fwupdmgr refresh
-  when: ansible_system == 'Linux'
+  when: ansible_system == 'Linux' and system_fwupd_install_result is changed
   changed_when: false
   failed_when: false
 

@@ -46,7 +46,7 @@
 
 - name: Add Google Chrome repo
   when:
-    - repo_google_chrome | default(true)
+    - repo_google_chrome | default(false)
     - ansible_architecture == 'x86_64'
   block:
     - name: Add google-chrome repo
@@ -86,7 +86,7 @@
 
 - name: Add Google Cloud SDK repo
   when:
-    - repo_google_cloud_sdk | default(true)
+    - repo_google_cloud_sdk | default(false)
     - ansible_architecture == 'x86_64'
   block:
     - name: Add google-cloud-cli repo

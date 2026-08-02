@@ -39,6 +39,10 @@ install_virtualization: true
 # Additional toggles available via role defaults (override in config.yml):
 #   system_install_usbguard: true      (roles/system/defaults)
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
+#   system_auditd_max_log_file: 8      (roles/system/defaults) — MB per audit log file; machines with a dedicated /var/log/audit partition
+#                                        or high-volume workloads (kind clusters, bpfman eBPF load tests) may want 32–64 MB
+#   system_auditd_num_logs: 5          (roles/system/defaults) — rotated files to keep; total = max_log_file * num_logs (40 MB default)
+#   system_aide_check_calendar: '*-*-* 05:00:00'  (roles/system/defaults) — OnCalendar for aide-check.timer
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   packages_install_binaries: true    (roles/packages/defaults)
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
@@ -81,6 +85,8 @@ install_virtualization: true
 #   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime (preserves Secure Boot chain of
 #                                        trust). Set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump
 #                                        impossible even when Secure Boot is disabled (kdump uses kexec internally).
+#   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
+#                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
 #   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=unrestricted within
 #                                        user ns, Fedora workstation default — set 0 in config.yml for gdb -p / strace -p
 #                                        on own running processes without sudo, needed for OVN-K/bpfman kernel debugging)
@@ -95,6 +101,9 @@ install_virtualization: true
 #                                            'remote' for ssh -R, 'yes' for both
 # system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
 #   ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
+#   system_ssh_unused_connection_timeout: 600 (roles/system/defaults) — seconds before idle connection with no open channels is
+#   closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
+#   value or "" if they hold idle control masters between commands for more than 600 s)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
@@ -152,6 +161,8 @@ install_virtualization: true
 #     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (test-queue-poller.sh systemd user service)
+#   claude_queue_memory_max: '4G'      (roles/claude/defaults) — MemoryMax for queue poller unit; lower on 8 GiB machines
+#   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
 #   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
 #     that allow external triggering of Claude sessions
 #   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
@@ -190,8 +201,8 @@ system_faillock_even_deny_root: false  # root lockout on failed logins; root SSH
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky
-repo_google_chrome: true
-repo_google_cloud_sdk: true  # enables 'dnf install google-cloud-sdk'; nothing auto-installed — set false if you do not use GCP
+repo_google_chrome: false  # opt in; nothing auto-installed on Linux and Chrome repo adds dnf metadata overhead
+repo_google_cloud_sdk: false  # opt in when gcloud is needed; GCP repo adds metadata overhead on every dnf invocation
 repo_rpmfusion_free: true    # Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC; nothing auto-installed
 repo_rpmfusion_nonfree: false  # Fedora-only; NVIDIA proprietary drivers, non-free firmware; opt in explicitly
 repo_slack: false   # packagecloud Slack RPM repo has gpgcheck=false — opt in explicitly or use Flatpak instead

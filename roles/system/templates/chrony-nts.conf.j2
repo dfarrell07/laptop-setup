@@ -1,12 +1,11 @@
 # {{ ansible_managed }}
 # NTS-authenticated time sources
-server time.cloudflare.com iburst nts
-server nts.netnod.se iburst nts
-server ptbtime1.ptb.de iburst nts
-server ntppool1.time.nl iburst nts
+{% for server in system_chrony_nts_servers %}
+server {{ server }} iburst nts
+{% endfor %}
 
-# Unauthenticated fallback (used when fewer than minsources=2 NTS servers respond)
-pool 2.fedora.pool.ntp.org iburst
+# Unauthenticated fallback (used when fewer than minsources={{ system_chrony_minsources }} NTS servers respond)
+pool {{ system_chrony_fallback_pool }} iburst
 
 # Prefer NTS; fall back to pool only when NTS unavailable
 authselectmode prefer
@@ -22,5 +21,5 @@ makestep 1.0 3
 rtcsync
 leapseclist /usr/share/zoneinfo/leap-seconds.list
 leapsecmode slew
-minsources 2
+minsources {{ system_chrony_minsources }}
 logdir /var/log/chrony

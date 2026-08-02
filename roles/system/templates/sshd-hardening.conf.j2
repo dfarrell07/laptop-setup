@@ -42,7 +42,7 @@ ClientAliveCountMax 2
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
 {% if system_ssh_channel_timeout | default('') %}ChannelTimeout {{ system_ssh_channel_timeout }}{% endif %}
-UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
+{% if system_ssh_unused_connection_timeout | default('') %}UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}{% endif %}
 TCPKeepAlive no
 LogLevel VERBOSE
 UsePAM yes

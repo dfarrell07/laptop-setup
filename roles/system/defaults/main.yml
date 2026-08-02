@@ -126,6 +126,11 @@ system_pwquality_dcredit: -1   # digit credit: -1 = require at least 1 digit; 0 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
 
+# auditd log rotation
+system_auditd_max_log_file: 8   # MB per log file (kind/bpfman workloads may want larger)
+system_auditd_num_logs: 5       # number of rotated files to keep; total cap = max_log_file * num_logs (default: 40 MB)
+system_aide_check_calendar: '*-*-* 05:00:00'  # OnCalendar for aide-check.timer; override in config.yml
+
 # TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
 # Auto-detected from ansible_form_factor (Notebook/Portable/Laptop = true, Desktop = false).
 # Override in config.yml: system_tlp_enabled: true/false
@@ -253,3 +258,13 @@ system_remove_luks_key: false
 system_iommu_passthrough: false
 # system_wifi_mac_rand: not set — defaults true on non-CSB, false on CSB; override in config.yml
 system_enable_cockpit: false  # set true to unmask cockpit web console (port 9090); drop zone still blocks external access
+
+# Chrony NTS time sources. Override in config.yml for corporate environments that block
+# outbound NTP or require regional servers.
+system_chrony_nts_servers:
+  - time.cloudflare.com
+  - nts.netnod.se
+  - ptbtime1.ptb.de
+  - ntppool1.time.nl
+system_chrony_fallback_pool: 2.fedora.pool.ntp.org
+system_chrony_minsources: 2

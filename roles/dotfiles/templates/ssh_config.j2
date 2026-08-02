@@ -24,7 +24,7 @@ Host *
 
 Host github.com gist.github.com
     User git
-    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     IdentitiesOnly yes
     HostKeyAlgorithms ssh-ed25519
     PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
@@ -32,7 +32,7 @@ Host github.com gist.github.com
 Host gh gist
     HostName github.com
     User git
-    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     IdentitiesOnly yes
     HostKeyAlgorithms ssh-ed25519
     PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
@@ -40,12 +40,12 @@ Host gh gist
 {% if profile == 'work' %}
 Host code.engineering.redhat.com
     User {{ real_user_id | default(ansible_user_id) }}
-    IdentityFile ~/.ssh/id_rsa_redhat
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
     IdentitiesOnly yes
 
 Host gitlab.cee.redhat.com
     User git
-    IdentityFile ~/.ssh/id_rsa_redhat
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
     IdentitiesOnly yes
 {% endif %}
 
@@ -53,20 +53,20 @@ Host gitlab.cee.redhat.com
 Host internal-git
     HostName {{ dotfiles_internal_git_host }}
     User git
-    IdentityFile ~/.ssh/id_rsa_redhat
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
     IdentitiesOnly yes
 {% endif %}
 
 {% if dotfiles_laptop_tailscale_host | default('') %}
 Host {{ dotfiles_laptop_tailscale_host }}
     Port {{ ssh_port | default(722) }}
-    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     IdentitiesOnly yes
 {% endif %}
 {% if dotfiles_mac_tailscale_host | default('') %}
 Host {{ dotfiles_mac_tailscale_host }}
     Port {{ ssh_port | default(722) }}
-    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     IdentitiesOnly yes
 {% endif %}
 

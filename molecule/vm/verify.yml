@@ -94,13 +94,13 @@
         path: /etc/yum.repos.d/google-cloud-cli.repo
       register: verify_gcloud_repo
       become: true
-      when: (repo_google_cloud_sdk | default(true)) and ansible_architecture == 'x86_64'
+      when: (repo_google_cloud_sdk | default(false)) and ansible_architecture == 'x86_64'
 
     - name: Assert google-cloud-cli repo exists
       ansible.builtin.assert:
         that: verify_gcloud_repo.stat.exists
         fail_msg: "google-cloud-cli repo not configured"
-      when: (repo_google_cloud_sdk | default(true)) and ansible_architecture == 'x86_64'
+      when: (repo_google_cloud_sdk | default(false)) and ansible_architecture == 'x86_64'
 
     - name: Verify rpmfusion-free repo configured
       ansible.builtin.stat:

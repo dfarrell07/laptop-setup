@@ -14,6 +14,9 @@ dotfiles_oh_my_zsh_plugins:
 
 dotfiles_aws_profile: "aws-acm-subm"
 
+dotfiles_gonosumdb: "*.redhat.com,*.engineering.redhat.com"
+dotfiles_goprivate: "gitlab.cee.redhat.com,pkgs.devel.redhat.com"
+
 profile: work  # noqa: var-naming[no-role-prefix] — playbook-level variable shared across 7 roles
 
 dotfiles_tmux_prefix: "C-a"
@@ -32,3 +35,5 @@ dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 dotfiles_internal_ca_path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
 
 ssh_signing_key_basename: id_ed25519_sk_signing  # noqa: var-naming[no-role-prefix] — shared with ssh role; must match
+dotfiles_ssh_hardware_key_basename: id_ed25519_sk
+dotfiles_ssh_redhat_key_basename: id_rsa_redhat
