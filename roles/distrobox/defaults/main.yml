@@ -8,6 +8,7 @@ distrobox_container_replace: "{{ container_replace | default(false) }}"
 distrobox_ini_path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
 
 distrobox_packages:
+  # --- General shell tools ---
   - git
   - vim
   - tmux
@@ -19,43 +20,57 @@ distrobox_packages:
   - wget
   - tar
   - unzip
-  - gcc
-  - gcc-c++
-  - clang
-  - make
-  - cmake
-  - autoconf
-  - automake
-  - libtool
-  - golang
-  - rust    # bpfman MSRV 1.85.0; Fedora 44 ships 1.97.1 (stable, no nightly features needed)
-  - cargo   # Rust package manager (companion to rust package)
-  - clippy  # Rust linter — separate dnf package on Fedora; needed for 'cargo clippy'
-  - rustfmt  # Rust formatter — separate dnf package; needed for 'cargo fmt --check'
-  - rust-src  # Rust stdlib source — required by rust-analyzer for go-to-definition into std and hover docs
-  - protobuf-compiler  # protoc — hard bpfman build requirement (tonic/prost gRPC code generation)
-  - pkgconf-pkg-config  # pkg-config — Rust build scripts for libbpf and openssl use it
-  - python3
-  - python3-pip
-  - python3-devel
-  - nodejs
-  - npm
-  - openssl-devel
-  - libffi-devel
-  - zlib-devel
-  - ShellCheck
-  - yamllint
-  - shfmt       # moved adjacent to linting peers (ShellCheck/yamllint)
-  - ripgrep
-  - fd-find
-  - buildah
-  - skopeo
   - zoxide
   - procps-ng
   - findutils
   - which
   - hostname
   - bash-completion
+
+  # --- C / build toolchain ---
+  - gcc
+  - gcc-c++
+  - clang
+  - llvm  # complements clang for eBPF bytecode compilation
+  - make
+  - cmake
+  - autoconf
+  - automake
+  - libtool
+  - protobuf-compiler  # protoc — hard bpfman build requirement (tonic/prost gRPC code generation)
+  - pkgconf-pkg-config  # pkg-config — Rust build scripts for libbpf and openssl use it
+  - openssl-devel
+  - libffi-devel
+  - zlib-devel
+  - libbpf-devel  # eBPF development headers
+
+  # --- Language runtimes ---
+  - golang
+  - rust    # bpfman MSRV 1.85.0; Fedora 44 ships 1.97.1 (stable, no nightly features needed)
+  - cargo   # Rust package manager (companion to rust package)
+  - clippy  # Rust linter — separate dnf package on Fedora; needed for 'cargo clippy'
+  - rustfmt  # Rust formatter — separate dnf package; needed for 'cargo fmt --check'
+  - rust-src  # Rust stdlib source — required by rust-analyzer for go-to-definition into std and hover docs
+  - python3
+  - python3-pip
+  - python3-devel
+  - nodejs
+  - npm
+
+  # --- Linting / code quality ---
+  - ShellCheck
+  - yamllint
+  - shfmt
+
+  # --- Search / navigation ---
+  - ripgrep
+  - fd-find
+
+  # --- Container tools ---
+  - buildah
+  - skopeo
+
+  # --- Networking / diagnostics ---
   - tcpdump
   - wireshark-cli  # tshark — scripting-safe CLI capture for OVN-K/bpfman traffic analysis
   - iproute
@@ -69,17 +84,21 @@ distrobox_packages:
   - conntrack-tools
   - socat
   - iperf3
+
+  # --- eBPF / debugging ---
   - strace
   - bpftool  # eBPF program/map introspection (essential for bpfman development)
   - bpftrace  # eBPF dynamic tracing (container-side; shares host kernel with distrobox)
   - perf      # kernel performance profiling; CAP_PERFMON granted by distrobox additional_flags
-  - libbpf-devel  # eBPF development headers
-  - llvm  # complements clang for eBPF bytecode compilation
   - gdb       # C/eBPF program debugger; required by rust-gdb; Go debugging fallback
   - rust-gdb  # Rust GDB pretty-printers (separate Fedora package from rust)
   - delve     # Go-native debugger (dlv) — goroutine-aware; GDB insufficient for OVN-K/bpfman Go runtime inspection
+
+  # --- VCS / security ---
   - gh
   - gitleaks
+
+  # --- OVN / networking stack ---
   - ovn
   - openvswitch
 

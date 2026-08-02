@@ -723,6 +723,10 @@
       ansible.builtin.command: rpm -q ykpers  # noqa: command-instead-of-module
       changed_when: false
 
+    - name: Check sos is installed (sosreport diagnostic bundle tool)
+      ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
+      changed_when: false
+
     # --- distrobox role ---
     - name: Check for distrobox binary
       ansible.builtin.command:
