@@ -215,7 +215,10 @@ install_virtualization: true
 #     entry here will shadow the vault-backed value without any warning.
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
-#     packages_kubebuilder_version, packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
+#     packages_subctl_version: "0.24.0"  (single source of truth for subctl; also governs distrobox container)
+#     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
+#     packages_subctl_rh_versions: [{tag, image, suffix}]  (RH downstream via oc image extract)
+#     packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
 system_kexec_load_disabled: 0  # kdump requires kexec; safe here (Secure Boot disabled); CIS default is 1 (see Additional toggles above)
