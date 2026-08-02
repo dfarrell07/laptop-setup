@@ -141,10 +141,10 @@ cstatus() {
 }
 
 # --- Device access (Tailscale + mosh) ---
-alias laptop='mosh laptop.tail'
-alias mac='mosh mac-desktop.tail'
-laptop-claude() { mosh laptop.tail -- tmux new-session -A -s "${1:-work}"; }
-mac-claude() { mosh mac-desktop.tail -- tmux new-session -A -s "${1:-personal}"; }
+alias laptop='mosh {{ dotfiles_laptop_tailscale_host }}'
+alias mac='mosh {{ dotfiles_mac_tailscale_host }}'
+laptop-claude() { mosh {{ dotfiles_laptop_tailscale_host }} -- tmux new-session -A -s "${1:-work}"; }
+mac-claude() { mosh {{ dotfiles_mac_tailscale_host }} -- tmux new-session -A -s "${1:-personal}"; }
 alias rc='claude --remote-control'
 
 # --- Quick nav ---
@@ -257,7 +257,7 @@ alias vpn='ip route | grep -E "tun|wg"'
 alias ts='tailscale status'
 
 # --- General aliases ---
-alias gv="gvim -vp"
+command -v gvim &>/dev/null && alias gv="gvim -vp"
 alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
 alias ping="ping -i .2"
 alias pingg="ping www.google.com"

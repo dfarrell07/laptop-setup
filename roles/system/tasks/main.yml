@@ -22,8 +22,8 @@
       - ansible_selinux.mode == 'enforcing'
       - ansible_selinux.type == 'targeted'
     fail_msg: >-
-      SELinux is {{ansible_selinux.mode | default('disabled')}}
-      (type: {{ansible_selinux.type | default('unknown')}}).
+      SELinux is {{ ansible_selinux.mode | default('disabled') }}
+      (type: {{ ansible_selinux.type | default('unknown') }}).
       Fix: sudo setenforce 1 && sudo sed -i
       's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
   when: ansible_selinux is defined and ansible_selinux is mapping
@@ -39,7 +39,7 @@
 - name: Harden /tmp with noexec via systemd drop-in
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # IMPORTANT: Options= replaces all base unit options (no merge).
       # Must include all options from tmp.mount + noexec.
       # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
@@ -60,7 +60,7 @@
     - name: Deploy /tmp drop-in without noexec (nosuid/nodev preserved)
       ansible.builtin.copy:
         content: |
-          # {{ansible_managed}}
+          # {{ ansible_managed }}
           # IMPORTANT: Options= replaces all base unit options (no merge).
           # Must include all options from tmp.mount (noexec omitted — system_tmp_noexec: false).
           # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
@@ -111,7 +111,7 @@
 - name: Deploy dev-shm-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
       # /dev/shm with nosuid,nodev,noexec at every boot (CIS 1.1.7.x).
       [Unit]
@@ -315,7 +315,7 @@
 - name: Deploy boot-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
       # /boot with nosuid,nodev,noexec at every boot.
       [Unit]
@@ -428,7 +428,7 @@
 - name: Deploy boot-efi-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
       # /boot/efi with nosuid,noexec at every boot.
       [Unit]
@@ -482,7 +482,7 @@
 - name: Deploy var-tmp.mount unit (bind /var/tmp to /tmp)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # /var/tmp bind-mounted to /tmp so it inherits noexec,nosuid,nodev.
       [Unit]
       Description=Bind mount /var/tmp to /tmp
@@ -601,8 +601,8 @@
 - name: Set firewalld running fact
   ansible.builtin.set_fact:
     system_firewalld_running: >-
-      {{ansible_facts.services['firewalld.service'] is defined and
-         ansible_facts.services['firewalld.service'].state == 'running'}}
+      {{ ansible_facts.services['firewalld.service'] is defined and
+         ansible_facts.services['firewalld.service'].state == 'running' }}
 
 - name: Check current default firewall zone
   ansible.builtin.command:  # noqa: command-instead-of-module
@@ -627,7 +627,7 @@
 - name: Move primary network interface to drop zone
   ansible.posix.firewalld:
     zone: drop
-    interface: "{{ansible_default_ipv4.interface | default(ansible_default_ipv6.interface)}}"
+    interface: "{{ ansible_default_ipv4.interface | default(ansible_default_ipv6.interface) }}"
     permanent: true
     immediate: true
     state: enabled
@@ -640,7 +640,7 @@
 - name: Remove default services from public zone
   ansible.posix.firewalld:
     zone: public
-    service: "{{item}}"
+    service: "{{ item }}"
     permanent: true
     immediate: true
     state: disabled
@@ -671,8 +671,8 @@
 # (semantics are inverted). Without inversion, this command would block them.
 - name: Allow essential ICMP types through drop zone
   ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{item}}"
-  loop: "{{system_firewall_icmp_types}}"
+    cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{ item }}"
+  loop: "{{ system_firewall_icmp_types }}"
   register: system_icmp_types
   changed_when: "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
   failed_when:
@@ -689,7 +689,7 @@
 # zone via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
 - name: Open SSH port in firewall
   ansible.posix.firewalld:
-    port: "{{ssh_port}}/tcp"
+    port: "{{ ssh_port }}/tcp"
     zone: drop
     permanent: true
     immediate: true
@@ -707,8 +707,8 @@
 # guard prevents a redundant rule if the default zone is already drop.
 - name: Open SSH port in default firewall zone (fallback — zone management disabled in config)
   ansible.posix.firewalld:
-    port: "{{ssh_port}}/tcp"
-    zone: "{{system_fw_default_zone.stdout | default('FedoraWorkstation')}}"
+    port: "{{ ssh_port }}/tcp"
+    zone: "{{ system_fw_default_zone.stdout | default('FedoraWorkstation') }}"
     permanent: true
     immediate: true
     state: enabled
@@ -722,7 +722,7 @@
 
 - name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
   ansible.posix.firewalld:
-    port: "{{ssh_port}}/tcp"
+    port: "{{ ssh_port }}/tcp"
     zone: redhat
     permanent: true
     immediate: false
@@ -734,7 +734,7 @@
   failed_when: false
   notify: Apply firewall rules
 
-- name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ssh_port}})
+- name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
   ansible.posix.firewalld:
     zone: redhat
     service: ssh
@@ -766,7 +766,7 @@
 
 - name: Enable kernel lockdown (integrity mode)
   ansible.builtin.command:
-    cmd: "grubby --args='lockdown={{system_kernel_lockdown}}' --update-kernel=ALL"
+    cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
   register: system_lockdown_result
   when:
     - not (csb_detected | default(false))
@@ -896,15 +896,15 @@
       new="$current"
       # Append each missing hardening param (check by key prefix only)
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
-      {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else ''}}
+      {{  '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else '' }}
       _add "vsyscall=none"
-      {{ '_add "init_on_free=1"' if system_init_on_free | default(true) | bool else ''}}
+      {{  '_add "init_on_free=1"' if system_init_on_free | default(true) | bool else '' }}
       _add "page_alloc.shuffle=1"
       {% set is_amd = ansible_processor | join(' ') | lower is search('amd') %}
       {% set is_intel = ansible_processor | join(' ') | lower is search('intel') %}
-      {{ '_add "amd_iommu=on"' if is_amd else ''}}
-      {{ '_add "iommu=pt"' if system_iommu_passthrough | default(false) | bool and (is_amd or is_intel) else ''}}
-      {{ '_add "intel_iommu=on"' if is_intel else ''}}
+      {{  '_add "amd_iommu=on"' if is_amd else '' }}
+      {{  '_add "iommu=pt"' if system_iommu_passthrough | default(false) | bool and (is_amd or is_intel) else '' }}
+      {{  '_add "intel_iommu=on"' if is_intel else '' }}
       new=$(echo "$new" | tr -s ' ' | sed 's/^ //;s/ $//')
       if [[ "$new" != "$current" ]]; then
         echo "$new" > /etc/kernel/cmdline
@@ -1136,7 +1136,7 @@
 
 - name: Mask power management daemons that conflict with TLP
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: true
     state: stopped
   loop:
@@ -1147,7 +1147,7 @@
 
 - name: Unmask power management daemons when TLP disabled
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: false
     enabled: true
     state: started
@@ -1200,7 +1200,7 @@
 
 - name: Mask cups.socket and cups.path (prevent socket activation of CUPS)
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: true
     state: stopped
   loop:
@@ -1212,7 +1212,7 @@
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
 - name: Mask avahi-daemon service
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: true
     state: stopped
   loop:
@@ -1223,7 +1223,7 @@
 
 - name: Unmask avahi-daemon when system_disable_avahi is false
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: false
   loop:
     - avahi-daemon.service
@@ -1234,7 +1234,7 @@
 # --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
 - name: Mask NFS server and rpcbind (CIS 2.2.7)
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: true
     state: stopped
   loop:
@@ -1247,7 +1247,7 @@
 # --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
 - name: Mask cockpit service and socket (CIS 2.2 — web console not needed on workstation)
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: true
     state: stopped
   loop:
@@ -1258,7 +1258,7 @@
 
 - name: Unmask and enable cockpit service and socket when system_enable_cockpit
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     masked: false
     state: started
     enabled: true
@@ -1280,18 +1280,18 @@
   community.general.ini_file:
     path: /etc/systemd/logind.conf.d/99-hardening.conf
     section: Login
-    option: "{{item.key}}"
-    value: "{{item.value}}"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
     no_extra_spaces: true
     mode: "0644"
     create: true
   loop:
     - key: HandleLidSwitch
-      value: "{{system_lid_switch}}"
+      value: "{{ system_lid_switch }}"
     - key: HandleLidSwitchExternalPower
-      value: "{{system_lid_switch_external}}"
+      value: "{{ system_lid_switch_external }}"
     - key: HandleLidSwitchDocked
-      value: "{{system_lid_switch_docked}}"
+      value: "{{ system_lid_switch_docked }}"
     - key: HandleHibernateKey
       value: ignore
     - key: HandlePowerKey
@@ -1320,7 +1320,7 @@
 
 - name: Enable modular libvirt sockets (Fedora 35+)
   ansible.builtin.systemd:
-    name: "{{item}}"
+    name: "{{ item }}"
     state: started
     enabled: true
   loop:
@@ -1366,7 +1366,7 @@
 
 - name: Add user to libvirt and kvm groups
   ansible.builtin.user:
-    name: "{{real_user_id}}"
+    name: "{{ real_user_id }}"
     groups: [libvirt, kvm]
     append: true
   when: system_enable_libvirtd | bool
@@ -1537,7 +1537,7 @@
 
 - name: Report available firmware updates
   ansible.builtin.debug:
-    msg: "Firmware updates available: {{system_fwupd.stdout | default('') | trim}}\nRun: sudo fwupdmgr update"
+    msg: "Firmware updates available: {{ system_fwupd.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
     - system_fwupd.rc | default(1) == 0
     - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
@@ -1560,7 +1560,7 @@
       - real_user_id | default('') | length > 0
       - real_user_id != 'root'
     fail_msg: >-
-      real_user_id='{{real_user_id | default("(empty)")}}' — AllowUsers in sshd would
+      real_user_id='{{ real_user_id | default("(empty)") }}' — AllowUsers in sshd would
       lock out all SSH users. Run as your normal user with -K (make all), not as root.
       'sudo -i && make all' sets USER=root and would write 'AllowUsers root'.
   when: ansible_facts.services['sshd.service'] is defined
@@ -1659,7 +1659,7 @@
   block:
     - name: Apply SELinux port label for non-default SSH port
       community.general.seport:
-        ports: "{{ssh_port}}"
+        ports: "{{ ssh_port }}"
         proto: tcp
         setype: ssh_port_t
         state: present
@@ -1706,7 +1706,7 @@
 # --- Kernel modules for kind ---
 - name: Load iptables kernel modules for kind
   community.general.modprobe:
-    name: "{{item}}"
+    name: "{{ item }}"
     state: present
     persistent: present
   register: system_modules_result
@@ -1746,7 +1746,7 @@
 - name: Configure WiFi MAC address randomization
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [device]
       wifi.scan-rand-mac-address=yes
       [connection]
@@ -1760,7 +1760,7 @@
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [keyfile]
       unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:ovn-k8s-mp0
     dest: /etc/NetworkManager/conf.d/tailscale.conf
@@ -1771,7 +1771,7 @@
 - name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [main]
       dns=systemd-resolved
     dest: /etc/NetworkManager/conf.d/99-dns.conf
@@ -1785,7 +1785,7 @@
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [connection]
       wifi.powersave=2
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
@@ -1825,7 +1825,7 @@
 # ahead of IT's approval cycle or outside maintenance windows.
 - name: Install dnf-automatic
   ansible.builtin.dnf:
-    name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic'}}"
+    name: "{{  'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
     state: present
   when:
     - ansible_pkg_mgr in ['dnf', 'dnf5']
@@ -1844,7 +1844,7 @@
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
-    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer'}}"
+    name: "{{  'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
     state: started
     enabled: true
   when:
@@ -1855,7 +1855,7 @@
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
 - name: Ensure dnf-automatic service drop-in directory exists
   ansible.builtin.file:
-    path: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service'}}.d"
+    path: "/etc/systemd/system/{{  'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d"
     state: directory
     mode: "0755"
   when:
@@ -1867,13 +1867,13 @@
 - name: Deploy AIDE update hook for dnf-automatic
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # Run aide --update after dnf-automatic applies security updates.
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
       ExecStartPost=/usr/bin/bash -c '/usr/bin/aide --update; mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
-    dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service'}}.d/aide-update.conf"
+    dest: "/etc/systemd/system/{{  'dnf5-automatic.service' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"
     mode: "0644"
   when:
     - ansible_pkg_mgr in ['dnf', 'dnf5']
@@ -1901,7 +1901,7 @@
 - name: Disable LLMNR and mDNS via resolved drop-in
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [Resolve]
       LLMNR=no
       MulticastDNS=no
@@ -1914,13 +1914,13 @@
 - name: Deploy DNS-over-TLS resolved config
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [Resolve]
-      DNS={{system_dns_primary}}
-      Domains={{system_dns_domains}}
-      DNSOverTLS={{system_dot_mode}}
+      DNS={{ system_dns_primary }}
+      Domains={{ system_dns_domains }}
+      DNSOverTLS={{ system_dot_mode }}
       DNSSEC=allow-downgrade
-      FallbackDNS={{system_dns_fallback}}
+      FallbackDNS={{ system_dns_fallback }}
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:
@@ -1953,9 +1953,9 @@
 - name: Deploy session timeout via profile.d (bash login shells)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       # Auto-logout after inactivity (CIS 5.5.5 requires <=900s). Override system_tmout in config.yml.
-      TMOUT={{system_tmout}}
+      TMOUT={{ system_tmout }}
       export TMOUT
     dest: /etc/profile.d/tmout.sh
     mode: "0644"
@@ -1971,7 +1971,7 @@
 - name: Deploy session timeout to /etc/zshrc (all interactive zsh shells)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
-    line: "TMOUT={{system_tmout}}; export TMOUT  # CIS 5.5.5"
+    line: "TMOUT={{ system_tmout }}; export TMOUT  # CIS 5.5.5"
     regexp: '^\s*(readonly\s+)?TMOUT='
     create: true
     mode: "0644"
@@ -1982,12 +1982,12 @@
 # --- Timezone and locale ---
 - name: Set system timezone
   community.general.timezone:
-    name: "{{system_timezone}}"
+    name: "{{ system_timezone }}"
   when: ansible_system == 'Linux'
 
 - name: Set system locale
   ansible.builtin.copy:
-    content: "LANG={{system_locale}}\n"
+    content: "LANG={{ system_locale }}\n"
     dest: /etc/locale.conf
     mode: "0644"
   when: ansible_system == 'Linux'
@@ -1996,7 +1996,7 @@
   ansible.builtin.lineinfile:
     path: /etc/vconsole.conf
     regexp: '^KEYMAP='
-    line: "KEYMAP={{system_keymap}}"
+    line: "KEYMAP={{ system_keymap }}"
     create: true
     mode: "0644"
   when: ansible_system | default('Linux') == 'Linux'
@@ -2029,14 +2029,14 @@
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
-    option: "{{item.key}}"
-    value: "{{item.value}}"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
     mode: "0644"
   loop:
     - key: deny
-      value: "{{system_faillock_deny}}"
+      value: "{{ system_faillock_deny }}"
     - key: unlock_time
-      value: "{{system_faillock_unlock_time}}"
+      value: "{{ system_faillock_unlock_time }}"
   when: not (csb_detected | default(false) and ansible_distribution != 'Fedora')
   failed_when: false
 
@@ -2044,7 +2044,7 @@
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
-    option: "{{item}}"
+    option: "{{ item }}"
     allow_no_value: true
     mode: "0644"
   loop:
@@ -2160,20 +2160,20 @@
   community.general.ini_file:
     path: /etc/security/pwquality.conf
     section: null
-    option: "{{item.key}}"
-    value: "{{item.value}}"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
     mode: "0644"
   loop:
     - key: minlen
       value: "14"
     - key: dcredit
-      value: "{{system_pwquality_dcredit}}"
+      value: "{{ system_pwquality_dcredit }}"
     - key: ucredit
-      value: "{{system_pwquality_ucredit}}"
+      value: "{{ system_pwquality_ucredit }}"
     - key: lcredit
-      value: "{{system_pwquality_lcredit}}"
+      value: "{{ system_pwquality_lcredit }}"
     - key: ocredit
-      value: "{{system_pwquality_ocredit}}"
+      value: "{{ system_pwquality_ocredit }}"
     - key: difok
       value: "4"
     - key: maxrepeat
@@ -2227,7 +2227,7 @@
 - name: Deploy journald hardening config
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       [Journal]
       Storage=persistent
       SystemMaxUse=4G
@@ -2244,7 +2244,7 @@
 - name: Deploy logrotate config for sudo.log
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       /var/log/sudo.log {
           weekly
           rotate 8
@@ -2273,7 +2273,7 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: Non-root crontabs found and will be silently blocked by cron.allow=root:
-      {{system_existing_crontabs.files | map(attribute='path') | list}}.
+      {{ system_existing_crontabs.files | map(attribute='path') | list }}.
       Review these jobs before proceeding.
   when: (system_existing_crontabs.files | default([])) | length > 0
 
@@ -2305,10 +2305,10 @@
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
-    path: "{{item.path}}"
+    path: "{{ item.path }}"
     owner: root
     group: root
-    mode: "{{item.mode}}"
+    mode: "{{ item.mode }}"
   loop:
     - path: /etc/crontab
       mode: "0600"
@@ -2355,7 +2355,7 @@
 - name: Configure sudoers security defaults
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       Defaults logfile=/var/log/sudo.log
       Defaults log_input,log_output
       Defaults timestamp_timeout=15
@@ -2370,7 +2370,7 @@
 - name: Propagate GOTMPDIR through sudo (go test under sudo)
   ansible.builtin.copy:
     content: |
-      # {{ansible_managed}}
+      # {{ ansible_managed }}
       Defaults env_keep += GOTMPDIR
     dest: /etc/sudoers.d/go-env
     mode: "0440"
@@ -2385,8 +2385,8 @@
 - name: Configure password aging in login.defs
   ansible.builtin.lineinfile:
     path: /etc/login.defs
-    regexp: "^{{item.name}}\\s+"
-    line: "{{item.name}}\t{{item.value}}"
+    regexp: "^{{ item.name }}\\s+"
+    line: "{{ item.name }}\t{{ item.value }}"
     insertafter: EOF
     create: false
   loop:
@@ -2422,7 +2422,7 @@
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
-    path: "{{real_user_home}}"
+    path: "{{ real_user_home }}"
     mode: "0750"
     state: directory
   when:
@@ -2450,7 +2450,7 @@
 # inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
 - name: Check current inactive lockout setting for existing user account
   ansible.builtin.command:
-    cmd: chage -l {{real_user_id}}
+    cmd: chage -l {{ real_user_id }}
   register: system_chage_status
   changed_when: false
   failed_when: false
@@ -2460,7 +2460,7 @@
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
-    cmd: chage -I 30 {{real_user_id}}
+    cmd: chage -I 30 {{ real_user_id }}
   when:
     - real_user_id is defined
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
@@ -2472,7 +2472,7 @@
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Check whether subuid entry already exists for user
-  ansible.builtin.command: grep -q "^{{real_user_id}}:" /etc/subuid
+  ansible.builtin.command: grep -q "^{{ real_user_id }}:" /etc/subuid
   register: system_subuid_check
   changed_when: false
   failed_when: false
@@ -2481,13 +2481,13 @@
 - name: Ensure subuid entry exists for user (only if absent)
   ansible.builtin.lineinfile:
     path: /etc/subuid
-    line: "{{real_user_id}}:100000:65536"
+    line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
   when: real_user_id is defined and system_subuid_check.rc != 0
 
 - name: Check whether subgid entry already exists for user
-  ansible.builtin.command: grep -q "^{{real_user_id}}:" /etc/subgid
+  ansible.builtin.command: grep -q "^{{ real_user_id }}:" /etc/subgid
   register: system_subgid_check
   changed_when: false
   failed_when: false
@@ -2496,20 +2496,20 @@
 - name: Ensure subgid entry exists for user (only if absent)
   ansible.builtin.lineinfile:
     path: /etc/subgid
-    line: "{{real_user_id}}:100000:65536"
+    line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
   when: real_user_id is defined and system_subgid_check.rc != 0
 
 - name: Check if session lingering is already enabled
   ansible.builtin.stat:
-    path: /var/lib/systemd/linger/{{real_user_id}}
+    path: /var/lib/systemd/linger/{{ real_user_id }}
   register: system_linger_file
   when: real_user_id is defined
 
 - name: Enable session lingering for rootless podman socket persistence
   ansible.builtin.command:
-    cmd: loginctl enable-linger {{real_user_id}}
+    cmd: loginctl enable-linger {{ real_user_id }}
   changed_when: not system_linger_file.stat.exists
   failed_when: false  # loginctl absent on macOS; system role runs Linux-only via site.yml
   when: real_user_id is defined and not system_linger_file.stat.exists
@@ -2544,7 +2544,7 @@
 - name: Assert no non-root UID 0 accounts (CIS 6.2.9)
   ansible.builtin.assert:
     that: system_uid0_accounts.stdout | length == 0
-    fail_msg: "Non-root UID 0 accounts found: {{system_uid0_accounts.stdout}} -- Fix: sudo usermod -u <new_uid> <account>"
+    fail_msg: "Non-root UID 0 accounts found: {{ system_uid0_accounts.stdout }} -- Fix: sudo usermod -u <new_uid> <account>"
     success_msg: "CIS 6.2.9: no non-root UID 0 accounts"
 
 - name: Find accounts with GID 0 (root group) as primary group (CIS 6.2.x)
@@ -2560,7 +2560,7 @@
 - name: Assert no non-root GID 0 primary group accounts (CIS 6.2.x)
   ansible.builtin.assert:
     that: system_gid0_accounts.stdout | length == 0
-    fail_msg: "Non-root accounts with root primary GID: {{system_gid0_accounts.stdout}} -- Fix: sudo usermod -g <new_gid> <account>"
+    fail_msg: "Non-root accounts with root primary GID: {{ system_gid0_accounts.stdout }} -- Fix: sudo usermod -g <new_gid> <account>"
     success_msg: "CIS 6.2.x: no non-root GID 0 primary group accounts"
 
 - name: Find accounts with empty passwords in shadow (CIS 6.2.2)
@@ -2577,7 +2577,7 @@
   ansible.builtin.assert:
     that: system_empty_pw_accounts.stdout | length == 0
     fail_msg: >-
-      Accounts with empty passwords: {{system_empty_pw_accounts.stdout}}
+      Accounts with empty passwords: {{ system_empty_pw_accounts.stdout }}
       -- Fix: sudo passwd -l <account> (lock) or sudo passwd <account> (set password)
     success_msg: "CIS 6.2.2: no empty passwords"
 
@@ -2594,16 +2594,16 @@
 - name: Assert all passwd entries use shadowed passwords (CIS 6.2.1)
   ansible.builtin.assert:
     that: system_unshadowed_accounts.stdout | length == 0
-    fail_msg: "Unshadowed passwd entries: {{system_unshadowed_accounts.stdout}} -- Fix: sudo pwconv"
+    fail_msg: "Unshadowed passwd entries: {{ system_unshadowed_accounts.stdout }} -- Fix: sudo pwconv"
     success_msg: "CIS 6.2.1: all passwd entries shadowed"
 
 # --- Critical file permissions (CIS 6.1.2/6.1.4/6.1.6/6.1.8) ---
 - name: Enforce permissions on critical auth files
   ansible.builtin.file:
-    path: "{{item.path}}"
+    path: "{{ item.path }}"
     owner: root
-    group: "{{item.group}}"
-    mode: "{{item.mode}}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
   loop:
     - path: /etc/passwd
       group: root
@@ -2637,7 +2637,7 @@
     - name: Deploy system-level GNOME media-handling hardening (CIS 1.8.6-1.8.8)
       ansible.builtin.copy:
         content: |
-          # {{ansible_managed}}
+          # {{ ansible_managed }}
           # CIS 1.8.6-1.8.8: disable removable media automount/autorun
           [org/gnome/desktop/media-handling]
           automount=false
@@ -2666,7 +2666,7 @@
     - name: Disable GDM user list on login screen and deploy banner (CIS 1.8.2/1.8.3)
       ansible.builtin.copy:
         content: |
-          # {{ansible_managed}}
+          # {{ ansible_managed }}
           # CIS 1.8.2: GDM login banner
           # CIS 1.8.3: prevent username enumeration on GDM login screen
           [org/gnome/login-screen]
@@ -2690,7 +2690,7 @@
     - name: Deploy screensaver/idle lock policy (CIS 1.8.4/1.8.5)
       ansible.builtin.copy:
         content: |
-          # {{ansible_managed}}
+          # {{ ansible_managed }}
           # CIS 1.8.4/1.8.5: GNOME screen lock on idle (≤900s per benchmark)
           [org/gnome/desktop/session]
           idle-delay=uint32 300
@@ -2742,13 +2742,13 @@
 
     - name: Remove AIDE systemd unit files when disabled
       ansible.builtin.file:
-        path: "{{item}}"
+        path: "{{ item }}"
         state: absent
       loop:
         - /etc/systemd/system/aide-check.service
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
-        - "/etc/systemd/system/{{ 'dnf5-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic'}}.service.d/aide-update.conf"
+        - "/etc/systemd/system/{{  'dnf5-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}.service.d/aide-update.conf"
       register: system_aide_unit_removal
 
     - name: Reload systemd after removing AIDE units  # noqa: no-handler

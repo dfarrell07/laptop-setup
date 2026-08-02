@@ -73,13 +73,13 @@
       tags: [always]
 
     - name: Warn when vault.yml is still the unencrypted stub
-      ansible.builtin.assert:
-        that: vault_placeholder | default('encrypt-me') != 'encrypt-me'
-        fail_msg: >-
-          vault.yml is still the unencrypted stub (vault_placeholder == 'encrypt-me').
-          Secret-backed features will silently skip: SSH key deployment, transcrypt,
-          and rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
-        warn: true
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: vault.yml is still the unencrypted stub
+          (vault_placeholder == 'encrypt-me'). Secret-backed features
+          will silently skip: SSH key deployment, transcrypt, and
+          rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+      when: vault_placeholder | default('encrypt-me') == 'encrypt-me'
       become: false
       tags: [always]
 
@@ -180,13 +180,13 @@
       tags: [always]
 
     - name: Warn when vault.yml is still the unencrypted stub
-      ansible.builtin.assert:
-        that: vault_placeholder | default('encrypt-me') != 'encrypt-me'
-        fail_msg: >-
-          vault.yml is still the unencrypted stub (vault_placeholder == 'encrypt-me').
-          Secret-backed features will silently skip: SSH key deployment, transcrypt,
-          and rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
-        warn: true
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: vault.yml is still the unencrypted stub
+          (vault_placeholder == 'encrypt-me'). Secret-backed features
+          will silently skip: SSH key deployment, transcrypt, and
+          rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+      when: vault_placeholder | default('encrypt-me') == 'encrypt-me'
       tags: [always]
 
     - name: Vault healthcheck — assert required SSH key variables are defined and non-empty
