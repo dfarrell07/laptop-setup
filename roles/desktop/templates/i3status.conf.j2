@@ -9,6 +9,7 @@ order += "cpu_usage"
 order += "command cpu_temp"
 order += "memory"
 order += "disk /"
+order += "disk /home"
 order += "battery 0"
 order += "command"
 order += "time"
@@ -39,7 +40,13 @@ disk "/" {
     low_threshold = 10
 }
 
-battery 0 {
+disk "/home" {
+    format = " %avail"
+    low_threshold = 20
+    prefix_type = si
+}
+
+battery {{ desktop_i3status_battery_num }} {
     format = " %status %percentage %remaining"
     last_full_capacity = true
     status_chr = "⚡"

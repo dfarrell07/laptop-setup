@@ -66,6 +66,7 @@ DOTFILES=(
   .config/systemd/user/claude-queue.service
   .config/systemd/user/claude-queue.timer
   .config/user-tmpfiles.d/ssh-sockets.conf
+  .config/user-tmpfiles.d/tmux-sockets.conf
   .config/user-tmpfiles.d/claude-privacy.conf
   "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
   "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
