@@ -233,6 +233,8 @@ if command -v i3 &>/dev/null; then
   else record "i3-playerctl" "FAIL" "playerctl not installed — XF86Audio media keys non-functional in i3 (run: make desktop)"; fi
   if command -v clipit &>/dev/null; then record "i3-clipit" "PASS"
   else record "i3-clipit" "FAIL" "clipit not installed — clipboard contents lost on app close in i3 (run: make desktop)"; fi
+  if command -v wpctl &>/dev/null; then record "i3-wpctl" "PASS"
+  else record "i3-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make desktop)"; fi
 fi
 
 # GTK theme config (only on Sway desktop — no GNOME settings daemon)
