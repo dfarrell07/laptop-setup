@@ -7,9 +7,7 @@ profile: work  # noqa: var-naming[no-role-prefix] — fallback for standalone in
 # in config.yml to trim unneeded packages.
 
 packages_cli:
-  - git
   - make
-  - tree
   - htop
   - tmux
   - mosh
@@ -45,7 +43,6 @@ packages_security:
   - policycoreutils-python-utils
   - libfido2
   - openssl
-  - gnupg2
   - gitleaks
 
 packages_containers:
@@ -66,22 +63,16 @@ packages_virtualization:
 
 packages_networking:
   # packet capture
-  - tcpdump
   - wireshark-cli   # tshark — scripting-safe CLI capture; GUI wireshark belongs in distrobox
-  # path analysis
-  - traceroute
-  - mtr
   # socket/connection
   - socat           # socket relay utility (moved from packages_cli)
   - conntrack-tools
-  # interface/routing
-  - ethtool
   # scanning/perf
   - nmap            # network scanner (moved from packages_cli)
   - iperf3
   # firewall/DNS
   - nftables
-  - bind-utils
+  # tcpdump, traceroute, mtr, ethtool, bind-utils are Fedora Workstation defaults (always installed)
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
 
