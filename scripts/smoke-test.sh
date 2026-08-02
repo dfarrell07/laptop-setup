@@ -1479,6 +1479,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "sysctl-conntrack-max" "FAIL" "net.netfilter.nf_conntrack_max=$_nfct expected >=524288"; fi
   _sysctl_check "net.core.rmem_max"                    "16777216" "sysctl-rmem-max"
   _sysctl_check "net.core.wmem_max"                    "16777216" "sysctl-wmem-max"
+  _sysctl_check "vm.max_map_count"                     "1048576"  "sysctl-vm-max-map-count"
 
 fi
 

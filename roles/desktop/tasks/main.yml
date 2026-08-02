@@ -5,10 +5,10 @@
 - name: Detect desktop environment
   ansible.builtin.set_fact:
     desktop_detected: >-
-      {{ 'sway' if (ansible_env.XDG_SESSION_TYPE | default('') == 'wayland' and
-                    ansible_env.XDG_CURRENT_DESKTOP | default('') == 'sway')
-         else ('gnome' if (ansible_env.XDG_CURRENT_DESKTOP | default('') is search('GNOME'))
-         else ('i3' if (ansible_env.XDG_CURRENT_DESKTOP | default('') == 'i3')
+      {{ 'sway' if (ansible_facts['env']['XDG_SESSION_TYPE'] | default('') == 'wayland' and
+                    ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'sway')
+         else ('gnome' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') is search('GNOME'))
+         else ('i3' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'i3')
          else 'unknown')) }}
   when: desktop_environment == 'auto'
 
@@ -27,8 +27,8 @@
   ansible.builtin.fail:
     msg: >-
       desktop_environment is 'auto' but no desktop session was detected
-      (XDG_SESSION_TYPE='{{ ansible_env.XDG_SESSION_TYPE | default('') }}',
-      XDG_CURRENT_DESKTOP='{{ ansible_env.XDG_CURRENT_DESKTOP | default('') }}').
+      (XDG_SESSION_TYPE='{{ ansible_facts['env']['XDG_SESSION_TYPE'] | default('') }}',
+      XDG_CURRENT_DESKTOP='{{ ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') }}').
       Set desktop_environment: sway, i3, or gnome in config.yml before running
       make all — auto-detection requires an active desktop session and will not
       work on bare installs or remote SSH provisioning.
@@ -309,13 +309,13 @@
 # --- Shell ---
 - name: Set zsh as default shell
   ansible.builtin.user:
-    name: "{{ ansible_user_id }}"
+    name: "{{ ansible_facts['user_id'] }}"
     shell: /bin/zsh
   become: true
   tags: [become]
   when:
     - ansible_system == 'Linux'
-    - ansible_env.SHELL | default('/bin/bash') != '/bin/zsh'
+    - ansible_facts['env']['SHELL'] | default('/bin/bash') != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
 - name: Ensure AeroSpace config directory (macOS)
