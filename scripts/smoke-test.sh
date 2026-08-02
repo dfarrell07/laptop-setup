@@ -202,12 +202,14 @@ if grep -q "Ansible managed" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc"
 else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
 unset _rg
 
-# alacritty config (terminal emulator)
+# alacritty config (terminal emulator — only expected on Sway/i3 desktop machines)
 _alc="$HOME/.config/alacritty/alacritty.toml"
-if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
-elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
-elif ! grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $\{_alc} — SSH into remote hosts may fail"
-else record "dotfile-alacritty" "PASS"; fi
+if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
+  if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
+  elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
+  elif ! grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $_alc — SSH into remote hosts may fail"
+  else record "dotfile-alacritty" "PASS"; fi
+fi
 unset _alc
 
 # vimrc quality (termguicolors + background=dark for correct colors)
