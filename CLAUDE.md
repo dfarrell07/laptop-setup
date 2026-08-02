@@ -165,7 +165,7 @@ make repos-downstream # downstream repos only
 - `make syntax-check` — Playbook syntax validation
 - `make test-scripts` — Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
-- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline);
+- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/packages-binaries);
   Podman only, no libvirt required. CI coverage minus macOS
 - `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
   + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-packages-binaries (macOS runner required)
