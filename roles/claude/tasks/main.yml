@@ -58,7 +58,7 @@
 # --- Instance isolation directories ---
 - name: Create default instance config directory (~/.claude)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.claude"
+    path: "{{ ansible_facts['user_dir'] }}/.claude"
     state: directory
     mode: "0700"
 
@@ -84,7 +84,7 @@
 - name: Deploy default instance settings (~/.claude)
   ansible.builtin.template:
     src: settings.json.j2
-    dest: "{{ ansible_user_dir }}/.claude/settings.local.json"
+    dest: "{{ ansible_facts['user_dir'] }}/.claude/settings.local.json"
     mode: "0600"
 
 - name: Deploy work instance settings
@@ -128,7 +128,7 @@
       # shell-snapshots, cache, etc.  No symlinks exist under ~/.claude.
       d %h/.claude 0700 - - -
       Z %h/.claude 0700 - - -
-    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
   when: ansible_facts['system'] == 'Linux'
 
@@ -140,7 +140,7 @@
 
 - name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.claude"
+    path: "{{ ansible_facts['user_dir'] }}/.claude"
     mode: "0700"
   when: ansible_facts['system'] == 'Darwin'
   failed_when: false
@@ -174,7 +174,7 @@
 
 - name: Ensure ~/.config/claude directory exists (queue config)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/claude"
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
     state: directory
     mode: "0700"
   when: claude_queue_enabled | bool
@@ -182,7 +182,7 @@
 - name: Deploy queue-repos.conf stub (first run only — edit to add repos)
   ansible.builtin.template:
     src: queue-repos.conf.j2
-    dest: "{{ ansible_user_dir }}/.config/claude/queue-repos.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/claude/queue-repos.conf"
     mode: "0600"
     force: false
   when: claude_queue_enabled | bool
@@ -190,14 +190,14 @@
 - name: Deploy task queue poller script
   ansible.builtin.copy:
     src: claude-queue-poller.sh
-    dest: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
+    dest: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
     mode: "0700"
   when: claude_queue_enabled | bool
 
 - name: Deploy task queue systemd service
   ansible.builtin.template:
     src: claude-queue.service.j2
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.service"
     mode: "0644"
   when:
     - claude_queue_enabled | bool
@@ -206,7 +206,7 @@
 - name: Deploy task queue systemd timer
   ansible.builtin.template:
     src: claude-queue.timer.j2
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
     mode: "0644"
   when:
     - claude_queue_enabled | bool
@@ -238,7 +238,7 @@
 
 - name: Remove task queue systemd unit files (when disabled)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/{{ item }}"
     state: absent
   loop:
     - claude-queue.service
@@ -259,7 +259,7 @@
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.local/state/log"
+    path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
     state: directory
     mode: "0755"
   when:
@@ -269,7 +269,7 @@
 - name: Deploy task queue launchd plist (macOS)
   ansible.builtin.template:
     src: claude-queue.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     mode: "0644"
   when:
     - ansible_facts['os_family'] == 'Darwin'
@@ -280,7 +280,7 @@
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool
@@ -290,7 +290,7 @@
 - name: Deploy Remote Control launchd plist (macOS)
   ansible.builtin.template:
     src: claude-remote-control.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     mode: "0644"
   when:
     - ansible_facts['os_family'] == 'Darwin'
@@ -301,7 +301,7 @@
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
+    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_remote_control_enabled | bool

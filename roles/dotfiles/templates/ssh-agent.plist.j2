@@ -10,7 +10,7 @@
     <string>{{ dotfiles_homebrew_prefix }}/bin/ssh-agent</string>
     <string>-D</string>
     <string>-a</string>
-    <string>{{ ansible_user_dir }}/.ssh/ssh-agent.socket</string>
+    <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
     <string>-t</string>
     <string>{{ dotfiles_ssh_agent_timeout }}</string>
   </array>
@@ -19,8 +19,8 @@
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>{{ ansible_user_dir }}/.local/state/log/ssh-agent.log</string>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/ssh-agent.log</string>
   <key>StandardErrorPath</key>
-  <string>{{ ansible_user_dir }}/.local/state/log/ssh-agent.log</string>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/ssh-agent.log</string>
 </dict>
 </plist>

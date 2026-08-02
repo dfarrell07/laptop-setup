@@ -977,8 +977,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if authselect current 2>/dev/null | grep -q 'sssd'; then record "authselect-profile" "PASS"
     else record "authselect-profile" "FAIL" "authselect profile is not sssd (faillock/pwhistory may not wire correctly)"; fi
     if authselect is-feature-enabled with-faillock 2>/dev/null; then record "authselect-faillock" "PASS"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+      record "authselect-faillock" "WARN" "skipped on RHEL CSB — Ansible intentionally omits enable-feature on RHEL (IPA/SSSD owns PAM policy)"
     else record "authselect-faillock" "FAIL" "authselect with-faillock not enabled (faillock settings won't apply)"; fi
     if authselect is-feature-enabled with-pwhistory 2>/dev/null; then record "authselect-pwhistory" "PASS"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+      record "authselect-pwhistory" "WARN" "skipped on RHEL CSB — Ansible intentionally omits enable-feature on RHEL (IPA/SSSD owns PAM policy)"
     else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
     # authselect check verifies actual PAM files match profile+features — is-feature-enabled only checks state file
     if authselect check 2>/dev/null; then record "authselect-check" "PASS"
@@ -1079,13 +1083,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # Critical file permissions (CIS 6.1.x)
   shadow_mode=$(stat -c '%a' /etc/shadow 2>/dev/null || echo "?")
   if [[ "$shadow_mode" == "0" ]]; then record "shadow-perms" "PASS"
-  else record "shadow-perms" "FAIL" "permissions $shadow_mode, expected 0000"; fi
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ "$shadow_mode" == "640" ]]; then record "shadow-perms" "PASS"
+  else record "shadow-perms" "FAIL" "permissions $shadow_mode, expected 0000 (Fedora/RHEL) or 0640 (Debian)"; fi
   gshadow_mode=$(stat -c '%a' /etc/gshadow 2>/dev/null || echo "?")
   if [[ "$gshadow_mode" == "0" ]]; then record "gshadow-perms" "PASS"
-  else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000"; fi
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ "$gshadow_mode" == "640" ]]; then record "gshadow-perms" "PASS"
+  else record "gshadow-perms" "FAIL" "permissions $gshadow_mode, expected 0000 (Fedora/RHEL) or 0640 (Debian)"; fi
 
   # TMOUT session timeout (CIS 5.5.5) — verify numeric value <=900s in bash (profile.d) and zsh (/etc/zshrc)
-  _tmout_val=$(grep -oP '^TMOUT=\K[0-9]+' /etc/profile.d/tmout.sh 2>/dev/null || echo "")
+  _tmout_val=$(grep -oP '^(readonly\s+)?TMOUT=\K[0-9]+' /etc/profile.d/tmout.sh 2>/dev/null || echo "")
   if [[ -n "$_tmout_val" && "$_tmout_val" -gt 0 && "$_tmout_val" -le 900 ]]; then
     record "tmout-bash" "PASS"
   elif [[ -z "$_tmout_val" ]]; then
@@ -1093,7 +1099,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else
     record "tmout-bash" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
   fi
-  _tmout_zsh=$(grep -oP '^TMOUT=\K[0-9]+' /etc/zshrc 2>/dev/null || echo "")
+  _tmout_zsh=$(grep -oP '^(typeset -xr\s+|readonly\s+)?TMOUT=\K[0-9]+' /etc/zshrc 2>/dev/null || echo "")
   if [[ -n "$_tmout_zsh" && "$_tmout_zsh" -gt 0 && "$_tmout_zsh" -le 900 ]]; then
     record "tmout-zsh" "PASS"
   elif [[ -z "$_tmout_zsh" ]]; then

@@ -1081,8 +1081,8 @@
     cmd: "go install {{ item }}"
   changed_when: true
   environment:
-    GOPATH: "{{ ansible_user_dir }}/go"
-    GOBIN: "{{ ansible_user_dir }}/go/bin"
+    GOPATH: "{{ ansible_facts['user_dir'] }}/go"
+    GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
     HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
     HTTP_PROXY: "{{ proxy_url | default(omit) }}"
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
@@ -1137,7 +1137,7 @@
   block:
     - name: Check if krew is installed at target version
       ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew version"
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
       register: packages_krew_check
       changed_when: false
       failed_when: false
@@ -1162,7 +1162,7 @@
         - packages_krew_check.rc != 0
       ansible.builtin.unarchive:
         src: /tmp/krew.tar.gz
-        dest: "{{ ansible_user_dir }}/.local/bin"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
         remote_src: true
 
     - name: Run krew installer
@@ -1170,7 +1170,7 @@
         - packages_krew_version not in (packages_krew_check.stdout | default(''))
         - packages_krew_check.rc != 0
       ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64 install krew"
+        cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
       changed_when: true
 
     - name: Upgrade krew
@@ -1178,7 +1178,7 @@
         - packages_krew_version not in (packages_krew_check.stdout | default(''))
         - packages_krew_check.rc == 0
       ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew upgrade krew"
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
       changed_when: true
 
   rescue:
@@ -1213,9 +1213,9 @@
         state: absent
       loop:
         - /tmp/krew.tar.gz
-        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64"
-        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64.yaml"
-        - "{{ ansible_user_dir }}/.local/bin/LICENSE"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64.yaml"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/LICENSE"
 
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
   when:
@@ -1229,7 +1229,7 @@
       ansible.builtin.command:
         cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
       environment:
-        GOPATH: "{{ ansible_user_dir }}/go"
+        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
       changed_when: true
       failed_when: false
@@ -1250,7 +1250,7 @@
     - name: Copy versioned subctl to ~/.local/bin/subctlXX
       ansible.builtin.copy:
         src: "/tmp/subctl-v{{ item.version }}-bin/subctl"
-        dest: "{{ ansible_user_dir }}/.local/bin/subctl{{ item.suffix }}"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
         mode: "0755"
         remote_src: true
       loop: "{{ packages_subctl_versioned }}"
@@ -1292,7 +1292,7 @@
           tar -C "$TMPDIR" -xf "$TARBALL"
           BINARY=$(find "$TMPDIR" -name "subctl-{{ item.tag }}*-linux-amd64" -type f | head -1)
           [[ -z "$BINARY" ]] && exit 0
-          install -m755 "$BINARY" "{{ ansible_user_dir }}/.local/bin/subctl{{ item.suffix }}"
+          install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
           rm -rf "$TMPDIR" "$TARBALL"
       changed_when: true
       failed_when: false
@@ -1302,7 +1302,7 @@
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
-    cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew install {{ item }}"
+    cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew install {{ item }}"
   loop: [ctx, ns]
   changed_when: false
   failed_when: false

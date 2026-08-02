@@ -105,7 +105,7 @@
 # --- periodic container storage cleanup ---
 - name: Deploy podman-prune.service
   ansible.builtin.copy:
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.service"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/podman-prune.service"
     mode: "0644"
     content: |
       [Unit]
@@ -122,7 +122,7 @@
 
 - name: Deploy podman-prune.timer
   ansible.builtin.copy:
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.timer"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/podman-prune.timer"
     mode: "0644"
     content: |
       [Unit]
@@ -164,7 +164,7 @@
     # No :-fallback needed: XDG_RUNTIME_DIR is always set by systemd in user sessions.
     # environment.d does not support $() command substitution, so the $(id -u) fallback
     # used in zshrc.j2 cannot be used here. The two forms are intentionally different.
-    dest: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/containers.conf"
     mode: "0644"
     backup: true
   when: ansible_facts['system'] == 'Linux'

@@ -1061,6 +1061,7 @@
 - name: Select authselect sssd profile and clear PAM drift
   ansible.builtin.command:
     cmd: authselect select sssd --force
+  register: system_authselect_select_result
   when:
     - system_authselect_bin.stat.exists
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
@@ -1068,6 +1069,16 @@
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   changed_when: true
   failed_when: false
+
+- name: Warn if authselect sssd profile selection failed
+  ansible.builtin.debug:
+    msg: >-
+      authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
+      enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
+      password reuse prevention will be unconfigured. Check authselect status manually.
+  when:
+    - system_authselect_select_result is defined
+    - system_authselect_select_result.rc | default(0) != 0
 
 # --- Disable fingerprint auth (bypasses pam_faillock; no enrolled prints expected) ---
 - name: Check if authselect with-fingerprint feature is enabled
@@ -1992,7 +2003,7 @@
     content: |
       # {{ ansible_managed }}
       # Auto-logout after inactivity (CIS 5.5.5 requires <=900s). Override system_tmout in config.yml.
-      TMOUT={{ system_tmout }}
+      readonly TMOUT={{ system_tmout }}
       export TMOUT
     dest: /etc/profile.d/tmout.sh
     mode: "0644"
@@ -2008,8 +2019,8 @@
 - name: Deploy session timeout to /etc/zshrc (all interactive zsh shells)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
-    line: "TMOUT={{ system_tmout }}; export TMOUT  # CIS 5.5.5"
-    regexp: '^\s*(readonly\s+)?TMOUT='
+    line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     create: true
     mode: "0644"
   when:
@@ -2163,6 +2174,19 @@
     regexp: '^account\s+required\s+pam_faillock\.so$'
     line: 'account required                        pam_faillock.so'
     insertbefore: '^account\s'
+    mode: "0644"
+  when: ansible_facts['pkg_mgr'] == 'apt'
+  failed_when: false
+
+# Debian: pam_pwhistory.so must be inserted directly (no authselect).
+# authselect enable-feature with-pwhistory (below) is RHEL/Fedora only.
+# This mirrors the pam_faillock Debian block above.
+- name: Ensure pam_pwhistory.so line is in common-password (Debian)
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/common-password
+    regexp: '^password\s+required\s+pam_pwhistory\.so'
+    line: 'password required                        pam_pwhistory.so use_authtok remember=24 enforce_for_root'
+    insertbefore: '^password.*pam_unix\.so'
     mode: "0644"
   when: ansible_facts['pkg_mgr'] == 'apt'
   failed_when: false

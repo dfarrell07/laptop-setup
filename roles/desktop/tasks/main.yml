@@ -97,20 +97,20 @@
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/alacritty"
+    path: "{{ ansible_facts['user_dir'] }}/.config/alacritty"
     state: directory
     mode: "0755"
 
 - name: Deploy Alacritty config
   ansible.builtin.template:
     src: alacritty.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
     mode: "0644"
 
 # --- i3 config ---
 - name: Ensure i3 config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/i3"
+    path: "{{ ansible_facts['user_dir'] }}/.config/i3"
     state: directory
     mode: "0755"
   when: desktop_effective == 'i3'
@@ -118,7 +118,7 @@
 - name: Deploy i3 config
   ansible.builtin.template:
     src: i3.config.j2
-    dest: "{{ ansible_user_dir }}/.config/i3/config"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/i3/config"
     mode: "0644"
   when: desktop_effective == 'i3'
 
@@ -150,14 +150,14 @@
 # --- Sway config ---
 - name: Ensure Sway config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/sway"
+    path: "{{ ansible_facts['user_dir'] }}/.config/sway"
     state: directory
     mode: "0755"
   when: desktop_effective == 'sway'
 
 - name: Ensure Pictures directory exists for screenshots
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/Pictures"
+    path: "{{ ansible_facts['user_dir'] }}/Pictures"
     state: directory
     mode: "0755"
   when: desktop_effective in ['sway', 'i3']
@@ -165,13 +165,13 @@
 - name: Deploy Sway config
   ansible.builtin.template:
     src: sway.config.j2
-    dest: "{{ ansible_user_dir }}/.config/sway/config"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
     mode: "0644"
   when: desktop_effective == 'sway'
 
 - name: Ensure swaylock config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/swaylock"
+    path: "{{ ansible_facts['user_dir'] }}/.config/swaylock"
     state: directory
     mode: "0755"
   when: desktop_effective == 'sway'
@@ -179,20 +179,20 @@
 - name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
   ansible.builtin.template:
     src: swaylock.config.j2
-    dest: "{{ ansible_user_dir }}/.config/swaylock/config"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
     mode: "0644"
   when: desktop_effective == 'sway'
 
 - name: Ensure xdg-desktop-portal config directory (Sway)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal"
+    path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
     state: directory
     mode: "0755"
   when: desktop_effective == 'sway'
 
 - name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
   ansible.builtin.copy:
-    dest: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
     mode: "0644"
     content: |
       # {{ ansible_managed }}
@@ -205,7 +205,7 @@
 # --- GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly) ---
 - name: Ensure GTK 3.0 config directory (Sway)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/gtk-3.0"
+    path: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0"
     state: directory
     mode: "0755"
   when: desktop_effective == 'sway'
@@ -213,14 +213,14 @@
 - name: Deploy GTK 3.0 settings (Sway)
   ansible.builtin.template:
     src: gtk-settings.ini.j2
-    dest: "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0/settings.ini"
     mode: "0644"
     force: false
   when: desktop_effective == 'sway'
 
 - name: Ensure GTK 4.0 config directory (Sway)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/gtk-4.0"
+    path: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0"
     state: directory
     mode: "0755"
   when: desktop_effective == 'sway'
@@ -228,7 +228,7 @@
 - name: Deploy GTK 4.0 settings (Sway)
   ansible.builtin.template:
     src: gtk-settings.ini.j2
-    dest: "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0/settings.ini"
     mode: "0644"
     force: false
   when: desktop_effective == 'sway'
@@ -245,7 +245,7 @@
 # --- i3status config (shared by i3 and Sway) ---
 - name: Ensure i3status config directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/i3status"
+    path: "{{ ansible_facts['user_dir'] }}/.config/i3status"
     state: directory
     mode: "0755"
   when: desktop_effective in ['i3', 'sway']
@@ -253,7 +253,7 @@
 - name: Deploy i3status config
   ansible.builtin.template:
     src: i3status.conf.j2
-    dest: "{{ ansible_user_dir }}/.config/i3status/config"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
     mode: "0644"
   when: desktop_effective in ['i3', 'sway']
 
@@ -320,7 +320,7 @@
 # --- macOS: AeroSpace config ---
 - name: Ensure AeroSpace config directory (macOS)
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/aerospace"
+    path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
     state: directory
     mode: "0755"
   when: ansible_facts['os_family'] == 'Darwin'
@@ -328,7 +328,7 @@
 - name: Deploy AeroSpace config (macOS)
   ansible.builtin.template:
     src: aerospace.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
     mode: "0644"
   when: ansible_facts['os_family'] == 'Darwin'
 

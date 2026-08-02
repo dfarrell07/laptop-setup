@@ -4,7 +4,7 @@
 
 - name: Ensure SSH directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh"
+    path: "{{ ansible_facts['user_dir'] }}/.ssh"
     state: directory
     mode: "0700"
 
@@ -47,7 +47,7 @@
 
 - name: Restrict known_hosts to owner-only
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh/known_hosts"
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
     state: file
     mode: "0600"
   failed_when: false
@@ -117,7 +117,7 @@
 - name: Deploy SSH auth key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk"
     mode: "0600"
   no_log: true
   when: ssh_auth_key | default('') | length > 0
@@ -125,7 +125,7 @@
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key_pub }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk.pub"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk.pub"
     mode: "0644"
   no_log: true
   when: ssh_auth_key_pub | default('') | trim | length > 0
@@ -156,7 +156,7 @@
 - name: Deploy SSH signing key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/{{ ssh_signing_key_basename }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}"
     mode: "0600"
   no_log: true
   when: ssh_signing_key | default('') | length > 0
@@ -164,7 +164,7 @@
 - name: Deploy SSH signing public key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key_pub }}"
-    dest: "{{ ansible_user_dir }}/.ssh/{{ ssh_signing_key_basename }}.pub"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}.pub"
     mode: "0644"
   no_log: true
   when: ssh_signing_key_pub | default('') | length > 0
@@ -172,7 +172,7 @@
 - name: Deploy Red Hat internal git key
   ansible.builtin.copy:
     content: "{{ rh_git_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_rsa_redhat"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_rsa_redhat"
     mode: "0600"
   no_log: true
   when:
@@ -181,7 +181,7 @@
 
 - name: Ensure ~/.config/git directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/git"
+    path: "{{ ansible_facts['user_dir'] }}/.config/git"
     state: directory
     mode: "0755"
   when: ssh_git_signing_pubkey | default('') | trim | length > 0
@@ -189,6 +189,6 @@
 - name: Deploy allowed signers file
   ansible.builtin.template:
     src: allowed_signers.j2
-    dest: "{{ ansible_user_dir }}/.config/git/allowed_signers"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/allowed_signers"
     mode: "0644"
   when: ssh_git_signing_pubkey | default('') | trim | length > 0

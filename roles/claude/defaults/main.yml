@@ -5,8 +5,8 @@ dotfiles_github_user: "dfarrell07"  # noqa: var-naming[no-role-prefix] — share
 claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 
-claude_work_config_dir: "{{ ansible_user_dir }}/.claude-work"
-claude_personal_config_dir: "{{ ansible_user_dir }}/.claude-personal"
+claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
+claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 
 claude_telemetry_env:
   DISABLE_ERROR_REPORTING: "1"
