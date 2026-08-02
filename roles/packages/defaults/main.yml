@@ -70,9 +70,8 @@ packages_networking:
   # scanning/perf
   - nmap            # network scanner (moved from packages_cli)
   - iperf3
-  # firewall/DNS
-  - nftables
-  # tcpdump, traceroute, mtr, ethtool, bind-utils are Fedora Workstation defaults (always installed)
+  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults (always installed)
+  # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
 
@@ -108,6 +107,7 @@ packages_apt:
   - zsh-syntax-highlighting
   - fzf
   - zoxide
+  - gnupg  # Debian does not auto-install gnupg; needed for SSH role and git commit signing
   - socat
   - pipx
   - shellcheck
