@@ -433,7 +433,7 @@ notes_enabled: false  # or remove `notes_enabled: true` from config.yml (false i
 
 Then re-run `make notes` (or `make all`). The notes role will skip entirely.
 
-If you want your own private notes repo, set `dotfiles_notes_repo` to your own repository in `config.yml` and ensure transcrypt is initialized.
+If you want your own private notes repo, set `notes_remote_url: git@github.com:<you>/notes.git` (and optionally `notes_remote_url_https: https://github.com/<you>/notes.git`) in `config.yml` and ensure transcrypt is initialized.
 
 ---
 

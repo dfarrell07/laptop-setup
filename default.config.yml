@@ -111,6 +111,10 @@ install_virtualization: true
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
 #   system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"  (roles/system/defaults) — fallback DoT servers (IP#hostname required)
+#   system_chrony_nts_servers: [time.cloudflare.com, nts.netnod.se, ptbtime1.ptb.de, ntppool1.time.nl]
+#                                        (roles/system/defaults) — NTS-capable time sources; override for corporate NTP or regional servers
+#   system_chrony_fallback_pool: 2.fedora.pool.ntp.org  (roles/system/defaults) — plain NTP pool fallback when NTS sources unreachable
+#   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
 # system_tmp_noexec: true            (roles/system/defaults) — noexec on /tmp (CIS 1.1.2.x); set false if non-Go dev tools need to exec
 #   from /tmp (nosuid/nodev preserved)
 #   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile

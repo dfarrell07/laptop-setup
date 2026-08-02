@@ -185,6 +185,13 @@
   changed_when: false
   become: true
 
+- name: Check faillock even_deny_root is absent (default config)
+  ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
+  register: verify_even_deny_root
+  changed_when: false
+  failed_when: verify_even_deny_root.rc == 0
+  become: true
+
 - name: Check pwquality minlen=14
   ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
   changed_when: false

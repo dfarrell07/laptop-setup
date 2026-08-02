@@ -186,6 +186,46 @@
         cmd: grep -q 'show-failed-attempts' "{{ ansible_user_dir }}/.config/swaylock/config"
       changed_when: false
 
+    - name: Stat GTK 3.0 settings.ini
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
+      register: verify_gtk3
+
+    - name: Assert GTK 3.0 settings.ini exists
+      ansible.builtin.assert:
+        that: verify_gtk3.stat.exists
+        fail_msg: "gtk-3.0/settings.ini not deployed — dark mode and icon theme broken for GTK3 apps under Sway"
+
+    - name: Verify GTK 3.0 settings.ini contains gtk-theme-name
+      ansible.builtin.command:
+        cmd: grep -q 'gtk-theme-name' "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
+      changed_when: false
+
+    - name: Verify GTK 3.0 settings.ini contains gtk-icon-theme-name
+      ansible.builtin.command:
+        cmd: grep -q 'gtk-icon-theme-name' "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
+      changed_when: false
+
+    - name: Stat GTK 4.0 settings.ini
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
+      register: verify_gtk4
+
+    - name: Assert GTK 4.0 settings.ini exists
+      ansible.builtin.assert:
+        that: verify_gtk4.stat.exists
+        fail_msg: "gtk-4.0/settings.ini not deployed — dark mode and icon theme broken for GTK4 apps under Sway"
+
+    - name: Verify GTK 4.0 settings.ini contains gtk-theme-name
+      ansible.builtin.command:
+        cmd: grep -q 'gtk-theme-name' "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
+      changed_when: false
+
+    - name: Verify GTK 4.0 settings.ini contains gtk-icon-theme-name
+      ansible.builtin.command:
+        cmd: grep -q 'gtk-icon-theme-name' "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
+      changed_when: false
+
     # --- Desktop WM configs (second converge run sets desktop_environment: i3) ---
     - name: Verify i3 config deployed
       ansible.builtin.stat:

@@ -88,7 +88,7 @@ make repos-dnf        # repos_dnf role only (sudo)
 make redhat           # redhat role only (sudo)
 make containers       # containers role only (sudo)
 make claude           # claude role only (no sudo)
-make distrobox        # distrobox role only (no sudo)
+make distrobox        # alias for make container (backwards compatibility)
 # Per repo-group subsets of `make repos`:
 make repos-ovnk       # OVN-Kubernetes repos only
 make repos-konflux    # Konflux repos only

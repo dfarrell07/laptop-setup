@@ -132,17 +132,69 @@
       fi
       exit $_gitleaks_rc
 
-- name: Deploy commit-msg chain-stub hook
+- name: Deploy commit-msg hook
   ansible.builtin.copy:
     dest: "{{ ansible_user_dir }}/.config/git/template/hooks/commit-msg"
     mode: "0755"
     backup: true
     content: |
       #!/bin/sh
-      # Chain to per-repo commit-msg hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
-      _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/commit-msg"
-      if [ -f "$_repo_hook" ]; then
-        exec "$_repo_hook" "$@"
+      msg=$(head -1 "$1")
+      first=$(echo "$msg" | awk '{print $1}')
+      first="${first%:}"
+      desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
+
+      case "$msg" in
+        squash!*|fixup!*|amend!*) exit 0 ;;
+      esac
+
+      if ! echo "$msg" | grep -qE '^[A-Z]'; then
+        echo "ERROR: Capitalize the subject line" >&2
+        exit 1
+      fi
+
+      _bad_word() {
+        case "$1" in
+          Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|Fixed|\
+          Implemented|Improved|Merged|Moved|Refactored|Removed|Renamed|\
+          Replaced|Resolved|Reverted|Started|Stopped|Updated|Upgraded|\
+          Adding|Changing|Creating|Deleting|Enabling|Disabling|Expanding|\
+          Fixing|Implementing|Improving|Merging|Moving|Refactoring|Removing|\
+          Renaming|Replacing|Resolving|Reverting|Starting|Stopping|Updating|\
+          Upgrading) return 0 ;;
+          *) return 1 ;;
+        esac
+      }
+      if _bad_word "$desc_first"; then
+        echo "ERROR: Use imperative mood ('$desc_first' is not imperative)" >&2
+        echo "  Write 'Scope: fix ...' not 'Scope: Fixed/Fixing ...'" >&2
+        exit 1
+      fi
+      if [ "$desc_first" != "$first" ] && _bad_word "$first"; then
+        echo "ERROR: Use imperative mood ('$first' is not imperative)" >&2
+        exit 1
+      fi
+
+      len=${#msg}
+      if [ "$len" -gt 72 ]; then
+        echo "ERROR: Subject too long ($len > 72 chars)" >&2
+        exit 1
+      fi
+
+      if echo "$msg" | grep -qE '\.$'; then
+        echo "ERROR: No trailing period on subject line" >&2
+        exit 1
+      fi
+
+      if ! grep -q '^Signed-off-by:' "$1"; then
+        echo "ERROR: Missing Signed-off-by — use 'git commit -s'" >&2
+        exit 1
+      fi
+
+      if command -v npx >/dev/null 2>&1; then
+        npx --no -- commitlint --edit "$1"
+      else
+        echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
       fi
 
 - name: Deploy prepare-commit-msg chain-stub hook
