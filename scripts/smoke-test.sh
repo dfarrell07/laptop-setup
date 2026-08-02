@@ -67,11 +67,32 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "oc:oc version --client" "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "cosign:cosign version" "tkn:tkn version --component=cli" "sops:sops --version" "operator-sdk:operator-sdk version" "k9s:k9s version" "krew:kubectl krew version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "krew:kubectl krew version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
 unset _tool_absent
+
+# oc (work-profile only — guard on binary presence, emit nothing when absent)
+if [[ -x /usr/local/bin/oc ]]; then
+  if run oc version --client &>/dev/null; then record "oc" "PASS"
+  else record "oc" "FAIL" "oc binary present but 'oc version --client' failed"; fi
+fi
+# cosign (work-profile only — guard on binary presence, emit nothing when absent)
+if [[ -x /usr/local/bin/cosign ]]; then
+  if run cosign version &>/dev/null; then record "cosign" "PASS"
+  else record "cosign" "FAIL" "cosign binary present but version command failed"; fi
+fi
+# tkn (work-profile only — guard on binary presence, emit nothing when absent)
+if [[ -x /usr/local/bin/tkn ]]; then
+  if run tkn version --component=cli &>/dev/null; then record "tkn" "PASS"
+  else record "tkn" "FAIL" "tkn binary present but 'tkn version --component=cli' failed"; fi
+fi
+# operator-sdk (work-profile only — guard on binary presence, emit nothing when absent)
+if [[ -x /usr/local/bin/operator-sdk ]]; then
+  if run operator-sdk version &>/dev/null; then record "operator-sdk" "PASS"
+  else record "operator-sdk" "FAIL" "operator-sdk binary present but version command failed"; fi
+fi
 
 # ec CLI (work-profile only — guard on binary presence)
 if [[ -x /usr/local/bin/ec ]]; then

@@ -107,7 +107,9 @@ packages_apt:
   - zsh-syntax-highlighting
   - fzf
   - zoxide
-  - gnupg  # Debian does not auto-install gnupg; needed for SSH role and git commit signing
+  - gnupg          # Debian does not auto-install gnupg; needed for SSH role and git commit signing
+  - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
+  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - socat
   - pipx
   - shellcheck
