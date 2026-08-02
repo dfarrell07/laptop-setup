@@ -109,6 +109,16 @@
   changed_when: true
   failed_when: false
 
+- name: Install subctl via go install (Submariner cluster management)
+  ansible.builtin.command:
+    cmd: >-
+      go install github.com/submariner-io/subctl/cmd/subctl@{{ distrobox_subctl_version }}
+  environment:
+    GOPATH: "{{ ansible_env.HOME }}/go"
+    GOBIN: "{{ ansible_env.HOME }}/go/bin"
+  changed_when: true
+  failed_when: false
+
 # --- Host-command delegation ---
 - name: Check for distrobox-host-exec
   ansible.builtin.stat:

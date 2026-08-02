@@ -1217,6 +1217,39 @@
         - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64.yaml"
         - "{{ ansible_user_dir }}/.local/bin/LICENSE"
 
+- name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+    - profile == 'work'
+    - packages_subctl_versioned | default([]) | length > 0
+  block:
+    - name: Install subctl version with temp GOBIN
+      ansible.builtin.command:
+        cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
+      environment:
+        GOPATH: "{{ ansible_user_dir }}/go"
+        GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
+      changed_when: true
+      failed_when: false
+      loop: "{{ packages_subctl_versioned }}"
+
+    - name: Copy versioned subctl to ~/.local/bin/subctlXX
+      ansible.builtin.copy:
+        src: "/tmp/subctl-v{{ item.version }}-bin/subctl"
+        dest: "{{ ansible_user_dir }}/.local/bin/subctl{{ item.suffix }}"
+        mode: "0755"
+        remote_src: true
+      loop: "{{ packages_subctl_versioned }}"
+      failed_when: false
+
+    - name: Clean up temp GOBIN directories
+      ansible.builtin.file:
+        path: "/tmp/subctl-v{{ item.version }}-bin"
+        state: absent
+      loop: "{{ packages_subctl_versioned }}"
+
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
     cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew install {{ item }}"
