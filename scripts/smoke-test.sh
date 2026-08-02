@@ -466,8 +466,10 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     record "wl-paste" "WARN" "not found (expected on sway — wl-clipboard is in desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
   # swaylock config: deployed via desktop/tasks/main.yml copy task; without it swaylock
-  # falls back to defaults (no show-failed-attempts, no indicator-caps-lock)
-  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" ]] || [[ -f "$HOME/.config/swaylock/config" ]]; then
+  # falls back to defaults (no show-failed-attempts, no indicator-caps-lock).
+  # Guard on `command -v sway` (installed) rather than XDG_CURRENT_DESKTOP (active session)
+  # so the FAIL is reachable from SSH/TTY — the recommended smoke-test environment per CLAUDE.md.
+  if command -v sway &>/dev/null; then
     if [[ -f "$HOME/.config/swaylock/config" ]]; then
       record "swaylock-config" "PASS"
     else

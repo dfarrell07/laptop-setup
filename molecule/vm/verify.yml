@@ -695,11 +695,14 @@
       become: true
 
     - name: Check AIDE conf includes security-critical paths
-      ansible.builtin.command: grep -q '{{ item }}' /etc/aide.conf
+      ansible.builtin.command: grep -q '{{ item.path }}' /etc/aide.conf
       loop:
-        - /etc/bpfman
-        - /etc/crypto-policies
-        - /etc/selinux
+        - path: /etc/audit
+        - path: /etc/bpfman
+        - path: /etc/crypto-policies
+        - path: /etc/selinux
+        - path: /etc/usbguard
+      when: item.path != '/etc/usbguard' or usbguard_expected | default(true)
       changed_when: false
       become: true
 

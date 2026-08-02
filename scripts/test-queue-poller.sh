@@ -63,6 +63,16 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: $desc — expected NOT to contain '$needle'" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 _TMPBIN=$(mktemp -d)
 _TMPHOME=$(mktemp -d)
 _TMPLOCKDIR=$(mktemp -d)
@@ -137,6 +147,9 @@ fail_issue "42" "Something went wrong"
 _gh_calls=$(cat "$_GH_LOG")
 assert_contains "fail_issue: gh edit removes processing" \
   "issue edit 42 --repo owner/queue --remove-label processing --add-label failed" \
+  "$_gh_calls"
+assert_not_contains "fail_issue: does not remove queued label" \
+  "--remove-label queued" \
   "$_gh_calls"
 assert_contains "fail_issue: gh comment with message" \
   "issue comment 42 --repo owner/queue --body Something went wrong" \
