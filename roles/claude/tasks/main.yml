@@ -92,7 +92,7 @@
     src: settings.json.j2
     dest: "{{ claude_work_config_dir }}/settings.local.json"
     mode: "0600"
-  when: profile == 'work'
+  when: profile == 'work' or (claude_queue_enabled | bool)
 
 - name: Deploy personal instance settings
   ansible.builtin.template:
@@ -107,7 +107,7 @@
     dest: "{{ claude_work_config_dir }}/CLAUDE.md"
     mode: "0600"
     force: false
-  when: profile == 'work'
+  when: profile == 'work' or (claude_queue_enabled | bool)
 
 - name: Deploy personal instance CLAUDE.md
   ansible.builtin.template:
