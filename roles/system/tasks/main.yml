@@ -573,7 +573,7 @@
         'kernel.core_pattern': system_core_pattern,
         'kernel.yama.ptrace_scope': system_ptrace_scope | int,
         'kernel.kexec_load_disabled': system_kexec_load_disabled | int
-      }) }}" # noqa: jinja[spacing]
+      }) | combine(system_sysctl_extra | default({})) }}" # noqa: jinja[spacing]
 
 # CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
 # On CSB, Red Hat IT network diagnostics rely on TCP timestamps for RTT measurement

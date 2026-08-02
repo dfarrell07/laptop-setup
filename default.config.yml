@@ -41,6 +41,8 @@ install_virtualization: true
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   packages_install_binaries: true    (roles/packages/defaults)
+#   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
+#     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, bpfman, bpftool, ...]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
 #   packages_go_install_work: [controller-gen@v0.21.0, ...]  (roles/packages/defaults) — work-profile-only OVN-K codegen +
@@ -70,6 +72,9 @@ install_virtualization: true
 #                                        2=all incl root for strict CIS/STIG but breaks bpftool prog dump jited)
 #   system_unprivileged_bpf_disabled: 1 (roles/system/defaults) — unprivileged BPF block (1=block non-root, root can re-enable;
 #                                        2=write-once locked, even root cannot re-enable; 0=allow all)
+#   system_sysctl_extra: {}            (roles/system/defaults) — additional sysctl key=value pairs merged into the hardening dict;
+#                                        use in config.yml to add machine-specific sysctls without replacing the entire dict.
+#                                        Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
 #   system_kernel_panic: 10            (roles/system/defaults) — seconds before auto-reboot after panic;
 #                                        set 0 to disable auto-reboot (preserves crash state for kdump/OVN-K/bpfman debugging)
 #   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; set 0 to allow system to continue after non-fatal oops
@@ -125,6 +130,7 @@ install_virtualization: true
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
+#   desktop_sway_cursor_size: 24       (roles/desktop/defaults) — cursor size in physical pixels (HiDPI: try 36 for 1.5x scale)
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
 #   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  # P16v Gen 1 AMD example
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
@@ -159,6 +165,12 @@ install_virtualization: true
 #   dotfiles_aws_profile: aws-acm-subm   — default AWS CLI profile name
 #   dotfiles_laptop_tailscale_host: laptop.tail  — Tailscale hostname for laptop mosh/tmux alias
 #   dotfiles_mac_tailscale_host: mac-desktop.tail  — Tailscale hostname for desktop mosh/tmux alias
+#   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
+#     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
+#     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
+#   dotfiles_internal_ca_path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem  — CA cert for internal HTTPS hosts
+#   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
+#   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   ssh_git_signing_pubkey: ""            — SSH public key for git commit signing; set in config.yml to the literal pubkey or
 #     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
 #     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
@@ -173,6 +185,8 @@ system_kexec_load_disabled: 0  # kdump requires kexec; safe here (Secure Boot di
 system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1 (see Additional
 system_kernel_panic_on_oops: 0  # dev workstation: bpfman/OVN-K non-fatal oops should log-and-continue, not halt the host (CIS default is 1)
 system_kernel_panic: 0          # preserve panic state for kdump analysis; kexec_load_disabled=0 already enables kdump (CIS default is 10)
+system_faillock_even_deny_root: false  # root lockout on failed logins; root SSH is blocked (PermitRootLogin no), so this adds self-lockout
+                                        # risk on sudo mistype without security benefit; CIS default is true
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky

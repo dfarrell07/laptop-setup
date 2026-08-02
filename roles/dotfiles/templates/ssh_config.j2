@@ -57,6 +57,19 @@ Host internal-git
     IdentitiesOnly yes
 {% endif %}
 
+{% if dotfiles_laptop_tailscale_host | default('') %}
+Host {{ dotfiles_laptop_tailscale_host }}
+    Port {{ ssh_port | default(722) }}
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentitiesOnly yes
+{% endif %}
+{% if dotfiles_mac_tailscale_host | default('') %}
+Host {{ dotfiles_mac_tailscale_host }}
+    Port {{ ssh_port | default(722) }}
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentitiesOnly yes
+{% endif %}
+
 # User-local overrides (not managed by Ansible).
 # Host-specific stanzas here take effect because specific hostnames match before Host *.
 # This Include is placed after Host * so local settings cannot override the cipher/MAC policy above.
