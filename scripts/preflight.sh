@@ -194,6 +194,19 @@ for netlabel_url in "${net_urls[@]}"; do
   fi
 done
 
+# --- registry.redhat.io authentication (required for RH subctl download) ---
+if [[ "$PROFILE" == "work" ]]; then
+  if command -v podman &>/dev/null; then
+    if podman login --get-login registry.redhat.io &>/dev/null; then
+      record "registry_redhat_auth" "pass" "authenticated with registry.redhat.io"
+    else
+      record "registry_redhat_auth" "warn" "not authenticated with registry.redhat.io — run 'podman login registry.redhat.io' before using packages_subctl_rh_versions"
+    fi
+  else
+    record "registry_redhat_auth" "skip" "podman not installed"
+  fi
+fi
+
 # --- fapolicyd detection (Linux only) ---
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" != "darwin" ]]; then
