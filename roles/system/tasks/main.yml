@@ -2050,7 +2050,9 @@
   notify: Restart chronyd
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected | default(false))  # CSB may use IPA-enrolled Kerberos NTP; replacing chrony.conf breaks kinit
+    # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
+    # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
+    - not (csb_detected | default(false) and ansible_distribution != 'Fedora')
 
 - name: Ensure chronyd is enabled
   ansible.builtin.systemd:
