@@ -335,8 +335,8 @@
 
 - name: Assert user.signingkey is set
   ansible.builtin.assert:
-    that: "verify_signingkey.stdout | trim == '~/.ssh/id_ed25519_sk_signing.pub'"
-    fail_msg: "git user.signingkey not set to ~/.ssh/id_ed25519_sk_signing.pub"
+    that: "verify_signingkey.stdout | trim == '~/.ssh/' ~ (ssh_signing_key_basename | default('id_ed25519_sk_signing')) ~ '.pub'"
+    fail_msg: "git user.signingkey not set to ~/.ssh/{{ ssh_signing_key_basename | default('id_ed25519_sk_signing') }}.pub"
 
 - name: Verify ~/.config/git/allowed_signers exists
   ansible.builtin.stat:

@@ -119,7 +119,7 @@ make repos-downstream # downstream repos only
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides). Key
   top-level variables: `profile` (work/personal), `desktop_environment` (auto/sway/i3/gnome), `ssh_port`
   (default 722); feature toggles `install_docker`, `install_vpn`, `install_virtualization`; repo toggles
-  `repo_gh_cli`, `repo_google_chrome`, `repo_google_cloud_sdk`, `repo_rpmfusion`, `repo_slack`,
+  `repo_gh_cli`, `repo_google_chrome`, `repo_google_cloud_sdk`, `repo_rpmfusion_free`, `repo_rpmfusion_nonfree`, `repo_slack`,
   `repo_tailscale`, `repo_acli`, `repo_docker_ce`, `repo_mullvad`, `repo_redhat`; container settings
   `container_name`, `container_image`, `container_distro`, `container_release`, `container_replace`. See
   `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 35+

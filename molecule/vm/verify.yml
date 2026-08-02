@@ -107,26 +107,26 @@
         path: /etc/yum.repos.d/rpmfusion-free.repo
       register: verify_rpmfusion_free_repo
       become: true
-      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_free | default(true)) and ansible_distribution == 'Fedora'
 
     - name: Assert rpmfusion-free repo exists
       ansible.builtin.assert:
         that: verify_rpmfusion_free_repo.stat.exists
         fail_msg: "rpmfusion-free repo not configured"
-      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_free | default(true)) and ansible_distribution == 'Fedora'
 
     - name: Verify rpmfusion-nonfree repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/rpmfusion-nonfree.repo
       register: verify_rpmfusion_nonfree_repo
       become: true
-      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_nonfree | default(false)) and ansible_distribution == 'Fedora'
 
     - name: Assert rpmfusion-nonfree repo exists
       ansible.builtin.assert:
         that: verify_rpmfusion_nonfree_repo.stat.exists
         fail_msg: "rpmfusion-nonfree repo not configured"
-      when: (repo_rpmfusion | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_nonfree | default(false)) and ansible_distribution == 'Fedora'
 
     - name: Verify sysctl hardening config deployed
       ansible.builtin.stat:

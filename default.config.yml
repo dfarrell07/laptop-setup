@@ -176,7 +176,8 @@ system_kernel_panic: 0          # preserve panic state for kdump analysis; kexec
 repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky
 repo_google_chrome: true
 repo_google_cloud_sdk: true  # enables 'dnf install google-cloud-sdk'; nothing auto-installed — set false if you do not use GCP
-repo_rpmfusion: true  # Fedora-only; multimedia codecs (H.264/AAC), firmware, proprietary GPU drivers; nothing auto-installed
+repo_rpmfusion_free: true    # Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC; nothing auto-installed
+repo_rpmfusion_nonfree: false  # Fedora-only; NVIDIA proprietary drivers, non-free firmware; opt in explicitly
 repo_slack: false   # packagecloud Slack RPM repo has gpgcheck=false — opt in explicitly or use Flatpak instead
 repo_tailscale: true
 repo_acli: true  # no-op without repos_dnf_acli_baseurl in config.yml (internal Red Hat Jira/Confluence CLI mirror)

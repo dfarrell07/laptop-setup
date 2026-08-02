@@ -4,9 +4,9 @@ system_sysctl_hardening:
   # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
   kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
   kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
-  kernel.unprivileged_bpf_disabled: 2  # CIS — prevent unprivileged eBPF program loading;
-  # value 2=write-once locked (Fedora 44 kernel default via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
-  # value 1 allows root to re-enable at runtime
+  kernel.unprivileged_bpf_disabled: 1  # CIS — prevent unprivileged eBPF program loading;
+  # value 1: root retains write access to re-enable at runtime (needed for bpfman/bpftrace debugging);
+  # value 2: write-once locked — root CANNOT re-enable, too strict for bpf dev workstation
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   kernel.perf_event_paranoid: 1    # value 1 = require CAP_PERFMON for kernel profiling
   # (value 2 restricts unprivileged users from all perf events; root/CAP_PERFMON retain full access)
@@ -20,6 +20,7 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.rp_filter: 2      # loose mode; applies to all existing interfaces
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1

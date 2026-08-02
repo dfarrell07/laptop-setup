@@ -22,6 +22,11 @@
              + packages_languages
              + packages_security
              + packages_containers
+             + (packages_containers_kubectl | default(['kubectl'])
+                if (profile != 'work'
+                    or ansible_architecture != 'x86_64'
+                    or not (packages_install_binaries | default(true) | bool))
+                else [])
              + packages_networking
              + (packages_networking_work | default([]) if profile == 'work' else []) }}
         state: present

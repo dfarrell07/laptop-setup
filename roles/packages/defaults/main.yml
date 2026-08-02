@@ -45,14 +45,21 @@ packages_security:
   - libfido2
   - openssl
   - gitleaks
-  - sos            # Red Hat support diagnostic bundle tool (sosreport); required for CSB/RHEL support cases
 
 packages_containers:
   - podman
   - buildah
   - skopeo
   - distrobox
-  - kubectl  # kubectl — needed on all profiles for KIND cluster interaction; 'kubernetes-client' is a RHEL-only name, Fedora uses 'kubectl'
+
+# kubectl via dnf only when the OCP tarball download is skipped (personal profile,
+# non-x86_64, or packages_install_binaries=false). On work+x86_64 with
+# packages_install_binaries=true, the OCP tarball provides /usr/local/bin/kubectl,
+# which shadows /usr/bin/kubectl in PATH; the dnf install is unused and wastes disk.
+# tasks/main.yml merges this list conditionally. Override to [] to suppress.
+packages_containers_kubectl:
+  - kubectl
+
 packages_virtualization:
   - libvirt
   - libvirt-client
@@ -87,6 +94,7 @@ packages_networking_work:
   - gdb            # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
   - perf           # kernel performance profiling
   - bpftrace       # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
+  - sos            # Red Hat support diagnostic bundle tool (sosreport); work profile only (CSB/RHEL support cases)
 
 packages_apt:
   - git

@@ -98,12 +98,16 @@
           - vault_ssh_signing_key is defined and vault_ssh_signing_key | length > 0
           - vault_ssh_signing_key_pub is defined and vault_ssh_signing_key_pub | length > 0
         fail_msg: >-
-          vault.yml is populated (vault_placeholder != 'encrypt-me') but one or more
-          required SSH key variables are missing or empty. Check for key name typos in
+          vault.yml has some SSH key variables defined but one or more required
+          variables are missing or empty. Check for key name typos in
           vault.yml — expected: vault_ssh_auth_key, vault_ssh_auth_key_pub,
           vault_ssh_signing_key, vault_ssh_signing_key_pub.
           Run: ansible-vault view group_vars/all/vault.yml | grep vault_ssh
-      when: vault_placeholder | default('encrypt-me') != 'encrypt-me'
+      when: >-
+        vault_ssh_auth_key is defined or
+        vault_ssh_auth_key_pub is defined or
+        vault_ssh_signing_key is defined or
+        vault_ssh_signing_key_pub is defined
       tags: [always]
 
     - name: Assert identity vars are not CHANGE_ME placeholder values
@@ -184,8 +188,8 @@
 
     - name: Bootstrap Python inside container
       ansible.builtin.raw: |
-        dnf install -y python3 python3-libdnf5 2>/dev/null || \
-        dnf install -y python3 python3-dnf 2>/dev/null || true
+        sudo dnf install -y python3 python3-libdnf5 2>/dev/null || \
+        sudo dnf install -y python3 python3-dnf 2>/dev/null || true
       changed_when: false
       tags: [always]
 

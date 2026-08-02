@@ -1,7 +1,7 @@
 ---
 - name: Remount /tmp  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: mount -o remount,nosuid,nodev,noexec /tmp
+    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | default(true) | bool else '' }} /tmp"
   become: true
   changed_when: true
   failed_when: false

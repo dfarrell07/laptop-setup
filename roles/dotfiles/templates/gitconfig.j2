@@ -3,7 +3,7 @@
 	name = {{ dotfiles_user_name }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
 {% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
-	signingkey = ~/.ssh/id_ed25519_sk_signing.pub
+	signingkey = ~/.ssh/{{ ssh_signing_key_basename | default('id_ed25519_sk_signing') }}.pub
 {% endif %}
 
 {% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
@@ -103,7 +103,7 @@
 
 {% if profile == 'work' and ansible_system | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
 [http "https://{{ dotfiles_internal_git_host }}"]
-	sslCAInfo = /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+	sslCAInfo = {{ dotfiles_internal_ca_path }}
 {% endif %}
 
 [includeIf "gitdir:~/src/submariner-io/"]

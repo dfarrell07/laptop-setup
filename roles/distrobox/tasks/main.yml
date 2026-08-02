@@ -137,8 +137,15 @@
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
-    - distrobox_container_exists.rc != 0
+    - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
   block:
+    - name: Remove existing Toolbx container for replacement
+      ansible.builtin.command:
+        cmd: "toolbox rm --force {{ distrobox_container_name }}"
+      when:
+        - distrobox_container_exists.rc == 0
+        - distrobox_container_replace | default(false) | bool
+
     - name: Create Toolbx container
       ansible.builtin.command:
         cmd: >-

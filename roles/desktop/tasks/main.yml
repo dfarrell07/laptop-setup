@@ -340,7 +340,9 @@
   register: desktop_gnome_check
   changed_when: false
   failed_when: false
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - desktop_effective == 'gnome'
 
 - name: Disable notifications on lock screen
   community.general.dconf:

@@ -150,14 +150,13 @@
     user: "{{ ansible_user_id }}"
     key: "{{ ssh_auth_key_pub }}"
     state: present
-    exclusive: true
   no_log: true
   when: ssh_auth_key_pub | default('') | trim | length > 0
 
 - name: Deploy SSH signing key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing"
+    dest: "{{ ansible_user_dir }}/.ssh/{{ ssh_signing_key_basename }}"
     mode: "0600"
   no_log: true
   when: ssh_signing_key | default('') | length > 0
@@ -165,7 +164,7 @@
 - name: Deploy SSH signing public key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key_pub }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing.pub"
+    dest: "{{ ansible_user_dir }}/.ssh/{{ ssh_signing_key_basename }}.pub"
     mode: "0644"
   no_log: true
   when: ssh_signing_key_pub | default('') | length > 0

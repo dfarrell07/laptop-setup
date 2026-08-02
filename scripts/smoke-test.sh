@@ -289,7 +289,7 @@ if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
 elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "$HOME/.ssh/ directory not deployed"
 else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
 
-# authorized_keys: exclusive:true removes stale keys on every re-provision — verify count and mode.
+# authorized_keys: verify count and mode.
 # File absent is a WARN not FAIL: the authorized_key task is guarded by
 # `when: ssh_auth_key_pub | length > 0`, so first provision with plaintext vault leaves no file.
 _ak="$HOME/.ssh/authorized_keys"
@@ -301,7 +301,7 @@ else
   else record "authorized-keys-perms" "FAIL" "permissions $_ak_perms, expected 600"; fi
   _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || echo "0")
   if [[ "$_ak_total" -gt 1 ]]; then
-    record "authorized-keys-exclusive" "FAIL" "$_ak_total keys present, expected 1 — exclusive:true drift or manual key added; inspect: cat $_ak"
+    record "authorized-keys-exclusive" "WARN" "$_ak_total keys present, expected 1 — extra keys beyond vault key; inspect: cat $_ak"
   elif [[ "$_ak_total" -eq 0 ]]; then
     record "authorized-keys-exclusive" "WARN" "$_ak exists but has no key entries"
   elif grep -qE '^(sk-)?ssh-ed25519' "$_ak" 2>/dev/null; then
