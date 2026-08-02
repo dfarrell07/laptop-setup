@@ -1028,11 +1028,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
   else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
-  # pwhistory remember=24 (CIS 5.3.5)
+  # pwhistory remember=24 (CIS 5.3.5) — skipped on RHEL CSB (IPA/SSSD owns PAM policy; pwhistory.conf not written)
   if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    record "pwhistory-remember" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
   else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
 
   if grep -q '^enforce_for_root' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-enforce-root" "PASS"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    record "pwhistory-enforce-root" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
   else record "pwhistory-enforce-root" "FAIL" "pwhistory enforce_for_root not set — root can reuse passwords despite remember=24 (CIS 5.3.5)"; fi
 
   # yescrypt password hashing (CIS 5.3.6)

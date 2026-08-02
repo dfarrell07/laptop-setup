@@ -97,7 +97,8 @@
 - name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
-  changed_when: true
+  register: _devshm_remount_result
+  changed_when: _devshm_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
     - >-
@@ -105,6 +106,13 @@
       'nosuid' not in (system_devshm_opts.stdout | default('')) or
       'nodev' not in (system_devshm_opts.stdout | default(''))
   failed_when: false
+
+- name: Warn if /dev/shm remount failed
+  ansible.builtin.debug:
+    msg: "WARNING: remount of /dev/shm failed (rc={{ _devshm_remount_result.rc }}); live nosuid/nodev/noexec may not be active"
+  when:
+    - _devshm_remount_result is defined
+    - _devshm_remount_result.rc | default(0) != 0
 
 # On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
 # Deploy a one-shot service to re-apply hardening on every boot instead.
@@ -235,7 +243,8 @@
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid /home
-  changed_when: true
+  register: _home_remount_result
+  changed_when: _home_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
@@ -245,6 +254,13 @@
     - >-
       'nosuid' not in (system_home_opts.stdout | default(''))
   failed_when: false
+
+- name: Warn if /home nosuid remount failed
+  ansible.builtin.debug:
+    msg: "WARNING: remount of /home failed (rc={{ _home_remount_result.rc }}); live nosuid may not be active"
+  when:
+    - _home_remount_result is defined
+    - _home_remount_result.rc | default(0) != 0
 
 # --- Harden /boot mount options ---
 # nosuid,nodev,noexec: no setuid binaries, device nodes, or executable code needs to
@@ -306,7 +322,8 @@
 - name: Apply /boot hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /boot
-  changed_when: true
+  register: _boot_remount_result
+  changed_when: _boot_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
@@ -315,6 +332,13 @@
       'nodev' not in (system_boot_opts.stdout | default('')) or
       'noexec' not in (system_boot_opts.stdout | default(''))
   failed_when: false
+
+- name: Warn if /boot remount failed
+  ansible.builtin.debug:
+    msg: "WARNING: remount of /boot failed (rc={{ _boot_remount_result.rc }}); live nosuid/nodev/noexec may not be active"
+  when:
+    - _boot_remount_result is defined
+    - _boot_remount_result.rc | default(0) != 0
 
 - name: Deploy boot-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
@@ -420,7 +444,8 @@
 - name: Apply /boot/efi hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,noexec /boot/efi
-  changed_when: true
+  register: _boot_efi_remount_result
+  changed_when: _boot_efi_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
@@ -428,6 +453,13 @@
       'nosuid' not in (system_boot_efi_opts.stdout | default('')) or
       'noexec' not in (system_boot_efi_opts.stdout | default(''))
   failed_when: false
+
+- name: Warn if /boot/efi remount failed
+  ansible.builtin.debug:
+    msg: "WARNING: remount of /boot/efi failed (rc={{ _boot_efi_remount_result.rc }}); live nosuid/noexec may not be active"
+  when:
+    - _boot_efi_remount_result is defined
+    - _boot_efi_remount_result.rc | default(0) != 0
 
 - name: Deploy boot-efi-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
@@ -866,6 +898,18 @@
   changed_when: true
   failed_when: false
 
+- name: Remove init_on_free grub parameter (system_init_on_free false — removes performance/security tradeoff param)
+  ansible.builtin.command:
+    cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
+  register: system_init_on_free_remove_result
+  when:
+    - not (csb_detected | default(false))
+    - system_grubby_info.rc | default(1) == 0
+    - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
+    - not (system_init_on_free | default(true) | bool)
+  changed_when: true
+  failed_when: false
+
 - name: Randomize page allocator free-list order (heap-spray defense)
   ansible.builtin.command:
     cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
@@ -921,6 +965,9 @@
       {% if system_kernel_lockdown | default('') | length == 0 %}
       current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
       {% endif %}
+      {% if not (system_init_on_free | default(true) | bool) %}
+      current=$(echo "$current" | sed 's| *init_on_free=1||g')
+      {% endif %}
       new="$current"
       # Append each missing hardening param (check by key prefix only)
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
@@ -969,6 +1016,7 @@
     (system_iommu_pt_result is defined and system_iommu_pt_result is changed) or
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or
     (system_init_on_free_result is defined and system_init_on_free_result is changed) or
+    (system_init_on_free_remove_result is defined and system_init_on_free_remove_result is changed) or
     (system_page_shuffle_result is defined and system_page_shuffle_result is changed) or
     (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed) or
     (system_kernel_cmdline_result is defined and system_kernel_cmdline_result is changed)
@@ -2027,6 +2075,25 @@
     - ansible_facts['system'] == 'Linux'
     - system_tmout | int > 0
 
+# Cleanup: remove TMOUT artifacts when system_tmout=0 (operator disables timeout).
+# Without this, readonly TMOUT=600 persists and cannot be overridden in user dotfiles.
+- name: Remove session timeout from profile.d when disabled
+  ansible.builtin.file:
+    path: /etc/profile.d/tmout.sh
+    state: absent
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - system_tmout | int == 0
+
+- name: Remove session timeout from /etc/zshrc when disabled
+  ansible.builtin.lineinfile:
+    path: /etc/zshrc
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    state: absent
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - system_tmout | int == 0
+
 # --- Timezone and locale ---
 - name: Set system timezone
   community.general.timezone:
@@ -2274,6 +2341,7 @@
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^#.*pam_wheel.so'
   failed_when: false
+  when: ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
 
 # --- Journald persistent logging and retention ---
 # The drop-in directory and /var/log/journal are created unconditionally (no CSB guard).

@@ -537,8 +537,9 @@
   ansible.builtin.copy:
     content: |
       export CLAUDE_CONFIG_DIR=~/.claude-work
-      export CLAUDE_CODE_USE_VERTEX=1
-      # Add Vertex project vars here manually, e.g.: export ANTHROPIC_VERTEX_PROJECT_ID=... CLOUD_ML_REGION=... GOOGLE_CLOUD_PROJECT=...
+      # Uncomment after adding companion vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION, GOOGLE_CLOUD_PROJECT):
+      # export CLAUDE_CODE_USE_VERTEX=1
+      # export ANTHROPIC_VERTEX_PROJECT_ID=...
     dest: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
     mode: "0600"
     backup: true
