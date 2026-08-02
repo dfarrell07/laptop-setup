@@ -7,6 +7,12 @@
         path: "{{ notes_repo_path }}/.git"
       register: notes_repo_stat
 
+    - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
+      ansible.builtin.command:
+        cmd: git lfs install
+      changed_when: false
+      failed_when: false
+
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists
       block:

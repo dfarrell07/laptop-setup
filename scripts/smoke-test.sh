@@ -919,8 +919,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
   if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
   else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
+  # even_deny_root: default.config.yml sets this to false (root SSH blocked by sshd; no self-lockout risk on single-user machine).
+  # If explicitly set to true in config.yml, PASS when present; if false (default), absence is correct — WARN not FAIL.
   if grep -q '^even_deny_root' /etc/security/faillock.conf 2>/dev/null; then record "faillock-even-deny-root" "PASS"
-  else record "faillock-even-deny-root" "FAIL" "faillock missing even_deny_root (root account exempt from lockout policy)"; fi
+  else record "faillock-even-deny-root" "WARN" "faillock even_deny_root absent (root lockout disabled — default for single-user dev; set system_faillock_even_deny_root: true in config.yml to enable)"; fi
 
   # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"

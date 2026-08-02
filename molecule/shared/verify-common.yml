@@ -805,3 +805,29 @@
     - ansible_system == 'Linux'
     - item.rc == 0
     - item.stdout | length > 0
+
+- name: Check git-lfs is installed (packages role)
+  ansible.builtin.command:
+    cmd: git lfs version
+  register: verify_git_lfs
+  changed_when: false
+  failed_when: false
+
+- name: Assert git-lfs installed
+  ansible.builtin.assert:
+    that: verify_git_lfs.rc == 0
+    fail_msg: "git-lfs not installed — packages_cli regression (needed for repos with LFS-tracked files)"
+
+- name: Check zshrc has GONOSUMDB (profile=work)
+  ansible.builtin.command:
+    cmd: grep -q 'GONOSUMDB' "{{ ansible_user_dir }}/.zshrc"
+  changed_when: false
+  failed_when: false
+  register: verify_gonosumdb
+  when: ansible_system == 'Linux'
+
+- name: Assert GONOSUMDB in zshrc (work profile, Linux)
+  ansible.builtin.assert:
+    that: verify_gonosumdb.rc == 0
+    fail_msg: "GONOSUMDB missing from ~/.zshrc — dotfiles_gonosumdb variable not rendered"
+  when: ansible_system == 'Linux'

@@ -63,6 +63,8 @@ install_virtualization: true
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
+#   system_tlp_platform_profile_ac: performance   (roles/system/defaults) — ACPI platform profile on AC
+#   system_tlp_platform_profile_bat: balanced     (roles/system/defaults) — ACPI platform profile on battery
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (roles/system/defaults) — 0=disabled (CIS), 176=emergency recovery
 #   system_tmout: 600                  (roles/system/defaults) — session inactivity timeout seconds (CIS<=900); 0=disabled
@@ -155,6 +157,8 @@ install_virtualization: true
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
 #   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
 #   desktop_terminal: alacritty          (roles/desktop/defaults) — terminal emulator (alacritty/kitty/etc)
+#   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
+#   desktop_gtk_icon_theme: Adwaita    (roles/desktop/defaults) — GTK icon theme
 #   desktop_alacritty_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — Alacritty font family
 #   desktop_alacritty_font_size: 12.0   (roles/desktop/defaults) — Alacritty font size
 #   desktop_wm_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — WM status-bar font
@@ -179,7 +183,7 @@ install_virtualization: true
 #     container creation and Play 3 entirely (Linux users who do not want a dev container)
 #   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:
 #   dotfiles_oh_my_zsh_theme: gallois     — oh-my-zsh theme name
-#   dotfiles_oh_my_zsh_plugins: [git, python, history-substring-search]  — oh-my-zsh plugin list
+#   dotfiles_oh_my_zsh_plugins: [git, kubectl, forgit, python, history-substring-search]  — oh-my-zsh plugin list
 #   dotfiles_tmux_prefix: "C-a"           — tmux prefix key (e.g. "C-b" for default)
 #   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
 #   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)

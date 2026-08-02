@@ -423,7 +423,15 @@
     backup: true
   when: ansible_system == 'Linux'
 
-- name: Activate tmpfiles to create SSH socket directory
+- name: Deploy tmux socket tmpfiles config (TMUX_TMPDIR=$XDG_RUNTIME_DIR/tmux)
+  ansible.builtin.copy:
+    content: "d %t/tmux 0700 - - -\n"
+    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/tmux-sockets.conf"
+    mode: "0644"
+    backup: true
+  when: ansible_system == 'Linux'
+
+- name: Activate tmpfiles to create SSH and tmux socket directories
   ansible.builtin.command:
     cmd: systemd-tmpfiles --user --create
   changed_when: false
