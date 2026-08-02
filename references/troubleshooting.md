@@ -768,15 +768,15 @@ Then re-run `make system`. Valid values are 0 (disabled) or 1–900 (seconds, CI
 
 **Symptom:** The VS Code Remote SSH "Ports" tab shows no ports, or port forwarding (`ssh -L`) fails with `channel 3: open failed: administratively prohibited`.
 
-**Root Cause:** The sshd drop-in sets `AllowTcpForwarding no` (default). This prevents both local (`-L`) and remote (`-R`) SSH port forwarding into this machine. The core VS Code Remote SSH connection still works, but the port-forwarding feature does not.
+**Root Cause:** The sshd drop-in sets `AllowTcpForwarding local` (default), which allows `-L` port forwarding (VS Code port panel) but not `-R` remote forwarding. If forwarding is still blocked, the `config.yml` may have overridden the default to `no`.
 
-**Fix:** Set in `config.yml`:
+**Fix:** Verify `config.yml` does not set `system_ssh_allow_tcp_forwarding: "no"`. To disable all forwarding explicitly, set:
 
 ```yaml
-system_ssh_allow_tcp_forwarding: "local"  # allows -L (VS Code port panel); use 'yes' for -R too
+system_ssh_allow_tcp_forwarding: "no"  # disables both -L and -R forwarding
 ```
 
-Then re-run `make system`. Valid values: `no` (default, secure), `local` (outbound only, VS Code), `remote` (`-R` tunnels), `yes` (all forwarding).
+Then re-run `make system`. Valid values: `local` (default — VS Code port panel and ssh -L), `yes` (both -L and -R), `no` (all forwarding disabled), `remote` (-R only).
 
 ---
 

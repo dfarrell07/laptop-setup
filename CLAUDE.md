@@ -94,7 +94,6 @@ make repos-konflux    # Konflux repos only
 make repos-personal   # personal repos only
 make repos-bpfman     # bpfman repos only
 make repos-downstream # downstream repos only
-make repos-cncf       # CNCF repos only
 ```
 
 ## Project Structure

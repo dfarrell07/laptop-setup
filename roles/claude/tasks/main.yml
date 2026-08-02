@@ -67,7 +67,7 @@
     path: "{{ claude_work_config_dir }}"
     state: directory
     mode: "0700"
-  when: profile == 'work'
+  when: profile == 'work' or (claude_queue_enabled | bool)
 
 - name: Create personal instance config directory
   ansible.builtin.file:

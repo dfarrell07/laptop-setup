@@ -58,6 +58,31 @@
     - git_repos_ssh_agent.rc in [1, 2]
     - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
 
+- name: Check connectivity to VPN-gated repo hosts
+  ansible.builtin.command:
+    cmd: "nc -z -w 3 {{ item }} 22"
+  loop: >-
+    {{
+      (['code.engineering.redhat.com']
+       if git_repos_filtered | map(attribute='url') | select('search', 'code\\.engineering\\.redhat\\.com') | list | length > 0
+       else [])
+      + (['gitlab.cee.redhat.com']
+         if git_repos_filtered | map(attribute='url') | select('search', 'gitlab\\.cee\\.redhat\\.com') | list | length > 0
+         else [])
+    }}
+  register: git_repos_vpn_check
+  changed_when: false
+  failed_when: false
+
+- name: Warn if VPN-gated repo hosts are unreachable
+  ansible.builtin.debug:
+    msg: >-
+      VPN-gated host {{ item.item }} is unreachable (port 22).
+      Repos at {{ item.item }} require Red Hat VPN — connect to VPN or expect clone failures.
+  loop: "{{ git_repos_vpn_check.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: Ensure base directory exists
   ansible.builtin.file:
     path: "{{ git_repos_base_dir }}"

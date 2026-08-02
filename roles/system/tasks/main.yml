@@ -12,8 +12,7 @@
   ansible.builtin.dnf:
     name: policycoreutils-python-utils
     state: present
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
+  when: ansible_pkg_mgr in ['dnf', 'dnf5'] and not (csb_detected | default(false))
 
 # --- SELinux enforcement check ---
 - name: Verify SELinux is enforcing
@@ -35,9 +34,7 @@
     path: /etc/systemd/system/tmp.mount.d
     state: directory
     mode: "0755"
-  when:
-    - ansible_system == 'Linux'
-    - system_tmp_noexec | default(true) | bool
+  when: ansible_system == 'Linux'
 
 - name: Harden /tmp with noexec via systemd drop-in
   ansible.builtin.copy:
@@ -60,12 +57,6 @@
     - ansible_system == 'Linux'
     - not (system_tmp_noexec | default(true) | bool)
   block:
-    - name: Ensure tmp.mount drop-in directory exists (noexec disabled)
-      ansible.builtin.file:
-        path: /etc/systemd/system/tmp.mount.d
-        state: directory
-        mode: "0755"
-
     - name: Deploy /tmp drop-in without noexec (nosuid/nodev preserved)
       ansible.builtin.copy:
         content: |
@@ -94,7 +85,6 @@
   when:
     - ansible_system == 'Linux'
     - not (csb_detected | default(false) and ansible_distribution != 'Fedora')  # CSB manages fstab; don't add entries IT doesn't control
-  failed_when: false
 
 - name: Check /dev/shm current mount options
   ansible.builtin.command:
@@ -164,7 +154,7 @@
   when:
     - ansible_system == 'Linux'
     - csb_detected | default(false) and ansible_distribution != 'Fedora'
-    - system_dev_shm_enable.failed | default(false) or system_dev_shm_enable is skipped
+    - system_dev_shm_enable.failed | default(false)
 
 # --- Harden /home mount options (CIS 1.1.9) ---
 # nosuid prevents any setuid binary a user copies into their home directory from
@@ -229,7 +219,6 @@
     - not (csb_detected | default(false) and ansible_distribution != 'Fedora') or (system_home_nosuid_force | default(false) | bool)
     - >-
       'nosuid' not in (system_home_fstab_opts.stdout | default(''))
-  failed_when: false
 
 - name: Check /home current mount options (CIS 1.1.9)
   ansible.builtin.command:
@@ -299,7 +288,6 @@
       'nosuid' not in (system_boot_fstab_opts.stdout | default('')) or
       'nodev' not in (system_boot_fstab_opts.stdout | default('')) or
       'noexec' not in (system_boot_fstab_opts.stdout | default(''))
-  failed_when: false
 
 - name: Check /boot current mount options
   ansible.builtin.command:
@@ -373,7 +361,7 @@
     - ansible_system == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_distribution != 'Fedora'
-    - system_boot_harden_enable.failed | default(false) or system_boot_harden_enable is skipped
+    - system_boot_harden_enable.failed | default(false)
 
 # --- Harden /boot/efi mount options ---
 # vfat does not support device nodes, so nodev is omitted (the kernel ignores it for
@@ -414,7 +402,6 @@
     - >-
       'nosuid' not in (system_boot_efi_fstab_opts.stdout | default('')) or
       'noexec' not in (system_boot_efi_fstab_opts.stdout | default(''))
-  failed_when: false
 
 - name: Check /boot/efi current mount options
   ansible.builtin.command:
@@ -487,7 +474,7 @@
     - ansible_system == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_distribution != 'Fedora'
-    - system_boot_efi_harden_enable.failed | default(false) or system_boot_efi_harden_enable is skipped
+    - system_boot_efi_harden_enable.failed | default(false)
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
 # A complete unit file is required — /var/tmp has no base unit on Fedora
@@ -516,7 +503,6 @@
     - ansible_system == 'Linux'
     - system_var_tmp_noexec | default(true) | bool
     - not (csb_detected | default(false) and ansible_distribution != 'Fedora')
-  failed_when: false
 
 - name: Enable and start var-tmp.mount
   when:
@@ -976,7 +962,6 @@
     name: audit
     state: present
   when: ansible_pkg_mgr in ['dnf', 'dnf5']
-  failed_when: false
 
 - name: Deploy auditd rules
   ansible.builtin.template:
@@ -1006,7 +991,6 @@
     enabled: true
     state: started
   become: true
-  failed_when: false
   when:
     - ansible_system == 'Linux'
     - not (csb_detected | default(false))
@@ -1437,7 +1421,6 @@
       - usbguard-selinux
     state: present
   when: system_install_usbguard | default(true) | bool
-  failed_when: false
 
 - name: Deploy USBGuard whitelist rules
   ansible.builtin.template:
@@ -1446,7 +1429,6 @@
     owner: root
     group: root
     mode: "0600"
-    backup: true
   when: system_install_usbguard | default(true) | bool
   notify: Restart usbguard
   # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
@@ -2025,7 +2007,6 @@
     src: chrony-nts.conf.j2
     dest: /etc/chrony.conf
     mode: "0644"
-    backup: true
   notify: Restart chronyd
   when:
     - ansible_system == 'Linux'
