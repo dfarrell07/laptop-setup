@@ -1399,6 +1399,7 @@
   when:
     - system_enable_mullvad | bool
     - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_distribution == 'Fedora'
     - not (csb_detected | default(false))
   failed_when: false
 
@@ -1410,6 +1411,7 @@
   when:
     - system_enable_mullvad | bool
     - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_distribution == 'Fedora'
     - not (csb_detected | default(false))
   failed_when: false
 

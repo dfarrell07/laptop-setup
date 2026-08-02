@@ -230,6 +230,12 @@ if [[ -f "$_dtf" ]]; then
   else record "direnv-toml" "FAIL" "$_dtf missing strict_env = true or disable_stdin = true — run: make dotfiles"; fi
 else record "direnv-toml" "FAIL" "$_dtf not deployed — run: make dotfiles"; fi
 unset _dtf
+_drc="$HOME/.config/direnv/direnvrc"
+if [[ -f "$_drc" ]]; then
+  if grep -q 'layout_go' "$_drc" 2>/dev/null; then record "direnvrc" "PASS"
+  else record "direnvrc" "FAIL" "$_drc deployed but layout_go missing — run: make dotfiles"; fi
+else record "direnvrc" "FAIL" "$_drc not deployed — run: make dotfiles"; fi
+unset _drc
 
 # environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
 if [[ "$(uname -s)" == "Linux" ]]; then
@@ -306,6 +312,14 @@ else
 fi
 unset _ak _ak_perms _ak_total
 
+_kh="$HOME/.ssh/known_hosts"
+if [[ -f "$_kh" ]]; then
+  _kh_perms=$(stat -c '%a' "$_kh" 2>/dev/null || stat -f '%Lp' "$_kh" 2>/dev/null || echo "?")
+  if [[ "$_kh_perms" == "600" ]]; then record "known-hosts-perms" "PASS"
+  else record "known-hosts-perms" "FAIL" "permissions $_kh_perms, expected 600 (HashKnownHosts hashes leak if world-readable)"; fi
+fi
+unset _kh _kh_perms
+
 homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev/null || echo "?")
 # CIS intent: home dir should be no MORE permissive than 750 (owner=7, group≤5, others=0)
 # Modes like 710 are acceptable (more restrictive than 750 — group has execute only)
@@ -353,6 +367,14 @@ if [[ -x "$HOME/.config/git/template/hooks/pre-commit" ]]; then
 else
   record "git-hooks-pre-commit" "FAIL" "gitleaks pre-commit hook missing or not executable: $HOME/.config/git/template/hooks/pre-commit — run: make dotfiles"
 fi
+
+for _hook in commit-msg prepare-commit-msg pre-push; do
+  if [[ -x "$HOME/.config/git/template/hooks/$_hook" ]]; then
+    record "git-hooks-$_hook" "PASS"
+  else
+    record "git-hooks-$_hook" "FAIL" "$_hook hook missing or not executable: $HOME/.config/git/template/hooks/$_hook — run: make dotfiles"
+  fi
+done
 
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 # Security config is in settings.local.json (survives /config writes); fall
@@ -443,6 +465,15 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
     record "wl-paste" "WARN" "not found (expected on sway — wl-clipboard is in desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
+  # swaylock config: deployed via desktop/tasks/main.yml copy task; without it swaylock
+  # falls back to defaults (no show-failed-attempts, no indicator-caps-lock)
+  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" ]] || [[ -f "$HOME/.config/swaylock/config" ]]; then
+    if [[ -f "$HOME/.config/swaylock/config" ]]; then
+      record "swaylock-config" "PASS"
+    else
+      record "swaylock-config" "FAIL" "~/.config/swaylock/config not deployed — run: make desktop"
+    fi
+  fi
 fi
 
 # kernel-cmdline persistence (new kernels inherit from /etc/kernel/cmdline)

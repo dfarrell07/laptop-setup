@@ -138,6 +138,7 @@
         # (packagecloud metadata signing inconsistent). Not a dnf-automatic risk: packagecloud repos
         # publish no updateinfo.xml, so upgrade_type=security never matches Slack (no advisory metadata).
         gpgcheck: false
+        repo_gpgcheck: false
         enabled: true
   rescue:
     - name: Record Slack repo failure
@@ -363,6 +364,7 @@
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable
+        # Tailscale uses a single static 'fedora' path for all Fedora releases (no per-version subdirectory)
         baseurl: >-
           https://pkgs.tailscale.com/stable/{{
           'rhel/' ~ ansible_distribution_major_version if ansible_distribution != 'Fedora'
