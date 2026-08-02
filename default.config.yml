@@ -140,6 +140,16 @@ install_virtualization: true
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
 #   desktop_sway_cursor_size: 24       (roles/desktop/defaults) — cursor size in physical pixels (HiDPI: try 36 for 1.5x scale)
+#   desktop_sway_cursor_theme: Adwaita (roles/desktop/defaults) — cursor theme name (propagated to seat config and XCURSOR_THEME)
+#   desktop_sway_libva_driver: radeonsi (roles/desktop/defaults) — VA-API driver: radeonsi (AMD), iHD/i965 (Intel), nvidia
+#   desktop_sway_vdpau_driver: radeonsi (roles/desktop/defaults) — VDPAU driver: radeonsi (AMD), va_gl (Intel)
+#   desktop_sway_idle_lock_timeout: 300  (roles/desktop/defaults) — seconds idle before swaylock (0 to disable)
+#   desktop_sway_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
+#   desktop_sway_lock_color: "000000"  (roles/desktop/defaults) — swaylock background hex color (no #)
+#   desktop_sway_keyboard_layout: us   (roles/desktop/defaults) — XKB keyboard layout
+#   desktop_sway_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
+#   desktop_sway_repeat_rate: 50       (roles/desktop/defaults) — key repeats per second
+#   desktop_sway_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
 #   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  # P16v Gen 1 AMD example
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
@@ -182,6 +192,11 @@ install_virtualization: true
 #   dotfiles_internal_ca_path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem  — CA cert for internal HTTPS hosts
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
+#   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
+#   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
+#   dotfiles_gonosumdb: '*.redhat.com,*.engineering.redhat.com'  — GONOSUMDB for internal Go modules
+#   dotfiles_goprivate: 'gitlab.cee.redhat.com,pkgs.devel.redhat.com'  — GOPRIVATE for internal Go modules
+#   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
 #   ssh_git_signing_pubkey: ""            — SSH public key for git commit signing; set in config.yml to the literal pubkey or
 #     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
 #     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
