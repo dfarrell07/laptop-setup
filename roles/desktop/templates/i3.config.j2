@@ -7,8 +7,8 @@ font pango:{{ desktop_wm_font_family }} {{ desktop_wm_font_size }}
 
 # Autostart
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
-exec --no-startup-id xautolock -time 5 -locker 'i3lock -c {{ desktop_sway_lock_color }}'
-exec --no-startup-id xset dpms 0 0 600
+exec --no-startup-id xautolock -time {{ (desktop_sway_idle_lock_timeout | int // 60) }} -locker 'i3lock -c {{ desktop_sway_lock_color }}'
+exec --no-startup-id xset dpms 0 0 {{ desktop_sway_idle_display_timeout }}
 exec --no-startup-id xset r rate 200 50
 exec --no-startup-id dunst
 exec --no-startup-id /usr/bin/lxpolkit  # polkit-gnome removed Fedora 41+

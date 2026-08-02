@@ -7,7 +7,9 @@
 apply_updates = yes
 download_updates = yes
 
-# Security advisories only — prevents auto-update of compilers, container runtimes, kernel mid-session
+# Security advisories only — applies kernel, container runtime, and compiler security updates.
+# Note: kernel security updates ARE included; if mid-session kernel updates are disruptive,
+# set upgrade_type = minimal (only critical) or disable auto-apply (apply_updates = no).
 upgrade_type = security
 
 # Wait up to 60s for network
