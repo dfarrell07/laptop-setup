@@ -79,6 +79,13 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
+      tags: [always]
+
     - name: Run pre-flight checks
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
       tags: [always]
