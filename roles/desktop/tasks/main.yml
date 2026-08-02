@@ -356,7 +356,7 @@
 - name: Enable macOS firewall
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-  changed_when: false
+  changed_when: true
   become: true
   tags: [become]
   when: ansible_os_family == 'Darwin'
@@ -365,7 +365,7 @@
 - name: Enable macOS firewall stealth mode
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
-  changed_when: false
+  changed_when: true
   become: true
   tags: [become]
   when: ansible_os_family == 'Darwin'

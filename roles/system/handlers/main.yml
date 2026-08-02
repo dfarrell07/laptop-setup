@@ -135,6 +135,7 @@
   failed_when:
     - system_aide_timer_result.failed | default(false)
     - ansible_virtualization_type not in ['container', 'docker', 'podman']
+  when: system_aide_enabled | bool
 
 - name: Restart systemd-journald
   ansible.builtin.systemd:

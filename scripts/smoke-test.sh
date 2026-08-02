@@ -1016,7 +1016,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -n "$_tmout_val" && "$_tmout_val" -gt 0 && "$_tmout_val" -le 900 ]]; then
     record "tmout-bash" "PASS"
   elif [[ -z "$_tmout_val" ]]; then
-    record "tmout-bash" "FAIL" "tmout.sh missing or TMOUT not set (expected TMOUT<=900)"
+    record "tmout-bash" "WARN" "tmout.sh missing or TMOUT not set — may be intentional (system_tmout: 0 disables)"
   else
     record "tmout-bash" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
   fi
@@ -1024,7 +1024,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -n "$_tmout_zsh" && "$_tmout_zsh" -gt 0 && "$_tmout_zsh" -le 900 ]]; then
     record "tmout-zsh" "PASS"
   elif [[ -z "$_tmout_zsh" ]]; then
-    record "tmout-zsh" "FAIL" "/etc/zshrc missing TMOUT (zsh sessions have no inactivity timeout)"
+    record "tmout-zsh" "WARN" "/etc/zshrc missing TMOUT — may be intentional (system_tmout: 0 disables)"
   else
     record "tmout-zsh" "FAIL" "TMOUT=$_tmout_zsh in /etc/zshrc exceeds CIS 5.5.5 maximum of 900s"
   fi

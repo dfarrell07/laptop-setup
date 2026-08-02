@@ -113,7 +113,7 @@ if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
   if command -v ykchalresp &>/dev/null; then
     echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-    if ykchalresp -2 "preflight-test" &>/dev/null; then
+    if timeout 5 ykchalresp -2 "preflight-test" &>/dev/null; then
       record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
     else
       record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
