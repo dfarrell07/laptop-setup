@@ -215,6 +215,7 @@
     src: gtk-settings.ini.j2
     dest: "{{ ansible_user_dir }}/.config/gtk-3.0/settings.ini"
     mode: "0644"
+    force: false
   when: desktop_effective == 'sway'
 
 - name: Ensure GTK 4.0 config directory (Sway)
@@ -229,6 +230,7 @@
     src: gtk-settings.ini.j2
     dest: "{{ ansible_user_dir }}/.config/gtk-4.0/settings.ini"
     mode: "0644"
+    force: false
   when: desktop_effective == 'sway'
 
 - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
