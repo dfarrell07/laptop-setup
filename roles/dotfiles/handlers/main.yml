@@ -1,0 +1,10 @@
+---
+# roles/dotfiles/handlers/main.yml
+
+- name: Restart ssh-agent
+  ansible.builtin.systemd:
+    name: ssh-agent
+    scope: user
+    state: restarted
+    daemon_reload: true
+  failed_when: false

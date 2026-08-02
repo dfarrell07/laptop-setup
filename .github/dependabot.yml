@@ -26,6 +26,10 @@ updates:
       python:
         patterns:
           - "*"
+    # NOTE: Dependabot bumps version bounds in requirements-test.txt but does NOT
+    # regenerate requirements-test.lock (pip-compile hashed output). After merging
+    # any Dependabot pip PR, run `make pip-lock` and commit the updated lockfile —
+    # CI installs exclusively from requirements-test.lock, so the PR is otherwise inert.
 
   - package-ecosystem: "npm"
     directory: "/"

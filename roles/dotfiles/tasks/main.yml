@@ -360,6 +360,7 @@
     mode: "0644"
     backup: true
   when: ansible_system == 'Linux'
+  notify: Restart ssh-agent
 
 - name: Enable SSH agent user service
   ansible.builtin.systemd:
@@ -541,4 +542,5 @@
     dest: "{{ ansible_user_dir }}/.config/claude/work-env"
     mode: "0600"
     backup: true
+    force: false
   when: profile == 'work'

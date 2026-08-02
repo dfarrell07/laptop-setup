@@ -13,6 +13,8 @@
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 -a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
+-a never,exit -F exe=/usr/local/go/pkg/tool/linux_amd64/compile -k exclude-go-build
+-a never,exit -F exe=/usr/local/go/pkg/tool/linux_amd64/link -k exclude-go-build
 
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
@@ -21,7 +23,6 @@
 
 # Read access on rarely-accessed high-value files
 -w {{ real_user_home }}/.aws/ -p r -k claude-sensitive-read
--w {{ real_user_home }}/.vault_pass.sh -p r -k claude-sensitive-read
 -w {{ real_user_home }}/.vault_pass -p r -k claude-sensitive-read
 -w {{ real_user_home }}/.claude/.credentials.json -p r -k claude-sensitive-read
 -w {{ real_user_home }}/.config/containers/auth.json -p r -k claude-sensitive-read
@@ -77,9 +78,11 @@
 -w /usr/bin/auditctl -p x -k audit-tools
 -w /usr/bin/augenrules -p x -k audit-tools
 
+{% if system_aide_enabled | default(false) %}
 # AIDE integrity monitoring protection (prevent covert tampering of AIDE baseline)
 -w /var/lib/aide/ -p wa -k aide-integrity
 -w /etc/aide.conf -p wa -k aide-integrity
+{% endif %}
 
 # TLP battery/power configuration changes
 -w /etc/tlp.d/ -p wa -k power-config

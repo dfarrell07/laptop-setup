@@ -264,55 +264,45 @@
     - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
 
-- name: Create Chrome managed policies directory
-  ansible.builtin.file:
-    path: /etc/opt/chrome/policies/managed
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
+- name: Chrome and Chromium managed policies
   when:
     - desktop_deploy_chrome_policies | default(false) | bool
     - ansible_system == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
+  block:
+    - name: Create Chrome managed policies directory
+      ansible.builtin.file:
+        path: /etc/opt/chrome/policies/managed
+        state: directory
+        mode: "0755"
+      become: true
+      tags: [become]
 
-- name: Deploy Chrome security policy
-  ansible.builtin.copy:
-    src: chrome-security-policy.json
-    dest: /etc/opt/chrome/policies/managed/security.json
-    mode: "0644"
-    validate: "python3 -c \"import json; json.load(open('%s'))\""
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(false) | bool
-    - ansible_system == 'Linux'
-    - not (desktop_csb_chrome.stat.exists | default(false))
+    - name: Deploy Chrome security policy
+      ansible.builtin.copy:
+        src: chrome-security-policy.json
+        dest: /etc/opt/chrome/policies/managed/security.json
+        mode: "0644"
+        validate: "python3 -c \"import json; json.load(open('%s'))\""
+      become: true
+      tags: [become]
 
-- name: Create Chromium managed policies directory
-  ansible.builtin.file:
-    path: /etc/chromium/policies/managed
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(false) | bool
-    - ansible_system == 'Linux'
-    - not (desktop_csb_chrome.stat.exists | default(false))
+    - name: Create Chromium managed policies directory
+      ansible.builtin.file:
+        path: /etc/chromium/policies/managed
+        state: directory
+        mode: "0755"
+      become: true
+      tags: [become]
 
-- name: Deploy Chromium security policy
-  ansible.builtin.copy:
-    src: chrome-security-policy.json
-    dest: /etc/chromium/policies/managed/security.json
-    mode: "0644"
-    validate: "python3 -c \"import json; json.load(open('%s'))\""
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(false) | bool
-    - ansible_system == 'Linux'
-    - not (desktop_csb_chrome.stat.exists | default(false))
+    - name: Deploy Chromium security policy
+      ansible.builtin.copy:
+        src: chrome-security-policy.json
+        dest: /etc/chromium/policies/managed/security.json
+        mode: "0644"
+        validate: "python3 -c \"import json; json.load(open('%s'))\""
+      become: true
+      tags: [become]
 
 # --- Shell ---
 - name: Set zsh as default shell
@@ -382,92 +372,67 @@
     - ansible_system == 'Linux'
     - desktop_effective == 'gnome'
 
-- name: Disable notifications on lock screen
-  community.general.dconf:
-    key: /org/gnome/desktop/notifications/show-in-lock-screen
-    value: "false"
-  failed_when: false
+- name: GNOME hardening dconf settings
   when:
     - ansible_system == 'Linux'
     - desktop_gnome_check.rc | default(1) == 0
+  block:
+    - name: Disable notifications on lock screen
+      community.general.dconf:
+        key: /org/gnome/desktop/notifications/show-in-lock-screen
+        value: "false"
+      failed_when: false
 
-- name: Ensure screen lock is enabled
-  community.general.dconf:
-    key: /org/gnome/desktop/screensaver/lock-enabled
-    value: "true"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Ensure screen lock is enabled
+      community.general.dconf:
+        key: /org/gnome/desktop/screensaver/lock-enabled
+        value: "true"
+      failed_when: false
 
-- name: Set screen idle timeout (CIS requires ≤900s; set to 300s)
-  community.general.dconf:
-    key: /org/gnome/desktop/session/idle-delay
-    value: "uint32 300"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Set screen idle timeout (CIS requires ≤900s; set to 300s)
+      community.general.dconf:
+        key: /org/gnome/desktop/session/idle-delay
+        value: "uint32 300"
+      failed_when: false
 
-- name: Set screen lock delay after idle
-  community.general.dconf:
-    key: /org/gnome/desktop/screensaver/lock-delay
-    value: "uint32 0"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Set screen lock delay after idle
+      community.general.dconf:
+        key: /org/gnome/desktop/screensaver/lock-delay
+        value: "uint32 0"
+      failed_when: false
 
-- name: Disable location services
-  community.general.dconf:
-    key: /org/gnome/system/location/enabled
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Disable location services
+      community.general.dconf:
+        key: /org/gnome/system/location/enabled
+        value: "false"
+      failed_when: false
 
-- name: Disable recent files tracking
-  community.general.dconf:
-    key: /org/gnome/desktop/privacy/remember-recent-files
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Disable recent files tracking
+      community.general.dconf:
+        key: /org/gnome/desktop/privacy/remember-recent-files
+        value: "false"
+      failed_when: false
 
-- name: Disable GNOME RDP
-  community.general.dconf:
-    key: /org/gnome/desktop/remote-desktop/rdp/enable
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Disable GNOME RDP
+      community.general.dconf:
+        key: /org/gnome/desktop/remote-desktop/rdp/enable
+        value: "false"
+      failed_when: false
 
-- name: Disable GNOME VNC
-  community.general.dconf:
-    key: /org/gnome/desktop/remote-desktop/vnc/enable
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Disable GNOME VNC
+      community.general.dconf:
+        key: /org/gnome/desktop/remote-desktop/vnc/enable
+        value: "false"
+      failed_when: false
 
-- name: Set keyboard repeat delay (match Sway/i3 200ms)
-  community.general.dconf:
-    key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
-    value: "uint32 200"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Set keyboard repeat delay (match Sway/i3 200ms)
+      community.general.dconf:
+        key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
+        value: "uint32 200"
+      failed_when: false
 
-- name: Set keyboard repeat interval (match Sway/i3 50 rep/s → 20ms)
-  community.general.dconf:
-    key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
-    value: "uint32 20"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Set keyboard repeat interval (match Sway/i3 50 rep/s → 20ms)
+      community.general.dconf:
+        key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
+        value: "uint32 20"
+      failed_when: false
