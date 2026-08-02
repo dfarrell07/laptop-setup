@@ -181,7 +181,14 @@ _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"
 else record "dotfile-gitconfig" "PASS"; fi
-unset _gc
+# git identity must be set to non-placeholder values
+_git_name=$(git config --global user.name 2>/dev/null || echo "")
+_git_email=$(git config --global user.email 2>/dev/null || echo "")
+if [[ -z "$_git_name" || "$_git_name" == "CHANGE_ME" ]]; then record "git-user-name" "FAIL" "git user.name='$_git_name' — set dotfiles_user_name in config.yml and re-run: make dotfiles"
+else record "git-user-name" "PASS"; fi
+if [[ -z "$_git_email" || "$_git_email" == "CHANGE_ME" ]]; then record "git-user-email" "FAIL" "git user.email='$_git_email' — set dotfiles_user_email_work/personal in config.yml and re-run: make dotfiles"
+else record "git-user-email" "PASS"; fi
+unset _gc _git_name _git_email
 
 # global gitignore — also referenced via core.excludesfile in gitconfig.j2 (belt-and-suspenders: XDG path is read automatically, explicit setting survives non-XDG git invocations)
 _gi="$HOME/.config/git/ignore"
@@ -453,8 +460,8 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # cliphist: clipboard history manager — exec wl-paste --watch cliphist store in sway config;
   # clipboard contents die with source app if this is missing
   if command -v cliphist &>/dev/null; then record "cliphist" "PASS"
-  elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
-    record "cliphist" "PASS"
+  elif ! command -v sway &>/dev/null; then
+    record "cliphist" "PASS"  # not a sway machine
   else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
   # wl-paste/wl-copy (wl-clipboard): installed via desktop_sway_packages (sway desktop);
   # not present on non-sway Fedora. tmux copy-pipe benefits from it on any Wayland desktop,
@@ -462,7 +469,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
   elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
     record "wl-paste" "WARN" "not found (expected in molecule — packages_containers overridden to [] in converge)"
-  elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
+  elif ! command -v sway &>/dev/null; then
     record "wl-paste" "WARN" "not found (expected on sway — wl-clipboard is in desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
   # swaylock config: deployed via desktop/tasks/main.yml copy task; without it swaylock
@@ -587,6 +594,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       unset _iface_zone
     fi
     unset _primary_iface
+    _ssh_port="?"  # initialized here so firewall checks below are never unbound when run as non-root
     if [[ "$EUID" -ne 0 ]]; then
       record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
     else
@@ -1050,6 +1058,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   _vt_min=$(findmnt -n -o MAJ:MIN /var/tmp 2>/dev/null | tr -d ' ' || echo "")
   _tmp_min=$(findmnt -n -o MAJ:MIN /tmp 2>/dev/null | tr -d ' ' || echo "")
   if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
+  elif [[ ! -f /etc/systemd/system/var-tmp.mount ]]; then record "var-tmp-bind" "WARN" "var-tmp.mount not deployed — system_var_tmp_noexec may be false (intentional)"
   elif $CSB_HOST; then record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec on CSB: $_vt_opts"
   else record "var-tmp-bind" "FAIL" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
 
