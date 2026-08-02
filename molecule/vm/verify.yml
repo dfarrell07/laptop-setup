@@ -543,9 +543,12 @@
     - name: Verify fstab nosuid backrefs regex matches representative Fedora btrfs /home line
       # Exercises the regex used by the system role to add nosuid to fstab, regardless of
       # whether /home is a separate partition in this VM scenario (it is not by default).
-      ansible.builtin.shell: >-
-        echo 'UUID=abc123  /home  btrfs  subvol=home,compress=zstd:1,relatime,ssd  0  0'
-        | grep -qP '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          echo 'UUID=abc123  /home  btrfs  subvol=home,compress=zstd:1,relatime,ssd  0  0' \
+            | grep -qP '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+        executable: /bin/bash
       changed_when: false
 
     - name: Check /boot mount options
