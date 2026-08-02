@@ -22,7 +22,7 @@
   register: system_firewalld_reload_result
   failed_when:
     - system_firewalld_reload_result.rc != 0
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart tlp
   ansible.builtin.systemd:
@@ -32,7 +32,7 @@
   register: system_tlp_restart_result
   failed_when:
     - system_tlp_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Reload NetworkManager
   ansible.builtin.systemd:
@@ -42,7 +42,7 @@
   register: system_nm_reload_result
   failed_when:
     - system_nm_reload_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart NetworkManager
   ansible.builtin.systemd:
@@ -52,7 +52,7 @@
   register: system_nm_restart_result
   failed_when:
     - system_nm_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart tailscaled
   listen: Apply firewall rules
@@ -73,7 +73,7 @@
   register: system_auditd_restart_result
   failed_when:
     - system_auditd_restart_result.rc != 0
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart usbguard
   ansible.builtin.systemd:
@@ -83,7 +83,7 @@
   register: system_usbguard_restart_result
   failed_when:
     - system_usbguard_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart sshd
   ansible.builtin.systemd:
@@ -93,7 +93,7 @@
   register: system_sshd_restart_result
   failed_when:
     - system_sshd_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
@@ -103,7 +103,7 @@
   register: system_resolved_restart_result
   failed_when:
     - system_resolved_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart logind  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -113,7 +113,7 @@
   register: system_logind_restart_result
   failed_when:
     - system_logind_restart_result.rc != 0
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart chronyd
   ansible.builtin.systemd:
@@ -123,7 +123,7 @@
   register: system_chronyd_restart_result
   failed_when:
     - system_chronyd_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -134,7 +134,7 @@
   register: system_aide_timer_result
   failed_when:
     - system_aide_timer_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
   when: system_aide_enabled | bool
 
 - name: Restart systemd-journald
@@ -145,7 +145,7 @@
   register: system_journald_restart_result
   failed_when:
     - system_journald_restart_result.failed | default(false)
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Run dconf update  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -156,7 +156,7 @@
 
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:
-    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
+    name: "{{ 'dnf5-automatic.timer' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.timer' }}"
     state: restarted
     daemon_reload: true
   become: true
@@ -170,7 +170,7 @@
   register: system_aide_reinit_result
   failed_when:
     - system_aide_reinit_result.rc != 0
-    - ansible_virtualization_type not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
   when:
     - system_aide_enabled | bool
     - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't overwrite

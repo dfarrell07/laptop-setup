@@ -147,7 +147,7 @@
 
 - name: Add SSH auth public key to authorized_keys
   ansible.posix.authorized_key:
-    user: "{{ ansible_user_id }}"
+    user: "{{ ansible_facts['user_id'] }}"
     key: "{{ ssh_auth_key_pub }}"
     state: present
   no_log: true

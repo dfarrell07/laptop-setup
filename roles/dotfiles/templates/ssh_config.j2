@@ -14,7 +14,7 @@ Host *
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto
-{% if ansible_system | default('Linux') == 'Linux' %}
+{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
     ControlPath /run/user/%i/ssh/%r@%h-%p
 {% else %}
     ControlPath ~/.ssh/sockets/%r@%h-%p
@@ -39,7 +39,7 @@ Host gh gist
 
 {% if profile == 'work' %}
 Host code.engineering.redhat.com
-    User {{ real_user_id | default(ansible_user_id) }}
+    User {{ real_user_id | default(ansible_facts['user_id']) }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
     IdentitiesOnly yes
 

@@ -38,29 +38,29 @@
 # stat the files directly here rather than trusting the Play 1 fact.
 - name: Re-check subuid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subuid"
+    cmd: "grep -q ^{{ ansible_facts['user_id'] }}: /etc/subuid"
   register: distrobox_subuid_check
   changed_when: false
   failed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Re-check subgid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_user_id }}: /etc/subgid"
+    cmd: "grep -q ^{{ ansible_facts['user_id'] }}: /etc/subgid"
   register: distrobox_subgid_check
   changed_when: false
   failed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Warn if rootless podman prerequisites are missing
   ansible.builtin.debug:
     msg: >-
-      subuid/subgid missing for {{ ansible_user_id }}.
+      subuid/subgid missing for {{ ansible_facts['user_id'] }}.
       Rootless podman will fail. The system role provisions these entries;
       run 'make system' as root to fix, or manually:
-      sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_user_id }}
+      sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_facts['user_id'] }}
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - (distrobox_subuid_check.rc | default(1) != 0) or (distrobox_subgid_check.rc | default(1) != 0)
 
 - name: Check Podman socket is active  # noqa: command-instead-of-module
@@ -151,7 +151,7 @@
         cmd: >-
           toolbox create
           --distro {{ container_distro | default('fedora') }}
-          --release {{ container_release | default(ansible_distribution_major_version) }}
+          --release {{ container_release | default(ansible_facts['distribution_major_version']) }}
           {{ distrobox_container_name }}
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0

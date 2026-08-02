@@ -63,9 +63,9 @@ system_sysctl_hardening:
 
 # Firewall
 # True on standard Fedora (csb_detected=false) and Fedora hybrid (csb_detected=true, not RHEL).
-# False on RHEL CSB (csb_detected=true AND ansible_distribution='Fedora' is false) where IT
+# False on RHEL CSB (csb_detected=true AND ansible_facts['distribution']='Fedora' is false) where IT
 # manages zone policy. Override in config.yml to force-enable or force-disable zone management.
-system_firewall_manage_zone: "{{ not (csb_detected | default(false) and ansible_distribution != 'Fedora') }}"
+system_firewall_manage_zone: "{{ not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora') }}"
 
 system_firewall_icmp_types:
   - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed
@@ -135,9 +135,9 @@ system_auditd_num_logs: 5       # number of rotated files to keep; total cap = m
 system_aide_check_calendar: '*-*-* 05:00:00'  # OnCalendar for aide-check.timer; override in config.yml
 
 # TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
-# Auto-detected from ansible_form_factor (Notebook/Portable/Laptop = true, Desktop = false).
+# Auto-detected from ansible_facts['form_factor'] (Notebook/Portable/Laptop = true, Desktop = false).
 # Override in config.yml: system_tlp_enabled: true/false
-system_tlp_enabled: "{{ ansible_form_factor is defined and ansible_form_factor in ['Notebook', 'Portable', 'Laptop'] }}"
+system_tlp_enabled: "{{ ansible_facts['form_factor'] is defined and ansible_facts['form_factor'] in ['Notebook', 'Portable', 'Laptop'] }}"
 system_tlp_bat0_start: 20   # start charging when battery drops below this %
 system_tlp_bat0_stop: 80    # stop charging at this % (Li-ion longevity: keep 20-80%)
 system_tlp_platform_profile_ac: performance   # ACPI platform profile on AC (performance/balanced/low-power)
@@ -211,7 +211,7 @@ system_kernel_lockdown: integrity
 # but role defaults guard against standalone invocation or empty env vars.
 # An empty real_user_id would produce AllowUsers with no token in sshd,
 # locking out all users on the next sshd restart.
-# Must use lookup('env') not ansible_user_id/dir: those Ansible facts
+# Must use lookup('env') not ansible_facts['user_id']/dir: those Ansible facts
 # resolve to root/root when the role runs with become: true at play level.
 real_user_home: "{{ lookup('env', 'HOME') }}"  # noqa: var-naming[no-role-prefix]
 real_user_id: "{{ lookup('env', 'USER') }}"  # noqa: var-naming[no-role-prefix]

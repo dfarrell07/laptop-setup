@@ -130,19 +130,19 @@
       Z %h/.claude 0700 - - -
     dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Apply claude-privacy tmpfiles now
   ansible.builtin.command:
     cmd: systemd-tmpfiles --user --create
   changed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.claude"
     mode: "0700"
-  when: ansible_system == 'Darwin'
+  when: ansible_facts['system'] == 'Darwin'
   failed_when: false
 
 # --- Git safety (defense-in-depth) ---
@@ -170,7 +170,7 @@
     state: present
   when:
     - claude_queue_enabled | bool
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
 
 - name: Ensure ~/.config/claude directory exists (queue config)
   ansible.builtin.file:
@@ -201,7 +201,7 @@
     mode: "0644"
   when:
     - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
 
 - name: Deploy task queue systemd timer
   ansible.builtin.template:
@@ -210,7 +210,7 @@
     mode: "0644"
   when:
     - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
 
 - name: Enable task queue timer
   ansible.builtin.systemd:
@@ -221,7 +221,7 @@
     daemon_reload: true
   when:
     - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
   failed_when: false
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
@@ -233,7 +233,7 @@
     enabled: false
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Remove task queue systemd unit files (when disabled)
@@ -245,7 +245,7 @@
     - claude-queue.timer
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
 
 - name: Reload systemd user daemon after removing task queue unit files
   ansible.builtin.systemd:
@@ -253,7 +253,7 @@
     daemon_reload: true
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
   failed_when: false
 
 # --- macOS: launchd services ---
@@ -263,7 +263,7 @@
     state: directory
     mode: "0755"
   when:
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
 - name: Deploy task queue launchd plist (macOS)
@@ -272,7 +272,7 @@
     dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     mode: "0644"
   when:
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
@@ -282,7 +282,7 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
   when:
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool
   changed_when: false
   failed_when: false
@@ -293,7 +293,7 @@
     dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     mode: "0644"
   when:
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
     - claude_remote_control_enabled | bool
 
 - name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
@@ -303,7 +303,7 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
-    - ansible_os_family == 'Darwin'
+    - ansible_facts['os_family'] == 'Darwin'
     - claude_remote_control_enabled | bool
   changed_when: false
   failed_when: false

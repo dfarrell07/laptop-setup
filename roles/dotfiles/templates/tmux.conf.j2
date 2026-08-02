@@ -57,7 +57,7 @@ bind S setw synchronize-panes \; display "Sync: #{?pane_synchronized,ON,OFF}"
 
 # Vi copy mode
 bind -T copy-mode-vi v send-keys -X begin-selection
-{% if ansible_system | default('Linux') == 'Darwin' %}
+{% if ansible_facts['system'] | default('Linux') == 'Darwin' %}
 bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
 bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
 {% else %}

@@ -43,7 +43,7 @@
     path: "{{ ansible_user_dir }}/.ssh/sockets"
     state: directory
     mode: "0700"
-  when: ansible_system != 'Linux'
+  when: ansible_facts['system'] != 'Linux'
 
 - name: Ensure Claude config directory
   ansible.builtin.file:
@@ -327,7 +327,7 @@
     path: "{{ ansible_user_dir }}/.config/autostart"
     state: directory
     mode: "0755"
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
   ansible.builtin.copy:
@@ -337,7 +337,7 @@
     dest: "{{ ansible_user_dir }}/.config/autostart/gnome-keyring-ssh.desktop"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
   ansible.builtin.systemd:
@@ -349,7 +349,7 @@
     - gcr-ssh-agent.socket
     - gcr-ssh-agent.service
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - not (csb_restricted | default(false))  # Only skip on fapolicyd-enforcing CSB (smart-card/PIV auth via gcr)
   failed_when: false
 
@@ -359,7 +359,7 @@
     dest: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   notify: Restart ssh-agent
 
 - name: Enable SSH agent user service
@@ -369,7 +369,7 @@
     state: started
     enabled: true
     daemon_reload: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Deploy SSH agent environment.d config
@@ -378,7 +378,7 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy XDG base directory environment.d config
   ansible.builtin.copy:
@@ -390,7 +390,7 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/xdg.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
   ansible.builtin.copy:
@@ -398,7 +398,7 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/gotmpdir.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 # --- macOS: SSH agent via launchd ---
 - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
@@ -406,21 +406,21 @@
     cmd: "launchctl disable user/{{ ansible_user_uid }}/com.openssh.ssh-agent"
   changed_when: false
   failed_when: false
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.local/state/log"
     state: directory
     mode: "0755"
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Ensure LaunchAgents directory exists (macOS)
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/Library/LaunchAgents"
     state: directory
     mode: "0755"
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Deploy SSH agent launchd plist (macOS)
   ansible.builtin.template:
@@ -428,7 +428,7 @@
     dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
     mode: "0644"
     backup: true
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
   # 'launchctl bootstrap' is the modern replacement for the deprecated
@@ -438,7 +438,7 @@
     cmd: >-
       launchctl bootstrap gui/{{ ansible_user_uid }}
       {{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
   changed_when: false
   failed_when: false
 
@@ -473,7 +473,7 @@
     dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/ssh-sockets.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy tmux socket tmpfiles config (TMUX_TMPDIR=$XDG_RUNTIME_DIR/tmux)
   ansible.builtin.copy:
@@ -481,13 +481,13 @@
     dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/tmux-sockets.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Activate tmpfiles to create SSH and tmux socket directories
   ansible.builtin.command:
     cmd: systemd-tmpfiles --user --create
   changed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Ensure direnv config directory
   ansible.builtin.file:

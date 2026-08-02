@@ -32,7 +32,7 @@
   register: containers_auth_status
   changed_when: false
   failed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Report unauthenticated registries
   ansible.builtin.debug:
@@ -66,7 +66,7 @@
     state: started
     enabled: true
     scope: user
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Disable Docker socket by default
@@ -77,7 +77,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - not (install_docker | default(false))
   failed_when: false
 
@@ -90,7 +90,7 @@
     value: '"{{ containers_kind_log_driver }}"'
     mode: "0644"
     create: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 - name: Set containers.conf pids_limit for kind (kind nodes spawn many processes)
   community.general.ini_file:
@@ -100,7 +100,7 @@
     value: "{{ containers_kind_pids_limit }}"
     mode: "0644"
     create: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
 
 # --- periodic container storage cleanup ---
 - name: Deploy podman-prune.service
@@ -117,7 +117,7 @@
       # because they are tagged (not dangling) — podman system prune without --all
       # skips non-dangling images regardless of the label filter
       ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   register: containers_prune_service
 
 - name: Deploy podman-prune.timer
@@ -134,7 +134,7 @@
 
       [Install]
       WantedBy=timers.target
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   register: containers_prune_timer
 
 - name: Reload systemd user daemon after deploying prune units
@@ -142,7 +142,7 @@
     scope: user
     daemon_reload: true
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - containers_prune_service.changed or containers_prune_timer.changed
   failed_when: false
 
@@ -152,7 +152,7 @@
     state: started
     enabled: true
     scope: user
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
@@ -167,7 +167,7 @@
     dest: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
     mode: "0644"
     backup: true
-  when: ansible_system == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   # environment.d is processed by systemd-environment-d-generator at user session start,
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or

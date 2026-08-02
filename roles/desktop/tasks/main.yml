@@ -35,7 +35,7 @@
   when:
     - desktop_effective == 'unknown'
     - desktop_environment == 'auto'
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
 
 - name: Install common desktop packages
   ansible.builtin.dnf:
@@ -43,7 +43,7 @@
     state: present
   become: true
   tags: [become]
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
 - name: Install Sway packages
   ansible.builtin.dnf:
@@ -52,7 +52,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - desktop_effective == 'sway'
 
 - name: Install i3 packages
@@ -62,7 +62,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - desktop_effective == 'i3'
 
 - name: Install GNOME packages
@@ -72,11 +72,11 @@
   become: true
   tags: [become]
   when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - desktop_effective == 'gnome'
 
 - name: Install desktop packages (apt)
-  when: ansible_pkg_mgr == 'apt'
+  when: ansible_facts['pkg_mgr'] == 'apt'
   block:
     - name: Install desktop packages (apt)
       ansible.builtin.apt:
@@ -239,7 +239,7 @@
     value: "'prefer-dark'"
   failed_when: false
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - desktop_effective == 'sway'
 
 # --- i3status config (shared by i3 and Sway) ---
@@ -264,12 +264,12 @@
   register: desktop_csb_chrome
   when:
     - desktop_deploy_chrome_policies | default(false) | bool
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
 
 - name: Chrome and Chromium managed policies
   when:
     - desktop_deploy_chrome_policies | default(false) | bool
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
   block:
     - name: Create Chrome managed policies directory
@@ -314,7 +314,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - ansible_facts['env']['SHELL'] | default('/bin/bash') != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
@@ -323,14 +323,14 @@
     path: "{{ ansible_user_dir }}/.config/aerospace"
     state: directory
     mode: "0755"
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Deploy AeroSpace config (macOS)
   ansible.builtin.template:
     src: aerospace.toml.j2
     dest: "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
     mode: "0644"
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 # --- macOS: defaults ---
 - name: Set macOS defaults
@@ -342,7 +342,7 @@
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
 
 # --- macOS: firewall ---
 - name: Enable macOS firewall
@@ -351,7 +351,7 @@
   changed_when: true
   become: true
   tags: [become]
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
   failed_when: false
 
 - name: Enable macOS firewall stealth mode
@@ -360,7 +360,7 @@
   changed_when: true
   become: true
   tags: [become]
-  when: ansible_os_family == 'Darwin'
+  when: ansible_facts['os_family'] == 'Darwin'
   failed_when: false
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
@@ -371,12 +371,12 @@
   changed_when: false
   failed_when: false
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - desktop_effective == 'gnome'
 
 - name: GNOME hardening dconf settings
   when:
-    - ansible_system == 'Linux'
+    - ansible_facts['system'] == 'Linux'
     - desktop_gnome_check.rc | default(1) == 0
   block:
     - name: Disable notifications on lock screen

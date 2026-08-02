@@ -7,7 +7,7 @@
   # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
   when:
     - repo_gh_cli | default(true)
-    - ansible_distribution != 'Fedora'
+    - ansible_facts['distribution'] != 'Fedora'
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
@@ -47,7 +47,7 @@
 - name: Add Google Chrome repo
   when:
     - repo_google_chrome | default(false)
-    - ansible_architecture == 'x86_64'
+    - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
@@ -87,13 +87,13 @@
 - name: Add Google Cloud SDK repo
   when:
     - repo_google_cloud_sdk | default(false)
-    - ansible_architecture == 'x86_64'
+    - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add google-cloud-cli repo
       ansible.builtin.yum_repository:
         name: google-cloud-cli
         description: Google Cloud CLI
-        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if (ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 40) or (ansible_distribution != 'Fedora' and ansible_distribution_major_version | int >= 10) else 'el9' }}-x86_64"  # yamllint disable-line rule:line-length
+        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if (ansible_facts['distribution'] == 'Fedora' and ansible_facts['distribution_major_version'] | int >= 40) or (ansible_facts['distribution'] != 'Fedora' and ansible_facts['distribution_major_version'] | int >= 10) else 'el9' }}-x86_64"  # yamllint disable-line rule:line-length
         gpgcheck: true
         repo_gpgcheck: true
         gpgkey: "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
@@ -126,7 +126,7 @@
 - name: Add Slack repo
   when:
     - repo_slack | default(false)
-    - ansible_architecture == 'x86_64'
+    - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add slack repo
       ansible.builtin.yum_repository:
@@ -172,7 +172,7 @@
 - name: Add Mullvad VPN repo
   when:
     - repo_mullvad | default(true)
-    - ansible_distribution == 'Fedora'
+    - ansible_facts['distribution'] == 'Fedora'
     - not (csb_detected | default(false))
   block:
     - name: Add mullvad repo
@@ -204,13 +204,17 @@
         description: Docker CE Stable
         baseurl: >-
           https://download.docker.com/linux/{{
-          'fedora' if ansible_distribution == 'Fedora' else 'centos' if ansible_distribution in ['Rocky', 'AlmaLinux', 'CentOS'] else 'rhel'
+          'fedora' if ansible_facts['distribution'] == 'Fedora'
+          else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
+          else 'rhel')
           }}/$releasever/$basearch/stable
         gpgcheck: true
         repo_gpgcheck: true
         gpgkey: >-
           https://download.docker.com/linux/{{
-          'fedora' if ansible_distribution == 'Fedora' else 'centos' if ansible_distribution in ['Rocky', 'AlmaLinux', 'CentOS'] else 'rhel'
+          'fedora' if ansible_facts['distribution'] == 'Fedora'
+          else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
+          else 'rhel')
           }}/gpg
         enabled: true
   rescue:
@@ -320,11 +324,11 @@
 - name: Enable RPM Fusion free repo
   when:
     - repo_rpmfusion_free | default(true)
-    - ansible_distribution == 'Fedora'
+    - ansible_facts['distribution'] == 'Fedora'
   block:
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
-        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
   rescue:
     - name: Record RPM Fusion free failure
@@ -355,11 +359,11 @@
 - name: Enable RPM Fusion nonfree repo
   when:
     - repo_rpmfusion_nonfree | default(false)
-    - ansible_distribution == 'Fedora'
+    - ansible_facts['distribution'] == 'Fedora'
   block:
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
-        name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
   rescue:
     - name: Record RPM Fusion nonfree failure
@@ -397,14 +401,14 @@
         # Tailscale uses a single static 'fedora' path for all Fedora releases (no per-version subdirectory)
         baseurl: >-
           https://pkgs.tailscale.com/stable/{{
-          'rhel/' ~ ansible_distribution_major_version if ansible_distribution != 'Fedora'
+          'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora'
           else 'fedora'
           }}/$basearch
         gpgcheck: true
         repo_gpgcheck: true
         gpgkey: >-
           https://pkgs.tailscale.com/stable/{{
-          'rhel/' ~ ansible_distribution_major_version if ansible_distribution != 'Fedora'
+          'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora'
           else 'fedora'
           }}/repo.gpg
         enabled: true
