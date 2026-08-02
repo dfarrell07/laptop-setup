@@ -56,6 +56,7 @@ make test-debian      # Molecule Debian tests
 make test-macos       # Molecule macOS tests
 make test-container   # Molecule container provisioning scenario (distrobox/Podman)
 make test-container-offline  # Molecule container rescue/degradation path (offline 404 scenario)
+make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt)
 make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-container  # Post-run verification (distrobox)
@@ -65,7 +66,7 @@ make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
 make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline); Podman only
-make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos)
+make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, packages-binaries)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
@@ -167,7 +168,7 @@ make repos-downstream # downstream repos only
 - `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline);
   Podman only, no libvirt required. CI coverage minus macOS
 - `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
-  + test-rocky + test-debian + test-macos + test-container + test-container-offline (macOS runner required)
+  + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-packages-binaries (macOS runner required)
 - `make test-fedora` — Molecule Fedora 44 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-rocky` — Molecule Rocky Linux 10 (work profile, includes redhat role)
 - `make test-debian` — Molecule Debian 13 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
@@ -176,7 +177,7 @@ make repos-downstream # downstream repos only
   fast failure via distrobox_oc_fetch_timeout: 5
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services); requires `make bootstrap-test` first
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
-- CI runs linting + Fedora/Rocky/Debian/container/macOS molecule tests on every PR, VM tests locally
+- CI runs linting + Fedora/Rocky/Debian/container/packages-binaries/macOS molecule tests on every PR, VM tests locally
 - CI skips molecule on doc-only PRs (shell-based git diff, no third-party action)
 
 ## CI Security
