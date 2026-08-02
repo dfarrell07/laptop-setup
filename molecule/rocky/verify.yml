@@ -48,7 +48,7 @@
 
     - name: Assert git email is work profile
       ansible.builtin.assert:
-        that: "'redhat.com' in verify_git_email.stdout"
+        that: "dotfiles_user_email_work in verify_git_email.stdout"
         fail_msg: "git user.email is not set to a Red Hat work address"
 
     - name: Verify Claude CLAUDE.md exists (work)

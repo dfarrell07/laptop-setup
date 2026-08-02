@@ -38,6 +38,10 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in EPEL 10
 
+- name: Check tree is installed
+  ansible.builtin.command: tree --version
+  changed_when: false
+
 - name: Check go is installed
   ansible.builtin.command: go version
   changed_when: false

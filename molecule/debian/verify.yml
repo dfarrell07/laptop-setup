@@ -3,6 +3,10 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
@@ -78,6 +82,10 @@
 
     - name: Check pip3 is installed (python3-pip)
       ansible.builtin.command: pip3 --version
+      changed_when: false
+
+    - name: Check tree is installed
+      ansible.builtin.command: tree --version
       changed_when: false
 
     # wl-clipboard moved to desktop_apt_packages (Wayland-only; not installed in headless CI)

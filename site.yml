@@ -54,6 +54,35 @@
       become: false
       tags: [always]
 
+    - name: Assert config.yml contains no indirection-layer secret keys
+      ansible.builtin.assert:
+        that: >-
+          _user_config is not defined or
+          (_user_config.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
+           'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
+           'notes_transcrypt_password']) | list | length == 0)
+        fail_msg: >-
+          config.yml must not define these indirection-layer keys — include_vars
+          outranks group_vars/all/vars.yml (precedence 17 vs 4-5), silently
+          bypassing vault for: {{ (_user_config | default({})).keys()
+          | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
+          'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password'])
+          | list }}. Use group_vars/all/vault.yml for these secrets instead.
+          (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
+      become: false
+      tags: [always]
+
+    - name: Warn when vault.yml is still the unencrypted stub
+      ansible.builtin.assert:
+        that: vault_placeholder | default('encrypt-me') != 'encrypt-me'
+        fail_msg: >-
+          vault.yml is still the unencrypted stub (vault_placeholder == 'encrypt-me').
+          Secret-backed features will silently skip: SSH key deployment, transcrypt,
+          and rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+        warn: true
+      become: false
+      tags: [always]
+
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
       when: ansible_system | default('Linux') == 'Linux'
@@ -131,6 +160,49 @@
           config.yml must not define vault_* variables — include_vars outranks
           group_vars (precedence 17 vs 4), so these keys silently shadow
           vault.yml: {{ (_user_config | default({})).keys() | select('match', '^vault_') | list }}
+      tags: [always]
+
+    - name: Assert config.yml contains no indirection-layer secret keys
+      ansible.builtin.assert:
+        that: >-
+          _user_config is not defined or
+          (_user_config.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
+           'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
+           'notes_transcrypt_password']) | list | length == 0)
+        fail_msg: >-
+          config.yml must not define these indirection-layer keys — include_vars
+          outranks group_vars/all/vars.yml (precedence 17 vs 4-5), silently
+          bypassing vault for: {{ (_user_config | default({})).keys()
+          | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
+          'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password'])
+          | list }}. Use group_vars/all/vault.yml for these secrets instead.
+          (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
+      tags: [always]
+
+    - name: Warn when vault.yml is still the unencrypted stub
+      ansible.builtin.assert:
+        that: vault_placeholder | default('encrypt-me') != 'encrypt-me'
+        fail_msg: >-
+          vault.yml is still the unencrypted stub (vault_placeholder == 'encrypt-me').
+          Secret-backed features will silently skip: SSH key deployment, transcrypt,
+          and rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+        warn: true
+      tags: [always]
+
+    - name: Vault healthcheck — assert required SSH key variables are defined and non-empty
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_auth_key is defined and vault_ssh_auth_key | length > 0
+          - vault_ssh_auth_key_pub is defined and vault_ssh_auth_key_pub | length > 0
+          - vault_ssh_signing_key is defined and vault_ssh_signing_key | length > 0
+          - vault_ssh_signing_key_pub is defined and vault_ssh_signing_key_pub | length > 0
+        fail_msg: >-
+          vault.yml is populated (vault_placeholder != 'encrypt-me') but one or more
+          required SSH key variables are missing or empty. Check for key name typos in
+          vault.yml — expected: vault_ssh_auth_key, vault_ssh_auth_key_pub,
+          vault_ssh_signing_key, vault_ssh_signing_key_pub.
+          Run: ansible-vault view group_vars/all/vault.yml | grep vault_ssh
+      when: vault_placeholder | default('encrypt-me') != 'encrypt-me'
       tags: [always]
 
     - name: Assert identity vars are not CHANGE_ME placeholder values

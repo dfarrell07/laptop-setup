@@ -8,7 +8,8 @@ system_sysctl_hardening:
   # value 2=write-once locked (Fedora 44 kernel default via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
   # value 1 allows root to re-enable at runtime
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
-  kernel.perf_event_paranoid: 1    # value 1 = require CAP_PERFMON for kernel profiling (value 2 also blocks CPU counters for root)
+  kernel.perf_event_paranoid: 1    # value 1 = require CAP_PERFMON for kernel profiling
+  # (value 2 restricts unprivileged users from all perf events; root/CAP_PERFMON retain full access)
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0

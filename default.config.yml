@@ -156,7 +156,10 @@ install_virtualization: true
 #   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
 #   dotfiles_aws_profile: aws-acm-subm   — default AWS CLI profile name
 #   ssh_git_signing_pubkey: ""            — SSH public key for git commit signing; set in config.yml to the literal pubkey or
-#     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted
+#     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
+#     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
+#     and encrypted — config.yml (include_vars precedence 17) silently overrides group_vars (precedence 4-5), so a stale
+#     entry here will shadow the vault-backed value without any warning.
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
 #     packages_kubebuilder_version, packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;

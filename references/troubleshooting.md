@@ -894,6 +894,28 @@ Then re-run `make system`. For a non-persistent change: `sudo sysctl -w net.core
 
 **CSB IT ticket:** No. Applied by the playbook with sudo.
 
+## system: kernel.unprivileged_bpf_disabled=2 Is Write-Once (bpfman Contributors)
+
+**Symptom:** `sudo sysctl -w kernel.unprivileged_bpf_disabled=0` returns `sysctl: setting key "kernel.unprivileged_bpf_disabled": Operation not permitted` even as root.
+
+**Root Cause:** The `system` role sets `kernel.unprivileged_bpf_disabled=2`. Value 2 is write-once: once applied at boot (or by the first `sysctl -w` after kernel init), the kernel locks the sysctl and rejects any subsequent write — including from root — with EPERM. This is intentional: it prevents privilege-escalation attacks that attempt to re-enable unprivileged BPF after hardening is applied.
+
+**Normal bpfman and OVN-K development is unaffected.** Both workloads use privileged BPF via root-level processes (bpfman daemon with CAP_BPF, ovnkube-node as root), so unprivileged BPF is never needed at runtime.
+
+**Affected case:** bpfman contributors who need to test BPF program rejection behavior (i.e., verify that unprivileged BPF is correctly denied) cannot lower this sysctl at runtime.
+
+**Fix:** To temporarily allow testing on a single boot, reboot and override the sysctl via kernel cmdline:
+
+```
+kernel.unprivileged_bpf_disabled=0
+```
+
+Add to `GRUB_CMDLINE_LINUX` in `/etc/default/grub` (or use `grubby`) for a one-time test, then revert. Do not set this in `config.yml` — that would permanently downgrade the security posture.
+
+Alternatively, run the tests in a throwaway VM or container that has not yet applied the write-once sysctl.
+
+**CSB IT ticket:** No. This is expected behavior; no provisioning change needed.
+
 ## system: SSH Fails to Legacy RHEL 7 / Old Servers After Provisioning
 
 **Symptom:** `ssh user@old-server` fails with `no matching key exchange method found` or `algorithm negotiation failed`. This affects RHEL 7 servers, older network appliances, and any host that only supports SHA-1-based algorithms.
