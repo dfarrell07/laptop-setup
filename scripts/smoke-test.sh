@@ -67,16 +67,40 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "krew:kubectl krew version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
+if [[ -x "$HOME/.krew/bin/krew" ]]; then
+  if run "$HOME/.krew/bin/krew" version &>/dev/null; then record "krew" "PASS"
+  else record "krew" "FAIL" "krew installed but version failed"; fi
+else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
+
+# Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
+for tool in "gofumpt:--version" "gopls:version" "stern:--version"; do
+  name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
+  [[ -x "$_gobin" ]] && {
+    if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"
+    else record "go-$name" "FAIL" "$_gobin present but command failed"; fi
+  }
+done
 
 # oc (work-profile only — guard on binary presence, emit nothing when absent)
 if [[ -x /usr/local/bin/oc ]]; then
   if run oc version --client &>/dev/null; then record "oc" "PASS"
   else record "oc" "FAIL" "oc binary present but 'oc version --client' failed"; fi
+fi
+# kubectl-ocp (work-profile only — oc and kubectl come from the same OCP tarball;
+# if /usr/local/bin/oc is present the tarball succeeded, so kubectl must be present too)
+if [[ -x /usr/local/bin/oc ]]; then
+  if [[ ! -x /usr/local/bin/kubectl ]]; then
+    record "kubectl-ocp" "FAIL" "/usr/local/bin/kubectl absent despite oc present — OCP tarball extraction incomplete"
+  elif run /usr/local/bin/kubectl version --client &>/dev/null; then
+    record "kubectl-ocp" "PASS"
+  else
+    record "kubectl-ocp" "FAIL" "OCP kubectl present but version check failed"
+  fi
 fi
 # cosign (work-profile only — guard on binary presence, emit nothing when absent)
 if [[ -x /usr/local/bin/cosign ]]; then
@@ -92,6 +116,11 @@ fi
 if [[ -x /usr/local/bin/operator-sdk ]]; then
   if run operator-sdk version &>/dev/null; then record "operator-sdk" "PASS"
   else record "operator-sdk" "FAIL" "operator-sdk binary present but version command failed"; fi
+fi
+# opm (work-profile only — guard on binary presence, emit nothing when absent)
+if [[ -x /usr/local/bin/opm ]]; then
+  if run opm version &>/dev/null; then record "opm" "PASS"
+  else record "opm" "FAIL" "opm binary present but version command failed"; fi
 fi
 
 # ec CLI (work-profile only — guard on binary presence)
@@ -125,6 +154,19 @@ else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
 if command -v vim >/dev/null 2>&1; then record "vim-binary" "PASS"
 else record "vim-binary" "WARN" "vim not found"; fi
 
+# --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
+for tool in yamllint ansible-lint; do
+  if command -v "$tool" &>/dev/null; then
+    if run "$tool" --version &>/dev/null; then
+      record "pipx-$tool" "PASS"
+    else
+      record "pipx-$tool" "FAIL" "$tool present but --version failed"
+    fi
+  else
+    record "pipx-$tool" "WARN" "$tool not installed (pipx install may have failed — run: make packages)"
+  fi
+done
+
 # --- Dotfiles checks ---
 for f in .zshrc .vimrc .bashrc; do
   if [[ ! -f "$HOME/$f" ]]; then record "dotfile-$f" "FAIL" "not deployed — run: make all"
@@ -152,6 +194,25 @@ _rg="$HOME/.config/ripgrep/config"
 if grep -q "Ansible managed" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc" "PASS"
 else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
 unset _rg
+
+# ~/tmp must exist and allow exec (GOTMPDIR — go test compiles binaries here, /tmp is noexec)
+if [[ ! -d "$HOME/tmp" ]]; then
+  record "home-tmp-dir" "FAIL" "$HOME/tmp does not exist — run: mkdir -p ~/tmp (or make dotfiles)"
+else
+  _htmp_test=$(mktemp "$HOME/tmp/smoke-exec-XXXXXX" 2>/dev/null) || _htmp_test=""
+  if [[ -z "$_htmp_test" ]]; then
+    record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
+  else
+    # Guard cleanup with trap so set -e abort doesn't leak the temp file
+    trap 'rm -f "$_htmp_test"' EXIT
+    cp /bin/true "$_htmp_test" && chmod +x "$_htmp_test"
+    if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
+    else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
+    rm -f "$_htmp_test"
+    trap - EXIT
+  fi
+  unset _htmp_test
+fi
 
 # ~/.cargo/bin in PATH (added by dotfiles role — required for Rust/bpfman toolchain)
 if grep -q '\.cargo/bin' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "cargo-path" "PASS"
@@ -263,7 +324,7 @@ for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsi
   key="${check%%=*}" expected="${check#*=}"
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
-  elif [[ "$key" =~ ^(commit|tag|gpg)\. ]] && [[ "$_signing_key_present" == "false" ]]; then
+  elif { [[ "$key" =~ ^(commit|tag|gpg)\. ]] || [[ "$key" == "user.signingkey" ]]; } && [[ "$_signing_key_present" == "false" ]]; then
     record "git-$key" "WARN" "signing key absent (populate vault + re-provision) — got '$actual'"
   else record "git-$key" "FAIL" "got '$actual', expected '$expected'"; fi
 done
@@ -285,7 +346,13 @@ else record "git-safe-directory" "PASS"; fi
 # git hooksPath configured
 if hp=$(run git config --global core.hooksPath 2>/dev/null) && [[ -n "$hp" ]]; then
   record "git-hooks-path" "PASS"
-else record "git-hooks-path" "FAIL" "not configured — expected core.hooksPath=.githooks; run: make hooks"; fi
+else record "git-hooks-path" "FAIL" "not configured — expected core.hooksPath=~/.config/git/template/hooks (global); run: make dotfiles"; fi
+
+if [[ -x "$HOME/.config/git/template/hooks/pre-commit" ]]; then
+  record "git-hooks-pre-commit" "PASS"
+else
+  record "git-hooks-pre-commit" "FAIL" "gitleaks pre-commit hook missing or not executable: $HOME/.config/git/template/hooks/pre-commit — run: make dotfiles"
+fi
 
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 # Security config is in settings.local.json (survives /config writes); fall
@@ -367,14 +434,36 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
     record "cliphist" "PASS"
   else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
-  # wl-paste/wl-copy (wl-clipboard): installed for ALL desktops via packages_containers
-  # (tmux copy-pipe Wayland clipboard chain) and additionally via desktop_sway_packages
-  # (cliphist daemon + clipboard picker keybinding in sway). Not sway-only — a FAIL here
-  # means wl-clipboard was not installed even from the common packages_containers list.
+  # wl-paste/wl-copy (wl-clipboard): installed via desktop_sway_packages (sway desktop);
+  # not present on non-sway Fedora. tmux copy-pipe benefits from it on any Wayland desktop,
+  # so its absence on non-sway is a WARN rather than a hard failure.
   if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
   elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
     record "wl-paste" "WARN" "not found (expected in molecule — packages_containers overridden to [] in converge)"
+  elif [[ "${XDG_CURRENT_DESKTOP:-}" != "sway" ]]; then
+    record "wl-paste" "WARN" "not found (expected on sway — wl-clipboard is in desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
+fi
+
+# kernel-cmdline persistence (new kernels inherit from /etc/kernel/cmdline)
+# File is 0644 root-owned; no elevated privilege required. Guard makes this a
+# no-op on macOS and Debian containers where the file is absent.
+if [[ -f /etc/kernel/cmdline ]]; then
+  _kcmd=$(cat /etc/kernel/cmdline)
+  _kcmd_ok=true
+  echo "$_kcmd" | grep -q "vsyscall=none"       || _kcmd_ok=false
+  echo "$_kcmd" | grep -q "init_on_free=1"       || _kcmd_ok=false
+  echo "$_kcmd" | grep -q "page_alloc.shuffle=1" || _kcmd_ok=false
+  if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
+    echo "$_kcmd" | grep -q "amd_iommu=on"       || _kcmd_ok=false
+    grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
+  elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
+    echo "$_kcmd" | grep -q "intel_iommu=on"     || _kcmd_ok=false
+    grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
+  fi
+  if $_kcmd_ok; then record "kernel-cmdline" "PASS"
+  else record "kernel-cmdline" "WARN" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
+  unset _kcmd _kcmd_ok
 fi
 
 # ---- System-level checks (skipped with --user-only, --container, or macOS) ----
@@ -422,16 +511,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(cat /sys/kernel/security/lockdown)
     if echo "$ld" | grep -q '\[integrity\]'; then record "kernel-lockdown" "PASS"
-    else record "kernel-lockdown" "WARN" "lockdown not in integrity mode ($ld) — requires Secure Boot"; fi
-  fi
-
-  # kernel-cmdline persistence (new kernels inherit from /etc/kernel/cmdline)
-  if [[ -f /etc/kernel/cmdline ]]; then
-    _kcmd=$(cat /etc/kernel/cmdline)
-    if echo "$_kcmd" | grep -q "vsyscall=none" && echo "$_kcmd" | grep -q "init_on_free=1"; then
-      record "kernel-cmdline" "PASS"
-    else record "kernel-cmdline" "WARN" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
-    unset _kcmd
+    else record "kernel-lockdown" "WARN" "lockdown not in integrity mode ($ld) — if make system ran, reboot to activate; Secure Boot strengthens but does not require lockdown"; fi
   fi
 
   # Secure Boot (informational — not managed by Ansible, but critical to verify)
@@ -459,18 +539,34 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if [[ "$zone" == "drop" ]]; then record "firewall-zone" "PASS"
     elif $CSB_HOST; then record "firewall-zone" "WARN" "zone='$zone' — IT manages zone policy on CSB; drop zone not applied"
     else record "firewall-zone" "FAIL" "'$zone', expected 'drop'"; fi
-    _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
-    if [[ "$_ssh_port" != '?' && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
-    else record "sshd-port" "FAIL" "Port='$_ssh_port' expected non-default port !=22"; fi
-    if command -v semanage &>/dev/null; then
-      if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
-      else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
+    _primary_iface=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}')
+    if [[ -n "$_primary_iface" && "$zone" == "drop" ]]; then
+      _iface_zone=$(firewall-cmd --get-zone-of-interface="$_primary_iface" 2>/dev/null || true)
+      if [[ "$_iface_zone" == "drop" ]]; then
+        record "firewall-primary-iface-zone" "PASS"
+      elif [[ -z "$_iface_zone" ]]; then
+        # No explicit zone: interface inherits default zone (already confirmed drop) — PASS
+        record "firewall-primary-iface-zone" "PASS"
+      else
+        record "firewall-primary-iface-zone" "FAIL" \
+          "$_primary_iface in zone '$_iface_zone', expected 'drop' — NIC may use FedoraWorkstation rules despite default zone being drop"
+      fi
+      unset _iface_zone
     fi
-    if ss -tlnp 2>/dev/null | grep -q ":${_ssh_port}"; then record "sshd-port-bound" "PASS"
-    else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
-    # Verify sshd is enabled for reboot persistence — bound now but not enabled = reboot lockout
-    if systemctl is-enabled sshd.service &>/dev/null; then record "sshd-enabled" "PASS"
-    else record "sshd-enabled" "FAIL" "sshd.service not enabled — reboot will leave machine unreachable"; fi
+    unset _primary_iface
+    if [[ "$EUID" -ne 0 ]]; then
+      record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
+    else
+      _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
+      if [[ "$_ssh_port" != '?' && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
+      else record "sshd-port" "FAIL" "Port='$_ssh_port' expected non-default port !=22"; fi
+      if command -v semanage &>/dev/null; then
+        if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
+        else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
+      fi
+      if ss -tlnp 2>/dev/null | grep -q ":${_ssh_port}"; then record "sshd-port-bound" "PASS"
+      else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
+    fi
     if [[ "$zone" == "drop" ]]; then
       # Only check drop-zone-specific rules when the drop zone is actually active
       if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
@@ -500,6 +596,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   else
     record "firewall-present" "FAIL" "firewall-cmd not found — firewalld not installed or not in PATH; all firewall checks skipped"
+  fi
+  # Verify sshd is enabled for reboot persistence — bound now but not enabled = reboot lockout
+  if systemctl is-enabled sshd.service &>/dev/null; then record "sshd-enabled" "PASS"
+  else record "sshd-enabled" "FAIL" "sshd.service not enabled — reboot will leave machine unreachable"; fi
+  # Verify sshd.socket masked — prevents socket activation from reopening port 22
+  # Note: systemctl is-masked is not a valid verb in systemd 259; use show UnitFileState.
+  if systemctl list-unit-files sshd.socket &>/dev/null | grep -q 'sshd.socket'; then
+    if [[ "$(systemctl show -p UnitFileState --value sshd.socket 2>/dev/null)" == "masked" ]]; then
+      record "sshd-socket-masked" "PASS"
+    else
+      record "sshd-socket-masked" "FAIL" "sshd.socket not masked — socket activation can reopen port 22, bypassing 00-hardening.conf"
+    fi
   fi
 
   # tailscaled service state (Linux systemd — on macOS tailscale uses launchd, handled by connectivity check above)
@@ -564,31 +672,47 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
 
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
-  _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
-  if grep -q '^PasswordAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -qP '^AllowAgentForwarding (yes|no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -qP '^AllowTcpForwarding (yes|no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-     [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
-    record "sshd-hardening" "PASS"
-  elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms (MaxAuthTries=$_max_auth)"
-  else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
-  # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
+  if [[ "$EUID" -ne 0 ]]; then
+    record "sshd-hardening" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
+    record "sshd-allowusers" "WARN" "skipped — requires root"
+  else
+    _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
+    if grep -q '^PasswordAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^IgnoreRhosts yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
+      record "sshd-hardening" "PASS"
+    elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms (MaxAuthTries=$_max_auth)"
+    else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
+    # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
+    if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+      _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ' || true)
+      _expected_user="${SUDO_USER:-$USER}"
+      if [[ "$_allow_users" == "$_expected_user" ]]; then record "sshd-allowusers" "PASS"
+      else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$_expected_user'"; fi
+      unset _allow_users _expected_user
+    else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
+  fi
+  # Ciphers, MACs, KexAlgorithms, and PubkeyAcceptedAlgorithms must be present and hardened in the drop-in
   if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    _allow_users=$(grep -oP '^AllowUsers \K.*' /etc/ssh/sshd_config.d/00-hardening.conf | tr -d ' ' || true)
-    _expected_user="${SUDO_USER:-$USER}"
-    if [[ "$_allow_users" == "$_expected_user" ]]; then record "sshd-allowusers" "PASS"
-    else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$_expected_user'"; fi
-    unset _allow_users _expected_user
-  else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
+    if grep -q '^Ciphers aes256-gcm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^MACs hmac-sha2-512-etm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qE '^KexAlgorithms.*(mlkem768x25519|curve25519)' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^PubkeyAcceptedAlgorithms.*sk-ssh-ed25519@openssh.com' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
+      record "sshd-algorithms" "PASS"
+    else record "sshd-algorithms" "FAIL" "Ciphers/MACs/KexAlgorithms/PubkeyAcceptedAlgorithms not hardened in sshd drop-in — check 00-hardening.conf"; fi
+  else record "sshd-algorithms" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule; skipped on CSB — IT manages audit rules)
   if $CSB_HOST; then
@@ -621,12 +745,6 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     done
   else record "aide-not-configured" "WARN" "/etc/aide.conf absent; run: aide --init && cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"; fi
 
-  # kernel module blacklist (verify key always-present blacklist entries)
-  if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf 2>/dev/null && \
-     grep -q '^blacklist vivid' /etc/modprobe.d/hardening.conf 2>/dev/null && \
-     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf 2>/dev/null; then
-    record "modprobe-hardening" "PASS"
-  else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
   # USB storage blacklist is conditional on system_disable_usb_storage (default: true)
   if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
     record "usb-storage-blocked" "PASS"
@@ -649,32 +767,50 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
-  if systemctl is-masked cups-browsed.service &>/dev/null; then record "cups-browsed-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)" == "masked" ]]; then record "cups-browsed-masked" "PASS"
   else record "cups-browsed-masked" "FAIL" "not masked (CVE-2024-47176 RCE vector — must be masked)"; fi
 
-  # cups.service disabled (not masked — cups.socket must remain for Flatpak on-demand activation)
+  # cups.service disabled; cups.socket and cups.path masked (prevent socket/path activation of CUPS)
+  # Set system_disable_printing: false in config.yml to leave cups.socket unmasked for Flatpak print dialogs
   _cups_state=$(systemctl show -p UnitFileState --value cups.service 2>/dev/null)
   if [[ "$_cups_state" == "disabled" ]]; then record "cups-disabled" "PASS"
   else record "cups-disabled" "WARN" "cups.service state is '$_cups_state', expected 'disabled' (masked breaks Flatpak print)"; fi
   unset _cups_state
+  if [[ "$(systemctl show -p UnitFileState --value cups.socket 2>/dev/null)" == "masked" ]]; then record "cups-socket-masked" "PASS"
+  else record "cups-socket-masked" "WARN" "cups.socket not masked — socket activation can start CUPS despite cups.service being disabled (expected masked when system_disable_printing: true)"; fi
+  if [[ "$(systemctl show -p UnitFileState --value cups.path 2>/dev/null)" == "masked" ]]; then record "cups-path-masked" "PASS"
+  else record "cups-path-masked" "WARN" "cups.path not masked — path activation can start CUPS despite cups.service being disabled (expected masked when system_disable_printing: true)"; fi
 
   # avahi-daemon masked
-  if systemctl is-masked avahi-daemon.service &>/dev/null; then record "avahi-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value avahi-daemon.service 2>/dev/null)" == "masked" ]]; then record "avahi-masked" "PASS"
   else record "avahi-masked" "FAIL" "not masked (mDNS service discovery leakage risk)"; fi
+  if [[ "$(systemctl show -p UnitFileState --value avahi-daemon.socket 2>/dev/null)" == "masked" ]]; then record "avahi-socket-masked" "PASS"
+  else record "avahi-socket-masked" "FAIL" "avahi-daemon.socket not masked — mDNS port 5353 may be open despite service being masked"; fi
   # passim masked (fwupd dependency — unauthenticated HTTP on 0.0.0.0:27500 reachable via Tailscale trusted zone)
-  if systemctl is-masked passim.service &>/dev/null; then record "passim-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)" == "masked" ]]; then record "passim-masked" "PASS"
   else record "passim-masked" "FAIL" "not masked (unauthenticated HTTP server on 0.0.0.0:27500)"; fi
 
   # NFS server and rpcbind masked (CIS 2.2.7 — workstation must not run an NFS server)
-  if systemctl is-masked nfs-server.service &>/dev/null; then record "nfs-server-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value nfs-server.service 2>/dev/null)" == "masked" ]]; then record "nfs-server-masked" "PASS"
   else record "nfs-server-masked" "FAIL" "nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)"; fi
-  if systemctl is-masked rpcbind.service &>/dev/null; then record "rpcbind-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value rpcbind.service 2>/dev/null)" == "masked" ]]; then record "rpcbind-masked" "PASS"
   else record "rpcbind-masked" "FAIL" "rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)"; fi
+  if [[ "$(systemctl show -p UnitFileState --value rpcbind.socket 2>/dev/null)" == "masked" ]]; then record "rpcbind-socket-masked" "PASS"
+  else record "rpcbind-socket-masked" "FAIL" "rpcbind.socket not masked — socket activation can start rpcbind despite service being masked (CIS 2.2.7)"; fi
   # Cockpit web console masked (port 9090 reachable from Tailscale peers if unmasked)
-  if systemctl is-masked cockpit.service &>/dev/null; then record "cockpit-service-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value cockpit.service 2>/dev/null)" == "masked" ]]; then record "cockpit-service-masked" "PASS"
   else record "cockpit-service-masked" "FAIL" "cockpit.service not masked — port 9090 reachable from Tailscale peers"; fi
-  if systemctl is-masked cockpit.socket &>/dev/null; then record "cockpit-socket-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value cockpit.socket 2>/dev/null)" == "masked" ]]; then record "cockpit-socket-masked" "PASS"
   else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked — web console activation possible"; fi
+
+  # thermald masked on non-Intel hardware (Intel-only daemon — exits immediately on AMD)
+  if [[ -f /proc/cpuinfo ]] && ! grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+    if [[ "$(systemctl show -p UnitFileState --value thermald 2>/dev/null)" == "masked" ]]; then
+      record "thermald-masked" "PASS"
+    else
+      record "thermald-masked" "WARN" "thermald not masked on non-Intel hardware (exits immediately but wastes a unit slot)"
+    fi
+  fi
 
   # AIDE file integrity — only check if aide-check.timer is deployed (skips cleanly when AIDE disabled)
   if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then
@@ -742,6 +878,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
   if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
   else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
+  if grep -q '^even_deny_root' /etc/security/faillock.conf 2>/dev/null; then record "faillock-even-deny-root" "PASS"
+  else record "faillock-even-deny-root" "FAIL" "faillock missing even_deny_root (root account exempt from lockout policy)"; fi
 
   # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
@@ -774,6 +912,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
   else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
 
+  if grep -q '^enforce_for_root' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-enforce-root" "PASS"
+  else record "pwhistory-enforce-root" "FAIL" "pwhistory enforce_for_root not set — root can reuse passwords despite remember=24 (CIS 5.3.5)"; fi
+
   # yescrypt password hashing (CIS 5.3.6)
   # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
   if grep -q '^ENCRYPT_METHOD YESCRYPT$' /etc/login.defs 2>/dev/null; then record "yescrypt" "PASS"
@@ -787,7 +928,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
 
   # fprintd masked (prevents fingerprint from bypassing faillock)
-  if systemctl is-masked fprintd.service &>/dev/null; then record "fprintd-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value fprintd.service 2>/dev/null)" == "masked" ]]; then record "fprintd-masked" "PASS"
   else record "fprintd-masked" "FAIL" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
 
   # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
@@ -871,39 +1012,69 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
 
   # /var/tmp bind-mounted to /tmp with noexec (CIS 1.1.8)
+  # 'bind' is MS_BIND syscall flag, never stored in kernel option strings — compare MAJ:MIN instead
   _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
-  if echo "$_vt_opts" | grep -q bind && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
-  else record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
+  _vt_min=$(findmnt -n -o MAJ:MIN /var/tmp 2>/dev/null | tr -d ' ' || echo "")
+  _tmp_min=$(findmnt -n -o MAJ:MIN /tmp 2>/dev/null | tr -d ' ' || echo "")
+  if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
+  elif $CSB_HOST; then record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec on CSB: $_vt_opts"
+  else record "var-tmp-bind" "FAIL" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
 
-  # ~/tmp must exist and allow exec (GOTMPDIR — go test compiles binaries here, /tmp is noexec)
-  if [[ ! -d "$HOME/tmp" ]]; then
-    record "home-tmp-dir" "FAIL" "$HOME/tmp does not exist — run: mkdir -p ~/tmp (or make dotfiles)"
-  else
-    _htmp_test=$(mktemp "$HOME/tmp/smoke-exec-XXXXXX" 2>/dev/null) || _htmp_test=""
-    if [[ -z "$_htmp_test" ]]; then
-      record "home-tmp-dir" "WARN" "$HOME/tmp exists but cannot create temp file"
-    else
-      # Guard cleanup with trap so set -e abort doesn't leak the temp file
-      trap 'rm -f "$_htmp_test"' EXIT
-      cp /bin/true "$_htmp_test" && chmod +x "$_htmp_test"
-      if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
-      else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
-      rm -f "$_htmp_test"
-      trap - EXIT
-    fi
-    unset _htmp_test
+  if [[ -f /etc/systemd/system/var-tmp.mount ]]; then
+    if systemctl is-enabled var-tmp.mount &>/dev/null; then record "var-tmp-mount-enabled" "PASS"
+    else record "var-tmp-mount-enabled" "FAIL" "var-tmp.mount not enabled — /var/tmp hardening lost on reboot"; fi
   fi
-  unset _vt_opts
+
+  unset _vt_opts _vt_min _tmp_min
 
   # /home nosuid (CIS 1.1.9) — nosuid prevents setuid binaries copied into $HOME from gaining elevated privileges
   # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
   if findmnt -n /home &>/dev/null; then
     _home_opts=$(findmnt -n -o OPTIONS /home 2>/dev/null || echo "")
     if echo "$_home_opts" | grep -q nosuid; then record "home-nosuid" "PASS"
-    elif $CSB_HOST; then record "home-nosuid" "WARN" "skipped on CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
     else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid not set: $_home_opts"; fi
     unset _home_opts
   else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
+
+  # /boot hardening — nosuid,nodev,noexec (guard: /boot may not be a separate mountpoint)
+  if findmnt -n /boot &>/dev/null; then
+    _boot_opts=$(findmnt -n -o OPTIONS /boot 2>/dev/null || echo "")
+    if echo "$_boot_opts" | grep -q nosuid && echo "$_boot_opts" | grep -q nodev && echo "$_boot_opts" | grep -q noexec; then
+      record "boot-hardening" "PASS"
+    elif $CSB_HOST; then record "boot-hardening" "WARN" "/boot missing hardening options on CSB (IT manages fstab; boot-harden.service re-applies on reboot): $_boot_opts"
+    else record "boot-hardening" "FAIL" "/boot missing hardening options: $_boot_opts"; fi
+    unset _boot_opts
+    # On CSB, fstab is IT-managed so Ansible deploys boot-harden.service to re-apply
+    # hardening on each boot. Verify the service is enabled — if it isn't, a reboot loses
+    # nosuid/nodev/noexec and the boot-hardening check above would pass until next reboot.
+    if $CSB_HOST; then
+      if systemctl is-enabled boot-harden.service &>/dev/null; then record "boot-harden-enabled" "PASS"
+      else record "boot-harden-enabled" "FAIL" "boot-harden.service not enabled on CSB — /boot hardening lost on reboot"; fi
+    fi
+  fi
+
+  # /boot/efi hardening — nosuid,noexec (vfat does not support nodev)
+  if findmnt -n /boot/efi &>/dev/null; then
+    _efi_opts=$(findmnt -n -o OPTIONS /boot/efi 2>/dev/null || echo "")
+    if echo "$_efi_opts" | grep -q nosuid && echo "$_efi_opts" | grep -q noexec; then
+      record "boot-efi-hardening" "PASS"
+    elif $CSB_HOST; then
+      record "boot-efi-hardening" "WARN" "/boot/efi missing nosuid/noexec on CSB: $_efi_opts (IT manages fstab; may reset on reboot)"
+    else
+      record "boot-efi-hardening" "FAIL" "/boot/efi missing nosuid/noexec: $_efi_opts"
+    fi
+    unset _efi_opts
+    # On CSB, Ansible deploys boot-efi-harden.service to re-apply options each boot.
+    # Verify it is enabled — silent enable failure (ignore_errors: true) leaves no other signal.
+    if $CSB_HOST; then
+      if systemctl is-enabled boot-efi-harden.service &>/dev/null; then
+        record "boot-efi-harden-enabled" "PASS"
+      else
+        record "boot-efi-harden-enabled" "FAIL" "boot-efi-harden.service not enabled on CSB — /boot/efi hardening lost on reboot"
+      fi
+    fi
+  fi
 
   # kernel.core_pattern safety — must begin with | (pipe to handler), never a raw path
   _core_pattern="$(sysctl -n kernel.core_pattern 2>/dev/null)"
@@ -921,7 +1092,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   unset _inotify_instances
 
   # ctrl+alt+del disabled (physical security)
-  if systemctl is-masked ctrl-alt-del.target &>/dev/null; then record "ctrl-alt-del-masked" "PASS"
+  if [[ "$(systemctl show -p UnitFileState --value ctrl-alt-del.target 2>/dev/null)" == "masked" ]]; then record "ctrl-alt-del-masked" "PASS"
   else record "ctrl-alt-del-masked" "FAIL" "ctrl-alt-del.target not masked"; fi
 
   # dnf-automatic
@@ -956,6 +1127,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "tlp-bat-start-threshold" "PASS"
     else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi
     unset _bat_start
+  fi
+  if command -v tlp &>/dev/null || [[ -d /etc/tlp.d ]]; then
+    if [[ "$(systemctl show -p UnitFileState --value power-profiles-daemon 2>/dev/null)" == "masked" ]]; then record "ppd-masked" "PASS"
+    else record "ppd-masked" "FAIL" "power-profiles-daemon not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"; fi
   fi
 
   # Chrome policies (verify key security settings, not just file existence)
@@ -1010,7 +1185,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "dconf-gdm-user-list" "FAIL" "disable-user-list=true missing in /etc/dconf/db/gdm.d/03-hardening"; fi
 
   # Unexpected listening ports (non-loopback)
-  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | tail -n +2 || true)
+  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vF ":${_ssh_port:-722}" | tail -n +2 || true)
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 
@@ -1053,30 +1228,6 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   elif $CSB_HOST; then record "home-mode" "WARN" "skipped on CSB — login.defs not modified"
   else record "home-mode" "FAIL" "HOME_MODE not set to 0750 in login.defs (CIS: explicit home dir permissions)"; fi
 
-  # WiFi MAC address randomization (privacy)
-  if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf 2>/dev/null; then
-    record "wifi-mac-rand" "PASS"
-  elif $CSB_HOST; then record "wifi-mac-rand" "WARN" "skipped on CSB — IT may use MAC-based NAC; stable-ssid not deployed"
-  else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
-
-  # NM dns=systemd-resolved (required for Tailscale MagicDNS split-DNS)
-  # Skipped on CSB — paired with resolv.conf guard; Ansible deliberately omits both on CSB (DHCP DNS remains active)
-  if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf 2>/dev/null; then
-    record "nm-dns-resolved" "PASS"
-  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "skipped on CSB — DHCP DNS active via systemd-resolved without NM override"
-  else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
-
-  # NM wifi-powersave=2 (prevents latency spikes and drops on ThinkPad)
-  if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf 2>/dev/null; then
-    record "nm-wifi-powersave" "PASS"
-  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "not deployed on CSB — run 'make all' to apply; Intel WiFi may suffer latency spikes under load until then"
-  else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
-
-  # NM unmanaged-devices for Tailscale (prevents NM from managing kind/OVN/Tailscale interfaces)
-  if grep -q 'interface-name:tailscale' /etc/NetworkManager/conf.d/tailscale.conf 2>/dev/null; then
-    record "nm-tailscale-unmanaged" "PASS"
-  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make all"; fi
-
   # Console keymap
   if grep -q '^KEYMAP=us$' /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
   else record "vconsole-keymap" "WARN" "KEYMAP=us not set in /etc/vconsole.conf"; fi
@@ -1116,17 +1267,20 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ "$_bpf_disabled" -ge "1" ]] 2>/dev/null; then record "sysctl-bpf-restrict" "PASS"
   elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
   else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
-  _sysctl_check "kernel.perf_event_paranoid"         "2" "sysctl-perf-paranoid"
+  _perf_expected=$(awk -F' *= *' '/^kernel\.perf_event_paranoid/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.perf_event_paranoid" "${_perf_expected:-1}" "sysctl-perf-paranoid"
   # bpf_jit_harden: read expected from deployed config (system_bpf_jit_harden in config.yml may override default 2).
   _bpf_jit_harden_expected=$(awk -F' *= *' '/^net\.core\.bpf_jit_harden/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.core.bpf_jit_harden" "${_bpf_jit_harden_expected:-2}" "sysctl-bpf-jit-harden"
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
-  # tcp_timestamps: CIS=0, but CSB sets it to 1 (IT network diagnostics require timestamps)
+  # tcp_timestamps: CIS 3.3.9 recommends 0; playbook default is 1 for OVN-K/Submariner RTTM/PAWS on high-BDP links.
+  # Set net.ipv4.tcp_timestamps: 0 in config.yml to comply with CIS (disables RTTM/PAWS).
   _ts=$(sysctl -n net.ipv4.tcp_timestamps 2>/dev/null || echo "?")
   if [[ "$_ts" == "0" ]]; then record "sysctl-tcp-timestamps" "PASS"
   elif $CSB_HOST && [[ "$_ts" == "1" ]]; then record "sysctl-tcp-timestamps" "WARN" "CSB: tcp_timestamps=1 (IT network diagnostics override CIS default 0)"
+  elif [[ "$_ts" == "1" ]]; then record "sysctl-tcp-timestamps" "WARN" "tcp_timestamps=1 (OVN-K/Submariner override of CIS 0; set net.ipv4.tcp_timestamps: 0 in config.yml to comply)"
   else record "sysctl-tcp-timestamps" "FAIL" "net.ipv4.tcp_timestamps=$_ts expected 0 (or 1 on CSB)"; fi
   _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
   _sysctl_check "net.ipv6.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects-v6"
@@ -1153,7 +1307,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
   else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
   if grep -q 'iommu=pt' /proc/cmdline 2>/dev/null; then record "iommu-pt" "PASS"
-  else record "iommu-pt" "WARN" "iommu=pt not in cmdline (requires reboot; needed for IOMMU passthrough)"; fi
+  elif grep -q 'iommu=pt' /etc/kernel/cmdline 2>/dev/null; then record "iommu-pt" "WARN" "iommu=pt in /etc/kernel/cmdline but not active (requires reboot)"; fi
   # Memory safety kernel params
   if grep -q 'init_on_free=1' /proc/cmdline 2>/dev/null; then record "init-on-free" "PASS"
   else record "init-on-free" "WARN" "init_on_free=1 not in cmdline (requires reboot)"; fi
@@ -1187,6 +1341,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.sysrq" "${_sysrq_expected:-0}" "sysctl-sysrq-disabled"
   # kernel.panic: hardcoded 10 (reboot-after-panic); no standalone override variable in config.yml.
   _sysctl_check "kernel.panic"                        "10" "sysctl-panic-reboot"
+  # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 1).
+  # Hardcoding 1 here would false-FAIL on machines with system_kernel_panic_on_oops: 0 (OVN-K/bpfman debugging).
+  _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.panic_on_oops" "${_panic_on_oops_expected:-1}" "sysctl-panic-on-oops"
   # accept_ra: read expected value from deployed config (system_ipv6_accept_ra in config.yml may override default 0).
   _accept_ra_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.ipv6.conf.all.accept_ra" "${_accept_ra_expected:-0}" "sysctl-no-accept-ra"
@@ -1203,6 +1361,51 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.core.rmem_max"                    "16777216" "sysctl-rmem-max"
   _sysctl_check "net.core.wmem_max"                    "16777216" "sysctl-wmem-max"
 
+fi
+
+# ---- File-gated checks (run always; silently skip where system role was not run) ----
+# These files ARE deployed by the system role in Fedora/Rocky/Debian container CI;
+# [[ -f ]] guards make them no-ops on macOS and container scenarios without the system role.
+
+# kernel module blacklist — always-present entries (cramfs, n_hdlc); vivid/usb_storage skipped
+# (usb_storage is conditional on system_disable_usb_storage and checked in the full gate above)
+if [[ -f /etc/modprobe.d/hardening.conf ]]; then
+  if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf && \
+     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf; then
+    record "modprobe-hardening" "PASS"
+  else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
+fi
+
+# NM conf.d content checks — file-gated; silently skip on macOS or where system role was not run
+if [[ -f /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf ]]; then
+  if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf; then
+    record "wifi-mac-rand" "PASS"
+  elif $CSB_HOST; then record "wifi-mac-rand" "WARN" "skipped on CSB — IT may use MAC-based NAC; stable-ssid not deployed"
+  else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi
+fi
+if [[ -f /etc/NetworkManager/conf.d/99-dns.conf ]]; then
+  # Skipped on CSB — paired with resolv.conf guard; Ansible deliberately omits both on CSB (DHCP DNS remains active)
+  if grep -q '^dns=systemd-resolved' /etc/NetworkManager/conf.d/99-dns.conf; then
+    record "nm-dns-resolved" "PASS"
+  elif $CSB_HOST; then record "nm-dns-resolved" "WARN" "skipped on CSB — DHCP DNS active via systemd-resolved without NM override"
+  else record "nm-dns-resolved" "FAIL" "NM dns=systemd-resolved not configured (/etc/NetworkManager/conf.d/99-dns.conf)"; fi
+fi
+if [[ -f /etc/NetworkManager/conf.d/99-wifi-powersave.conf ]]; then
+  if grep -q '^wifi.powersave=2' /etc/NetworkManager/conf.d/99-wifi-powersave.conf; then
+    record "nm-wifi-powersave" "PASS"
+  elif $CSB_HOST; then record "nm-wifi-powersave" "WARN" "not deployed on CSB — run 'make all' to apply; Intel WiFi may suffer latency spikes under load until then"
+  else record "nm-wifi-powersave" "WARN" "WiFi power saving not disabled (/etc/NetworkManager/conf.d/99-wifi-powersave.conf)"; fi
+fi
+if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then
+  if grep -q 'interface-name:tailscale' /etc/NetworkManager/conf.d/tailscale.conf; then
+    record "nm-tailscale-unmanaged" "PASS"
+  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make all"; fi
+fi
+
+# resolved.conf.d/99-dot.conf existence check (file-gated; silently skips on macOS or where system role was not run)
+# Runtime DoT negotiation is checked via resolvectl in the full gate above (live-value, not moved)
+if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
+  record "resolved-dot-conf" "PASS"
 fi
 
 # ---- Output ----

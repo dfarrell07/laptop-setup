@@ -28,6 +28,16 @@
     that: verify_gitconfig.stat.exists
     fail_msg: ".config/git/config was not deployed"
 
+- name: Stat legacy ~/.gitconfig (should be absent after XDG migration)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.gitconfig"
+  register: verify_legacy_gitconfig
+
+- name: Assert legacy ~/.gitconfig is absent (XDG migration complete)
+  ansible.builtin.assert:
+    that: not verify_legacy_gitconfig.stat.exists
+    fail_msg: "~/.gitconfig exists alongside ~/.config/git/config — XDG migration incomplete"
+
 - name: Verify .config/tmux/tmux.conf exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/tmux/tmux.conf"
@@ -269,6 +279,39 @@
     that: verify_bare_repo.stdout == 'explicit'
     fail_msg: "git safe.bareRepository is not set to explicit"
 
+- name: Check git protocol.allow
+  ansible.builtin.command: git config --global protocol.allow  # noqa: command-instead-of-module
+  register: verify_protocol_allow
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.allow is never
+  ansible.builtin.assert:
+    that: verify_protocol_allow.stdout == 'never'
+    fail_msg: "git protocol.allow is not set to never — arbitrary protocol escalation not blocked"
+
+- name: Check git protocol.https.allow
+  ansible.builtin.command: git config --global protocol.https.allow  # noqa: command-instead-of-module
+  register: verify_protocol_https
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.https.allow is always
+  ansible.builtin.assert:
+    that: verify_protocol_https.stdout == 'always'
+    fail_msg: "git protocol.https.allow is not set to always — HTTPS clones will be blocked"
+
+- name: Check git protocol.ssh.allow
+  ansible.builtin.command: git config --global protocol.ssh.allow  # noqa: command-instead-of-module
+  register: verify_protocol_ssh
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.ssh.allow is always
+  ansible.builtin.assert:
+    that: verify_protocol_ssh.stdout == 'always'
+    fail_msg: "git protocol.ssh.allow is not set to always — SSH clones will be blocked"
+
 - name: Check git gpg.format
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: git config --global gpg.format
@@ -333,6 +376,17 @@
   ansible.builtin.assert:
     that: verify_gitignore_global.stat.exists
     fail_msg: "~/.config/git/ignore was not deployed"
+
+- name: Check git core.excludesfile
+  ansible.builtin.command: git config --global core.excludesfile  # noqa: command-instead-of-module
+  register: verify_excludesfile
+  changed_when: false
+  failed_when: false
+
+- name: Assert core.excludesfile points to ~/.config/git/ignore
+  ansible.builtin.assert:
+    that: "verify_excludesfile.stdout | trim == '~/.config/git/ignore'"
+    fail_msg: "git core.excludesfile not set to ~/.config/git/ignore — global gitignore directive missing from gitconfig template"
 
 # --- Directories ---
 - name: Verify ~/bin directory exists
@@ -601,3 +655,147 @@
   when:
     - ansible_distribution in ['Fedora', 'Debian']
     - ansible_system == 'Linux'
+
+- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.x)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*noexec' /etc/fstab
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+# --- Sysctl hardening: file-content assertions (system role, Linux only) ---
+# Checks that the template was deployed without live kernel reads — safe in container CI.
+# No become: true needed because /etc/sysctl.d/90-hardening.conf is deployed mode 0644.
+- name: Stat sysctl hardening config (asserts system role ran)
+  ansible.builtin.stat:
+    path: /etc/sysctl.d/90-hardening.conf
+  register: verify_sysctl_file
+  when: ansible_system == 'Linux'
+
+- name: Assert sysctl hardening config deployed
+  ansible.builtin.assert:
+    that: verify_sysctl_file.stat.exists
+    fail_msg: "/etc/sysctl.d/90-hardening.conf not deployed — system role did not run"
+  when: ansible_system == 'Linux'
+
+- name: Check sysctl hardening config contains security-critical keys
+  ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  loop:
+    - kernel.yama.ptrace_scope
+    - kernel.dmesg_restrict
+    - kernel.kptr_restrict
+    - kernel.unprivileged_bpf_disabled
+    - kernel.io_uring_disabled
+    - net.ipv4.ip_forward
+    - net.bridge.bridge-nf-call-iptables
+    - net.ipv6.conf.all.forwarding
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_sysctl_file.stat.exists
+
+- name: Stat /etc/systemd/system/tmp.mount.d/hardening.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/system/tmp.mount.d/hardening.conf
+  register: verify_tmp_hardening
+  when: ansible_system == 'Linux'
+
+- name: Assert tmp.mount.d/hardening.conf deployed
+  ansible.builtin.assert:
+    that: verify_tmp_hardening.stat.exists
+    fail_msg: "/etc/systemd/system/tmp.mount.d/hardening.conf not deployed — system role did not run or template broken"
+  when: ansible_system == 'Linux'
+
+- name: Check tmp.mount.d/hardening.conf Options= line has nosuid,nodev,noexec
+  ansible.builtin.command: grep -qE '^Options=.*{{ item }}' /etc/systemd/system/tmp.mount.d/hardening.conf
+  loop:
+    - nosuid
+    - nodev
+    - noexec
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_tmp_hardening.stat.exists
+
+# --- sshd hardening drop-in: file-content assertions (system role, Linux only) ---
+# File is mode 0600 root:root — become: true required for stat and grep.
+# Catches directive-value regressions that pass sshd -t syntax validation.
+- name: Stat sshd hardening drop-in (asserts system role deployed it)
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/00-hardening.conf
+  register: verify_sshd_dropin
+  become: true
+  when: ansible_system == 'Linux'
+
+- name: Assert sshd hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_sshd_dropin.stat.exists
+    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf not deployed — system role did not run"
+  when: ansible_system == 'Linux'
+
+- name: Check sshd hardening drop-in contains critical directives
+  ansible.builtin.command: grep -q '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
+  loop:
+    - "PasswordAuthentication no"
+    - "PermitRootLogin no"
+    - "KbdInteractiveAuthentication no"
+    - "PermitEmptyPasswords no"
+    - "X11Forwarding no"
+    - "HostKeyAlgorithms ssh-ed25519"
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - verify_sshd_dropin.stat.exists
+
+- name: Stat /etc/systemd/resolved.conf.d/98-llmnr.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/resolved.conf.d/98-llmnr.conf
+  register: verify_llmnr_conf
+  when: ansible_system == 'Linux'
+
+- name: Assert 98-llmnr.conf deployed
+  ansible.builtin.assert:
+    that: verify_llmnr_conf.stat.exists
+    fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
+  when: ansible_system == 'Linux'
+
+- name: Check 98-llmnr.conf disables LLMNR and mDNS
+  ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  loop:
+    - "LLMNR=no"
+    - "MulticastDNS=no"
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_llmnr_conf.stat.exists
+
+# --- System role: service masking (Linux container CI) ---
+# Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.
+# failed_when: false + item.rc/stdout guards skip cleanly when a unit is absent from a
+# minimal image (e.g. cups-browsed not installed on debian slim).
+- name: Check UnitFileState for security-masked units
+  ansible.builtin.command: systemctl show -p UnitFileState --value {{ item }}
+  register: masked_unit_state
+  changed_when: false
+  failed_when: false
+  loop:
+    - cups-browsed
+    - avahi-daemon.service
+    - avahi-daemon.socket
+    - sshd.socket
+    - ctrl-alt-del.target
+  when: ansible_system == 'Linux'
+
+- name: Assert masked units are masked (skip if unit absent from image)
+  ansible.builtin.assert:
+    that: item.stdout == 'masked'
+    fail_msg: >-
+      {{ item.item }} UnitFileState is '{{ item.stdout }}', expected 'masked'
+      — system role masking task regression
+  loop: "{{ masked_unit_state.results }}"
+  when:
+    - ansible_system == 'Linux'
+    - item.rc == 0
+    - item.stdout | length > 0

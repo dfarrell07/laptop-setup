@@ -53,9 +53,10 @@
           Continuing playbook execution.
       when: not (csb_detected | default(false))
 
-# Enable bpfman.socket here (Play 2 packages role) in addition to system role (Play 1).
-# On first provision, bpfman isn't installed when Play 1 runs, so the system role's
-# enable attempt silently fails. This task enables the socket after the binary is present.
+# Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
+# was just installed in this play. The system role (Play 1) also attempts this, but
+# on first provision bpfman is not yet installed when Play 1 runs, so that attempt
+# is a no-op. Both roles use failed_when: false for container/macOS safety.
 - name: Enable bpfman.socket after package install (required for bpfman load/list to work)
   ansible.builtin.systemd:
     name: bpfman.socket
@@ -136,8 +137,9 @@
     - install_virtualization | default(true) | bool
     - real_user_id is defined
     - real_user_id | length > 0
-  # System role (Play 1) attempts this with failed_when:false because libvirt/kvm groups
-  # do not exist until packages are installed here. This task completes the membership.
+  failed_when: false
+  # System role (Play 1) and this task both use failed_when:false because libvirt/kvm groups
+  # may not exist if the package install was rescued. This task completes the membership.
 
 - name: Install apt packages (Debian/Ubuntu)
   when: ansible_pkg_mgr == 'apt'
@@ -310,11 +312,27 @@
             state: absent
 
   rescue:
+    - name: Record oc/kubectl download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "oc/kubectl"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install oc and kubectl manually from
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+        _csb_ticket_summary: "Cannot download oc/kubectl binary on CSB"
+        _csb_ticket_body: >-
+          oc and kubectl binaries could not be downloaded from mirror.openshift.com.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+      when: csb_detected | default(false)
+
     - name: Warn oc/kubectl download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download oc/kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+      when: not (csb_detected | default(false))
 
 - name: Install opm (Operator Package Manager)
   when:
@@ -416,11 +434,27 @@
             state: absent
 
   rescue:
+    - name: Record opm download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "opm"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install opm manually from
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+        _csb_ticket_summary: "Cannot download opm binary on CSB"
+        _csb_ticket_body: >-
+          opm binary could not be downloaded from mirror.openshift.com.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+      when: csb_detected | default(false)
+
     - name: Warn opm download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download opm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+      when: not (csb_detected | default(false))
 
 - name: Install kind
   when:
@@ -450,11 +484,26 @@
       until: packages_kind_download is succeeded
 
   rescue:
+    - name: Record kind download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "kind"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install kind manually from https://kind.sigs.k8s.io/dl/
+        _csb_ticket_summary: "Cannot download kind binary on CSB"
+        _csb_ticket_body: >-
+          kind binary could not be downloaded from kind.sigs.k8s.io.
+          Install manually from https://kind.sigs.k8s.io/dl/
+      when: csb_detected | default(false)
+
     - name: Warn kind download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download kind: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kind.sigs.k8s.io/dl/.
+      when: not (csb_detected | default(false))
 
 - name: Install helm
   when:
@@ -511,11 +560,26 @@
             state: absent
 
   rescue:
+    - name: Record helm download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "helm"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install helm manually from https://helm.sh/docs/intro/install/
+        _csb_ticket_summary: "Cannot download helm binary on CSB"
+        _csb_ticket_body: >-
+          helm binary could not be downloaded from get.helm.sh.
+          Install manually from https://helm.sh/docs/intro/install/
+      when: csb_detected | default(false)
+
     - name: Warn helm download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download helm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://helm.sh/docs/intro/install/.
+      when: not (csb_detected | default(false))
 
 - name: Install kustomize
   when:
@@ -572,11 +636,27 @@
             state: absent
 
   rescue:
+    - name: Record kustomize download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "kustomize"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install kustomize manually from
+          https://kubectl.docs.kubernetes.io/installation/kustomize/
+        _csb_ticket_summary: "Cannot download kustomize binary on CSB"
+        _csb_ticket_body: >-
+          kustomize binary could not be downloaded from github.com/kubernetes-sigs/kustomize.
+          Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/
+      when: csb_detected | default(false)
+
     - name: Warn kustomize download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download kustomize: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/.
+      when: not (csb_detected | default(false))
 
 # --- Standalone script/binary downloads ---
 
@@ -585,7 +665,15 @@
     - packages_install_binaries | default(true) | bool
     - ansible_system == 'Linux'
   block:
+    - name: Check if transcrypt is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/transcrypt --version
+      register: packages_transcrypt_check
+      changed_when: false
+      failed_when: false
+
     - name: Download transcrypt script
+      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout | default(''))
       ansible.builtin.get_url:
         url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
         dest: /usr/local/bin/transcrypt
@@ -598,11 +686,26 @@
       delay: 10
       until: packages_transcrypt_download is succeeded
   rescue:
+    - name: Record transcrypt download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "transcrypt"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install transcrypt manually from https://github.com/elasticdog/transcrypt
+        _csb_ticket_summary: "Cannot download transcrypt binary on CSB"
+        _csb_ticket_body: >-
+          transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
+          Install manually from https://github.com/elasticdog/transcrypt
+      when: csb_detected | default(false)
+
     - name: Warn transcrypt download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download transcrypt: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/elasticdog/transcrypt.
+      when: not (csb_detected | default(false))
 
 - name: Install SOPS
   when:
@@ -632,11 +735,26 @@
       until: packages_sops_download is succeeded
 
   rescue:
+    - name: Record sops download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "sops"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install sops manually from https://github.com/getsops/sops/releases
+        _csb_ticket_summary: "Cannot download sops binary on CSB"
+        _csb_ticket_body: >-
+          sops binary could not be downloaded from github.com/getsops/sops.
+          Install manually from https://github.com/getsops/sops/releases
+      when: csb_detected | default(false)
+
     - name: Warn sops download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download sops: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/getsops/sops/releases.
+      when: not (csb_detected | default(false))
 
 - name: Install operator-sdk
   when:
@@ -645,7 +763,15 @@
     - ansible_architecture == 'x86_64'
     - profile == 'work'
   block:
+    - name: Check if operator-sdk is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/operator-sdk version
+      register: packages_operator_sdk_check
+      changed_when: false
+      failed_when: false
+
     - name: Download operator-sdk binary
+      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout | default(''))
       vars:
         _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
       ansible.builtin.get_url:
@@ -661,11 +787,28 @@
       until: packages_operator_sdk_download is succeeded
 
   rescue:
+    - name: Record operator-sdk download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "operator-sdk"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install operator-sdk manually from
+          https://github.com/operator-framework/operator-sdk/releases
+        _csb_ticket_summary: "Cannot download operator-sdk binary on CSB"
+        _csb_ticket_body: >-
+          operator-sdk binary could not be downloaded from
+          github.com/operator-framework/operator-sdk.
+          Install manually from https://github.com/operator-framework/operator-sdk/releases
+      when: csb_detected | default(false)
+
     - name: Warn operator-sdk download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download operator-sdk: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/operator-framework/operator-sdk/releases.
+      when: not (csb_detected | default(false))
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
@@ -696,11 +839,26 @@
       until: packages_cosign_download is succeeded
 
   rescue:
+    - name: Record cosign download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "cosign"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install cosign manually from https://github.com/sigstore/cosign/releases
+        _csb_ticket_summary: "Cannot download cosign binary on CSB"
+        _csb_ticket_body: >-
+          cosign binary could not be downloaded from github.com/sigstore/cosign.
+          Install manually from https://github.com/sigstore/cosign/releases
+      when: csb_detected | default(false)
+
     - name: Warn cosign download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download cosign: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/sigstore/cosign/releases.
+      when: not (csb_detected | default(false))
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
@@ -755,11 +913,26 @@
             state: absent
 
   rescue:
+    - name: Record tkn download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "tkn"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install tkn manually from https://github.com/tektoncd/cli/releases
+        _csb_ticket_summary: "Cannot download tkn binary on CSB"
+        _csb_ticket_body: >-
+          tkn (Tekton CLI) binary could not be downloaded from github.com/tektoncd/cli.
+          Install manually from https://github.com/tektoncd/cli/releases
+      when: csb_detected | default(false)
+
     - name: Warn tkn download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download tkn: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/tektoncd/cli/releases.
+      when: not (csb_detected | default(false))
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
@@ -791,11 +964,26 @@
       until: packages_ec_download is succeeded
 
   rescue:
+    - name: Record ec download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "ec"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install ec manually from https://github.com/conforma/cli/releases
+        _csb_ticket_summary: "Cannot download ec binary on CSB"
+        _csb_ticket_body: >-
+          ec (Enterprise Contract CLI) binary could not be downloaded from github.com/conforma/cli.
+          Install manually from https://github.com/conforma/cli/releases
+      when: csb_detected | default(false)
+
     - name: Warn ec download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download ec: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/conforma/cli/releases.
+      when: not (csb_detected | default(false))
 
 - name: Install k9s (Kubernetes TUI)
   when:
@@ -846,11 +1034,26 @@
             state: absent
 
   rescue:
+    - name: Record k9s download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "k9s"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install k9s manually from https://github.com/derailed/k9s/releases
+        _csb_ticket_summary: "Cannot download k9s binary on CSB"
+        _csb_ticket_body: >-
+          k9s binary could not be downloaded from github.com/derailed/k9s.
+          Install manually from https://github.com/derailed/k9s/releases
+      when: csb_detected | default(false)
+
     - name: Warn k9s download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download k9s: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/derailed/k9s/releases.
+      when: not (csb_detected | default(false))
 
 # --- Go install tools ---
 
@@ -858,11 +1061,10 @@
   # No 'creates:' guard — version bumps in packages_go_install would be silently
   # ignored if the binary already exists. 'go install' with a pinned version is
   # fast when the module cache is warm (skips recompile). 'changed_when: true'
-  # reports every run as changed; for pinned tools this is a minor false positive,
-  # but it is necessary so that @latest entries (gofumpt, govulncheck, gci, gopls,
-  # stern) give the operator a visible signal when a binary actually changes.
-  # NOTE: entries using @latest are intentionally non-idempotent — the installed
-  # binary can change on each run.
+  # reports every run as changed; all entries in packages_go_install are pinned
+  # versions so this is an accepted false positive on every run — do NOT add
+  # @latest entries; they are not specially handled and would make the list
+  # permanently non-idempotent with no additional benefit.
   # See packages_go_install in defaults/main.yml for rationale and pinning guidance.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
@@ -893,18 +1095,18 @@
 # --- pip/pipx installs ---
 
 - name: Install pipx packages (yamllint, ansible-lint)
-  when: ansible_pkg_mgr in ['dnf', 'dnf5', 'apt']
+  when:
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'apt']
+    - packages_install_binaries | default(true) | bool
   block:
     - name: Install yamllint (pipx, version-pinned)
       community.general.pipx:
-        name: yamllint
-        source: "yamllint=={{ packages_yamllint_version }}"
+        name: "yamllint=={{ packages_yamllint_version }}"
         state: install
 
     - name: Install ansible-lint (pipx, version-pinned)
       community.general.pipx:
-        name: ansible-lint
-        source: "ansible-lint=={{ packages_ansible_lint_version }}"
+        name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
   rescue:
     - name: Warn pipx install failed
@@ -923,7 +1125,7 @@
   block:
     - name: Check if krew is installed at target version
       ansible.builtin.command:
-        cmd: "{{ ansible_user_dir }}/.krew/bin/krew version"
+        cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew version"
       register: packages_krew_check
       changed_when: false
       failed_when: false
@@ -944,13 +1146,13 @@
       when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.unarchive:
         src: /tmp/krew.tar.gz
-        dest: /tmp
+        dest: "{{ ansible_user_dir }}/.local/bin"
         remote_src: true
 
     - name: Run krew installer
       when: packages_krew_version not in (packages_krew_check.stdout | default(''))
       ansible.builtin.command:
-        cmd: /tmp/krew-linux_amd64 install krew
+        cmd: "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64 install krew"
       changed_when: true
 
     - name: Clean up krew installer files
@@ -960,14 +1162,33 @@
         state: absent
       loop:
         - /tmp/krew.tar.gz
-        - /tmp/krew-linux_amd64
+        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64"
+        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64.yaml"
+        - "{{ ansible_user_dir }}/.local/bin/LICENSE"
 
   rescue:
+    - name: Record krew installation failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "krew"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install krew manually from
+          https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+        _csb_ticket_summary: "Cannot install krew on CSB"
+        _csb_ticket_body: >-
+          krew (kubectl plugin manager) could not be downloaded or installed from
+          github.com/kubernetes-sigs/krew.
+          Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+      when: csb_detected | default(false)
+
     - name: Warn krew installation failed
       ansible.builtin.debug:
         msg: >-
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
+      when: not (csb_detected | default(false))
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:

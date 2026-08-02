@@ -10,9 +10,6 @@
 [commit]
 	gpgsign = true
 
-[tag]
-	gpgsign = true
-
 [gpg]
 	format = ssh
 
@@ -24,6 +21,9 @@
 	sort = -committerdate
 
 [tag]
+{% if ssh_git_signing_pubkey | default('') | length > 0 %}
+	gpgsign = true
+{% endif %}
 	sort = -version:refname
 
 [push]

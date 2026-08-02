@@ -99,6 +99,18 @@
         fail_msg: "notes .git/config should be 0600"
       when: verify_notes.stat.exists and verify_notes_config.stat.exists
 
+    - name: Stat notes directory for permission check
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes"
+      register: verify_notes_dir
+      when: verify_notes.stat.exists
+
+    - name: Assert notes directory is mode 0700
+      ansible.builtin.assert:
+        that: verify_notes_dir.stat.mode == '0700'
+        fail_msg: "notes/ should be 0700 — world-readable notes regression"
+      when: verify_notes.stat.exists
+
     # --- Desktop role ---
     - name: Verify Alacritty config deployed
       ansible.builtin.stat:
@@ -130,3 +142,41 @@
     # --- Containers ---
     - name: Include containers.conf assertions
       ansible.builtin.include_tasks: ../shared/verify-containers.yml
+
+    # --- PAM faillock (Debian) ---
+    - name: Check pam_faillock.so preauth line in common-auth (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^auth\s+required\s+pam_faillock\.so\s+preauth' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Check pam_faillock.so authfail line in common-auth (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Check pam_faillock.so account line in common-account (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^account\s+required\s+pam_faillock\.so$' /etc/pam.d/common-account
+      changed_when: false
+      become: true
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Check faillock.conf deny = 5 (Debian)
+      ansible.builtin.command:
+        cmd: grep -q '^deny = 5' /etc/security/faillock.conf
+      changed_when: false
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Check git user.email is personal email
+      ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
+      register: verify_git_email_personal
+      changed_when: false
+
+    - name: Assert git email is personal profile
+      ansible.builtin.assert:
+        that: "dotfiles_user_email_personal in verify_git_email_personal.stdout"
+        fail_msg: "git user.email is not set to the personal address — profile conditional regression in gitconfig.j2?"

@@ -101,3 +101,188 @@
     - usbguard_expected | default(false)
     - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
     - verify_usbguard_pkg_shared.rc == 0
+
+# --- sshd hardening inline assertions ---
+# Gated on config file presence so these fire only when the system role deployed
+# sshd hardening (the deploy task itself is gated on sshd.service being defined).
+# Silently skipped in container scenarios where sshd-server is not installed.
+# systemctl is-enabled assertion intentionally omitted — systemd is mocked in
+# Podman containers (see usbguard note above); service enablement is verified by
+# the VM scenario which runs a full root smoke-test.
+- name: Stat /etc/ssh/sshd_config.d/00-hardening.conf (shared)
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/00-hardening.conf
+  register: sshd_conf_stat
+  become: true
+
+- name: Assert /etc/ssh/sshd_config.d/00-hardening.conf exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - sshd_conf_stat.stat.exists
+      - sshd_conf_stat.stat.mode == '0600'
+    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions (expected 0600)"
+  when: sshd_conf_stat.stat.exists
+
+- name: Check sshd hardening directives in 00-hardening.conf (shared)
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
+  loop:
+    - 'PasswordAuthentication no'
+    - 'PermitRootLogin no'
+    - 'PermitEmptyPasswords no'
+    - 'X11Forwarding no'
+    - 'AllowAgentForwarding no'
+  changed_when: false
+  become: true
+  when: sshd_conf_stat.stat.exists
+
+- name: Check sshd HostKeyAlgorithms includes ssh-ed25519 (shared)
+  ansible.builtin.command: grep -qE 'HostKeyAlgorithms.*ssh-ed25519' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa:
+  become: true
+  when: sshd_conf_stat.stat.exists
+
+- name: Check sshd algorithm hardening directives present in 00-hardening.conf (shared)
+  ansible.builtin.command: grep -qE '^{{ item }} ' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
+  loop:
+    - 'Ciphers'
+    - 'MACs'
+    - 'KexAlgorithms'
+  changed_when: false
+  become: true
+  when: sshd_conf_stat.stat.exists
+
+# --- Service masking inline assertions ---
+# Gated on UnitFileState being non-empty so these are silently skipped when the
+# unit is completely unknown to systemd (failed_when: false absorbs the module
+# error; the when guard skips the assert when status.UnitFileState is absent).
+# Fires in Fedora, Rocky, and Debian CI (all include this file and all run the
+# system role in converge). Does not fire in the container scenario (its
+# verify.yml does not include verify-smoke.yml).
+- name: Check cups-browsed service state (shared)
+  ansible.builtin.systemd:
+    name: cups-browsed
+  register: verify_cups_shared
+  become: true
+  failed_when: false
+
+- name: Assert cups-browsed is masked (shared)
+  ansible.builtin.assert:
+    that: verify_cups_shared.status.UnitFileState == 'masked'
+    fail_msg: "cups-browsed is not masked"
+  when: verify_cups_shared.status.UnitFileState | default('') != ''
+
+- name: Check avahi-daemon.service state (shared)
+  ansible.builtin.systemd:
+    name: avahi-daemon.service
+  register: verify_avahi_service_shared
+  become: true
+  failed_when: false
+
+- name: Assert avahi-daemon.service is masked (shared)
+  ansible.builtin.assert:
+    that: verify_avahi_service_shared.status.UnitFileState == 'masked'
+    fail_msg: "avahi-daemon.service is not masked"
+  when: verify_avahi_service_shared.status.UnitFileState | default('') != ''
+
+- name: Check avahi-daemon.socket state (shared)
+  ansible.builtin.systemd:
+    name: avahi-daemon.socket
+  register: verify_avahi_socket_shared
+  become: true
+  failed_when: false
+
+- name: Assert avahi-daemon.socket is masked (shared)
+  ansible.builtin.assert:
+    that: verify_avahi_socket_shared.status.UnitFileState == 'masked'
+    fail_msg: "avahi-daemon.socket is not masked"
+  when: verify_avahi_socket_shared.status.UnitFileState | default('') != ''
+
+- name: Check nfs-server.service state (shared)
+  ansible.builtin.systemd:
+    name: nfs-server.service
+  register: verify_nfs_server_shared
+  become: true
+  failed_when: false
+
+- name: Assert nfs-server.service is masked (shared)
+  ansible.builtin.assert:
+    that: verify_nfs_server_shared.status.UnitFileState == 'masked'
+    fail_msg: "nfs-server.service is not masked"
+  when: verify_nfs_server_shared.status.UnitFileState | default('') != ''
+
+- name: Check rpcbind.service state (shared)
+  ansible.builtin.systemd:
+    name: rpcbind.service
+  register: verify_rpcbind_service_shared
+  become: true
+  failed_when: false
+
+- name: Assert rpcbind.service is masked (shared)
+  ansible.builtin.assert:
+    that: verify_rpcbind_service_shared.status.UnitFileState == 'masked'
+    fail_msg: "rpcbind.service is not masked"
+  when: verify_rpcbind_service_shared.status.UnitFileState | default('') != ''
+
+- name: Check rpcbind.socket state (shared)
+  ansible.builtin.systemd:
+    name: rpcbind.socket
+  register: verify_rpcbind_socket_shared
+  become: true
+  failed_when: false
+
+- name: Assert rpcbind.socket is masked (shared)
+  ansible.builtin.assert:
+    that: verify_rpcbind_socket_shared.status.UnitFileState == 'masked'
+    fail_msg: "rpcbind.socket is not masked"
+  when: verify_rpcbind_socket_shared.status.UnitFileState | default('') != ''
+
+- name: Check cockpit.service state (shared)
+  ansible.builtin.systemd:
+    name: cockpit.service
+  register: verify_cockpit_service_shared
+  become: true
+  failed_when: false
+
+- name: Assert cockpit.service is masked (shared)
+  ansible.builtin.assert:
+    that: verify_cockpit_service_shared.status.UnitFileState == 'masked'
+    fail_msg: "cockpit.service is not masked"
+  when: verify_cockpit_service_shared.status.UnitFileState | default('') != ''
+
+- name: Check cockpit.socket state (shared)
+  ansible.builtin.systemd:
+    name: cockpit.socket
+  register: verify_cockpit_socket_shared
+  become: true
+  failed_when: false
+
+- name: Assert cockpit.socket is masked (shared)
+  ansible.builtin.assert:
+    that: verify_cockpit_socket_shared.status.UnitFileState == 'masked'
+    fail_msg: "cockpit.socket is not masked"
+  when: verify_cockpit_socket_shared.status.UnitFileState | default('') != ''
+
+- name: Check ctrl-alt-del.target state (shared)
+  ansible.builtin.systemd:
+    name: ctrl-alt-del.target
+  register: verify_cad_shared
+  become: true
+  failed_when: false
+
+- name: Assert ctrl-alt-del.target is masked (shared)
+  ansible.builtin.assert:
+    that: verify_cad_shared.status.UnitFileState == 'masked'
+    fail_msg: "ctrl-alt-del.target is not masked"
+  when: verify_cad_shared.status.UnitFileState | default('') != ''
+
+- name: Check passim service state (shared)
+  ansible.builtin.systemd:
+    name: passim
+  register: verify_passim_shared
+  become: true
+  failed_when: false
+
+- name: Assert passim is masked (shared)
+  ansible.builtin.assert:
+    that: verify_passim_shared.status.UnitFileState == 'masked'
+    fail_msg: "passim is not masked — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"
+  when: verify_passim_shared.status.UnitFileState | default('') != ''

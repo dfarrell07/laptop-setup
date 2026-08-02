@@ -263,6 +263,20 @@
         - verify_tlp_pkg.rc == 0
         - verify_tlp_conf.stat.exists
 
+    - name: Check power-profiles-daemon is masked (conflicts with TLP)
+      ansible.builtin.systemd:
+        name: power-profiles-daemon
+      register: verify_ppd
+      become: true
+      failed_when: false
+      when: verify_tlp_pkg.rc == 0
+
+    - name: Assert power-profiles-daemon is masked when TLP is active
+      ansible.builtin.assert:
+        that: verify_ppd.status.UnitFileState == 'masked'
+        fail_msg: "power-profiles-daemon is not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"
+      when: verify_tlp_pkg.rc == 0 and verify_ppd.status.UnitFileState | default('') != ''
+
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
     - name: Verify claude-queue.service deployed
       ansible.builtin.stat:
@@ -311,3 +325,14 @@
           - verify_claude_queue_repos_conf.stat.exists
           - verify_claude_queue_repos_conf.stat.mode == '0600'
         fail_msg: "queue-repos.conf missing or wrong permissions — expected 0600"
+
+    # --- System role: DNS-over-TLS ---
+    - name: Stat DNS-over-TLS config
+      ansible.builtin.stat:
+        path: /etc/systemd/resolved.conf.d/99-dot.conf
+      register: verify_dot
+
+    - name: Assert DNS-over-TLS config deployed
+      ansible.builtin.assert:
+        that: verify_dot.stat.exists
+        fail_msg: "DNS-over-TLS config not deployed — system role regression"

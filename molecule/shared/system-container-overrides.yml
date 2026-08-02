@@ -2,6 +2,9 @@
 # Shared container-safe overrides for the system role in all molecule CI scenarios.
 # Included by molecule/{fedora,rocky,debian}/converge.yml system role pre_tasks.
 # Prevents container-incompatible tasks from running in Podman-based CI scenarios.
+# NOTE: sshd hardening IS intentionally exercised in container CI — openssh-server is
+# installed via a pre_task in each converge.yml before the system role runs, so the
+# sshd block is NOT skipped (unlike the genuinely container-incompatible behaviors below).
 - name: Override for container testing (system role)
   ansible.builtin.set_fact:
     system_disable_usb_storage: false    # USB modprobe blacklisting is meaningless in containers
@@ -11,7 +14,11 @@
     install_virtualization: false         # libvirt not needed in CI container
     system_var_tmp_noexec: false          # var-tmp.mount unit fails in containers without systemd
     system_disable_fingerprint: false     # fprintd masking fails silently in containers; skip entirely
+                                          # CI gap: fprintd masking (systemctl mask + /dev/null symlink) is NOT
+                                          # exercised by any Podman-based scenario — make test-vm is required for
+                                          # full fprintd masking coverage
     system_tlp_enabled: false             # TLP/ppd service ops fail in containers
     real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert
     packages_install_binaries: false      # no binary downloads in container CI
     ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
+    ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI

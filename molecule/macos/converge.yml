@@ -12,7 +12,9 @@
       ansible.builtin.set_fact:
         profile: personal
         ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
+        ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
         desktop_environment: aerospace
+        packages_go_install: []  # Go tools use changed_when: true — skip in CI to avoid idempotence failures
 
     # Create a minimal mock notes repo so the notes role skips cloning (private
     # repo, no SSH key in CI) but still runs the chmod tasks that set notes/

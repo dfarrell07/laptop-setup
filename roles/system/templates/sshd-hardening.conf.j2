@@ -2,7 +2,17 @@
 # Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
 
 Port {{ ssh_port }}
+{% if not (csb_detected | default(false)) %}
 Banner /etc/issue.net
+{% endif %}
+# WARNING: password auth is disabled. Before running make all, ensure
+# ~/.ssh/authorized_keys holds at least one ssh-ed25519 or
+# sk-ssh-ed25519@openssh.com key — RSA/ECDSA are silently rejected by
+# PubkeyAcceptedAlgorithms below. A missing or wrong-type key causes a
+# complete SSH lockout once sshd restarts. If no hardware key is available:
+#   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local -C "local-bootstrap"
+#   cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
+# Alternatively, populate vault.yml with vault_ssh_auth_key_pub (ed25519).
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
@@ -22,7 +32,7 @@ LoginGraceTime 30
 
 X11Forwarding no
 AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | default('no') }}
-AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default('no') }}
+AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default('local') }}
 
 ClientAliveInterval 300
 ClientAliveCountMax 2
@@ -31,7 +41,7 @@ ClientAliveCountMax 2
 # OpenSSH 10.3 (bz3827) fixed UnusedConnectionTimeout firing prematurely after a
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
-ChannelTimeout session=10m
+{% if system_ssh_channel_timeout | default('') %}ChannelTimeout {{ system_ssh_channel_timeout }}{% endif %}
 UnusedConnectionTimeout 600
 TCPKeepAlive no
 LogLevel VERBOSE

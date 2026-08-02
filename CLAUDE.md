@@ -25,7 +25,8 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    must use SSH, run inside tmux first: `tmux new-session -s provision 'make all'`
 5. After provisioning, see `references/troubleshooting.md` for common surprises:
    SSH now on port 722, CUPS masked, TMOUT=600 in shells, USB storage kernel-blocked,
-   AllowTcpForwarding no (VS Code port panel needs `system_ssh_allow_tcp_forwarding: local`)
+   AllowTcpForwarding local (set "no" in config.yml to disable; set "yes" for remote forwards too),
+   IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router provides IPv6 via RA; value 1 does not work when forwarding=1)
 6. Required manual actions after `make all`:
    - **Reboot** — kernel security params (lockdown, IOMMU, vsyscall, init_on_free) only
      take effect after a reboot. SSH will be on port 722 after reboot.
@@ -126,7 +127,7 @@ make repos-cncf       # CNCF repos only
   AIDE disabled by default; enable only with a log consumer), `system_tmout` (600 s inactivity timeout,
   CIS; set 0 to disable), `system_disable_usb_storage` (true — USB drives kernel-blocked), `system_kernel_lockdown`
   (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging), `system_ipv6_accept_ra`
-  (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (no — set 'local' for VS Code port forwarding),
+  (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (local — set "no" to disable port forwarding; "yes" for both -L and -R),
   `system_dns_domains` (~. — catch-all for Tailscale MagicDNS), `system_ssh_max_sessions` (10),
   `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `system_lid_switch`.
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`

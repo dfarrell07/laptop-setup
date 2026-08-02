@@ -79,6 +79,18 @@
         fail_msg: "notes .git/config should be 0600"
       when: verify_notes.stat.exists and verify_notes_config.stat.exists
 
+    - name: Stat notes directory for permission check
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/notes"
+      register: verify_notes_dir
+      when: verify_notes.stat.exists
+
+    - name: Assert notes directory is mode 0700
+      ansible.builtin.assert:
+        that: verify_notes_dir.stat.mode == '0700'
+        fail_msg: "notes/ should be 0700 — world-readable notes regression"
+      when: verify_notes.stat.exists
+
     # --- Desktop role ---
     - name: Verify Alacritty config deployed
       ansible.builtin.stat:
@@ -131,3 +143,14 @@
       ansible.builtin.assert:
         that: not (fapolicyd_installed | default(true))
         fail_msg: "fapolicyd_installed is true on Rocky molecule host — CSB detection false positive"
+
+    # --- System role: DNS-over-TLS ---
+    - name: Stat DNS-over-TLS config
+      ansible.builtin.stat:
+        path: /etc/systemd/resolved.conf.d/99-dot.conf
+      register: verify_dot
+
+    - name: Assert DNS-over-TLS config deployed
+      ansible.builtin.assert:
+        that: verify_dot.stat.exists
+        fail_msg: "DNS-over-TLS config not deployed — system role regression"

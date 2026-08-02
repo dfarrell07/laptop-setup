@@ -21,6 +21,11 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Install openssh-server so sshd hardening block is exercised in container CI
+      ansible.builtin.apt:
+        name: openssh-server
+        state: present
+
   roles:
     - role: system
 
@@ -35,6 +40,7 @@
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
+        notes_enabled: true
         # packages_install_binaries and ssh_signing_key_pub are in molecule/shared/system-container-overrides.yml
 
     # Create a minimal mock notes repo so the notes role skips cloning (private

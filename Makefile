@@ -5,7 +5,7 @@
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container \
        ci syntax-check shellcheck markdownlint commitlint \
-       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline \
+       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries \
        preflight guard-not-root \
        pip-lock pip-sync
 
@@ -153,7 +153,7 @@ check:
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
-ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline
+ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-packages-binaries
 
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
@@ -221,6 +221,9 @@ test-container: .venv
 # Idempotence skipped (download always fails, rescue debug fires every run).
 test-container-offline: .venv
 	.venv/bin/molecule test -s container-offline
+
+test-packages-binaries: .venv
+	.venv/bin/molecule test -s packages-binaries
 
 test-vm: .venv
 	.venv/bin/molecule test -s vm

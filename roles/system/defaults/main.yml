@@ -19,7 +19,6 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
-  net.ipv4.conf.all.rp_filter: 2  # loose mode (not CIS strict=1): Tailscale and OVN-K overlay use asymmetric routes
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
@@ -39,8 +38,7 @@ system_sysctl_hardening:
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
   net.ipv4.tcp_timestamps: 1      # kernel default; 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
-  kernel.kexec_load_disabled: 1   # CIS — prevent loading new kernel via kexec (preserves Secure Boot chain of trust);
-  # set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump impossible even with kdump-utils installed
+  # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
   # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
   # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   fs.inotify.max_user_watches: 1048576
@@ -56,6 +54,11 @@ system_sysctl_hardening:
   # note: use_tempaddr omitted — SLAAC is disabled via system_ipv6_accept_ra, so tempaddr has no effect
 
 # Firewall
+# True on standard Fedora (csb_detected=false) and Fedora hybrid (csb_detected=true, not RHEL).
+# False on RHEL CSB (csb_detected=true AND ansible_distribution='Fedora' is false) where IT
+# manages zone policy. Override in config.yml to force-enable or force-disable zone management.
+system_firewall_manage_zone: "{{ not (csb_detected | default(false) and ansible_distribution != 'Fedora') }}"
+
 system_firewall_icmp_types:
   - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed
   - packet-too-big
@@ -71,8 +74,9 @@ system_enable_libvirtd: "{{ install_virtualization | default(true) }}"
 system_enable_mullvad: "{{ install_vpn | default(true) }}"
 
 # Core dumps
-system_coredump_storage: none
-system_coredump_process_size_max: 0
+system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
+# 'none' disables collection entirely; 'journal' embeds core in journald (adds size pressure, requires extra extraction step)
+system_coredump_process_size_max: 2G  # max core dump size; 0 disables collection; 2G matches systemd upstream default
 
 # USBGuard
 system_install_usbguard: true
@@ -106,6 +110,12 @@ system_timezone: America/New_York
 system_locale: en_US.UTF-8
 system_keymap: us
 system_tmout: 600  # CIS 5.5.5: session inactivity timeout in seconds (must be <= 900); set 0 to disable
+system_faillock_deny: 5        # PAM lockout: failed attempts before account lock
+system_faillock_unlock_time: 900  # seconds before auto-unlock after 5 failed attempts (CIS); set 300 on LUKS-encrypted single-user dev
+system_faillock_even_deny_root: true  # lock root on failed attempts; set false on single-user (root SSH blocked by PermitRootLogin no)
+system_pwquality_ucredit: -1   # uppercase credit: -1 = require at least 1 uppercase; 0 = no requirement
+system_pwquality_lcredit: -1   # lowercase credit: -1 = require at least 1 lowercase; 0 = no requirement
+system_pwquality_ocredit: -1   # other/special credit: -1 = require at least 1 special char; 0 = no requirement
 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
@@ -131,6 +141,7 @@ system_disable_printing: true
 # required for ThinkPad P16v AMD Bluetooth mouse. Set true in config.yml to blacklist BT.
 system_disable_bluetooth: false
 system_disable_fingerprint: true  # mask fprintd — set false in config.yml to enable fingerprint auth
+system_disable_avahi: true  # mask avahi-daemon (mDNS/DNS-SD); set false in config.yml for .local hostname resolution or DNS-SD lab tooling
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
 # Dangerous bits omitted from 176: raw-console(4), proc-signals/OOM-kill(64), crash(not in std bitmask).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
@@ -154,6 +165,7 @@ system_bpf_jit_harden: 1
 # Set both to 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging.
 system_kernel_panic: 10       # set 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging
 system_kernel_panic_on_oops: 1  # CIS 1.5.3; set 0 in config.yml to allow system to continue after non-fatal oops
+system_init_on_free: true  # zero freed memory pages (init_on_free=1 kernel param); set false in config.yml to disable
 # ptrace scope: 1=restrict to parent process only (CIS; value 2=admin-only, 3=none); 0=unrestricted within
 # user namespace (Fedora workstation default). For OVN-K/bpfman kernel development, set 0 in config.yml
 # to allow gdb -p and strace -p on your own running processes without sudo.
@@ -164,6 +176,11 @@ system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; 
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
+# kexec_load_disabled: 1=block kexec (CIS — prevents loading a new kernel at runtime,
+# preserving Secure Boot chain of trust). Even with Secure Boot disabled, kexec_load_disabled=1
+# makes kdump impossible (kdump uses kexec to jump into the crash kernel). Set 0 in config.yml
+# if kdump is required on this machine (e.g. kernel debug or production crash capture).
+system_kexec_load_disabled: 1
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
@@ -184,7 +201,7 @@ real_user_id: "{{ lookup('env', 'USER') }}"  # noqa: var-naming[no-role-prefix]
 # Must match ssh_port in default.config.yml (currently 722); update both together.
 ssh_port: 722  # noqa: var-naming[no-role-prefix]
 system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
-system_ssh_allow_tcp_forwarding: "no"  # 'local' for VS Code port-forwarding panel / ssh -L; 'remote' for ssh -R; 'yes' for both
+system_ssh_channel_timeout: ""  # disabled: sshd 10.2p1 (Fedora 44) has bz3827 — UnusedConnectionTimeout fires immediately after
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
@@ -198,11 +215,28 @@ system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"
 # ~. = catch-all required for Tailscale MagicDNS; VPN routing domains (redhat.com, ts.net) always win by specificity
 system_dns_domains: "~."
 
+# /tmp mount hardening (CIS 1.1.2.x): noexec,nosuid,nodev via systemd drop-in.
+# Set false if non-Go dev tools (pip, cargo, etc.) need to exec from /tmp; nosuid/nodev are preserved.
+system_tmp_noexec: true
 # /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
 # Set false if workloads require executable files in /var/tmp (some RPM scriptlets, build tools).
+# WARNING: when true, /var/tmp becomes a tmpfs alias of /tmp — all contents are silently lost on
+# reboot (FHS requires /var/tmp to persist). Set false if any workload stages persistent data there.
 system_var_tmp_noexec: true
+# /home nosuid force: on RHEL CSB-detected machines the nosuid tasks are skipped because
+# IT-managed NFS/autofs home directories may break with nosuid. Set true in config.yml
+# when /home is a known local mount on a RHEL CSB machine and nosuid is safe to apply.
+# NOTE: on Fedora hybrid (csb_detected=true, Fedora distribution), nosuid is applied
+# regardless of this flag — /home is a local btrfs partition and nosuid is always safe.
+system_home_nosuid_force: false
 # LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
 # LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
 # If rd.luks.key is active and you set this true, the machine will require manual LUKS
 # passphrase entry on every reboot after provisioning. Default: false (preserve keyfile auth).
 system_remove_luks_key: false
+# IOMMU passthrough mode for VFIO/libvirt PCI passthrough: set true only when actively
+# assigning PCI devices to VMs. Enabling iommu=pt bypasses DMA remapping for all devices
+# not assigned to a VM, trading full DMA isolation for passthrough performance.
+system_iommu_passthrough: false
+# system_wifi_mac_rand: not set — defaults true on non-CSB, false on CSB; override in config.yml
+system_enable_cockpit: false  # set true to unmask cockpit web console (port 9090); drop zone still blocks external access

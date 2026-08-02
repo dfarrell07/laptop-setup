@@ -51,8 +51,8 @@ packages_containers:
   - buildah
   - skopeo
   - distrobox
-  - kubernetes-client  # kubectl — needed on all profiles for KIND cluster interaction
-
+  - kubectl  # kubectl — needed on all profiles for KIND cluster interaction; 'kubernetes-client' is a RHEL-only name, Fedora uses 'kubectl'
+  - kubectl  # needed on all profiles for KIND; Fedora package name (not kubernetes-client which is RHEL-only)
 packages_virtualization:
   - libvirt
   - libvirt-client
@@ -162,7 +162,8 @@ packages_ansible_lint_version: "26.6.0"
 # Also governs opm download — opm co-releases with oc on mirror.openshift.com.
 # kubectl is extracted from the same OCP tarball (openshift-client-linux.tar.gz)
 # and therefore tracks the OCP release cadence, not upstream Kubernetes.  OCP 4.22
-# ships Kubernetes 1.31.  If you need a newer kubectl for upstream clusters, replace
+# ships Kubernetes 1.35 (OCP 4.x → k8s 1.(x+13); update this line when
+# packages_oc_version changes).  If you need a newer kubectl for upstream clusters, replace
 # the Extract task in tasks/main.yml with a standalone dl.k8s.io download and pin
 # packages_kubectl_version independently.
 packages_oc_version: "4.22.6"

@@ -101,11 +101,12 @@ CSB manages the firewall centrally. STIG requires the `drop` zone and admin-mana
 
 **Fix:**
 - On CSB, the playbook detects `csb_detected` and skips the drop-zone, ICMP-inversion, and SSH-port tasks entirely — they are omitted, not rescued. Port 722 is never added to the drop zone on CSB (the drop zone has no interface there), so the task would create a dead rule. Provisioning completes without a firewall failure on CSB.
+- On **hybrid Fedora CSB** (`csb_detected=true`, Fedora distribution, no fapolicyd): the playbook does open port 722 in the default firewall zone (typically `FedoraWorkstation`) so the primary NIC remains reachable after provisioning. No IT ticket needed for this tier.
 - Do not attempt to set the default zone or add custom rules without confirmed sudo access.
 - For Tailscale: userspace networking mode avoids all firewall changes.
 - On non-CSB machines (Fedora, macOS), firewall tasks should work normally with `--ask-become-pass`.
 
-**CSB IT ticket:** Only if SSH on port 722 must be reachable from non-Tailscale sources on CSB. The playbook skips the drop-zone and SSH-port tasks on CSB (no provisioning failure). Port 722 over Tailscale requires no IT ticket.
+**CSB IT ticket:** Only if SSH on port 722 must be reachable from non-Tailscale sources on **full RHEL CSB** (fapolicyd enforcing). On hybrid Fedora CSB, the playbook handles port 722 automatically. Port 722 over Tailscale requires no IT ticket on any tier.
 
 ---
 
@@ -721,7 +722,7 @@ systemctl is-active bpfman.socket    # may be inactive until first client connec
 bpfman list                          # triggers socket activation; should return without error
 ```
 
-**Fix:** If `bpfman.socket` is not enabled, re-run the playbook (`make all`) to re-trigger the `Enable bpfman socket` task in `roles/system/tasks/main.yml`. The task has `failed_when: false` to allow headless/container provisioning where systemd is absent.
+**Fix:** If `bpfman.socket` is not enabled, re-run the playbook (`make all`) to re-trigger the `Enable bpfman.socket` tasks in both `roles/system/tasks/main.yml` (Play 1, detect-then-enable) and `roles/packages/tasks/main.yml` (Play 2, after package install). Both tasks have `failed_when: false` to allow headless/container provisioning where systemd is absent.
 
 **CSB IT ticket:** No. Socket enable is a user-space systemd unit requiring only sudo.
 
@@ -849,7 +850,7 @@ system_dot_mode: "no"
 
 **Symptom:** `pip install`, `cargo build`, `dnf install`, or other build tools fail with `Permission denied` or `EPERM` errors when writing to `/var/tmp`. Some RPM post-install scriptlets fail mid-transaction leaving packages half-installed.
 
-**Root Cause:** The `system` role bind-mounts `/var/tmp` to `/tmp` with `noexec,nosuid,nodev` options (CIS 1.1.8). Some tools use `/var/tmp` as a working directory for executable binaries (pip wheel builds, cargo compilation artifacts, some RPM scriptlets). With `noexec`, anything that writes a binary to `/var/tmp` and then tries to execute it will fail.
+**Root Cause:** Additionally, because /tmp on Fedora is a tmpfs, the bind-mount makes /var/tmp equally volatile: any files written to /var/tmp during a session are silently discarded on the next reboot with no error. This affects staged OCI images, Cargo/pip build caches, and any tool that treats /var/tmp as persistent staging area (Go/Rust builds, pip wheel compilation). The symptom is silent data loss on reboot, not a permission-denied error. The `system` role bind-mounts `/var/tmp` to `/tmp` with `noexec,nosuid,nodev` options (CIS 1.1.8). Some tools use `/var/tmp` as a working directory for executable binaries (pip wheel builds, cargo compilation artifacts, some RPM scriptlets). With `noexec`, anything that writes a binary to `/var/tmp` and then tries to execute it will fail.
 
 **Fix (permanent):** Set in `config.yml`:
 

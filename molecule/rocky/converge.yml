@@ -21,6 +21,11 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Install openssh-server so sshd hardening block is exercised in container CI
+      ansible.builtin.dnf:
+        name: openssh-server
+        state: present
+
   roles:
     - role: system
 
@@ -35,6 +40,7 @@
     - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
+        notes_enabled: true
         # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng, fd-find not in Rocky 10 repos
         # (fd-find has no EPEL 10 package; ripgrep IS in EPEL 10 and is included below)
         packages_cli:

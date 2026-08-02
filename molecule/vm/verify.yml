@@ -202,6 +202,16 @@
         that: verify_fw_zone.stdout == 'drop'
         fail_msg: "Firewall default zone is '{{ verify_fw_zone.stdout }}', expected 'drop'"
 
+    - name: Check ICMP block inversion enabled in drop zone
+      ansible.builtin.command: firewall-cmd --zone=drop --query-icmp-block-inversion
+      register: verify_fw_icmp_inversion
+      changed_when: false
+      become: true
+
+    - name: Assert ICMP block inversion is enabled in drop zone
+      ansible.builtin.assert:
+        that: verify_fw_icmp_inversion.rc == 0
+        fail_msg: "icmp-block-inversion not enabled — ICMP blocks now BLOCK (not allow); NDP and PMTU discovery broken"
     - name: Check sysctl net.core.bpf_jit_harden
       ansible.builtin.command: sysctl -n net.core.bpf_jit_harden
       register: verify_bpf
@@ -244,6 +254,30 @@
         that: verify_rp_filter.stdout == '2'
         fail_msg: "Reverse path filtering not set to loose mode (2) required for Tailscale"
 
+    - name: Check sysctl net.ipv4.ip_forward
+      ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+      register: verify_ip_forward
+      changed_when: false
+      become: true
+
+    - name: Assert ip_forward is 1 (required for Kubernetes/OVN-K/kind)
+      ansible.builtin.assert:
+        that: verify_ip_forward.stdout == '1'
+        fail_msg: "net.ipv4.ip_forward is not 1 — pod routing and Tailscale subnet routing will fail"
+
+    - name: Check sysctl net.bridge.bridge-nf-call-iptables
+      ansible.builtin.command: sysctl -n net.bridge.bridge-nf-call-iptables
+      register: verify_bridge_nf
+      changed_when: false
+      become: true
+      failed_when: false  # key absent if br_netfilter not loaded
+
+    - name: Assert bridge-nf-call-iptables is 1 (required for OVN-K NetworkPolicy)
+      ansible.builtin.assert:
+        that: verify_bridge_nf.stdout == '1'
+        fail_msg: "net.bridge.bridge-nf-call-iptables is not 1 — Kubernetes NetworkPolicy will not be enforced"
+      when: verify_bridge_nf.rc == 0
+
     - name: Verify auditd rules file exists
       ansible.builtin.stat:
         path: /etc/audit/rules.d/claude-code.rules
@@ -276,6 +310,38 @@
       ansible.builtin.assert:
         that: verify_dot.stat.exists
         fail_msg: "DNS-over-TLS config not deployed"
+      when: ansible_facts.services['systemd-resolved.service'] is defined
+
+    - name: Slurp DNS-over-TLS config for content check
+      ansible.builtin.slurp:
+        src: /etc/systemd/resolved.conf.d/99-dot.conf
+      register: verify_dot_content
+      become: true
+      when: verify_dot.stat.exists
+
+    - name: Assert DNS-over-TLS config contains required settings
+      ansible.builtin.assert:
+        that:
+          - (verify_dot_content.content | b64decode) is search('Domains=~\.')
+          - (verify_dot_content.content | b64decode) is search('DNSOverTLS=opportunistic')
+          - (verify_dot_content.content | b64decode) is search('1\.1\.1\.1')
+        fail_msg: "99-dot.conf exists but is missing required settings (Domains=~., DNSOverTLS=opportunistic, 1.1.1.1)"
+      when: verify_dot.stat.exists
+
+    - name: Stat /etc/resolv.conf for symlink check
+      ansible.builtin.stat:
+        path: /etc/resolv.conf
+      register: verify_resolv_conf
+
+    - name: Assert /etc/resolv.conf is a symlink to stub-resolv
+      ansible.builtin.assert:
+        that:
+          - verify_resolv_conf.stat.islnk
+          - "'stub-resolv' in verify_resolv_conf.stat.lnk_source"
+        fail_msg: >-
+          /etc/resolv.conf is not a symlink to stub-resolv.conf
+          (islnk={{ verify_resolv_conf.stat.islnk | default(false) }},
+          lnk_source={{ verify_resolv_conf.stat.lnk_source | default('') }})
       when: ansible_facts.services['systemd-resolved.service'] is defined
 
     - name: Verify kernel lockdown in grubby
@@ -330,12 +396,12 @@
       become: true
 
     - name: Check sshd config disables agent forwarding
-      ansible.builtin.command: grep -qP '^AllowAgentForwarding (yes|no)$' /etc/ssh/sshd_config.d/00-hardening.conf
+      ansible.builtin.command: grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 
     - name: Check sshd config disables TCP forwarding
-      ansible.builtin.command: grep -qP '^AllowTcpForwarding (yes|no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf
+      ansible.builtin.command: grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 
@@ -397,6 +463,30 @@
         that: verify_nm_ts.stat.exists
         fail_msg: "NetworkManager Tailscale config not deployed"
 
+    - name: Verify NetworkManager dns=systemd-resolved config
+      ansible.builtin.stat:
+        path: /etc/NetworkManager/conf.d/99-dns.conf
+      register: verify_nm_dns
+      become: true
+
+    - name: Assert NM dns=systemd-resolved config deployed
+      ansible.builtin.assert:
+        that: verify_nm_dns.stat.exists
+        fail_msg: "99-dns.conf not deployed — Tailscale MagicDNS split-DNS will not work"
+
+    - name: Slurp NM dns config for content check
+      ansible.builtin.slurp:
+        src: /etc/NetworkManager/conf.d/99-dns.conf
+      register: verify_nm_dns_content
+      become: true
+      when: verify_nm_dns.stat.exists
+
+    - name: Assert NM dns config contains dns=systemd-resolved
+      ansible.builtin.assert:
+        that: (verify_nm_dns_content.content | b64decode) is search('dns=systemd-resolved')
+        fail_msg: "99-dns.conf exists but does not contain dns=systemd-resolved"
+      when: verify_nm_dns.stat.exists
+
     # --- New system hardening checks ---
     - name: Check /dev/shm mount options
       ansible.builtin.command: findmnt -n -o OPTIONS /dev/shm
@@ -449,6 +539,45 @@
         that: "'nosuid' in verify_home.stdout"
         fail_msg: "/home missing nosuid mount option (CIS 1.1.9)"
       when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
+
+    - name: Verify fstab nosuid backrefs regex matches representative Fedora btrfs /home line
+      # Exercises the regex used by the system role to add nosuid to fstab, regardless of
+      # whether /home is a separate partition in this VM scenario (it is not by default).
+      ansible.builtin.shell: >-
+        echo 'UUID=abc123  /home  btrfs  subvol=home,compress=zstd:1,relatime,ssd  0  0'
+        | grep -qP '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+      changed_when: false
+
+    - name: Check /boot mount options
+      ansible.builtin.command: findmnt -n -o OPTIONS /boot
+      register: verify_boot
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert /boot has nosuid, nodev, noexec
+      ansible.builtin.assert:
+        that:
+          - "'nosuid' in verify_boot.stdout"
+          - "'nodev' in verify_boot.stdout"
+          - "'noexec' in verify_boot.stdout"
+        fail_msg: "/boot missing required mount options (nosuid,nodev,noexec)"
+      when: verify_boot.rc | default(1) == 0  # skip if /boot is not a separate mountpoint
+
+    - name: Check /boot/efi mount options
+      ansible.builtin.command: findmnt -n -o OPTIONS /boot/efi
+      register: verify_boot_efi
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert /boot/efi has nosuid, noexec
+      ansible.builtin.assert:
+        that:
+          - "'nosuid' in verify_boot_efi.stdout"
+          - "'noexec' in verify_boot_efi.stdout"
+        fail_msg: "/boot/efi missing required mount options (nosuid,noexec)"
+      when: verify_boot_efi.rc | default(1) == 0  # skip if /boot/efi is not a separate mountpoint
 
     - name: Verify modprobe blacklists usb_storage
       ansible.builtin.command: grep -q usb_storage /etc/modprobe.d/hardening.conf
@@ -505,6 +634,19 @@
       ansible.builtin.assert:
         that: verify_chronyd.status.UnitFileState == 'enabled'
         fail_msg: "chronyd not enabled"
+
+    - name: Verify var-tmp.mount is enabled
+      ansible.builtin.systemd:
+        name: var-tmp.mount
+      register: verify_var_tmp_mount
+      become: true
+      when: system_var_tmp_noexec | default(true)
+
+    - name: Assert var-tmp.mount is enabled
+      ansible.builtin.assert:
+        that: verify_var_tmp_mount.status.UnitFileState == 'enabled'
+        fail_msg: "var-tmp.mount not enabled"
+      when: system_var_tmp_noexec | default(true)
 
     - name: Check pam_wheel.so in /etc/pam.d/su
       ansible.builtin.command: grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su
@@ -646,6 +788,32 @@
         fail_msg: "cups-browsed is not masked"
       when: verify_cups.status.UnitFileState | default('') != ''
 
+    - name: Check cups.socket state
+      ansible.builtin.systemd:
+        name: cups.socket
+      register: verify_cups_socket
+      become: true
+      failed_when: false
+
+    - name: Assert cups.socket is masked (prevent socket activation of CUPS)
+      ansible.builtin.assert:
+        that: verify_cups_socket.status.UnitFileState == 'masked'
+        fail_msg: "cups.socket is not masked — Flatpak print dialogs can trigger socket activation to restart CUPS"
+      when: verify_cups_socket.status.UnitFileState | default('') != ''
+
+    - name: Check cups.path state
+      ansible.builtin.systemd:
+        name: cups.path
+      register: verify_cups_path
+      become: true
+      failed_when: false
+
+    - name: Assert cups.path is masked (prevent path activation of CUPS)
+      ansible.builtin.assert:
+        that: verify_cups_path.status.UnitFileState == 'masked'
+        fail_msg: "cups.path is not masked — path activation can restart CUPS daemon"
+      when: verify_cups_path.status.UnitFileState | default('') != ''
+
     - name: Check ctrl-alt-del.target state
       ansible.builtin.systemd:
         name: ctrl-alt-del.target
@@ -658,6 +826,162 @@
         that: verify_cad.status.UnitFileState == 'masked'
         fail_msg: "ctrl-alt-del.target is not masked"
       when: verify_cad.status.UnitFileState | default('') != ''
+
+    - name: Check passim service state
+      ansible.builtin.systemd:
+        name: passim
+      register: verify_passim
+      become: true
+      failed_when: false
+
+    - name: Assert passim is masked (prevents unauthenticated HTTP on 0.0.0.0:27500 reachable from Tailscale peers)
+      ansible.builtin.assert:
+        that: verify_passim.status.UnitFileState == 'masked'
+        fail_msg: "passim is not masked — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"
+      when: verify_passim.status.UnitFileState | default('') != ''
+
+    - name: Check fprintd service state
+      ansible.builtin.systemd:
+        name: fprintd.service
+      register: verify_fprintd
+      become: true
+      failed_when: false
+
+    - name: Assert fprintd.service is masked (prevents fingerprint from bypassing pam_faillock)
+      ansible.builtin.assert:
+        that: verify_fprintd.status.UnitFileState == 'masked'
+        fail_msg: "fprintd.service is not masked — fingerprint auth can bypass pam_faillock"
+      when: verify_fprintd.status.UnitFileState | default('') != ''
+
+    - name: Check avahi-daemon.service state
+      ansible.builtin.systemd:
+        name: avahi-daemon.service
+      register: verify_avahi_service
+      become: true
+      failed_when: false
+
+    - name: Assert avahi-daemon.service is masked
+      ansible.builtin.assert:
+        that: verify_avahi_service.status.UnitFileState == 'masked'
+        fail_msg: "avahi-daemon.service is not masked"
+      when: verify_avahi_service.status.UnitFileState | default('') != ''
+
+    - name: Check avahi-daemon.socket state
+      ansible.builtin.systemd:
+        name: avahi-daemon.socket
+      register: verify_avahi_socket
+      become: true
+      failed_when: false
+
+    - name: Assert avahi-daemon.socket is masked
+      ansible.builtin.assert:
+        that: verify_avahi_socket.status.UnitFileState == 'masked'
+        fail_msg: "avahi-daemon.socket is not masked"
+      when: verify_avahi_socket.status.UnitFileState | default('') != ''
+
+    - name: Check nfs-server.service state
+      ansible.builtin.systemd:
+        name: nfs-server.service
+      register: verify_nfs_server
+      become: true
+      failed_when: false
+
+    - name: Assert nfs-server.service is masked
+      ansible.builtin.assert:
+        that: verify_nfs_server.status.UnitFileState == 'masked'
+        fail_msg: "nfs-server.service is not masked"
+      when: verify_nfs_server.status.UnitFileState | default('') != ''
+
+    - name: Check rpcbind.service state
+      ansible.builtin.systemd:
+        name: rpcbind.service
+      register: verify_rpcbind_service
+      become: true
+      failed_when: false
+
+    - name: Assert rpcbind.service is masked
+      ansible.builtin.assert:
+        that: verify_rpcbind_service.status.UnitFileState == 'masked'
+        fail_msg: "rpcbind.service is not masked"
+      when: verify_rpcbind_service.status.UnitFileState | default('') != ''
+
+    - name: Check rpcbind.socket state
+      ansible.builtin.systemd:
+        name: rpcbind.socket
+      register: verify_rpcbind_socket
+      become: true
+      failed_when: false
+
+    - name: Assert rpcbind.socket is masked
+      ansible.builtin.assert:
+        that: verify_rpcbind_socket.status.UnitFileState == 'masked'
+        fail_msg: "rpcbind.socket is not masked"
+      when: verify_rpcbind_socket.status.UnitFileState | default('') != ''
+
+    - name: Check cockpit.service state
+      ansible.builtin.systemd:
+        name: cockpit.service
+      register: verify_cockpit_service
+      become: true
+      failed_when: false
+
+    - name: Assert cockpit.service is masked
+      ansible.builtin.assert:
+        that: verify_cockpit_service.status.UnitFileState == 'masked'
+        fail_msg: "cockpit.service is not masked"
+      when: verify_cockpit_service.status.UnitFileState | default('') != ''
+
+    - name: Check cockpit.socket state
+      ansible.builtin.systemd:
+        name: cockpit.socket
+      register: verify_cockpit_socket
+      become: true
+      failed_when: false
+
+    - name: Assert cockpit.socket is masked
+      ansible.builtin.assert:
+        that: verify_cockpit_socket.status.UnitFileState == 'masked'
+        fail_msg: "cockpit.socket is not masked"
+      when: verify_cockpit_socket.status.UnitFileState | default('') != ''
+
+    - name: Check sshd.socket state
+      ansible.builtin.systemd:
+        name: sshd.socket
+      register: verify_sshd_socket
+      become: true
+      failed_when: false
+
+    - name: Assert sshd.socket is masked
+      ansible.builtin.assert:
+        that: verify_sshd_socket.status.UnitFileState == 'masked'
+        fail_msg: "sshd.socket is not masked"
+      when: verify_sshd_socket.status.UnitFileState | default('') != ''
+
+    - name: Check power-profiles-daemon state
+      ansible.builtin.systemd:
+        name: power-profiles-daemon
+      register: verify_ppd
+      become: true
+      failed_when: false
+
+    - name: Assert power-profiles-daemon is masked (TLP conflict prevention)
+      ansible.builtin.assert:
+        that: verify_ppd.status.UnitFileState == 'masked'
+        fail_msg: "power-profiles-daemon is not masked — TLP and power-profiles-daemon will conflict"
+      when: verify_ppd.status.UnitFileState | default('') != ''
+
+    - name: Check tuned-ppd state
+      ansible.builtin.systemd:
+        name: tuned-ppd
+      register: verify_tuned_ppd
+      become: true
+      failed_when: false
+
+    - name: Assert tuned-ppd is masked (TLP conflict prevention)
+      ansible.builtin.assert:
+        that: verify_tuned_ppd.status.UnitFileState == 'masked'
+        fail_msg: "tuned-ppd is not masked — TLP and tuned-ppd will conflict"
+      when: verify_tuned_ppd.status.UnitFileState | default('') != ''
 
     # --- Core dump disable ---
     - name: Verify core dump disable config

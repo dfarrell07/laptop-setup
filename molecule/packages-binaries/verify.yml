@@ -1,0 +1,95 @@
+---
+- name: Verify — packages binary installs
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    # --- /usr/local/bin binaries ---
+
+    - name: Stat /usr/local/bin/kind
+      ansible.builtin.stat:
+        path: /usr/local/bin/kind
+      register: verify_kind
+
+    - name: Assert kind exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kind.stat.exists
+          - verify_kind.stat.executable
+        fail_msg: "/usr/local/bin/kind missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/helm
+      ansible.builtin.stat:
+        path: /usr/local/bin/helm
+      register: verify_helm
+
+    - name: Assert helm exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_helm.stat.exists
+          - verify_helm.stat.executable
+        fail_msg: "/usr/local/bin/helm missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/kustomize
+      ansible.builtin.stat:
+        path: /usr/local/bin/kustomize
+      register: verify_kustomize
+
+    - name: Assert kustomize exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kustomize.stat.exists
+          - verify_kustomize.stat.executable
+        fail_msg: "/usr/local/bin/kustomize missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/transcrypt
+      ansible.builtin.stat:
+        path: /usr/local/bin/transcrypt
+      register: verify_transcrypt
+
+    - name: Assert transcrypt exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_transcrypt.stat.exists
+          - verify_transcrypt.stat.executable
+        fail_msg: "/usr/local/bin/transcrypt missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/k9s
+      ansible.builtin.stat:
+        path: /usr/local/bin/k9s
+      register: verify_k9s
+
+    - name: Assert k9s exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_k9s.stat.exists
+          - verify_k9s.stat.executable
+        fail_msg: "/usr/local/bin/k9s missing or not executable — packages_install_binaries=true regression"
+
+    # --- krew ---
+
+    - name: Stat krew binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.krew/bin/krew"
+      register: verify_krew
+
+    - name: Assert krew exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_krew.stat.exists
+          - verify_krew.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/.krew/bin/krew missing or not executable — packages_install_binaries=true regression"
+
+    # --- go install binaries ---
+
+    - name: Stat gofumpt binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/gofumpt"
+      register: verify_gofumpt
+
+    - name: Assert gofumpt exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gofumpt.stat.exists
+          - verify_gofumpt.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install regression"

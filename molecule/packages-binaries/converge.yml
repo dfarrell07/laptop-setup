@@ -1,0 +1,28 @@
+---
+- name: Converge — packages role with binaries enabled
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+    - name: Override for binary download testing
+      ansible.builtin.set_fact:
+        packages_install_binaries: true           # the critical toggle under test
+        profile: personal                         # avoids work-gated binaries requiring internal auth
+        packages_go_install:
+          - mvdan.cc/gofumpt@v0.7.0               # one tool is enough to exercise the go install path
+        packages_go_install_work: []              # clear work-profile go tools
+        packages_security: []                     # avoid dnf repo dependencies
+        packages_networking: []                   # avoid dnf repo dependencies
+        packages_networking_work: []              # avoid dnf repo dependencies
+        packages_containers: []                   # avoid dnf repo dependencies
+        install_virtualization: false             # libvirt not needed in CI container
+
+  roles:
+    - role: packages

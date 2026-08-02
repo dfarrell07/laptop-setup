@@ -79,22 +79,29 @@
   ansible.builtin.stat:
     path: /usr/local/bin/kubectl
   register: verify_kubectl_bin
+  when: (packages_install_binaries | default(false) | bool) and (profile | default('work')) == 'work'
 
-- name: Check kubectl client version when installed
-  ansible.builtin.command: kubectl version --client
-  changed_when: false
-  when: verify_kubectl_bin.stat.exists
+- name: Assert kubectl binary is present and executable
+  ansible.builtin.assert:
+    that:
+      - verify_kubectl_bin.stat.exists
+      - verify_kubectl_bin.stat.executable
+    fail_msg: 'kubectl binary is missing or not executable'
+  when: (packages_install_binaries | default(false) | bool) and (profile | default('work')) == 'work'
 
 - name: Check kind binary presence
   ansible.builtin.stat:
     path: /usr/local/bin/kind
   register: verify_kind_bin
+  when: packages_install_binaries | default(false) | bool
 
-- name: Assert kind binary is executable when present
+- name: Assert kind binary is present and executable
   ansible.builtin.assert:
-    that: verify_kind_bin.stat.executable
-    fail_msg: 'kind binary exists but is not executable'
-  when: verify_kind_bin.stat.exists
+    that:
+      - verify_kind_bin.stat.exists
+      - verify_kind_bin.stat.executable
+    fail_msg: 'kind binary is missing or not executable'
+  when: packages_install_binaries | default(false) | bool
 
 - name: Check gpg is installed
   ansible.builtin.command: gpg --version
@@ -108,11 +115,90 @@
   ansible.builtin.stat:
     path: /usr/bin/ykman
   register: verify_ykman_bin
+  # ykman is from packages_security (a dnf package), not a binary download;
+  # packages_security is set to [] in Podman CI converge, so absence is intentional.
 
 - name: Check ykman version when installed
   ansible.builtin.command: ykman --version
   changed_when: false
   when: verify_ykman_bin.stat.exists
 
+- name: Stat /etc/kernel/cmdline
+  ansible.builtin.stat:
+    path: /etc/kernel/cmdline
+  register: verify_kernel_cmdline
+
+- name: Assert /etc/kernel/cmdline contains vsyscall=none
+  ansible.builtin.command:
+    cmd: grep -q 'vsyscall=none' /etc/kernel/cmdline
+  changed_when: false
+  when: verify_kernel_cmdline.stat.exists
+
+- name: Assert /etc/kernel/cmdline contains init_on_free=1
+  ansible.builtin.command:
+    cmd: grep -q 'init_on_free=1' /etc/kernel/cmdline
+  changed_when: false
+  when: verify_kernel_cmdline.stat.exists
+
 - name: Include containers.conf assertions
   ansible.builtin.include_tasks: verify-containers.yml
+
+- name: Include NetworkManager conf.d assertions
+  ansible.builtin.include_tasks: verify-nm.yml
+
+# --- PAM / authselect / faillock / pwquality / pwhistory ---
+- name: Check authselect with-faillock is active
+  ansible.builtin.command: authselect is-feature-enabled with-faillock
+  register: verify_faillock_authselect
+  changed_when: false
+  failed_when: verify_faillock_authselect.rc != 0
+  become: true
+
+- name: Check authselect with-pwhistory is active
+  ansible.builtin.command: authselect is-feature-enabled with-pwhistory
+  register: verify_pwhistory_authselect
+  changed_when: false
+  failed_when: verify_pwhistory_authselect.rc != 0
+  become: true
+
+- name: Run authselect check to verify PAM files match profile
+  ansible.builtin.command: authselect check
+  changed_when: false
+  become: true
+
+- name: Check faillock deny=5
+  ansible.builtin.command: grep -q '^deny = 5' /etc/security/faillock.conf
+  changed_when: false
+  become: true
+
+- name: Check faillock local_users_only (prevent SSSD double-lockout)
+  ansible.builtin.command: grep -q '^local_users_only' /etc/security/faillock.conf
+  changed_when: false
+  become: true
+
+- name: Check faillock unlock_time=900
+  ansible.builtin.command: grep -q '^unlock_time = 900' /etc/security/faillock.conf
+  changed_when: false
+  become: true
+
+- name: Check pwquality minlen=14
+  ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
+  changed_when: false
+  become: true
+
+- name: Check pwhistory remember=24
+  ansible.builtin.command: grep -q '^remember = 24' /etc/security/pwhistory.conf
+  changed_when: false
+  become: true
+
+- name: Check authselect current profile is sssd
+  ansible.builtin.command:
+    cmd: authselect current --raw
+  register: verify_authselect_current
+  changed_when: false
+  become: true
+
+- name: Assert authselect profile is sssd
+  ansible.builtin.assert:
+    that: verify_authselect_current.stdout is search('^sssd\b')
+    fail_msg: "authselect profile is not sssd — faillock/pwhistory features will not wire into PAM"

@@ -50,12 +50,20 @@ install_virtualization: true
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_printing: true      (roles/system/defaults) — masks cups.socket/cups.path; set false if printing needed
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
+# system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
+#   on machines with a fingerprint reader if fingerprint auth is desired (P16v Gen 1 AMD: Synaptics 06cb:0126)
+# system_disable_avahi: true         (roles/system/defaults) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
+#   resolution or DNS-SD lab tooling
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (roles/system/defaults) — 0=disabled (CIS), 176=emergency recovery
 #   system_tmout: 600                  (roles/system/defaults) — session inactivity timeout seconds (CIS<=900); 0=disabled
+#   system_faillock_deny: 5            (roles/system/defaults) — failed logins before lockout (CIS); lower for shared machines
+#   system_faillock_unlock_time: 900   (roles/system/defaults) — seconds until auto-unlock (CIS); 0=permanent until admin reset
+#   system_faillock_even_deny_root: true (roles/system/defaults) — lock root on failed logins; set false on single-user workstations
+# (root SSH already blocked by PermitRootLogin no, so false reduces lockout surprise without weakening remote security)
 #   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
 #   system_bpf_jit_harden: 1           (roles/system/defaults) — BPF JIT hardening (1=unprivileged only, default here;
@@ -63,25 +71,55 @@ install_virtualization: true
 #   system_kernel_panic: 10            (roles/system/defaults) — seconds before auto-reboot after panic;
 #                                        set 0 to disable auto-reboot (preserves crash state for kdump/OVN-K/bpfman debugging)
 #   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; set 0 to allow system to continue after non-fatal oops
+#   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime (preserves Secure Boot chain of
+#                                        trust). Set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump
+#                                        impossible even when Secure Boot is disabled (kdump uses kexec internally).
 #   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=unrestricted within
 #                                        user ns, Fedora workstation default — set 0 in config.yml for gdb -p / strace -p
 #                                        on own running processes without sudo, needed for OVN-K/bpfman kernel debugging)
 #                                        (useful for OVN-K/bpfman development with KASAN/UBSAN)
+#   system_init_on_free: true          (roles/system/defaults) — zero freed memory pages on kernel free (init_on_free=1);
+#                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
 #   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
 #                                        (default: kernel-blocked, no override via USBGuard)
 #   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
 #                                        (VS Code Remote needs >=10)
-#   system_ssh_allow_tcp_forwarding: "no"   (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
+#   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
 #                                            'remote' for ssh -R, 'yes' for both
+# system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
+#   ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
 #   system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"  (roles/system/defaults) — fallback DoT servers (IP#hostname required)
-#   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec (set false if RPM scriptlets need exec)
+# system_tmp_noexec: true            (roles/system/defaults) — noexec on /tmp (CIS 1.1.2.x); set false if non-Go dev tools need to exec
+#   from /tmp (nosuid/nodev preserved)
+#   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
+#                                        (data lost on reboot); set false if RPM scriptlets need exec OR if any workload expects
+#                                        /var/tmp to persist across reboots
+#   system_home_nosuid_force: false    (roles/system/defaults) — set true on CSB/hybrid machines where /home is a known local
+#                                        mount to apply nosuid; default false preserves the CSB skip (IT-managed NFS/autofs /home
+#                                        may break with nosuid; use only when /home is btrfs/ext4 under your control)
+#   system_iommu_passthrough: false    (roles/system/defaults) — set true only for VFIO/libvirt PCI passthrough; enables
+#                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
+#   system_wifi_mac_rand: <unset>      (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
+#                                        on hybrid Fedora CSB machines to opt in to stable-ssid MAC randomization
+# system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
+#   external access
 #   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
 #                                        for LUKS auto-unlock (e.g. no keyfile partition). WARNING: setting true when
 #                                        rd.luks.key is active will require manual LUKS passphrase on every reboot.
+#   system_coredump_storage: external  (roles/system/defaults) — where systemd-coredump stores cores; 'external' writes
+#                                        compressed files to /var/lib/systemd/coredump/ (Fedora default, pass directly to
+#                                        gdb/dlv or use coredumpctl debug); 'none' disables; 'journal' embeds in journald
+#   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
+#                                           2G matches systemd upstream default
+#   system_pwquality_dcredit: -1          (roles/system/defaults) — digit requirement (-1=require 1, 0=none)
+#   system_pwquality_ucredit: -1          (roles/system/defaults) — uppercase requirement (-1=require 1, 0=none)
+#   system_pwquality_lcredit: -1          (roles/system/defaults) — lowercase requirement (-1=require 1, 0=none)
+#   system_pwquality_ocredit: -1          (roles/system/defaults) — special-char requirement (-1=require 1, 0=none)
+#                                           set all four to 0 to disable composition requirements while preserving minlen=14
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
@@ -117,10 +155,17 @@ install_virtualization: true
 #   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
 #   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
 #   dotfiles_aws_profile: aws-acm-subm   — default AWS CLI profile name
+#   ssh_git_signing_pubkey: ""            — SSH public key for git commit signing; set in config.yml to the literal pubkey or
+#     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
 #     packages_kubebuilder_version, packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
+
+system_kexec_load_disabled: 0  # kdump requires kexec; safe here (Secure Boot disabled); CIS default is 1 (see Additional toggles above)
+system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1 (see Additional
+system_kernel_panic_on_oops: 0  # dev workstation: bpfman/OVN-K non-fatal oops should log-and-continue, not halt the host (CIS default is 1)
+system_kernel_panic: 0          # preserve panic state for kdump analysis; kexec_load_disabled=0 already enables kdump (CIS default is 10)
 
 # Third-party repos (naming: repo_<name>, dnf-based OS only)
 repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky

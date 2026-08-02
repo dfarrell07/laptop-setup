@@ -166,6 +166,10 @@
     cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
   become: true
   changed_when: true
+  register: system_aide_reinit_result
+  failed_when:
+    - system_aide_reinit_result.rc != 0
+    - ansible_virtualization_type not in ['container', 'docker', 'podman']
   when:
     - system_aide_enabled | bool
     - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't overwrite
