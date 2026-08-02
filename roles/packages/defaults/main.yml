@@ -211,6 +211,21 @@ packages_subctl_versioned:
   - version: "0.18.0"
     suffix: "18"
 
+# Downstream RH subctl (registry.redhat.io/rhacm2/subctl-rhel{8,9}) — RHACM-bundled builds.
+# Extracted via 'oc image extract'; each entry installed as subctlRH<suffix> in ~/.local/bin.
+# Requires: oc installed (from OCP tarball) + podman login registry.redhat.io.
+# Image name: subctl-rhel8 for RHACM <=2.8 (Submariner <=0.15); subctl-rhel9 for RHACM 2.9+
+# Binary inside image: /dist/subctl-v<tag>*-linux-amd64.tar.xz
+packages_subctl_rh_versions: []
+# Example to enable:
+# packages_subctl_rh_versions:
+#   - tag: "v0.18"            # image tag (e.g. v0.18 for Submariner 0.18.x / RHACM 2.11)
+#     image: "subctl-rhel8"   # image name: subctl-rhel8 (<=RHACM 2.8) or subctl-rhel9 (2.9+)
+#     suffix: "RH18"          # binary name: ~/.local/bin/subctlRH18
+#   - tag: "v0.22"
+#     image: "subctl-rhel9"
+#     suffix: "RH22"
+
 packages_k9s_version: "0.51.0"
 packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
 

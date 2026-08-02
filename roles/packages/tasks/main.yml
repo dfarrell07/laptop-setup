@@ -1250,6 +1250,44 @@
         state: absent
       loop: "{{ packages_subctl_versioned }}"
 
+- name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
+  when:
+    - packages_install_binaries | default(true) | bool
+    - ansible_system == 'Linux'
+    - ansible_architecture == 'x86_64'
+    - profile == 'work'
+    - packages_subctl_rh_versions | default([]) | length > 0
+  block:
+    - name: Extract downstream subctl tarball from registry image
+      ansible.builtin.command:
+        cmd: >-
+          oc image extract registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}
+          --path="/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz":/tmp/
+          --confirm
+      changed_when: true
+      failed_when: false
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
+
+    - name: Extract and install versioned RH subctl to ~/.local/bin
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          TARBALL=$(ls /tmp/subctl-{{ item.tag }}*-linux-amd64.tar.xz 2>/dev/null | head -1)
+          [[ -z "$TARBALL" ]] && exit 0
+          TMPDIR=$(mktemp -d)
+          tar -C "$TMPDIR" -xf "$TARBALL"
+          BINARY=$(find "$TMPDIR" -name "subctl-{{ item.tag }}*-linux-amd64" -type f | head -1)
+          [[ -z "$BINARY" ]] && exit 0
+          install -m755 "$BINARY" "{{ ansible_user_dir }}/.local/bin/subctl{{ item.suffix }}"
+          rm -rf "$TMPDIR" "$TARBALL"
+      changed_when: true
+      failed_when: false
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
     cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew install {{ item }}"
