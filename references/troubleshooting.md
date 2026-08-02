@@ -27,17 +27,17 @@ Steps required after every `make all`. Complete these in order before the machin
 
 2. **Verify provisioning succeeded:** `make smoke-test` — review any WARN/FAIL entries before proceeding.
 
-2. **Authenticate Tailscale:** `tailscale up` opens a browser window to join the tailnet. Required on every new node. For headless machines use `tailscale up --auth-key=tskey-auth-...`. See [Tailscale Not Authenticated After Provisioning](#system-tailscale-not-authenticated-after-provisioning).
+3. **Authenticate Tailscale:** `tailscale up` opens a browser window to join the tailnet. Required on every new node. For headless machines use `tailscale up --auth-key=tskey-auth-...`. See [Tailscale Not Authenticated After Provisioning](#system-tailscale-not-authenticated-after-provisioning).
 
-3. **Log out and log back in** — group membership changes (libvirt, kvm, podman groups) take effect only on new login sessions. Use `newgrp libvirt` for an in-session reload if a full logout is inconvenient. See [Group Membership Changes Require Logout](#make-test-vm-group-membership-changes-require-logout).
+4. **Log out and log back in** — group membership changes (libvirt, kvm, podman groups) take effect only on new login sessions. Use `newgrp libvirt` for an in-session reload if a full logout is inconvenient. See [Group Membership Changes Require Logout](#make-test-vm-group-membership-changes-require-logout).
 
-4. **CSB/hybrid machines only: `make container`** — provisions the Distrobox dev container with dev tools that cannot run on the hardened host. Required before OVN-K, bpfman, or Konflux workflows. See [distrobox: fapolicyd Blocks Container Startup](#distrobox-fapolicyd-blocks-container-startup).
+5. **CSB/hybrid machines only: `make container`** — provisions the Distrobox dev container with dev tools that cannot run on the hardened host. Required before OVN-K, bpfman, or Konflux workflows. See [distrobox: fapolicyd Blocks Container Startup](#distrobox-fapolicyd-blocks-container-startup).
 
-5. **If notes are enabled: `gh auth login` then `make notes`** — the private notes repo requires GitHub authentication for the initial clone. Decryption requires `vault_notes_transcrypt_password` populated in vault. See [notes: Transcrypt Clone/Decrypt Failures](#notes-transcrypt-clonedecrypt-failures).
+6. **If notes are enabled: `gh auth login` then `make notes`** — the private notes repo requires GitHub authentication for the initial clone. Decryption requires `vault_notes_transcrypt_password` populated in vault. See [notes: Transcrypt Clone/Decrypt Failures](#notes-transcrypt-clonedecrypt-failures).
 
-6. **If using YubiKey for vault or SSH signing: verify pcscd** — on a fresh machine pcscd may not be running. Check with `systemctl status pcscd`; enable with `sudo systemctl enable --now pcscd`. See [YubiKey Not Detected by pcscd / FIDO2](#packages-yubikey-not-detected-by-pcscd--fido2).
+7. **If using YubiKey for vault or SSH signing: verify pcscd** — on a fresh machine pcscd may not be running. Check with `systemctl status pcscd`; enable with `sudo systemctl enable --now pcscd`. See [YubiKey Not Detected by pcscd / FIDO2](#packages-yubikey-not-detected-by-pcscd--fido2).
 
-7. **Re-run `make smoke-test`** — confirms Tailscale WARN clears and no new failures appeared after login/container steps.
+8. **Re-run `make smoke-test`** — confirms Tailscale WARN clears and no new failures appeared after login/container steps.
 
 ---
 

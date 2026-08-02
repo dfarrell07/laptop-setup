@@ -29,10 +29,11 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 6. Required manual actions after `make all`:
    - **Reboot** — kernel security params (lockdown, IOMMU, vsyscall, init_on_free) only
      take effect after a reboot. SSH will be on port 722 after reboot.
+   - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - Log out and back in for group membership changes (libvirt, kvm groups)
    - For CSB/hybrid machines: `make container` to provision dev container
-   - `make smoke-test` to verify the provisioning succeeded
+   - Re-run `make smoke-test` — confirms Tailscale WARN clears and no new failures
 
 ```bash
 make all              # Full run (asks for sudo password)

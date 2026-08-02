@@ -64,6 +64,18 @@
       ansible.builtin.command: zoxide --version
       changed_when: false
 
+    - name: Check dig is installed (dnsutils)
+      ansible.builtin.command: which dig
+      changed_when: false
+
+    - name: Check gpg is installed (gnupg)
+      ansible.builtin.command: gpg --version
+      changed_when: false
+
+    - name: Check pip3 is installed (python3-pip)
+      ansible.builtin.command: pip3 --version
+      changed_when: false
+
     # wl-clipboard moved to desktop_apt_packages (Wayland-only; not installed in headless CI)
     # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
     - name: Check notes repo directory
