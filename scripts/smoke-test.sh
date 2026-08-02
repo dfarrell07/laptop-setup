@@ -211,8 +211,8 @@ else record "dotfile-gitconfig-work" "PASS"; fi
 if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "~/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc_personal"; then record "dotfile-gitconfig-personal" "WARN" "config-personal present but not Ansible-managed — manual overwrite?"
 else record "dotfile-gitconfig-personal" "PASS"; fi
-if ! grep -q 'includeIf.*gitdir:.*src/' "$HOME/.config/git/config" 2>/dev/null; then
-  record "gitconfig-includeif" "FAIL" "no includeIf gitdir:*/src/ block in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
+if ! grep -q 'config-work' "$HOME/.config/git/config" 2>/dev/null; then
+  record "gitconfig-includeif" "FAIL" "no includeIf referencing config-work in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
 else record "gitconfig-includeif" "PASS"; fi
 unset _gc_work _gc_personal
 

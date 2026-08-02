@@ -178,7 +178,18 @@ _zsh_cached_completion oc completion zsh
 _zsh_cached_completion helm completion zsh
 _zsh_cached_completion kind completion zsh
 _zsh_cached_completion kustomize completion zsh
-_zsh_cached_completion bpfman completion zsh
+if command -v bpfman &>/dev/null; then
+  local _bpf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/bpfman.zsh"
+  local _bpf_bin; _bpf_bin=$(command -v bpfman)
+  if [[ ! -f "$_bpf_cache" || "$_bpf_bin" -nt "$_bpf_cache" ]]; then
+    mkdir -p "${_bpf_cache:h}"
+    local _bpf_tmp; _bpf_tmp=$(mktemp -d)
+    bpfman completions "$_bpf_tmp" --shell zsh 2>/dev/null
+    [[ -f "$_bpf_tmp/_bpfman" ]] && mv -f "$_bpf_tmp/_bpfman" "$_bpf_cache"
+    rm -rf "$_bpf_tmp"
+  fi
+  [[ -s "$_bpf_cache" ]] && source "$_bpf_cache"
+fi
 
 # --- Dev shortcuts ---
 alias mj='make -j$(nproc)'          # parallel make (OVN-K/bpfman builds)
