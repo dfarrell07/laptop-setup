@@ -6,12 +6,12 @@ general {
 }
 
 order += "cpu_usage"
-order += "command cpu_temp"
+order += "cpu_temperature 0"
 order += "memory"
 order += "disk /"
 order += "disk /home"
 order += "battery {{ desktop_i3status_battery_num }}"
-order += "command"
+order += "volume master"
 order += "time"
 order += "tztime utc"
 order += "ethernet _first_"
@@ -22,11 +22,13 @@ cpu_usage {
     max_threshold = 80
 }
 
-# AMD k10temp via configurable PCI path (hwmon index varies across reboots; glob is safe in sh -c)
+# AMD k10temp via configurable hwmon path. i3status cpu_temperature requires a concrete path (no globs).
 # Override desktop_i3status_cpu_temp_path in config.yml for different PCI topologies.
-command "cpu_temp" {
-    command = "awk '{printf \" %.0f°C\", $1/1000}' {{ desktop_i3status_cpu_temp_path }} 2>/dev/null || echo \" N/A\""
-    interval = 5
+# Default: /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon0/temp1_input (ThinkPad P16v AMD k10temp)
+cpu_temperature 0 {
+    format = " %degrees°C"
+    path = "{{ desktop_i3status_cpu_temp_path }}"
+    max_threshold = 90
 }
 
 memory {
@@ -54,11 +56,12 @@ battery {{ desktop_i3status_battery_num }} {
     status_full = "✓"
 }
 
-# volume master block removed — ALSA 'default' shows N/A on PipeWire.
-# Use pactl keybindings in i3.config for volume control.
-command {
-    command = "vol=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oP '\\d+%' | head -1); mute=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null); [ \"$mute\" = 'Mute: yes' ] && echo '🔇 muted' || echo \" $vol\""
-    interval = 5
+# volume master uses PipeWire's PulseAudio compatibility layer (device = "pulse" works on Fedora 44)
+volume master {
+    device = "pulse"
+    format = " %volume"
+    format_muted = " muted"
+    mixer = "Master"
 }
 
 time {

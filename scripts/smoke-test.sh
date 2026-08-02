@@ -608,10 +608,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "dns-over-tls" "WARN" "not deployed — expected on CSB (Cloudflare blocked; DHCP DNS in use)"
   else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make system"; fi
 
-  # ptrace scope
-  val=$(sysctl -n kernel.yama.ptrace_scope 2>/dev/null || echo "?")
-  if [[ "$val" == "1" ]]; then record "ptrace-scope" "PASS"
-  else record "ptrace-scope" "FAIL" "=$val, expected 1"; fi
+  # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 0 in default.config.yml)
+  _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-1}" "sysctl-ptrace-scope"
 
   # SELinux
   if command -v getenforce &>/dev/null; then
@@ -864,13 +863,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "usb-storage-blocked" "PASS"
   else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked — USB drives may mount (expected if system_disable_usb_storage: false)"; fi
 
-  # core dump disabled (verify Storage=none not just file existence)
-  if grep -q '^Storage=none' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
-    record "coredump-disabled" "PASS"
-  else record "coredump-disabled" "FAIL" "coredump Storage=none not configured"; fi
-  if grep -q '^ProcessSizeMax=0' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null; then
-    record "coredump-processsizemax" "PASS"
-  else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax=0 not configured"; fi
+  # coredump config — verify drop-in is deployed with a Storage= directive (default is external, not none)
+  _cd_storage=$(grep -oP '^Storage=\K.*' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null)
+  if [[ -n "$_cd_storage" ]]; then record "coredump-configured" "PASS" "Storage=$_cd_storage"
+  else record "coredump-configured" "FAIL" "coredump drop-in missing or Storage not set"; fi
+  _cd_size=$(grep -oP '^ProcessSizeMax=\K.*' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null)
+  if [[ -n "$_cd_size" ]]; then record "coredump-processsizemax" "PASS" "ProcessSizeMax=$_cd_size"
+  else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax not configured"; fi
+  unset _cd_storage _cd_size
 
   # journald persistent storage (verify Storage=persistent, not just file existence)
   # Skipped on CSB — Ansible omits journald config to avoid suppressing SIEM-forwarded events
@@ -1385,7 +1385,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     else record "$n" "FAIL" "$k=$got expected $v"; fi
   }
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
-  _sysctl_check "kernel.kexec_load_disabled"         "1" "sysctl-kexec-disabled"
+  # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
+  _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-1}" "sysctl-kexec-disabled"
   _sysctl_check "kernel.io_uring_disabled"           "1" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
@@ -1468,8 +1470,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Hardcoding 0 here would false-FAIL on machines with system_sysrq: 176 (OVN-K kernel debugging).
   _sysrq_expected=$(awk -F' *= *' '/^kernel\.sysrq/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "kernel.sysrq" "${_sysrq_expected:-0}" "sysctl-sysrq-disabled"
-  # kernel.panic: hardcoded 10 (reboot-after-panic); no standalone override variable in config.yml.
-  _sysctl_check "kernel.panic"                        "10" "sysctl-panic-reboot"
+  # kernel.panic: read expected value from deployed config (system_kernel_panic defaults to 0 in default.config.yml)
+  _panic_expected=$(awk -F' *= *' '/^kernel\.panic /{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.panic" "${_panic_expected:-10}" "sysctl-panic-reboot"
   # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 1).
   # Hardcoding 1 here would false-FAIL on machines with system_kernel_panic_on_oops: 0 (OVN-K/bpfman debugging).
   _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)

@@ -25,8 +25,10 @@
     - name: Signal that usbguard is expected (system role included in this scenario)
       ansible.builtin.set_fact:
         usbguard_expected: true
-        system_aide_enabled: true  # VM scenario exercises AIDE (full kernel access, real timer)
-        system_tlp_enabled: true   # VM scenario exercises TLP/ppd masking path (laptop form_factor not auto-detected in VMs)
+        system_aide_enabled: true        # VM scenario exercises AIDE (full kernel access, real timer)
+        system_tlp_enabled: true         # VM scenario exercises TLP/ppd masking path (laptop form_factor not auto-detected in VMs)
+        system_coredump_storage: none    # VM verify asserts Storage=none; match defaults that ship None for hardened CI
+        system_coredump_process_size_max: 0  # VM verify asserts ProcessSizeMax=0; disable coredumps in hardened CI
 
     # Vagrant boxes ship sshd_config with '#Port 22' (commented-out, implicit default).
     # The system role deploys Port 722 in a drop-in and restarts sshd.  If no explicit

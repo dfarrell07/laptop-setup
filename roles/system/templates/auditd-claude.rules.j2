@@ -13,8 +13,11 @@
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 -a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
--a never,exit -F exe=/usr/local/go/pkg/tool/linux_amd64/compile -k exclude-go-build
--a never,exit -F exe=/usr/local/go/pkg/tool/linux_amd64/link -k exclude-go-build
+# Fedora packages Go at /usr/lib/golang (golang-bin RPM), not /usr/local/go (go.dev tarball convention).
+# GOTOOLCHAIN=auto downloads land at ~/go/pkg/mod/golang.org/toolchain@vX.Y.Z/ — version slug changes,
+# so those paths cannot be excluded by exe= without per-toolchain entries.
+-a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/compile -k exclude-go-build
+-a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/link -k exclude-go-build
 
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
