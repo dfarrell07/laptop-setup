@@ -664,10 +664,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
     if [[ "$zone" == "drop" ]]; then
       # Only check drop-zone-specific rules when the drop zone is actually active
-      if firewall-cmd --zone=drop --query-port="${_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
-      else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
+      if firewall-cmd --zone=drop --query-port="${_ssh_port:-722}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
+      else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-722}/tcp not open in drop zone"; fi
     elif $CSB_HOST; then record "firewall-ssh-port" "WARN" "skipped on CSB — drop zone not active (IT manages zones)"
-    else record "firewall-ssh-port" "FAIL" "port ${_ssh_port}/tcp not open in drop zone"; fi
+    else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-722}/tcp not open in drop zone"; fi
     # Check permanent rule regardless of whether tailscale0 is up (catches post-snapshot regressions)
     if firewall-cmd --permanent --zone=trusted --query-interface=tailscale0 &>/dev/null; then
       record "firewall-tailscale-permanent" "PASS"
@@ -1401,9 +1401,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
   else record "vsyscall-none" "WARN" "vsyscall=none not in cmdline (requires reboot if grubby ran)"; fi
-  # IOMMU kernel param (AMD DMA protection)
-  if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
-  else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+  # IOMMU kernel param (AMD DMA protection — only applicable on AMD CPUs)
+  if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
+    if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
+    else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+  fi
   if grep -q 'iommu=pt' /proc/cmdline 2>/dev/null; then record "iommu-pt" "PASS"
   elif grep -q 'iommu=pt' /etc/kernel/cmdline 2>/dev/null; then record "iommu-pt" "WARN" "iommu=pt in /etc/kernel/cmdline but not active (requires reboot)"; fi
   # Memory safety kernel params

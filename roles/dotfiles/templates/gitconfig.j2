@@ -106,23 +106,10 @@
 	sslCAInfo = {{ dotfiles_internal_ca_path }}
 {% endif %}
 
-[includeIf "gitdir:~/src/submariner-io/"]
+{% for org in dotfiles_work_src_dirs %}
+[includeIf "gitdir:~/src/{{ org }}/"]
 	path = ~/.config/git/config-work
 
-[includeIf "gitdir:~/src/stolostron/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/ovnk/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/konflux/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/bpfman/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/ds/"]
-	path = ~/.config/git/config-work
-
+{% endfor %}
 [includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
 	path = ~/.config/git/config-personal

@@ -112,7 +112,7 @@ cw() {
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
-  if [[ "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* || "$phys" == */src/ovnk/* || "$phys" == */src/konflux/* || "$phys" == */src/bpfman/* || "$phys" == */src/ds/* ]]; then
+  if [[ {% for org in dotfiles_work_src_dirs %}"$phys" == */src/{{ org }}/*{% if not loop.last %} || {% endif %}{% endfor %} ]]; then
     echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
   fi
   _claude_check_base_url || return 1
