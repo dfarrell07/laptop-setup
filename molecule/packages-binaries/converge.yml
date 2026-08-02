@@ -14,7 +14,7 @@
     - name: Override for binary download testing
       ansible.builtin.set_fact:
         packages_install_binaries: true           # the critical toggle under test
-        profile: personal                         # avoids work-gated binaries requiring internal auth
+        profile: work
         packages_go_install:
           - mvdan.cc/gofumpt@v0.7.0               # one tool is enough to exercise the go install path
         packages_go_install_work: []              # clear work-profile go tools

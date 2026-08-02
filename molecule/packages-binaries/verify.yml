@@ -80,11 +80,82 @@
 
     # --- krew ---
 
+    - name: Stat /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc
+
+    - name: Assert oc exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_oc.stat.exists
+          - verify_oc.stat.executable
+        fail_msg: "/usr/local/bin/oc missing or not executable — work-profile OCP tarball regression"
+
+    - name: Stat /usr/local/bin/opm
+      ansible.builtin.stat:
+        path: /usr/local/bin/opm
+      register: verify_opm
+
+    - name: Assert opm exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_opm.stat.exists
+          - verify_opm.stat.executable
+        fail_msg: "/usr/local/bin/opm missing or not executable — work-profile OCP tarball regression"
+
+    - name: Stat /usr/local/bin/operator-sdk
+      ansible.builtin.stat:
+        path: /usr/local/bin/operator-sdk
+      register: verify_operator_sdk
+
+    - name: Assert operator-sdk exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_operator_sdk.stat.exists
+          - verify_operator_sdk.stat.executable
+        fail_msg: "/usr/local/bin/operator-sdk missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/cosign
+      ansible.builtin.stat:
+        path: /usr/local/bin/cosign
+      register: verify_cosign
+
+    - name: Assert cosign exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_cosign.stat.exists
+          - verify_cosign.stat.executable
+        fail_msg: "/usr/local/bin/cosign missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/tkn
+      ansible.builtin.stat:
+        path: /usr/local/bin/tkn
+      register: verify_tkn
+
+    - name: Assert tkn exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_tkn.stat.exists
+          - verify_tkn.stat.executable
+        fail_msg: "/usr/local/bin/tkn missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/ec
+      ansible.builtin.stat:
+        path: /usr/local/bin/ec
+      register: verify_ec
+
+    - name: Assert ec exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_ec.stat.exists
+          - verify_ec.stat.executable
+        fail_msg: "/usr/local/bin/ec missing or not executable — packages_install_binaries=true regression"
+
     - name: Stat krew binary
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew"
       register: verify_krew
-      when: profile | default('personal') == 'work'
 
     - name: Assert krew exists and is executable
       ansible.builtin.assert:
@@ -92,7 +163,6 @@
           - verify_krew.stat.exists
           - verify_krew.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
-      when: profile | default('personal') == 'work'
 
     # --- go install binaries ---
 
