@@ -164,6 +164,8 @@ lint: .venv shellcheck
 	.venv/bin/pip install -r requirements-test.lock
 
 # Regenerate the lockfile from the current .venv (run after editing requirements-test.txt)
+# Note: pip freeze omits per-package hashes; PyPI packages are authenticated via HTTPS/TLS.
+# To generate a hash-pinned lock file: install pip-tools and run pip-compile --generate-hashes.
 pip-lock: .venv
 	.venv/bin/pip freeze > requirements-test.lock
 

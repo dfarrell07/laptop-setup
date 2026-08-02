@@ -7,6 +7,10 @@
     - name: Load configuration
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 
+    - name: Override profile to match converge (personal)
+      ansible.builtin.set_fact:
+        profile: personal
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
