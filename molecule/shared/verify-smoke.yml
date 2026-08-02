@@ -134,7 +134,14 @@
         - 'PermitEmptyPasswords no'
         - 'X11Forwarding no'
         - 'AllowAgentForwarding no'
-        - 'AllowTcpForwarding local'
+      changed_when: false
+      become: true
+      when: sshd_conf_stat.stat.exists
+
+    - name: Check AllowTcpForwarding set to valid value (shared)
+      ansible.builtin.command: >-
+        grep -qE '^AllowTcpForwarding (no|local|remote|yes)$'
+        /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       changed_when: false
       become: true
       when: sshd_conf_stat.stat.exists

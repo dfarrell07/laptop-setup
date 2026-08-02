@@ -30,6 +30,7 @@ packages_cli:
   - fd-find
   - bat
   - tree
+  - git-lfs            # large file support — repos in group_vars/all/repos.yml may use LFS
 
 packages_languages:
   - golang
@@ -98,6 +99,7 @@ packages_networking_work:
 
 packages_apt:
   - git
+  - git-lfs
   - make
   - curl
   - tree
@@ -194,7 +196,7 @@ packages_go_install_work:
   - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
   - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
   - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
-  # Pin to match the broker API version in active Submariner cluster deployments.
+  # Pin to Submariner v0.18.x broker API; revisit when RHACM clusters upgrade past v0.18.
   - github.com/submariner-io/subctl/cmd/subctl@v0.18.0
   # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
   - github.com/stern/stern@v1.32.0

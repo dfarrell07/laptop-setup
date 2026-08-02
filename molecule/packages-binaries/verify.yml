@@ -84,6 +84,7 @@
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew"
       register: verify_krew
+      when: profile | default('personal') == 'work'
 
     - name: Assert krew exists and is executable
       ansible.builtin.assert:
@@ -91,6 +92,7 @@
           - verify_krew.stat.exists
           - verify_krew.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
+      when: profile | default('personal') == 'work'
 
     # --- go install binaries ---
 

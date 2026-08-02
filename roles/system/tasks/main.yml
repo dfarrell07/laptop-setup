@@ -777,6 +777,18 @@
   changed_when: true
   failed_when: false
 
+- name: Remove kernel lockdown grub parameter (lockdown disabled)
+  ansible.builtin.command:
+    cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+  register: system_lockdown_remove_result
+  when:
+    - not (csb_detected | default(false))
+    - system_kernel_lockdown | default('') | length == 0
+    - system_grubby_info.rc | default(1) == 0
+    - "'lockdown=' in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
 - name: Enable IOMMU for DMA protection (AMD)
   ansible.builtin.command:
     cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
@@ -894,6 +906,9 @@
       {% if system_remove_luks_key | bool %}
       current=$(echo "$current" | sed 's| *rd\.luks\.key=[^ ]*||g')
       {% endif %}
+      {% if system_kernel_lockdown | default('') | length == 0 %}
+      current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
+      {% endif %}
       new="$current"
       # Append each missing hardening param (check by key prefix only)
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
@@ -936,6 +951,7 @@
     msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
   when: >-
     (system_lockdown_result is defined and system_lockdown_result is changed) or
+    (system_lockdown_remove_result is defined and system_lockdown_remove_result is changed) or
     (system_iommu_amd_result is defined and system_iommu_amd_result is changed) or
     (system_iommu_intel_result is defined and system_iommu_intel_result is changed) or
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or

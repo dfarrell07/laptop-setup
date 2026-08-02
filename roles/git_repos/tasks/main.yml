@@ -114,6 +114,7 @@
     dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
     update: false
     version: HEAD
+    depth: "{{ item.depth | default(omit) }}"
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"

@@ -171,13 +171,13 @@ system_unprivileged_bpf_disabled: 1
 # for kdump or live analysis). system_kernel_panic_on_oops: 1=halt on OOPS (CIS 1.5.3); 0=log and continue
 # (useful for OVN-K/bpfman development with KASAN/UBSAN where a non-fatal oops should not crash the host).
 # Set both to 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging.
-system_kernel_panic: 10       # set 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging
-system_kernel_panic_on_oops: 1  # CIS 1.5.3; set 0 in config.yml to allow system to continue after non-fatal oops
+system_kernel_panic: 10       # CIS default; default.config.yml overrides to 0 (standalone invocation only)
+system_kernel_panic_on_oops: 1  # CIS 1.5.3; default.config.yml overrides to 0 (standalone invocation only)
 system_init_on_free: true  # zero freed memory pages (init_on_free=1 kernel param); set false in config.yml to disable
 # ptrace scope: 1=restrict to parent process only (CIS; value 2=admin-only, 3=none); 0=unrestricted within
 # user namespace (Fedora workstation default). For OVN-K/bpfman kernel development, set 0 in config.yml
 # to allow gdb -p and strace -p on your own running processes without sudo.
-system_ptrace_scope: 1
+system_ptrace_scope: 1  # CIS default; default.config.yml overrides to 0 (standalone invocation only)
 system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
                           # to add machine-specific sysctls without replacing the entire hardening dict.
                           # Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
@@ -191,7 +191,7 @@ system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d
 # preserving Secure Boot chain of trust). Even with Secure Boot disabled, kexec_load_disabled=1
 # makes kdump impossible (kdump uses kexec to jump into the crash kernel). Set 0 in config.yml
 # if kdump is required on this machine (e.g. kernel debug or production crash capture).
-system_kexec_load_disabled: 1
+system_kexec_load_disabled: 1  # CIS default; default.config.yml overrides to 0 (standalone invocation only)
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
