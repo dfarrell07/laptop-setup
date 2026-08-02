@@ -540,7 +540,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # so its absence on non-sway is a WARN rather than a hard failure.
   if command -v wl-paste &>/dev/null; then record "wl-paste" "PASS"
   elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
-    record "wl-paste" "WARN" "not found (expected in molecule — packages_containers overridden to [] in converge)"
+    record "wl-paste" "WARN" "not found (expected in molecule — desktop_sway_packages overridden to [] in converge)"
   elif ! command -v sway &>/dev/null; then
     record "wl-paste" "WARN" "not found (non-sway machine — wl-clipboard only required on Wayland/sway; see desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi

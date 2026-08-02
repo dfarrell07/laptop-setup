@@ -2126,6 +2126,7 @@
   when:
     - system_authselect_bin.stat.exists
     - system_authselect_faillock_check.rc | default(1) != 0
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   changed_when: true
   failed_when: false
 
@@ -2181,6 +2182,7 @@
   when:
     - system_authselect_bin.stat.exists
     - system_authselect_pwhistory_check.rc | default(1) != 0
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   changed_when: true
   failed_when: false
 
@@ -2658,14 +2660,14 @@
       group: root
       mode: "0644"
     - path: /etc/shadow
-      group: shadow
-      mode: "0000"
+      group: "{{ 'shadow' if ansible_facts['pkg_mgr'] == 'apt' else 'root' }}"
+      mode: "{{ '0640' if ansible_facts['pkg_mgr'] == 'apt' else '0000' }}"
     - path: /etc/group
       group: root
       mode: "0644"
     - path: /etc/gshadow
-      group: shadow
-      mode: "0000"
+      group: "{{ 'shadow' if ansible_facts['pkg_mgr'] == 'apt' else 'root' }}"
+      mode: "{{ '0640' if ansible_facts['pkg_mgr'] == 'apt' else '0000' }}"
   failed_when: false
 
 # --- System-level dconf hardening (CIS 1.8.x — GNOME/GDM only) ---
