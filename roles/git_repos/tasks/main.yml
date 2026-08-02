@@ -108,6 +108,27 @@
     state: directory
     mode: "0755"
 
+- name: Check git-lfs availability
+  ansible.builtin.command:
+    cmd: git lfs version
+  register: git_repos_lfs_check
+  changed_when: false
+  failed_when: false
+
+- name: Warn if git-lfs is not installed
+  ansible.builtin.debug:
+    msg: >-
+      git-lfs is not installed. Repos with LFS-tracked files will clone with
+      pointer text files instead of real content.
+      Affected repo list: {{ git_repos_filtered | map(attribute='dest') | list | join(', ') }}
+  when: git_repos_lfs_check.rc != 0
+
+- name: Register git-lfs smudge/clean filter drivers
+  ansible.builtin.command:
+    cmd: git lfs install
+  changed_when: false
+  when: git_repos_lfs_check.rc == 0
+
 - name: Clone repositories  # noqa: latest[git]
   ansible.builtin.git:
     repo: "{{ item.url }}"
