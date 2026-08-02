@@ -128,7 +128,7 @@ bindsym $mod+Ctrl+l exec swaylock -f -c {{ desktop_sway_lock_color }}
 
 # Screenshot (grim + slurp)
 bindsym Print exec grim ~/Pictures/screenshot-$(date +%F-%T).png
-bindsym $mod+Print exec grim -g "$(slurp)" - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy
+bindsym $mod+Print exec grim -g "$(slurp)" - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy -t image/png
 
 # Audio (PipeWire via pactl)
 bindsym XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +5%
