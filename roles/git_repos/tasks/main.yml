@@ -123,11 +123,21 @@
       Affected repo list: {{ git_repos_filtered | map(attribute='dest') | list | join(', ') }}
   when: git_repos_lfs_check.rc != 0
 
+- name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: git config --global filter.lfs.smudge
+  register: git_repos_lfs_configured
+  changed_when: false
+  failed_when: false
+  when: git_repos_lfs_check.rc == 0
+
 - name: Register git-lfs smudge/clean filter drivers
   ansible.builtin.command:
     cmd: git lfs install
-  changed_when: false
-  when: git_repos_lfs_check.rc == 0
+  changed_when: true
+  when:
+    - git_repos_lfs_check.rc == 0
+    - (git_repos_lfs_configured.rc | default(-1)) != 0
 
 - name: Clone repositories  # noqa: latest[git]
   ansible.builtin.git:

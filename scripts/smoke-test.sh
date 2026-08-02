@@ -67,7 +67,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "golangci-lint:golangci-lint --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
@@ -78,7 +78,7 @@ else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
 
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
-for tool in "gofumpt:--version" "gopls:version" "stern:--version"; do
+for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   [[ -x "$_gobin" ]] && {
     if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"
@@ -207,8 +207,10 @@ _alc="$HOME/.config/alacritty/alacritty.toml"
 if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
   if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
   elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
-  elif grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty" "PASS"
-  else record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $_alc — SSH into remote hosts may fail"; fi
+  else
+    record "dotfile-alacritty" "PASS"
+    if ! grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $_alc — SSH into remote hosts may fail"; fi
+  fi
 fi
 unset _alc
 

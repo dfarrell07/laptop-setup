@@ -54,10 +54,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
           script: |
-            const fs = require('fs');
-            const body = fs.existsSync('./lychee/out.md')
-              ? fs.readFileSync('./lychee/out.md', 'utf8')
-              : 'Link check failed. See workflow run for details.';
+            const body = 'Link check failed. See run: ' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId;
             const {data: issues} = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
