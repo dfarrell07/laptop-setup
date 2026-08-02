@@ -162,13 +162,6 @@
   failed_when: false
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
-- name: Ensure environment.d directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/environment.d"
-    state: directory
-    mode: "0755"
-  when: ansible_system == 'Linux'
-
 - name: Deploy containers environment.d config (KIND and Podman socket)
   ansible.builtin.copy:
     content: |

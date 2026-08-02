@@ -222,6 +222,9 @@
 
   roles:
     - role: common
+      # always tag is intentional: common creates prerequisite dirs; '--skip-tags common'
+      # is insufficient to suppress it — the always tag wins. Use '--skip-tags always'
+      # to suppress (also affects all other always-tagged pre_tasks in this play).
       tags: [common, always]
 
     - role: packages

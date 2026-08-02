@@ -45,18 +45,6 @@
     mode: "0700"
   when: ansible_system != 'Linux'
 
-- name: Ensure Linux-only config directories exist
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - "{{ ansible_user_dir }}/.config/user-tmpfiles.d"
-    - "{{ ansible_user_dir }}/.config/environment.d"
-    - "{{ ansible_user_dir }}/.config/systemd/user"
-  when: ansible_system == 'Linux'
-
-
 - name: Ensure Claude config directory
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/.config/claude"
@@ -81,12 +69,6 @@
     dest: "{{ ansible_user_dir }}/.zshrc"
     mode: "0644"
     backup: true
-
-- name: Ensure ~/.config/git directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/git"
-    state: directory
-    mode: "0755"
 
 - name: Check if gitconfig exists
   ansible.builtin.stat:

@@ -562,7 +562,7 @@
 # config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
 - name: Merge configurable sysctl values into hardening dict
   ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({  # noqa: jinja[spacing]
         'kernel.sysrq': system_sysrq | int,
         'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int,
         'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int,
