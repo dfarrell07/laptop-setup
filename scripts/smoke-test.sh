@@ -542,7 +542,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
     record "wl-paste" "WARN" "not found (expected in molecule — packages_containers overridden to [] in converge)"
   elif ! command -v sway &>/dev/null; then
-    record "wl-paste" "WARN" "not found (expected on sway — wl-clipboard is in desktop_sway_packages)"
+    record "wl-paste" "WARN" "not found (non-sway machine — wl-clipboard only required on Wayland/sway; see desktop_sway_packages)"
   else record "wl-paste" "FAIL" "not found (wl-clipboard missing — tmux clipboard chain and cliphist daemon broken)"; fi
   # swaylock config: deployed via desktop/tasks/main.yml copy task; without it swaylock
   # falls back to defaults (no show-failed-attempts, no indicator-caps-lock).
@@ -587,13 +587,14 @@ IS_LINUX=true
 # RHEL CSB: fapolicyd is installed AND Red Hat internal CA cert present
 # The CA cert check prevents false-positives on machines that have fapolicyd
 # installed manually without being on a Red Hat corporate network.
-_rh_ca="/etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem"
+# Mirrors csb_detect.yml OR logic: any of the three RH CA cert files triggers.
 CSB_HOST=false
-if [[ -f "$_rh_ca" ]]; then
+if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
+   || [[ -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
+   || [[ -f /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem ]]; then
   [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
   systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q "fapolicyd" && CSB_HOST=true
 fi
-unset _rh_ca
 
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 

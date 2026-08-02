@@ -56,7 +56,10 @@ system_sysctl_hardening:
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
-  vm.max_map_count: 262144  # required for Elasticsearch/OpenSearch pods in kind clusters; Go programs with many goroutines
+  # Fedora 41+ default (Changes/IncreaseVmMaxMapCount); also satisfies Elasticsearch/OpenSearch
+  # minimum and large JVM/AI-ML pods in kind clusters. Must be ≥ 90-hardening.conf to avoid
+  # silently overriding /usr/lib/sysctl.d/10-map-count.conf (alphabetical precedence).
+  vm.max_map_count: 1048576
 
 # Firewall
 # True on standard Fedora (csb_detected=false) and Fedora hybrid (csb_detected=true, not RHEL).

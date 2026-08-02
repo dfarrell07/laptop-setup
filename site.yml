@@ -29,17 +29,17 @@
 
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-      when: ansible_system | default('Linux') == 'Linux'
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
       tags: [always]
 
   roles:
     - role: repos_dnf
       tags: [repos_dnf]
-      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+      when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
     - role: system
       tags: [system]
-      when: ansible_system | default('Linux') == 'Linux'
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
 
   post_tasks:
     # NetworkManager restart and systemd-resolved restart handlers fire here (end of Play 1).
@@ -55,8 +55,8 @@
       register: system_dns_liveness
       until: system_dns_liveness.rc == 0
       when:
-        - ansible_system | default('Linux') == 'Linux'
-        - ansible_virtualization_type not in ['container', 'docker', 'podman']
+        - ansible_facts['system'] | default('Linux') == 'Linux'
+        - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
       tags: [system]
 
     - name: Warn if DNS is not resolving after NetworkManager restart
@@ -66,7 +66,7 @@
           restart. Play 2 (git clones, binary downloads) may fail. Check NM and resolved status:
           systemctl status NetworkManager systemd-resolved; resolvectl status
       when:
-        - ansible_system | default('Linux') == 'Linux'
+        - ansible_facts['system'] | default('Linux') == 'Linux'
         - system_dns_liveness is defined
         - system_dns_liveness.rc | default(1) != 0
       tags: [system]
@@ -149,7 +149,7 @@
 
     - role: redhat
       tags: [redhat]
-      when: profile == 'work' and ansible_os_family == 'RedHat'
+      when: profile == 'work' and ansible_facts['os_family'] == 'RedHat'
 
     - role: containers
       tags: [containers]
@@ -159,7 +159,7 @@
 
     - role: distrobox
       tags: [distrobox]
-      when: ansible_system | default('Linux') == 'Linux' and distrobox_enabled | bool
+      when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
 
     - role: claude
       tags: [claude]

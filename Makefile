@@ -37,7 +37,7 @@ all: guard-not-root preflight
 minimal: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
 
-offline: guard-not-root
+offline: guard-not-root preflight
 	ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
