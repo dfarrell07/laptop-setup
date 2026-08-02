@@ -196,10 +196,9 @@ packages_go_install_work:
   - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
   - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
   - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
-  # subctl: latest version installed as 'subctl' in ~/.local/bin; older versions installed
-  # with version suffix (subctlXX) for clusters still on legacy broker APIs.
-  # See packages_subctl_versioned below for multi-version installs.
-  - github.com/submariner-io/subctl/cmd/subctl@v0.24.0
+  # subctl: latest version installed as 'subctl'; packages_subctl_version governs the pin.
+  # See packages_subctl_versioned below for older-version multi-install.
+  - "github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}"
   # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
   - github.com/stern/stern@v1.34.0
 
@@ -207,6 +206,8 @@ packages_go_install_work:
 # Example: {version: "0.18.0", suffix: "18"} → installs /usr/local/bin → ~/.local/bin/subctl18
 # Useful when managing Submariner clusters at different broker API versions.
 # The latest version should also be in packages_go_install_work (as plain 'subctl').
+packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
+
 packages_subctl_versioned:
   - version: "0.18.0"
     suffix: "18"
