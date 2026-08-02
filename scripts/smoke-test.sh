@@ -202,6 +202,19 @@ else record "git-user-name" "PASS"; fi
 if [[ -z "$_git_email" || "$_git_email" == "CHANGE_ME" ]]; then record "git-user-email" "FAIL" "git user.email='$_git_email' — set dotfiles_user_email_work/personal in config.yml and re-run: make dotfiles"
 else record "git-user-email" "PASS"; fi
 unset _gc _git_name _git_email
+# git identity files and includeIf routing
+_gc_work="$HOME/.config/git/config-work"
+_gc_personal="$HOME/.config/git/config-personal"
+if [[ ! -f "$_gc_work" ]]; then record "dotfile-gitconfig-work" "WARN" "~/.config/git/config-work missing — work identity not deployed; run: make dotfiles"
+elif ! grep -q 'Ansible managed' "$_gc_work"; then record "dotfile-gitconfig-work" "WARN" "config-work present but not Ansible-managed — manual overwrite?"
+else record "dotfile-gitconfig-work" "PASS"; fi
+if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "~/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
+elif ! grep -q 'Ansible managed' "$_gc_personal"; then record "dotfile-gitconfig-personal" "WARN" "config-personal present but not Ansible-managed — manual overwrite?"
+else record "dotfile-gitconfig-personal" "PASS"; fi
+if ! grep -q 'includeIf.*gitdir:.*src/' "$HOME/.config/git/config" 2>/dev/null; then
+  record "gitconfig-includeif" "FAIL" "no includeIf gitdir:*/src/ block in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
+else record "gitconfig-includeif" "PASS"; fi
+unset _gc_work _gc_personal
 
 # global gitignore — also referenced via core.excludesfile in gitconfig.j2 (belt-and-suspenders: XDG path is read automatically, explicit setting survives non-XDG git invocations)
 _gi="$HOME/.config/git/ignore"

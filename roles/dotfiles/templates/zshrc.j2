@@ -159,12 +159,26 @@ cq() { gh issue create --repo {{ dotfiles_claude_queue_repo }} --title "$1" --bo
 # --- Kubernetes ---
 # Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)
 (( $+functions[compdef] )) || { autoload -Uz compinit && compinit }
-command -v kubectl &>/dev/null && source <(kubectl completion zsh)
-command -v oc &>/dev/null && source <(oc completion zsh)
-command -v helm &>/dev/null && source <(helm completion zsh)
-command -v kind &>/dev/null && source <(kind completion zsh)
-command -v kustomize &>/dev/null && source <(kustomize completion zsh)
-command -v bpfman &>/dev/null && source <(bpfman completion zsh) 2>/dev/null
+# kubectl completion is provided by the oh-my-zsh kubectl plugin (no duplicate load needed)
+# Cache completions for tools not covered by oh-my-zsh plugins; regenerate when binary changes.
+_zsh_cached_completion() {
+  local cmd="$1"; shift
+  command -v "$cmd" &>/dev/null || return 0
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions"
+  local cache_file="$cache_dir/${cmd}.zsh"
+  local binary
+  binary=$(command -v "$cmd")
+  if [[ ! -f "$cache_file" || "$binary" -nt "$cache_file" ]]; then
+    mkdir -p "$cache_dir"
+    "$cmd" "$@" > "$cache_file" 2>/dev/null
+  fi
+  [[ -s "$cache_file" ]] && source "$cache_file"
+}
+_zsh_cached_completion oc completion zsh
+_zsh_cached_completion helm completion zsh
+_zsh_cached_completion kind completion zsh
+_zsh_cached_completion kustomize completion zsh
+_zsh_cached_completion bpfman completion zsh
 
 # --- Dev shortcuts ---
 alias mj='make -j$(nproc)'          # parallel make (OVN-K/bpfman builds)
