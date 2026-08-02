@@ -352,9 +352,9 @@ elif ! grep -qE '(sk-)?ssh-ed25519' "$_as"; then record "git-allowed-signers" "F
 else record "git-allowed-signers" "PASS"; fi
 unset _as
 
-# git safe.directory should be empty
-if dirs=$(run git config --global --get-all safe.directory 2>/dev/null) && [[ -n "$dirs" ]]; then
-  record "git-safe-directory" "FAIL" "set: $dirs"
+# git safe.directory must not contain dangerous wildcards (* ** /)
+if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E '^\*{1,2}$|^/$') && [[ -n "$dirs" ]]; then
+  record "git-safe-directory" "FAIL" "unsafe wildcard entries: $dirs"
 else record "git-safe-directory" "PASS"; fi
 
 # git hooksPath configured

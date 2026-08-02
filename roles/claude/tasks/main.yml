@@ -147,9 +147,18 @@
 
 # --- Git safety (defense-in-depth) ---
 # core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
-- name: Remove unsafe safe.directory entries  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: git config --global --unset-all safe.directory
+- name: Remove unsafe safe.directory wildcard entries  # noqa: command-instead-of-module risky-shell-pipe
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      found=$(git config --global --get-all safe.directory 2>/dev/null | grep -cE '^\*{1,2}$|^/$' || echo 0)
+      if [[ "$found" -gt 0 ]]; then
+        for pat in '^\*$' '^\*\*$' '^/$'; do
+          git config --global --unset-all safe.directory "$pat" 2>/dev/null || true
+        done
+        exit 0
+      fi
+      exit 1
   register: claude_safe_dir
   changed_when: claude_safe_dir.rc == 0
   failed_when: false
