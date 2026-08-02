@@ -7,9 +7,10 @@ first="${first%:}"
 # This is what should be imperative mood.
 desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
 
-# Allow git autosquash prefixes unchanged
+# Allow git autosquash prefixes and merge commits unchanged
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
+  Merge\ branch*|Merge\ pull*|Merge\ remote*) exit 0 ;;
 esac
 
 # Check capitalized
@@ -43,8 +44,8 @@ if [ "$desc_first" != "$first" ] && _bad_word "$first"; then
   exit 1
 fi
 
-# Check length
-len=${#msg}
+# Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
+len=$(printf '%s' "$msg" | wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2
   exit 1

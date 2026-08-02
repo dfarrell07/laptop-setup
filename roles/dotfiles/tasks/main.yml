@@ -146,6 +146,7 @@
 
       case "$msg" in
         squash!*|fixup!*|amend!*) exit 0 ;;
+        Merge\ branch*|Merge\ pull*|Merge\ remote*) exit 0 ;;
       esac
 
       if ! echo "$msg" | grep -qE '^[A-Z]'; then

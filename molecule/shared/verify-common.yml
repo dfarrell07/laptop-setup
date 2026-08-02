@@ -826,10 +826,14 @@
   changed_when: false
   failed_when: false
   register: verify_gonosumdb
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
 
 - name: Assert GONOSUMDB in zshrc (work profile, Linux)
   ansible.builtin.assert:
     that: verify_gonosumdb.rc == 0
     fail_msg: "GONOSUMDB missing from ~/.zshrc — dotfiles_gonosumdb variable not rendered"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
