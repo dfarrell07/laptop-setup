@@ -242,9 +242,9 @@
         cmd: grep -q 'bindsym.*Return exec' "{{ ansible_user_dir }}/.config/i3/config"
       changed_when: false
 
-    - name: Verify i3 config starts polkit authentication agent
+    - name: Verify i3 config starts lxpolkit authentication agent
       ansible.builtin.command:
-        cmd: grep -q 'polkit-gnome-authentication-agent' "{{ ansible_user_dir }}/.config/i3/config"
+        cmd: grep -q 'lxpolkit' "{{ ansible_user_dir }}/.config/i3/config"
       changed_when: false
 
     # --- System role: bpfman.socket ---

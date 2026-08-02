@@ -197,6 +197,19 @@
   changed_when: false
   become: true
 
+- name: Check pwquality credit and complexity parameters (CIS 5.3.3)
+  ansible.builtin.command: grep -q '{{ item }}' /etc/security/pwquality.conf
+  changed_when: false
+  become: true
+  loop:
+    - '^dcredit = -1'
+    - '^ucredit = -1'
+    - '^lcredit = -1'
+    - '^ocredit = -1'
+    - '^difok = 4'
+    - '^maxrepeat = 3'
+    - '^enforce_for_root'
+
 - name: Check pwhistory remember=24
   ansible.builtin.command: grep -q '^remember = 24' /etc/security/pwhistory.conf
   changed_when: false

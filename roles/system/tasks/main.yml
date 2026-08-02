@@ -1517,7 +1517,9 @@
 
 # --- USBGuard ---
 - name: Configure USBGuard
-  when: system_install_usbguard | bool
+  when:
+    - system_install_usbguard | bool
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']  # usbguard-selinux is Fedora/RHEL-only
   block:
     - name: Install USBGuard
       ansible.builtin.dnf:

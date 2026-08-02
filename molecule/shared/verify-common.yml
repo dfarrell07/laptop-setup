@@ -769,6 +769,16 @@
     fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
   when: ansible_system == 'Linux'
 
+- name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
+  ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
+  changed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh)
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
+  changed_when: false
+  when: ansible_system == 'Linux'
+
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:

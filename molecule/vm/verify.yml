@@ -763,12 +763,12 @@
 
     # --- Session timeout ---
     - name: Verify TMOUT configured via profile.d (CIS 5.5.5 — bash login shells)
-      ansible.builtin.command: grep -qE '^TMOUT=600([^0-9]|$)' /etc/profile.d/tmout.sh
+      ansible.builtin.command: grep -qE '^readonly TMOUT=600' /etc/profile.d/tmout.sh
       changed_when: false
       become: true
 
     - name: Verify TMOUT configured via /etc/zshrc (CIS 5.5.5 — zsh interactive shells)
-      ansible.builtin.command: grep -qE '^TMOUT=600([^0-9]|$)' /etc/zshrc
+      ansible.builtin.command: grep -qE '^typeset -xr TMOUT=600' /etc/zshrc
       changed_when: false
       become: true
 
