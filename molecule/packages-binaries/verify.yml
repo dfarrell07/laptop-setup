@@ -66,11 +66,23 @@
           - verify_k9s.stat.executable
         fail_msg: "/usr/local/bin/k9s missing or not executable — packages_install_binaries=true regression"
 
+    - name: Stat /usr/local/bin/sops
+      ansible.builtin.stat:
+        path: /usr/local/bin/sops
+      register: verify_sops
+
+    - name: Assert sops exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_sops.stat.exists
+          - verify_sops.stat.executable
+        fail_msg: "/usr/local/bin/sops missing or not executable — packages_install_binaries=true regression"
+
     # --- krew ---
 
     - name: Stat krew binary
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.krew/bin/krew"
+        path: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew"
       register: verify_krew
 
     - name: Assert krew exists and is executable
@@ -78,7 +90,7 @@
         that:
           - verify_krew.stat.exists
           - verify_krew.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/.krew/bin/krew missing or not executable — packages_install_binaries=true regression"
+        fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
 
     # --- go install binaries ---
 

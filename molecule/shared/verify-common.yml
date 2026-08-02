@@ -173,7 +173,9 @@
 
 - name: Assert known_hosts exists
   ansible.builtin.assert:
-    that: verify_known_hosts.stat.exists
+    that:
+      - verify_known_hosts.stat.exists
+      - verify_known_hosts.stat.mode == '0600'
     fail_msg: "~/.ssh/known_hosts was not created — GitHub known_hosts seeding did not run"
 
 - name: Check known_hosts contains github.com entry
@@ -742,6 +744,7 @@
     - "KbdInteractiveAuthentication no"
     - "PermitEmptyPasswords no"
     - "X11Forwarding no"
+    - "AllowTcpForwarding local"
     - "HostKeyAlgorithms ssh-ed25519"
   changed_when: false
   become: true

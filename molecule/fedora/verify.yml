@@ -171,6 +171,21 @@
         that: verify_i3status.stat.exists
         fail_msg: "i3status config not deployed"
 
+    - name: Verify swaylock config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/swaylock/config"
+      register: verify_swaylock
+
+    - name: Assert swaylock config exists
+      ansible.builtin.assert:
+        that: verify_swaylock.stat.exists
+        fail_msg: "swaylock config not deployed — desktop role copy task missing or dest path wrong"
+
+    - name: Verify swaylock config contains show-failed-attempts
+      ansible.builtin.command:
+        cmd: grep -q 'show-failed-attempts' "{{ ansible_user_dir }}/.config/swaylock/config"
+      changed_when: false
+
     # --- Desktop WM configs (second converge run sets desktop_environment: i3) ---
     - name: Verify i3 config deployed
       ansible.builtin.stat:

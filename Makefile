@@ -20,7 +20,7 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
-	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline smoke-test smoke-test-container check"
+	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit"
@@ -189,7 +189,7 @@ commitlint:
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
 # For VM tests: make test-vm (requires: make bootstrap-test first).
-test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline
+test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-packages-binaries
 
 # Syntax-check the scripts/ directory (bash -n: parse only, no execution).
 test-scripts:

@@ -104,7 +104,7 @@ make repos-downstream # downstream repos only
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
 - **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks),
   backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
-- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, debian, vm, macos) + shared verify includes
+- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, debian, vm, macos, packages-binaries) + shared verify includes
 
 ## Key Patterns
 
