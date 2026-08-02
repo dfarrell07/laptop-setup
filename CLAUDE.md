@@ -65,7 +65,7 @@ make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
-make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline); Podman only
+make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/packages-binaries); Podman only
 make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, packages-binaries)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
