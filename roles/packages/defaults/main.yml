@@ -52,7 +52,6 @@ packages_containers:
   - skopeo
   - distrobox
   - kubectl  # kubectl — needed on all profiles for KIND cluster interaction; 'kubernetes-client' is a RHEL-only name, Fedora uses 'kubectl'
-  - kubectl  # needed on all profiles for KIND; Fedora package name (not kubernetes-client which is RHEL-only)
 packages_virtualization:
   - libvirt
   - libvirt-client
@@ -202,6 +201,8 @@ packages_brew_taps:
   - nikitabobko/tap
   - theseal/ssh-askpass
   - domt4/autoupdate
+
+packages_brew_update: false
 
 packages_brew_cask:
   - alacritty

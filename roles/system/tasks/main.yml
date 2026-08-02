@@ -574,39 +574,19 @@
 # Merge system_sysrq into the dict so config.yml can override without replacing
 # the entire system_sysctl_hardening dict. Default is 0 (CIS); set 176 in
 # config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
-- name: Merge system_sysrq into sysctl hardening dict
+- name: Merge configurable sysctl values into hardening dict
   ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.sysrq': system_sysrq | int})}}"
-
-# yamllint disable rule:line-length
-- name: Merge system_ipv6_accept_ra into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int, 'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int})}}"
-# yamllint enable rule:line-length
-
-- name: Merge system_bpf_jit_harden into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'net.core.bpf_jit_harden': system_bpf_jit_harden | int})}}"
-
-- name: Merge system_kernel_panic into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.panic': system_kernel_panic | int})}}"
-
-- name: Merge system_kernel_panic_on_oops into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.panic_on_oops': system_kernel_panic_on_oops | int})}}"
-
-- name: Merge system_core_pattern into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.core_pattern': system_core_pattern})}}"
-
-- name: Merge system_ptrace_scope into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.yama.ptrace_scope': system_ptrace_scope | int})}}"
-
-- name: Merge system_kexec_load_disabled into sysctl hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{system_sysctl_hardening | combine({'kernel.kexec_load_disabled': system_kexec_load_disabled | int})}}"
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
+        'kernel.sysrq': system_sysrq | int,
+        'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int,
+        'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int,
+        'net.core.bpf_jit_harden': system_bpf_jit_harden | int,
+        'kernel.panic': system_kernel_panic | int,
+        'kernel.panic_on_oops': system_kernel_panic_on_oops | int,
+        'kernel.core_pattern': system_core_pattern,
+        'kernel.yama.ptrace_scope': system_ptrace_scope | int,
+        'kernel.kexec_load_disabled': system_kexec_load_disabled | int
+      }) }}"
 
 # CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
 # On CSB, Red Hat IT network diagnostics rely on TCP timestamps for RTT measurement

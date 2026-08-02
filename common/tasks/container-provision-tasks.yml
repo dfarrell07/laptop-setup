@@ -137,7 +137,7 @@
   become: true
 
 # Export oc and kubectl to the host after they are installed (must happen
-# after install, not in distrobox_exports init_hooks which run before Play 3).
+# after install, not at init time which runs before Play 3).
 # No `creates:` guard: always overwrite so the wrapper points to the current
 # container. A stale wrapper from a renamed/old container would otherwise
 # silently persist. distrobox-export is idempotent when the container matches.

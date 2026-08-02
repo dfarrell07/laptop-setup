@@ -426,11 +426,6 @@
     state: directory
     mode: "0700"
 
-- name: Check if SSH client config exists
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.ssh/config"
-  register: dotfiles_ssh_config_stat
-
 - name: Deploy SSH client config
   ansible.builtin.template:
     src: ssh_config.j2

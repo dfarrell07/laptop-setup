@@ -116,6 +116,7 @@ system_faillock_even_deny_root: true  # lock root on failed attempts; set false 
 system_pwquality_ucredit: -1   # uppercase credit: -1 = require at least 1 uppercase; 0 = no requirement
 system_pwquality_lcredit: -1   # lowercase credit: -1 = require at least 1 lowercase; 0 = no requirement
 system_pwquality_ocredit: -1   # other/special credit: -1 = require at least 1 special char; 0 = no requirement
+system_pwquality_dcredit: -1   # digit credit: -1 = require at least 1 digit; 0 = no requirement
 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
@@ -203,6 +204,7 @@ ssh_port: 722  # noqa: var-naming[no-role-prefix]
 system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
 system_ssh_channel_timeout: ""  # disabled: sshd 10.2p1 (Fedora 44) has bz3827 — UnusedConnectionTimeout fires immediately after
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
+system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)
