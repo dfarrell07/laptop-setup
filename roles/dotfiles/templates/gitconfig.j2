@@ -3,7 +3,7 @@
 	name = {{ dotfiles_user_name }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
 {% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
-	signingkey = ~/.ssh/{{ ssh_signing_key_basename | default('id_ed25519_sk_signing') }}.pub
+	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 {% endif %}
 
 {% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
