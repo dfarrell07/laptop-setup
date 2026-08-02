@@ -1092,12 +1092,23 @@
   when: not (system_disable_fingerprint | bool)
   failed_when: false
 
+- name: Check if authselect with-fingerprint feature is already enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-fingerprint
+  register: system_authselect_fingerprint_enable_check
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_disable_fingerprint | bool)
+    - system_authselect_bin.stat.exists
+
 - name: Enable authselect with-fingerprint feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-fingerprint
   when:
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
+    - system_authselect_fingerprint_enable_check.rc | default(1) != 0
   changed_when: true
   failed_when: false
 
