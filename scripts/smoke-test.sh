@@ -207,8 +207,25 @@ _alc="$HOME/.config/alacritty/alacritty.toml"
 if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
   if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
   elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
-  elif ! grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $_alc — SSH into remote hosts may fail"
-  else record "dotfile-alacritty" "PASS"; fi
+  elif grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty" "PASS"
+  else record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $_alc — SSH into remote hosts may fail"; fi
+fi
+unset _alc
+
+# i3-specific tool checks (only on i3 desktop machines)
+if command -v i3 &>/dev/null; then
+  if command -v playerctl &>/dev/null; then record "i3-playerctl" "PASS"
+  else record "i3-playerctl" "FAIL" "playerctl not installed — XF86Audio media keys non-functional in i3 (run: make desktop)"; fi
+  if command -v clipit &>/dev/null; then record "i3-clipit" "PASS"
+  else record "i3-clipit" "FAIL" "clipit not installed — clipboard contents lost on app close in i3 (run: make desktop)"; fi
+fi
+
+# GTK theme config (only on Sway desktop — no GNOME settings daemon)
+if command -v sway &>/dev/null; then
+  _gtk3="$HOME/.config/gtk-3.0/settings.ini"
+  if [[ -f "$_gtk3" ]]; then record "gtk-3-settings" "PASS"
+  else record "gtk-3-settings" "WARN" "GTK 3.0 settings.ini not deployed — GTK apps use system default theme in Sway"; fi
+  unset _gtk3
 fi
 unset _alc
 
