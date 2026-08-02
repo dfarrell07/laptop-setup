@@ -311,6 +311,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up oc tarball
           ansible.builtin.file:
             path: /tmp/openshift-client-linux.tar.gz
@@ -433,6 +434,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up opm tarball
           ansible.builtin.file:
             path: /tmp/opm-linux.tar.gz
@@ -559,6 +561,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up helm tarball
           ansible.builtin.file:
             path: /tmp/helm.tar.gz
@@ -635,6 +638,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up kustomize tarball
           ansible.builtin.file:
             path: /tmp/kustomize.tar.gz
@@ -912,6 +916,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up tkn tarball
           ansible.builtin.file:
             path: /tmp/tkn.tar.gz
@@ -1033,6 +1038,7 @@
           become: true
           tags: [become]
 
+      always:
         - name: Clean up k9s tarball
           ansible.builtin.file:
             path: /tmp/k9s.tar.gz
@@ -1161,17 +1167,6 @@
         cmd: "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64 install krew"
       changed_when: true
 
-    - name: Clean up krew installer files
-      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /tmp/krew.tar.gz
-        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64"
-        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64.yaml"
-        - "{{ ansible_user_dir }}/.local/bin/LICENSE"
-
   rescue:
     - name: Record krew installation failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -1195,6 +1190,18 @@
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
       when: not (csb_detected | default(false))
+
+  always:
+    - name: Clean up krew installer files
+      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/krew.tar.gz
+        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64"
+        - "{{ ansible_user_dir }}/.local/bin/krew-linux_amd64.yaml"
+        - "{{ ansible_user_dir }}/.local/bin/LICENSE"
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:

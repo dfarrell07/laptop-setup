@@ -175,7 +175,7 @@
         exit 1
       fi
 
-      len=${#msg}
+      len=$(printf '%s' "$msg" | wc -m)
       if [ "$len" -gt 72 ]; then
         echo "ERROR: Subject too long ($len > 72 chars)" >&2
         exit 1
