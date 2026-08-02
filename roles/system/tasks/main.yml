@@ -2100,7 +2100,7 @@
     option: even_deny_root
     allow_no_value: true
     mode: "0644"
-  when: system_faillock_even_deny_root | bool
+  when: system_faillock_even_deny_root | bool and not (csb_detected | default(false) and ansible_distribution != 'Fedora')
   failed_when: false
 
 - name: Remove pam_faillock even_deny_root flag (when disabled)
@@ -2110,7 +2110,7 @@
     option: even_deny_root
     state: absent
     mode: "0644"
-  when: not (system_faillock_even_deny_root | bool)
+  when: not (system_faillock_even_deny_root | bool) and not (csb_detected | default(false) and ansible_distribution != 'Fedora')
   failed_when: false
 
 - name: Check if authselect with-faillock feature is already enabled
