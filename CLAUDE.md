@@ -56,7 +56,7 @@ make test-debian      # Molecule Debian tests
 make test-macos       # Molecule macOS tests
 make test-container   # Molecule container provisioning scenario (distrobox/Podman)
 make test-container-offline  # Molecule container rescue/degradation path (offline 404 scenario)
-make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt)
+make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt, subctl18; profile:work)
 make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-container  # Post-run verification (distrobox)
