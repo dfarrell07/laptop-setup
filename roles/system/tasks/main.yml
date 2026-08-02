@@ -2911,6 +2911,20 @@
       # 90-hardening.conf lives here; an attacker editing it could disable kernel
       # hardening (ASLR, dmesg, ptrace restrictions) without AIDE detecting the change.
 
+    - name: Add /etc/audit to AIDE monitoring (auditd rules integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/audit'
+        line: '/etc/audit NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      notify: Reinitialize AIDE database
+      # claude-code.rules lives here (-w /etc/audit/ -p wa -k audit-config watches the
+      # directory at runtime, but auditd cannot self-verify its own rules after a
+      # post-compromise strip — e.g. removing the -e 2 immutability flag or deleting
+      # bpf() syscall watches). AIDE fills the boot-time gap: rule files can be silently
+      # modified while auditd is stopped, but AIDE detects the content change independently.
+
     - name: Add /etc/modprobe.d to AIDE monitoring (kernel module blacklist integrity)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
@@ -2932,6 +2946,19 @@
       notify: Reinitialize AIDE database
       # 99-hardening enforces use_pty, log_input/log_output, and timestamp_timeout;
       # editing it would remove sudo audit trail without AIDE detecting the change.
+
+    - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/usbguard'
+        line: '/etc/usbguard NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      notify: Reinitialize AIDE database
+      when: system_install_usbguard | default(true) | bool
+      # rules.conf controls which USB devices enumerate; offline modification (e.g., adding
+      # "allow id *:*") would bypass USBGuard entirely. auditd detects write events only
+      # while running; AIDE content-hash baseline catches offline tampering on next --check.
 
     - name: Add /etc/aide.conf to AIDE monitoring (self-reference — detect config tampering)
       ansible.builtin.lineinfile:

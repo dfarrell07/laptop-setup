@@ -33,14 +33,19 @@ DOTFILES=(
   .ssh/id_ed25519_sk_signing.pub
   .ssh/id_rsa_redhat
   .config/direnv/direnv.toml
+  .config/direnv/direnvrc
   .config/environment.d/ssh-agent.conf
   .config/environment.d/containers.conf
   .config/environment.d/xdg.conf
+  .config/environment.d/gotmpdir.conf
   .config/git/config-work
   .config/git/config-personal
   .config/git/allowed_signers
   .config/git/ignore
   .config/git/template/hooks/pre-commit
+  .config/git/template/hooks/commit-msg
+  .config/git/template/hooks/prepare-commit-msg
+  .config/git/template/hooks/pre-push
   .local/state/zsh/history
   .config/ripgrep/config
   .config/alacritty/alacritty.toml
@@ -52,6 +57,7 @@ DOTFILES=(
   .claude-work/CLAUDE.md
   .config/i3/config
   .config/sway/config
+  .config/swaylock/config
   .config/i3status/config
   .config/autostart/gnome-keyring-ssh.desktop
   .config/xdg-desktop-portal/portals.conf
