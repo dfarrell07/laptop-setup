@@ -202,6 +202,18 @@ if grep -q "Ansible managed" "$_rg" 2>/dev/null; then record "dotfile-ripgreprc"
 else record "dotfile-ripgreprc" "FAIL" "not deployed or not Ansible-managed: $_rg"; fi
 unset _rg
 
+# alacritty config (terminal emulator)
+_alc="$HOME/.config/alacritty/alacritty.toml"
+if [[ ! -f "$_alc" ]]; then record "dotfile-alacritty" "FAIL" "not deployed — run: make desktop"
+elif ! grep -q 'Ansible managed' "$_alc"; then record "dotfile-alacritty" "WARN" "$_alc present but not Ansible-managed"
+elif ! grep -q 'xterm-256color' "$_alc"; then record "dotfile-alacritty-term" "WARN" "TERM=xterm-256color not set in $\{_alc} — SSH into remote hosts may fail"
+else record "dotfile-alacritty" "PASS"; fi
+unset _alc
+
+# vimrc quality (termguicolors + background=dark for correct colors)
+if grep -q 'termguicolors' "$HOME/.vimrc" 2>/dev/null; then record "vimrc-termguicolors" "PASS"
+else record "vimrc-termguicolors" "WARN" "termguicolors not set in ~/.vimrc — 24-bit colors disabled"; fi
+
 # ~/tmp must exist and allow exec (GOTMPDIR — go test compiles binaries here, /tmp is noexec)
 if [[ ! -d "$HOME/tmp" ]]; then
   record "home-tmp-dir" "FAIL" "$HOME/tmp does not exist — run: mkdir -p ~/tmp (or make dotfiles)"
