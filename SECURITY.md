@@ -15,7 +15,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   (encrypt after populating)
 - **SSH key management** — YubiKey FIDO2 key deployment, post-quantum
   key exchange
-- **System hardening** — firewall (drop zone), sysctl (48 settings),
+- **System hardening** — firewall (drop zone), sysctl (49 settings),
   auditd (user persistence monitoring, immutable rules), kernel lockdown,
   SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
   DNS-over-TLS/DNSSEC (empty FallbackDNS), core dump disable, kernel

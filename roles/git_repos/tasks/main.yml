@@ -35,6 +35,15 @@
         | list
       }}
 
+- name: Fail when explicit category filter matches no enabled repos
+  ansible.builtin.fail:
+    msg: >-
+      Category '{{ git_repos_category_filter }}' matched no enabled repos.
+      Valid categories: {{ (git_repos_work_categories + git_repos_personal_categories) | unique | sort | join(', ') }}.
+  when:
+    - git_repos_category_filter | length > 0
+    - git_repos_filtered | length == 0
+
 - name: Display repos to clone
   ansible.builtin.debug:
     verbosity: 1
@@ -59,8 +68,11 @@
     - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
 
 - name: Check connectivity to VPN-gated repo hosts
-  ansible.builtin.command:
-    cmd: "nc -z -w 3 {{ item }} 22"
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: 22
+    timeout: 3
+    state: started
   loop: >-
     {{
       (['code.engineering.redhat.com']
@@ -71,15 +83,14 @@
          else [])
     }}
   register: git_repos_vpn_check
-  changed_when: false
-  failed_when: false
+  ignore_errors: true
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
       VPN-gated host {{ item.item }} is unreachable (port 22).
       Repos at {{ item.item }} require Red Hat VPN — connect to VPN or expect clone failures.
-  loop: "{{ git_repos_vpn_check.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop: "{{ git_repos_vpn_check.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -149,12 +160,12 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
+  when: >-
+    git_repos_clone_results.results
+    | selectattr('item.dest', 'equalto', item.0.dest)
+    | selectattr('failed', 'equalto', false)
+    | list | length > 0
   register: git_repos_remote_result
   changed_when: >-
     'added' in git_repos_remote_result.stdout or
     'updated' in git_repos_remote_result.stdout
-  failed_when:
-    - git_repos_remote_result.rc is not none
-    - git_repos_remote_result.rc != 0
-    - "'No such file' not in ((git_repos_remote_result.msg | default('')) + (git_repos_remote_result.stderr | default('')))"
-    - "'Unable to change directory' not in (git_repos_remote_result.msg | default(''))"
