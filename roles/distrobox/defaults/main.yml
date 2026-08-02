@@ -32,6 +32,7 @@ distrobox_packages:
   - cargo   # Rust package manager (companion to rust package)
   - clippy  # Rust linter — separate dnf package on Fedora; needed for 'cargo clippy'
   - rustfmt  # Rust formatter — separate dnf package; needed for 'cargo fmt --check'
+  - rust-src  # Rust stdlib source — required by rust-analyzer for go-to-definition into std and hover docs
   - protobuf-compiler  # protoc — hard bpfman build requirement (tonic/prost gRPC code generation)
   - pkgconf-pkg-config  # pkg-config — Rust build scripts for libbpf and openssl use it
   - python3
@@ -44,12 +45,12 @@ distrobox_packages:
   - zlib-devel
   - ShellCheck
   - yamllint
+  - shfmt       # moved adjacent to linting peers (ShellCheck/yamllint)
   - ripgrep
   - fd-find
   - buildah
   - skopeo
   - zoxide
-  - shfmt
   - procps-ng
   - findutils
   - which
@@ -76,6 +77,7 @@ distrobox_packages:
   - llvm  # complements clang for eBPF bytecode compilation
   - gdb       # C/eBPF program debugger; required by rust-gdb; Go debugging fallback
   - rust-gdb  # Rust GDB pretty-printers (separate Fedora package from rust)
+  - delve     # Go-native debugger (dlv) — goroutine-aware; GDB insufficient for OVN-K/bpfman Go runtime inspection
   - gh
   - gitleaks
   - ovn
