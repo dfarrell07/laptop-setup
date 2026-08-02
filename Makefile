@@ -153,6 +153,7 @@ check:
 diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
+# NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-packages-binaries
 
 lint: .venv shellcheck
