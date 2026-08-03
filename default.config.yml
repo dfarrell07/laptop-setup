@@ -104,8 +104,8 @@ install_virtualization: true
 #   system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
 #                                                ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
 #   system_ssh_unused_connection_timeout: 600 (roles/system/defaults) — seconds before idle connection with no open channels is
-#   closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
-#   value or "" if they hold idle control masters between commands for more than 600 s)
+#     closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
+#     value or "" if they hold idle control masters between commands for more than 600 s)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
@@ -156,9 +156,9 @@ install_virtualization: true
 #   desktop_sway_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
 #   desktop_sway_repeat_rate: 50       (roles/desktop/defaults) — key repeats per second
 #   desktop_sway_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
-#   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; ThinkPad: 0 (BAT0)
+#   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; most laptops use 0 (BAT0)
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
-#   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  # P16v Gen 1 AMD example
+#   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  (roles/desktop/defaults) — find yours with: swaymsg -t get_inputs
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
 #   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
 #   desktop_terminal: alacritty          (roles/desktop/defaults) — terminal emulator (alacritty/kitty/etc)
@@ -225,8 +225,8 @@ install_virtualization: true
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
 system_kexec_load_disabled: 0  # kdump requires kexec; kexec_load_disabled=1 blocks kdump even without Secure Boot; CIS default is 1
-system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1 (see Additional
-system_kernel_panic_on_oops: 0  # dev workstation: bpfman/OVN-K non-fatal oops should log-and-continue, not halt the host (CIS default is 1)
+system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1
+system_kernel_panic_on_oops: 0  # dev workstation: non-fatal kernel oops should log-and-continue rather than halt (CIS default is 1)
 system_kernel_panic: 0          # preserve panic state for kdump analysis; kexec_load_disabled=0 already enables kdump (CIS default is 10)
 system_faillock_even_deny_root: false  # root lockout on failed logins; root SSH is blocked (PermitRootLogin no), so this adds self-lockout
                                         # risk on sudo mistype without security benefit; CIS default is true

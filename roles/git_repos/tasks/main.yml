@@ -123,7 +123,7 @@
     msg: >-
       git-lfs is not installed. Repos with LFS-tracked files will clone with
       pointer text files instead of real content.
-      Affected repo list: {{ git_repos_filtered | map(attribute='dest') | list | join(', ') }}
+      Install git-lfs ('dnf install git-lfs') before cloning repos that track large files.
   when: git_repos_lfs_check.rc != 0
 
 - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
