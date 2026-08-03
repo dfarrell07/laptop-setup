@@ -311,27 +311,7 @@
         fail_msg: "net.bridge.bridge-nf-call-iptables is not 1 — Kubernetes NetworkPolicy will not be enforced"
       when: verify_bridge_nf.rc == 0
 
-    - name: Verify auditd rules file exists
-      ansible.builtin.stat:
-        path: /etc/audit/rules.d/claude-code.rules
-      register: verify_auditd
-      become: true
-
-    - name: Assert auditd rules deployed with correct mode
-      ansible.builtin.assert:
-        that:
-          - verify_auditd.stat.exists
-          - verify_auditd.stat.mode == '0640'
-        fail_msg: "Auditd rules not deployed or wrong permissions (expected 0640)"
-      when: ansible_facts.services['auditd.service'] is defined
-
-    - name: Check auditd rules are immutable (-e 2 is last rule)
-      ansible.builtin.command: grep -q '^\-e 2$' /etc/audit/rules.d/claude-code.rules
-      changed_when: false
-      become: true
-      when:
-        - ansible_facts.services['auditd.service'] is defined
-        - verify_auditd.stat.exists
+    # auditd: stat + mode 0640 + -e 2 immutability covered by verify-common.yml (not csb_detected)
 
     - name: Verify DNS-over-TLS config exists
       ansible.builtin.stat:
@@ -684,11 +664,7 @@
       changed_when: false
       become: true
 
-    # --- Password quality ---
-    - name: Check pwquality minlen=14
-      ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
-      changed_when: false
-      become: true
+    # pwquality minlen=14 covered by verify-dnf.yml (included at line 35)
 
     # --- Journald persistence ---
     - name: Verify /var/log/journal exists for persistent logging

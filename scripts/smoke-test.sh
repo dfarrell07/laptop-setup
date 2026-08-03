@@ -1254,8 +1254,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=524288 (run: make all)"; fi
   unset _inotify_watches
   _inotify_instances=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
-  if [[ "$_inotify_instances" -ge 512 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"
-  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=512 (run: make all)"; fi
+  if [[ "$_inotify_instances" -ge 8192 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"
+  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make all)"; fi
   unset _inotify_instances
 
   # ctrl+alt+del disabled (physical security)
