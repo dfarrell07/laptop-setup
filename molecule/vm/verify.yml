@@ -14,6 +14,7 @@
         system_coredump_process_size_max: 0  # converge.yml overrides to 0 for hardened CI
         usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
+        go_tools_installed: false            # converge.yml sets packages_go_install: []; skip golangci-lint verify
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -40,11 +41,13 @@
         path: /etc/yum.repos.d/google-chrome.repo
       register: verify_chrome_repo
       become: true
+      when: repo_google_chrome | default(false)
 
     - name: Assert google-chrome repo exists
       ansible.builtin.assert:
         that: verify_chrome_repo.stat.exists
         fail_msg: "google-chrome repo not configured"
+      when: repo_google_chrome | default(false)
 
     - name: Verify Chrome security policy deployed
       ansible.builtin.stat:

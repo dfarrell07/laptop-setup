@@ -2596,11 +2596,14 @@
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
 # inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
 - name: Check current inactive lockout setting for existing user account
+  # Read /etc/shadow field 7 (inactive-days integer) directly; chage -l prints
+  # a human-readable calendar date, not the raw integer, so regex_search('30') never matches.
   ansible.builtin.command:
-    cmd: chage -l {{ real_user_id }}
+    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $7}' /etc/shadow"
   register: system_chage_status
   changed_when: false
   failed_when: false
+  become: true
   when:
     - real_user_id is defined
     - not (csb_detected | default(false))
@@ -2613,7 +2616,7 @@
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not (csb_detected | default(false))
-    - "system_chage_status.stdout | default('') | regex_search('Password inactive\\s*:\\s*30') is none"
+    - "system_chage_status.stdout | default('') | trim != '30'"
   changed_when: true
   failed_when: false
 
