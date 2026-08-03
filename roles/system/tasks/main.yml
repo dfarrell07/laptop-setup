@@ -1417,7 +1417,7 @@
     - key: IdleAction
       value: lock
     - key: IdleActionSec
-      value: "300"
+      value: "{{ system_logind_idle_sec }}"
   notify: Restart logind
 
 # --- Disable Ctrl+Alt+Delete reboot ---
@@ -2500,7 +2500,7 @@
   failed_when: false
 
 # --- Login banner ---
-- name: Deploy login banner
+- name: Deploy login banners (/etc/issue and /etc/issue.net)
   ansible.builtin.copy:
     content: |
       NOTICE: This system is for authorized users only. Unauthorized access
@@ -2508,21 +2508,9 @@
       and/or criminal prosecution. All activities on this system may be
       monitored, recorded, and audited. By accessing this system, you
       consent to such monitoring and recording.
-    dest: /etc/issue
+    dest: "{{ item }}"
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # no IT banner at home
-  failed_when: false
-
-- name: Deploy SSH login banner
-  ansible.builtin.copy:
-    content: |
-      NOTICE: This system is for authorized users only. Unauthorized access
-      or use is strictly prohibited and may result in disciplinary action
-      and/or criminal prosecution. All activities on this system may be
-      monitored, recorded, and audited. By accessing this system, you
-      consent to such monitoring and recording.
-    dest: /etc/issue.net
-    mode: "0644"
+  loop: [/etc/issue, /etc/issue.net]
   when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # no IT banner at home
   failed_when: false
 
@@ -2566,17 +2554,17 @@
     create: false
   loop:
     - name: PASS_MAX_DAYS
-      value: "365"
+      value: "{{ system_pass_max_days }}"
     - name: PASS_MIN_DAYS
-      value: "1"
+      value: "{{ system_pass_min_days }}"
     - name: PASS_WARN_AGE
-      value: "7"
+      value: "{{ system_pass_warn_age }}"
     - name: UMASK
-      value: "027"
+      value: "{{ system_umask }}"
     - name: HOME_MODE
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
-      value: "30"
+      value: "{{ system_inactive_days }}"
   when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
@@ -2616,9 +2604,9 @@
 
 - name: Set default inactive days for new accounts to 30
   ansible.builtin.command:
-    cmd: useradd -D -f 30
+    cmd: useradd -D -f {{ system_inactive_days }}
   when:
-    - "'INACTIVE=30' not in system_useradd_defaults.stdout"
+    - "'INACTIVE=' ~ system_inactive_days not in system_useradd_defaults.stdout"
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # same rationale as login.defs INACTIVE guard
   changed_when: true
 
@@ -2640,13 +2628,13 @@
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
-    cmd: chage -I 30 {{ real_user_id }}
+    cmd: chage -I {{ system_inactive_days }} {{ real_user_id }}
   when:
     - real_user_id is defined
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - "system_chage_status.stdout | default('') | trim != '30'"
+    - system_chage_status.stdout | default('') | trim != system_inactive_days | string
   changed_when: true
   failed_when: false
 

@@ -120,6 +120,12 @@ system_pwquality_minlen: 14    # minimum password length (CIS 5.3.2)
 system_pwquality_difok: 4      # characters that must differ from previous password
 system_pwquality_maxrepeat: 3  # maximum consecutive repeated characters
 system_pwhistory_remember: 24  # number of previous passwords to remember (CIS 5.3.5)
+system_inactive_days: 30      # days after password expiry before account is locked (CIS 5.5.1.5); applied to login.defs and useradd/chage
+system_pass_max_days: 365     # maximum password age in days (login.defs PASS_MAX_DAYS)
+system_pass_min_days: 1       # minimum days between password changes (login.defs PASS_MIN_DAYS)
+system_pass_warn_age: 7       # days of warning before password expires (login.defs PASS_WARN_AGE)
+system_umask: "027"           # default umask for login shells (login.defs UMASK)
+system_logind_idle_sec: 300   # seconds of inactivity before logind locks the session
 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results

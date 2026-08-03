@@ -313,9 +313,11 @@ else record "cargo-path" "FAIL" "$HOME/.cargo/bin not in PATH exports (.zshrc/.b
 if [[ -f "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh" ]]; then record "omz-xdg-dir" "PASS"
 else record "omz-xdg-dir" "FAIL" "~/.local/share/oh-my-zsh/oh-my-zsh.sh missing — zsh plugins unavailable; run: make dotfiles"; fi
 
-# GONOSUMDB — required for go get/install against Red Hat private modules (work profile)
-if grep -q 'GONOSUMDB' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "gonosumdb-set" "PASS"
-else record "gonosumdb-set" "WARN" "GONOSUMDB not exported — expected on work profile; Red Hat private Go modules will fail sum verification"; fi
+# GONOSUMDB — required for go get/install against Red Hat private modules (work profile only)
+if [[ "$profile" == "work" ]]; then
+  if grep -q 'GONOSUMDB' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "gonosumdb-set" "PASS"
+  else record "gonosumdb-set" "WARN" "GONOSUMDB not exported — expected on work profile; Red Hat private Go modules will fail sum verification"; fi
+fi
 
 # direnv: hook and toml content
 _dtf="$HOME/.config/direnv/direnv.toml"
