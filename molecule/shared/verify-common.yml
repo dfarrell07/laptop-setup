@@ -369,6 +369,35 @@
     fail_msg: "allowed_signers does not contain an sk-ssh-ed25519 key — YubiKey SSH signing key not registered"
   when: verify_allowed_signers.stat.exists
 
+- name: Check git alias.revert-s (must exist; 'revert' shadows built-in)
+  ansible.builtin.command: git config --global alias.revert-s  # noqa: command-instead-of-module
+  register: verify_revert_s_alias
+  changed_when: false
+  failed_when: false
+
+- name: Assert git alias.revert-s equals revert -s
+  ansible.builtin.assert:
+    that: verify_revert_s_alias.stdout | trim == 'revert -s'
+    fail_msg: >-
+      git alias.revert-s is '{{ verify_revert_s_alias.stdout | trim }}', expected 'revert -s'.
+      If the alias was renamed back to 'revert' it silently shadows the git built-in.
+
+- name: Get global safe.directory entries (claude role cleanup regression guard)
+  ansible.builtin.command:
+    cmd: git config --global --get-all safe.directory
+  register: verify_safe_directory_common
+  changed_when: false
+  failed_when: false
+
+- name: Assert no wildcard safe.directory entries exist
+  ansible.builtin.assert:
+    that: >-
+      verify_safe_directory_common.stdout_lines | default([])
+      | select('match', r'^\*{1,2}$|^/$') | list | length == 0
+    fail_msg: >-
+      safe.directory contains a wildcard entry — claude role cleanup task regression?
+      (shell task requires executable: /bin/bash for set -o pipefail + [[ ]] on Debian/dash)
+
 - name: Verify ~/.config/git/ignore exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/ignore"
@@ -815,6 +844,20 @@
   when:
     - ansible_system == 'Linux'
     - verify_coredump_conf.stat.exists
+
+- name: Stat orphaned coredump disable.conf (must be absent — pre-cycle-2 name)
+  ansible.builtin.stat:
+    path: /etc/systemd/coredump.conf.d/disable.conf
+  register: verify_coredump_disable_conf
+  when: ansible_system == 'Linux'
+
+- name: Assert orphaned disable.conf is absent
+  ansible.builtin.assert:
+    that: not verify_coredump_disable_conf.stat.exists
+    fail_msg: >-
+      /etc/systemd/coredump.conf.d/disable.conf exists — orphaned pre-cycle-2 drop-in
+      sorts before coredump.conf alphabetically and silently overrides it
+  when: ansible_system == 'Linux'
 
 - name: Stat logind hardening drop-in (system role must deploy it)
   ansible.builtin.stat:

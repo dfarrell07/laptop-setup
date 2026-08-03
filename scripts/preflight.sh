@@ -186,6 +186,15 @@ if [[ -f "$CONFIG_FILE" ]]; then
   done
 fi
 
+# --- vault_* key guard (mirrors pre_flight_checks.yml assert) ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  if grep -qE '^vault_[a-zA-Z_]+:' "$CONFIG_FILE"; then
+    record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — include_vars outranks group_vars (precedence 17 > 4), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
+  else
+    record "config_vault_keys" "pass" "no vault_* keys in config.yml"
+  fi
+fi
+
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
@@ -250,7 +259,7 @@ else
 fi
 
 # --- Sudo scope ---
-if sudo -n -l &>/dev/null 2>&1; then
+if sudo -n -l &>/dev/null; then
   sudo_out=$(sudo -n -l 2>/dev/null) || true
   if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]+ALL'; then
     record "sudo" "pass" "full sudo available"

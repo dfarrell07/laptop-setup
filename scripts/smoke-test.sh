@@ -36,6 +36,14 @@ record() { # name status [detail]
   esac
 }
 
+# Detect profile from config.yml so work-only checks are correctly gated.
+# 'profile' is an Ansible variable never exported to the shell; read it here.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+_cfg="$SCRIPT_DIR/../config.yml"
+profile="personal"
+grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="work"
+unset _cfg SCRIPT_DIR
+
 run() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
     if command -v toolbox &>/dev/null; then
@@ -78,6 +86,7 @@ _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
 for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
+  # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
 if [[ -x "$HOME/.krew/bin/krew" ]]; then
@@ -90,6 +99,7 @@ unset _tool_absent
 for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "golangci-lint:--version" "subctl:version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   [[ -x "$_gobin" ]] && {
+    # shellcheck disable=SC2086  # intentional word-split: args is a short arg list
     if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"
     else record "go-$name" "FAIL" "$_gobin present but command failed"; fi
   }
@@ -149,7 +159,7 @@ if command -v gh &>/dev/null; then
 fi
 
 # registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
-if [[ "${profile:-work}" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
+if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
   if podman login --get-login registry.redhat.io &>/dev/null 2>&1; then
     record "registry-redhat-auth" "PASS"
   else
@@ -220,7 +230,7 @@ else record "dotfile-gitconfig-work" "PASS"; fi
 if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "~/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc_personal"; then record "dotfile-gitconfig-personal" "WARN" "config-personal present but not Ansible-managed — manual overwrite?"
 else record "dotfile-gitconfig-personal" "PASS"; fi
-if [[ "${profile:-work}" == "work" ]]; then
+if [[ "$profile" == "work" ]]; then
   if ! grep -q 'config-work' "$HOME/.config/git/config" 2>/dev/null; then
     record "gitconfig-includeif" "FAIL" "no includeIf referencing config-work in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
   else record "gitconfig-includeif" "PASS"; fi
@@ -271,7 +281,6 @@ if command -v sway &>/dev/null; then
   if command -v wpctl &>/dev/null; then record "sway-wpctl" "PASS"
   else record "sway-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional in Sway (run: make desktop)"; fi
 fi
-unset _alc
 
 # vimrc quality (termguicolors + background=dark for correct colors)
 if grep -q 'termguicolors' "$HOME/.vimrc" 2>/dev/null; then record "vimrc-termguicolors" "PASS"

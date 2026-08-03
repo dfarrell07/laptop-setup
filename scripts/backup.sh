@@ -52,8 +52,10 @@ DOTFILES=(
   .config/gh/config.yml
   .config/gh/hosts.yml
   .claude-personal/settings.json
+  .claude-personal/settings.local.json
   .claude-personal/CLAUDE.md
   .claude-work/settings.json
+  .claude-work/settings.local.json
   .claude-work/CLAUDE.md
   .config/i3/config
   .config/sway/config
@@ -92,6 +94,8 @@ OPTIONAL_FILES=(
   .aws/config
   .config/containers/auth.json
   .claude/.credentials.json
+  .claude-work/.credentials.json
+  .claude-personal/.credentials.json
   .claude/settings.json
   .gnupg/trustdb.gpg
   .gnupg/pubring.kbx
