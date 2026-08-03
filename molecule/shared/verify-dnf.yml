@@ -195,8 +195,9 @@
   become: true
   when: not (system_faillock_even_deny_root | default(false) | bool)
 
-- name: Check pwquality minlen=14
-  ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
+- name: Check pwquality minlen={{ system_pwquality_minlen | default(14) }}
+  ansible.builtin.command: >-
+    grep -q '^minlen = {{ system_pwquality_minlen | default(14) }}' /etc/security/pwquality.conf
   changed_when: false
   become: true
 
@@ -209,12 +210,13 @@
     - '^ucredit = -1'
     - '^lcredit = -1'
     - '^ocredit = -1'
-    - '^difok = 4'
-    - '^maxrepeat = 3'
+    - "'^difok = {{ system_pwquality_difok | default(4) }}'"
+    - "'^maxrepeat = {{ system_pwquality_maxrepeat | default(3) }}'"
     - '^enforce_for_root'
 
-- name: Check pwhistory remember=24
-  ansible.builtin.command: grep -q '^remember = 24' /etc/security/pwhistory.conf
+- name: Check pwhistory remember={{ system_pwhistory_remember | default(24) }}
+  ansible.builtin.command: >-
+    grep -q '^remember = {{ system_pwhistory_remember | default(24) }}' /etc/security/pwhistory.conf
   changed_when: false
   become: true
 

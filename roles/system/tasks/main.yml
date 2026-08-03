@@ -1803,7 +1803,7 @@
   when:
     - system_crypto_policy.rc == 0
     - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
-    - not (csb_detected | default(false))  # CSB IT may enforce FIPS/FUTURE; don't downgrade
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # RHEL CSB: IT may enforce FIPS/FUTURE
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
   register: system_crypto_policy_set
   changed_when: system_crypto_policy_set.rc == 0
@@ -2420,7 +2420,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
-  when: not (csb_detected | default(false))  # CSB IT may manage journald.conf; don't overwrite (analogous to auditd.conf guard)
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---

@@ -60,6 +60,18 @@
       ansible.builtin.command: nmap --version
       changed_when: false
 
+    - name: Check bat is installed (packages_brew)
+      ansible.builtin.command: bat --version
+      changed_when: false
+
+    - name: Check yq is installed (packages_brew)
+      ansible.builtin.command: yq --version
+      changed_when: false
+
+    - name: Check neovim is installed (packages_brew)
+      ansible.builtin.command: nvim --version
+      changed_when: false
+
     - name: Verify SSH sockets directory exists (macOS ControlPath)
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.ssh/sockets"
