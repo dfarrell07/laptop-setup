@@ -80,7 +80,7 @@
       If that fails: systemctl --user status podman.socket; journalctl --user -u podman.socket
   when:
     - ansible_facts['system'] == 'Linux'
-    - containers_podman_socket is failed or containers_podman_socket.status.ActiveState | default('') not in ['active', 'activating']
+    - containers_podman_socket.status.ActiveState | default('') not in ['active', 'activating']
 
 - name: Disable Docker socket by default
   ansible.builtin.systemd:
