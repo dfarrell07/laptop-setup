@@ -859,15 +859,52 @@
     - ansible_system == 'Linux'
     - verify_sudoers_conf.stat.exists
 
+- name: Stat auditd rules file (system role deploys it on all non-CSB Linux)
+  ansible.builtin.stat:
+    path: /etc/audit/rules.d/claude-code.rules
+  register: verify_auditd_rules
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Assert auditd rules file deployed with mode 0640
+  ansible.builtin.assert:
+    that:
+      - verify_auditd_rules.stat.exists
+      - verify_auditd_rules.stat.mode == '0640'
+    fail_msg: "/etc/audit/rules.d/claude-code.rules not deployed or wrong mode — system role auditd task regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Check auditd rules contain immutability flag -e 2
+  ansible.builtin.command: grep -q '^-e 2$' /etc/audit/rules.d/claude-code.rules
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+    - verify_auditd_rules.stat.exists
+
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false
   when: ansible_system == 'Linux'
 
-- name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh)
+- name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
   changed_when: false
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+
+- name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zsh/zshrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
 
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf

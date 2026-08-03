@@ -346,9 +346,11 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # subuid/subgid required for rootless Podman user namespaces (/etc/subuid is world-readable)
   # Skipped with --user-only or --container: requires system role (not run in container scenarios)
   if ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
-    if grep -q "^${USER}:" /etc/subuid 2>/dev/null && grep -q "^${USER}:" /etc/subgid 2>/dev/null; then
+    _subuid_user="${SUDO_USER:-$USER}"
+    if grep -q "^${_subuid_user}:" /etc/subuid 2>/dev/null && grep -q "^${_subuid_user}:" /etc/subgid 2>/dev/null; then
       record "subuid-subgid" "PASS"
-    else record "subuid-subgid" "FAIL" "subuid/subgid not configured for $USER — rootless Podman will fail with cryptic namespace errors"; fi
+    else record "subuid-subgid" "FAIL" "subuid/subgid not configured for ${_subuid_user} — rootless Podman will fail with cryptic namespace errors"; fi
+    unset _subuid_user
   fi
 fi
 

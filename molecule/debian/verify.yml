@@ -7,9 +7,10 @@
     - name: Load configuration
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 
-    - name: Override profile to match converge (personal)
+    - name: Override profile and identity vars to match converge
       ansible.builtin.set_fact:
         profile: personal
+        dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches converge set_fact; default.config.yml has 'CHANGE_ME'
 
   tasks:
     # --- Shared assertions (all platforms) ---

@@ -4,10 +4,11 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Set work profile for verify context
+    - name: Set work profile and identity vars for verify context
       ansible.builtin.set_fact:
         profile: work
         go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
+        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
 
   tasks:
     # --- Shared assertions (all platforms) ---

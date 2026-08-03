@@ -2064,11 +2064,10 @@
     - system_tmout | int > 0
 
 # /etc/profile.d/*.sh is bash-only; zsh needs TMOUT set directly.
-# /etc/zshrc is sourced by ALL interactive zsh instances (login AND non-login),
-# covering both SSH sessions and Alacritty terminals in Sway with a single file.
-# /etc/zprofile is NOT used — login shells also source /etc/zshrc, and deploying
-# to both causes 'readonly variable' errors when zprofile fires first.
-- name: Deploy session timeout to /etc/zshrc (all interactive zsh shells)
+# On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
+# On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
+# /etc/zshrc is silently ignored by Debian's zsh binary).
+- name: Deploy session timeout to /etc/zshrc (Fedora/RHEL zsh)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
@@ -2077,6 +2076,19 @@
     mode: "0644"
   when:
     - ansible_facts['system'] == 'Linux'
+    - ansible_facts['os_family'] != 'Debian'
+    - system_tmout | int > 0
+
+- name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
+  ansible.builtin.lineinfile:
+    path: /etc/zsh/zshrc
+    line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    create: true
+    mode: "0644"
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - ansible_facts['os_family'] == 'Debian'
     - system_tmout | int > 0
 
 # Cleanup: remove TMOUT artifacts when system_tmout=0 (operator disables timeout).
@@ -2089,13 +2101,24 @@
     - ansible_facts['system'] == 'Linux'
     - system_tmout | int == 0
 
-- name: Remove session timeout from /etc/zshrc when disabled
+- name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
     - ansible_facts['system'] == 'Linux'
+    - ansible_facts['os_family'] != 'Debian'
+    - system_tmout | int == 0
+
+- name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)
+  ansible.builtin.lineinfile:
+    path: /etc/zsh/zshrc
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    state: absent
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - ansible_facts['os_family'] == 'Debian'
     - system_tmout | int == 0
 
 # --- Timezone and locale ---
