@@ -24,9 +24,11 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
    must use SSH, run inside tmux first: `tmux new-session -s provision 'make all'`
 5. After provisioning, see `references/troubleshooting.md` for common surprises:
-   SSH now on port 722, CUPS masked, TMOUT=600 in shells, USB storage kernel-blocked,
+   SSH now on port 722, cups-browsed masked (cups.service disabled, not masked; set `system_disable_printing: false` to restore printing),
+   TMOUT=600 in shells, USB storage kernel-blocked,
    AllowTcpForwarding local (set "no" in config.yml to disable; set "yes" for remote forwards too),
-   IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router provides IPv6 via RA; value 1 does not work when forwarding=1)
+   IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router provides IPv6 via RA; value 1 does not work when forwarding=1),
+   kernel lockdown (integrity) applied via grubby on standard and hybrid (CSB-detected) Fedora; RHEL CSB skips this (IT manages boot config)
 6. Required manual actions after `make all`:
    - **Reboot** — kernel security params (lockdown, IOMMU, vsyscall, init_on_free) only
      take effect after a reboot. SSH will be on port 722 after reboot.
