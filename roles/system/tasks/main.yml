@@ -757,19 +757,19 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode to enable kernel-cmdline task conditionals
 
-# On CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
-# /etc/kernel/cmdline edits are skipped to avoid conflicts with corporate policy.
+# On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
+# /etc/kernel/cmdline edits are skipped. Fedora hybrid CSB runs its own kernel — lockdown applies.
 - name: Skip grubby kernel param tasks on CSB (IT manages boot config)
   ansible.builtin.debug:
-    msg: "CSB detected — skipping grubby/kernel-cmdline hardening tasks (IT manages boot config)"
-  when: csb_detected | default(false)
+    msg: "RHEL CSB detected — skipping grubby/kernel-cmdline hardening (IT manages RHEL boot config)"
+  when: csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
 
 - name: Enable kernel lockdown (integrity mode)
   ansible.builtin.command:
     cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
   register: system_lockdown_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_kernel_lockdown | default('') | length > 0
     - system_grubby_info.rc | default(1) == 0
     - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout | default(''))"
@@ -781,7 +781,7 @@
     cmd: grubby --remove-args="lockdown" --update-kernel=ALL
   register: system_lockdown_remove_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_kernel_lockdown | default('') | length == 0
     - system_grubby_info.rc | default(1) == 0
     - "'lockdown=' in (system_grubby_info.stdout | default(''))"
@@ -793,7 +793,7 @@
     cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
   register: system_iommu_amd_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('amd')
@@ -805,7 +805,7 @@
     cmd: grubby --args="intel_iommu=on" --update-kernel=ALL
   register: system_iommu_intel_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'intel_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('intel')
@@ -822,7 +822,7 @@
   # for all other devices. Leave false unless actively using PCI passthrough to VMs.
   when:
     - system_iommu_passthrough | default(false) | bool
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'iommu=pt' not in (system_grubby_info.stdout | default(''))"
     - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
@@ -836,7 +836,7 @@
   register: system_iommu_pt_remove_result
   when:
     - not (system_iommu_passthrough | default(false) | bool)
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -847,7 +847,7 @@
     cmd: grubby --args="vsyscall=none" --update-kernel=ALL
   register: system_vsyscall_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -858,7 +858,7 @@
     cmd: grubby --args="init_on_free=1" --update-kernel=ALL
   register: system_init_on_free_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
     - system_init_on_free | default(true) | bool
@@ -870,7 +870,7 @@
     cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
   register: system_init_on_free_remove_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
     - not (system_init_on_free | default(true) | bool)
@@ -882,7 +882,7 @@
     cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
   register: system_page_shuffle_result
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -893,7 +893,7 @@
     cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
   register: system_luks_key_cleanup
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
     - system_remove_luks_key | bool
@@ -909,7 +909,7 @@
     regexp: '\s*rd\.luks\.key=\S+'
     replace: ''
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - system_remove_luks_key | bool
   failed_when: false
@@ -962,7 +962,7 @@
   changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   become: true
   failed_when: false
 

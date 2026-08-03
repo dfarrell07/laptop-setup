@@ -8,7 +8,7 @@ font pango:{{ desktop_wm_font_family }} {{ desktop_wm_font_size }}
 # HiDPI output scaling (override desktop_sway_hidpi_scale in config.yml)
 # adaptive_sync: VRR/FreeSync on AMD Radeon 780M; silently ignored on non-VRR displays or when docked
 output {{ desktop_sway_output }} scale {{ desktop_sway_hidpi_scale }} adaptive_sync {{ desktop_sway_adaptive_sync }}
-xwayland enable
+xwayland {{ desktop_sway_xwayland }}
 {% if desktop_sway_workspace_outputs | default([]) | length > 0 %}
 
 # Workspace-to-output assignments (set desktop_sway_workspace_outputs list in config.yml)
@@ -29,7 +29,7 @@ exec_always mako
 exec wl-paste --watch cliphist store
 
 # Polkit agent (required for GUI privilege escalation — NetworkManager, USB mounts, etc.)
-exec_always /usr/libexec/lxqt-policykit-agent  # Qt6 Wayland-native polkit agent (lxqt-policykit pkg); polkit-gnome removed Fedora 41+
+exec_always {{ desktop_sway_polkit_agent }}  # Qt6 Wayland-native polkit agent (lxqt-policykit pkg); polkit-gnome removed Fedora 41+
 exec_always nm-applet
 
 # Wallpaper
