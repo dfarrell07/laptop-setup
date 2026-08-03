@@ -467,6 +467,21 @@
           - verify_claude_work_settings.stat.mode == '0600'
         fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
 
+    - name: Validate Claude work settings.local.json sandbox and deny config
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "
+          import json, sys
+          d = json.load(open('{{ ansible_user_dir }}/.claude-work/settings.local.json'))
+          assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
+          assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true'
+          assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false'
+          assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+          assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
+          "
+      changed_when: false
+      when: verify_claude_work_settings.stat.exists
+
     - name: Verify Claude work CLAUDE.md exists
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.claude-work/CLAUDE.md"
@@ -526,13 +541,19 @@
           - verify_claude_queue_repos_conf.stat.mode == '0600'
         fail_msg: "queue-repos.conf missing or wrong permissions — expected 0600"
 
-    # --- System role: DNS-over-TLS ---
-    - name: Stat DNS-over-TLS config
-      ansible.builtin.stat:
-        path: /etc/systemd/resolved.conf.d/99-dot.conf
-      register: verify_dot
+    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
-    - name: Assert DNS-over-TLS config deployed
+    # --- git_repos role: verify a public HTTPS repo was actually cloned ---
+    - name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
+      register: verify_git_repos_clone
+
+    - name: Assert public HTTPS repo clone succeeded
       ansible.builtin.assert:
-        that: verify_dot.stat.exists
-        fail_msg: "DNS-over-TLS config not deployed — system role regression"
+        that:
+          - verify_git_repos_clone.stat.exists
+          - verify_git_repos_clone.stat.isdir
+        fail_msg: >-
+          git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
+          clone task logic regression or git_repos_list filtering broken

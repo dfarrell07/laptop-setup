@@ -22,6 +22,29 @@
     - name: Include dnf verify assertions
       ansible.builtin.include_tasks: ../shared/verify-dnf.yml
 
+    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
+
+    # --- repos_dnf role: third-party repo files ---
+    - name: Verify tailscale-stable.repo exists (repos_dnf)
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/tailscale-stable.repo
+      register: verify_tailscale_repo
+
+    - name: Assert tailscale-stable.repo was deployed by repos_dnf
+      ansible.builtin.assert:
+        that: verify_tailscale_repo.stat.exists
+        fail_msg: "tailscale-stable.repo missing — repos_dnf role not exercised or template broken"
+
+    - name: Verify gh-cli.repo exists (repos_dnf, RHEL/Rocky only)
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/gh-cli.repo
+      register: verify_gh_cli_repo
+
+    - name: Assert gh-cli.repo was deployed by repos_dnf
+      ansible.builtin.assert:
+        that: verify_gh_cli_repo.stat.exists
+        fail_msg: "gh-cli.repo missing — repos_dnf role not exercised or template broken"
+
     # --- Work profile checks ---
     - name: Verify Claude work config directory
       ansible.builtin.stat:
@@ -166,13 +189,4 @@
         that: not (fapolicyd_installed | default(true))
         fail_msg: "fapolicyd_installed is true on Rocky molecule host — CSB detection false positive"
 
-    # --- System role: DNS-over-TLS ---
-    - name: Stat DNS-over-TLS config
-      ansible.builtin.stat:
-        path: /etc/systemd/resolved.conf.d/99-dot.conf
-      register: verify_dot
-
-    - name: Assert DNS-over-TLS config deployed
-      ansible.builtin.assert:
-        that: verify_dot.stat.exists
-        fail_msg: "DNS-over-TLS config not deployed — system role regression"
+    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml

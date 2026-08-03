@@ -20,6 +20,9 @@
     - name: Include smoke-test verification
       ansible.builtin.include_tasks: ../shared/verify-smoke.yml
 
+    - name: Include NetworkManager conf.d assertions
+      ansible.builtin.include_tasks: ../shared/verify-nm.yml
+
     # --- Packages (apt) ---
     - name: Check vim is installed
       ansible.builtin.command: vim --version

@@ -1270,8 +1270,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # inotify limits (required for IDE/file-watcher tools — system role sets these)
   _inotify_watches=$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")
-  if [[ "$_inotify_watches" -ge 524288 ]] 2>/dev/null; then record "inotify-max-user-watches" "PASS"
-  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=524288 (run: make all)"; fi
+  if [[ "$_inotify_watches" -ge 1048576 ]] 2>/dev/null; then record "inotify-max-user-watches" "PASS"
+  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make all)"; fi
   unset _inotify_watches
   _inotify_instances=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
   if [[ "$_inotify_instances" -ge 8192 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"

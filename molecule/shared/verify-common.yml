@@ -453,6 +453,21 @@
       - verify_claude_default_settings.stat.mode == '0600'
     fail_msg: "~/.claude/settings.local.json not deployed — default claude instance has no deny lists or sandbox"
 
+- name: Validate Claude default settings.local.json sandbox and deny config
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "
+      import json, sys
+      d = json.load(open('{{ ansible_user_dir }}/.claude/settings.local.json'))
+      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
+      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)'
+      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false'
+      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+      assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
+      "
+  changed_when: false
+  when: verify_claude_default_settings.stat.exists
+
 - name: Verify Claude settings.local.json exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
@@ -743,6 +758,22 @@
     fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
   when: ansible_system == 'Linux'
 
+- name: Stat /etc/systemd/resolved.conf.d/99-dot.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/resolved.conf.d/99-dot.conf
+  register: verify_dot_conf
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Assert DNS-over-TLS config deployed
+  ansible.builtin.assert:
+    that: verify_dot_conf.stat.exists
+    fail_msg: "/etc/systemd/resolved.conf.d/99-dot.conf not deployed — DNS-over-TLS regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:
     path: /etc/systemd/coredump.conf.d/disable.conf
@@ -824,6 +855,30 @@
   when:
     - ansible_system == 'Linux'
     - verify_logind_conf.stat.exists
+
+- name: Stat journald hardening drop-in (system role deploys it on non-CSB Linux)
+  ansible.builtin.stat:
+    path: /etc/systemd/journald.conf.d/99-hardening.conf
+  register: verify_journald_conf
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Assert journald hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_journald_conf.stat.exists
+    fail_msg: "/etc/systemd/journald.conf.d/99-hardening.conf not deployed — system role journald task regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Check journald drop-in has Storage=persistent
+  ansible.builtin.command: grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+    - verify_journald_conf.stat.exists
 
 - name: Check sudoers drop-in has logfile directive
   ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening

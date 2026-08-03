@@ -132,8 +132,8 @@
         msg: >-
           transcrypt is already initialized — if vault_notes_transcrypt_password changed,
           re-provisioning silently skips re-init. To rotate credentials, manually run:
-          cd ~/notes && transcrypt --flush-credentials &&
-          transcrypt -c aes-256-cbc -p <new_password> -y
+          cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
+          transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
         - notes_repo_available | bool
         - notes_transcrypt_bin.rc | default(1) == 0

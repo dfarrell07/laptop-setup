@@ -823,6 +823,20 @@
         that: verify_distrobox_bin.rc == 0
         fail_msg: "distrobox binary not found in PATH — packages role should install it"
 
+    - name: Stat distrobox.ini deployed by template
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+      register: verify_distrobox_ini
+      when: verify_distrobox_bin.rc == 0
+
+    - name: Assert distrobox.ini exists (template was rendered and deployed)
+      ansible.builtin.assert:
+        that: verify_distrobox_ini.stat.exists
+        fail_msg: >-
+          distrobox.ini missing at {{ ansible_user_dir }}/.config/distrobox/distrobox.ini —
+          distrobox role template was not deployed
+      when: verify_distrobox_bin.rc == 0
+
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled
       ansible.builtin.systemd:

@@ -1383,7 +1383,24 @@
     - rpcbind.service
     - rpcbind.socket
   failed_when: false
-  when: ansible_facts['system'] == 'Linux'
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - system_mask_nfs_server | default(true) | bool
+
+- name: Unmask NFS server and rpcbind when system_mask_nfs_server is false
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: false
+    state: stopped
+  loop:
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+  failed_when: false
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - not (system_mask_nfs_server | default(true) | bool)
 
 # --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
 - name: Mask cockpit service and socket (CIS 2.2 — web console not needed on workstation)
