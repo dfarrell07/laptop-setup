@@ -34,7 +34,6 @@
     path: /etc/systemd/system/tmp.mount.d
     state: directory
     mode: "0755"
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
   vars:
@@ -49,7 +48,6 @@
       Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
-  when: ansible_facts['system'] == 'Linux'
   notify: Remount /tmp
 
 # --- Harden /dev/shm mount options ---
@@ -65,7 +63,6 @@
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # CSB (RHEL): IT-managed fstab
 
 - name: Check /dev/shm current mount options
@@ -73,7 +70,6 @@
     cmd: findmnt -n -o OPTIONS /dev/shm
   register: system_devshm_opts
   changed_when: false
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
@@ -82,7 +78,6 @@
   register: _devshm_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _devshm_remount_result.rc == 0
   when:
-    - ansible_facts['system'] == 'Linux'
     - >-
       'noexec' not in (system_devshm_opts.stdout | default('')) or
       'nosuid' not in (system_devshm_opts.stdout | default('')) or
@@ -122,7 +117,6 @@
     owner: root
     group: root
   when:
-    - ansible_facts['system'] == 'Linux'
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
 
 - name: Enable dev-shm-harden.service (CSB)
@@ -131,7 +125,6 @@
     enabled: true
     daemon_reload: true
   when:
-    - ansible_facts['system'] == 'Linux'
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
   ignore_errors: true
   register: system_dev_shm_enable
@@ -142,7 +135,6 @@
       dev-shm-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /dev/shm hardening will NOT persist across reboots.
   when:
-    - ansible_facts['system'] == 'Linux'
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
     - system_dev_shm_enable.failed | default(false)
 
@@ -172,7 +164,6 @@
     cmd: findmnt -n /home
   register: system_home_mountpoint
   changed_when: false
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Check /home filesystem type (CIS 1.1.9)
@@ -181,7 +172,6 @@
   register: system_home_fstype
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -191,7 +181,6 @@
   register: system_home_fstab_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -204,7 +193,6 @@
     backup: true
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
     - >-
       not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
@@ -218,7 +206,6 @@
   register: system_home_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -228,7 +215,6 @@
   register: _home_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _home_remount_result.rc == 0
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_home_mountpoint.rc | default(1) == 0
     - >-
       not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
@@ -261,7 +247,6 @@
     cmd: findmnt -n /boot
   register: system_boot_mountpoint
   changed_when: false
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Check /boot fstab options
@@ -270,7 +255,6 @@
   register: system_boot_fstab_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -283,7 +267,6 @@
     backup: true
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - >-
@@ -297,7 +280,6 @@
   register: system_boot_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -307,7 +289,6 @@
   register: _boot_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_remount_result.rc == 0
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - >-
       'nosuid' not in (system_boot_opts.stdout | default('')) or
@@ -346,7 +327,6 @@
     owner: root
     group: root
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
 
@@ -356,7 +336,6 @@
     enabled: true
     daemon_reload: true
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
   ignore_errors: true
@@ -368,7 +347,6 @@
       boot-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /boot hardening will NOT persist across reboots.
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
     - system_boot_harden_enable.failed | default(false)
@@ -384,7 +362,6 @@
     cmd: findmnt -n /boot/efi
   register: system_boot_efi_mountpoint
   changed_when: false
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Check /boot/efi fstab options
@@ -393,7 +370,6 @@
   register: system_boot_efi_fstab_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -406,7 +382,6 @@
     backup: true
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - >-
@@ -419,7 +394,6 @@
   register: system_boot_efi_opts
   changed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
   failed_when: false
 
@@ -429,7 +403,6 @@
   register: _boot_efi_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_efi_remount_result.rc == 0
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - >-
       'nosuid' not in (system_boot_efi_opts.stdout | default('')) or
@@ -467,7 +440,6 @@
     owner: root
     group: root
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
 
@@ -477,7 +449,6 @@
     enabled: true
     daemon_reload: true
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
   ignore_errors: true
@@ -489,7 +460,6 @@
       boot-efi-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /boot/efi hardening will NOT persist across reboots.
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_boot_efi_mountpoint.rc | default(1) == 0
     - csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora'
     - system_boot_efi_harden_enable.failed | default(false)
@@ -518,13 +488,11 @@
     dest: /etc/systemd/system/var-tmp.mount
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_var_tmp_noexec | default(true) | bool
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable and start var-tmp.mount
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_var_tmp_noexec | default(true) | bool
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   block:
@@ -544,7 +512,6 @@
 
 - name: Remove var-tmp.mount when system_var_tmp_noexec disabled
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (system_var_tmp_noexec | default(true) | bool)
   block:
     - name: Stop and disable var-tmp.mount
@@ -572,7 +539,6 @@
     src: modprobe-hardening.conf.j2
     dest: /etc/modprobe.d/hardening.conf
     mode: "0644"
-  when: ansible_facts['system'] == 'Linux'
 
 # --- Sysctl hardening ---
 # Merge system_sysrq into the dict so config.yml can override without replacing
@@ -984,7 +950,6 @@
   register: system_kernel_cmdline_result
   changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not (csb_detected | default(false))
   become: true
@@ -996,7 +961,6 @@
       Skipping /etc/kernel/cmdline write on CSB — IT manages kernel packages
       via CSB COPR/dnf repos; coordinate boot param changes through IT change management.
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - csb_detected | default(false)
 
@@ -1050,7 +1014,6 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))  # CSB IT manages audit rules via audisp-remote SIEM pipeline
 
 - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
@@ -1062,7 +1025,6 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))  # CSB may send events to a SIEM via audisp-remote; don't overwrite
 
 - name: Ensure auditd is enabled and started
@@ -1072,7 +1034,6 @@
     state: started
   become: true
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
@@ -1220,7 +1181,6 @@
     masked: true
     state: stopped
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['interfaces'] | select('match', '^wwan') | list | length == 0
   failed_when: false
 
@@ -1266,7 +1226,6 @@
     mode: "0644"
   when:
     - system_tlp_enabled | bool
-    - ansible_facts['system'] == 'Linux'
   failed_when: false
   notify: Restart tlp
 
@@ -1368,7 +1327,6 @@
     - rpcbind.socket
   failed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_mask_nfs_server | default(true) | bool
 
 - name: Unmask NFS server and rpcbind when system_mask_nfs_server is false
@@ -1383,7 +1341,6 @@
     - rpcbind.socket
   failed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (system_mask_nfs_server | default(true) | bool)
 
 # --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
@@ -1396,7 +1353,7 @@
     - cockpit.service
     - cockpit.socket
   failed_when: false
-  when: ansible_facts['system'] == 'Linux' and not (system_enable_cockpit | default(false) | bool)
+  when: not (system_enable_cockpit | default(false) | bool)
 
 - name: Unmask and enable cockpit service and socket when system_enable_cockpit
   ansible.builtin.systemd:
@@ -1408,7 +1365,7 @@
     - cockpit.service
     - cockpit.socket
   failed_when: false
-  when: ansible_facts['system'] == 'Linux' and (system_enable_cockpit | default(false) | bool)
+  when: (system_enable_cockpit | default(false) | bool)
 
 # --- Logind lid close ---
 # Write to a drop-in so package upgrades can't clobber the settings.
@@ -1642,13 +1599,12 @@
     name: fwupd-refresh.timer
     state: started
     enabled: true
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
-- name: Refresh LVFS firmware metadata
+- name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
   ansible.builtin.command:
     cmd: fwupdmgr refresh
-  when: ansible_facts['system'] == 'Linux' and system_fwupd_install_result is changed
+  when: system_fwupd_install_result is changed
   changed_when: false
   failed_when: false
 
@@ -1658,7 +1614,6 @@
     masked: true
     state: stopped
     daemon_reload: true
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
   # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
   # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
@@ -1668,7 +1623,6 @@
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
   register: system_fwupd
-  when: ansible_facts['system'] == 'Linux'
   changed_when: false
   failed_when: false
 
@@ -1688,7 +1642,6 @@
   become: true
   failed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts.services['sshd.service'] is defined
 
 - name: SSHD pre-deployment checks
@@ -1779,8 +1732,6 @@
     name: sshd.socket
     masked: true
     enabled: false
-  when:
-    - ansible_facts['system'] == 'Linux'
   failed_when: false
 
 # --- SELinux SSH port label ---
@@ -1916,7 +1867,6 @@
     dest: /etc/NetworkManager/conf.d/99-dns.conf
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))  # paired with resolv.conf guard — both or neither to avoid broken half-state
   failed_when: false
   notify: Restart NetworkManager
@@ -1929,8 +1879,6 @@
       wifi.powersave=2
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
-  when:
-    - ansible_facts['system'] == 'Linux'
   failed_when: false
   notify: Reload NetworkManager
 
@@ -2027,7 +1975,6 @@
     name: systemd-resolved
     state: started
     enabled: true
-  when: ansible_facts['system'] == 'Linux'
   failed_when: false
 
 - name: Ensure resolved drop-in directory
@@ -2035,7 +1982,6 @@
     path: /etc/systemd/resolved.conf.d
     state: directory
     mode: "0755"
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Disable LLMNR and mDNS via resolved drop-in
   ansible.builtin.copy:
@@ -2046,7 +1992,6 @@
       MulticastDNS=no
     dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
     mode: "0644"
-  when: ansible_facts['system'] == 'Linux'
   notify: Restart systemd-resolved
 
 # yamllint disable rule:line-length
@@ -2063,7 +2008,6 @@
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
@@ -2081,7 +2025,6 @@
     state: link
     force: true
   when:
-    - ansible_facts['system'] == 'Linux'
     - not (csb_detected | default(false))  # CSB manages resolv.conf via NM/VPN; don't override
     - >-
       not (system_resolv_conf.stat.islnk | default(false)) or
@@ -2099,7 +2042,6 @@
     dest: /etc/profile.d/tmout.sh
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_tmout | int > 0
 
 # /etc/profile.d/*.sh is bash-only; zsh needs TMOUT set directly.
@@ -2114,7 +2056,6 @@
     create: true
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['os_family'] != 'Debian'
     - system_tmout | int > 0
 
@@ -2126,7 +2067,6 @@
     create: true
     mode: "0644"
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['os_family'] == 'Debian'
     - system_tmout | int > 0
 
@@ -2137,7 +2077,6 @@
     path: /etc/profile.d/tmout.sh
     state: absent
   when:
-    - ansible_facts['system'] == 'Linux'
     - system_tmout | int == 0
 
 - name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL)
@@ -2146,7 +2085,6 @@
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['os_family'] != 'Debian'
     - system_tmout | int == 0
 
@@ -2156,7 +2094,6 @@
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
-    - ansible_facts['system'] == 'Linux'
     - ansible_facts['os_family'] == 'Debian'
     - system_tmout | int == 0
 
@@ -2164,14 +2101,12 @@
 - name: Set system timezone
   community.general.timezone:
     name: "{{ system_timezone }}"
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Set system locale
   ansible.builtin.copy:
     content: "LANG={{ system_locale }}\n"
     dest: /etc/locale.conf
     mode: "0644"
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Set console keymap
   ansible.builtin.lineinfile:
@@ -2198,7 +2133,6 @@
     mode: "0644"
   notify: Restart chronyd
   when:
-    - ansible_facts['system'] == 'Linux'
     # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
     # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
@@ -2208,7 +2142,6 @@
     name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
     state: started
     enabled: true
-  when: ansible_facts['system'] == 'Linux'
 
 # CSB: faillock/pwhistory/pwquality govern local-account PAM policy. On RHEL CSB hybrid,
 # IT's security baseline sets lockout thresholds (NIST SP 800-53 AC-7); overwriting them
@@ -2849,7 +2782,6 @@
 # Skipped on Sway/i3 systems where GDM is not installed (service facts check).
 - name: System-level dconf hardening (GNOME/GDM, CIS 1.8.x)
   when:
-    - ansible_facts['system'] == 'Linux'
     - '"gdm.service" in ansible_facts.services'
   block:
     - name: Ensure dconf local.d locks directory exists
