@@ -942,6 +942,25 @@
     - not (csb_detected | default(false))
     - verify_auditd_rules.stat.exists
 
+- name: Check chrony/chronyd service is enabled (NTP hardening)
+  ansible.builtin.systemd:
+    name: "{{ 'chrony' if ansible_pkg_mgr == 'apt' else 'chronyd' }}"
+  register: verify_chronyd
+  become: true
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+
+- name: Assert chrony/chronyd is enabled
+  ansible.builtin.assert:
+    that: verify_chronyd.status.UnitFileState == 'enabled'
+    fail_msg: "chrony/chronyd service not enabled — NTP authentication regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (csb_detected | default(false))
+    - verify_chronyd.status.UnitFileState | default('') != ''
+
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false

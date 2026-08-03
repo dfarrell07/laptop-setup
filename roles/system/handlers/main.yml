@@ -126,7 +126,7 @@
 
 - name: Restart chronyd
   ansible.builtin.systemd:
-    name: chronyd
+    name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
     state: restarted
   become: true
   register: system_chronyd_restart_result

@@ -2206,6 +2206,12 @@
   # (copy would overwrite the entire file, destroying eurlatgr FONT on fresh Fedora)
 
 # --- Chrony NTS (authenticated time sync) ---
+- name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+  when: ansible_facts['pkg_mgr'] == 'apt'
+
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
     src: chrony-nts.conf.j2
@@ -2218,9 +2224,9 @@
     # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
-- name: Ensure chronyd is enabled
+- name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
-    name: chronyd
+    name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
     state: started
     enabled: true
   when: ansible_facts['system'] == 'Linux'
@@ -2242,7 +2248,6 @@
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -2255,7 +2260,6 @@
     - audit
     - local_users_only  # prevent double-lockout with SSSD/IPA domain users
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Configure pam_faillock even_deny_root flag
   community.general.ini_file:
@@ -2265,7 +2269,6 @@
     allow_no_value: true
     mode: "0644"
   when: system_faillock_even_deny_root | bool and not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Remove pam_faillock even_deny_root flag (when disabled)
   community.general.ini_file:
@@ -2275,7 +2278,6 @@
     state: absent
     mode: "0644"
   when: not (system_faillock_even_deny_root | bool) and not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -2372,7 +2374,6 @@
     value: "24"
     mode: "0644"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -2382,7 +2383,6 @@
     allow_no_value: true
     mode: "0644"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
@@ -2408,7 +2408,6 @@
     - key: maxrepeat
       value: "3"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -2418,7 +2417,6 @@
     allow_no_value: true
     mode: "0644"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
-  failed_when: false
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
