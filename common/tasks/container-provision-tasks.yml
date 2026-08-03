@@ -34,7 +34,7 @@
   block:
     - name: Fetch OpenShift client SHA256 checksums
       ansible.builtin.uri:
-        url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ distrobox_oc_version }}/sha256sum.txt"
+        url: "{{ distrobox_oc_mirror_url }}/{{ distrobox_oc_version }}/sha256sum.txt"
         return_content: true
         timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
       register: container_oc_checksums
@@ -56,7 +56,7 @@
 
     - name: Download OpenShift client tarball
       ansible.builtin.get_url:
-        url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ distrobox_oc_version }}/openshift-client-linux.tar.gz"
+        url: "{{ distrobox_oc_mirror_url }}/{{ distrobox_oc_version }}/openshift-client-linux.tar.gz"
         dest: /tmp/openshift-client-linux.tar.gz
         checksum: "sha256:{{ container_oc_sha256 }}"
         mode: "0644"
