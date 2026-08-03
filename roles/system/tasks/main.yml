@@ -1327,6 +1327,8 @@
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: false
+    enabled: true
+    state: started
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
@@ -1855,6 +1857,13 @@
     mode: "0644"
   when: system_wifi_mac_rand | default(not (csb_detected | default(false))) | bool
   failed_when: false
+  notify: Reload NetworkManager
+
+- name: Remove WiFi MAC address randomization config when disabled
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    state: absent
+  when: not (system_wifi_mac_rand | default(not (csb_detected | default(false))) | bool)
   notify: Reload NetworkManager
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces

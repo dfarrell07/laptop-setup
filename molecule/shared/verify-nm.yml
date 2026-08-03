@@ -22,12 +22,13 @@
   become: true
   when: verify_nm_tailscale.stat.exists
 
-- name: Assert tailscale.conf contains podman and kind unmanaged entries
+- name: Assert tailscale.conf contains tailscale, podman, and kind unmanaged entries
   ansible.builtin.assert:
     that:
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:tailscale\*')
       - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:podman\*')
       - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:kind\*')
-    fail_msg: "tailscale.conf missing podman* or kind* unmanaged entry — OVN-K/kind networking will break"
+    fail_msg: "tailscale.conf missing tailscale*, podman*, or kind* unmanaged entry — Tailscale routing or OVN-K/kind networking will break"
   when: verify_nm_tailscale.stat.exists
 
 - name: Stat /etc/NetworkManager/conf.d/99-dns.conf

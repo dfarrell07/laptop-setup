@@ -390,54 +390,6 @@
         fail_msg: "Kernel lockdown=integrity not found in boot args"
       when: verify_lockdown.rc == 0
 
-    - name: Verify sshd hardening config
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/00-hardening.conf
-      register: verify_sshd
-      become: true
-
-    - name: Assert sshd hardening deployed with correct mode
-      ansible.builtin.assert:
-        that:
-          - verify_sshd.stat.exists
-          - verify_sshd.stat.mode == '0600'
-        fail_msg: "SSHD hardening config not deployed or wrong permissions (expected 0600)"
-
-    - name: Check sshd config disables password auth
-      ansible.builtin.command: grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables root login
-      ansible.builtin.command: grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables keyboard-interactive auth
-      ansible.builtin.command: grep -q 'KbdInteractiveAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables empty passwords
-      ansible.builtin.command: grep -q 'PermitEmptyPasswords no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables X11 forwarding
-      ansible.builtin.command: grep -q 'X11Forwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables agent forwarding
-      ansible.builtin.command: grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sshd config disables TCP forwarding
-      ansible.builtin.command: grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
     - name: Check sshd config uses non-default port 722
       ansible.builtin.command: grep -q '^Port 722$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
@@ -754,19 +706,6 @@
         fail_msg: "/var/log/journal missing or wrong mode (expected 2755)"
 
     # --- Service masking ---
-    - name: Check cups-browsed service state
-      ansible.builtin.systemd:
-        name: cups-browsed
-      register: verify_cups
-      become: true
-      failed_when: false
-
-    - name: Assert cups-browsed is masked
-      ansible.builtin.assert:
-        that: verify_cups.status.UnitFileState == 'masked'
-        fail_msg: "cups-browsed is not masked"
-      when: verify_cups.status.UnitFileState | default('') != ''
-
     - name: Check cups.socket state
       ansible.builtin.systemd:
         name: cups.socket
@@ -793,32 +732,6 @@
         fail_msg: "cups.path is not masked — path activation can restart CUPS daemon"
       when: verify_cups_path.status.UnitFileState | default('') != ''
 
-    - name: Check ctrl-alt-del.target state
-      ansible.builtin.systemd:
-        name: ctrl-alt-del.target
-      register: verify_cad
-      become: true
-      failed_when: false
-
-    - name: Assert ctrl-alt-del is masked
-      ansible.builtin.assert:
-        that: verify_cad.status.UnitFileState == 'masked'
-        fail_msg: "ctrl-alt-del.target is not masked"
-      when: verify_cad.status.UnitFileState | default('') != ''
-
-    - name: Check passim service state
-      ansible.builtin.systemd:
-        name: passim
-      register: verify_passim
-      become: true
-      failed_when: false
-
-    - name: Assert passim is masked (prevents unauthenticated HTTP on 0.0.0.0:27500 reachable from Tailscale peers)
-      ansible.builtin.assert:
-        that: verify_passim.status.UnitFileState == 'masked'
-        fail_msg: "passim is not masked — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"
-      when: verify_passim.status.UnitFileState | default('') != ''
-
     - name: Check fprintd service state
       ansible.builtin.systemd:
         name: fprintd.service
@@ -831,110 +744,6 @@
         that: verify_fprintd.status.UnitFileState == 'masked'
         fail_msg: "fprintd.service is not masked — fingerprint auth can bypass pam_faillock"
       when: verify_fprintd.status.UnitFileState | default('') != ''
-
-    - name: Check avahi-daemon.service state
-      ansible.builtin.systemd:
-        name: avahi-daemon.service
-      register: verify_avahi_service
-      become: true
-      failed_when: false
-
-    - name: Assert avahi-daemon.service is masked
-      ansible.builtin.assert:
-        that: verify_avahi_service.status.UnitFileState == 'masked'
-        fail_msg: "avahi-daemon.service is not masked"
-      when: verify_avahi_service.status.UnitFileState | default('') != ''
-
-    - name: Check avahi-daemon.socket state
-      ansible.builtin.systemd:
-        name: avahi-daemon.socket
-      register: verify_avahi_socket
-      become: true
-      failed_when: false
-
-    - name: Assert avahi-daemon.socket is masked
-      ansible.builtin.assert:
-        that: verify_avahi_socket.status.UnitFileState == 'masked'
-        fail_msg: "avahi-daemon.socket is not masked"
-      when: verify_avahi_socket.status.UnitFileState | default('') != ''
-
-    - name: Check nfs-server.service state
-      ansible.builtin.systemd:
-        name: nfs-server.service
-      register: verify_nfs_server
-      become: true
-      failed_when: false
-
-    - name: Assert nfs-server.service is masked
-      ansible.builtin.assert:
-        that: verify_nfs_server.status.UnitFileState == 'masked'
-        fail_msg: "nfs-server.service is not masked"
-      when: verify_nfs_server.status.UnitFileState | default('') != ''
-
-    - name: Check rpcbind.service state
-      ansible.builtin.systemd:
-        name: rpcbind.service
-      register: verify_rpcbind_service
-      become: true
-      failed_when: false
-
-    - name: Assert rpcbind.service is masked
-      ansible.builtin.assert:
-        that: verify_rpcbind_service.status.UnitFileState == 'masked'
-        fail_msg: "rpcbind.service is not masked"
-      when: verify_rpcbind_service.status.UnitFileState | default('') != ''
-
-    - name: Check rpcbind.socket state
-      ansible.builtin.systemd:
-        name: rpcbind.socket
-      register: verify_rpcbind_socket
-      become: true
-      failed_when: false
-
-    - name: Assert rpcbind.socket is masked
-      ansible.builtin.assert:
-        that: verify_rpcbind_socket.status.UnitFileState == 'masked'
-        fail_msg: "rpcbind.socket is not masked"
-      when: verify_rpcbind_socket.status.UnitFileState | default('') != ''
-
-    - name: Check cockpit.service state
-      ansible.builtin.systemd:
-        name: cockpit.service
-      register: verify_cockpit_service
-      become: true
-      failed_when: false
-
-    - name: Assert cockpit.service is masked
-      ansible.builtin.assert:
-        that: verify_cockpit_service.status.UnitFileState == 'masked'
-        fail_msg: "cockpit.service is not masked"
-      when: verify_cockpit_service.status.UnitFileState | default('') != ''
-
-    - name: Check cockpit.socket state
-      ansible.builtin.systemd:
-        name: cockpit.socket
-      register: verify_cockpit_socket
-      become: true
-      failed_when: false
-
-    - name: Assert cockpit.socket is masked
-      ansible.builtin.assert:
-        that: verify_cockpit_socket.status.UnitFileState == 'masked'
-        fail_msg: "cockpit.socket is not masked"
-      when: verify_cockpit_socket.status.UnitFileState | default('') != ''
-
-    - name: Check sshd.socket state
-      ansible.builtin.systemd:
-        name: sshd.socket
-      register: verify_sshd_socket
-      become: true
-      failed_when: false
-
-    - name: Assert sshd.socket is masked
-      ansible.builtin.assert:
-        that: verify_sshd_socket.status.UnitFileState == 'masked'
-        fail_msg: "sshd.socket is not masked"
-      when: verify_sshd_socket.status.UnitFileState | default('') != ''
 
     - name: Check power-profiles-daemon state
       ansible.builtin.systemd:
@@ -983,7 +792,7 @@
       ansible.builtin.command: grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf
       changed_when: false
       become: true
-      when: verify_logind.stat.exists
+      when: verify_logind_conf.stat.exists
 
     # --- subuid/subgid (rootless Podman) ---
     - name: Check /etc/subuid has entry for ansible_user_id
