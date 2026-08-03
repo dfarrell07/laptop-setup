@@ -45,7 +45,6 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Re-check subgid entry for current user
   ansible.builtin.command:
@@ -54,7 +53,6 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: ansible_facts['system'] == 'Linux'
 
 - name: Warn if rootless podman prerequisites are missing
   ansible.builtin.debug:
@@ -63,9 +61,7 @@
       Rootless podman will fail. The system role provisions these entries;
       run 'make system' as root to fix, or manually:
       sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_facts['user_id'] }}
-  when:
-    - ansible_facts['system'] == 'Linux'
-    - (distrobox_subuid_check.rc | default(1) != 0) or (distrobox_subgid_check.rc | default(1) != 0)
+  when: (distrobox_subuid_check.rc | default(1) != 0) or (distrobox_subgid_check.rc | default(1) != 0)
 
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
@@ -104,6 +100,7 @@
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing | default(false))
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
   block:
     - name: Ensure distrobox config directory
@@ -133,7 +130,9 @@
       ansible.builtin.debug:
         msg: >-
           distrobox assemble create failed — container will not be available.
-          Check registry connectivity and available disk space.
+          If running on a fapolicyd-enforcing host, the security policy may have
+          blocked the operation; check: journalctl -u fapolicyd
+          Otherwise check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
@@ -167,7 +166,9 @@
       ansible.builtin.debug:
         msg: >-
           toolbox create failed — container will not be available.
-          Check registry connectivity and available disk space.
+          If running on a fapolicyd-enforcing host, the security policy may have
+          blocked the operation; check: journalctl -u fapolicyd
+          Otherwise check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:

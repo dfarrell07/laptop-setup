@@ -76,7 +76,7 @@ bootstrap:
 bootstrap-test: .venv
 	ansible-galaxy collection install -r requirements.yml -p ./collections
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
-	vagrant box add githubixx/fedora-44 --provider libvirt --box-version 20260727.0.0 || true
+	vagrant box add githubixx/fedora-44 --provider libvirt
 
 hooks:
 	git config --local core.hooksPath .githooks
@@ -143,8 +143,7 @@ distrobox: container  # alias for backwards compatibility
 preflight:
 	scripts/preflight.sh
 
-csb-audit:
-	scripts/preflight.sh
+csb-audit: preflight
 	ansible-playbook site.yml --tags common --check -v
 
 check:
@@ -170,10 +169,7 @@ pip-lock: .venv
 	.venv/bin/pip-compile --generate-hashes --output-file=requirements-test.lock requirements-test.txt
 
 # Create .venv from the exact lockfile for reproducible CI builds
-pip-sync:
-	python3 -m venv .venv
-	.venv/bin/pip install pip-tools
-	.venv/bin/pip install --require-hashes -r requirements-test.lock
+pip-sync: .venv
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check
