@@ -100,7 +100,7 @@
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
-    - not (fapolicyd_enforcing | default(false))
+    - not (fapolicyd_enforcing)
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
   block:
     - name: Ensure distrobox config directory

@@ -33,7 +33,7 @@
     # Full install-success verification requires internal repos (out of scope for Podman CI).
     - name: Assert is_fedora is true on Fedora molecule host
       ansible.builtin.assert:
-        that: is_fedora | default(false)
+        that: is_fedora
         fail_msg: "is_fedora is false on Fedora host — csb_detect.yml condition regression"
 
     # --- repos_dnf role: third-party repo files ---

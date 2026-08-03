@@ -662,7 +662,7 @@
 
 - name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian
   ansible.builtin.assert:
-    that: needs_container_tier | default('unknown') == 'host-only'
+    that: needs_container_tier == 'host-only'
     fail_msg: "needs_container_tier is not host-only on non-CSB host — CSB detection regression"
   when:
     - ansible_distribution in ['Fedora', 'Debian']
@@ -670,7 +670,7 @@
 
 - name: Assert fapolicyd is not running on non-CSB molecule host
   ansible.builtin.assert:
-    that: not (fapolicyd_installed | default(true))
+    that: not (fapolicyd_installed)
     fail_msg: "fapolicyd_installed is true on non-CSB molecule host — CSB detection false positive"
   when:
     - ansible_distribution in ['Fedora', 'Debian']

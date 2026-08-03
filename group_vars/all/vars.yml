@@ -25,7 +25,18 @@ notes_transcrypt_password: "{{ vault_notes_transcrypt_password | default('') }}"
 
 # registry_tokens: "{{ vault_registry_tokens | default({}) }}"  # future — not yet implemented
 
-# CSB detection baseline — pre_tasks csb_detect.yml always overrides at runtime.
-# Defining here removes the need for | default(false) on every csb_detected conditional.
+# CSB / OS detection baselines — csb_detect.yml always overrides via set_fact at runtime.
+# Defining here removes the need for | default(X) guards in conditionals.
 csb_detected: false
 csb_restricted: false
+is_rhel: false
+is_fedora: false
+is_macos: false
+is_linux: true
+fapolicyd_installed: false
+fapolicyd_running: false
+fapolicyd_enforcing: false
+internal_ca_present: false
+podman_rootless_ready: false
+network_proxied: false
+needs_container_tier: "host-only"

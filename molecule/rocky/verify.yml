@@ -132,12 +132,12 @@
 
     - name: Assert needs_container_tier is host-only on Rocky (not RedHat, not CSB)
       ansible.builtin.assert:
-        that: needs_container_tier | default('unknown') == 'host-only'
+        that: needs_container_tier == 'host-only'
         fail_msg: "needs_container_tier is not host-only on Rocky — is_rhel detection broken (Rocky != RedHat)"
 
     - name: Assert fapolicyd is not installed on Rocky molecule host
       ansible.builtin.assert:
-        that: not (fapolicyd_installed | default(true))
+        that: not (fapolicyd_installed)
         fail_msg: "fapolicyd_installed is true or undefined on Rocky molecule host — CSB detection false positive or variable never set"
 
     # Downstream consequence of is_rhel=false: redhat role skips CA cert deployment
