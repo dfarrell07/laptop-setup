@@ -926,6 +926,7 @@
     cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
   register: system_luks_key_cleanup
   when:
+    - not (csb_detected | default(false))
     - system_grubby_info.rc | default(1) == 0
     - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
     - system_remove_luks_key | bool
@@ -941,6 +942,7 @@
     regexp: '\s*rd\.luks\.key=\S+'
     replace: ''
   when:
+    - not (csb_detected | default(false))
     - system_grubby_info.rc | default(1) == 0
     - system_remove_luks_key | bool
   failed_when: false

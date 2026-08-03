@@ -1398,9 +1398,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
   _perf_expected=$(awk -F' *= *' '/^kernel\.perf_event_paranoid/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "kernel.perf_event_paranoid" "${_perf_expected:-1}" "sysctl-perf-paranoid"
-  # bpf_jit_harden: read expected from deployed config (system_bpf_jit_harden in config.yml may override default 2).
+  # bpf_jit_harden: read expected from deployed config (system_bpf_jit_harden in config.yml may override default 1).
+  # Default is 1 (constant blinding for unprivileged callers only); 2=blind all callers including root.
   _bpf_jit_harden_expected=$(awk -F' *= *' '/^net\.core\.bpf_jit_harden/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
-  _sysctl_check "net.core.bpf_jit_harden" "${_bpf_jit_harden_expected:-2}" "sysctl-bpf-jit-harden"
+  _sysctl_check "net.core.bpf_jit_harden" "${_bpf_jit_harden_expected:-1}" "sysctl-bpf-jit-harden"
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"

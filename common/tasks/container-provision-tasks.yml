@@ -221,6 +221,8 @@
       packages     : {{ 'OK' if container_dnf_result.rc == 0 else 'FAILED (rc=' + (container_dnf_result.rc | string) + ')' }}
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
       oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING')) }}
+      golangci-lint: {{ 'OK' if container_golangci_lint_result.rc == 0 else 'FAILED (rc=' + (container_golangci_lint_result.rc | string) + ')' }}
+      subctl       : {{ 'OK' if container_subctl_result.rc == 0 else 'FAILED (rc=' + (container_subctl_result.rc | string) + ')' }}
       Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
       ======================================
 # yamllint enable rule:line-length

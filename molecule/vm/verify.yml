@@ -6,10 +6,14 @@
 
   pre_tasks:
     # Load variable overrides matching vm/converge.yml so shared verify checks
-    # (e.g. even_deny_root absent/present) evaluate against the correct values.
+    # evaluate against the correct deployed values (not role/config defaults).
     - name: Apply VM-specific variable overrides for verify
       ansible.builtin.set_fact:
         system_faillock_even_deny_root: true
+        system_coredump_storage: none        # converge.yml overrides to none for hardened CI
+        system_coredump_process_size_max: 0  # converge.yml overrides to 0 for hardened CI
+        usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
+        system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -146,8 +150,8 @@
         that: verify_sysctl.stat.exists
         fail_msg: "Sysctl hardening config not deployed"
 
-    - name: Check sysctl config contains ptrace restriction
-      ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 1' /etc/sysctl.d/90-hardening.conf
+    - name: Check sysctl config contains ptrace scope 0 (workstation default — default.config.yml overrides role default of 1)
+      ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 0' /etc/sysctl.d/90-hardening.conf
       changed_when: false
       become: true
 
@@ -1017,6 +1021,22 @@
         that: verify_tuned_ppd.status.UnitFileState == 'masked'
         fail_msg: "tuned-ppd is not masked — TLP and tuned-ppd will conflict"
       when: verify_tuned_ppd.status.UnitFileState | default('') != ''
+
+    - name: Check tlp.service is enabled (system_tlp_enabled path)
+      ansible.builtin.systemd:
+        name: tlp.service
+      register: verify_tlp_service
+      become: true
+      failed_when: false
+      when: system_tlp_enabled | default(false)
+
+    - name: Assert tlp.service is enabled
+      ansible.builtin.assert:
+        that: verify_tlp_service.status.UnitFileState == 'enabled'
+        fail_msg: "tlp.service is not enabled — system_tlp_enabled: true did not take effect"
+      when:
+        - system_tlp_enabled | default(false)
+        - verify_tlp_service.status is defined
 
     # --- Core dump disable ---
     - name: Verify core dump disable config
