@@ -94,6 +94,7 @@
   register: distrobox_container_exists
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: distrobox_tool != 'none'
 
 # --- Distrobox path ---
@@ -211,6 +212,7 @@
   register: distrobox_python
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: distrobox_tool != 'none'
 
 - name: Register container as Ansible host for Play 3

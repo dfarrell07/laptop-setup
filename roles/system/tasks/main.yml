@@ -1077,6 +1077,7 @@
   register: system_authselect_current
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: system_authselect_bin.stat.exists
 
 - name: Select authselect sssd profile and clear PAM drift
@@ -2654,6 +2655,7 @@
   register: system_subuid_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: real_user_id is defined
 
 - name: Ensure subuid entry exists for user (only if absent)
@@ -2669,6 +2671,7 @@
   register: system_subgid_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: real_user_id is defined
 
 - name: Ensure subgid entry exists for user (only if absent)
