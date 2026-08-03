@@ -142,7 +142,9 @@
   ansible.builtin.command:
     cmd: grep -q 'init_on_free=1' /etc/kernel/cmdline
   changed_when: false
-  when: verify_kernel_cmdline.stat.exists
+  when:
+    - verify_kernel_cmdline.stat.exists
+    - system_init_on_free | default(true) | bool
 
 - name: Include containers.conf assertions
   ansible.builtin.include_tasks: verify-containers.yml

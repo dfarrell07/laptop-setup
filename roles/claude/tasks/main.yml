@@ -48,8 +48,8 @@
           Install manually: curl -fsSL {{ claude_install_url }} | bash
       when: not (csb_detected | default(false))
 
-- name: Warn when install method is unrecognized
-  ansible.builtin.debug:
+- name: Fail when install method is unrecognized
+  ansible.builtin.fail:
     msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized;
       Claude was not installed. Set 'claude_install_method: native' in config.yml and re-run.
@@ -255,6 +255,45 @@
     - not (claude_queue_enabled | bool)
     - ansible_facts['system'] == 'Linux'
   failed_when: false
+
+# --- macOS: launchd cleanup when disabled ---
+- name: Unload task queue launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-  # yamllint disable-line rule:line-length
+      launchctl bootout gui/$(id -u)
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - not (claude_queue_enabled | bool)
+  changed_when: false
+  failed_when: false
+
+- name: Remove task queue launchd plist (macOS, when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+    state: absent
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - not (claude_queue_enabled | bool)
+
+- name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-  # yamllint disable-line rule:line-length
+      launchctl bootout gui/$(id -u)
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - not (claude_remote_control_enabled | bool)
+  changed_when: false
+  failed_when: false
+
+- name: Remove Remote Control launchd plist (macOS, when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+    state: absent
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - not (claude_remote_control_enabled | bool)
 
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)

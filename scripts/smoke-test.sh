@@ -391,7 +391,7 @@ else
   _ak_perms=$(stat -c '%a' "$_ak" 2>/dev/null || stat -f '%Lp' "$_ak" 2>/dev/null || echo "?")
   if [[ "$_ak_perms" == "600" ]]; then record "authorized-keys-perms" "PASS"
   else record "authorized-keys-perms" "FAIL" "permissions $_ak_perms, expected 600"; fi
-  _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || echo "0")
+  _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || true)
   if [[ "$_ak_total" -gt 1 ]]; then
     record "authorized-keys-exclusive" "WARN" "$_ak_total keys present, expected 1 — extra keys beyond vault key; inspect: cat $_ak"
   elif [[ "$_ak_total" -eq 0 ]]; then
