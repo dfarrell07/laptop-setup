@@ -224,7 +224,7 @@ install_virtualization: true
 #     packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
-system_kexec_load_disabled: 0  # kdump requires kexec; safe here (Secure Boot disabled); CIS default is 1 (see Additional toggles above)
+system_kexec_load_disabled: 0  # kdump requires kexec; kexec_load_disabled=1 blocks kdump even without Secure Boot; CIS default is 1
 system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1 (see Additional
 system_kernel_panic_on_oops: 0  # dev workstation: bpfman/OVN-K non-fatal oops should log-and-continue, not halt the host (CIS default is 1)
 system_kernel_panic: 0          # preserve panic state for kdump analysis; kexec_load_disabled=0 already enables kdump (CIS default is 10)

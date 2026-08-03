@@ -14,6 +14,10 @@
   tags: [always]
 
 - name: Load user config for vault key inspection
+  # Second load into a named dict — include_vars with name: does not populate the play
+  # namespace, so this does NOT duplicate the first load. Both loads are required: the
+  # first (above) provides overrides to the play namespace; this load provides a dict
+  # for the vault_ and secret-key assertions below that need to inspect key names.
   ansible.builtin.include_vars:
     file: config.yml
     name: _user_config

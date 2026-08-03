@@ -233,10 +233,10 @@ system_dns_domains: "~."
 # Set false if non-Go dev tools (pip, cargo, etc.) need to exec from /tmp; nosuid/nodev are preserved.
 system_tmp_noexec: true
 # /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
-# Set false if workloads require executable files in /var/tmp (some RPM scriptlets, build tools).
-# WARNING: when true, /var/tmp becomes a tmpfs alias of /tmp — all contents are silently lost on
-# reboot (FHS requires /var/tmp to persist). Set false if any workload stages persistent data there.
-system_var_tmp_noexec: true
+# Default false: the bind-mount makes /var/tmp a tmpfs alias of /tmp — all contents are silently
+# lost on reboot, breaking dracut on kernel updates (FHS requires /var/tmp to persist across boots).
+# Set true only on hardened, non-development hosts where /var/tmp persistence is not required.
+system_var_tmp_noexec: false
 # /home nosuid force: on RHEL CSB-detected machines the nosuid tasks are skipped because
 # IT-managed NFS/autofs home directories may break with nosuid. Set true in config.yml
 # when /home is a known local mount on a RHEL CSB machine and nosuid is safe to apply.

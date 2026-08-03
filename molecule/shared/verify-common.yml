@@ -776,19 +776,19 @@
 
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:
-    path: /etc/systemd/coredump.conf.d/disable.conf
+    path: /etc/systemd/coredump.conf.d/coredump.conf
   register: verify_coredump_conf
   when: ansible_system == 'Linux'
 
 - name: Assert coredump drop-in deployed
   ansible.builtin.assert:
     that: verify_coredump_conf.stat.exists
-    fail_msg: "/etc/systemd/coredump.conf.d/disable.conf not deployed — system role coredump task regression"
+    fail_msg: "/etc/systemd/coredump.conf.d/coredump.conf not deployed — system role Configure coredump storage task regression"
   when: ansible_system == 'Linux'
 
 - name: Slurp coredump drop-in content
   ansible.builtin.slurp:
-    src: /etc/systemd/coredump.conf.d/disable.conf
+    src: /etc/systemd/coredump.conf.d/coredump.conf
   register: verify_coredump_content
   when:
     - ansible_system == 'Linux'

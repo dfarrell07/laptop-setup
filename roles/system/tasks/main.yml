@@ -999,10 +999,10 @@
     state: directory
     mode: "0755"
 
-- name: Disable core dumps
+- name: Configure coredump storage
   ansible.builtin.template:
-    src: coredump-disable.conf.j2
-    dest: /etc/systemd/coredump.conf.d/disable.conf
+    src: coredump.conf.j2
+    dest: /etc/systemd/coredump.conf.d/coredump.conf
     mode: "0644"
 
 # --- Auditd ---
@@ -3016,7 +3016,7 @@
         state: present
       notify: Reinitialize AIDE database
 
-    - name: Add /etc/systemd/coredump.conf.d to AIDE monitoring (coredump disable integrity)
+    - name: Add /etc/systemd/coredump.conf.d to AIDE monitoring (coredump config integrity)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/etc/systemd/coredump\.conf\.d'
