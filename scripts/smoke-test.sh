@@ -1195,14 +1195,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else
     record "tmout-bash" "FAIL" "TMOUT=$_tmout_val exceeds CIS 5.5.5 maximum of 900s"
   fi
-  _tmout_zsh=$(grep -oP '^(typeset -xr\s+|readonly\s+)?TMOUT=\K[0-9]+' /etc/zshrc 2>/dev/null || echo "")
+  # Debian's zsh binary reads /etc/zsh/zshrc, not /etc/zshrc (which is silently ignored there)
+  _zsh_tmout_file="/etc/zshrc"
+  grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _zsh_tmout_file="/etc/zsh/zshrc"
+  _tmout_zsh=$(grep -oP '^(typeset -xr\s+|readonly\s+)?TMOUT=\K[0-9]+' "$_zsh_tmout_file" 2>/dev/null || echo "")
   if [[ -n "$_tmout_zsh" && "$_tmout_zsh" -gt 0 && "$_tmout_zsh" -le 900 ]]; then
     record "tmout-zsh" "PASS"
   elif [[ -z "$_tmout_zsh" ]]; then
-    record "tmout-zsh" "WARN" "/etc/zshrc missing TMOUT — may be intentional (system_tmout: 0 disables)"
+    record "tmout-zsh" "WARN" "$_zsh_tmout_file missing TMOUT — may be intentional (system_tmout: 0 disables)"
   else
-    record "tmout-zsh" "FAIL" "TMOUT=$_tmout_zsh in /etc/zshrc exceeds CIS 5.5.5 maximum of 900s"
+    record "tmout-zsh" "FAIL" "TMOUT=$_tmout_zsh in $_zsh_tmout_file exceeds CIS 5.5.5 maximum of 900s"
   fi
+  unset _zsh_tmout_file
 
   # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
   _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")

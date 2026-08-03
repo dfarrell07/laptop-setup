@@ -142,6 +142,7 @@
     - name: Remove existing Toolbx container for replacement
       ansible.builtin.command:
         cmd: "toolbox rm --force {{ distrobox_container_name }}"
+      changed_when: true
       when:
         - distrobox_container_exists.rc == 0
         - distrobox_container_replace | default(false) | bool
