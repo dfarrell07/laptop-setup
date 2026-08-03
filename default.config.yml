@@ -56,10 +56,10 @@ install_virtualization: true
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_printing: true      (roles/system/defaults) — masks cups.socket/cups.path; set false if printing needed
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
-# system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
-#   on machines with a fingerprint reader if fingerprint auth is desired (P16v Gen 1 AMD: Synaptics 06cb:0126)
-# system_disable_avahi: true         (roles/system/defaults) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
-#   resolution or DNS-SD lab tooling
+#   system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
+#                                        on machines with a fingerprint reader if fingerprint auth is desired
+#   system_disable_avahi: true         (roles/system/defaults) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
+#                                        resolution or DNS-SD lab tooling
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
@@ -71,7 +71,7 @@ install_virtualization: true
 #   system_faillock_deny: 5            (roles/system/defaults) — failed logins before lockout (CIS); lower for shared machines
 #   system_faillock_unlock_time: 900   (roles/system/defaults) — seconds until auto-unlock (CIS); 0=permanent until admin reset
 #   system_faillock_even_deny_root: true (roles/system/defaults) — lock root on failed logins; set false on single-user workstations
-# (root SSH already blocked by PermitRootLogin no, so false reduces lockout surprise without weakening remote security)
+#                                        (root SSH blocked by PermitRootLogin no; false reduces lockout risk)
 #   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
 #   system_bpf_jit_harden: 1           (roles/system/defaults) — BPF JIT hardening (1=unprivileged only, default here;
@@ -101,8 +101,8 @@ install_virtualization: true
 #                                        (VS Code Remote needs >=10)
 #   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
 #                                            'remote' for ssh -R, 'yes' for both
-# system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
-#   ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
+#   system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
+#                                                ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
 #   system_ssh_unused_connection_timeout: 600 (roles/system/defaults) — seconds before idle connection with no open channels is
 #   closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
 #   value or "" if they hold idle control masters between commands for more than 600 s)
@@ -115,11 +115,11 @@ install_virtualization: true
 #                                        (roles/system/defaults) — NTS-capable time sources; override for corporate NTP or regional servers
 #   system_chrony_fallback_pool: 2.fedora.pool.ntp.org  (roles/system/defaults) — plain NTP pool fallback when NTS sources unreachable
 #   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
-# system_tmp_noexec: true            (roles/system/defaults) — noexec on /tmp (CIS 1.1.2.x); set false if non-Go dev tools need to exec
-#   from /tmp (nosuid/nodev preserved)
-#   system_var_tmp_noexec: true        (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
-#                                        (data lost on reboot); set false if RPM scriptlets need exec OR if any workload expects
-#                                        /var/tmp to persist across reboots
+#   system_tmp_noexec: true            (roles/system/defaults) — noexec on /tmp (CIS 1.1.2.x); set false if non-Go dev tools need to exec
+#                                        from /tmp (nosuid/nodev preserved)
+#   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
+#                                        (data lost on reboot); default false — set true only on hardened non-dev hosts where
+#                                        /var/tmp persistence is not needed and dracut kernel updates are not a concern
 #   system_home_nosuid_force: false    (roles/system/defaults) — set true on CSB/hybrid machines where /home is a known local
 #                                        mount to apply nosuid; default false preserves the CSB skip (IT-managed NFS/autofs /home
 #                                        may break with nosuid; use only when /home is btrfs/ext4 under your control)
@@ -127,8 +127,8 @@ install_virtualization: true
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
 #   system_wifi_mac_rand: <unset>      (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
 #                                        on hybrid Fedora CSB machines to opt in to stable-ssid MAC randomization
-# system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
-#   external access
+#   system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
+#                                        external access
 #   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
 #                                        for LUKS auto-unlock (e.g. no keyfile partition). WARNING: setting true when
 #                                        rd.luks.key is active will require manual LUKS passphrase on every reboot.
