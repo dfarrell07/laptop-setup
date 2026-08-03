@@ -1089,3 +1089,23 @@
   when:
     - ansible_system == 'Linux'
     - profile | default('personal') == 'work'
+
+- name: Check zshrc has GOPRIVATE on separate line (profile=work, trim_blocks regression guard)
+  ansible.builtin.command:
+    cmd: grep -q '^export GOPRIVATE=' "{{ ansible_user_dir }}/.zshrc"
+  changed_when: false
+  failed_when: false
+  register: verify_goprivate
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
+
+- name: Assert GOPRIVATE in zshrc on its own line
+  ansible.builtin.assert:
+    that: verify_goprivate.rc == 0
+    fail_msg: >-
+      export GOPRIVATE= not found as a standalone line in ~/.zshrc — possible
+      Jinja2 trim_blocks regression (GOPRIVATE concatenated with export PATH on one line)
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'

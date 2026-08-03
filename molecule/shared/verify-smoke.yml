@@ -149,6 +149,29 @@
       become: true
       when: sshd_conf_stat.stat.exists
 
+    - name: Check UnusedConnectionTimeout on its own line (trim_blocks regression guard)
+      ansible.builtin.command: >-
+        grep -qP '^UnusedConnectionTimeout\s+\d+$'
+        /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
+      changed_when: false
+      become: true
+      register: verify_sshd_unused_timeout
+      failed_when: false
+      when:
+        - sshd_conf_stat.stat.exists
+        - system_ssh_unused_connection_timeout | default('') | string != ''
+
+    - name: Assert UnusedConnectionTimeout is not concatenated with next directive
+      ansible.builtin.assert:
+        that: verify_sshd_unused_timeout.rc == 0
+        fail_msg: >-
+          UnusedConnectionTimeout not found as a standalone line in 00-hardening.conf —
+          possible Jinja2 trim_blocks newline-eating regression (two directives on one line)
+      when:
+        - sshd_conf_stat.stat.exists
+        - system_ssh_unused_connection_timeout | default('') | string != ''
+        - verify_sshd_unused_timeout is defined
+
 # --- Service masking inline assertions ---
 # Gated on UnitFileState being non-empty so these are silently skipped when the
 # unit is completely unknown to systemd (failed_when: false absorbs the module
