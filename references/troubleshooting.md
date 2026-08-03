@@ -850,12 +850,12 @@ system_dot_mode: "no"
 
 **Symptom:** `pip install`, `cargo build`, `dnf install`, or other build tools fail with `Permission denied` or `EPERM` errors when writing to `/var/tmp`. Some RPM post-install scriptlets fail mid-transaction leaving packages half-installed.
 
-**Root Cause:** Additionally, because /tmp on Fedora is a tmpfs, the bind-mount makes /var/tmp equally volatile: any files written to /var/tmp during a session are silently discarded on the next reboot with no error. This affects staged OCI images, Cargo/pip build caches, and any tool that treats /var/tmp as persistent staging area (Go/Rust builds, pip wheel compilation). The symptom is silent data loss on reboot, not a permission-denied error. The `system` role bind-mounts `/var/tmp` to `/tmp` with `noexec,nosuid,nodev` options (CIS 1.1.8). Some tools use `/var/tmp` as a working directory for executable binaries (pip wheel builds, cargo compilation artifacts, some RPM scriptlets). With `noexec`, anything that writes a binary to `/var/tmp` and then tries to execute it will fail.
+**Root Cause:** `system_var_tmp_noexec: true` (not the default — must be explicitly set) bind-mounts `/var/tmp` to `/tmp` with `noexec,nosuid,nodev` options (CIS 1.1.8). Some tools use `/var/tmp` as a working directory for executable binaries (pip wheel builds, cargo compilation artifacts, some RPM scriptlets). With `noexec`, anything that writes a binary to `/var/tmp` and then tries to execute it will fail. Additionally, because /tmp on Fedora is a tmpfs, the bind-mount makes /var/tmp equally volatile: any files written to /var/tmp during a session are silently discarded on the next reboot. The default is `false` (disabled) — this issue only occurs if you explicitly opted in.
 
-**Fix (permanent):** Set in `config.yml`:
+**Fix (permanent):** Remove the opt-in from `config.yml` (or ensure it is not set):
 
 ```yaml
-system_var_tmp_noexec: false
+system_var_tmp_noexec: false  # this is the default; remove from config.yml to restore default
 ```
 
 Then re-run `make system`. This stops and disables the var-tmp.mount bind-mount unit.

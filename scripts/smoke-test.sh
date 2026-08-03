@@ -934,10 +934,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked — USB drives may mount (expected if system_disable_usb_storage: false)"; fi
 
   # coredump config — verify drop-in is deployed with a Storage= directive (default is external, not none)
-  _cd_storage=$(grep -oP '^Storage=\K.*' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null)
+  _cd_storage=$(grep -oP '^Storage=\K.*' /etc/systemd/coredump.conf.d/coredump.conf 2>/dev/null)
   if [[ -n "$_cd_storage" ]]; then record "coredump-configured" "PASS" "Storage=$_cd_storage"
   else record "coredump-configured" "FAIL" "coredump drop-in missing or Storage not set"; fi
-  _cd_size=$(grep -oP '^ProcessSizeMax=\K.*' /etc/systemd/coredump.conf.d/disable.conf 2>/dev/null)
+  _cd_size=$(grep -oP '^ProcessSizeMax=\K.*' /etc/systemd/coredump.conf.d/coredump.conf 2>/dev/null)
   if [[ -n "$_cd_size" ]]; then record "coredump-processsizemax" "PASS" "ProcessSizeMax=$_cd_size"
   else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax not configured"; fi
   unset _cd_storage _cd_size
