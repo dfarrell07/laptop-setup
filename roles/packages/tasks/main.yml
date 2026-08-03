@@ -47,7 +47,7 @@
           One or more packages from packages_cli, packages_languages, packages_security,
           packages_containers, packages_networking, or packages_networking_work could not be installed.
           This may be due to fapolicyd repo policy or a missing repository.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn dnf package install failed (non-CSB)
       ansible.builtin.debug:
@@ -56,7 +56,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
@@ -100,7 +100,7 @@
         _csb_ticket_body: >-
           One or more virtualization packages (libvirt, QEMU, virt-manager, etc.)
           could not be installed. This may affect container and VM workflows.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn virtualization package install failed (non-CSB)
       ansible.builtin.debug:
@@ -109,7 +109,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # Enable virtqemud.socket here (Play 2) in addition to system role (Play 1).
 # On first provision, libvirt isn't installed when Play 1 runs, so the system role's
@@ -333,14 +333,14 @@
         _csb_ticket_body: >-
           oc and kubectl binaries could not be downloaded from mirror.openshift.com.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn oc/kubectl download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download oc/kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install opm (Operator Package Manager)
   when:
@@ -457,14 +457,14 @@
         _csb_ticket_body: >-
           opm binary could not be downloaded from mirror.openshift.com.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn opm download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download opm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install kind
   when:
@@ -506,14 +506,14 @@
         _csb_ticket_body: >-
           kind binary could not be downloaded from kind.sigs.k8s.io.
           Install manually from https://kind.sigs.k8s.io/dl/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn kind download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download kind: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kind.sigs.k8s.io/dl/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install helm
   when:
@@ -583,14 +583,14 @@
         _csb_ticket_body: >-
           helm binary could not be downloaded from get.helm.sh.
           Install manually from https://helm.sh/docs/intro/install/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn helm download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download helm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://helm.sh/docs/intro/install/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install kustomize
   when:
@@ -661,14 +661,14 @@
         _csb_ticket_body: >-
           kustomize binary could not be downloaded from github.com/kubernetes-sigs/kustomize.
           Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn kustomize download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download kustomize: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # --- Standalone script/binary downloads ---
 
@@ -710,14 +710,14 @@
         _csb_ticket_body: >-
           transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
           Install manually from https://github.com/elasticdog/transcrypt
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn transcrypt download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download transcrypt: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/elasticdog/transcrypt.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install SOPS
   when:
@@ -759,14 +759,14 @@
         _csb_ticket_body: >-
           sops binary could not be downloaded from github.com/getsops/sops.
           Install manually from https://github.com/getsops/sops/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn sops download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download sops: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/getsops/sops/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install operator-sdk
   when:
@@ -813,14 +813,14 @@
           operator-sdk binary could not be downloaded from
           github.com/operator-framework/operator-sdk.
           Install manually from https://github.com/operator-framework/operator-sdk/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn operator-sdk download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download operator-sdk: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/operator-framework/operator-sdk/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
@@ -863,14 +863,14 @@
         _csb_ticket_body: >-
           cosign binary could not be downloaded from github.com/sigstore/cosign.
           Install manually from https://github.com/sigstore/cosign/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn cosign download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download cosign: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/sigstore/cosign/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
@@ -938,14 +938,14 @@
         _csb_ticket_body: >-
           tkn (Tekton CLI) binary could not be downloaded from github.com/tektoncd/cli.
           Install manually from https://github.com/tektoncd/cli/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn tkn download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download tkn: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/tektoncd/cli/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
@@ -989,14 +989,14 @@
         _csb_ticket_body: >-
           ec (Enterprise Contract CLI) binary could not be downloaded from github.com/conforma/cli.
           Install manually from https://github.com/conforma/cli/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn ec download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download ec: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/conforma/cli/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install k9s (Kubernetes TUI)
   when:
@@ -1060,14 +1060,14 @@
         _csb_ticket_body: >-
           k9s binary could not be downloaded from github.com/derailed/k9s.
           Install manually from https://github.com/derailed/k9s/releases
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn k9s download failed
       ansible.builtin.debug:
         msg: >-
           Failed to download k9s: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/derailed/k9s/releases.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # --- Go install tools ---
 
@@ -1196,14 +1196,14 @@
           krew (kubectl plugin manager) could not be downloaded or installed from
           github.com/kubernetes-sigs/krew.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn krew installation failed
       ansible.builtin.debug:
         msg: >-
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
   always:
     - name: Clean up krew installer files

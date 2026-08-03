@@ -345,7 +345,7 @@
     - gcr-ssh-agent.service
   when:
     - ansible_facts['system'] == 'Linux'
-    - not (csb_restricted | default(false))  # Only skip on fapolicyd-enforcing CSB (smart-card/PIV auth via gcr)
+    - not (csb_restricted)  # Only skip on fapolicyd-enforcing CSB (smart-card/PIV auth via gcr)
   failed_when: false
 
 - name: Deploy SSH agent systemd user service

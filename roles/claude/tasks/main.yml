@@ -41,14 +41,14 @@
           The Claude Code installer could not run ({{ claude_install_url }} may be blocked
           by fapolicyd). Install manually after provisioning:
           curl -fsSL {{ claude_install_url }} | bash
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn if Claude install failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
           WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
           Install manually: curl -fsSL {{ claude_install_url }} | bash
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Fail when install method is unrecognized
   ansible.builtin.fail:

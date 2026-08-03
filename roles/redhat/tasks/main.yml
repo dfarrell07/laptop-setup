@@ -11,7 +11,7 @@
 
 - name: Deploy Red Hat CA certificates
   when:
-    - is_rhel | default(false) | bool or csb_detected | default(false)
+    - is_rhel | default(false) | bool or csb_detected
   block:
     - name: Deploy Red Hat CA certificates
       ansible.builtin.copy:
@@ -38,7 +38,7 @@
           Red Hat CA certificate files could not be copied to
           /etc/pki/ca-trust/source/anchors/. Internal CA trust may be
           broken, affecting access to internal HTTPS services.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn CA certificate deploy failed (non-CSB)
       ansible.builtin.debug:
@@ -46,12 +46,12 @@
           TASK FAILED: Deploy Red Hat CA certificates in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install Red Hat cert packages
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - is_rhel | default(false) | bool or csb_detected | default(false)
+    - is_rhel | default(false) | bool or csb_detected
   block:
     - name: Install Red Hat cert packages
       ansible.builtin.dnf:
@@ -81,7 +81,7 @@
           distribution mechanism for these certs on CSB systems.
           Blocked workflows: internal web services, container image pulls
           from internal registries, authenticated internal API calls.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn cert package install failed (non-CSB network error)
       ansible.builtin.debug:
@@ -90,13 +90,13 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install VPN packages
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - install_vpn | default(true)
-    - is_rhel | default(false) | bool or csb_detected | default(false) or is_fedora | default(false) | bool
+    - is_rhel | default(false) | bool or csb_detected or is_fedora | default(false) | bool
   block:
     - name: Install VPN packages
       ansible.builtin.dnf:
@@ -122,7 +122,7 @@
           and build infrastructure are unreachable without an active tunnel.
           Blocked workflows: all internal network access when off the
           Red Hat corporate network.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn VPN package install failed (non-CSB network error)
       ansible.builtin.debug:
@@ -131,7 +131,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
@@ -143,11 +143,11 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: is_rhel | default(false) | bool or csb_detected | default(false)
+  when: is_rhel | default(false) | bool or csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
-    - is_rhel | default(false) | bool or csb_detected | default(false)
+    - is_rhel | default(false) | bool or csb_detected
     - redhat_splunk_user_check.rc | default(1) == 0
   block:
     - name: Set splunk account shell to nologin
@@ -178,11 +178,11 @@
           to set shell=/sbin/nologin at install time.
           Blocked workflows: CIS 5.6 compliance cannot be achieved while
           the CSB splunk package sets an interactive shell.
-      when: csb_detected | default(false)
+      when: csb_detected
     - name: Warn splunk account hardening failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
           TASK FAILED: Restrict splunk system account shell in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')

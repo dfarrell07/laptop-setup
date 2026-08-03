@@ -65,7 +65,7 @@ system_sysctl_hardening:
 # True on standard Fedora (csb_detected=false) and Fedora hybrid (csb_detected=true, not RHEL).
 # False on RHEL CSB (csb_detected=true AND ansible_facts['distribution']='Fedora' is false) where IT
 # manages zone policy. Override in config.yml to force-enable or force-disable zone management.
-system_firewall_manage_zone: "{{ not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora') }}"
+system_firewall_manage_zone: "{{ not (csb_detected and ansible_facts['distribution'] != 'Fedora') }}"
 
 system_firewall_icmp_types:
   - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed

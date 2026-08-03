@@ -182,7 +182,7 @@
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
   when:
     - system_aide_enabled | bool
-    - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't overwrite
+    - not (csb_detected)  # CSB IT manages AIDE baseline; don't overwrite
   # Triggered when aide.conf paths change so new entries take effect immediately.
   # Without this, added paths are written to the config but the database never
   # includes them until a manual 'aide --init'.

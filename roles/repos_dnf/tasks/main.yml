@@ -33,7 +33,7 @@
           Repo URL: https://cli.github.com/packages/rpm.
           RHEL/Rocky ship no gh package; Fedora ships gh in standard repos but this handler does not run on Fedora.
           Blocked workflows: all PR review automation and CI trigger scripts.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn gh-cli repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -42,7 +42,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Google Chrome repo
   when:
@@ -73,7 +73,7 @@
           Repo URL: https://dl.google.com/linux/chrome/rpm/stable/x86_64.
           Chromium from Fedora repos lacks Widevine DRM and Google-specific APIs needed for compatibility testing.
           Blocked workflows: web application testing, DRM-gated content, browser-specific debugging.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Google Chrome repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -82,7 +82,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Google Cloud SDK repo
   when:
@@ -112,7 +112,7 @@
           Repo URL: https://packages.cloud.google.com/yum/repos/cloud-sdk-el10-x86_64 (el9 on older releases).
           Fedora does not ship gcloud; pip install lacks some SDK components and shell integration scripts.
           Blocked workflows: GCP resource management, container image publishing to GCR, GKE cluster access.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Google Cloud SDK repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -121,7 +121,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Slack repo
   when:
@@ -155,7 +155,7 @@
           Flatpak Slack has degraded screen sharing on Wayland and missing system tray integration;
           the browser app lacks desktop notifications and file-upload drag-and-drop.
           Blocked workflows: team communication, incident response, meeting coordination.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Slack repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -164,7 +164,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 # Mullvad is a personal privacy VPN whose purpose is to bypass network monitoring —
 # adding it on CSB could trigger SIEM/DLP alerts and violates corporate policy intent.
@@ -173,7 +173,7 @@
   when:
     - repo_mullvad | default(true)
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
@@ -232,7 +232,7 @@
           Rootless Podman satisfies most use cases but lacks Docker BuildKit and compose v2 features
           required by upstream CI scripts that invoke docker directly.
           Blocked workflows: building images with Docker-native CI pipelines, testing Docker-specific tooling.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Docker CE repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -241,7 +241,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add acli repo
   when:
@@ -271,7 +271,7 @@
           No public RPM is available; the internal repo is the only supported distribution channel.
           pip install atlassian-cli is a different third-party project and not a drop-in replacement.
           Blocked workflows: Jira ticket management, Confluence updates, sprint planning scripts.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn acli repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -280,7 +280,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Red Hat internal repos
   when:
@@ -310,7 +310,7 @@
           Repo URL: {{ repos_dnf_redhat_baseurl }} (internal Red Hat package repository).
           Internal packages are not available through RHSM, EPEL, or any public repository.
           Blocked workflows: internal tooling installation, debugging packages, Red Hat-specific dev utilities.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Red Hat internal repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -319,7 +319,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable RPM Fusion free repo
   when:
@@ -345,7 +345,7 @@
           Repo URL: https://download1.rpmfusion.org/free/fedora/.
           No equivalent licensed source exists in Fedora or RHEL; these packages require RPM Fusion.
           Blocked workflows: video conferencing codec support, media playback.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn RPM Fusion free failed (non-CSB network error)
       ansible.builtin.debug:
@@ -354,7 +354,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable RPM Fusion nonfree repo
   when:
@@ -380,7 +380,7 @@
           Repo URL: https://download1.rpmfusion.org/nonfree/fedora/.
           Required only on machines with discrete NVIDIA GPUs or hardware needing non-free firmware.
           Blocked workflows: GPU-accelerated workloads, NVIDIA driver installation.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn RPM Fusion nonfree failed (non-CSB network error)
       ansible.builtin.debug:
@@ -389,7 +389,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Tailscale repo
   when: repo_tailscale | default(true)
@@ -429,7 +429,7 @@
           Fedora ships Tailscale but lags upstream by 1-3 releases; current releases include security patches
           and WireGuard improvements not present in the Fedora-packaged version.
           Blocked workflows: access to personal dev servers, home lab resources, cross-network development.
-      when: csb_detected | default(false)
+      when: csb_detected
 
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -438,4 +438,4 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
