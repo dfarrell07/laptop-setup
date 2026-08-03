@@ -2626,44 +2626,36 @@
   failed_when: false
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
-- name: Ensure subuid entry exists for user
-  ansible.builtin.lineinfile:
-    path: /etc/subuid
-    line: "{{ real_user_id }}:100000:65536"
-    create: true
-    mode: "0644"
+- name: Ensure rootless podman prerequisites for user
   when: real_user_id is defined
+  block:
+    - name: Ensure subuid entry exists for user
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        line: "{{ real_user_id }}:100000:65536"
+        create: true
+        mode: "0644"
 
-- name: Ensure subgid entry exists for user
-  ansible.builtin.lineinfile:
-    path: /etc/subgid
-    line: "{{ real_user_id }}:100000:65536"
-    create: true
-    mode: "0644"
-  when: real_user_id is defined
+    - name: Ensure subgid entry exists for user
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        line: "{{ real_user_id }}:100000:65536"
+        create: true
+        mode: "0644"
 
-- name: Enable session lingering for rootless podman socket persistence
-  ansible.builtin.command:
-    cmd: loginctl enable-linger {{ real_user_id }}
-    creates: /var/lib/systemd/linger/{{ real_user_id }}
-  failed_when: false  # loginctl absent on macOS; system role runs Linux-only via site.yml
-  when: real_user_id is defined
-  # Without linger, systemd kills the user session (and podman.socket) when the
-  # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
+    - name: Enable session lingering for rootless podman socket persistence
+      ansible.builtin.command:
+        cmd: loginctl enable-linger {{ real_user_id }}
+        creates: /var/lib/systemd/linger/{{ real_user_id }}
+      failed_when: false
+      # Without linger, systemd kills the user session (and podman.socket) when the
+      # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 
 # --- Lock root account ---
-- name: Check root account status
-  ansible.builtin.command:
-    cmd: passwd -S root
-  register: system_root_status
-  changed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-
 - name: Lock root account
-  ansible.builtin.command:
-    cmd: passwd -l root
-  when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
-  changed_when: true
+  ansible.builtin.user:
+    name: root
+    password_lock: true
   failed_when: false
 
 # --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
@@ -2991,20 +2983,19 @@
         path: /var/lib/aide/aide.db.new.gz
       register: system_aide_db_new
 
-    - name: Warn that AIDE initialization takes 5-10 minutes
-      ansible.builtin.debug:
-        msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
-      when:
-        - not (system_aide_db.stat.exists | default(false))
-        - not (system_aide_db_new.stat.exists | default(false))
-
     - name: Initialize AIDE database (first run only)
-      ansible.builtin.command:
-        cmd: aide --init
       when:
         - not (system_aide_db.stat.exists | default(false))
         - not (system_aide_db_new.stat.exists | default(false))
-      changed_when: true
+      block:
+        - name: Warn that AIDE initialization takes 5-10 minutes
+          ansible.builtin.debug:
+            msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+
+        - name: Initialize AIDE database
+          ansible.builtin.command:
+            cmd: aide --init
+          changed_when: true
 
     - name: Promote initial AIDE database
       ansible.builtin.copy:
