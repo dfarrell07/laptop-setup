@@ -213,13 +213,13 @@
       fapolicyd installed: {{ fapolicyd_installed }}
       fapolicyd running  : {{ fapolicyd_running }}
       fapolicyd enforcing: {{ fapolicyd_enforcing }}
-      Internal CA certs  : {{ internal_ca_present | default(false) }}
+      Internal CA certs  : {{ internal_ca_present }}
       ---
       CSB hostname (.csb): {{ csb_hostname }}
       CSB detected       : {{ csb_detected }}
       CSB restricted     : {{ csb_restricted }}
       ---
-      Podman rootless OK : {{ podman_rootless_ready | default(false) }}
+      Podman rootless OK : {{ podman_rootless_ready }}
       Network proxied    : {{ network_proxied }}
       Proxy URL          : {{ proxy_url | regex_replace('://[^@]+@', '://***@') }}
       ---
