@@ -163,6 +163,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
   record "config_yml" "fail" "config.yml exists but does not set desktop_environment — 'auto' detection fails before any WM is installed; set 'desktop_environment: sway' (or i3/gnome)"
+elif grep -qE '^desktop_environment:[[:space:]]*auto([[:space:]]|$)' "$CONFIG_FILE"; then
+  record "config_yml" "fail" "desktop_environment is 'auto' — auto-detection requires an active XDG session and will fail on first provision; set 'desktop_environment: sway' (or i3/gnome) in config.yml"
 else
   record "config_yml" "pass" "desktop_environment is set"
 fi

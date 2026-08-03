@@ -10,6 +10,7 @@
     - name: Set work profile for verify context
       ansible.builtin.set_fact:
         profile: work
+        go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
 
   tasks:
     # --- Shared assertions (all platforms) ---

@@ -158,6 +158,21 @@
       changed_when: false
       become: true
 
+    - name: Check sysctl config contains kexec_load_disabled = 0 (default.config.yml overrides role default of 1)
+      ansible.builtin.command: grep -q 'kernel.kexec_load_disabled = 0' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sysctl config contains kernel.panic = 0 (default.config.yml overrides role default of 10)
+      ansible.builtin.command: grep -q 'kernel.panic = 0' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
+
+    - name: Check sysctl config contains kernel.panic_on_oops = 0 (default.config.yml overrides role default of 1)
+      ansible.builtin.command: grep -q 'kernel.panic_on_oops = 0' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
+
     - name: Check sysctl config contains dmesg restriction
       ansible.builtin.command: grep -q 'kernel.dmesg_restrict = 1' /etc/sysctl.d/90-hardening.conf
       changed_when: false

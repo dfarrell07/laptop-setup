@@ -403,7 +403,7 @@
 # --- macOS: SSH agent via launchd ---
 - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: "launchctl disable user/{{ ansible_user_uid }}/com.openssh.ssh-agent"
+    cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
   changed_when: false
   failed_when: false
   when: ansible_facts['os_family'] == 'Darwin'
@@ -436,7 +436,7 @@
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
     cmd: >-
-      launchctl bootstrap gui/{{ ansible_user_uid }}
+      launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
   when: ansible_facts['os_family'] == 'Darwin'
   changed_when: false
