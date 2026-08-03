@@ -345,10 +345,31 @@
   when: ansible_facts['os_family'] == 'Darwin'
 
 # --- macOS: firewall ---
+- name: Check macOS firewall state
+  ansible.builtin.command:
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+  register: _fw_state
+  changed_when: false
+  become: true
+  tags: [become]
+  when: ansible_facts['os_family'] == 'Darwin'
+  failed_when: false
+
 - name: Enable macOS firewall
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-  changed_when: true
+  become: true
+  tags: [become]
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - "'State = 1' not in (_fw_state.stdout | default(''))"
+  failed_when: false
+
+- name: Check macOS firewall stealth mode state
+  ansible.builtin.command:
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
+  register: _fw_stealth
+  changed_when: false
   become: true
   tags: [become]
   when: ansible_facts['os_family'] == 'Darwin'
@@ -357,10 +378,11 @@
 - name: Enable macOS firewall stealth mode
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
-  changed_when: true
   become: true
   tags: [become]
-  when: ansible_facts['os_family'] == 'Darwin'
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
   failed_when: false
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---

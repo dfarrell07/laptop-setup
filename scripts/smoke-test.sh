@@ -823,7 +823,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^MaxSessions [1-9][0-9]*$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^MaxStartups 10:30:60$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^LoginGraceTime 30$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \

@@ -1086,6 +1086,8 @@
     GOTOOLCHAIN: auto  # gofumpt/govulncheck need Go 1.25+, gopls needs 1.26+; auto downloads on demand
     HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
     HTTP_PROXY: "{{ proxy_url | default(omit) }}"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   register: packages_go_results
   failed_when: false
@@ -1232,6 +1234,9 @@
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
+        GOTOOLCHAIN: auto
+        HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
+        HTTP_PROXY: "{{ proxy_url | default(omit) }}"
       changed_when: true
       failed_when: false
       register: packages_subctl_install_results
