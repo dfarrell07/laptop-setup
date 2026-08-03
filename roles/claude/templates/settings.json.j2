@@ -6,7 +6,7 @@
   },
   "sandbox": {{ claude_sandbox_config | to_json }},
   "cleanupPeriodDays": {{ claude_cleanup_period_days }},
-  "enableAllProjectMcpServers": false,
+  "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
   "permissions": {
     "deny": [
 {% for path in claude_deny_read | default([]) %}
