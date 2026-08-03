@@ -153,7 +153,7 @@ alias src='cd ~/src'
 alias subm='cd ~/src/submariner-io'
 alias ovnk='cd ~/src/ovnk'
 {% endif %}
-alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
+alias notes='cd {{ notes_repo_path | default(ansible_facts["user_dir"] + "/notes") }}'
 
 # --- Task queue ---
 cq() { gh issue create --repo {{ dotfiles_claude_queue_repo }} --title "$1" --body "$2"; }

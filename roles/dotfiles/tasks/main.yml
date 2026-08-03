@@ -483,10 +483,18 @@
     backup: true
   when: ansible_facts['system'] == 'Linux'
 
-- name: Activate tmpfiles to create SSH and tmux socket directories
-  ansible.builtin.command:
-    cmd: systemd-tmpfiles --user --create
-  changed_when: false
+- name: Create SSH socket directory in XDG runtime dir
+  ansible.builtin.file:
+    path: "/run/user/{{ ansible_facts['user_uid'] }}/ssh"
+    state: directory
+    mode: "0700"
+  when: ansible_facts['system'] == 'Linux'
+
+- name: Create tmux socket directory in XDG runtime dir
+  ansible.builtin.file:
+    path: "/run/user/{{ ansible_facts['user_uid'] }}/tmux"
+    state: directory
+    mode: "0700"
   when: ansible_facts['system'] == 'Linux'
 
 - name: Ensure direnv config directory

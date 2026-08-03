@@ -729,7 +729,7 @@
 - name: Open SSH port in default firewall zone (fallback — zone management disabled in config)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
-    zone: "{{ system_fw_default_zone.stdout | default('FedoraWorkstation') }}"
+    zone: "{{ system_fw_info.firewalld_info.default_zone | default('FedoraWorkstation') }}"
     permanent: true
     immediate: true
     state: enabled
@@ -737,7 +737,8 @@
     - system_firewalld_running | bool
     - csb_detected | default(false) | bool
     - not (system_firewall_manage_zone | bool)
-    - system_fw_default_zone.stdout | default('') not in ['drop', '']
+    - system_fw_info is defined
+    - system_fw_info.firewalld_info.default_zone | default('') not in ['drop', '']
   failed_when: false
   notify: Apply firewall rules
 
