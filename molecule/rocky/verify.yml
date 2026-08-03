@@ -120,7 +120,7 @@
     - name: Assert is_rhel is false on Rocky molecule host
       ansible.builtin.assert:
         that: not (is_rhel | default(true))
-        fail_msg: "is_rhel is true on Rocky host — is_rhel detection broken (Rocky != RedHat)"
+        fail_msg: "is_rhel is true or undefined on Rocky host — csb_detect.yml regression or variable never set"
 
     # --- CSB detection: Rocky is NOT RedHat (ansible_distribution='Rocky' != 'RedHat') ---
     # is_rhel=False on Rocky → needs_container_tier='host-only' (not 'hybrid').
@@ -128,7 +128,7 @@
     - name: Assert csb_detected is false on Rocky molecule host
       ansible.builtin.assert:
         that: not (csb_detected | default(true))
-        fail_msg: "csb_detected is true on Rocky molecule host — csb_detect.yml regression"
+        fail_msg: "csb_detected is true or undefined on Rocky molecule host — csb_detect.yml regression or variable never set"
 
     - name: Assert needs_container_tier is host-only on Rocky (not RedHat, not CSB)
       ansible.builtin.assert:
@@ -138,7 +138,18 @@
     - name: Assert fapolicyd is not installed on Rocky molecule host
       ansible.builtin.assert:
         that: not (fapolicyd_installed | default(true))
-        fail_msg: "fapolicyd_installed is true on Rocky molecule host — CSB detection false positive"
+        fail_msg: "fapolicyd_installed is true or undefined on Rocky molecule host — CSB detection false positive or variable never set"
+
+    # Downstream consequence of is_rhel=false: redhat role skips CA cert deployment
+    - name: Stat Red Hat internal CA cert (must be absent on Rocky — redhat role skipped)
+      ansible.builtin.stat:
+        path: /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt
+      register: verify_rhit_ca_rocky
+
+    - name: Assert Red Hat CA cert absent on Rocky (is_rhel=false → redhat role skipped)
+      ansible.builtin.assert:
+        that: not verify_rhit_ca_rocky.stat.exists
+        fail_msg: "RH-IT-Root-CA.crt deployed on Rocky — redhat role should skip cert when is_rhel=false"
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 

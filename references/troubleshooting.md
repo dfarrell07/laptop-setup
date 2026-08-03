@@ -102,6 +102,8 @@ CSB manages the firewall centrally. STIG requires the `drop` zone and admin-mana
 **Fix:**
 - On CSB, the playbook detects `csb_detected` and skips the drop-zone, ICMP-inversion, and SSH-port tasks entirely — they are omitted, not rescued. Port 722 is never added to the drop zone on CSB (the drop zone has no interface there), so the task would create a dead rule. Provisioning completes without a firewall failure on CSB.
 - On **hybrid Fedora CSB** (`csb_detected=true`, Fedora distribution, no fapolicyd): the playbook does open port 722 in the default firewall zone (typically `FedoraWorkstation`) so the primary NIC remains reachable after provisioning. No IT ticket needed for this tier.
+
+> **Note (cycle-8 fix):** Prior to cycle-8, the kernel cmdline guard incorrectly skipped lockdown, IOMMU, vsyscall=none, and init_on_free on all CSB-detected hosts including hybrid Fedora. If provisioned before cycle-8, re-run `make system` then reboot to apply these params. RHEL CSB continues to skip grubby tasks (IT manages boot config).
 - Do not attempt to set the default zone or add custom rules without confirmed sudo access.
 - For Tailscale: userspace networking mode avoids all firewall changes.
 - On non-CSB machines (Fedora, macOS), firewall tasks should work normally with `--ask-become-pass`.
@@ -226,16 +228,16 @@ Podman rootless requires entries in `/etc/subuid` and `/etc/subgid` mapping subo
 
 ---
 
-## claude: npm Install Deprecated
+## claude: npm Install Method Removed
 
-**Symptom:**
+**Symptom:** Setting `claude_install_method: npm` in `config.yml` causes an immediate playbook abort with:
 ```
-npm install -g @anthropic-ai/claude-code
+FATAL: npm install method is removed; set claude_install_method to native
 ```
-Installs successfully but pulls ~300 npm dependencies, any of which could be compromised. Or on CSB, `npm install -g` writes to a path blocked by fapolicyd.
+No npm command is ever executed — the `roles/claude/tasks/main.yml` hard-fails before reaching any install step.
 
 **Cause:**
-The npm installation method was deprecated in Claude Code v2.1.15 (January 2026). In March 2026, the npm registry saw concurrent supply chain attacks (axios trojan alongside a Claude Code source leak in v2.1.88). The npm install path carries unnecessary supply chain risk.
+The npm installation method was removed (not just deprecated) due to supply chain risk. In March 2026, the npm registry saw concurrent supply chain attacks (axios trojan alongside a Claude Code source leak in v2.1.88). The npm install path carries unnecessary supply chain risk with ~300 transitive dependencies.
 
 **Fix:**
 Install via the native binary installer:

@@ -1517,7 +1517,7 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   failed_when: false
 
 - name: Enable Mullvad VPN service
@@ -1529,7 +1529,7 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   failed_when: false
 
 # --- USBGuard ---
