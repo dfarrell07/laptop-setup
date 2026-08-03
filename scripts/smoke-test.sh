@@ -1003,11 +1003,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
 
   # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)
+  # CSB RHEL: IPA/SSSD owns PAM policy; faillock.conf not written by Ansible — WARN not FAIL
   if grep -q '^deny = 5' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    record "faillock-deny" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
   if grep -q '^local_users_only' /etc/security/faillock.conf 2>/dev/null; then record "faillock-local-only" "PASS"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    record "faillock-local-only" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
   if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    record "faillock-unlock-time" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
   # even_deny_root: default.config.yml sets this to false (root SSH blocked by sshd; no self-lockout risk on single-user machine).
   # If explicitly set to true in config.yml, PASS when present; if false (default), absence is correct — WARN not FAIL.
@@ -1015,22 +1022,34 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "faillock-even-deny-root" "WARN" "faillock even_deny_root absent (root lockout disabled — default for single-user dev; set system_faillock_even_deny_root: true in config.yml to enable)"; fi
 
   # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
+  # CSB RHEL: IPA/SSSD owns password policy; pwquality.conf not written by Ansible — WARN not FAIL
+  _skip_pwquality=false
+  $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _skip_pwquality=true
   if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
+  elif $_skip_pwquality; then record "pwquality-minlen" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
   if grep -q '^dcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-dcredit" "PASS"
+  elif $_skip_pwquality; then record "pwquality-dcredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-dcredit" "FAIL" "pwquality dcredit not set to -1"; fi
   if grep -q '^ucredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ucredit" "PASS"
+  elif $_skip_pwquality; then record "pwquality-ucredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-ucredit" "FAIL" "pwquality ucredit not set to -1"; fi
   if grep -q '^lcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-lcredit" "PASS"
+  elif $_skip_pwquality; then record "pwquality-lcredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-lcredit" "FAIL" "pwquality lcredit not set to -1"; fi
   if grep -q '^ocredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ocredit" "PASS"
+  elif $_skip_pwquality; then record "pwquality-ocredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-ocredit" "FAIL" "pwquality ocredit not set to -1"; fi
   if grep -q '^difok = 4' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-difok" "PASS"
+  elif $_skip_pwquality; then record "pwquality-difok" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-difok" "FAIL" "pwquality difok not set to 4"; fi
   if grep -q '^maxrepeat = 3' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-maxrepeat" "PASS"
+  elif $_skip_pwquality; then record "pwquality-maxrepeat" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-maxrepeat" "FAIL" "pwquality maxrepeat not set to 3"; fi
   if grep -q '^enforce_for_root' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-enforce-root" "PASS"
+  elif $_skip_pwquality; then record "pwquality-enforce-root" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
   else record "pwquality-enforce-root" "FAIL" "pwquality enforce_for_root not set (CIS 5.3.4)"; fi
+  unset _skip_pwquality
 
   # sudoers hardening drop-in (mode 0440 — unreadable by non-root; WARN not FAIL)
   if [[ "$EUID" -eq 0 ]]; then

@@ -12,7 +12,7 @@
   ansible.builtin.dnf:
     name: policycoreutils-python-utils
     state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and not (csb_detected | default(false))
+  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 # --- SELinux enforcement check ---
 - name: Verify SELinux is enforcing

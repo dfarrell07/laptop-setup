@@ -181,12 +181,15 @@
       register: verify_avahi_service_shared
       become: true
       failed_when: false
+      when: system_disable_avahi | default(true) | bool
 
     - name: Assert avahi-daemon.service is masked (shared)
       ansible.builtin.assert:
         that: verify_avahi_service_shared.status.UnitFileState == 'masked'
         fail_msg: "avahi-daemon.service is not masked"
-      when: verify_avahi_service_shared.status.UnitFileState | default('') != ''
+      when:
+        - system_disable_avahi | default(true) | bool
+        - verify_avahi_service_shared.status.UnitFileState | default('') != ''
 
     - name: Check avahi-daemon.socket state (shared)
       ansible.builtin.systemd:
@@ -194,12 +197,15 @@
       register: verify_avahi_socket_shared
       become: true
       failed_when: false
+      when: system_disable_avahi | default(true) | bool
 
     - name: Assert avahi-daemon.socket is masked (shared)
       ansible.builtin.assert:
         that: verify_avahi_socket_shared.status.UnitFileState == 'masked'
         fail_msg: "avahi-daemon.socket is not masked"
-      when: verify_avahi_socket_shared.status.UnitFileState | default('') != ''
+      when:
+        - system_disable_avahi | default(true) | bool
+        - verify_avahi_socket_shared.status.UnitFileState | default('') != ''
 
     - name: Check nfs-server.service state (shared)
       ansible.builtin.systemd:

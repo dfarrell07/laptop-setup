@@ -68,6 +68,10 @@ fi
 if [[ -z "$PROFILE" ]]; then
   [[ "$IS_CSB" == true ]] && PROFILE="work" || PROFILE="personal"
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
+  # Promote to work if config.yml explicitly sets profile: work (e.g. non-CSB work machine)
+  _cfg="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
+  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$_cfg" 2>/dev/null && PROFILE="work"
+  unset _cfg
 fi
 record "profile" "pass" "$PROFILE"
 

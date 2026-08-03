@@ -220,6 +220,16 @@
         cmd: grep -q 'swaylock -f -c [0-9a-fA-F]' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
+    - name: Verify swayidle before-sleep wires swaylock (lock on suspend)
+      ansible.builtin.command:
+        cmd: grep -q 'before-sleep.*swaylock' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify swayidle resume restores display power
+      ansible.builtin.command:
+        cmd: grep -q 'resume.*swaymsg.*output.*power on' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
     - name: Verify sway config enables tap-to-click on touchpad
       ansible.builtin.command:
         cmd: grep -q 'tap enabled' "{{ ansible_user_dir }}/.config/sway/config"

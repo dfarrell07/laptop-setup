@@ -864,7 +864,9 @@
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - system_tmout | default(600) | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
@@ -872,6 +874,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
+    - system_tmout | default(600) | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zsh/zshrc
@@ -879,6 +882,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family == 'Debian'
+    - system_tmout | default(600) | int > 0
 
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
@@ -901,8 +905,6 @@
   failed_when: false
   loop:
     - cups-browsed
-    - avahi-daemon.service
-    - avahi-daemon.socket
     - sshd.socket
     - ctrl-alt-del.target
   when: ansible_system == 'Linux'
@@ -916,6 +918,31 @@
   loop: "{{ masked_unit_state.results }}"
   when:
     - ansible_system == 'Linux'
+    - item.rc == 0
+    - item.stdout | length > 0
+
+- name: Check UnitFileState for avahi (only when system_disable_avahi is true)
+  ansible.builtin.command: systemctl show -p UnitFileState --value {{ item }}
+  register: masked_avahi_state
+  changed_when: false
+  failed_when: false
+  loop:
+    - avahi-daemon.service
+    - avahi-daemon.socket
+  when:
+    - ansible_system == 'Linux'
+    - system_disable_avahi | default(true) | bool
+
+- name: Assert avahi units are masked when disable_avahi is true
+  ansible.builtin.assert:
+    that: item.stdout == 'masked'
+    fail_msg: >-
+      {{ item.item }} UnitFileState is '{{ item.stdout }}', expected 'masked'
+      — set system_disable_avahi: false in config.yml if mDNS is needed
+  loop: "{{ masked_avahi_state.results }}"
+  when:
+    - ansible_system == 'Linux'
+    - system_disable_avahi | default(true) | bool
     - item.rc == 0
     - item.stdout | length > 0
 
