@@ -83,7 +83,7 @@
   ansible.builtin.stat:
     path: /usr/local/bin/kubectl
   register: verify_kubectl_bin
-  when: (packages_install_binaries | default(false) | bool) and (profile | default('work')) == 'work'
+  when: (packages_install_binaries | bool) and (profile | default('work')) == 'work'
 
 - name: Assert kubectl binary is present and executable
   ansible.builtin.assert:
@@ -91,13 +91,13 @@
       - verify_kubectl_bin.stat.exists
       - verify_kubectl_bin.stat.executable
     fail_msg: 'kubectl binary is missing or not executable'
-  when: (packages_install_binaries | default(false) | bool) and (profile | default('work')) == 'work'
+  when: (packages_install_binaries | bool) and (profile | default('work')) == 'work'
 
 - name: Check kind binary presence
   ansible.builtin.stat:
     path: /usr/local/bin/kind
   register: verify_kind_bin
-  when: packages_install_binaries | default(false) | bool
+  when: packages_install_binaries | bool
 
 - name: Assert kind binary is present and executable
   ansible.builtin.assert:
@@ -105,7 +105,7 @@
       - verify_kind_bin.stat.exists
       - verify_kind_bin.stat.executable
     fail_msg: 'kind binary is missing or not executable'
-  when: packages_install_binaries | default(false) | bool
+  when: packages_install_binaries | bool
 
 - name: Check gpg is installed
   ansible.builtin.command: gpg --version

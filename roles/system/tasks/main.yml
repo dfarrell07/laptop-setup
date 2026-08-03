@@ -499,12 +499,12 @@
     dest: /etc/systemd/system/var-tmp.mount
     mode: "0644"
   when:
-    - system_var_tmp_noexec | default(false) | bool
+    - system_var_tmp_noexec | bool
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable and start var-tmp.mount
   when:
-    - system_var_tmp_noexec | default(false) | bool
+    - system_var_tmp_noexec | bool
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
   block:
     - name: Enable and start var-tmp.mount
@@ -523,7 +523,7 @@
 
 - name: Remove var-tmp.mount when system_var_tmp_noexec disabled
   when:
-    - not (system_var_tmp_noexec | default(false) | bool)
+    - not (system_var_tmp_noexec | bool)
   block:
     - name: Stop and disable var-tmp.mount
       ansible.builtin.systemd:
@@ -542,7 +542,7 @@
     - name: Reload systemd after removing var-tmp.mount  # noqa: no-handler
       ansible.builtin.systemd:
         daemon_reload: true
-      when: system_var_tmp_unit_removal.changed | default(false)
+      when: system_var_tmp_unit_removal.changed
 
 # --- Kernel module blacklist ---
 - name: Deploy kernel module blacklist
@@ -2131,7 +2131,7 @@
     line: "KEYMAP={{ system_keymap }}"
     create: true
     mode: "0644"
-  when: ansible_facts['system'] | default('Linux') == 'Linux'
+  when: ansible_facts['system'] == 'Linux'
   # lineinfile: manages only the KEYMAP line; preserves FONT and other vconsole.conf settings
   # (copy would overwrite the entire file, destroying eurlatgr FONT on fresh Fedora)
 
@@ -2917,7 +2917,7 @@
     - name: Reload systemd after removing AIDE units  # noqa: no-handler
       ansible.builtin.systemd:
         daemon_reload: true
-      when: system_aide_unit_removal.changed | default(false)
+      when: system_aide_unit_removal.changed
 
     - name: Remove aide package when AIDE disabled
       ansible.builtin.dnf:

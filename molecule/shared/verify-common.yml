@@ -654,7 +654,7 @@
 # all Fedora/Debian molecule runs as CSB, suppressing repo tasks and container-tier logic.
 - name: Assert csb_detected is false on non-CSB test host
   ansible.builtin.assert:
-    that: not (csb_detected | default(true))
+    that: not (csb_detected)
     fail_msg: "csb_detected is true on non-CSB molecule host — csb_detect.yml regression"
   when:
     - ansible_distribution in ['Fedora', 'Debian']

@@ -238,7 +238,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - ansible_facts['system'] == 'Linux'
-    - _claude_queue_unit_removal.changed | default(false)
+    - _claude_queue_unit_removal.changed
   failed_when: false
 
 # --- macOS: launchd cleanup when disabled ---

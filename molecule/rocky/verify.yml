@@ -119,7 +119,7 @@
     # redhat role skips internal CA cert deployment — assert the detection is correct.
     - name: Assert is_rhel is false on Rocky molecule host
       ansible.builtin.assert:
-        that: not (is_rhel | default(true))
+        that: not (is_rhel)
         fail_msg: "is_rhel is true or undefined on Rocky host — csb_detect.yml regression or variable never set"
 
     # --- CSB detection: Rocky is NOT RedHat (ansible_distribution='Rocky' != 'RedHat') ---
@@ -127,7 +127,7 @@
     # verify-common.yml re-includes csb_detect.yml so facts are populated in verify phase.
     - name: Assert csb_detected is false on Rocky molecule host
       ansible.builtin.assert:
-        that: not (csb_detected | default(true))
+        that: not (csb_detected)
         fail_msg: "csb_detected is true or undefined on Rocky molecule host — csb_detect.yml regression or variable never set"
 
     - name: Assert needs_container_tier is host-only on Rocky (not RedHat, not CSB)
