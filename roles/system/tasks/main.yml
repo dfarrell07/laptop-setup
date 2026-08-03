@@ -2325,7 +2325,7 @@
     path: /etc/security/pwhistory.conf
     section: null
     option: remember
-    value: "24"
+    value: "{{ system_pwhistory_remember }}"
     mode: "0644"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
@@ -2348,7 +2348,7 @@
     mode: "0644"
   loop:
     - key: minlen
-      value: "14"
+      value: "{{ system_pwquality_minlen }}"
     - key: dcredit
       value: "{{ system_pwquality_dcredit }}"
     - key: ucredit
@@ -2358,9 +2358,9 @@
     - key: ocredit
       value: "{{ system_pwquality_ocredit }}"
     - key: difok
-      value: "4"
+      value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
-      value: "3"
+      value: "{{ system_pwquality_maxrepeat }}"
   when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enforce pwquality for root (CIS 5.3.4)
@@ -2379,7 +2379,9 @@
     regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^#.*pam_wheel.so'
-  when: ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
+  when:
+    - ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 # --- Journald persistent logging and retention ---
 # The drop-in directory and /var/log/journal are created unconditionally (no CSB guard).
