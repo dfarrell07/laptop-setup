@@ -1050,7 +1050,7 @@
     state: started
   become: true
   when:
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
@@ -1891,7 +1891,7 @@
     dest: /etc/NetworkManager/conf.d/99-dns.conf
     mode: "0644"
   when:
-    - not (csb_detected | default(false))  # paired with resolv.conf guard — both or neither to avoid broken half-state
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # paired with resolv.conf
   failed_when: false
   notify: Restart NetworkManager
 
@@ -1940,7 +1940,7 @@
     state: present
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   failed_when: false
 
 - name: Deploy dnf-automatic config
@@ -1951,7 +1951,7 @@
   notify: Restart dnf-automatic timer
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
@@ -1960,7 +1960,7 @@
     enabled: true
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
@@ -1972,7 +1972,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   failed_when: false
 
 - name: Deploy AIDE update hook for dnf-automatic
@@ -2032,7 +2032,7 @@
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:
-    - not (csb_detected | default(false))  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
 
@@ -2049,7 +2049,7 @@
     state: link
     force: true
   when:
-    - not (csb_detected | default(false))  # CSB manages resolv.conf via NM/VPN; don't override
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - >-
       not (system_resolv_conf.stat.islnk | default(false)) or
       'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
@@ -2465,26 +2465,26 @@
     content: "root\n"
     dest: /etc/cron.allow
     mode: "0600"
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Restrict at access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/at.allow
     mode: "0600"
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
   ansible.builtin.file:
     path: /etc/cron.deny
     state: absent
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
   ansible.builtin.file:
     path: /etc/at.deny
     state: absent
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -2585,7 +2585,7 @@
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "30"
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -2593,7 +2593,7 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -2601,7 +2601,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
-  when: not (csb_detected | default(false))
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
@@ -2627,7 +2627,7 @@
     cmd: useradd -D -f 30
   when:
     - "'INACTIVE=30' not in system_useradd_defaults.stdout"
-    - not (csb_detected | default(false))  # same rationale as login.defs INACTIVE guard
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # same rationale as login.defs INACTIVE guard
   changed_when: true
 
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
@@ -2644,7 +2644,7 @@
   become: true
   when:
     - real_user_id is defined
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
@@ -2653,7 +2653,7 @@
     - real_user_id is defined
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
     - "system_chage_status.stdout | default('') | trim != '30'"
   changed_when: true
   failed_when: false
