@@ -1707,7 +1707,7 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts.services['sshd.service'] is defined
 
-- name: sshd pre-deployment checks
+- name: SSHD pre-deployment checks
   when: ansible_facts.services['sshd.service'] is defined
   block:
     - name: Assert real_user_id is non-empty and not root before deploying AllowUsers
@@ -2285,12 +2285,22 @@
 - name: Enable authselect with-faillock feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-faillock
+  register: system_authselect_faillock_enable
   when:
     - system_authselect_bin.stat.exists
     - system_authselect_faillock_check.rc | default(1) != 0
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   changed_when: true
   failed_when: false
+
+- name: Warn if authselect enable-feature with-faillock failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: authselect enable-feature with-faillock exited
+      {{ system_authselect_faillock_enable.rc }} — faillock PAM feature may not be active
+  when:
+    - system_authselect_faillock_enable is defined
+    - system_authselect_faillock_enable.rc | default(0) != 0
 
 # --- Debian PAM faillock (no authselect; direct PAM stack insertion) ---
 # On Debian, authselect is absent; pam_faillock.so must be added directly to
@@ -2350,12 +2360,22 @@
 - name: Enable authselect with-pwhistory feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-pwhistory
+  register: system_authselect_pwhistory_enable
   when:
     - system_authselect_bin.stat.exists
     - system_authselect_pwhistory_check.rc | default(1) != 0
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   changed_when: true
   failed_when: false
+
+- name: Warn if authselect enable-feature with-pwhistory failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: authselect enable-feature with-pwhistory exited
+      {{ system_authselect_pwhistory_enable.rc }} — pwhistory PAM feature may not be active
+  when:
+    - system_authselect_pwhistory_enable is defined
+    - system_authselect_pwhistory_enable.rc | default(0) != 0
 
 - name: Configure pam_pwhistory remember count (CIS 5.3.5)
   community.general.ini_file:
