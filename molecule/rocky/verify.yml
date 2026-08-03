@@ -116,10 +116,11 @@
 
     # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---
     # Rocky has ansible_distribution='Rocky' not 'RedHat', so is_rhel=False and
-    # redhat role skips internal CA cert deployment. These assertions are skipped.
-    - name: Note that Red Hat internal CA certs are not deployed on Rocky
-      ansible.builtin.debug:
-        msg: "Skipping RH CA cert assertions — Rocky is not RHEL (is_rhel=False, certs not deployed)"
+    # redhat role skips internal CA cert deployment — assert the detection is correct.
+    - name: Assert is_rhel is false on Rocky molecule host
+      ansible.builtin.assert:
+        that: not (is_rhel | default(true))
+        fail_msg: "is_rhel is true on Rocky host — is_rhel detection broken (Rocky != RedHat)"
 
     # --- CSB detection: Rocky is NOT RedHat (ansible_distribution='Rocky' != 'RedHat') ---
     # is_rhel=False on Rocky → needs_container_tier='host-only' (not 'hybrid').

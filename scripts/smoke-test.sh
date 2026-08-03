@@ -815,11 +815,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^TCPKeepAlive no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^LogLevel VERBOSE$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^PubkeyAuthentication yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^MaxStartups 10:30:60$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^IgnoreRhosts yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^GSSAPIAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -827,7 +831,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/GSSAPIAuthentication/AuthorizedKeysFile (MaxAuthTries=$_max_auth)"
+      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/PubkeyAuthentication/GSSAPIAuthentication/TCPKeepAlive/LogLevel/MaxStartups (MaxAuthTries=$_max_auth)"
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
     # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -1612,10 +1616,13 @@ if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then
   else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make all"; fi
 fi
 
-# resolved.conf.d/99-dot.conf existence check (file-gated; silently skips on macOS or where system role was not run)
-# Runtime DoT negotiation is checked via resolvectl in the full gate above (live-value, not moved)
+# resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
 if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
-  record "resolved-dot-conf" "PASS"
+  if grep -qE '^DNSOverTLS=' /etc/systemd/resolved.conf.d/99-dot.conf; then
+    record "resolved-dot-conf" "PASS"
+  else
+    record "resolved-dot-conf" "FAIL" "99-dot.conf missing DNSOverTLS= directive — run: make system"
+  fi
 fi
 
 # ---- Output ----
