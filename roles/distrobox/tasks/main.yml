@@ -9,6 +9,7 @@
   register: distrobox_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Check for toolbox
   ansible.builtin.command:
@@ -16,6 +17,7 @@
   register: distrobox_toolbox_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Set container tool facts
   ansible.builtin.set_fact:

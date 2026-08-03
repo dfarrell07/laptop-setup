@@ -8,6 +8,7 @@
   register: git_repos_gh_auth
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Warn if gh not authenticated
   ansible.builtin.debug:
@@ -114,6 +115,7 @@
   register: git_repos_lfs_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Warn if git-lfs is not installed
   ansible.builtin.debug:

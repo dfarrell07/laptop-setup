@@ -371,6 +371,7 @@
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
   register: _fw_stealth  # noqa: var-naming[no-role-prefix]
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
   when: ansible_facts['os_family'] == 'Darwin'
@@ -394,6 +395,7 @@
   register: desktop_gnome_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - ansible_facts['system'] == 'Linux'
     - desktop_effective == 'gnome'

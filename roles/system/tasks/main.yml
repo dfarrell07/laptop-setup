@@ -208,6 +208,7 @@
     cmd: findmnt -n -o OPTIONS /home
   register: system_home_opts
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - system_home_mountpoint.rc | default(1) == 0
   failed_when: false
@@ -284,6 +285,7 @@
     cmd: findmnt -n -o OPTIONS /boot
   register: system_boot_opts
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - system_boot_mountpoint.rc | default(1) == 0
   failed_when: false
@@ -400,6 +402,7 @@
     cmd: findmnt -n -o OPTIONS /boot/efi
   register: system_boot_efi_opts
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - system_boot_efi_mountpoint.rc | default(1) == 0
   failed_when: false
@@ -1105,6 +1108,7 @@
   register: system_authselect_fingerprint_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - system_authselect_bin.stat.exists
     - system_disable_fingerprint | bool
@@ -1140,6 +1144,7 @@
   register: system_authselect_fingerprint_enable_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
@@ -1455,6 +1460,7 @@
   register: system_bpfman_check
   failed_when: false
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - profile == 'work'
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
@@ -1781,6 +1787,7 @@
   register: system_crypto_policy
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Set crypto policy to DEFAULT:NO-SHA1
   ansible.builtin.command:
@@ -2206,6 +2213,7 @@
   register: system_authselect_faillock_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: system_authselect_bin.stat.exists
 
 - name: Enable authselect with-faillock feature
@@ -2281,6 +2289,7 @@
   register: system_authselect_pwhistory_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: system_authselect_bin.stat.exists
 
 - name: Enable authselect with-pwhistory feature
@@ -2621,6 +2630,7 @@
   register: system_chage_status
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   become: true
   when:
     - real_user_id is defined

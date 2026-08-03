@@ -142,6 +142,7 @@
   register: redhat_splunk_user_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: is_rhel | default(false) | bool or csb_detected | default(false)
 
 - name: Restrict splunk system account shell (CIS 5.6)
