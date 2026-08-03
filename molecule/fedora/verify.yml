@@ -140,14 +140,14 @@
         cmd: grep -q 'output.*scale.*adaptive_sync enabled' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
-    - name: Verify sway config exports AMD VA-API environment variables
+    - name: Verify sway config exports VA-API environment variables
       ansible.builtin.command:
-        cmd: grep -q 'LIBVA_DRIVER_NAME=radeonsi' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }}' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config sets cursor theme for XWayland consistency
       ansible.builtin.command:
-        cmd: grep -q 'xcursor_theme Adwaita' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'xcursor_theme {{ desktop_sway_cursor_theme }}' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config starts cliphist clipboard history daemon
@@ -440,6 +440,42 @@
         that: verify_ppd.status.UnitFileState == 'masked'
         fail_msg: "power-profiles-daemon is not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"
       when: verify_tlp_pkg.rc == 0 and verify_ppd.status.UnitFileState | default('') != ''
+
+    # --- Work profile: Claude work instance directory ---
+    - name: Verify Claude work config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-work"
+      register: verify_claude_work
+
+    - name: Assert Claude work config directory exists with mode 0700
+      ansible.builtin.assert:
+        that:
+          - verify_claude_work.stat.exists
+          - verify_claude_work.stat.isdir
+          - verify_claude_work.stat.mode == '0700'
+        fail_msg: "Claude work config dir missing or wrong permissions"
+
+    - name: Verify Claude work settings.local.json exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+      register: verify_claude_work_settings
+
+    - name: Assert Claude work settings.local.json exists with mode 0600
+      ansible.builtin.assert:
+        that:
+          - verify_claude_work_settings.stat.exists
+          - verify_claude_work_settings.stat.mode == '0600'
+        fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
+
+    - name: Verify Claude work CLAUDE.md exists
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.claude-work/CLAUDE.md"
+      register: verify_claude_md_work
+
+    - name: Assert Claude work CLAUDE.md exists
+      ansible.builtin.assert:
+        that: verify_claude_md_work.stat.exists
+        fail_msg: "Claude CLAUDE.md not deployed (work profile)"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
     - name: Verify claude-queue.service deployed

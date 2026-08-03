@@ -1107,9 +1107,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   elif $CSB_HOST; then record "yescrypt-cost" "WARN" "skipped on CSB — login.defs not modified; IPA/SSSD governs password policy"
   else record "yescrypt-cost" "FAIL" "YESCRYPT_COST_FACTOR 5 not set in login.defs"; fi
 
-  # fprintd masked (prevents fingerprint from bypassing faillock)
-  if [[ "$(systemctl show -p UnitFileState --value fprintd.service 2>/dev/null)" == "masked" ]]; then record "fprintd-masked" "PASS"
-  else record "fprintd-masked" "FAIL" "fprintd.service not masked (fingerprint can bypass faillock)"; fi
+  # fprintd masked (prevents fingerprint from bypassing faillock; or intentionally enabled via system_disable_fingerprint: false)
+  _fprintd_state=$(systemctl show -p UnitFileState --value fprintd.service 2>/dev/null)
+  if [[ "$_fprintd_state" == "masked" ]]; then record "fprintd-masked" "PASS"
+  elif [[ "$_fprintd_state" == "enabled" || "$_fprintd_state" == "static" ]]; then
+    record "fprintd-masked" "WARN" "fprintd.service enabled (state: $_fprintd_state) — confirm system_disable_fingerprint: false is intentional (faillock bypass risk)"
+  else record "fprintd-masked" "FAIL" "fprintd.service not masked (state: $_fprintd_state) — fingerprint can bypass faillock"; fi
+  unset _fprintd_state
 
   # resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
   # Skipped on CSB — Ansible guard omits this because NM/VPN manages resolv.conf on corporate networks

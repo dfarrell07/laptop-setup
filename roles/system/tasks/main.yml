@@ -1315,6 +1315,15 @@
     state: stopped
     enabled: false
   failed_when: false
+  when: system_disable_printing | bool
+
+- name: Enable cups.service when system_disable_printing is false
+  ansible.builtin.systemd:
+    name: cups
+    state: started
+    enabled: true
+  failed_when: false
+  when: not (system_disable_printing | bool)
 
 - name: Mask cups.socket and cups.path (prevent socket activation of CUPS)
   ansible.builtin.systemd:
@@ -1326,6 +1335,18 @@
     - cups.path
   failed_when: false
   when: system_disable_printing | bool
+
+- name: Unmask cups.socket and cups.path when system_disable_printing is false
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: true
+    state: started
+  loop:
+    - cups.socket
+    - cups.path
+  failed_when: false
+  when: not (system_disable_printing | bool)
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
 - name: Mask avahi-daemon service
