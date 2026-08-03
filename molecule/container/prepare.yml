@@ -46,12 +46,12 @@
           exit 0
         mode: "0755"
 
-    - name: Create stub subctl binary (go install cannot run — no Go in molecule image)
+    - name: Create stub subctl binary (satisfies 'creates:' guard in converge)
       ansible.builtin.copy:
         dest: "{{ ansible_env.HOME }}/go/bin/subctl"
         content: |
           #!/bin/sh
-          # Molecule stub — satisfies verify assertion; go install subctl is silently skipped.
+          # Molecule stub — satisfies the 'creates:' guard so go install is skipped.
           echo "subctl version stub (molecule test)"
           exit 0
         mode: "0755"

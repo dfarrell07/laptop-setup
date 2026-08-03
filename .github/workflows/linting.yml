@@ -366,6 +366,20 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
+          _bad_word() {
+            case "$1" in
+              Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|\
+              Fixed|Implemented|Improved|Merged|Moved|Refactored|\
+              Removed|Renamed|Replaced|Resolved|Reverted|Started|\
+              Stopped|Updated|Upgraded|\
+              Adding|Changing|Creating|Deleting|Enabling|Disabling|\
+              Expanding|Fixing|Implementing|Improving|Merging|Moving|\
+              Refactoring|Removing|Renaming|Replacing|Resolving|\
+              Reverting|Starting|Stopping|Updating|Upgrading) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
           failed=0
           # shellcheck disable=SC2046
           for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
@@ -378,26 +392,14 @@ jobs:
               echo "::error::Commit $sha: Subject must start with a capital letter (or use 'scope: Capital verb')"
               failed=1
             fi
-            bad_words="Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|\
-Fixed|Implemented|Improved|Merged|Moved|Refactored|\
-Removed|Renamed|Replaced|Resolved|Reverted|Started|\
-Stopped|Updated|Upgraded|\
-Adding|Changing|Creating|Deleting|Enabling|Disabling|\
-Expanding|Fixing|Implementing|Improving|Merging|Moving|\
-Refactoring|Removing|Renaming|Replacing|Resolving|\
-Reverting|Starting|Stopping|Updating|Upgrading"
-            case "$first" in
-              $bad_words)
-                echo "::error::Commit $sha: Use imperative mood, not '$first'"
-                failed=1 ;;
-            esac
+            if _bad_word "$first"; then
+              echo "::error::Commit $sha: Use imperative mood, not '$first'"
+              failed=1
+            fi
             # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
-            if [[ "$desc_first" != "$first" ]]; then
-              case "$desc_first" in
-                $bad_words)
-                  echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
-                  failed=1 ;;
-              esac
+            if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
+              echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
+              failed=1
             fi
           done
           exit $failed

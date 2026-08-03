@@ -160,15 +160,18 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
       --body "From [${TASK_QUEUE_REPO}#${ISSUE_NUM}](https://github.com/${TASK_QUEUE_REPO}/issues/${ISSUE_NUM}). Duration: ${DURATION}s.")
 
     gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
-      --remove-label processing --add-label "done"
+      --remove-label processing --add-label "done" \
+      || log "WARNING: could not update labels for #$ISSUE_NUM (PR: $PR_URL)"
     gh issue comment "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
-      --body "PR opened: ${PR_URL}"
-    gh issue close "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO"
+      --body "PR opened: ${PR_URL}" \
+      || log "WARNING: could not post PR comment for #$ISSUE_NUM (PR: $PR_URL)"
+    gh issue close "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
+      || log "WARNING: could not close issue #$ISSUE_NUM (PR: $PR_URL)"
 
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
     log "Issue #$ISSUE_NUM: subshell failed"
-    fail_issue "$ISSUE_NUM" "Internal error: git-push or PR creation failed. Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
+    fail_issue "$ISSUE_NUM" "Internal error: git-push or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
     rm -f "$TMPFILE"
   }
 done
