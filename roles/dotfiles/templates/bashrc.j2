@@ -23,8 +23,12 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
 {% endif %}
 {% if profile == 'work' %}
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
-{% if dotfiles_gonosumdb | default('') %}export GONOSUMDB="{{ dotfiles_gonosumdb }}"{% endif %}
-{% if dotfiles_goprivate | default('') %}export GOPRIVATE="{{ dotfiles_goprivate }}"{% endif %}
+{% if dotfiles_gonosumdb | default('') %}
+export GONOSUMDB="{{ dotfiles_gonosumdb }}"
+{% endif %}
+{% if dotfiles_goprivate | default('') %}
+export GOPRIVATE="{{ dotfiles_goprivate }}"
+{% endif %}
 {% endif %}
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"
