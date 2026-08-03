@@ -945,8 +945,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
-  if [[ "$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)" == "masked" ]]; then record "cups-browsed-masked" "PASS"
-  else record "cups-browsed-masked" "FAIL" "not masked (CVE-2024-47176 RCE vector — must be masked)"; fi
+  _cups_browsed_state=$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)
+  if [[ "$_cups_browsed_state" == "masked" ]]; then record "cups-browsed-masked" "PASS"
+  elif [[ -z "$_cups_browsed_state" ]] && grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
+    record "cups-browsed-masked" "WARN" "cups-browsed not installed on Debian (cups-filters absent) — no CVE-2024-47176 exposure"
+  else record "cups-browsed-masked" "FAIL" "not masked (state: '$_cups_browsed_state', CVE-2024-47176 RCE vector — must be masked)"; fi
+  unset _cups_browsed_state
 
   # cups.service disabled; cups.socket and cups.path masked (prevent socket/path activation of CUPS)
   # Set system_disable_printing: false in config.yml to leave cups.socket unmasked for Flatpak print dialogs
@@ -973,8 +977,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "avahi-socket-masked" "FAIL" "avahi-daemon.socket not masked (state: $_avahi_sock) — mDNS port 5353 may be open"; fi
   unset _avahi_sock
   # passim masked (fwupd dependency — unauthenticated HTTP on 0.0.0.0:27500 reachable via Tailscale trusted zone)
-  if [[ "$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)" == "masked" ]]; then record "passim-masked" "PASS"
-  else record "passim-masked" "FAIL" "not masked (unauthenticated HTTP server on 0.0.0.0:27500)"; fi
+  _passim_state=$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)
+  if [[ "$_passim_state" == "masked" ]]; then record "passim-masked" "PASS"
+  elif [[ -z "$_passim_state" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
+  else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
+  unset _passim_state
 
   # NFS server and rpcbind masked (CIS 2.2.7 — workstation must not run an NFS server)
   if [[ "$(systemctl show -p UnitFileState --value nfs-server.service 2>/dev/null)" == "masked" ]]; then record "nfs-server-masked" "PASS"

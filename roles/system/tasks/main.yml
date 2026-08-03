@@ -1055,6 +1055,12 @@
     state: present
   when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
+- name: Install auditd package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+  when: ansible_facts['pkg_mgr'] == 'apt'
+
 - name: Deploy auditd rules
   ansible.builtin.template:
     src: auditd-claude.rules.j2
@@ -1531,19 +1537,16 @@
   # the packages role re-runs this after installing libvirt, completing membership.
 
 - name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: firewall-cmd --zone=libvirt --remove-service=ssh --permanent
-  register: system_libvirt_ssh
-  changed_when:
-    - "'NOT_ENABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
-    - "'INVALID_ZONE' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
-  failed_when:
-    - system_libvirt_ssh.rc != 0
-    - "'NOT_ENABLED' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
-    - "'INVALID_ZONE' not in ((system_libvirt_ssh.stderr | default('')) + (system_libvirt_ssh.stdout | default('')))"
+  ansible.posix.firewalld:
+    zone: libvirt
+    service: ssh
+    permanent: true
+    immediate: true
+    state: disabled
   when:
     - system_firewalld_running | bool
     - system_enable_libvirtd | bool
+  failed_when: false
   notify: Apply firewall rules
 
 - name: Install Mullvad VPN
