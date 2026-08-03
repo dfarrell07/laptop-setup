@@ -1,7 +1,7 @@
 ---
 - name: Remount /tmp  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | default(true) | bool else '' }} /tmp"
+    cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | bool else '' }} /tmp"
   become: true
   register: _tmp_remount_handler_result  # noqa: var-naming[no-role-prefix]
   changed_when: _tmp_remount_handler_result.rc == 0
@@ -40,7 +40,7 @@
   become: true
   register: system_tlp_restart_result
   failed_when:
-    - system_tlp_restart_result.failed | default(false)
+    - system_tlp_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Reload NetworkManager
@@ -50,7 +50,7 @@
   become: true
   register: system_nm_reload_result
   failed_when:
-    - system_nm_reload_result.failed | default(false)
+    - system_nm_reload_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart NetworkManager
@@ -60,7 +60,7 @@
   become: true
   register: system_nm_restart_result
   failed_when:
-    - system_nm_restart_result.failed | default(false)
+    - system_nm_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart tailscaled
@@ -91,7 +91,7 @@
   become: true
   register: system_usbguard_restart_result
   failed_when:
-    - system_usbguard_restart_result.failed | default(false)
+    - system_usbguard_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart sshd
@@ -101,7 +101,7 @@
   become: true
   register: system_sshd_restart_result
   failed_when:
-    - system_sshd_restart_result.failed | default(false)
+    - system_sshd_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart systemd-resolved
@@ -111,7 +111,7 @@
   become: true
   register: system_resolved_restart_result
   failed_when:
-    - system_resolved_restart_result.failed | default(false)
+    - system_resolved_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart logind  # noqa: command-instead-of-module
@@ -131,7 +131,7 @@
   become: true
   register: system_chronyd_restart_result
   failed_when:
-    - system_chronyd_restart_result.failed | default(false)
+    - system_chronyd_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart aide-check timer
@@ -142,7 +142,7 @@
   become: true
   register: system_aide_timer_result
   failed_when:
-    - system_aide_timer_result.failed | default(false)
+    - system_aide_timer_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
   when: system_aide_enabled | bool
 
@@ -153,7 +153,7 @@
   become: true
   register: system_journald_restart_result
   failed_when:
-    - system_journald_restart_result.failed | default(false)
+    - system_journald_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Run dconf update  # noqa: command-instead-of-module

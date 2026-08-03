@@ -160,7 +160,10 @@ alias ovnk='cd ~/src/ovnk'
 alias notes='cd {{ notes_repo_path | default(ansible_facts["user_dir"] + "/notes") }}'
 
 # --- Task queue ---
-cq() { gh issue create --repo {{ dotfiles_claude_queue_repo }} --title "$1" --body "$2"; }
+cq() {
+  [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
+  gh issue create --repo {{ dotfiles_claude_queue_repo }} --title "$1" --body "$2"
+}
 
 # --- Kubernetes ---
 # Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)
@@ -184,6 +187,7 @@ _zsh_cached_completion oc completion zsh
 _zsh_cached_completion helm completion zsh
 _zsh_cached_completion kind completion zsh
 _zsh_cached_completion kustomize completion zsh
+{% if profile == 'work' %}
 if command -v bpfman &>/dev/null; then
   _bpf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/bpfman.zsh"
   _bpf_bin=$(command -v bpfman)
@@ -196,16 +200,19 @@ if command -v bpfman &>/dev/null; then
   fi
   [[ -s "$_bpf_cache" ]] && source "$_bpf_cache"
 fi
+{% endif %}
 
 # --- Dev shortcuts ---
 alias mj='make -j$(nproc)'          # parallel make (OVN-K/bpfman builds)
 alias psa='podman ps -a'             # list all containers (rootless podman default)
 alias kcc='kind create cluster --config'  # OVN-K kind cluster creation
 alias kdc='kind delete cluster'      # tear down kind cluster
+{% if profile == 'work' %}
 # bpfman daily ops (bpfman completion is sourced above for tab completion)
 command -v bpfman &>/dev/null && alias bpl='bpfman list'
 command -v bpfman &>/dev/null && alias bpg='bpfman get'
 command -v bpfman &>/dev/null && alias bpld='bpfman load'
+{% endif %}
 
 # helpers:
 # kfiles: fzf kubeconfig FILE picker — exports selected file as KUBECONFIG
