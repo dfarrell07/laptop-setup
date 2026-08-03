@@ -29,7 +29,7 @@
 
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-      when: ansible_facts['system'] == 'Linux'
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
       tags: [always]
 
   roles:
@@ -39,7 +39,7 @@
 
     - role: system
       tags: [system]
-      when: ansible_facts['system'] == 'Linux'
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
 
   post_tasks:
     # NetworkManager restart and systemd-resolved restart handlers fire here (end of Play 1).
@@ -55,7 +55,7 @@
       register: system_dns_liveness
       until: system_dns_liveness.rc == 0
       when:
-        - ansible_facts['system'] == 'Linux'
+        - ansible_facts['system'] | default('Linux') == 'Linux'
         - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
       tags: [system]
 
@@ -66,7 +66,7 @@
           restart. Play 2 (git clones, binary downloads) may fail. Check NM and resolved status:
           systemctl status NetworkManager systemd-resolved; resolvectl status
       when:
-        - ansible_facts['system'] == 'Linux'
+        - ansible_facts['system'] | default('Linux') == 'Linux'
         - system_dns_liveness is defined
         - system_dns_liveness.rc | default(1) != 0
       tags: [system]
@@ -159,7 +159,7 @@
 
     - role: distrobox
       tags: [distrobox]
-      when: ansible_facts['system'] == 'Linux' and distrobox_enabled | bool
+      when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
 
     - role: claude
       tags: [claude]
