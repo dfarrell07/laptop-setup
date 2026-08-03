@@ -172,7 +172,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal; do
     if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "warn" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
-    elif grep -qE "^${_ivar}:[[:space:]]*CHANGE_ME" "$CONFIG_FILE"; then
+    elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
     else
       record "identity_${_ivar}" "pass" "${_ivar} is set in config.yml"
@@ -246,7 +246,7 @@ fi
 # --- Sudo scope ---
 if sudo -n -l &>/dev/null 2>&1; then
   sudo_out=$(sudo -n -l 2>/dev/null) || true
-  if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+(NOPASSWD:[[:space:]]+)?ALL'; then
+  if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]+ALL'; then
     record "sudo" "pass" "full sudo available"
   else
     record "sudo" "warn" "scoped sudo — some system tasks may fail"

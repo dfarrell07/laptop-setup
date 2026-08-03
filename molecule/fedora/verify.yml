@@ -114,9 +114,9 @@
         that: verify_sway.stat.exists
         fail_msg: "sway config not deployed"
 
-    - name: Verify sway config uses exec_always for polkit agent
+    - name: Verify sway config uses exec_always for lxqt-policykit-agent (polkit-gnome removed Fedora 41+)
       ansible.builtin.command:
-        cmd: grep -q 'exec_always.*polkit-gnome' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'exec_always.*lxqt-policykit-agent' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config contains xkb_layout

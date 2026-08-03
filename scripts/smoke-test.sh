@@ -50,6 +50,15 @@ run() { # execute locally or inside container
   fi
 }
 
+_sysctl_check() {
+  local k="$1" v="$2" n="$3"; local got
+  got=$(sysctl -n "$k" 2>/dev/null || echo "?")
+  if [[ "$got" == "$v" ]]; then record "$n" "PASS"
+  elif [[ "$got" == "?" && "$EUID" -ne 0 ]]; then
+    record "$n" "WARN" "$k unreadable as non-root (re-run with sudo to verify value=$v)"
+  else record "$n" "FAIL" "$k=$got expected $v"; fi
+}
+
 # ---- User-level checks (always run) ----
 
 # SSH auth to GitHub (bypass run() — GitHub's success message is on stderr, which run() discards)
@@ -1375,15 +1384,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
-  # Critical kernel sysctl values
-  _sysctl_check() {
-    local k="$1" v="$2" n="$3"; local got
-    got=$(sysctl -n "$k" 2>/dev/null || echo "?")
-    if [[ "$got" == "$v" ]]; then record "$n" "PASS"
-    elif [[ "$got" == "?" && "$EUID" -ne 0 ]]; then
-      record "$n" "WARN" "$k unreadable as non-root (re-run with sudo to verify value=$v)"
-    else record "$n" "FAIL" "$k=$got expected $v"; fi
-  }
+
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
   _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
