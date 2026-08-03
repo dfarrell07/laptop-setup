@@ -650,10 +650,8 @@
   when: not (system_firewalld_running | bool)
 
 - name: Check current default firewall zone
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: firewall-cmd --get-default-zone
-  register: system_fw_default_zone
-  changed_when: false
+  ansible.posix.firewalld_info:
+  register: system_fw_info
   failed_when: false
   when: system_firewalld_running | bool
 
@@ -663,7 +661,7 @@
   changed_when: true
   when:
     - system_firewalld_running | bool
-    - system_fw_default_zone.stdout | default('') != 'drop'
+    - system_fw_info.firewalld_info.default_zone | default('') != 'drop'
     - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Apply firewall rules

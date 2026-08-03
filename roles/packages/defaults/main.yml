@@ -131,6 +131,7 @@ packages_apt:
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
   # GOTOOLCHAIN=auto (set in packages tasks) downloads the toolchain on demand.
   - golang
+  - chrony           # NTP daemon; Fedora installs via system role (dnf); Debian requires explicit apt install
   # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here

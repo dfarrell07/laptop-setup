@@ -1352,6 +1352,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "tlp-service" "PASS"
   elif systemctl is-enabled tlp.service &>/dev/null; then
     record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
+    record "tlp-service" "WARN" "TLP not installed on Debian (apt package not managed by this role) — battery charge thresholds absent on laptop hardware"
   elif [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
   else record "tlp-service" "WARN" "tlp.service not enabled"; fi
