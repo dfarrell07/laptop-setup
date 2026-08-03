@@ -2037,11 +2037,6 @@
 # yamllint enable rule:line-length
 
 # --- Verify resolv.conf symlink for split DNS ---
-- name: Check resolv.conf symlink target
-  ansible.builtin.stat:
-    path: /etc/resolv.conf
-  register: system_resolv_conf
-
 - name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
   ansible.builtin.file:
     src: /run/systemd/resolve/stub-resolv.conf
@@ -2050,9 +2045,6 @@
     force: true
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - >-
-      not (system_resolv_conf.stat.islnk | default(false)) or
-      'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
   failed_when: false
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
@@ -2691,18 +2683,12 @@
     mode: "0644"
   when: real_user_id is defined and system_subgid_check.rc != 0
 
-- name: Check if session lingering is already enabled
-  ansible.builtin.stat:
-    path: /var/lib/systemd/linger/{{ real_user_id }}
-  register: system_linger_file
-  when: real_user_id is defined
-
 - name: Enable session lingering for rootless podman socket persistence
   ansible.builtin.command:
     cmd: loginctl enable-linger {{ real_user_id }}
-  changed_when: not system_linger_file.stat.exists
+    creates: /var/lib/systemd/linger/{{ real_user_id }}
   failed_when: false  # loginctl absent on macOS; system role runs Linux-only via site.yml
-  when: real_user_id is defined and not system_linger_file.stat.exists
+  when: real_user_id is defined
   # Without linger, systemd kills the user session (and podman.socket) when the
   # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 
