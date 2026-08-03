@@ -42,7 +42,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Google Chrome repo
   when:
@@ -82,7 +82,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Google Cloud SDK repo
   when:
@@ -121,7 +121,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Slack repo
   when:
@@ -164,7 +164,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 # Mullvad is a personal privacy VPN whose purpose is to bypass network monitoring —
 # adding it on CSB could trigger SIEM/DLP alerts and violates corporate policy intent.
@@ -173,7 +173,7 @@
   when:
     - repo_mullvad | default(true)
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected | default(false))
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
@@ -241,7 +241,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add acli repo
   when:
@@ -280,7 +280,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Red Hat internal repos
   when:
@@ -319,7 +319,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable RPM Fusion free repo
   when:
@@ -354,7 +354,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable RPM Fusion nonfree repo
   when:
@@ -389,7 +389,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Tailscale repo
   when: repo_tailscale | default(true)
@@ -438,4 +438,4 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
