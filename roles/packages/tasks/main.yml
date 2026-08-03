@@ -1149,9 +1149,7 @@
       failed_when: false
 
     - name: Download krew tarball
-      when:
-        - packages_krew_version not in (packages_krew_check.stdout | default(''))
-        - packages_krew_check.rc != 0
+      when: packages_krew_check.rc != 0
       ansible.builtin.get_url:
         url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_version }}/krew-linux_amd64.tar.gz"
         dest: /tmp/krew.tar.gz
@@ -1163,18 +1161,14 @@
       until: packages_krew_download is succeeded
 
     - name: Extract krew installer
-      when:
-        - packages_krew_version not in (packages_krew_check.stdout | default(''))
-        - packages_krew_check.rc != 0
+      when: packages_krew_check.rc != 0
       ansible.builtin.unarchive:
         src: /tmp/krew.tar.gz
         dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
         remote_src: true
 
     - name: Run krew installer
-      when:
-        - packages_krew_version not in (packages_krew_check.stdout | default(''))
-        - packages_krew_check.rc != 0
+      when: packages_krew_check.rc != 0
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
       changed_when: true

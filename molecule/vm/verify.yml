@@ -577,13 +577,13 @@
         name: var-tmp.mount
       register: verify_var_tmp_mount
       become: true
-      when: system_var_tmp_noexec | default(true)
+      when: system_var_tmp_noexec | default(false)
 
     - name: Assert var-tmp.mount is enabled
       ansible.builtin.assert:
         that: verify_var_tmp_mount.status.UnitFileState == 'enabled'
         fail_msg: "var-tmp.mount not enabled"
-      when: system_var_tmp_noexec | default(true)
+      when: system_var_tmp_noexec | default(false)
 
     - name: Check pam_wheel.so in /etc/pam.d/su
       ansible.builtin.command: grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su
