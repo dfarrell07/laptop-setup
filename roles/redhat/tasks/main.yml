@@ -38,8 +38,7 @@
           Red Hat CA certificate files could not be copied to
           /etc/pki/ca-trust/source/anchors/. Internal CA trust may be
           broken, affecting access to internal HTTPS services.
-      when: csb_detected
-
+      when: csb_rhel
     - name: Warn CA certificate deploy failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
@@ -81,8 +80,7 @@
           distribution mechanism for these certs on CSB systems.
           Blocked workflows: internal web services, container image pulls
           from internal registries, authenticated internal API calls.
-      when: csb_detected
-
+      when: csb_rhel
     - name: Warn cert package install failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -122,8 +120,7 @@
           and build infrastructure are unreachable without an active tunnel.
           Blocked workflows: all internal network access when off the
           Red Hat corporate network.
-      when: csb_detected
-
+      when: csb_rhel
     - name: Warn VPN package install failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -178,7 +175,7 @@
           to set shell=/sbin/nologin at install time.
           Blocked workflows: CIS 5.6 compliance cannot be achieved while
           the CSB splunk package sets an interactive shell.
-      when: csb_detected
+      when: csb_rhel
     - name: Warn splunk account hardening failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
