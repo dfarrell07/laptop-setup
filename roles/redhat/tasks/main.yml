@@ -46,7 +46,7 @@
           TASK FAILED: Deploy Red Hat CA certificates in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install Red Hat cert packages
   when:
@@ -90,7 +90,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Install VPN packages
   when:
@@ -131,7 +131,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
@@ -185,4 +185,4 @@
           TASK FAILED: Restrict splunk system account shell in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not (csb_detected | default(false))
+      when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
