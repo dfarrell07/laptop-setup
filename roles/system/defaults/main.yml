@@ -130,6 +130,25 @@ system_logind_idle_sec: 300   # seconds of inactivity before logind locks the se
 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
+# Paths added to /etc/aide.conf as 'NORMAL' entries with insertbefore: '^/etc\s'.
+# Override in config.yml to add or remove monitored paths without editing tasks.
+system_aide_monitoring_etc_paths:
+  - /etc/ssh/sshd_config.d      # sshd hardening drop-ins
+  - /etc/NetworkManager/conf.d   # MAC randomization and DNS policy
+  - /etc/systemd/resolved.conf.d # DNS-over-TLS policy
+  - /etc/systemd/logind.conf.d   # session timeout policy
+  - /etc/systemd/journald.conf.d # log persistence policy
+  - /etc/systemd/coredump.conf.d # coredump config integrity
+  - /etc/systemd/system          # systemd hardening units
+  - /etc/crypto-policies         # system-wide crypto algorithm enforcement
+  - /etc/selinux                 # SELinux policy directory
+  - /etc/bpfman                  # eBPF program manager config
+  - /etc/sysctl.d                # kernel hardening parameters
+  - /etc/audit                   # auditd rules integrity
+  - /etc/modprobe.d              # kernel module blacklist integrity
+  - /etc/sudoers.d               # sudo policy integrity
+  - /etc/aide.conf               # self-reference: detect config tampering
+  - /etc/dconf                   # GNOME system hardening policy
 
 # auditd log rotation
 system_auditd_max_log_file: 8   # MB per log file (kind/bpfman workloads may want larger)
