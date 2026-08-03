@@ -36,13 +36,13 @@
     path: /etc/NetworkManager/conf.d/99-dns.conf
   register: verify_nm_dns
   become: true
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Assert 99-dns.conf deployed by system role
   ansible.builtin.assert:
     that: verify_nm_dns.stat.exists
     fail_msg: "99-dns.conf missing — Tailscale MagicDNS split-DNS will not work"
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Slurp 99-dns.conf for content check
   ansible.builtin.slurp:
@@ -50,7 +50,7 @@
   register: verify_nm_dns_content
   become: true
   when:
-    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - verify_nm_dns.stat.exists
 
 - name: Assert 99-dns.conf contains dns=systemd-resolved
@@ -58,7 +58,7 @@
     that: (verify_nm_dns_content.content | b64decode) is search('dns=systemd-resolved')
     fail_msg: "99-dns.conf exists but does not contain dns=systemd-resolved"
   when:
-    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - verify_nm_dns.stat.exists
 
 - name: Stat /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
@@ -66,13 +66,13 @@
     path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
   register: verify_nm_wifi_mac
   become: true
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Assert 99-wifi-mac-rand.conf deployed by system role
   ansible.builtin.assert:
     that: verify_nm_wifi_mac.stat.exists
     fail_msg: "99-wifi-mac-rand.conf missing — Wi-Fi MAC address randomisation not configured"
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Slurp 99-wifi-mac-rand.conf for content check
   ansible.builtin.slurp:
@@ -80,7 +80,7 @@
   register: verify_nm_wifi_mac_content
   become: true
   when:
-    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - verify_nm_wifi_mac.stat.exists
 
 - name: Assert 99-wifi-mac-rand.conf contains stable-ssid
@@ -88,7 +88,7 @@
     that: (verify_nm_wifi_mac_content.content | b64decode) is search('stable-ssid')
     fail_msg: "99-wifi-mac-rand.conf exists but does not contain stable-ssid"
   when:
-    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - verify_nm_wifi_mac.stat.exists
 
 - name: Stat /etc/NetworkManager/conf.d/99-wifi-powersave.conf
@@ -96,10 +96,10 @@
     path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
   register: verify_nm_wifi_ps
   become: true
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Assert 99-wifi-powersave.conf deployed by system role
   ansible.builtin.assert:
     that: verify_nm_wifi_ps.stat.exists
     fail_msg: "99-wifi-powersave.conf missing — Wi-Fi power management not configured"
-  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
+  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')

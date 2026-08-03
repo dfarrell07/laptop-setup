@@ -168,7 +168,7 @@
     - name: Generate CSB compatibility report
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-report.yml"
       tags: [always]
-      when: csb_detected | default(false)
+      when: csb_detected
 
 # Play 3 — Container provisioning (podman connection)
 # Only runs when the distrobox role registered a container via add_host.
