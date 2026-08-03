@@ -108,19 +108,20 @@
     mode: "0644"
 
 # --- i3 config ---
-- name: Ensure i3 config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/i3"
-    state: directory
-    mode: "0755"
+- name: Deploy i3 configuration
   when: desktop_effective == 'i3'
+  block:
+    - name: Ensure i3 config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/i3"
+        state: directory
+        mode: "0755"
 
-- name: Deploy i3 config
-  ansible.builtin.template:
-    src: i3.config.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/i3/config"
-    mode: "0644"
-  when: desktop_effective == 'i3'
+    - name: Deploy i3 config
+      ansible.builtin.template:
+        src: i3.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/i3/config"
+        mode: "0644"
 
 # --- i3 TrackPoint config (X11 persistent, via xorg.conf.d) ---
 - name: Ensure /etc/X11/xorg.conf.d exists (i3 TrackPoint)
@@ -148,13 +149,6 @@
     - desktop_i3_trackpoint_id
 
 # --- Sway config ---
-- name: Ensure Sway config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/sway"
-    state: directory
-    mode: "0755"
-  when: desktop_effective == 'sway'
-
 - name: Ensure Pictures directory exists for screenshots
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/Pictures"
@@ -162,76 +156,76 @@
     mode: "0755"
   when: desktop_effective in ['sway', 'i3']
 
-- name: Deploy Sway config
-  ansible.builtin.template:
-    src: sway.config.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
-    mode: "0644"
+- name: Deploy Sway configuration and GTK settings
   when: desktop_effective == 'sway'
+  block:
+    - name: Ensure Sway config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/sway"
+        state: directory
+        mode: "0755"
 
-- name: Ensure swaylock config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/swaylock"
-    state: directory
-    mode: "0755"
-  when: desktop_effective == 'sway'
+    - name: Deploy Sway config
+      ansible.builtin.template:
+        src: sway.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
+        mode: "0644"
 
-- name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
-  ansible.builtin.template:
-    src: swaylock.config.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
-    mode: "0644"
-  when: desktop_effective == 'sway'
+    - name: Ensure swaylock config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/swaylock"
+        state: directory
+        mode: "0755"
 
-- name: Ensure xdg-desktop-portal config directory (Sway)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
-    state: directory
-    mode: "0755"
-  when: desktop_effective == 'sway'
+    - name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
+      ansible.builtin.template:
+        src: swaylock.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
+        mode: "0644"
 
-- name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
-  ansible.builtin.copy:
-    dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
-    mode: "0644"
-    content: |
-      # {{ ansible_managed }}
-      [preferred]
-      default=gtk
-      org.freedesktop.impl.portal.Screenshot=wlr
-      org.freedesktop.impl.portal.ScreenCast=wlr
-  when: desktop_effective == 'sway'
+    - name: Ensure xdg-desktop-portal config directory (Sway)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
+        state: directory
+        mode: "0755"
 
-# --- GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly) ---
-- name: Ensure GTK 3.0 config directory (Sway)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0"
-    state: directory
-    mode: "0755"
-  when: desktop_effective == 'sway'
+    - name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
+        mode: "0644"
+        content: |
+          # {{ ansible_managed }}
+          [preferred]
+          default=gtk
+          org.freedesktop.impl.portal.Screenshot=wlr
+          org.freedesktop.impl.portal.ScreenCast=wlr
 
-- name: Deploy GTK 3.0 settings (Sway)
-  ansible.builtin.template:
-    src: gtk-settings.ini.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0/settings.ini"
-    mode: "0644"
-    force: false
-  when: desktop_effective == 'sway'
+    # GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly)
+    - name: Ensure GTK 3.0 config directory (Sway)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0"
+        state: directory
+        mode: "0755"
 
-- name: Ensure GTK 4.0 config directory (Sway)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0"
-    state: directory
-    mode: "0755"
-  when: desktop_effective == 'sway'
+    - name: Deploy GTK 3.0 settings (Sway)
+      ansible.builtin.template:
+        src: gtk-settings.ini.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0/settings.ini"
+        mode: "0644"
+        force: false
 
-- name: Deploy GTK 4.0 settings (Sway)
-  ansible.builtin.template:
-    src: gtk-settings.ini.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0/settings.ini"
-    mode: "0644"
-    force: false
-  when: desktop_effective == 'sway'
+    - name: Ensure GTK 4.0 config directory (Sway)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy GTK 4.0 settings (Sway)
+      ansible.builtin.template:
+        src: gtk-settings.ini.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0/settings.ini"
+        mode: "0644"
+        force: false
 
 - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
   community.general.dconf:
@@ -405,7 +399,7 @@
   when:
     - ansible_facts['system'] == 'Linux'
     - desktop_effective == 'gnome'
-    - desktop_gnome_check.rc | default(1) == 0
+    - desktop_gnome_check.rc == 0
   block:
     - name: Disable notifications on lock screen
       community.general.dconf:

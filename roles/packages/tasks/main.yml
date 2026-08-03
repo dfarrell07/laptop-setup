@@ -56,7 +56,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
@@ -109,7 +109,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 # Enable virtqemud.socket here (Play 2) in addition to system role (Play 1).
 # On first provision, libvirt isn't installed when Play 1 runs, so the system role's
@@ -340,7 +340,7 @@
         msg: >-
           Failed to download oc/kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install opm (Operator Package Manager)
   when:
@@ -464,7 +464,7 @@
         msg: >-
           Failed to download opm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install kind
   when:
@@ -513,7 +513,7 @@
         msg: >-
           Failed to download kind: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kind.sigs.k8s.io/dl/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install helm
   when:
@@ -590,7 +590,7 @@
         msg: >-
           Failed to download helm: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://helm.sh/docs/intro/install/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install kustomize
   when:
@@ -668,7 +668,7 @@
         msg: >-
           Failed to download kustomize: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 # --- Standalone script/binary downloads ---
 
@@ -717,7 +717,7 @@
         msg: >-
           Failed to download transcrypt: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/elasticdog/transcrypt.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install SOPS
   when:
@@ -766,7 +766,7 @@
         msg: >-
           Failed to download sops: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/getsops/sops/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install operator-sdk
   when:
@@ -820,7 +820,7 @@
         msg: >-
           Failed to download operator-sdk: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/operator-framework/operator-sdk/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
@@ -870,7 +870,7 @@
         msg: >-
           Failed to download cosign: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/sigstore/cosign/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
@@ -945,7 +945,7 @@
         msg: >-
           Failed to download tkn: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/tektoncd/cli/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
@@ -996,7 +996,7 @@
         msg: >-
           Failed to download ec: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/conforma/cli/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Install k9s (Kubernetes TUI)
   when:
@@ -1067,7 +1067,7 @@
         msg: >-
           Failed to download k9s: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://github.com/derailed/k9s/releases.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 # --- Go install tools ---
 
@@ -1206,7 +1206,7 @@
         msg: >-
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
   always:
     - name: Clean up krew installer files

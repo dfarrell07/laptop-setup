@@ -48,7 +48,7 @@
         msg: >-
           WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
           Install manually: curl -fsSL {{ claude_install_url }} | bash
-      when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      when: not csb_rhel
 
 - name: Fail when install method is unrecognized
   ansible.builtin.fail:

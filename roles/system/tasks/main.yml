@@ -12,7 +12,7 @@
   ansible.builtin.dnf:
     name: policycoreutils-python-utils
     state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and not csb_rhel
 
 # --- SELinux enforcement check ---
 - name: Verify SELinux is enforcing
@@ -63,7 +63,7 @@
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # CSB (RHEL): IT-managed fstab
+    - not csb_rhel  # CSB (RHEL): IT-managed fstab
 
 - name: Check /dev/shm current mount options
   ansible.builtin.command:
@@ -118,7 +118,7 @@
     owner: root
     group: root
   when:
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
 
 - name: Enable dev-shm-harden.service (CSB)
   ansible.builtin.systemd:
@@ -126,7 +126,7 @@
     enabled: true
     daemon_reload: true
   when:
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
   ignore_errors: true
   register: system_dev_shm_enable
 
@@ -136,7 +136,7 @@
       dev-shm-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /dev/shm hardening will NOT persist across reboots.
   when:
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
     - system_dev_shm_enable.failed | default(false)
 
 # --- Harden /home mount options (CIS 1.1.9) ---
@@ -199,7 +199,7 @@
   when:
     - system_home_mountpoint.rc == 0
     - >-
-      not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      not csb_rhel
       or (system_home_nosuid_force | bool)
     - >-
       'nosuid' not in (system_home_fstab_opts.stdout | default(''))
@@ -222,7 +222,7 @@
   when:
     - system_home_mountpoint.rc == 0
     - >-
-      not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+      not csb_rhel
       or (system_home_nosuid_force | bool)
     - >-
       'nosuid' not in (system_home_opts.stdout | default(''))
@@ -275,7 +275,7 @@
     mode: "0644"
   when:
     - system_boot_mountpoint.rc == 0
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - >-
       'nosuid' not in (system_boot_fstab_opts.stdout | default('')) or
       'nodev' not in (system_boot_fstab_opts.stdout | default('')) or
@@ -336,7 +336,7 @@
     group: root
   when:
     - system_boot_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
 
 - name: Enable boot-harden.service (CSB)
   ansible.builtin.systemd:
@@ -345,7 +345,7 @@
     daemon_reload: true
   when:
     - system_boot_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
   ignore_errors: true
   register: system_boot_harden_enable
 
@@ -356,7 +356,7 @@
       daemon-reload failure). /boot hardening will NOT persist across reboots.
   when:
     - system_boot_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
     - system_boot_harden_enable.failed | default(false)
 
 # --- Harden /boot/efi mount options ---
@@ -393,7 +393,7 @@
     mode: "0644"
   when:
     - system_boot_efi_mountpoint.rc == 0
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - >-
       'nosuid' not in (system_boot_efi_fstab_opts.stdout | default('')) or
       'noexec' not in (system_boot_efi_fstab_opts.stdout | default(''))
@@ -452,7 +452,7 @@
     group: root
   when:
     - system_boot_efi_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
 
 - name: Enable boot-efi-harden.service (CSB)
   ansible.builtin.systemd:
@@ -461,7 +461,7 @@
     daemon_reload: true
   when:
     - system_boot_efi_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
   ignore_errors: true
   register: system_boot_efi_harden_enable
 
@@ -472,7 +472,7 @@
       daemon-reload failure). /boot/efi hardening will NOT persist across reboots.
   when:
     - system_boot_efi_mountpoint.rc == 0
-    - csb_detected and ansible_facts['distribution'] != 'Fedora'
+    - csb_rhel
     - system_boot_efi_harden_enable.failed | default(false)
 
 # --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
@@ -500,12 +500,12 @@
     mode: "0644"
   when:
     - system_var_tmp_noexec | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Enable and start var-tmp.mount
   when:
     - system_var_tmp_noexec | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   block:
     - name: Enable and start var-tmp.mount
       ansible.builtin.systemd:
@@ -762,14 +762,14 @@
 - name: Skip grubby kernel param tasks on CSB (IT manages boot config)
   ansible.builtin.debug:
     msg: "RHEL CSB detected — skipping grubby/kernel-cmdline hardening (IT manages RHEL boot config)"
-  when: csb_detected and ansible_facts['distribution'] != 'Fedora'
+  when: csb_rhel
 
 - name: Enable kernel lockdown (integrity mode)
   ansible.builtin.command:
     cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
   register: system_lockdown_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_kernel_lockdown | length > 0
     - system_grubby_info.rc == 0
     - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout | default(''))"
@@ -781,7 +781,7 @@
     cmd: grubby --remove-args="lockdown" --update-kernel=ALL
   register: system_lockdown_remove_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_kernel_lockdown | length == 0
     - system_grubby_info.rc == 0
     - "'lockdown=' in (system_grubby_info.stdout | default(''))"
@@ -793,7 +793,7 @@
     cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
   register: system_iommu_amd_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('amd')
@@ -805,7 +805,7 @@
     cmd: grubby --args="intel_iommu=on" --update-kernel=ALL
   register: system_iommu_intel_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'intel_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('intel')
@@ -822,7 +822,7 @@
   # for all other devices. Leave false unless actively using PCI passthrough to VMs.
   when:
     - system_iommu_passthrough | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'iommu=pt' not in (system_grubby_info.stdout | default(''))"
     - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
@@ -836,7 +836,7 @@
   register: system_iommu_pt_remove_result
   when:
     - not (system_iommu_passthrough | bool)
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -847,7 +847,7 @@
     cmd: grubby --args="vsyscall=none" --update-kernel=ALL
   register: system_vsyscall_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -858,7 +858,7 @@
     cmd: grubby --args="init_on_free=1" --update-kernel=ALL
   register: system_init_on_free_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
     - system_init_on_free | bool
@@ -870,7 +870,7 @@
     cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
   register: system_init_on_free_remove_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
     - not (system_init_on_free | bool)
@@ -882,7 +882,7 @@
     cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
   register: system_page_shuffle_result
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
@@ -893,7 +893,7 @@
     cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
   register: system_luks_key_cleanup
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
     - system_remove_luks_key | bool
@@ -909,7 +909,7 @@
     regexp: '\s*rd\.luks\.key=\S+'
     replace: ''
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_grubby_info.rc == 0
     - system_remove_luks_key | bool
   failed_when: false
@@ -962,7 +962,7 @@
   changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   become: true
   failed_when: false
 
@@ -1030,7 +1030,7 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # no SIEM at home
+    - not csb_rhel  # no SIEM at home
 
 - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
   ansible.builtin.template:
@@ -1041,7 +1041,7 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # no audisp-remote at home
+    - not csb_rhel  # no audisp-remote at home
 
 - name: Ensure auditd is enabled and started
   ansible.builtin.systemd:
@@ -1050,7 +1050,7 @@
     state: started
   become: true
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
@@ -1094,7 +1094,7 @@
     - system_authselect_bin.stat.exists
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
     - system_authselect_current.stdout | default('') is not search('^sssd\b')
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   changed_when: true
   failed_when: false
 
@@ -1124,7 +1124,7 @@
   when:
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
-    - system_authselect_fingerprint_check.rc | default(1) == 0
+    - system_authselect_fingerprint_check.rc == 0
   changed_when: true
   failed_when: false
 
@@ -1149,7 +1149,7 @@
   when:
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
-    - system_authselect_fingerprint_check.rc | default(1) != 0
+    - system_authselect_fingerprint_check.rc != 0
   changed_when: true
   failed_when: false
 
@@ -1258,87 +1258,42 @@
     state: stopped
   failed_when: false
 
-- name: Disable cups.service (not a print server)
+- name: Configure cups.service (disable when system_disable_printing)
   ansible.builtin.systemd:
     name: cups
-    state: stopped
-    enabled: false
+    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
+    enabled: "{{ not (system_disable_printing | bool) }}"
   failed_when: false
-  when: system_disable_printing | bool
 
-- name: Enable cups.service when system_disable_printing is false
-  ansible.builtin.systemd:
-    name: cups
-    state: started
-    enabled: true
-  failed_when: false
-  when: not (system_disable_printing | bool)
-
-- name: Mask cups.socket and cups.path (prevent socket activation of CUPS)
+- name: Configure cups.socket and cups.path masking
   ansible.builtin.systemd:
     name: "{{ item }}"
-    masked: true
-    state: stopped
+    masked: "{{ system_disable_printing | bool }}"
+    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
+    enabled: "{{ not (system_disable_printing | bool) }}"
   loop:
     - cups.socket
     - cups.path
   failed_when: false
-  when: system_disable_printing | bool
-
-- name: Unmask cups.socket and cups.path when system_disable_printing is false
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
-    enabled: true
-    state: started
-  loop:
-    - cups.socket
-    - cups.path
-  failed_when: false
-  when: not (system_disable_printing | bool)
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
-- name: Mask avahi-daemon service
+- name: Configure avahi-daemon masking (mask when system_disable_avahi)
   ansible.builtin.systemd:
     name: "{{ item }}"
-    masked: true
-    state: stopped
+    masked: "{{ system_disable_avahi | bool }}"
+    state: "{{ 'stopped' if system_disable_avahi else 'started' }}"
+    enabled: "{{ not (system_disable_avahi | bool) }}"
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
-  failed_when: false
-  when: system_disable_avahi | bool
-
-- name: Unmask avahi-daemon when system_disable_avahi is false
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
-    enabled: true
-    state: started
-  loop:
-    - avahi-daemon.service
-    - avahi-daemon.socket
-  when: not (system_disable_avahi | bool)
   failed_when: false
 
 # --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
-- name: Mask NFS server and rpcbind (CIS 2.2.7)
+# Note: NFS stays stopped/disabled even when unmasked — workstations never serve NFS.
+- name: Configure NFS server and rpcbind masking (CIS 2.2.7)
   ansible.builtin.systemd:
     name: "{{ item }}"
-    masked: true
-    state: stopped
-  loop:
-    - nfs-server.service
-    - rpcbind.service
-    - rpcbind.socket
-  failed_when: false
-  when:
-    - system_mask_nfs_server | bool
-
-- name: Unmask NFS server and rpcbind when system_mask_nfs_server is false
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
+    masked: "{{ system_mask_nfs_server | bool }}"
     enabled: false
     state: stopped
   loop:
@@ -1346,32 +1301,18 @@
     - rpcbind.service
     - rpcbind.socket
   failed_when: false
-  when:
-    - not (system_mask_nfs_server | bool)
 
-# --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
-- name: Mask cockpit service and socket (CIS 2.2 — web console not needed on workstation)
+# --- Cockpit (web console — port 9090; disabled by default) ---
+- name: Configure cockpit masking (mask when not system_enable_cockpit)
   ansible.builtin.systemd:
     name: "{{ item }}"
-    masked: true
-    state: stopped
+    masked: "{{ not (system_enable_cockpit | bool) }}"
+    state: "{{ 'started' if system_enable_cockpit else 'stopped' }}"
+    enabled: "{{ system_enable_cockpit | bool }}"
   loop:
     - cockpit.service
     - cockpit.socket
   failed_when: false
-  when: not (system_enable_cockpit | bool)
-
-- name: Unmask and enable cockpit service and socket when system_enable_cockpit
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
-    state: started
-    enabled: true
-  loop:
-    - cockpit.service
-    - cockpit.socket
-  failed_when: false
-  when: (system_enable_cockpit | bool)
 
 # --- Logind lid close ---
 # Write to a drop-in so package upgrades can't clobber the settings.
@@ -1504,7 +1445,7 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 - name: Enable Mullvad VPN service
@@ -1516,7 +1457,7 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 # --- USBGuard ---
@@ -1639,7 +1580,7 @@
   ansible.builtin.debug:
     msg: "Firmware updates available: {{ system_fwupd.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
-    - system_fwupd.rc | default(1) == 0
+    - system_fwupd.rc == 0
     - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
 
 # --- sshd hardening ---
@@ -1790,7 +1731,7 @@
   when:
     - system_crypto_policy.rc == 0
     - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # RHEL CSB: IT may enforce FIPS/FUTURE
+    - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
   register: system_crypto_policy_set
   changed_when: system_crypto_policy_set.rc == 0
@@ -1878,7 +1819,7 @@
     dest: /etc/NetworkManager/conf.d/99-dns.conf
     mode: "0644"
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # paired with resolv.conf
+    - not csb_rhel  # paired with resolv.conf
   failed_when: false
   notify: Restart NetworkManager
 
@@ -1927,7 +1868,7 @@
     state: present
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 - name: Deploy dnf-automatic config
@@ -1938,7 +1879,7 @@
   notify: Restart dnf-automatic timer
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
@@ -1947,7 +1888,7 @@
     enabled: true
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
@@ -1959,7 +1900,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 - name: Deploy AIDE update hook for dnf-automatic
@@ -1976,7 +1917,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # dnf-automatic not installed on CSB
+    - not csb_rhel  # dnf-automatic not installed on CSB
   notify: Restart dnf-automatic timer
   failed_when: false
 
@@ -2019,7 +1960,7 @@
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
+    - not csb_rhel  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
 
@@ -2031,7 +1972,7 @@
     state: link
     force: true
   when:
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
   failed_when: false
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
@@ -2138,7 +2079,7 @@
   when:
     # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
     # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
@@ -2162,7 +2103,7 @@
       value: "{{ system_faillock_deny }}"
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -2174,7 +2115,7 @@
   loop:
     - audit
     - local_users_only  # prevent double-lockout with SSSD/IPA domain users
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Configure pam_faillock even_deny_root flag
   community.general.ini_file:
@@ -2183,7 +2124,7 @@
     option: even_deny_root
     allow_no_value: true
     mode: "0644"
-  when: system_faillock_even_deny_root | bool and not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: system_faillock_even_deny_root | bool and not csb_rhel
 
 - name: Remove pam_faillock even_deny_root flag (when disabled)
   community.general.ini_file:
@@ -2192,7 +2133,7 @@
     option: even_deny_root
     state: absent
     mode: "0644"
-  when: not (system_faillock_even_deny_root | bool) and not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not (system_faillock_even_deny_root | bool) and not csb_rhel
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -2209,8 +2150,8 @@
   register: system_authselect_faillock_enable
   when:
     - system_authselect_bin.stat.exists
-    - system_authselect_faillock_check.rc | default(1) != 0
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - system_authselect_faillock_check.rc != 0
+    - not csb_rhel
   changed_when: true
   failed_when: false
 
@@ -2285,8 +2226,8 @@
   register: system_authselect_pwhistory_enable
   when:
     - system_authselect_bin.stat.exists
-    - system_authselect_pwhistory_check.rc | default(1) != 0
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - system_authselect_pwhistory_check.rc != 0
+    - not csb_rhel
   changed_when: true
   failed_when: false
 
@@ -2306,7 +2247,7 @@
     option: remember
     value: "{{ system_pwhistory_remember }}"
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -2315,7 +2256,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
@@ -2340,7 +2281,7 @@
       value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
       value: "{{ system_pwquality_maxrepeat }}"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -2349,7 +2290,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
@@ -2360,7 +2301,7 @@
     insertafter: '^#.*pam_wheel.so'
   when:
     - ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 # --- Journald persistent logging and retention ---
 # The drop-in directory and /var/log/journal are created unconditionally (no CSB guard).
@@ -2399,7 +2340,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
@@ -2444,26 +2385,26 @@
     content: "root\n"
     dest: /etc/cron.allow
     mode: "0600"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Restrict at access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/at.allow
     mode: "0600"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
   ansible.builtin.file:
     path: /etc/cron.deny
     state: absent
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
   ansible.builtin.file:
     path: /etc/at.deny
     state: absent
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -2498,7 +2439,7 @@
     dest: "{{ item }}"
     mode: "0644"
   loop: [/etc/issue, /etc/issue.net]
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # no IT banner at home
+  when: not csb_rhel  # no IT banner at home
   failed_when: false
 
 # --- Sudoers hardening ---
@@ -2552,7 +2493,7 @@
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -2560,7 +2501,7 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -2568,7 +2509,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
-  when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+  when: not csb_rhel
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
@@ -2594,7 +2535,7 @@
     cmd: useradd -D -f {{ system_inactive_days }}
   when:
     - "'INACTIVE=' ~ system_inactive_days not in system_useradd_defaults.stdout"
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # same rationale as login.defs INACTIVE guard
+    - not csb_rhel  # same rationale as login.defs INACTIVE guard
   changed_when: true
 
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
@@ -2611,7 +2552,7 @@
   become: true
   when:
     - real_user_id is defined
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
@@ -2620,7 +2561,7 @@
     - real_user_id is defined
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - system_chage_status.stdout | default('') | trim != system_inactive_days | string
   changed_when: true
   failed_when: false
@@ -2860,7 +2801,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not (system_aide_enabled | bool)
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # CSB IT manages AIDE baseline; don't interfere
+    - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
   block:
     - name: Disable and stop aide-check.timer when AIDE disabled
       ansible.builtin.systemd:
@@ -2900,7 +2841,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')  # CSB IT manages AIDE baseline; don't overwrite
+    - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
   block:
     - name: Install AIDE
       ansible.builtin.dnf:

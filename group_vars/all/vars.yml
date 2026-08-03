@@ -77,3 +77,7 @@ system_pwhistory_remember: 24      # number of previous passwords to remember (C
 system_inactive_days: 30           # days inactive before account lock (CIS 5.5.1.5)
 system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
 system_umask: "027"                # default umask for login shells (login.defs UMASK)
+# Computed boolean: true on RHEL CSB where IT manages security baselines;
+# false on hybrid Fedora CSB where the user manages their own system.
+# Used in rescue blocks to route IT ticket vs. generic warning.
+csb_rhel: "{{ csb_detected and ansible_facts['distribution'] != 'Fedora' }}"

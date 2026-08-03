@@ -237,7 +237,7 @@
     distrobox_oc_fetch_delay: "{{ distrobox_oc_fetch_delay }}"
   when:
     - distrobox_tool != 'none'
-    - distrobox_python.rc | default(1) == 0
+    - distrobox_python.rc == 0
 
 - name: Warn if Python not found in container
   ansible.builtin.debug:
@@ -246,4 +246,4 @@
       Container provisioning (Play 3) will be skipped.
   when:
     - distrobox_tool != 'none'
-    - distrobox_python.rc | default(1) != 0
+    - distrobox_python.rc != 0
