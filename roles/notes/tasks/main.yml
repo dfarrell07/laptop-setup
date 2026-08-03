@@ -42,10 +42,13 @@
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git"
       register: notes_repo_post_clone
+      when: not notes_repo_stat.stat.exists
 
     - name: Set notes repo available fact
       ansible.builtin.set_fact:
-        notes_repo_available: "{{ notes_repo_post_clone.stat.exists }}"
+        notes_repo_available: >-
+          {{ notes_repo_stat.stat.exists or
+             (notes_repo_post_clone.stat.exists | default(false)) }}
 
     - name: Warn if notes repo could not be cloned
       ansible.builtin.debug:
