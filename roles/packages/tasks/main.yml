@@ -255,6 +255,7 @@
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
             return_content: true
           register: packages_oc_sha256sums
+          check_mode: false
           retries: 3
           delay: 10
           until: packages_oc_sha256sums.status == 200
@@ -371,6 +372,7 @@
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
             return_content: true
           register: packages_opm_sha256sums
+          check_mode: false
           retries: 3
           delay: 10
           until: packages_opm_sha256sums.status == 200

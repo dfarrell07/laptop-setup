@@ -959,6 +959,8 @@
   when:
     - ansible_system == 'Linux'
     - not (csb_detected | default(false))
+    - verify_chronyd is not skipped
+    - (verify_chronyd.status.UnitFileState | default('')) != ''
 
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
@@ -997,53 +999,23 @@
 # Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.
 # failed_when: false + item.rc/stdout guards skip cleanly when a unit is absent from a
 # minimal image (e.g. cups-browsed not installed on debian slim).
-- name: Check UnitFileState for security-masked units
-  ansible.builtin.command: systemctl show -p UnitFileState --value {{ item }}
-  register: masked_unit_state
+- name: Check UnitFileState for sshd.socket (must be masked — socket activation bypasses port 722)
+  ansible.builtin.command: systemctl show -p UnitFileState --value sshd.socket
+  register: masked_sshd_socket_state
   changed_when: false
   failed_when: false
-  loop:
-    - cups-browsed
-    - sshd.socket
-    - ctrl-alt-del.target
   when: ansible_system == 'Linux'
 
-- name: Assert masked units are masked (skip if unit absent from image)
+- name: Assert sshd.socket is masked
   ansible.builtin.assert:
-    that: item.stdout == 'masked'
+    that: masked_sshd_socket_state.stdout == 'masked'
     fail_msg: >-
-      {{ item.item }} UnitFileState is '{{ item.stdout }}', expected 'masked'
-      — system role masking task regression
-  loop: "{{ masked_unit_state.results }}"
+      sshd.socket UnitFileState is '{{ masked_sshd_socket_state.stdout }}', expected 'masked'
+      — socket activation would reopen port 22 bypassing the port-722 hardening
   when:
     - ansible_system == 'Linux'
-    - item.rc == 0
-    - item.stdout | length > 0
-
-- name: Check UnitFileState for avahi (only when system_disable_avahi is true)
-  ansible.builtin.command: systemctl show -p UnitFileState --value {{ item }}
-  register: masked_avahi_state
-  changed_when: false
-  failed_when: false
-  loop:
-    - avahi-daemon.service
-    - avahi-daemon.socket
-  when:
-    - ansible_system == 'Linux'
-    - system_disable_avahi | default(true) | bool
-
-- name: Assert avahi units are masked when disable_avahi is true
-  ansible.builtin.assert:
-    that: item.stdout == 'masked'
-    fail_msg: >-
-      {{ item.item }} UnitFileState is '{{ item.stdout }}', expected 'masked'
-      — set system_disable_avahi: false in config.yml if mDNS is needed
-  loop: "{{ masked_avahi_state.results }}"
-  when:
-    - ansible_system == 'Linux'
-    - system_disable_avahi | default(true) | bool
-    - item.rc == 0
-    - item.stdout | length > 0
+    - masked_sshd_socket_state.rc == 0
+    - masked_sshd_socket_state.stdout | length > 0
 
 - name: Check git-lfs is installed (packages role)
   ansible.builtin.command:

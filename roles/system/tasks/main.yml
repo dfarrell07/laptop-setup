@@ -36,39 +36,21 @@
     mode: "0755"
   when: ansible_facts['system'] == 'Linux'
 
-- name: Harden /tmp with noexec via systemd drop-in
+- name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
+  vars:
+    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | default(true) | bool else '' }}"
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       # IMPORTANT: Options= replaces all base unit options (no merge).
-      # Must include all options from tmp.mount + noexec.
+      # Must include all options from tmp.mount base unit.
       # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
       [Mount]
-      Options=mode=1777,strictatime,nosuid,nodev,noexec,size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+      Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
-  when:
-    - ansible_facts['system'] == 'Linux'
-    - system_tmp_noexec | default(true) | bool
+  when: ansible_facts['system'] == 'Linux'
   notify: Remount /tmp
-
-- name: Deploy /tmp drop-in without noexec when system_tmp_noexec disabled
-  when:
-    - ansible_facts['system'] == 'Linux'
-    - not (system_tmp_noexec | default(true) | bool)
-  block:
-    - name: Deploy /tmp drop-in without noexec (nosuid/nodev preserved)
-      ansible.builtin.copy:
-        content: |
-          # {{ ansible_managed }}
-          # IMPORTANT: Options= replaces all base unit options (no merge).
-          # Must include all options from tmp.mount (noexec omitted — system_tmp_noexec: false).
-          # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
-          [Mount]
-          Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
-        dest: /etc/systemd/system/tmp.mount.d/hardening.conf
-        mode: "0644"
-      notify: Remount /tmp
 
 # --- Harden /dev/shm mount options ---
 # Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under
