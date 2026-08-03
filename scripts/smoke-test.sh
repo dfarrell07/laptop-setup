@@ -1037,11 +1037,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "chrony-nts" "WARN" "NTS configured but no authenticated sources (port 4460 blocked? needs boot?)"; fi
   elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
-  if systemctl is-enabled chronyd &>/dev/null && systemctl is-active chronyd &>/dev/null; then
+  _chrony_svc="chronyd"
+  grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _chrony_svc="chrony"
+  if systemctl is-enabled "$_chrony_svc" &>/dev/null && systemctl is-active "$_chrony_svc" &>/dev/null; then
     record "chronyd-service" "PASS"
-  elif systemctl is-enabled chronyd &>/dev/null; then
-    record "chronyd-service" "FAIL" "chronyd enabled but not active (time sync required for FIDO2/TLS)"
-  else record "chronyd-service" "FAIL" "chronyd not enabled or started (time sync absent = FIDO2/TLS breaks)"; fi
+  elif systemctl is-enabled "$_chrony_svc" &>/dev/null; then
+    record "chronyd-service" "FAIL" "$_chrony_svc enabled but not active (time sync required for FIDO2/TLS)"
+  else record "chronyd-service" "FAIL" "$_chrony_svc not enabled or started (time sync absent = FIDO2/TLS breaks)"; fi
+  unset _chrony_svc
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
   else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi
@@ -1391,7 +1394,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     record "chrome-policies" "FAIL" "deployed but critical security policies missing or wrong"
   else record "chrome-policies" "WARN" "not deployed"; fi
 
-  # dconf system policies (CIS 1.8.3-1.8.8)
+  # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
+  # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
+  if ! systemctl cat gdm.service &>/dev/null 2>&1; then
+    record "dconf-policies" "WARN" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
+  else
   # Source key files checked directly — no D-Bus session required for smoke tests.
   # Compiled databases are produced by 'dconf update'; absence means it never ran.
   if [[ -f /etc/dconf/db/local ]]; then record "dconf-db-local" "PASS"
@@ -1428,6 +1435,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
     record "dconf-gdm-user-list" "WARN" "gdm.d/03-hardening not deployed (GDM not installed? Sway/greetd systems not affected)"
   else record "dconf-gdm-user-list" "FAIL" "disable-user-list=true missing in /etc/dconf/db/gdm.d/03-hardening"; fi
+  fi  # end GDM check
 
   # Unexpected listening ports (non-loopback)
   listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vF ":${_ssh_port:-722}" | tail -n +2 || true)

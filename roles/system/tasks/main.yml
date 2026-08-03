@@ -1707,62 +1707,57 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts.services['sshd.service'] is defined
 
-- name: Assert real_user_id is non-empty and not root before deploying AllowUsers
-  ansible.builtin.assert:
-    that:
-      - real_user_id | default('') | length > 0
-      - real_user_id != 'root'
-    fail_msg: >-
-      real_user_id='{{ real_user_id | default("(empty)") }}' — AllowUsers in sshd would
-      lock out all SSH users. Run as your normal user with -K (make all), not as root.
-      'sudo -i && make all' sets USER=root and would write 'AllowUsers root'.
+- name: sshd pre-deployment checks
   when: ansible_facts.services['sshd.service'] is defined
+  block:
+    - name: Assert real_user_id is non-empty and not root before deploying AllowUsers
+      ansible.builtin.assert:
+        that:
+          - real_user_id | default('') | length > 0
+          - real_user_id != 'root'
+        fail_msg: >-
+          real_user_id='{{ real_user_id | default("(empty)") }}' — AllowUsers in sshd would
+          lock out all SSH users. Run as your normal user with -K (make all), not as root.
+          'sudo -i && make all' sets USER=root and would write 'AllowUsers root'.
 
-- name: Ensure sshd config drop-in directory
-  ansible.builtin.file:
-    path: /etc/ssh/sshd_config.d
-    state: directory
-    mode: "0700"
-  when: ansible_facts.services['sshd.service'] is defined
+    - name: Ensure sshd config drop-in directory
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d
+        state: directory
+        mode: "0700"
 
-- name: Verify sshd_config includes drop-in directory  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config
-  changed_when: false
-  failed_when: false
-  become: true
-  register: system_sshd_include_check
-  when: ansible_facts.services['sshd.service'] is defined
+    - name: Verify sshd_config includes drop-in directory  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config
+      changed_when: false
+      failed_when: false
+      become: true
+      register: system_sshd_include_check
 
-- name: Fail if sshd_config missing Include for drop-in directory
-  ansible.builtin.fail:
-    msg: >-
-      /etc/ssh/sshd_config has no Include directive for /etc/ssh/sshd_config.d/.
-      The hardening drop-in will be deployed but never loaded by sshd.
-      Merge /etc/ssh/sshd_config.rpmnew (if present) or manually add:
-        Include /etc/ssh/sshd_config.d/*.conf
-      before re-running make system.
-  when:
-    - ansible_facts.services['sshd.service'] is defined
-    - system_sshd_include_check.rc != 0
+    - name: Fail if sshd_config missing Include for drop-in directory
+      ansible.builtin.fail:
+        msg: >-
+          /etc/ssh/sshd_config has no Include directive for /etc/ssh/sshd_config.d/.
+          The hardening drop-in will be deployed but never loaded by sshd.
+          Merge /etc/ssh/sshd_config.rpmnew (if present) or manually add:
+            Include /etc/ssh/sshd_config.d/*.conf
+          before re-running make system.
+      when: system_sshd_include_check.rc != 0
 
-- name: Warn if unreviewed sshd_config.rpmnew is present
-  ansible.builtin.stat:
-    path: /etc/ssh/sshd_config.rpmnew
-  register: system_sshd_rpmnew
-  become: true
-  when: ansible_facts.services['sshd.service'] is defined
+    - name: Warn if unreviewed sshd_config.rpmnew is present
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.rpmnew
+      register: system_sshd_rpmnew
+      become: true
 
-- name: Emit warning for unmerged sshd_config.rpmnew
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: /etc/ssh/sshd_config.rpmnew exists and has not been merged.
-      The package shipped a new default sshd_config that may contain security
-      or functional changes. Review and merge before next reprovisioning:
-        sudo diff /etc/ssh/sshd_config /etc/ssh/sshd_config.rpmnew
-  when:
-    - ansible_facts.services['sshd.service'] is defined
-    - system_sshd_rpmnew.stat.exists | default(false)
+    - name: Emit warning for unmerged sshd_config.rpmnew
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: /etc/ssh/sshd_config.rpmnew exists and has not been merged.
+          The package shipped a new default sshd_config that may contain security
+          or functional changes. Review and merge before next reprovisioning:
+            sudo diff /etc/ssh/sshd_config /etc/ssh/sshd_config.rpmnew
+      when: system_sshd_rpmnew.stat.exists | default(false)
 
 - name: Deploy and validate sshd hardening config
   when: ansible_facts.services['sshd.service'] is defined
@@ -2312,7 +2307,6 @@
     insertbefore: '^auth\s'
     mode: "0644"
   when: ansible_facts['pkg_mgr'] == 'apt'
-  failed_when: false
 
 - name: Ensure pam_faillock.so authfail line is in common-auth (Debian)
   ansible.builtin.lineinfile:
@@ -2322,7 +2316,6 @@
     insertafter: '^auth.*pam_unix\.so'
     mode: "0644"
   when: ansible_facts['pkg_mgr'] == 'apt'
-  failed_when: false
 
 - name: Ensure pam_faillock.so account line is in common-account (Debian)
   ansible.builtin.lineinfile:
@@ -2332,7 +2325,6 @@
     insertbefore: '^account\s'
     mode: "0644"
   when: ansible_facts['pkg_mgr'] == 'apt'
-  failed_when: false
 
 # Debian: pam_pwhistory.so must be inserted directly (no authselect).
 # authselect enable-feature with-pwhistory (below) is RHEL/Fedora only.
@@ -2345,7 +2337,6 @@
     insertbefore: '^password.*pam_unix\.so'
     mode: "0644"
   when: ansible_facts['pkg_mgr'] == 'apt'
-  failed_when: false
 
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
@@ -2425,7 +2416,6 @@
     regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^#.*pam_wheel.so'
-  failed_when: false
   when: ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
 
 # --- Journald persistent logging and retention ---
