@@ -232,11 +232,6 @@
     state: directory
     mode: "0700"
 
-- name: Check if gh config exists
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
-  register: dotfiles_gh_config
-
 - name: Deploy gh CLI config
   ansible.builtin.copy:
     content: |
@@ -248,7 +243,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
     mode: "0600"
     backup: true
-  when: not dotfiles_gh_config.stat.exists
+    force: false
 
 - name: Deploy git conditional includes
   ansible.builtin.template:

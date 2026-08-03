@@ -57,66 +57,46 @@
       Claude was not installed. Set 'claude_install_method: native' in config.yml and re-run.
   when: claude_install_method not in ['native', 'skip']
 
-# --- Instance isolation directories ---
-- name: Create default instance config directory (~/.claude)
+# --- Instance isolation directories and settings ---
+# Build the active instance list: default + personal always present; work added when profile=work or queue enabled.
+- name: Set active Claude instance directories
+  ansible.builtin.set_fact:
+    _claude_instances: >-
+      {{ [ansible_facts['user_dir'] + '/.claude', claude_personal_config_dir]
+         + ([claude_work_config_dir] if (profile == 'work' or claude_queue_enabled | bool) else []) }}
+
+- name: Create Claude instance config directories
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.claude"
+    path: "{{ item }}"
     state: directory
     mode: "0700"
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
-- name: Create work instance config directory
-  ansible.builtin.file:
-    path: "{{ claude_work_config_dir }}"
-    state: directory
-    mode: "0700"
-  when: profile == 'work' or (claude_queue_enabled | bool)
-
-- name: Create personal instance config directory
-  ansible.builtin.file:
-    path: "{{ claude_personal_config_dir }}"
-    state: directory
-    mode: "0700"
-
-# --- Settings ---
 # Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
 # to settings.local.json, not settings.json.  Claude Code's /config command
 # overwrites settings.json (theme, model, etc.) but does NOT touch
 # settings.local.json, so security policy survives user preference changes.
 # Claude Code merges both files; settings.local.json takes precedence.
-- name: Deploy default instance settings (~/.claude)
+- name: Deploy instance settings.local.json
   ansible.builtin.template:
     src: settings.json.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.claude/settings.local.json"
+    dest: "{{ item }}/settings.local.json"
     mode: "0600"
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
-- name: Deploy work instance settings
-  ansible.builtin.template:
-    src: settings.json.j2
-    dest: "{{ claude_work_config_dir }}/settings.local.json"
-    mode: "0600"
-  when: profile == 'work' or (claude_queue_enabled | bool)
-
-- name: Deploy personal instance settings
-  ansible.builtin.template:
-    src: settings.json.j2
-    dest: "{{ claude_personal_config_dir }}/settings.local.json"
-    mode: "0600"
-
-# --- Instance CLAUDE.md ---
-- name: Deploy work instance CLAUDE.md
+- name: "Deploy instance CLAUDE.md (force: false — preserve local edits)"
   ansible.builtin.template:
     src: CLAUDE.md.j2
-    dest: "{{ claude_work_config_dir }}/CLAUDE.md"
+    dest: "{{ item }}/CLAUDE.md"
     mode: "0600"
     force: false
-  when: profile == 'work' or (claude_queue_enabled | bool)
-
-- name: Deploy personal instance CLAUDE.md
-  ansible.builtin.template:
-    src: CLAUDE.md.j2
-    dest: "{{ claude_personal_config_dir }}/CLAUDE.md"
-    mode: "0600"
-    force: false
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
 # --- Security: ~/.claude permissions ---
 # Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time
