@@ -64,7 +64,7 @@ command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && 
 command -v fzf &>/dev/null && [[ -f {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh ]] && source {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh
 command -v fzf &>/dev/null && [[ -f {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh ]] && source {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh
 {% endif %}
-{% if ansible_facts['system'] | default('Linux') != 'Darwin' %}
+{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
 command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # syntax-highlighted man pages
 {% endif %}
