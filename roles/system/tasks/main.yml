@@ -173,6 +173,7 @@
     cmd: findmnt -n -o FSTYPE /home
   register: system_home_fstype
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - system_home_mountpoint.rc | default(1) == 0
   failed_when: false
