@@ -342,8 +342,11 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   unset _saf
   if [[ "$SSH_AUTH_SOCK" == */ssh-agent.socket ]]; then
     record "ssh-auth-sock" "PASS"
+  elif [[ -f "$HOME/.config/environment.d/ssh-agent.conf" ]] && \
+       grep -q "SSH_AUTH_SOCK" "$HOME/.config/environment.d/ssh-agent.conf"; then
+    record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK not yet updated — environment.d/ssh-agent.conf is deployed; log out and back in to activate (current: ${SSH_AUTH_SOCK:-<unset>})"
   else
-    record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK=$SSH_AUTH_SOCK does not point to custom ssh-agent (expected .../ssh-agent.socket)"
+    record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK=${SSH_AUTH_SOCK} does not point to custom ssh-agent (expected .../ssh-agent.socket) — run: make dotfiles"
   fi
   # subuid/subgid required for rootless Podman user namespaces (/etc/subuid is world-readable)
   # Skipped with --user-only or --container: requires system role (not run in container scenarios)
@@ -636,11 +639,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "selinux" "FAIL" "$se, expected Enforcing — fix: sudo setenforce 1 && sudo sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config"; fi
   fi
 
-  # Kernel lockdown
+  # Kernel lockdown (system_kernel_lockdown: '' in config.yml removes the param — silent skip then)
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(cat /sys/kernel/security/lockdown)
     if echo "$ld" | grep -q '\[integrity\]'; then record "kernel-lockdown" "PASS"
-    else record "kernel-lockdown" "WARN" "lockdown not in integrity mode ($ld) — if make system ran, reboot to activate; Secure Boot strengthens but does not require lockdown"; fi
+    elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
+      record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
+    fi
+    # Silent skip: lockdown= absent from /etc/kernel/cmdline means intentionally disabled
+    # (system_kernel_lockdown: '' in config.yml) or CSB (IT manages boot config)
   fi
 
   # Secure Boot (informational — not managed by Ansible, but critical to verify)
