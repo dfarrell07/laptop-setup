@@ -2918,7 +2918,7 @@
     - name: Add /etc paths to AIDE monitoring
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: "^{{ item | replace('.', '\\.') }}"
+        regexp: "^{{ item | replace('.', '\\.') }}(\\s|$)"  # anchor: prevents matching /path.bak (consistent with /etc/tlp.conf\s)
         line: "{{ item }} NORMAL"
         insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (longest-match-wins)
         state: present
@@ -3003,7 +3003,9 @@
         dest: /var/lib/aide/aide.db.gz
         remote_src: true
         mode: "0600"
-      when: not (system_aide_db.stat.exists | default(false))
+      when:
+        - not (system_aide_db.stat.exists | default(false))
+        - system_aide_db_new.stat.exists | default(false)  # guard: skip if init was externally interrupted (partial .new.gz)
 
     - name: Deploy AIDE failure notification unit
       ansible.builtin.template:

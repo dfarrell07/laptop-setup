@@ -201,14 +201,14 @@
       register: verify_avahi_service_shared
       become: true
       failed_when: false
-      when: system_disable_avahi | default(true) | bool
+      when: system_disable_avahi | bool
 
     - name: Assert avahi-daemon.service is masked (shared)
       ansible.builtin.assert:
         that: verify_avahi_service_shared.status.UnitFileState == 'masked'
         fail_msg: "avahi-daemon.service is not masked"
       when:
-        - system_disable_avahi | default(true) | bool
+        - system_disable_avahi | bool
         - verify_avahi_service_shared.status.UnitFileState | default('') != ''
 
     - name: Check avahi-daemon.socket state (shared)
@@ -217,14 +217,14 @@
       register: verify_avahi_socket_shared
       become: true
       failed_when: false
-      when: system_disable_avahi | default(true) | bool
+      when: system_disable_avahi | bool
 
     - name: Assert avahi-daemon.socket is masked (shared)
       ansible.builtin.assert:
         that: verify_avahi_socket_shared.status.UnitFileState == 'masked'
         fail_msg: "avahi-daemon.socket is not masked"
       when:
-        - system_disable_avahi | default(true) | bool
+        - system_disable_avahi | bool
         - verify_avahi_socket_shared.status.UnitFileState | default('') != ''
 
     - name: Check nfs-server.service state (shared)
@@ -240,7 +240,7 @@
         fail_msg: "nfs-server.service is not masked"
       when:
         - verify_nfs_server_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | default(true) | bool
+        - system_mask_nfs_server | bool
 
     - name: Check rpcbind.service state (shared)
       ansible.builtin.systemd:
@@ -255,7 +255,7 @@
         fail_msg: "rpcbind.service is not masked"
       when:
         - verify_rpcbind_service_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | default(true) | bool
+        - system_mask_nfs_server | bool
 
     - name: Check rpcbind.socket state (shared)
       ansible.builtin.systemd:
@@ -270,7 +270,7 @@
         fail_msg: "rpcbind.socket is not masked"
       when:
         - verify_rpcbind_socket_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | default(true) | bool
+        - system_mask_nfs_server | bool
 
     - name: Check cockpit.service state (shared)
       ansible.builtin.systemd:

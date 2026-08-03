@@ -144,7 +144,7 @@
   changed_when: false
   when:
     - verify_kernel_cmdline.stat.exists
-    - system_init_on_free | default(true) | bool
+    - system_init_on_free | bool
 
 - name: Include containers.conf assertions
   ansible.builtin.include_tasks: verify-containers.yml
@@ -193,7 +193,7 @@
   changed_when: false
   failed_when: verify_even_deny_root.rc == 0
   become: true
-  when: not (system_faillock_even_deny_root | default(false) | bool)
+  when: not (system_faillock_even_deny_root | bool)
 
 - name: Check pwquality minlen={{ system_pwquality_minlen | default(14) }}
   ansible.builtin.command: >-

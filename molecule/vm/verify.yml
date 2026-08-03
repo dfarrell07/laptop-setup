@@ -43,13 +43,13 @@
         path: /etc/yum.repos.d/google-chrome.repo
       register: verify_chrome_repo
       become: true
-      when: repo_google_chrome | default(false)
+      when: repo_google_chrome
 
     - name: Assert google-chrome repo exists
       ansible.builtin.assert:
         that: verify_chrome_repo.stat.exists
         fail_msg: "google-chrome repo not configured"
-      when: repo_google_chrome | default(false)
+      when: repo_google_chrome
 
     - name: Verify Chrome security policy deployed
       ansible.builtin.stat:
@@ -84,65 +84,65 @@
         path: /etc/yum.repos.d/tailscale-stable.repo
       register: verify_tailscale_repo
       become: true
-      when: repo_tailscale | default(true)
+      when: repo_tailscale
 
     - name: Assert tailscale-stable repo exists
       ansible.builtin.assert:
         that: verify_tailscale_repo.stat.exists
         fail_msg: "tailscale-stable repo not configured"
-      when: repo_tailscale | default(true)
+      when: repo_tailscale
 
     - name: Verify slack repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/slack.repo
       register: verify_slack_repo
       become: true
-      when: (repo_slack | default(false)) and ansible_architecture == 'x86_64'
+      when: (repo_slack) and ansible_architecture == 'x86_64'
 
     - name: Assert slack repo exists
       ansible.builtin.assert:
         that: verify_slack_repo.stat.exists
         fail_msg: "slack repo not configured"
-      when: (repo_slack | default(false)) and ansible_architecture == 'x86_64'
+      when: (repo_slack) and ansible_architecture == 'x86_64'
 
     - name: Verify google-cloud-cli repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/google-cloud-cli.repo
       register: verify_gcloud_repo
       become: true
-      when: (repo_google_cloud_sdk | default(false)) and ansible_architecture == 'x86_64'
+      when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
 
     - name: Assert google-cloud-cli repo exists
       ansible.builtin.assert:
         that: verify_gcloud_repo.stat.exists
         fail_msg: "google-cloud-cli repo not configured"
-      when: (repo_google_cloud_sdk | default(false)) and ansible_architecture == 'x86_64'
+      when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
 
     - name: Verify rpmfusion-free repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/rpmfusion-free.repo
       register: verify_rpmfusion_free_repo
       become: true
-      when: (repo_rpmfusion_free | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_free) and ansible_distribution == 'Fedora'
 
     - name: Assert rpmfusion-free repo exists
       ansible.builtin.assert:
         that: verify_rpmfusion_free_repo.stat.exists
         fail_msg: "rpmfusion-free repo not configured"
-      when: (repo_rpmfusion_free | default(true)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_free) and ansible_distribution == 'Fedora'
 
     - name: Verify rpmfusion-nonfree repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/rpmfusion-nonfree.repo
       register: verify_rpmfusion_nonfree_repo
       become: true
-      when: (repo_rpmfusion_nonfree | default(false)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_nonfree) and ansible_distribution == 'Fedora'
 
     - name: Assert rpmfusion-nonfree repo exists
       ansible.builtin.assert:
         that: verify_rpmfusion_nonfree_repo.stat.exists
         fail_msg: "rpmfusion-nonfree repo not configured"
-      when: (repo_rpmfusion_nonfree | default(false)) and ansible_distribution == 'Fedora'
+      when: (repo_rpmfusion_nonfree) and ansible_distribution == 'Fedora'
 
     - name: Check sysctl config contains ptrace scope 0 (workstation default — default.config.yml overrides role default of 1)
       ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 0' /etc/sysctl.d/90-hardening.conf

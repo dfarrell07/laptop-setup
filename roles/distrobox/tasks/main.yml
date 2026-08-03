@@ -61,7 +61,7 @@
       Rootless podman will fail. The system role provisions these entries;
       run 'make system' as root to fix, or manually:
       sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_facts['user_id'] }}
-  when: (distrobox_subuid_check.rc | default(1) != 0) or (distrobox_subgid_check.rc | default(1) != 0)
+  when: (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)
 
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
@@ -80,7 +80,7 @@
       If that fails, check: systemctl --user status podman.socket
   when:
     - distrobox_tool != 'none'
-    - distrobox_podman_socket_active.rc | default(1) != 0
+    - distrobox_podman_socket_active.rc != 0
 
 # --- Check if container exists ---
 - name: Check if container exists
