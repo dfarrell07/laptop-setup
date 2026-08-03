@@ -51,7 +51,7 @@
 - name: Install Red Hat cert packages
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - is_rhel | default(false) | bool or csb_detected | default(false) or is_fedora | default(false) | bool
+    - is_rhel | default(false) | bool or csb_detected | default(false)
   block:
     - name: Install Red Hat cert packages
       ansible.builtin.dnf:
