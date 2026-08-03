@@ -875,6 +875,18 @@
   changed_when: true
   failed_when: false
 
+- name: Remove iommu=pt grub parameter (system_iommu_passthrough false)
+  ansible.builtin.command:
+    cmd: grubby --remove-args="iommu=pt" --update-kernel=ALL
+  register: system_iommu_pt_remove_result
+  when:
+    - not (system_iommu_passthrough | default(false) | bool)
+    - not (csb_detected | default(false))
+    - system_grubby_info.rc | default(1) == 0
+    - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
+  changed_when: true
+  failed_when: false
+
 - name: Disable legacy vsyscall page (exploit gadget source)
   ansible.builtin.command:
     cmd: grubby --args="vsyscall=none" --update-kernel=ALL
@@ -970,6 +982,9 @@
       {% if not (system_init_on_free | default(true) | bool) %}
       current=$(echo "$current" | sed 's| *init_on_free=1||g')
       {% endif %}
+      {% if not (system_iommu_passthrough | default(false) | bool) %}
+      current=$(echo "$current" | sed 's| *iommu=pt||g')
+      {% endif %}
       new="$current"
       # Append each missing hardening param (check by key prefix only)
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
@@ -1016,6 +1031,7 @@
     (system_iommu_amd_result is defined and system_iommu_amd_result is changed) or
     (system_iommu_intel_result is defined and system_iommu_intel_result is changed) or
     (system_iommu_pt_result is defined and system_iommu_pt_result is changed) or
+    (system_iommu_pt_remove_result is defined and system_iommu_pt_remove_result is changed) or
     (system_vsyscall_result is defined and system_vsyscall_result is changed) or
     (system_init_on_free_result is defined and system_init_on_free_result is changed) or
     (system_init_on_free_remove_result is defined and system_init_on_free_remove_result is changed) or

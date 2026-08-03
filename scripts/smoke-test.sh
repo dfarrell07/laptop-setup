@@ -916,11 +916,19 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$(systemctl show -p UnitFileState --value cups.path 2>/dev/null)" == "masked" ]]; then record "cups-path-masked" "PASS"
   else record "cups-path-masked" "WARN" "cups.path not masked — path activation can start CUPS despite cups.service being disabled (expected masked when system_disable_printing: true)"; fi
 
-  # avahi-daemon masked
-  if [[ "$(systemctl show -p UnitFileState --value avahi-daemon.service 2>/dev/null)" == "masked" ]]; then record "avahi-masked" "PASS"
-  else record "avahi-masked" "FAIL" "not masked (mDNS service discovery leakage risk)"; fi
-  if [[ "$(systemctl show -p UnitFileState --value avahi-daemon.socket 2>/dev/null)" == "masked" ]]; then record "avahi-socket-masked" "PASS"
-  else record "avahi-socket-masked" "FAIL" "avahi-daemon.socket not masked — mDNS port 5353 may be open despite service being masked"; fi
+  # avahi-daemon masked (or intentionally enabled via system_disable_avahi: false)
+  _avahi_state=$(systemctl show -p UnitFileState --value avahi-daemon.service 2>/dev/null)
+  if [[ "$_avahi_state" == "masked" ]]; then record "avahi-masked" "PASS"
+  elif [[ "$_avahi_state" == "enabled" || "$_avahi_state" == "static" ]]; then
+    record "avahi-masked" "WARN" "avahi enabled (state: $_avahi_state) — confirm system_disable_avahi: false is intentional"
+  else record "avahi-masked" "FAIL" "not masked (state: $_avahi_state) — mDNS service discovery leakage risk"; fi
+  unset _avahi_state
+  _avahi_sock=$(systemctl show -p UnitFileState --value avahi-daemon.socket 2>/dev/null)
+  if [[ "$_avahi_sock" == "masked" ]]; then record "avahi-socket-masked" "PASS"
+  elif [[ "$_avahi_sock" == "enabled" || "$_avahi_sock" == "static" ]]; then
+    record "avahi-socket-masked" "WARN" "avahi-daemon.socket enabled (state: $_avahi_sock) — confirm system_disable_avahi: false is intentional"
+  else record "avahi-socket-masked" "FAIL" "avahi-daemon.socket not masked (state: $_avahi_sock) — mDNS port 5353 may be open"; fi
+  unset _avahi_sock
   # passim masked (fwupd dependency — unauthenticated HTTP on 0.0.0.0:27500 reachable via Tailscale trusted zone)
   if [[ "$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)" == "masked" ]]; then record "passim-masked" "PASS"
   else record "passim-masked" "FAIL" "not masked (unauthenticated HTTP server on 0.0.0.0:27500)"; fi
@@ -932,11 +940,19 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "rpcbind-masked" "FAIL" "rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)"; fi
   if [[ "$(systemctl show -p UnitFileState --value rpcbind.socket 2>/dev/null)" == "masked" ]]; then record "rpcbind-socket-masked" "PASS"
   else record "rpcbind-socket-masked" "FAIL" "rpcbind.socket not masked — socket activation can start rpcbind despite service being masked (CIS 2.2.7)"; fi
-  # Cockpit web console masked (port 9090 reachable from Tailscale peers if unmasked)
-  if [[ "$(systemctl show -p UnitFileState --value cockpit.service 2>/dev/null)" == "masked" ]]; then record "cockpit-service-masked" "PASS"
-  else record "cockpit-service-masked" "FAIL" "cockpit.service not masked — port 9090 reachable from Tailscale peers"; fi
-  if [[ "$(systemctl show -p UnitFileState --value cockpit.socket 2>/dev/null)" == "masked" ]]; then record "cockpit-socket-masked" "PASS"
-  else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked — web console activation possible"; fi
+  # Cockpit web console masked (or intentionally enabled via system_enable_cockpit: true)
+  _ck_svc=$(systemctl show -p UnitFileState --value cockpit.service 2>/dev/null)
+  if [[ "$_ck_svc" == "masked" ]]; then record "cockpit-service-masked" "PASS"
+  elif systemctl is-active cockpit.service &>/dev/null; then
+    record "cockpit-service-masked" "WARN" "cockpit.service active — confirm system_enable_cockpit: true is intentional (port 9090)"
+  else record "cockpit-service-masked" "FAIL" "cockpit.service not masked (state: $_ck_svc) — port 9090 reachable from Tailscale peers"; fi
+  unset _ck_svc
+  _ck_sock=$(systemctl show -p UnitFileState --value cockpit.socket 2>/dev/null)
+  if [[ "$_ck_sock" == "masked" ]]; then record "cockpit-socket-masked" "PASS"
+  elif systemctl is-active cockpit.socket &>/dev/null; then
+    record "cockpit-socket-masked" "WARN" "cockpit.socket active — confirm system_enable_cockpit: true is intentional"
+  else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked (state: $_ck_sock) — web console activation possible"; fi
+  unset _ck_sock
 
   # thermald masked on non-Intel hardware (Intel-only daemon — exits immediately on AMD)
   if [[ -f /proc/cpuinfo ]] && ! grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
