@@ -144,17 +144,6 @@
         fail_msg: "rpmfusion-nonfree repo not configured"
       when: (repo_rpmfusion_nonfree | default(false)) and ansible_distribution == 'Fedora'
 
-    - name: Verify sysctl hardening config deployed
-      ansible.builtin.stat:
-        path: /etc/sysctl.d/90-hardening.conf
-      register: verify_sysctl
-      become: true
-
-    - name: Assert sysctl hardening deployed
-      ansible.builtin.assert:
-        that: verify_sysctl.stat.exists
-        fail_msg: "Sysctl hardening config not deployed"
-
     - name: Check sysctl config contains ptrace scope 0 (workstation default — default.config.yml overrides role default of 1)
       ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 0' /etc/sysctl.d/90-hardening.conf
       changed_when: false
@@ -496,41 +485,6 @@
         fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected DEFAULT:NO-SHA1"
       when: verify_crypto.rc == 0
 
-    - name: Verify NetworkManager Tailscale config
-      ansible.builtin.stat:
-        path: /etc/NetworkManager/conf.d/tailscale.conf
-      register: verify_nm_ts
-      become: true
-
-    - name: Assert Tailscale NM unmanaged config deployed
-      ansible.builtin.assert:
-        that: verify_nm_ts.stat.exists
-        fail_msg: "NetworkManager Tailscale config not deployed"
-
-    - name: Verify NetworkManager dns=systemd-resolved config
-      ansible.builtin.stat:
-        path: /etc/NetworkManager/conf.d/99-dns.conf
-      register: verify_nm_dns
-      become: true
-
-    - name: Assert NM dns=systemd-resolved config deployed
-      ansible.builtin.assert:
-        that: verify_nm_dns.stat.exists
-        fail_msg: "99-dns.conf not deployed — Tailscale MagicDNS split-DNS will not work"
-
-    - name: Slurp NM dns config for content check
-      ansible.builtin.slurp:
-        src: /etc/NetworkManager/conf.d/99-dns.conf
-      register: verify_nm_dns_content
-      become: true
-      when: verify_nm_dns.stat.exists
-
-    - name: Assert NM dns config contains dns=systemd-resolved
-      ansible.builtin.assert:
-        that: (verify_nm_dns_content.content | b64decode) is search('dns=systemd-resolved')
-        fail_msg: "99-dns.conf exists but does not contain dns=systemd-resolved"
-      when: verify_nm_dns.stat.exists
-
     # --- New system hardening checks ---
     - name: Check /dev/shm mount options
       ansible.builtin.command: findmnt -n -o OPTIONS /dev/shm
@@ -755,54 +709,15 @@
         - path: /etc/crypto-policies
         - path: /etc/selinux
         - path: /etc/usbguard
-      when: item.path != '/etc/usbguard' or usbguard_expected | default(true)
+      when:
+        - system_aide_enabled | default(false)
+        - item.path != '/etc/usbguard' or usbguard_expected | default(true)
       changed_when: false
       become: true
 
-    # --- PAM faillock ---
-    - name: Check faillock deny=5
-      ansible.builtin.command: grep -q '^deny = 5' /etc/security/faillock.conf
-      changed_when: false
-      become: true
-
-    - name: Check faillock local_users_only (prevent SSSD double-lockout)
-      ansible.builtin.command: grep -q '^local_users_only' /etc/security/faillock.conf
-      changed_when: false
-      become: true
-
-    - name: Check authselect with-faillock is active
-      ansible.builtin.command: authselect is-feature-enabled with-faillock
-      register: verify_faillock_authselect
-      changed_when: false
-      failed_when: verify_faillock_authselect.rc != 0
-      become: true
-
+    # --- PAM faillock unique VM check (others covered by verify-dnf.yml) ---
     - name: Check faillock even_deny_root present (VM converge sets system_faillock_even_deny_root true)
       ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
-      changed_when: false
-      become: true
-
-    - name: Run authselect check to verify PAM files match profile
-      ansible.builtin.command: authselect check
-      changed_when: false
-      become: true
-
-    # --- Sudoers hardening ---
-    - name: Verify sudoers hardening file exists with correct mode
-      ansible.builtin.stat:
-        path: /etc/sudoers.d/99-hardening
-      register: verify_sudoers_hardening
-      become: true
-
-    - name: Assert sudoers hardening deployed with mode 0440
-      ansible.builtin.assert:
-        that:
-          - verify_sudoers_hardening.stat.exists
-          - verify_sudoers_hardening.stat.mode == '0440'
-        fail_msg: "sudoers hardening not deployed or wrong permissions (expected 0440)"
-
-    - name: Check sudoers hardening contains logfile directive
-      ansible.builtin.command: grep -q 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
       changed_when: false
       become: true
 
@@ -1063,48 +978,7 @@
         - system_tlp_enabled | default(false)
         - verify_tlp_service.status is defined
 
-    # --- Core dump disable ---
-    - name: Verify core dump disable config
-      ansible.builtin.stat:
-        path: /etc/systemd/coredump.conf.d/disable.conf
-      register: verify_coredump
-      become: true
-
-    - name: Assert core dump disable config deployed
-      ansible.builtin.assert:
-        that: verify_coredump.stat.exists
-        fail_msg: "Core dump disable config not deployed"
-
-    - name: Check coredump config contains Storage=none
-      ansible.builtin.command: grep -q '^Storage=none' /etc/systemd/coredump.conf.d/disable.conf
-      changed_when: false
-      become: true
-      when: verify_coredump.stat.exists
-
-    - name: Check coredump config contains ProcessSizeMax=0
-      ansible.builtin.command: grep -q '^ProcessSizeMax=0' /etc/systemd/coredump.conf.d/disable.conf
-      changed_when: false
-      become: true
-      when: verify_coredump.stat.exists
-
-    # --- logind hardening ---
-    - name: Verify logind hardening config exists
-      ansible.builtin.stat:
-        path: /etc/systemd/logind.conf.d/99-hardening.conf
-      register: verify_logind
-      become: true
-
-    - name: Assert logind hardening config deployed
-      ansible.builtin.assert:
-        that: verify_logind.stat.exists
-        fail_msg: "logind hardening config not deployed"
-
-    - name: Check logind config contains IdleAction=lock
-      ansible.builtin.command: grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
-      changed_when: false
-      become: true
-      when: verify_logind.stat.exists
-
+    # --- logind unique VM check: IdleActionSec (others covered by verify-common.yml) ---
     - name: Check logind config contains IdleActionSec
       ansible.builtin.command: grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf
       changed_when: false

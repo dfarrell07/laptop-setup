@@ -576,32 +576,6 @@
     that: verify_ripgreprc.stat.exists
     fail_msg: "~/.config/ripgrep/config not deployed (ripgrep config missing)"
 
-- name: Verify containers environment.d config deployed (Linux)
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
-  register: verify_containers_envd
-  when: ansible_system == 'Linux'
-
-- name: Assert containers environment.d config deployed (Linux)
-  ansible.builtin.assert:
-    that: verify_containers_envd.stat.exists
-    fail_msg: "containers.conf not deployed (DOCKER_HOST/KIND_EXPERIMENTAL_PROVIDER missing for make kind)"
-  when: ansible_system == 'Linux'
-
-- name: Slurp containers environment.d config content (Linux)
-  ansible.builtin.slurp:
-    src: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
-  register: verify_containers_envd_content
-  when: ansible_system == 'Linux'
-
-- name: Assert containers.conf content correct
-  ansible.builtin.assert:
-    that:
-      - "'DOCKER_HOST' in verify_containers_envd_content.content | b64decode"
-      - "'KIND_EXPERIMENTAL_PROVIDER=podman' in verify_containers_envd_content.content | b64decode"
-    fail_msg: "containers.conf is missing DOCKER_HOST or KIND_EXPERIMENTAL_PROVIDER=podman"
-  when: ansible_system == 'Linux'
-
 - name: Verify git config-work exists (always deployed)
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/config-work"

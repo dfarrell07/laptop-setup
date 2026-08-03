@@ -126,16 +126,10 @@
         fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions (expected 0600)"
       when: sshd_conf_stat.stat.exists
 
-    - name: Check sshd hardening directives in 00-hardening.conf (shared)
+    - name: Check sshd forwarding directives unique to verify-smoke (shared)
       ansible.builtin.command: grep -qF '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       loop:
-        - 'PasswordAuthentication no'
-        - 'PermitRootLogin no'
-        - 'PermitEmptyPasswords no'
-        - 'X11Forwarding no'
         - 'AllowAgentForwarding no'
-        - 'ClientAliveInterval 300'
-        - 'ClientAliveCountMax 2'
       changed_when: false
       become: true
       when: sshd_conf_stat.stat.exists
@@ -145,11 +139,6 @@
         grep -qE '^AllowTcpForwarding (no|local|remote|yes)$'
         /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       changed_when: false
-      become: true
-      when: sshd_conf_stat.stat.exists
-
-    - name: Check sshd HostKeyAlgorithms includes ssh-ed25519 (shared)
-      ansible.builtin.command: grep -qE 'HostKeyAlgorithms.*ssh-ed25519' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa:
       become: true
       when: sshd_conf_stat.stat.exists
 

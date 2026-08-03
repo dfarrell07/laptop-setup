@@ -155,6 +155,11 @@
         cmd: grep -q 'cliphist list.*wofi.*cliphist decode.*wl-copy' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
+    - name: Verify sway config caps audio raise volume at 100% (wpctl -l 1.0)
+      ansible.builtin.command:
+        cmd: grep -q 'wpctl set-volume -l 1\.0' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
     - name: Verify portals.conf deployed
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
@@ -254,6 +259,11 @@
     - name: Verify i3 config starts lxpolkit authentication agent
       ansible.builtin.command:
         cmd: grep -q 'lxpolkit' "{{ ansible_user_dir }}/.config/i3/config"
+      changed_when: false
+
+    - name: Verify i3 config caps audio raise volume at 100% (wpctl -l 1.0)
+      ansible.builtin.command:
+        cmd: grep -q 'wpctl set-volume -l 1\.0' "{{ ansible_user_dir }}/.config/i3/config"
       changed_when: false
 
     # --- System role: bpfman.socket ---
