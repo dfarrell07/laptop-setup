@@ -245,17 +245,19 @@
   loop:
     - claude-queue.service
     - claude-queue.timer
+  register: _claude_queue_unit_removal
   when:
     - not (claude_queue_enabled | bool)
     - ansible_facts['system'] == 'Linux'
 
-- name: Reload systemd user daemon after removing task queue unit files
+- name: Reload systemd user daemon after removing task queue unit files  # noqa: no-handler
   ansible.builtin.systemd:
     scope: user
     daemon_reload: true
   when:
     - not (claude_queue_enabled | bool)
     - ansible_facts['system'] == 'Linux'
+    - _claude_queue_unit_removal.changed | default(false)
   failed_when: false
 
 # --- macOS: launchd cleanup when disabled ---
