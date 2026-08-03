@@ -825,6 +825,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^MaxStartups 10:30:60$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^LoginGraceTime 30$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^IgnoreRhosts yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^GSSAPIAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -832,7 +833,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/PubkeyAuthentication/GSSAPIAuthentication/TCPKeepAlive/LogLevel/MaxStartups (MaxAuthTries=$_max_auth)"
+      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/PubkeyAuthentication/GSSAPIAuthentication/TCPKeepAlive/LogLevel/LoginGraceTime/MaxStartups (MaxAuthTries=$_max_auth)"
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
     # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -854,6 +855,22 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "sshd-algorithms" "PASS"
     else record "sshd-algorithms" "FAIL" "Ciphers/MACs/KexAlgorithms/PubkeyAcceptedAlgorithms not hardened in sshd drop-in — check 00-hardening.conf"; fi
   else record "sshd-algorithms" "FAIL" "sshd drop-in not deployed"; fi
+
+  # SSH Banner directive and /etc/issue.net content (NIST AC-8 login notice)
+  if [[ "$EUID" -ne 0 ]]; then
+    record "sshd-banner" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
+  elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+    if $CSB_HOST; then
+      if grep -q '^Banner ' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
+        record "sshd-banner" "WARN" "Banner directive present on CSB — IT manages SSH banner; may conflict with corporate policy"
+      else record "sshd-banner" "PASS"; fi
+    else
+      if grep -q '^Banner /etc/issue.net$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
+        if [[ -s /etc/issue.net ]]; then record "sshd-banner" "PASS"
+        else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make system"; fi
+      else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make system"; fi
+    fi
+  else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule; skipped on CSB — IT manages audit rules)
   if $CSB_HOST; then

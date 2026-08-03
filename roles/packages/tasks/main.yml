@@ -1277,7 +1277,8 @@
           oc image extract registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}
           --path="/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz":/tmp/
           --confirm
-      changed_when: true
+      register: _pkg_subctl_extract
+      changed_when: _pkg_subctl_extract.rc == 0
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
@@ -1295,7 +1296,9 @@
           [[ -z "$BINARY" ]] && exit 0
           install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
           rm -rf "$TMPDIR" "$TARBALL"
-      changed_when: true
+          echo "INSTALLED"
+      register: _pkg_subctl_install
+      changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
