@@ -3,8 +3,17 @@
   ansible.builtin.command:
     cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | default(true) | bool else '' }} /tmp"
   become: true
-  changed_when: true
+  register: _tmp_remount_handler_result
+  changed_when: _tmp_remount_handler_result.rc == 0
   failed_when: false
+
+- name: Warn if /tmp remount failed (handler)
+  ansible.builtin.debug:
+    msg: "WARNING: remount of /tmp failed (rc={{ _tmp_remount_handler_result.rc }}); live nosuid/nodev options may not be active"
+  listen: Remount /tmp  # noqa: command-instead-of-module
+  when:
+    - _tmp_remount_handler_result is defined
+    - _tmp_remount_handler_result.rc | default(0) != 0
 
 - name: Reload sysctl
   ansible.builtin.command:

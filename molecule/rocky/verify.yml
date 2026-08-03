@@ -3,6 +3,11 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Set work profile for verify context
+      ansible.builtin.set_fact:
+        profile: work
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions

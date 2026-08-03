@@ -67,7 +67,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "golangci-lint:golangci-lint --version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
@@ -78,7 +78,7 @@ else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
 
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
-for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "subctl:version"; do
+for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "golangci-lint:--version" "subctl:version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
   [[ -x "$_gobin" ]] && {
     if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"

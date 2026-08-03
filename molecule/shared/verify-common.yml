@@ -781,6 +781,36 @@
     fail_msg: "/etc/systemd/coredump.conf.d/disable.conf not deployed — system role coredump task regression"
   when: ansible_system == 'Linux'
 
+- name: Slurp coredump drop-in content
+  ansible.builtin.slurp:
+    src: /etc/systemd/coredump.conf.d/disable.conf
+  register: verify_coredump_content
+  when:
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
+- name: Assert coredump Storage= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('Storage=' ~ (system_coredump_storage | default('external')))
+      in (verify_coredump_content.content | b64decode)
+    fail_msg: >-
+      coredump drop-in missing expected Storage={{ system_coredump_storage | default('external') }} — template regression?
+  when:
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
+- name: Assert coredump ProcessSizeMax= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('ProcessSizeMax=' ~ (system_coredump_process_size_max | default('2G')))
+      in (verify_coredump_content.content | b64decode)
+    fail_msg: >-
+      coredump drop-in missing expected ProcessSizeMax={{ system_coredump_process_size_max | default('2G') }} — template regression?
+  when:
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
 - name: Stat logind hardening drop-in (system role must deploy it)
   ansible.builtin.stat:
     path: /etc/systemd/logind.conf.d/99-hardening.conf
@@ -805,6 +835,29 @@
     that: verify_sudoers_conf.stat.exists
     fail_msg: "/etc/sudoers.d/99-hardening not deployed — system role sudoers task regression"
   when: ansible_system == 'Linux'
+
+- name: Assert sudoers drop-in is mode 0440
+  ansible.builtin.assert:
+    that: verify_sudoers_conf.stat.mode == '0440'
+    fail_msg: "/etc/sudoers.d/99-hardening has wrong mode {{ verify_sudoers_conf.stat.mode }} — expected 0440"
+  when:
+    - ansible_system == 'Linux'
+    - verify_sudoers_conf.stat.exists
+
+- name: Check logind drop-in has IdleAction=lock
+  ansible.builtin.command: grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_logind_conf.stat.exists
+
+- name: Check sudoers drop-in has logfile directive
+  ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - verify_sudoers_conf.stat.exists
 
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh

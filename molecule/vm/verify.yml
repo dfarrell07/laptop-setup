@@ -4,6 +4,13 @@
   gather_facts: true
   become: false
 
+  pre_tasks:
+    # Load variable overrides matching vm/converge.yml so shared verify checks
+    # (e.g. even_deny_root absent/present) evaluate against the correct values.
+    - name: Apply VM-specific variable overrides for verify
+      ansible.builtin.set_fact:
+        system_faillock_even_deny_root: true
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
@@ -553,16 +560,20 @@
         fail_msg: "/home missing nosuid mount option (CIS 1.1.9)"
       when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
 
-    - name: Verify fstab nosuid backrefs regex matches representative Fedora btrfs /home line
-      # Exercises the regex used by the system role to add nosuid to fstab, regardless of
-      # whether /home is a separate partition in this VM scenario (it is not by default).
-      ansible.builtin.shell:
-        cmd: |
-          set -o pipefail
-          echo 'UUID=abc123  /home  btrfs  subvol=home,compress=zstd:1,relatime,ssd  0  0' \
-            | grep -qP '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
-        executable: /bin/bash
+    - name: Check /home fstab entry contains nosuid (system role fstab hardening)
+      # The Fedora installer writes a /home entry in /etc/fstab even when /home is on
+      # the root partition (subvol= btrfs). The system role adds nosuid to that line.
+      ansible.builtin.command: grep -qE '^[^#]\S+\s+/home\s+\S+\s+[^,]*nosuid' /etc/fstab
       changed_when: false
+      become: true
+      failed_when: false
+      register: verify_home_fstab_nosuid
+
+    - name: Assert /home fstab entry has nosuid
+      ansible.builtin.assert:
+        that: verify_home_fstab_nosuid.rc == 0
+        fail_msg: "/home fstab entry missing nosuid — system role fstab lineinfile task may have failed"
+      when: verify_home_fstab_nosuid.rc is defined
 
     - name: Check /boot mount options
       ansible.builtin.command: findmnt -n -o OPTIONS /boot

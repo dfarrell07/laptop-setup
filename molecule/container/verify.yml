@@ -73,3 +73,15 @@
           - verify_golangci.stat.exists
           - verify_golangci.stat.mode == '0755'
         fail_msg: "golangci-lint binary missing or wrong permissions — go install may have failed or creates: guard broke"
+
+    - name: Stat subctl binary (go install in container-provision-tasks.yml)
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/subctl"
+      register: verify_container_subctl
+
+    - name: Assert subctl binary present and executable
+      ansible.builtin.assert:
+        that:
+          - verify_container_subctl.stat.exists
+          - verify_container_subctl.stat.mode == '0755'
+        fail_msg: "subctl binary missing — go install may have failed silently in container provisioning"

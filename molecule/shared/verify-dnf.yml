@@ -191,6 +191,7 @@
   changed_when: false
   failed_when: verify_even_deny_root.rc == 0
   become: true
+  when: not (system_faillock_even_deny_root | default(false) | bool)
 
 - name: Check pwquality minlen=14
   ansible.builtin.command: grep -q '^minlen = 14' /etc/security/pwquality.conf
@@ -226,3 +227,15 @@
   ansible.builtin.assert:
     that: verify_authselect_current.stdout is search('^sssd\b')
     fail_msg: "authselect profile is not sssd — faillock/pwhistory features will not wire into PAM"
+
+- name: Stat golangci-lint (packages_go_install — host install)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/go/bin/golangci-lint"
+  register: verify_golangci_host
+
+- name: Assert golangci-lint installed and executable
+  ansible.builtin.assert:
+    that:
+      - verify_golangci_host.stat.exists
+      - verify_golangci_host.stat.executable
+    fail_msg: "~/go/bin/golangci-lint missing — packages_go_install go install may have failed silently"

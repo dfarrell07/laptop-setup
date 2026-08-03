@@ -106,6 +106,7 @@
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
+  register: container_golangci_lint_result
   changed_when: true
   failed_when: false
 
@@ -116,8 +117,17 @@
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
+  register: container_subctl_result
   changed_when: true
   failed_when: false
+
+- name: Report go install failures
+  ansible.builtin.debug:
+    msg: "go install FAILED (rc={{ item.rc }}): {{ item.stderr | default('no stderr') }}"
+  loop:
+    - "{{ container_golangci_lint_result }}"
+    - "{{ container_subctl_result }}"
+  when: item.rc | default(0) != 0
 
 # --- Host-command delegation ---
 - name: Check for distrobox-host-exec
