@@ -449,10 +449,15 @@ if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E
   record "git-safe-directory" "FAIL" "unsafe wildcard entries: $dirs"
 else record "git-safe-directory" "PASS"; fi
 
-# git hooksPath configured
-if hp=$(run git config --global core.hooksPath 2>/dev/null) && [[ -n "$hp" ]]; then
+# git hooksPath configured to correct path (git returns tilde-literal, not expanded $HOME)
+_expected_hooks="~/.config/git/template/hooks"
+hp=$(run git config --global core.hooksPath 2>/dev/null || echo "")
+if [[ "$hp" == "$_expected_hooks" ]]; then
   record "git-hooks-path" "PASS"
-else record "git-hooks-path" "FAIL" "not configured — expected core.hooksPath=~/.config/git/template/hooks (global); run: make dotfiles"; fi
+else
+  record "git-hooks-path" "FAIL" "core.hooksPath='${hp:-<unset>}' expected '$_expected_hooks' — run: make dotfiles"
+fi
+unset _expected_hooks
 
 if [[ -x "$HOME/.config/git/template/hooks/pre-commit" ]]; then
   record "git-hooks-pre-commit" "PASS"
@@ -721,7 +726,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       else record "firewall-libvirt-no-ssh" "PASS"; fi
     fi
   else
-    record "firewall-present" "FAIL" "firewall-cmd not found — firewalld not installed or not in PATH; all firewall checks skipped"
+    if grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
+      record "firewall-present" "WARN" "firewalld not installed on Debian — apt systems use nftables without firewalld; firewall checks skipped"
+    else
+      record "firewall-present" "FAIL" "firewall-cmd not found — firewalld not installed or not in PATH; all firewall checks skipped"
+    fi
   fi
   # Verify sshd is enabled for reboot persistence — bound now but not enabled = reboot lockout
   if systemctl is-enabled sshd.service &>/dev/null; then record "sshd-enabled" "PASS"
@@ -749,6 +758,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     elif systemctl is-active usbguard &>/dev/null; then
       record "usbguard" "WARN" "usbguard active but not enabled (won't start on reboot)"
     else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
+    record "usbguard" "WARN" "skipped on Debian — Ansible USBGuard block is Fedora/RHEL-only (dnf/dnf5 required)"
   else record "usbguard" "FAIL" "not installed"; fi
   if command -v usbguard &>/dev/null; then
     if grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-implicit-policy' 'PASS'
@@ -1032,6 +1043,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # pam_wheel.so
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
+  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
+    record "pam-wheel" "WARN" "skipped on Debian — 'sudo' group used instead of 'wheel'; pam_wheel.so not deployed by Ansible on apt systems"
   else record "pam-wheel" "FAIL" "su not restricted to wheel group"; fi
 
   # Root account locked (passwd -S root requires root — WARN not FAIL when non-root)

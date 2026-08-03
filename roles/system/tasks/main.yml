@@ -97,7 +97,7 @@
 - name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
-  register: _devshm_remount_result
+  register: _devshm_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _devshm_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
@@ -243,7 +243,7 @@
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid /home
-  register: _home_remount_result
+  register: _home_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _home_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
@@ -322,7 +322,7 @@
 - name: Apply /boot hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /boot
-  register: _boot_remount_result
+  register: _boot_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
@@ -444,7 +444,7 @@
 - name: Apply /boot/efi hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,noexec /boot/efi
-  register: _boot_efi_remount_result
+  register: _boot_efi_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_efi_remount_result.rc == 0
   when:
     - ansible_facts['system'] == 'Linux'
@@ -700,29 +700,25 @@
   failed_when: false
 
 - name: Enable ICMP block inversion on drop zone
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: firewall-cmd --permanent --zone=drop --add-icmp-block-inversion
-  register: system_icmp_inversion
-  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
-  failed_when:
-    - system_icmp_inversion.rc != 0
-    - "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
+  ansible.posix.firewalld:
+    zone: drop
+    icmp_block_inversion: true
+    permanent: true
+    state: enabled
   when:
     - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op
+    - system_firewall_manage_zone | bool
   notify: Apply firewall rules
 
-# NOTE: With icmp-block-inversion enabled, --add-icmp-block ALLOWS these types
+# NOTE: With icmp-block-inversion enabled, adding icmp-block ALLOWS these types
 # (semantics are inverted). Without inversion, this command would block them.
 - name: Allow essential ICMP types through drop zone
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{ item }}"
+  ansible.posix.firewalld:
+    zone: drop
+    icmp_block: "{{ item }}"
+    permanent: true
+    state: enabled
   loop: "{{ system_firewall_icmp_types }}"
-  register: system_icmp_types
-  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
-  failed_when:
-    - system_icmp_types.rc != 0
-    - "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op

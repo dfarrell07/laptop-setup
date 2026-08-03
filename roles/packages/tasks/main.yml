@@ -1282,7 +1282,7 @@
           oc image extract registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}
           --path="/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz":/tmp/
           --confirm
-      register: _pkg_subctl_extract
+      register: _pkg_subctl_extract  # noqa: var-naming[no-role-prefix]
       changed_when: _pkg_subctl_extract.rc == 0
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
@@ -1292,7 +1292,7 @@
     - name: Extract and install versioned RH subctl to ~/.local/bin
       ansible.builtin.shell:
         cmd: |
-          set -e
+          set -eo pipefail
           TARBALL=$(ls /tmp/subctl-{{ item.tag }}*-linux-amd64.tar.xz 2>/dev/null | head -1)
           [[ -z "$TARBALL" ]] && exit 0
           TMPDIR=$(mktemp -d)
@@ -1302,7 +1302,7 @@
           install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
           rm -rf "$TMPDIR" "$TARBALL"
           echo "INSTALLED"
-      register: _pkg_subctl_install
+      register: _pkg_subctl_install  # noqa: var-naming[no-role-prefix]
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
