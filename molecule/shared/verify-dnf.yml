@@ -172,8 +172,8 @@
   changed_when: false
   become: true
 
-- name: Check faillock deny={{ system_faillock_deny | default(5) }}
-  ansible.builtin.command: grep -q '^deny = {{ system_faillock_deny | default(5) }}' /etc/security/faillock.conf
+- name: Check faillock deny={{ system_faillock_deny }}
+  ansible.builtin.command: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
   changed_when: false
   become: true
 
@@ -182,8 +182,8 @@
   changed_when: false
   become: true
 
-- name: Check faillock unlock_time={{ system_faillock_unlock_time | default(900) }}
-  ansible.builtin.command: grep -q '^unlock_time = {{ system_faillock_unlock_time | default(900) }}' /etc/security/faillock.conf
+- name: Check faillock unlock_time={{ system_faillock_unlock_time }}
+  ansible.builtin.command: grep -q '^unlock_time = {{ system_faillock_unlock_time }}' /etc/security/faillock.conf
   changed_when: false
   become: true
 
@@ -195,9 +195,9 @@
   become: true
   when: not (system_faillock_even_deny_root | bool)
 
-- name: Check pwquality minlen={{ system_pwquality_minlen | default(14) }}
+- name: Check pwquality minlen={{ system_pwquality_minlen }}
   ansible.builtin.command: >-
-    grep -q '^minlen = {{ system_pwquality_minlen | default(14) }}' /etc/security/pwquality.conf
+    grep -q '^minlen = {{ system_pwquality_minlen }}' /etc/security/pwquality.conf
   changed_when: false
   become: true
 
@@ -210,13 +210,13 @@
     - '^ucredit = -1'
     - '^lcredit = -1'
     - '^ocredit = -1'
-    - "'^difok = {{ system_pwquality_difok | default(4) }}'"
-    - "'^maxrepeat = {{ system_pwquality_maxrepeat | default(3) }}'"
+    - "'^difok = {{ system_pwquality_difok }}'"
+    - "'^maxrepeat = {{ system_pwquality_maxrepeat }}'"
     - '^enforce_for_root'
 
-- name: Check pwhistory remember={{ system_pwhistory_remember | default(24) }}
+- name: Check pwhistory remember={{ system_pwhistory_remember }}
   ansible.builtin.command: >-
-    grep -q '^remember = {{ system_pwhistory_remember | default(24) }}' /etc/security/pwhistory.conf
+    grep -q '^remember = {{ system_pwhistory_remember }}' /etc/security/pwhistory.conf
   changed_when: false
   become: true
 
@@ -233,18 +233,18 @@
     fail_msg: "authselect profile is not sssd — faillock/pwhistory features will not wire into PAM"
 
 # --- login.defs policy assertions ---
-- name: Check login.defs PASS_MAX_DAYS={{ system_pass_max_days | default(365) }}
-  ansible.builtin.command: grep -q '^PASS_MAX_DAYS\s\+{{ system_pass_max_days | default(365) }}' /etc/login.defs
+- name: Check login.defs PASS_MAX_DAYS={{ system_pass_max_days }}
+  ansible.builtin.command: grep -q '^PASS_MAX_DAYS\s\+{{ system_pass_max_days }}' /etc/login.defs
   changed_when: false
   become: true
 
-- name: Check login.defs INACTIVE={{ system_inactive_days | default(30) }}
-  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days | default(30) }}' /etc/login.defs
+- name: Check login.defs INACTIVE={{ system_inactive_days }}
+  ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}' /etc/login.defs
   changed_when: false
   become: true
 
-- name: Check login.defs UMASK={{ system_umask | default('027') }}
-  ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask | default("027") }}' /etc/login.defs
+- name: Check login.defs UMASK={{ system_umask }}
+  ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask }}' /etc/login.defs
   changed_when: false
   become: true
 

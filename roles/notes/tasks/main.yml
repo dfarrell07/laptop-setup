@@ -65,6 +65,11 @@
       failed_when: false
       when: notes_repo_available | bool
 
+    - name: Set transcrypt availability fact
+      ansible.builtin.set_fact:
+        notes_transcrypt_available: "{{ notes_transcrypt_bin.rc == 0 }}"
+      when: notes_repo_available | bool
+
     - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
       ansible.builtin.copy:
         dest: "{{ notes_repo_path }}/.gitleaks.toml"
@@ -88,7 +93,14 @@
       no_log: true
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) == 0
+        - notes_transcrypt_available | bool
+
+    - name: Set transcrypt initialized fact
+      ansible.builtin.set_fact:
+        notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
+      when:
+        - notes_repo_available | bool
+        - notes_transcrypt_available | bool
 
     - name: Initialize transcrypt
       ansible.builtin.command:
@@ -106,9 +118,9 @@
       failed_when: false
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) == 0
-        - notes_transcrypt_check.rc | default(1) != 0
-        - notes_transcrypt_password | default('') | length > 0
+        - notes_transcrypt_available | bool
+        - not (notes_transcrypt_inited | bool)
+        - notes_transcrypt_password | length > 0
         - notes_transcrypt_password != 'REPLACE_ME'
 
     - name: Warn if transcrypt password is placeholder
@@ -118,9 +130,9 @@
           Replace vault_notes_transcrypt_password in vault.yml with the real password.
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) == 0
-        - notes_transcrypt_check.rc | default(1) != 0
-        - notes_transcrypt_password | default('') == 'REPLACE_ME'
+        - notes_transcrypt_available | bool
+        - not (notes_transcrypt_inited | bool)
+        - notes_transcrypt_password == 'REPLACE_ME'
 
     - name: Warn if transcrypt initialization failed
       ansible.builtin.debug:
@@ -141,9 +153,9 @@
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) == 0
-        - notes_transcrypt_check.rc | default(1) == 0
-        - notes_transcrypt_password | default('') | length > 0
+        - notes_transcrypt_available | bool
+        - notes_transcrypt_inited | bool
+        - notes_transcrypt_password | length > 0
         - notes_transcrypt_password != 'REPLACE_ME'
 
 
@@ -164,7 +176,7 @@
         msg: "transcrypt not installed — run 'make packages' first"
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) != 0
+        - not (notes_transcrypt_available | bool)
 
     - name: Warn if transcrypt password not set
       ansible.builtin.debug:
@@ -173,6 +185,6 @@
           Set vault_notes_transcrypt_password in vault.yml to enable.
       when:
         - notes_repo_available | bool
-        - notes_transcrypt_bin.rc | default(1) == 0
-        - notes_transcrypt_check.rc | default(1) != 0
-        - notes_transcrypt_password | default('') | length == 0
+        - notes_transcrypt_available | bool
+        - not (notes_transcrypt_inited | bool)
+        - notes_transcrypt_password | length == 0

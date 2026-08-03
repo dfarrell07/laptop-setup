@@ -175,7 +175,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_home_mountpoint.rc | default(1) == 0
+    - system_home_mountpoint.rc == 0
   failed_when: false
 
 - name: Check /home fstab options (CIS 1.1.9)
@@ -185,7 +185,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_home_mountpoint.rc | default(1) == 0
+    - system_home_mountpoint.rc == 0
   failed_when: false
 
 - name: Add nosuid to /home fstab entry (CIS 1.1.9)
@@ -197,7 +197,7 @@
     backup: true
     mode: "0644"
   when:
-    - system_home_mountpoint.rc | default(1) == 0
+    - system_home_mountpoint.rc == 0
     - >-
       not (csb_detected and ansible_facts['distribution'] != 'Fedora')
       or (system_home_nosuid_force | bool)
@@ -211,7 +211,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_home_mountpoint.rc | default(1) == 0
+    - system_home_mountpoint.rc == 0
   failed_when: false
 
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
@@ -220,7 +220,7 @@
   register: _home_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _home_remount_result.rc == 0
   when:
-    - system_home_mountpoint.rc | default(1) == 0
+    - system_home_mountpoint.rc == 0
     - >-
       not (csb_detected and ansible_facts['distribution'] != 'Fedora')
       or (system_home_nosuid_force | bool)
@@ -262,7 +262,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
   failed_when: false
 
 - name: Add nosuid,nodev,noexec to /boot fstab entry
@@ -274,7 +274,7 @@
     backup: true
     mode: "0644"
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - >-
       'nosuid' not in (system_boot_fstab_opts.stdout | default('')) or
@@ -288,7 +288,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
   failed_when: false
 
 - name: Apply /boot hardening immediately via remount  # noqa: command-instead-of-module
@@ -297,7 +297,7 @@
   register: _boot_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_remount_result.rc == 0
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
     - >-
       'nosuid' not in (system_boot_opts.stdout | default('')) or
       'nodev' not in (system_boot_opts.stdout | default('')) or
@@ -335,7 +335,7 @@
     owner: root
     group: root
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
 
 - name: Enable boot-harden.service (CSB)
@@ -344,7 +344,7 @@
     enabled: true
     daemon_reload: true
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
   ignore_errors: true
   register: system_boot_harden_enable
@@ -355,7 +355,7 @@
       boot-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /boot hardening will NOT persist across reboots.
   when:
-    - system_boot_mountpoint.rc | default(1) == 0
+    - system_boot_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
     - system_boot_harden_enable.failed | default(false)
 
@@ -380,7 +380,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
   failed_when: false
 
 - name: Add nosuid,noexec to /boot/efi fstab entry
@@ -392,7 +392,7 @@
     backup: true
     mode: "0644"
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - >-
       'nosuid' not in (system_boot_efi_fstab_opts.stdout | default('')) or
@@ -405,7 +405,7 @@
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
   failed_when: false
 
 - name: Apply /boot/efi hardening immediately via remount  # noqa: command-instead-of-module
@@ -414,7 +414,7 @@
   register: _boot_efi_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _boot_efi_remount_result.rc == 0
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
     - >-
       'nosuid' not in (system_boot_efi_opts.stdout | default('')) or
       'noexec' not in (system_boot_efi_opts.stdout | default(''))
@@ -451,7 +451,7 @@
     owner: root
     group: root
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
 
 - name: Enable boot-efi-harden.service (CSB)
@@ -460,7 +460,7 @@
     enabled: true
     daemon_reload: true
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
   ignore_errors: true
   register: system_boot_efi_harden_enable
@@ -471,7 +471,7 @@
       boot-efi-harden.service could not be enabled (systemd policy restriction or
       daemon-reload failure). /boot/efi hardening will NOT persist across reboots.
   when:
-    - system_boot_efi_mountpoint.rc | default(1) == 0
+    - system_boot_efi_mountpoint.rc == 0
     - csb_detected and ansible_facts['distribution'] != 'Fedora'
     - system_boot_efi_harden_enable.failed | default(false)
 
@@ -770,8 +770,8 @@
   register: system_lockdown_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_kernel_lockdown | default('') | length > 0
-    - system_grubby_info.rc | default(1) == 0
+    - system_kernel_lockdown | length > 0
+    - system_grubby_info.rc == 0
     - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
@@ -782,8 +782,8 @@
   register: system_lockdown_remove_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_kernel_lockdown | default('') | length == 0
-    - system_grubby_info.rc | default(1) == 0
+    - system_kernel_lockdown | length == 0
+    - system_grubby_info.rc == 0
     - "'lockdown=' in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
@@ -794,7 +794,7 @@
   register: system_iommu_amd_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('amd')
   changed_when: true
@@ -806,7 +806,7 @@
   register: system_iommu_intel_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'intel_iommu=on' not in (system_grubby_info.stdout | default(''))"
     - ansible_facts['processor'] | join(' ') | lower is search('intel')
   changed_when: true
@@ -823,7 +823,7 @@
   when:
     - system_iommu_passthrough | bool
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'iommu=pt' not in (system_grubby_info.stdout | default(''))"
     - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
       (ansible_facts['processor'] | join(' ') | lower is search('intel'))
@@ -837,7 +837,7 @@
   when:
     - not (system_iommu_passthrough | bool)
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
@@ -848,7 +848,7 @@
   register: system_vsyscall_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
@@ -859,7 +859,7 @@
   register: system_init_on_free_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
     - system_init_on_free | bool
   changed_when: true
@@ -871,7 +871,7 @@
   register: system_init_on_free_remove_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
     - not (system_init_on_free | bool)
   changed_when: true
@@ -883,7 +883,7 @@
   register: system_page_shuffle_result
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout | default(''))"
   changed_when: true
   failed_when: false
@@ -894,7 +894,7 @@
   register: system_luks_key_cleanup
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
     - system_remove_luks_key | bool
   changed_when: true
@@ -910,7 +910,7 @@
     replace: ''
   when:
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-    - system_grubby_info.rc | default(1) == 0
+    - system_grubby_info.rc == 0
     - system_remove_luks_key | bool
   failed_when: false
 
@@ -931,7 +931,7 @@
       {% if system_remove_luks_key | bool %}
       current=$(echo "$current" | sed 's| *rd\.luks\.key=[^ ]*||g')
       {% endif %}
-      {% if system_kernel_lockdown | default('') | length == 0 %}
+      {% if system_kernel_lockdown | length == 0 %}
       current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
       {% endif %}
       {% if not (system_init_on_free | bool) %}
@@ -943,7 +943,7 @@
       new="$current"
       # Append each missing hardening param (check by key prefix only)
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
-      {{  '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else '' }}
+      {{  '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | length > 0 else '' }}
       _add "vsyscall=none"
       {{  '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
       _add "page_alloc.shuffle=1"

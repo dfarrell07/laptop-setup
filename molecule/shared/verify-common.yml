@@ -335,8 +335,8 @@
 
 - name: Assert user.signingkey is set
   ansible.builtin.assert:
-    that: "verify_signingkey.stdout | trim == '~/.ssh/' ~ (ssh_signing_key_basename | default('id_ed25519_sk_signing')) ~ '.pub'"
-    fail_msg: "git user.signingkey not set to ~/.ssh/{{ ssh_signing_key_basename | default('id_ed25519_sk_signing') }}.pub"
+    that: "verify_signingkey.stdout | trim == '~/.ssh/' ~ (ssh_signing_key_basename) ~ '.pub'"
+    fail_msg: "git user.signingkey not set to ~/.ssh/{{ ssh_signing_key_basename }}.pub"
 
 - name: Verify ~/.config/git/allowed_signers exists
   ansible.builtin.stat:
@@ -1010,7 +1010,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - system_tmout | default(600) | int > 0
+    - system_tmout | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
@@ -1018,7 +1018,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
-    - system_tmout | default(600) | int > 0
+    - system_tmout | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zsh/zshrc
@@ -1026,7 +1026,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family == 'Debian'
-    - system_tmout | default(600) | int > 0
+    - system_tmout | int > 0
 
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
