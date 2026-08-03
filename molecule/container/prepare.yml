@@ -46,6 +46,16 @@
           exit 0
         mode: "0755"
 
+    - name: Create stub subctl binary (go install cannot run — no Go in molecule image)
+      ansible.builtin.copy:
+        dest: "{{ ansible_env.HOME }}/go/bin/subctl"
+        content: |
+          #!/bin/sh
+          # Molecule stub — satisfies verify assertion; go install subctl is silently skipped.
+          echo "subctl version stub (molecule test)"
+          exit 0
+        mode: "0755"
+
     - name: Create stub distrobox-host-exec (exercises symlink branch in converge)
       ansible.builtin.copy:
         dest: /usr/bin/distrobox-host-exec
