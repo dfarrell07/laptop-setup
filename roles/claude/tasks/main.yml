@@ -25,6 +25,7 @@
     - name: Install Claude Code via native binary
       ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
         cmd: "set -o pipefail && curl -fsSL {{ claude_install_url }} | bash"
+        executable: /bin/bash
   rescue:
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
