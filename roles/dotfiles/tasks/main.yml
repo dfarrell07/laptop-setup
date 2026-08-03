@@ -94,7 +94,7 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
     state: absent
-  when: not dotfiles_gitconfig.stat.exists
+  when: dotfiles_legacy_gitconfig.stat.exists
 
 - name: Deploy gitconfig
   ansible.builtin.template:

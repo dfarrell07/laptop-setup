@@ -751,12 +751,18 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "usbguard" "FAIL" "installed but usbguard.service not active"; fi
   else record "usbguard" "FAIL" "not installed"; fi
   if command -v usbguard &>/dev/null; then
-    grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-implicit-policy' 'FAIL' 'ImplicitPolicyTarget is not block — all unmatched devices may be allowed'
-    grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-audit-backend' 'FAIL' 'AuditBackend is not LinuxAudit — USBGuard events not forwarded to auditd'
-    grep -q '^IPCAllowedGroups=wheel' /etc/usbguard/usbguard-daemon.conf 2>/dev/null || record 'usbguard-ipc-groups' 'FAIL' 'IPCAllowedGroups is not wheel — non-root users cannot manage USBGuard'
-    grep -q '1050:' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-yubikey-rule' 'FAIL' 'YubiKey whitelist rule missing from rules.conf'
-    grep -q '3297:1969' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-moonlander-rule' 'WARN' 'Moonlander whitelist rule missing from rules.conf'
-    grep -q '0483:df11' /etc/usbguard/rules.conf 2>/dev/null || record 'usbguard-stm32-dfu-rule' 'WARN' 'STM32 DFU whitelist rule missing from rules.conf (needed for Moonlander firmware flashing)'
+    if grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-implicit-policy' 'PASS'
+    else record 'usbguard-implicit-policy' 'FAIL' 'ImplicitPolicyTarget is not block — all unmatched devices may be allowed'; fi
+    if grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-audit-backend' 'PASS'
+    else record 'usbguard-audit-backend' 'FAIL' 'AuditBackend is not LinuxAudit — USBGuard events not forwarded to auditd'; fi
+    if grep -q '^IPCAllowedGroups=wheel' /etc/usbguard/usbguard-daemon.conf 2>/dev/null; then record 'usbguard-ipc-groups' 'PASS'
+    else record 'usbguard-ipc-groups' 'FAIL' 'IPCAllowedGroups is not wheel — non-root users cannot manage USBGuard'; fi
+    if grep -q '1050:' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-yubikey-rule' 'PASS'
+    else record 'usbguard-yubikey-rule' 'FAIL' 'YubiKey whitelist rule missing from rules.conf'; fi
+    if grep -q '3297:1969' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-moonlander-rule' 'PASS'
+    else record 'usbguard-moonlander-rule' 'WARN' 'Moonlander whitelist rule missing from rules.conf'; fi
+    if grep -q '0483:df11' /etc/usbguard/rules.conf 2>/dev/null; then record 'usbguard-stm32-dfu-rule' 'PASS'
+    else record 'usbguard-stm32-dfu-rule' 'WARN' 'STM32 DFU whitelist rule missing from rules.conf (needed for Moonlander firmware flashing)'; fi
   fi
 
   # bpfman.socket enabled (socket-activated daemon — socket must be enabled for bpfman load/list to work)
@@ -1131,11 +1137,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # non-root system users; cron.allow=root-only would silently break those IT management jobs
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
   elif $CSB_HOST; then record "cron-allow-root" "WARN" "skipped on CSB — IT monitoring agents use cron; cron.allow not restricted to root"
-  else record "cron-allow-root" "WARN" "/etc/cron.allow missing or not restricted to root"; fi
+  else record "cron-allow-root" "FAIL" "/etc/cron.allow missing or not restricted to root (CIS 5.1.8)"; fi
   # at.allow restricts 'at' command to root only (CIS 5.1.9)
   if grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
   elif $CSB_HOST; then record "at-allow-root" "WARN" "skipped on CSB — IT monitoring agents may use at; at.allow not restricted to root"
-  else record "at-allow-root" "WARN" "/etc/at.allow missing or not restricted to root"; fi
+  else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
   # Login banner deployed to /etc/issue (CIS 1.7.1)
   # Skipped on CSB — IT deploys a mandated corporate legal banner; Ansible guard intentionally
@@ -1458,17 +1464,24 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
   # tcp_timestamps: CIS 3.3.9 recommends 0; playbook default is 1 for OVN-K/Submariner RTTM/PAWS on high-BDP links.
-  # Set net.ipv4.tcp_timestamps: 0 in config.yml to comply with CIS (disables RTTM/PAWS).
-  _ts=$(sysctl -n net.ipv4.tcp_timestamps 2>/dev/null || echo "?")
-  if [[ "$_ts" == "0" ]]; then record "sysctl-tcp-timestamps" "PASS"
-  elif $CSB_HOST && [[ "$_ts" == "1" ]]; then record "sysctl-tcp-timestamps" "WARN" "CSB: tcp_timestamps=1 (IT network diagnostics override CIS default 0)"
-  elif [[ "$_ts" == "1" ]]; then record "sysctl-tcp-timestamps" "WARN" "tcp_timestamps=1 (OVN-K/Submariner override of CIS 0; set net.ipv4.tcp_timestamps: 0 in config.yml to comply)"
-  else record "sysctl-tcp-timestamps" "FAIL" "net.ipv4.tcp_timestamps=$_ts expected 0 (or 1 on CSB)"; fi
-  _sysctl_check "net.ipv4.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects"
-  _sysctl_check "net.ipv6.conf.all.accept_redirects" "0" "sysctl-no-accept-redirects-v6"
-  _sysctl_check "net.ipv4.conf.all.send_redirects"   "0" "sysctl-no-send-redirects"
-  _sysctl_check "net.ipv4.conf.all.accept_source_route" "0" "sysctl-no-source-route"
-  _sysctl_check "net.ipv6.conf.all.accept_source_route" "0" "sysctl-no-source-route-v6"
+  # Override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml to comply with CIS.
+  _ts_expected=$(awk -F' *= *' '/^net\.ipv4\.tcp_timestamps/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "net.ipv4.tcp_timestamps" "${_ts_expected:-1}" "sysctl-tcp-timestamps"
+  if [[ "${_ts_expected:-1}" != "0" ]]; then
+    record "sysctl-tcp-timestamps-cis" "WARN" "net.ipv4.tcp_timestamps=${_ts_expected:-1} deviates from CIS 3.3.9 (recommended 0); override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml"
+  fi
+  _sysctl_check "net.ipv4.conf.all.accept_redirects"        "0" "sysctl-no-accept-redirects"
+  _sysctl_check "net.ipv4.conf.default.accept_redirects"    "0" "sysctl-no-accept-redirects-default"
+  _sysctl_check "net.ipv6.conf.all.accept_redirects"        "0" "sysctl-no-accept-redirects-v6"
+  _sysctl_check "net.ipv6.conf.default.accept_redirects"    "0" "sysctl-no-accept-redirects-v6-default"
+  _sysctl_check "net.ipv4.conf.all.send_redirects"          "0" "sysctl-no-send-redirects"
+  _sysctl_check "net.ipv4.conf.default.send_redirects"      "0" "sysctl-no-send-redirects-default"
+  _sysctl_check "net.ipv4.conf.all.accept_source_route"     "0" "sysctl-no-source-route"
+  _sysctl_check "net.ipv4.conf.default.accept_source_route" "0" "sysctl-no-source-route-default"
+  _sysctl_check "net.ipv6.conf.all.accept_source_route"     "0" "sysctl-no-source-route-v6"
+  _sysctl_check "net.ipv6.conf.default.accept_source_route" "0" "sysctl-no-source-route-v6-default"
+  _sysctl_check "net.ipv4.conf.all.secure_redirects"        "0" "sysctl-no-secure-redirects"
+  _sysctl_check "net.ipv4.conf.default.secure_redirects"    "0" "sysctl-no-secure-redirects-default"
   # bridge-nf: WARN if br_netfilter module not loaded (persistent via modules-load.d; reboot activates)
   _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null) || true
   if [[ "$_bridge_nf" == "1" ]]; then record "sysctl-bridge-nf-iptables" "PASS"
@@ -1536,7 +1549,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"
   _sysctl_check "net.ipv4.tcp_rfc1337"                "1" "sysctl-tcp-rfc1337"
-  _sysctl_check "net.ipv4.conf.all.log_martians"      "1" "sysctl-log-martians"
+  _sysctl_check "net.ipv4.conf.all.log_martians"            "1" "sysctl-log-martians"
+  _sysctl_check "net.ipv4.conf.default.log_martians"        "1" "sysctl-log-martians-default"
+  _sysctl_check "net.ipv4.icmp_echo_ignore_broadcasts"      "1" "sysctl-icmp-no-echo-broadcast"
+  _sysctl_check "net.ipv4.icmp_ignore_bogus_error_responses" "1" "sysctl-icmp-no-bogus-error"
   _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
   _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
@@ -1546,6 +1562,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.core.rmem_max"                    "16777216" "sysctl-rmem-max"
   _sysctl_check "net.core.wmem_max"                    "16777216" "sysctl-wmem-max"
   _sysctl_check "vm.max_map_count"                     "1048576"  "sysctl-vm-max-map-count"
+  _sysctl_check "net.ipv6.conf.all.use_tempaddr"       "2"        "sysctl-ipv6-tempaddr"
+  _sysctl_check "net.ipv6.conf.default.use_tempaddr"   "2"        "sysctl-ipv6-tempaddr-default"
 
 fi
 
