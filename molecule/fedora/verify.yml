@@ -120,6 +120,11 @@
         cmd: grep -q 'exec_always.*lxqt-policykit-agent' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
+    - name: Verify sway config starts nm-applet for network tray icon
+      ansible.builtin.command:
+        cmd: grep -q 'exec_always nm-applet' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
     - name: Verify sway config contains xkb_layout
       ansible.builtin.command:
         cmd: grep -q 'xkb_layout us' "{{ ansible_user_dir }}/.config/sway/config"
@@ -158,6 +163,11 @@
     - name: Verify sway config caps audio raise volume at 100% (wpctl -l 1.0)
       ansible.builtin.command:
         cmd: grep -q 'wpctl set-volume -l 1\.0' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify sway screenshot binding pipes to wl-copy as image
+      ansible.builtin.command:
+        cmd: grep -q 'grim.*wl-copy -t image/png' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify portals.conf deployed
@@ -309,6 +319,26 @@
     - name: Verify i3 config starts xss-lock for sleep-triggered screen lock
       ansible.builtin.command:
         cmd: grep -q 'exec.*xss-lock' "{{ ansible_user_dir }}/.config/i3/config"
+      changed_when: false
+
+    - name: Verify i3 config starts xautolock for idle screen lock
+      ansible.builtin.command:
+        cmd: grep -q 'exec.*xautolock' "{{ ansible_user_dir }}/.config/i3/config"
+      changed_when: false
+
+    - name: Verify i3lock invocation in xautolock includes lock color flag
+      ansible.builtin.command:
+        cmd: grep -q 'i3lock -c [0-9a-fA-F]' "{{ ansible_user_dir }}/.config/i3/config"
+      changed_when: false
+
+    - name: Verify i3 config starts nm-applet for network tray icon
+      ansible.builtin.command:
+        cmd: grep -q 'exec.*nm-applet' "{{ ansible_user_dir }}/.config/i3/config"
+      changed_when: false
+
+    - name: Verify i3 screenshot binding uses scrot
+      ansible.builtin.command:
+        cmd: grep -q 'exec.*scrot' "{{ ansible_user_dir }}/.config/i3/config"
       changed_when: false
 
     - name: Verify i3 config runs autorandr for display profile

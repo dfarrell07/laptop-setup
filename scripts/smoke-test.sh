@@ -220,9 +220,11 @@ else record "dotfile-gitconfig-work" "PASS"; fi
 if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "~/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc_personal"; then record "dotfile-gitconfig-personal" "WARN" "config-personal present but not Ansible-managed — manual overwrite?"
 else record "dotfile-gitconfig-personal" "PASS"; fi
-if ! grep -q 'config-work' "$HOME/.config/git/config" 2>/dev/null; then
-  record "gitconfig-includeif" "FAIL" "no includeIf referencing config-work in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
-else record "gitconfig-includeif" "PASS"; fi
+if [[ "${profile:-work}" == "work" ]]; then
+  if ! grep -q 'config-work' "$HOME/.config/git/config" 2>/dev/null; then
+    record "gitconfig-includeif" "FAIL" "no includeIf referencing config-work in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
+  else record "gitconfig-includeif" "PASS"; fi
+else record "gitconfig-includeif" "PASS"; fi  # personal profile: dotfiles_work_src_dirs may be empty by design
 unset _gc_work _gc_personal
 
 # global gitignore — also referenced via core.excludesfile in gitconfig.j2 (belt-and-suspenders: XDG path is read automatically, explicit setting survives non-XDG git invocations)
@@ -681,9 +683,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if [[ "$EUID" -ne 0 ]]; then
       record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
     else
-      _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
-      if [[ "$_ssh_port" != '?' && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
-      else record "sshd-port" "FAIL" "Port='$_ssh_port' expected non-default port !=22"; fi
+      _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null)
+      if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
+      else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected non-default port !=22 (config absent or port=22)"; fi
       if command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
         else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
