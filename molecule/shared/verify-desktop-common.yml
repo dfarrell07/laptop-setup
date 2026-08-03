@@ -1,0 +1,32 @@
+---
+# molecule/shared/verify-desktop-common.yml
+# Alacritty config and Chrome security policy assertions.
+# Include from Linux scenario verify.yml files via include_tasks.
+# macOS verify.yml has only the Alacritty check (no Chrome policy on macOS).
+
+- name: Verify Alacritty config deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+  register: verify_alacritty
+
+- name: Assert Alacritty config exists
+  ansible.builtin.assert:
+    that: verify_alacritty.stat.exists
+    fail_msg: "Alacritty config not deployed"
+
+- name: Verify Chrome policy deployed
+  ansible.builtin.stat:
+    path: /etc/opt/chrome/policies/managed/security.json
+  register: verify_chrome
+
+- name: Assert Chrome policy exists
+  ansible.builtin.assert:
+    that: verify_chrome.stat.exists
+    fail_msg: "Chrome security policy not deployed"
+
+- name: Validate Chrome security policy JSON
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
+      assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
+  changed_when: false

@@ -106,63 +106,13 @@
         that: verify_claude_md_work.stat.exists
         fail_msg: "Claude CLAUDE.md not deployed (work profile)"
 
-    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
-    - name: Check notes repo directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git"
-      register: verify_notes
-
-    - name: Assert notes .git/config has 0600 when repo exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git/config"
-      register: verify_notes_config
-      when: verify_notes.stat.exists
-
-    - name: Verify notes .git/config permissions
-      ansible.builtin.assert:
-        that: verify_notes_config.stat.mode == '0600'
-        fail_msg: "notes .git/config should be 0600"
-      when: verify_notes.stat.exists and verify_notes_config.stat.exists
-
-    - name: Stat notes directory for permission check
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes"
-      register: verify_notes_dir
-      when: verify_notes.stat.exists
-
-    - name: Assert notes directory is mode 0700
-      ansible.builtin.assert:
-        that: verify_notes_dir.stat.mode == '0700'
-        fail_msg: "notes/ should be 0700 — world-readable notes regression"
-      when: verify_notes.stat.exists
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.include_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: Verify Alacritty config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
-      register: verify_alacritty
-
-    - name: Assert Alacritty config exists
-      ansible.builtin.assert:
-        that: verify_alacritty.stat.exists
-        fail_msg: "Alacritty config not deployed"
-
-    - name: Verify Chrome policy deployed
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/security.json
-      register: verify_chrome
-
-    - name: Assert Chrome policy exists
-      ansible.builtin.assert:
-        that: verify_chrome.stat.exists
-        fail_msg: "Chrome security policy not deployed"
-
-    - name: Validate Chrome security policy JSON
-      ansible.builtin.command:
-        cmd: >-
-          python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
-          assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
-      changed_when: false
+    - name: Include Alacritty and Chrome policy assertions
+      ansible.builtin.include_tasks: ../shared/verify-desktop-common.yml
 
     # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---
     # Rocky has ansible_distribution='Rocky' not 'RedHat', so is_rhel=False and

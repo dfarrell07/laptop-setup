@@ -837,6 +837,21 @@
           distrobox role template was not deployed
       when: verify_distrobox_bin.rc == 0
 
+    # --- git_repos role: verify a public HTTPS repo was actually cloned ---
+    - name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
+      register: verify_git_repos_clone
+
+    - name: Assert public HTTPS repo clone succeeded
+      ansible.builtin.assert:
+        that:
+          - verify_git_repos_clone.stat.exists
+          - verify_git_repos_clone.stat.isdir
+        fail_msg: >-
+          git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
+          clone task logic regression or git_repos_list filtering broken
+
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled
       ansible.builtin.systemd:

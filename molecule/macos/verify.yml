@@ -72,35 +72,24 @@
           - verify_ssh_sockets.stat.isdir
         fail_msg: "SSH sockets directory missing for macOS ControlPath"
 
-    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
-    - name: Check notes repo directory
+    # --- git_repos role: verify a public HTTPS repo was actually cloned ---
+    - name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git"
-      register: verify_notes
+        path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
+      register: verify_git_repos_clone
 
-    - name: Assert notes .git/config has 0600 when repo exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git/config"
-      register: verify_notes_config
-      when: verify_notes.stat.exists
-
-    - name: Verify notes .git/config permissions
+    - name: Assert public HTTPS repo clone succeeded
       ansible.builtin.assert:
-        that: verify_notes_config.stat.mode == '0600'
-        fail_msg: "notes .git/config should be 0600"
-      when: verify_notes.stat.exists and verify_notes_config.stat.exists
+        that:
+          - verify_git_repos_clone.stat.exists
+          - verify_git_repos_clone.stat.isdir
+        fail_msg: >-
+          git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
+          clone task logic regression or git_repos_list filtering broken on macOS
 
-    - name: Stat notes directory for permission check
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes"
-      register: verify_notes_dir
-      when: verify_notes.stat.exists
-
-    - name: Assert notes directory is mode 0700
-      ansible.builtin.assert:
-        that: verify_notes_dir.stat.mode == '0700'
-        fail_msg: "notes/ should be 0700 — world-readable notes regression"
-      when: verify_notes.stat.exists
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.include_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role (macOS) ---
     - name: Verify AeroSpace config deployed

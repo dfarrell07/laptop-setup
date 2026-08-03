@@ -822,10 +822,12 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -qP '^MaxSessions [0-9]+$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^IgnoreRhosts yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^GSSAPIAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -q '^AuthorizedKeysFile .ssh/authorized_keys$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms (MaxAuthTries=$_max_auth)"
+      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/GSSAPIAuthentication/AuthorizedKeysFile (MaxAuthTries=$_max_auth)"
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
     # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -837,7 +839,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
   fi
   # Ciphers, MACs, KexAlgorithms, and PubkeyAcceptedAlgorithms must be present and hardened in the drop-in
-  if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+  if [[ "$EUID" -ne 0 ]]; then
+    record "sshd-algorithms" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
+  elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
     if grep -q '^Ciphers aes256-gcm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^MACs hmac-sha2-512-etm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qE '^KexAlgorithms.*(mlkem768x25519|curve25519)' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -1546,6 +1550,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # accept_ra: read expected value from deployed config (system_ipv6_accept_ra in config.yml may override default 0).
   _accept_ra_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.ipv6.conf.all.accept_ra" "${_accept_ra_expected:-0}" "sysctl-no-accept-ra"
+  _accept_ra_default_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.default\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "net.ipv6.conf.default.accept_ra" "${_accept_ra_default_expected:-0}" "sysctl-no-accept-ra-default"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"
   _sysctl_check "net.ipv4.tcp_rfc1337"                "1" "sysctl-tcp-rfc1337"
