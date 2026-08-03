@@ -769,6 +769,43 @@
     fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
   when: ansible_system == 'Linux'
 
+- name: Stat coredump drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/systemd/coredump.conf.d/disable.conf
+  register: verify_coredump_conf
+  when: ansible_system == 'Linux'
+
+- name: Assert coredump drop-in deployed
+  ansible.builtin.assert:
+    that: verify_coredump_conf.stat.exists
+    fail_msg: "/etc/systemd/coredump.conf.d/disable.conf not deployed — system role coredump task regression"
+  when: ansible_system == 'Linux'
+
+- name: Stat logind hardening drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_conf
+  when: ansible_system == 'Linux'
+
+- name: Assert logind hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_logind_conf.stat.exists
+    fail_msg: "/etc/systemd/logind.conf.d/99-hardening.conf not deployed — system role logind task regression"
+  when: ansible_system == 'Linux'
+
+- name: Stat sudoers hardening drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/99-hardening
+  register: verify_sudoers_conf
+  become: true
+  when: ansible_system == 'Linux'
+
+- name: Assert sudoers hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_sudoers_conf.stat.exists
+    fail_msg: "/etc/sudoers.d/99-hardening not deployed — system role sudoers task regression"
+  when: ansible_system == 'Linux'
+
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false

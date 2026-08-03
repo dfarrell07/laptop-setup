@@ -246,7 +246,7 @@ fi
 # --- Sudo scope ---
 if sudo -n -l &>/dev/null 2>&1; then
   sudo_out=$(sudo -n -l 2>/dev/null) || true
-  if printf '%s' "$sudo_out" | grep -qE '\(ALL\) ALL|\(ALL : ALL\) ALL'; then
+  if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+(NOPASSWD:[[:space:]]+)?ALL'; then
     record "sudo" "pass" "full sudo available"
   else
     record "sudo" "warn" "scoped sudo — some system tasks may fail"

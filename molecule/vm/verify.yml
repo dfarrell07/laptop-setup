@@ -737,6 +737,11 @@
       failed_when: verify_faillock_authselect.rc != 0
       become: true
 
+    - name: Check faillock even_deny_root present (VM converge sets system_faillock_even_deny_root true)
+      ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
+      changed_when: false
+      become: true
+
     - name: Run authselect check to verify PAM files match profile
       ansible.builtin.command: authselect check
       changed_when: false

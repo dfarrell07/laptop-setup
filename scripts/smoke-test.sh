@@ -851,7 +851,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
   # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
   if [[ -f /etc/aide.conf ]]; then
-    for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/tlp.d" "/etc/tlp.conf" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot"; do
+    for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/tlp.d" "/etc/tlp.conf" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
       label="aide-monitors-$(basename "$_path")"
       if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
       else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi

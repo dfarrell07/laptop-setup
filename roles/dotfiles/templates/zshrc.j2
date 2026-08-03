@@ -118,7 +118,7 @@ ccp() {
   _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="personal-${dir}"
-  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; CLAUDE_CONFIG_DIR=$HOME/.claude-personal claude; zsh"
+  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; export CLAUDE_CONFIG_DIR=$HOME/.claude-personal; claude; zsh"
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
