@@ -1030,7 +1030,7 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - not (csb_detected | default(false))  # CSB IT manages audit rules via audisp-remote SIEM pipeline
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # no SIEM at home
 
 - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
   ansible.builtin.template:
@@ -1041,7 +1041,7 @@
     mode: "0640"
   notify: Restart auditd
   when:
-    - not (csb_detected | default(false))  # CSB may send events to a SIEM via audisp-remote; don't overwrite
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # no audisp-remote at home
 
 - name: Ensure auditd is enabled and started
   ansible.builtin.systemd:
@@ -1989,7 +1989,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected | default(false))  # dnf-automatic not installed on CSB
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # dnf-automatic not installed on CSB
   notify: Restart dnf-automatic timer
   failed_when: false
 
@@ -2518,7 +2518,7 @@
       consent to such monitoring and recording.
     dest: /etc/issue
     mode: "0644"
-  when: not (csb_detected | default(false))  # CSB IT deploys mandated legal banner; don't overwrite
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # no IT banner at home
   failed_when: false
 
 - name: Deploy SSH login banner
@@ -2531,7 +2531,7 @@
       consent to such monitoring and recording.
     dest: /etc/issue.net
     mode: "0644"
-  when: not (csb_detected | default(false))  # CSB IT deploys mandated legal banner; don't overwrite
+  when: not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # no IT banner at home
   failed_when: false
 
 # --- Sudoers hardening ---
@@ -2923,7 +2923,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not (system_aide_enabled | bool)
-    - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't interfere
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # CSB IT manages AIDE baseline; don't interfere
   block:
     - name: Disable and stop aide-check.timer when AIDE disabled
       ansible.builtin.systemd:
@@ -2963,7 +2963,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - system_aide_enabled | bool
-    - not (csb_detected | default(false))  # CSB IT manages AIDE baseline; don't overwrite
+    - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')  # CSB IT manages AIDE baseline; don't overwrite
   block:
     - name: Install AIDE
       ansible.builtin.dnf:
