@@ -42,5 +42,23 @@ network_proxied: false
 needs_container_tier: "host-only"
 
 # Cross-role variable baselines — allow standalone invocation of roles that consume
-# variables defined in other roles' defaults (which only load when that role runs).
+# variables defined in other roles' defaults or default.config.yml (which only loads
+# during full playbook runs via pre_flight_checks.yml include_vars).
 packages_install_binaries: true  # roles/packages/defaults/main.yml:240; consumed by claude, distrobox
+
+# Feature toggle baselines matching default.config.yml — eliminates | default(X) in role tasks.
+# Users override these in config.yml (higher precedence via include_vars).
+repo_gh_cli: true
+repo_google_chrome: false
+repo_google_cloud_sdk: false
+repo_slack: false
+repo_mullvad: true
+repo_docker_ce: false
+repo_acli: true
+repo_redhat: true
+repo_rpmfusion_free: true
+repo_rpmfusion_nonfree: false
+repo_tailscale: true
+install_docker: false
+install_vpn: true
+install_virtualization: true

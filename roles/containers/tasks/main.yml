@@ -91,7 +91,7 @@
   tags: [become]
   when:
     - ansible_facts['system'] == 'Linux'
-    - not (install_docker | default(false))
+    - not (install_docker)
   failed_when: false
 
 # --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---

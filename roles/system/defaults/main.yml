@@ -78,8 +78,8 @@ system_firewall_icmp_types:
   - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
 
 # Services
-system_enable_libvirtd: "{{ install_virtualization | default(true) }}"
-system_enable_mullvad: "{{ install_vpn | default(true) }}"
+system_enable_libvirtd: "{{ install_virtualization }}"
+system_enable_mullvad: "{{ install_vpn }}"
 
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);

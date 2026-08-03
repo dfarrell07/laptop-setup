@@ -78,7 +78,7 @@
 - name: Install virtualization packages
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - install_virtualization | default(true) | bool
+    - install_virtualization | bool
   block:
     - name: Install virtualization packages
       ansible.builtin.dnf:
@@ -125,7 +125,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['system'] == 'Linux'
-    - install_virtualization | default(true) | bool
+    - install_virtualization | bool
     - "'libvirt' in (packages_virtualization | default([]))"
   failed_when: false
 
@@ -139,7 +139,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['system'] == 'Linux'
-    - install_virtualization | default(true) | bool
+    - install_virtualization | bool
     - real_user_id is defined
     - real_user_id | length > 0
   failed_when: false

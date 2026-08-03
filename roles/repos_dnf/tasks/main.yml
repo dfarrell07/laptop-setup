@@ -6,7 +6,7 @@
 - name: Add GitHub CLI repo
   # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
   when:
-    - repo_gh_cli | default(true)
+    - repo_gh_cli
     - ansible_facts['distribution'] != 'Fedora'
   block:
     - name: Add gh-cli repo
@@ -46,7 +46,7 @@
 
 - name: Add Google Chrome repo
   when:
-    - repo_google_chrome | default(false)
+    - repo_google_chrome
     - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add google-chrome repo
@@ -86,7 +86,7 @@
 
 - name: Add Google Cloud SDK repo
   when:
-    - repo_google_cloud_sdk | default(false)
+    - repo_google_cloud_sdk
     - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add google-cloud-cli repo
@@ -125,7 +125,7 @@
 
 - name: Add Slack repo
   when:
-    - repo_slack | default(false)
+    - repo_slack
     - ansible_facts['architecture'] == 'x86_64'
   block:
     - name: Add slack repo
@@ -171,7 +171,7 @@
 # Skip entirely on CSB (not just rescue-on-failure) unlike other consumer repos.
 - name: Add Mullvad VPN repo
   when:
-    - repo_mullvad | default(true)
+    - repo_mullvad
     - ansible_facts['distribution'] == 'Fedora'
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
   block:
@@ -196,7 +196,7 @@
           Continuing playbook execution.
 
 - name: Add Docker CE repo
-  when: repo_docker_ce | default(false)
+  when: repo_docker_ce
   block:
     - name: Add docker-ce repo
       ansible.builtin.yum_repository:
@@ -245,7 +245,7 @@
 
 - name: Add acli repo
   when:
-    - repo_acli | default(true)
+    - repo_acli
     - profile == 'work'
     - repos_dnf_acli_baseurl is defined
   block:
@@ -284,7 +284,7 @@
 
 - name: Add Red Hat internal repos
   when:
-    - repo_redhat | default(true)
+    - repo_redhat
     - profile == 'work'
     - repos_dnf_redhat_baseurl is defined
   block:
@@ -323,7 +323,7 @@
 
 - name: Enable RPM Fusion free repo
   when:
-    - repo_rpmfusion_free | default(true)
+    - repo_rpmfusion_free
     - ansible_facts['distribution'] == 'Fedora'
   block:
     - name: Install RPM Fusion free release
@@ -358,7 +358,7 @@
 
 - name: Enable RPM Fusion nonfree repo
   when:
-    - repo_rpmfusion_nonfree | default(false)
+    - repo_rpmfusion_nonfree
     - ansible_facts['distribution'] == 'Fedora'
   block:
     - name: Install RPM Fusion nonfree release
@@ -392,7 +392,7 @@
       when: not (csb_detected and ansible_facts['distribution'] != 'Fedora')
 
 - name: Add Tailscale repo
-  when: repo_tailscale | default(true)
+  when: repo_tailscale
   block:
     - name: Add Tailscale stable repo
       ansible.builtin.yum_repository:
