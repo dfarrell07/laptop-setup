@@ -2651,37 +2651,21 @@
   failed_when: false
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
-- name: Check whether subuid entry already exists for user
-  ansible.builtin.command: grep -q "^{{ real_user_id }}:" /etc/subuid
-  register: system_subuid_check
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when: real_user_id is defined
-
-- name: Ensure subuid entry exists for user (only if absent)
+- name: Ensure subuid entry exists for user
   ansible.builtin.lineinfile:
     path: /etc/subuid
     line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
-  when: real_user_id is defined and system_subuid_check.rc != 0
-
-- name: Check whether subgid entry already exists for user
-  ansible.builtin.command: grep -q "^{{ real_user_id }}:" /etc/subgid
-  register: system_subgid_check
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
   when: real_user_id is defined
 
-- name: Ensure subgid entry exists for user (only if absent)
+- name: Ensure subgid entry exists for user
   ansible.builtin.lineinfile:
     path: /etc/subgid
     line: "{{ real_user_id }}:100000:65536"
     create: true
     mode: "0644"
-  when: real_user_id is defined and system_subgid_check.rc != 0
+  when: real_user_id is defined
 
 - name: Enable session lingering for rootless podman socket persistence
   ansible.builtin.command:
