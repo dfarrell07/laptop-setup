@@ -37,7 +37,7 @@
 
 - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
   vars:
-    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | default(true) | bool else '' }}"
+    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -200,7 +200,7 @@
     - system_home_mountpoint.rc | default(1) == 0
     - >-
       not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-      or (system_home_nosuid_force | default(false) | bool)
+      or (system_home_nosuid_force | bool)
     - >-
       'nosuid' not in (system_home_fstab_opts.stdout | default(''))
 
@@ -223,7 +223,7 @@
     - system_home_mountpoint.rc | default(1) == 0
     - >-
       not (csb_detected and ansible_facts['distribution'] != 'Fedora')
-      or (system_home_nosuid_force | default(false) | bool)
+      or (system_home_nosuid_force | bool)
     - >-
       'nosuid' not in (system_home_opts.stdout | default(''))
   failed_when: false
@@ -821,7 +821,7 @@
   # This improves performance for VFIO PCI passthrough but degrades DMA protection
   # for all other devices. Leave false unless actively using PCI passthrough to VMs.
   when:
-    - system_iommu_passthrough | default(false) | bool
+    - system_iommu_passthrough | bool
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'iommu=pt' not in (system_grubby_info.stdout | default(''))"
@@ -835,7 +835,7 @@
     cmd: grubby --remove-args="iommu=pt" --update-kernel=ALL
   register: system_iommu_pt_remove_result
   when:
-    - not (system_iommu_passthrough | default(false) | bool)
+    - not (system_iommu_passthrough | bool)
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
@@ -861,7 +861,7 @@
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
-    - system_init_on_free | default(true) | bool
+    - system_init_on_free | bool
   changed_when: true
   failed_when: false
 
@@ -873,7 +873,7 @@
     - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
     - system_grubby_info.rc | default(1) == 0
     - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
-    - not (system_init_on_free | default(true) | bool)
+    - not (system_init_on_free | bool)
   changed_when: true
   failed_when: false
 
@@ -934,10 +934,10 @@
       {% if system_kernel_lockdown | default('') | length == 0 %}
       current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
       {% endif %}
-      {% if not (system_init_on_free | default(true) | bool) %}
+      {% if not (system_init_on_free | bool) %}
       current=$(echo "$current" | sed 's| *init_on_free=1||g')
       {% endif %}
-      {% if not (system_iommu_passthrough | default(false) | bool) %}
+      {% if not (system_iommu_passthrough | bool) %}
       current=$(echo "$current" | sed 's| *iommu=pt||g')
       {% endif %}
       new="$current"
@@ -945,12 +945,12 @@
       _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
       {{  '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | default('') | length > 0 else '' }}
       _add "vsyscall=none"
-      {{  '_add "init_on_free=1"' if system_init_on_free | default(true) | bool else '' }}
+      {{  '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
       _add "page_alloc.shuffle=1"
       {% set is_amd = ansible_facts['processor'] | join(' ') | lower is search('amd') %}
       {% set is_intel = ansible_facts['processor'] | join(' ') | lower is search('intel') %}
       {{  '_add "amd_iommu=on"' if is_amd else '' }}
-      {{  '_add "iommu=pt"' if system_iommu_passthrough | default(false) | bool and (is_amd or is_intel) else '' }}
+      {{  '_add "iommu=pt"' if system_iommu_passthrough | bool and (is_amd or is_intel) else '' }}
       {{  '_add "intel_iommu=on"' if is_intel else '' }}
       new=$(echo "$new" | tr -s ' ' | sed 's/^ //;s/ $//')
       if [[ "$new" != "$current" ]]; then
@@ -1172,7 +1172,7 @@
     name: bluetooth.service
     masked: true
     state: stopped
-  when: system_disable_bluetooth | default(false) | bool
+  when: system_disable_bluetooth | bool
   failed_when: false
 
 - name: Unmask bluetooth service when system_disable_bluetooth disabled
@@ -1181,7 +1181,7 @@
     masked: false
     enabled: true
     state: started
-  when: not (system_disable_bluetooth | default(false) | bool)
+  when: not (system_disable_bluetooth | bool)
   failed_when: false
 
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
@@ -1320,7 +1320,7 @@
     - avahi-daemon.service
     - avahi-daemon.socket
   failed_when: false
-  when: system_disable_avahi | default(true) | bool
+  when: system_disable_avahi | bool
 
 - name: Unmask avahi-daemon when system_disable_avahi is false
   ansible.builtin.systemd:
@@ -1331,7 +1331,7 @@
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
-  when: not (system_disable_avahi | default(true) | bool)
+  when: not (system_disable_avahi | bool)
   failed_when: false
 
 # --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
@@ -1346,7 +1346,7 @@
     - rpcbind.socket
   failed_when: false
   when:
-    - system_mask_nfs_server | default(true) | bool
+    - system_mask_nfs_server | bool
 
 - name: Unmask NFS server and rpcbind when system_mask_nfs_server is false
   ansible.builtin.systemd:
@@ -1360,7 +1360,7 @@
     - rpcbind.socket
   failed_when: false
   when:
-    - not (system_mask_nfs_server | default(true) | bool)
+    - not (system_mask_nfs_server | bool)
 
 # --- Mask cockpit (web console — not needed on a developer workstation, port 9090 exposure) ---
 - name: Mask cockpit service and socket (CIS 2.2 — web console not needed on workstation)
@@ -1372,7 +1372,7 @@
     - cockpit.service
     - cockpit.socket
   failed_when: false
-  when: not (system_enable_cockpit | default(false) | bool)
+  when: not (system_enable_cockpit | bool)
 
 - name: Unmask and enable cockpit service and socket when system_enable_cockpit
   ansible.builtin.systemd:
@@ -1384,7 +1384,7 @@
     - cockpit.service
     - cockpit.socket
   failed_when: false
-  when: (system_enable_cockpit | default(false) | bool)
+  when: (system_enable_cockpit | bool)
 
 # --- Logind lid close ---
 # Write to a drop-in so package upgrades can't clobber the settings.
@@ -3136,7 +3136,7 @@
         insertbefore: '^/etc\s'
         state: present
       notify: Reinitialize AIDE database
-      when: system_install_usbguard | default(true) | bool
+      when: system_install_usbguard | bool
       # rules.conf controls which USB devices enumerate; offline modification (e.g., adding
       # "allow id *:*") would bypass USBGuard entirely. auditd detects write events only
       # while running; AIDE content-hash baseline catches offline tampering on next --check.

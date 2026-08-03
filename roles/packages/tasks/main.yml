@@ -25,7 +25,7 @@
              + (packages_containers_kubectl | default(['kubectl'])
                 if (profile != 'work'
                     or ansible_facts['architecture'] != 'x86_64'
-                    or not (packages_install_binaries | default(true) | bool))
+                    or not (packages_install_binaries | bool))
                 else [])
              + packages_networking
              + (packages_networking_work | default([]) if profile == 'work' else []) }}
@@ -179,7 +179,7 @@
       community.general.homebrew:
         name: "{{ packages_brew }}"
         state: present
-        update_homebrew: "{{ packages_brew_update | default(false) }}"
+        update_homebrew: "{{ packages_brew_update }}"
   rescue:
     - name: Warn Homebrew package install failed
       ansible.builtin.debug:
@@ -233,7 +233,7 @@
 
 - name: Install oc and kubectl
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -344,7 +344,7 @@
 
 - name: Install opm (Operator Package Manager)
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -468,7 +468,7 @@
 
 - name: Install kind
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
   block:
@@ -517,7 +517,7 @@
 
 - name: Install helm
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   vars:
@@ -594,7 +594,7 @@
 
 - name: Install kustomize
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   vars:
@@ -674,7 +674,7 @@
 
 - name: Install transcrypt
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
   block:
     - name: Check if transcrypt is installed at target version
@@ -721,7 +721,7 @@
 
 - name: Install SOPS
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
   block:
@@ -770,7 +770,7 @@
 
 - name: Install operator-sdk
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -824,7 +824,7 @@
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -874,7 +874,7 @@
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -950,7 +950,7 @@
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -1000,7 +1000,7 @@
 
 - name: Install k9s (Kubernetes TUI)
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
   block:
@@ -1095,7 +1095,7 @@
   register: packages_go_results
   failed_when: false
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux' or ansible_facts['system'] == 'Darwin'
 
 - name: Report failed Go tool installs
@@ -1114,7 +1114,7 @@
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'apt']
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
   block:
     - name: Install yamllint (pipx, version-pinned)
       community.general.pipx:
@@ -1136,7 +1136,7 @@
 
 - name: Install krew
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -1219,7 +1219,7 @@
 
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -1267,7 +1267,7 @@
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
@@ -1314,7 +1314,7 @@
   changed_when: false
   failed_when: false
   when:
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'

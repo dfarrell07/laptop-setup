@@ -20,7 +20,7 @@
   when:
     - claude_version_check.rc != 0
     - claude_install_method == 'native'
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
   block:
     - name: Install Claude Code via native binary
       ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
