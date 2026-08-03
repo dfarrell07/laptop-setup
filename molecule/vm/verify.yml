@@ -14,7 +14,9 @@
         system_coredump_process_size_max: 0  # converge.yml overrides to 0 for hardened CI
         usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
+        system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
         go_tools_installed: false            # converge.yml sets packages_go_install: []; skip golangci-lint verify
+        profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -95,13 +97,13 @@
         path: /etc/yum.repos.d/slack.repo
       register: verify_slack_repo
       become: true
-      when: (repo_slack | default(true)) and ansible_architecture == 'x86_64'
+      when: (repo_slack | default(false)) and ansible_architecture == 'x86_64'
 
     - name: Assert slack repo exists
       ansible.builtin.assert:
         that: verify_slack_repo.stat.exists
         fail_msg: "slack repo not configured"
-      when: (repo_slack | default(true)) and ansible_architecture == 'x86_64'
+      when: (repo_slack | default(false)) and ansible_architecture == 'x86_64'
 
     - name: Verify google-cloud-cli repo configured
       ansible.builtin.stat:
@@ -718,27 +720,32 @@
         name: aide-check.timer
       register: verify_aide_timer
       become: true
+      when: system_aide_enabled | default(false)
 
     - name: Assert AIDE timer is enabled
       ansible.builtin.assert:
         that: verify_aide_timer.status.UnitFileState == 'enabled'
         fail_msg: "AIDE check timer not enabled"
+      when: system_aide_enabled | default(false)
 
     - name: Stat AIDE database
       ansible.builtin.stat:
         path: /var/lib/aide/aide.db.gz
       register: verify_aide_db
       become: true
+      when: system_aide_enabled | default(false)
 
     - name: Assert AIDE database is initialized
       ansible.builtin.assert:
         that: verify_aide_db.stat.exists
         fail_msg: "AIDE database /var/lib/aide/aide.db.gz not initialized"
+      when: system_aide_enabled | default(false)
 
     - name: Check AIDE service RestrictAddressFamilies sandbox setting
       ansible.builtin.command: grep -q 'RestrictAddressFamilies=none' /etc/systemd/system/aide-check.service
       changed_when: false
       become: true
+      when: system_aide_enabled | default(false)
 
     - name: Check AIDE conf includes security-critical paths
       ansible.builtin.command: grep -q '{{ item.path }}' /etc/aide.conf
@@ -1123,6 +1130,7 @@
     - name: Check sos is installed (sosreport diagnostic bundle tool)
       ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
       changed_when: false
+      when: profile | default('work') == 'work'  # sos is in packages_networking_work (work-profile only)
 
     # --- distrobox role ---
     - name: Check for distrobox binary

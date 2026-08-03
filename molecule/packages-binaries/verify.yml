@@ -92,6 +92,18 @@
           - verify_oc.stat.executable
         fail_msg: "/usr/local/bin/oc missing or not executable — work-profile OCP tarball regression"
 
+    - name: Stat /usr/local/bin/kubectl
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: verify_kubectl
+
+    - name: Assert kubectl exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kubectl.stat.exists
+          - verify_kubectl.stat.executable
+        fail_msg: "/usr/local/bin/kubectl missing or not executable — OCP tarball extraction regression"
+
     - name: Stat /usr/local/bin/opm
       ansible.builtin.stat:
         path: /usr/local/bin/opm
@@ -177,6 +189,18 @@
           - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install regression"
+
+    - name: Stat golangci-lint binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/golangci-lint"
+      register: verify_golangci_lint
+
+    - name: Assert golangci-lint exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_golangci_lint.stat.exists
+          - verify_golangci_lint.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/golangci-lint missing — packages_go_install v2 module path regression"
 
     - name: Stat subctl18 binary
       ansible.builtin.stat:
