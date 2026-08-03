@@ -12,6 +12,7 @@
         cmd: git lfs install
       changed_when: false
       failed_when: false
+      when: not notes_repo_stat.stat.exists
 
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists
@@ -129,6 +130,7 @@
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)
       ansible.builtin.debug:
+        verbosity: 1
         msg: >-
           transcrypt is already initialized — if vault_notes_transcrypt_password changed,
           re-provisioning silently skips re-init. To rotate credentials, manually run:

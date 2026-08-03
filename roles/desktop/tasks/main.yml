@@ -263,12 +263,12 @@
     path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
   register: desktop_csb_chrome
   when:
-    - desktop_deploy_chrome_policies | default(false) | bool
+    - desktop_deploy_chrome_policies
     - ansible_facts['system'] == 'Linux'
 
 - name: Chrome and Chromium managed policies
   when:
-    - desktop_deploy_chrome_policies | default(false) | bool
+    - desktop_deploy_chrome_policies
     - ansible_facts['system'] == 'Linux'
     - not (desktop_csb_chrome.stat.exists | default(false))
   block:
@@ -404,6 +404,7 @@
 - name: GNOME hardening dconf settings
   when:
     - ansible_facts['system'] == 'Linux'
+    - desktop_effective == 'gnome'
     - desktop_gnome_check.rc | default(1) == 0
   block:
     - name: Disable notifications on lock screen
