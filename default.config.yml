@@ -120,9 +120,9 @@ install_virtualization: true
 #   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
 #                                        (data lost on reboot); default false — set true only on hardened non-dev hosts where
 #                                        /var/tmp persistence is not needed and dracut kernel updates are not a concern
-#   system_home_nosuid_force: false    (roles/system/defaults) — set true on CSB/hybrid machines where /home is a known local
-#                                        mount to apply nosuid; default false preserves the CSB skip (IT-managed NFS/autofs /home
-#                                        may break with nosuid; use only when /home is btrfs/ext4 under your control)
+#   system_home_nosuid_force: false    (roles/system/defaults) — set true on RHEL CSB machines where /home is a known local
+#                                        mount; nosuid already applies unconditionally on Fedora hybrid (task condition is
+#                                        true regardless of this flag); use only when /home is btrfs/ext4 under your control
 #   system_iommu_passthrough: false    (roles/system/defaults) — set true only for VFIO/libvirt PCI passthrough; enables
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
 #   system_wifi_mac_rand: <unset>      (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
