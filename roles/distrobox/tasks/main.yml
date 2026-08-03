@@ -44,6 +44,7 @@
   register: distrobox_subuid_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: ansible_facts['system'] == 'Linux'
 
 - name: Re-check subgid entry for current user
@@ -52,6 +53,7 @@
   register: distrobox_subgid_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: ansible_facts['system'] == 'Linux'
 
 - name: Warn if rootless podman prerequisites are missing
@@ -71,6 +73,7 @@
   register: distrobox_podman_socket_active
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: distrobox_tool != 'none'
 
 - name: Warn if Podman socket failed

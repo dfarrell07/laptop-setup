@@ -32,6 +32,7 @@
   register: containers_auth_status
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when: ansible_facts['system'] == 'Linux'
 
 - name: Report unauthenticated registries
@@ -52,6 +53,7 @@
     cmd: id -nG
   register: containers_user_groups
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
 
 - name: Warn if user is in Docker group
   ansible.builtin.debug:
