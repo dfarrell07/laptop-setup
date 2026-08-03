@@ -499,12 +499,12 @@
     dest: /etc/systemd/system/var-tmp.mount
     mode: "0644"
   when:
-    - system_var_tmp_noexec | default(true) | bool
+    - system_var_tmp_noexec | default(false) | bool
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
 
 - name: Enable and start var-tmp.mount
   when:
-    - system_var_tmp_noexec | default(true) | bool
+    - system_var_tmp_noexec | default(false) | bool
     - not (csb_detected | default(false) and ansible_facts['distribution'] != 'Fedora')
   block:
     - name: Enable and start var-tmp.mount
@@ -523,7 +523,7 @@
 
 - name: Remove var-tmp.mount when system_var_tmp_noexec disabled
   when:
-    - not (system_var_tmp_noexec | default(true) | bool)
+    - not (system_var_tmp_noexec | default(false) | bool)
   block:
     - name: Stop and disable var-tmp.mount
       ansible.builtin.systemd:

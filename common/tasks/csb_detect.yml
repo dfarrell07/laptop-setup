@@ -54,7 +54,7 @@
 
 - name: Check fapolicyd config for permissive mode
   ansible.builtin.command:
-    cmd: grep -i '^permissive' /etc/fapolicyd/fapolicyd.conf
+    cmd: grep -qiP '^permissive\s*=\s*1' /etc/fapolicyd/fapolicyd.conf
   register: _fapolicyd_permissive_grep
   changed_when: false
   failed_when: false
@@ -74,9 +74,7 @@
       {{
         (is_linux | bool)
         and (_fapolicyd_active.rc | default(1) == 0)
-        and not (
-          (_fapolicyd_permissive_grep.stdout | default('')) is match('(?i)permissive\s*=\s*1')
-        )
+        and (_fapolicyd_permissive_grep.rc | default(1) != 0)
       }}
   become: false
 
@@ -103,7 +101,6 @@
       {{
         (is_linux | bool)
         and (_ca_certs.results | default([])
-             | selectattr('stat.exists', 'defined')
              | selectattr('stat.exists')
              | list | length > 0)
       }}
@@ -133,20 +130,11 @@
 # ---------------------------------------------------------------------------
 # 7. Rootless container readiness (subuid / subgid)
 # ---------------------------------------------------------------------------
-- name: Check subuid entry for current user
+- name: Check subuid/subgid entries for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ real_user_id | default(ansible_facts['user_id']) }}: /etc/subuid"
-  register: _subuid
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  become: false
-  when: is_linux | bool
-
-- name: Check subgid entry for current user
-  ansible.builtin.command:
-    cmd: "grep -q ^{{ real_user_id | default(ansible_facts['user_id']) }}: /etc/subgid"
-  register: _subgid
+    cmd: "grep -q ^{{ real_user_id | default(ansible_facts['user_id']) }}: /etc/{{ item }}"
+  register: _sub_ids
+  loop: [subuid, subgid]
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
@@ -158,8 +146,8 @@
     podman_rootless_ready: >-
       {{
         (is_linux | bool)
-        and (_subuid.rc | default(1) == 0)
-        and (_subgid.rc | default(1) == 0)
+        and (_sub_ids.results[0].rc | default(1) == 0)
+        and (_sub_ids.results[1].rc | default(1) == 0)
       }}
   become: false
 
@@ -180,11 +168,12 @@
       }}
     proxy_url: >-
       {{
-        ansible_facts['env']['https_proxy']
-        | default(ansible_facts['env']['HTTPS_PROXY']
-        | default(ansible_facts['env']['http_proxy']
-        | default(ansible_facts['env']['HTTP_PROXY']
-        | default(''))))
+        [
+          ansible_facts['env']['https_proxy'] | default(''),
+          ansible_facts['env']['HTTPS_PROXY'] | default(''),
+          ansible_facts['env']['http_proxy'] | default(''),
+          ansible_facts['env']['HTTP_PROXY'] | default('')
+        ] | select | first | default('')
       }}
   become: false
 
