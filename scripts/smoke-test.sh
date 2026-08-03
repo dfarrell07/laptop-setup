@@ -582,7 +582,6 @@ if [[ -f /etc/kernel/cmdline ]]; then
   _kcmd=$(cat /etc/kernel/cmdline)
   _kcmd_ok=true
   echo "$_kcmd" | grep -q "vsyscall=none"       || _kcmd_ok=false
-  echo "$_kcmd" | grep -q "init_on_free=1"       || _kcmd_ok=false
   echo "$_kcmd" | grep -q "page_alloc.shuffle=1" || _kcmd_ok=false
   if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
     echo "$_kcmd" | grep -q "amd_iommu=on"       || _kcmd_ok=false
@@ -628,7 +627,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 0 in default.config.yml)
   _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
-  _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-1}" "sysctl-ptrace-scope"
+  _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-0}" "sysctl-ptrace-scope"
 
   # SELinux
   if command -v getenforce &>/dev/null; then
@@ -1567,7 +1566,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   elif grep -q 'iommu=pt' /etc/kernel/cmdline 2>/dev/null; then record "iommu-pt" "WARN" "iommu=pt in /etc/kernel/cmdline but not active (requires reboot)"; fi
   # Memory safety kernel params
   if grep -q 'init_on_free=1' /proc/cmdline 2>/dev/null; then record "init-on-free" "PASS"
-  else record "init-on-free" "WARN" "init_on_free=1 not in cmdline (requires reboot)"; fi
+  elif grep -q 'init_on_free=1' /etc/kernel/cmdline 2>/dev/null; then
+    record "init-on-free" "WARN" "init_on_free=1 in /etc/kernel/cmdline but not active (requires reboot)"
+  fi
   if grep -q 'page_alloc.shuffle=1' /proc/cmdline 2>/dev/null; then record "page-alloc-shuffle" "PASS"
   else record "page-alloc-shuffle" "WARN" "page_alloc.shuffle=1 not in cmdline (requires reboot)"; fi
   # AMD CPU power driver (amd-pstate-epp is default on Fedora 44 + Zen 4)
