@@ -815,6 +815,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
+       grep -qP '^ClientAliveInterval [1-9][0-9]*$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^TCPKeepAlive no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^LogLevel VERBOSE$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
