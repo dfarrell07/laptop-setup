@@ -722,7 +722,7 @@
 - name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
-    zone: redhat
+    zone: "{{ system_firewall_csb_zone }}"
     permanent: true
     immediate: true
     state: enabled
@@ -735,7 +735,7 @@
 
 - name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
   ansible.posix.firewalld:
-    zone: redhat
+    zone: "{{ system_firewall_csb_zone }}"
     service: ssh
     permanent: true
     immediate: true
@@ -1108,17 +1108,15 @@
     - system_authselect_select_result is defined
     - system_authselect_select_result.rc | default(0) != 0
 
-# --- Disable fingerprint auth (bypasses pam_faillock; no enrolled prints expected) ---
-- name: Check if authselect with-fingerprint feature is enabled
+# --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
+- name: Probe authselect with-fingerprint feature state
   ansible.builtin.command:
     cmd: authselect is-feature-enabled with-fingerprint
   register: system_authselect_fingerprint_check
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when:
-    - system_authselect_bin.stat.exists
-    - system_disable_fingerprint | bool
+  when: system_authselect_bin.stat.exists
 
 - name: Disable authselect with-fingerprint feature
   ansible.builtin.command:
@@ -1145,24 +1143,13 @@
   when: not (system_disable_fingerprint | bool)
   failed_when: false
 
-- name: Check if authselect with-fingerprint feature is already enabled
-  ansible.builtin.command:
-    cmd: authselect is-feature-enabled with-fingerprint
-  register: system_authselect_fingerprint_enable_check
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when:
-    - not (system_disable_fingerprint | bool)
-    - system_authselect_bin.stat.exists
-
 - name: Enable authselect with-fingerprint feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-fingerprint
   when:
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
-    - system_authselect_fingerprint_enable_check.rc | default(1) != 0
+    - system_authselect_fingerprint_check.rc | default(1) != 0
   changed_when: true
   failed_when: false
 

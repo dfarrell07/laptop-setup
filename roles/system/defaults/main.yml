@@ -66,6 +66,7 @@ system_sysctl_hardening:
 # False on RHEL CSB (csb_detected=true AND ansible_facts['distribution']='Fedora' is false) where IT
 # manages zone policy. Override in config.yml to force-enable or force-disable zone management.
 system_firewall_manage_zone: "{{ not (csb_detected and ansible_facts['distribution'] != 'Fedora') }}"
+system_firewall_csb_zone: "redhat"  # CSB-provisioned firewalld zone for hybrid Fedora CSB; VPN tun0 uses this zone
 
 system_firewall_icmp_types:
   - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed

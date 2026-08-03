@@ -142,6 +142,13 @@ install_virtualization: true
 #   system_pwquality_lcredit: -1          (roles/system/defaults) — lowercase requirement (-1=require 1, 0=none)
 #   system_pwquality_ocredit: -1          (roles/system/defaults) — special-char requirement (-1=require 1, 0=none)
 #                                           set all four to 0 to disable composition requirements while preserving minlen=14
+#   system_pass_max_days: 365             (roles/system/defaults) — login.defs PASS_MAX_DAYS; max password age in days
+#   system_pass_min_days: 1               (roles/system/defaults) — login.defs PASS_MIN_DAYS; minimum days between changes
+#   system_pass_warn_age: 7               (roles/system/defaults) — login.defs PASS_WARN_AGE; days warning before expiry
+#   system_umask: "027"                   (roles/system/defaults) — login.defs UMASK; set 022 to allow group reads
+#   system_inactive_days: 30              (roles/system/defaults) — days inactive before account lock (login.defs INACTIVE,
+#                                           useradd -D -f, chage -I); CIS 5.5.1.5
+#   system_logind_idle_sec: 300           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
