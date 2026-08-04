@@ -1137,6 +1137,7 @@
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc == 0
+    - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
   changed_when: true
   failed_when: false
 
