@@ -1195,7 +1195,7 @@ EOF
 
   # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)
   # CSB RHEL: IPA/SSSD owns PAM policy; faillock.conf not written by Ansible — WARN not FAIL
-  if grep -q '^deny = 5' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
+  if grep -qE '^deny = 5$' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
   elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
     record "faillock-deny" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
@@ -1203,7 +1203,7 @@ EOF
   elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
     record "faillock-local-only" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
-  if grep -q '^unlock_time = 900' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
+  if grep -qE '^unlock_time = 900$' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
   elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
     record "faillock-unlock-time" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
   else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
@@ -1291,6 +1291,10 @@ EOF
     record "resolv-stub" "PASS"
   elif $CSB_HOST; then record "resolv-stub" "WARN" "skipped on CSB — NM/VPN manages resolv.conf on corporate networks"
   else record "resolv-stub" "FAIL" "resolv.conf not symlinked to stub-resolv.conf — Tailscale MagicDNS broken; fix: sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"; fi
+
+  # systemd-resolved service must be active for stub socket at 127.0.0.53 to work
+  if systemctl is-active systemd-resolved &>/dev/null; then record "systemd-resolved-active" "PASS"
+  else record "systemd-resolved-active" "FAIL" "systemd-resolved.service not active — stub socket 127.0.0.53 down; fix: sudo systemctl enable --now systemd-resolved"; fi
 
   # Basic DNS resolution (confirms DNS works regardless of DoT/DHCP source — critical on CSB)
   if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"

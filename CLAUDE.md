@@ -35,6 +35,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
+   - `podman login registry.redhat.io` — work profile only, if `oc` is installed; required for RH subctl `oc image extract`; skip if vault `registry_tokens` provides automated auth (clears `registry-redhat-auth` WARN in smoke-test)
    - Log out and back in for group membership changes (libvirt, kvm groups)
    - For CSB/hybrid machines: `make container` to provision dev container
    - Re-run `make smoke-test` — confirms Tailscale WARN clears and no new failures
