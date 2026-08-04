@@ -48,6 +48,7 @@
     - name: Wait for DNS resolution after NetworkManager and systemd-resolved restart
       ansible.builtin.command:
         cmd: getent hosts github.com
+      become: false
       changed_when: false
       failed_when: false
       retries: 6
@@ -65,6 +66,7 @@
           WARNING: DNS resolution for github.com failed after NetworkManager/systemd-resolved
           restart. Play 2 (git clones, binary downloads) may fail. Check NM and resolved status:
           systemctl status NetworkManager systemd-resolved; resolvectl status
+      become: false
       when:
         - ansible_facts['system'] | default('Linux') == 'Linux'
         - system_dns_liveness is defined

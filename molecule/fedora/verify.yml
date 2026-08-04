@@ -174,9 +174,14 @@
         cmd: grep -q 'exec swayidle' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
-    - name: Verify swaylock invocation in swayidle includes color flag (template rendered non-empty)
+    - name: Verify swaylock invocation in sway config (color set in swaylock config, not CLI)
       ansible.builtin.command:
-        cmd: grep -q 'swaylock -f -c [0-9a-fA-F]' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'swaylock -f' "{{ ansible_user_dir }}/.config/sway/config"
+      changed_when: false
+
+    - name: Verify swaylock config file sets lock color
+      ansible.builtin.command:
+        cmd: grep -q 'color=[0-9a-fA-F]' "{{ ansible_user_dir }}/.config/swaylock/config"
       changed_when: false
 
     - name: Verify swayidle before-sleep wires swaylock (lock on suspend)
