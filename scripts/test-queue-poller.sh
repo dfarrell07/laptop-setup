@@ -86,7 +86,7 @@ printf 'REPO_PATH[test]="/tmp/stub"\nREPO_REMOTE[test]="a/b"\n' \
   > "$_TMPHOME/.config/claude/queue-repos.conf"
 
 _PATCHED=$(mktemp)
-sed "s|LOCKFILE=\"/run/user.*|LOCKFILE=\"$_TMPLOCKDIR/test.lock\"|" \
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_TMPLOCKDIR/test.lock"'"|' \
   "$POLLER" > "$_PATCHED"
 
 set +e
@@ -107,7 +107,7 @@ printf '#!/bin/bash\nexit 1\n' > "$_ERRBIN/gh"
 chmod +x "$_ERRBIN/gh"
 
 _ERR_PATCHED=$(mktemp)
-sed "s|LOCKFILE=\"/run/user.*|LOCKFILE=\"$_TMPLOCKDIR/err.lock\"|" \
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_TMPLOCKDIR/err.lock"'"|' \
   "$POLLER" > "$_ERR_PATCHED"
 
 set +e
@@ -201,7 +201,7 @@ printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_INT_TMPREPO" > "$_INT_TMPHOME/.config/claude/queue-repos.conf"
 
 _INT_PATCHED=$(mktemp)
-sed "s|LOCKFILE=\"/run/user.*|LOCKFILE=\"$_INT_TMPLOCKDIR/test.lock\"|" \
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_INT_TMPLOCKDIR/test.lock"'"|' \
   "$POLLER" > "$_INT_PATCHED"
 
 set +e
@@ -244,7 +244,7 @@ printf 'REPO_PATH[test]="/tmp/stub"\nREPO_REMOTE[test]="a/b"\n' \
 
 _FLOCK_LOCK="$_FLOCK_TMPLOCKDIR/flock-test.lock"
 _FLOCK_PATCHED=$(mktemp)
-sed "s|LOCKFILE=\"/run/user.*|LOCKFILE=\"$_FLOCK_LOCK\"|" \
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_FLOCK_LOCK"'"|' \
   "$POLLER" > "$_FLOCK_PATCHED"
 
 # Hold the lock in the background before running the script

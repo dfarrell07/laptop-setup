@@ -796,6 +796,17 @@
 - name: Kernel cmdline hardening block (skipped on RHEL CSB)
   when: not csb_rhel
   block:
+    - name: Remove stale kernel lockdown parameter before mode change
+      ansible.builtin.command:
+        cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grubby_info.rc == 0
+        - "'lockdown=' in (system_grubby_info.stdout)"
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
+      changed_when: true
+      failed_when: false
+
     - name: Enable kernel lockdown (integrity mode)
       ansible.builtin.command:
         cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
@@ -959,6 +970,9 @@
           {% endif %}
           {% if not (system_iommu_passthrough | bool) %}
           current=$(echo "$current" | sed 's| *iommu=pt||g')
+          {% endif %}
+          {% if system_kernel_lockdown | length > 0 %}
+          current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
           {% endif %}
           new="$current"
           # Append each missing hardening param (check by key prefix only)
@@ -2639,6 +2653,7 @@
     - name: Ensure subuid entry exists for user
       ansible.builtin.lineinfile:
         path: /etc/subuid
+        regexp: "^{{ real_user_id }}:"
         line: "{{ real_user_id }}:100000:65536"
         create: true
         mode: "0644"
@@ -2646,6 +2661,7 @@
     - name: Ensure subgid entry exists for user
       ansible.builtin.lineinfile:
         path: /etc/subgid
+        regexp: "^{{ real_user_id }}:"
         line: "{{ real_user_id }}:100000:65536"
         create: true
         mode: "0644"

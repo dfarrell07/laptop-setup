@@ -174,6 +174,7 @@ pip-lock: .venv
 
 # Create .venv from the exact lockfile for reproducible CI builds
 pip-sync: .venv
+	.venv/bin/pip-sync requirements-test.lock
 
 syntax-check:
 	ansible-playbook site.yml --syntax-check

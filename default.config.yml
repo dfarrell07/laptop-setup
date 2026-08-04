@@ -60,6 +60,8 @@ install_virtualization: true
 #                                        on machines with a fingerprint reader if fingerprint auth is desired
 #   system_disable_avahi: true         (roles/system/defaults) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
 #                                        resolution or DNS-SD lab tooling
+#   system_mask_nfs_server: true     (roles/system/defaults) — masks nfs-server and rpcbind (CIS 2.2.7);
+#                                        set false if Vagrant NFS synced folders, NFS exports, or rpcbind are needed
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
@@ -83,18 +85,18 @@ install_virtualization: true
 #   system_sysctl_extra: {}            (roles/system/defaults) — additional sysctl key=value pairs merged into the hardening dict;
 #                                        use in config.yml to add machine-specific sysctls without replacing the entire dict.
 #                                        Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
-#   system_kernel_panic: 10            (roles/system/defaults) — seconds before auto-reboot after panic;
-#                                        set 0 to disable auto-reboot (preserves crash state for kdump/OVN-K/bpfman debugging)
-#   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; set 0 to allow system to continue after non-fatal oops
-#   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime (preserves Secure Boot chain of
-#                                        trust). Set 0 in config.yml if kdump is required — kexec_load_disabled=1 makes kdump
-#                                        impossible even when Secure Boot is disabled (kdump uses kexec internally).
+#   system_kernel_panic: 10            (roles/system/defaults) — auto-reboot after panic (CIS: 10 s);
+#                                        default.config.yml overrides to 0 for kdump/dev use; set 10 in config.yml to restore CIS compliance
+#   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; default.config.yml overrides to 0 for dev use;
+#                                        set 1 in config.yml to restore CIS compliance
+#   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime;
+#                                        default.config.yml overrides to 0 for kdump/dev use; set 1 in config.yml to restore
+#                                        strict CIS compliance
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
-#   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=unrestricted within
-#                                        user ns, Fedora workstation default — set 0 in config.yml for gdb -p / strace -p
-#                                        on own running processes without sudo, needed for OVN-K/bpfman kernel debugging)
-#                                        (useful for OVN-K/bpfman development with KASAN/UBSAN)
+#   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=Fedora workstation default);
+#                                        default.config.yml overrides to 0 for gdb -p / strace -p; set 1 in config.yml
+#                                        to restore CIS compliance
 #   system_init_on_free: true          (roles/system/defaults) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
 #   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
