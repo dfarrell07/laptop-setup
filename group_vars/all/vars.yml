@@ -59,25 +59,7 @@ repo_tailscale: true
 install_docker: false
 install_vpn: true
 install_virtualization: true
-system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
-system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS
-system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)
-system_faillock_even_deny_root: false  # lock root on failed auth; set false on single-user workstations
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
-system_tmout: 600                  # session inactivity timeout in seconds (CIS 5.5.5; must be <= 900)
-system_faillock_deny: 5            # PAM lockout: failed attempts before account lock
-system_faillock_unlock_time: 900   # seconds before auto-unlock after failed attempts
-system_pwquality_minlen: 14        # minimum password length (CIS 5.3.2)
-system_pwquality_difok: 4          # characters that must differ from previous password
-system_pwquality_ucredit: -1       # require at least 1 uppercase character (CIS 5.3.3)
-system_pwquality_lcredit: -1       # require at least 1 lowercase character (CIS 5.3.3)
-system_pwquality_ocredit: -1       # require at least 1 special character (CIS 5.3.3)
-system_pwquality_dcredit: -1       # require at least 1 digit (CIS 5.3.3)
-system_pwquality_maxrepeat: 3      # maximum consecutive repeated characters
-system_pwhistory_remember: 24      # number of previous passwords to remember (CIS 5.3.5)
-system_inactive_days: 30           # days inactive before account lock (CIS 5.5.1.5)
-system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
-system_umask: "027"                # default umask for login shells (login.defs UMASK)
 # Computed boolean: true on RHEL CSB where IT manages security baselines;
 # false on hybrid Fedora CSB where the user manages their own system.
 # Used in rescue blocks to route IT ticket vs. generic warning.

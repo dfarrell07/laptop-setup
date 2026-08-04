@@ -1760,7 +1760,7 @@
   ansible.builtin.command:
     cmd: update-crypto-policies --set DEFAULT:NO-SHA1
   when:
-    - system_crypto_policy.rc == 0
+    - system_crypto_policy.rc | default(-1) == 0
     - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
     - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
@@ -2189,8 +2189,8 @@
   register: system_authselect_faillock_enable
   when:
     - system_authselect_bin.stat.exists
-    - system_authselect_faillock_check.rc != 0
     - not csb_rhel
+    - system_authselect_faillock_check.rc | default(0) != 0
   changed_when: true
   failed_when: false
 
@@ -2266,8 +2266,8 @@
   register: system_authselect_pwhistory_enable
   when:
     - system_authselect_bin.stat.exists
-    - system_authselect_pwhistory_check.rc != 0
     - not csb_rhel
+    - system_authselect_pwhistory_check.rc | default(0) != 0
   changed_when: true
   failed_when: false
 
@@ -2468,6 +2468,7 @@
       mode: "0700"
     - path: /etc/cron.d
       mode: "0700"
+  when: not csb_rhel
   failed_when: false
 
 # --- Login banner ---
