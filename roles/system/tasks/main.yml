@@ -26,7 +26,7 @@
       (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
       Fix: sudo setenforce 1 && sudo sed -i
       's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-  when: ansible_facts['selinux'] is defined and ansible_facts['selinux'] is mapping
+  when: ansible_facts['selinux'] is defined and ansible_facts['selinux'] is mapping and ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
 # --- Harden /tmp mount options (CIS 1.1.2.x) ---
 - name: Ensure tmp.mount drop-in directory exists
@@ -656,16 +656,16 @@
   notify:
     - Apply firewall rules
 
-- name: Move primary network interface to drop zone
+- name: Move all physical network interfaces to drop zone
   ansible.posix.firewalld:
     zone: drop
-    interface: "{{ ansible_facts['default_ipv4'].interface | default(ansible_facts['default_ipv6'].interface) }}"
+    interface: "{{ item }}"
     permanent: true
     immediate: true
     state: enabled
+  loop: "{{ ansible_facts['interfaces'] | reject('match', '^(lo|tailscale\\d*|virbr.*|podman.*|br-.*|veth.*|docker.*)$') | list }}"
   when:
     - system_firewalld_running | bool
-    - ansible_facts['default_ipv4'].interface is defined or ansible_facts['default_ipv6'].interface is defined
     - system_firewall_manage_zone | bool  # paired with zone guard above
   failed_when: false
 
@@ -681,6 +681,23 @@
     - dhcpv6-client
     - mdns
     - cockpit
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  failed_when: false
+
+- name: Remove default services from FedoraWorkstation zone
+  ansible.posix.firewalld:
+    zone: FedoraWorkstation
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - ssh
+    - dhcpv6-client
+    - mdns
+    - samba-client
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
@@ -725,8 +742,8 @@
 
 # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
 # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
-# Fedora hybrid case (csb_detected + Fedora) opens port 722 in the FedoraWorkstation
-# zone via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
+# Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
+# via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
 - name: Open SSH port in firewall
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
@@ -2666,6 +2683,72 @@
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
     - system_chage_status.stdout | default('') | trim != system_inactive_days | string
+  changed_when: true
+  failed_when: false
+
+- name: Check current minimum password age for existing user account
+  ansible.builtin.command:
+    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $4}' /etc/shadow"
+  register: system_chage_min_days
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+
+- name: Set minimum password age for existing user account (CIS 5.5.1.2)
+  ansible.builtin.command:
+    cmd: chage -m {{ system_pass_min_days }} {{ real_user_id }}
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+    - system_chage_min_days.stdout | default('') | trim != system_pass_min_days | string
+  changed_when: true
+  failed_when: false
+
+- name: Check current maximum password age for existing user account
+  ansible.builtin.command:
+    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $5}' /etc/shadow"
+  register: system_chage_max_days
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+
+- name: Set maximum password age for existing user account (CIS 5.5.1.1)
+  ansible.builtin.command:
+    cmd: chage -M {{ system_pass_max_days }} {{ real_user_id }}
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+    - system_chage_max_days.stdout | default('') | trim != system_pass_max_days | string
+  changed_when: true
+  failed_when: false
+
+- name: Check current password warning age for existing user account
+  ansible.builtin.command:
+    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $6}' /etc/shadow"
+  register: system_chage_warn_age
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+
+- name: Set password warning age for existing user account (CIS 5.5.1.3)
+  ansible.builtin.command:
+    cmd: chage -W {{ system_pass_warn_age }} {{ real_user_id }}
+  when:
+    - not csb_rhel
+    - real_user_id | length > 0
+    - system_chage_warn_age.stdout | default('') | trim != system_pass_warn_age | string
   changed_when: true
   failed_when: false
 

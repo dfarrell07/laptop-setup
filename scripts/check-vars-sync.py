@@ -61,13 +61,14 @@ def main():
             )
 
     if drift:
-        print("ERROR: vars.yml / roles/system/defaults/main.yml drift detected:")
+        print("ERROR: vars.yml / roles/system/defaults/main.yml drift detected:", file=sys.stderr)
         for line in drift:
-            print(line)
+            print(line, file=sys.stderr)
         print(
             "Update BOTH files to the same value. "
             "group_vars (precedence 5) is authoritative; role defaults (precedence 2) "
-            "exist for standalone molecule verify plays."
+            "exist for standalone molecule verify plays.",
+            file=sys.stderr,
         )
         sys.exit(1)
 

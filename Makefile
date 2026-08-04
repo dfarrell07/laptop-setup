@@ -56,6 +56,7 @@ backup-dry-run:
 	bash scripts/backup.sh --dry-run
 
 # --- Bootstrap ---
+# Fedora/RHEL: if make is not yet installed: sudo dnf install -y make
 
 bootstrap:
 	@if [ "$$(uname -s)" = "Darwin" ]; then \

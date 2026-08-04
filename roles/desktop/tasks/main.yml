@@ -156,6 +156,13 @@
     mode: "0755"
   when: desktop_effective in ['sway', 'i3']
 
+- name: Override polkit agent path on Debian (lxqt-policykit installs to /usr/bin, not /usr/libexec)
+  ansible.builtin.set_fact:
+    desktop_sway_polkit_agent: /usr/bin/lxqt-policykit-agent
+  when:
+    - ansible_facts['pkg_mgr'] == 'apt'
+    - desktop_effective == 'sway'
+
 - name: Deploy Sway configuration and GTK settings
   when: desktop_effective == 'sway'
   block:

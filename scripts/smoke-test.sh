@@ -672,7 +672,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # Kernel lockdown (system_kernel_lockdown: '' in config.yml removes the param — silent skip then)
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(cat /sys/kernel/security/lockdown)
-    if echo "$ld" | grep -q '\[integrity\]'; then record "kernel-lockdown" "PASS"
+    if echo "$ld" | grep -qE '\[integrity\]|\[confidentiality\]'; then record "kernel-lockdown" "PASS"
     elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
       record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
     fi
