@@ -2398,6 +2398,7 @@
       }
     dest: /etc/logrotate.d/sudo
     mode: "0644"
+  when: not csb_rhel  # only meaningful when sudoers hardening task below creates /var/log/sudo.log
 
 # --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
 # RHEL CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
@@ -2501,6 +2502,7 @@
     dest: /etc/sudoers.d/99-hardening
     mode: "0440"
     validate: visudo -cf %s
+  when: not csb_rhel  # CSB: IT manages sudoers via Satellite/SCAP; log_input/log_output conflict with IT monitoring
 
 - name: Propagate GOTMPDIR through sudo (go test under sudo)
   ansible.builtin.copy:
