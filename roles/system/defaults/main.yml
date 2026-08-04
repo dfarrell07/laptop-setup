@@ -3,7 +3,7 @@
 system_sysctl_hardening:
   # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
   kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
-  kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
+  # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   kernel.perf_event_paranoid: 1    # developer tradeoff: deliberately relaxes Fedora 44 compiled-in default (2)
@@ -62,6 +62,8 @@ system_sysctl_hardening:
   # minimum and large JVM/AI-ML pods in kind clusters. The 90- filename prefix ensures this
   # file is processed after /usr/lib/sysctl.d/10-map-count.conf (sysctl.d: lexicographic order,
   # last writer wins), so our value of 1048576 takes precedence over the distribution default.
+  # Last direct entry in system_sysctl_hardening (kernel.unprivileged_bpf_disabled merged via
+  # system_unprivileged_bpf_disabled combine() in tasks.yml — see top of block).
   vm.max_map_count: 1048576
 
 # Firewall
@@ -232,6 +234,7 @@ system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d
 # makes kdump impossible (kdump uses kexec to jump into the crash kernel). Set 0 in config.yml
 # if kdump is required on this machine (e.g. kernel debug or production crash capture).
 system_kexec_load_disabled: 1  # CIS default; default.config.yml overrides to 0 (standalone invocation only)
+system_io_uring_disabled: 1  # value=1 restricts to CAP_SYS_ADMIN; set 2 in config.yml to fully disable for all users
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires

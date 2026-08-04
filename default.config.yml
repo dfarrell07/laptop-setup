@@ -93,6 +93,8 @@ install_virtualization: true
 #   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime;
 #                                        default.config.yml overrides to 0 for kdump/dev use; set 1 in config.yml to restore
 #                                        strict CIS compliance
+#   system_io_uring_disabled: 1        (roles/system/defaults) — value=1 restricts to CAP_SYS_ADMIN;
+#                                        set 2 in config.yml to fully disable for all users
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
 #   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=Fedora workstation default);

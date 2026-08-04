@@ -81,13 +81,15 @@ fi
 record "profile" "pass" "$PROFILE"
 
 # --- Required tools ---
-for tool in ansible-playbook ansible-vault git python3 curl make ssh; do
+for tool in ansible-playbook ansible-vault git python3 curl make ssh shellcheck; do
   if command -v "$tool" &>/dev/null; then
     ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     record "required_${tool}" "pass" "$ver"
   else
     if [[ "$tool" == "make" ]]; then
       record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
+    elif [[ "$tool" == "shellcheck" ]]; then
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install ShellCheck (Fedora/RHEL) | brew install shellcheck (macOS), or: make bootstrap"
     elif command -v make &>/dev/null; then
       record "required_${tool}" "fail" "not installed — run: make bootstrap"
     else

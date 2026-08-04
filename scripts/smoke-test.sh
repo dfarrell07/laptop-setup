@@ -1646,7 +1646,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
   _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-1}" "sysctl-kexec-disabled"
-  _sysctl_check "kernel.io_uring_disabled"           "1" "sysctl-io-uring-disabled"
+  _io_uring_expected=$(awk -F' *= *' '/^kernel\.io_uring_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
   # Integrity lockdown mode locks the value to 2 and makes it read-only (permission denied).

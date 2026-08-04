@@ -657,7 +657,8 @@
         'kernel.panic_on_oops': system_kernel_panic_on_oops | int,
         'kernel.core_pattern': system_core_pattern,
         'kernel.yama.ptrace_scope': system_ptrace_scope | int,
-        'kernel.kexec_load_disabled': system_kexec_load_disabled | int
+        'kernel.kexec_load_disabled': system_kexec_load_disabled | int,
+        'kernel.io_uring_disabled': system_io_uring_disabled | int
       }) | combine(system_sysctl_extra) }}" # noqa: jinja[spacing]
 
 # CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
