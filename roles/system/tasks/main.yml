@@ -1629,7 +1629,9 @@
     - ansible_facts.services['sshd.service'] is defined
 
 - name: SSHD pre-deployment checks
-  when: ansible_facts.services['sshd.service'] is defined
+  when:
+    - ansible_facts.services['sshd.service'] is defined
+    - not csb_rhel  # CSB: IT manages sshd; non-FIPS algorithms in 00-hardening.conf rejected in FIPS mode
   block:
     - name: Assert real_user_id is non-empty and not root before deploying AllowUsers
       ansible.builtin.assert:
@@ -1682,7 +1684,9 @@
       when: system_sshd_rpmnew.stat.exists | default(false)
 
 - name: Deploy and validate sshd hardening config
-  when: ansible_facts.services['sshd.service'] is defined
+  when:
+    - ansible_facts.services['sshd.service'] is defined
+    - not csb_rhel  # CSB: IT manages sshd via Satellite/SCAP; AllowUsers + non-FIPS algorithms conflict
   block:
     - name: Deploy sshd hardening config
       ansible.builtin.template:
@@ -1789,6 +1793,8 @@
     - br_netfilter
     - nf_conntrack  # explicit load so nf_conntrack_max sysctl applies even if firewalld fails to start
     - overlay
+  when:
+    - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
   failed_when: false
 
 - name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
