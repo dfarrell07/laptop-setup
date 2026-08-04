@@ -743,6 +743,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if [[ "$EUID" -ne 0 ]]; then
       record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
     else
+      # Verify sshd_config loads the drop-in directory (absent Include = drop-in deployed but never read)
+      if grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config 2>/dev/null; then record "sshd-include" "PASS"
+      elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
+      else record "sshd-include" "FAIL" "/etc/ssh/sshd_config missing Include /etc/ssh/sshd_config.d/*.conf — 00-hardening.conf not loaded; run: make system"; fi
       _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null)
       if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
       elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
@@ -1798,6 +1802,8 @@ if [[ -f /etc/modprobe.d/hardening.conf ]]; then
      grep -q '^install tipc /bin/false' /etc/modprobe.d/hardening.conf; then
     record "modprobe-hardening" "PASS"
   else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
+elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
+  record "modprobe-hardening" "FAIL" "/etc/modprobe.d/hardening.conf missing — run: make system"
 fi
 
 # NM conf.d content checks — file-gated; silently skip on macOS or where system role was not run
