@@ -15,7 +15,7 @@
 - name: Warn if oh-my-zsh clone failed
   ansible.builtin.debug:
     msg: "WARNING: oh-my-zsh clone failed (network issue?). Zsh config will deploy but OMZ features won't work until cloned."
-  when: dotfiles_ohmyzsh_result.failed | default(false)
+  when: dotfiles_ohmyzsh_result.failed
 
 - name: Install forgit oh-my-zsh plugin (not bundled — requires separate clone)
   ansible.builtin.git:
@@ -30,13 +30,13 @@
 - name: Warn if forgit clone failed
   ansible.builtin.debug:
     msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
-  when: dotfiles_forgit_result.failed | default(false)
+  when: dotfiles_forgit_result.failed
 
 - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh"
     state: absent
-  when: not (dotfiles_ohmyzsh_result.failed | default(false))
+  when: not (dotfiles_ohmyzsh_result.failed)
 
 - name: Ensure macOS SSH sockets directory exists
   ansible.builtin.file:

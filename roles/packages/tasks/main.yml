@@ -122,7 +122,7 @@
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['system'] == 'Linux'
     - install_virtualization | bool
-    - "'libvirt' in (packages_virtualization | default([]))"
+    - "'libvirt' in packages_virtualization"
   failed_when: false
 
 - name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
@@ -136,7 +136,6 @@
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['system'] == 'Linux'
     - install_virtualization | bool
-    - real_user_id is defined
     - real_user_id | length > 0
   failed_when: false
   # System role (Play 1) and this task both use failed_when:false because libvirt/kvm groups
@@ -474,7 +473,7 @@
       failed_when: false
 
     - name: Download kind binary
-      when: "packages_kind_version not in (packages_kind_check.stdout | default(''))"
+      when: "packages_kind_version not in (packages_kind_check.stdout)"
       ansible.builtin.get_url:
         url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-amd64"
         dest: /usr/local/bin/kind
@@ -525,7 +524,7 @@
       failed_when: false
 
     - name: Download and extract helm
-      when: "packages_helm_version not in (packages_helm_check.stdout | default(''))"
+      when: "packages_helm_version not in (packages_helm_check.stdout)"
       block:
         - name: Download helm tarball
           ansible.builtin.get_url:
@@ -601,7 +600,7 @@
       failed_when: false
 
     - name: Download and extract kustomize
-      when: "packages_kustomize_version not in (packages_kustomize_check.stdout | default(''))"
+      when: "packages_kustomize_version not in (packages_kustomize_check.stdout)"
       block:
         - name: Download kustomize tarball
           vars:
@@ -676,7 +675,7 @@
       failed_when: false
 
     - name: Download transcrypt script
-      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout | default(''))
+      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout)
       ansible.builtin.get_url:
         url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
         dest: /usr/local/bin/transcrypt
@@ -723,7 +722,7 @@
       failed_when: false
 
     - name: Download SOPS binary
-      when: packages_sops_version not in (packages_sops_check.stdout | default(''))
+      when: packages_sops_version not in (packages_sops_check.stdout)
       ansible.builtin.get_url:
         url: "https://github.com/getsops/sops/releases/download/v{{ packages_sops_version }}/sops-v{{ packages_sops_version }}.linux.amd64"
         dest: /usr/local/bin/sops
@@ -771,7 +770,7 @@
       failed_when: false
 
     - name: Download and install gitleaks
-      when: packages_gitleaks_version not in (packages_gitleaks_check.stdout | default(''))
+      when: packages_gitleaks_version not in (packages_gitleaks_check.stdout)
       block:
         - name: Download gitleaks tarball
           ansible.builtin.get_url:
