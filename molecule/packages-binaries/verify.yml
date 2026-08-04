@@ -3,6 +3,11 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Load packages role defaults for version pin assertions
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/packages/defaults/main.yml"
+
   tasks:
     # --- /usr/local/bin binaries ---
 
@@ -273,3 +278,83 @@
           - verify_subctl.stat.exists
           - verify_subctl.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/subctl missing — packages_go_install plain-subctl regression"
+
+    # --- Version-pin assertions: each binary must report the pinned version ---
+
+    - name: Check kind version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kind version
+      register: verify_kind_ver
+      changed_when: false
+
+    - name: Assert kind version matches packages_kind_version
+      ansible.builtin.assert:
+        that: packages_kind_version in verify_kind_ver.stdout
+        fail_msg: "kind version mismatch — expected {{ packages_kind_version }}, got: {{ verify_kind_ver.stdout }}"
+
+    - name: Check helm version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/helm version --short
+      register: verify_helm_ver
+      changed_when: false
+
+    - name: Assert helm version matches packages_helm_version
+      ansible.builtin.assert:
+        that: packages_helm_version in verify_helm_ver.stdout
+        fail_msg: "helm version mismatch — expected {{ packages_helm_version }}, got: {{ verify_helm_ver.stdout }}"
+
+    - name: Check kustomize version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kustomize version
+      register: verify_kustomize_ver
+      changed_when: false
+
+    - name: Assert kustomize version matches packages_kustomize_version
+      ansible.builtin.assert:
+        that: packages_kustomize_version in verify_kustomize_ver.stdout
+        fail_msg: "kustomize version mismatch — expected {{ packages_kustomize_version }}, got: {{ verify_kustomize_ver.stdout }}"
+
+    - name: Check k9s version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k9s version --short
+      register: verify_k9s_ver
+      changed_when: false
+
+    - name: Assert k9s version matches packages_k9s_version
+      ansible.builtin.assert:
+        that: packages_k9s_version in verify_k9s_ver.stdout
+        fail_msg: "k9s version mismatch — expected {{ packages_k9s_version }}, got: {{ verify_k9s_ver.stdout }}"
+
+    - name: Check sops version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/sops --version
+      register: verify_sops_ver
+      changed_when: false
+      failed_when: false
+
+    - name: Assert sops version matches packages_sops_version
+      ansible.builtin.assert:
+        that: packages_sops_version in (verify_sops_ver.stdout + verify_sops_ver.stderr)
+        fail_msg: "sops version mismatch — expected {{ packages_sops_version }}"
+
+    - name: Check cosign version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/cosign version
+      register: verify_cosign_ver
+      changed_when: false
+
+    - name: Assert cosign version matches packages_cosign_version
+      ansible.builtin.assert:
+        that: packages_cosign_version in verify_cosign_ver.stdout
+        fail_msg: "cosign version mismatch — expected {{ packages_cosign_version }}, got: {{ verify_cosign_ver.stdout }}"
+
+    - name: Check gitleaks version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/gitleaks version
+      register: verify_gitleaks_ver
+      changed_when: false
+
+    - name: Assert gitleaks version matches packages_gitleaks_version
+      ansible.builtin.assert:
+        that: packages_gitleaks_version in verify_gitleaks_ver.stdout
+        fail_msg: "gitleaks version mismatch — expected {{ packages_gitleaks_version }}, got: {{ verify_gitleaks_ver.stdout }}"
