@@ -6,8 +6,10 @@ system_sysctl_hardening:
   kernel.io_uring_disabled: 1      # CIS — disable io_uring for unprivileged users (high CVE surface area)
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
-  kernel.perf_event_paranoid: 1    # value 1 = require CAP_PERFMON for kernel profiling
-  # (value 2 restricts unprivileged users from all perf events; root/CAP_PERFMON retain full access)
+  kernel.perf_event_paranoid: 1    # developer tradeoff: deliberately relaxes Fedora 44 compiled-in default (2)
+  # value 1 = kernel profiling requires CAP_PERFMON; user-space perf works without it (needed for host-side profiling)
+  # value 2 = all perf_event_open requires CAP_PERFMON (Fedora 44 default; more restrictive)
+  # value 3 = requires CAP_SYS_ADMIN (strictest). Set 2 or 3 in config.yml for stricter compliance.
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0

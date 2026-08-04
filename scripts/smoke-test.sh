@@ -392,7 +392,7 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   else record "ssh-config-control-master" "WARN" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
   if ! grep -q 'MACs' "$HOME/.ssh/config" || ! grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "PASS"
   else record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"; fi
-else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make all (ssh role)"; fi
+else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make dotfiles"; fi
 
 # SSH signing key file (required for git commit signing — deployed by ssh role from vault)
 if [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]]; then record "ssh-signing-key-file" "PASS"
@@ -1024,7 +1024,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   _passim_state=$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)
   if [[ "$_passim_state" == "masked" ]]; then record "passim-masked" "PASS"
   elif [[ -z "$_passim_state" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
-  elif $CSB_HOST; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
+  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
   else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
   unset _passim_state
 
@@ -1191,7 +1191,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
        grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
       record "sudoers-hardening" "PASS"
-    elif $CSB_HOST; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers via Satellite/SCAP; 99-hardening not deployed"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers via Satellite/SCAP; 99-hardening not deployed"
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
   else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
@@ -1635,14 +1635,16 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if grep -q 'page_alloc.shuffle=1' /proc/cmdline 2>/dev/null; then record "page-alloc-shuffle" "PASS"
   else record "page-alloc-shuffle" "WARN" "page_alloc.shuffle=1 not in cmdline (requires reboot)"; fi
   # AMD CPU power driver (amd-pstate-epp is default on Fedora 44 + Zen 4)
-  if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver ]]; then
-    _pstate=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver)
-    if [[ "$_pstate" == "amd-pstate-epp" ]]; then record "amd-pstate-epp" "PASS"
-    elif [[ "$_pstate" == "amd-pstate" ]]; then
-      record "amd-pstate-epp" "WARN" "guided mode ($_pstate) not EPP — check BIOS CPPC setting"
-    elif [[ "$_pstate" == "acpi-cpufreq" ]]; then
-      record "amd-pstate-epp" "FAIL" "legacy acpi-cpufreq — kernel regression or BIOS CPPC disabled"
-    else record "amd-pstate-epp" "WARN" "driver=$_pstate (unexpected)"; fi
+  if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
+    if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver ]]; then
+      _pstate=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver)
+      if [[ "$_pstate" == "amd-pstate-epp" ]]; then record "amd-pstate-epp" "PASS"
+      elif [[ "$_pstate" == "amd-pstate" ]]; then
+        record "amd-pstate-epp" "WARN" "guided mode ($_pstate) not EPP — check BIOS CPPC setting"
+      elif [[ "$_pstate" == "acpi-cpufreq" ]]; then
+        record "amd-pstate-epp" "FAIL" "legacy acpi-cpufreq — kernel regression or BIOS CPPC disabled"
+      else record "amd-pstate-epp" "WARN" "driver=$_pstate (unexpected)"; fi
+    fi
   fi
   # amdgpu runtime PM (-1=auto is correct; 0=off wastes power)
   if [[ -f /sys/module/amdgpu/parameters/runpm ]]; then
