@@ -151,3 +151,22 @@ new password source:
 ```bash
 ansible-vault rekey group_vars/all/vault.yml
 ```
+
+## SSH Key Rotation
+
+1. Generate a new auth key pair:
+   ```bash
+   ssh-keygen -t ed25519-sk -f ~/.ssh/id_ed25519_sk
+   ```
+2. Generate a new signing key pair:
+   ```bash
+   ssh-keygen -t ed25519-sk -f ~/.ssh/id_ed25519_sk_signing
+   ```
+3. Run `make vault-edit` to update all four vault variables:
+   `vault_ssh_auth_key`, `vault_ssh_auth_key_pub`,
+   `vault_ssh_signing_key`, `vault_ssh_signing_key_pub`
+4. Run `make ssh` to deploy the new keys on this machine and update
+   `authorized_keys` (the role uses `exclusive: true`, so the old key
+   is automatically removed from this machine's `authorized_keys`).
+5. Remove the old public key from `authorized_keys` on every other
+   machine that previously trusted it.
