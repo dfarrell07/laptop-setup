@@ -160,9 +160,13 @@ VAULT_FILE="$(cd "$(dirname "$0")/.." && pwd)/group_vars/all/vault.yml"
 if [[ -f "$VAULT_FILE" ]]; then
   # shellcheck disable=SC2016  # Intentional: matching literal $ANSIBLE_VAULT header
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
-    record "vault_encrypted" "pass" "vault.yml is encrypted"
+    record "vault_encrypted" "pass" "vault.yml is encrypted (note: encrypted stub without real secrets still warns at runtime)"
   else
-    record "vault_encrypted" "warn" "vault.yml is plaintext — encrypt before use with real secrets"
+    if grep -q '^vault_ssh_auth_key:' "$VAULT_FILE" 2>/dev/null; then
+      record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"
+    else
+      record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
+    fi
   fi
 fi
 

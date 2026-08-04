@@ -1172,7 +1172,7 @@
 
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'apt']
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'apt'] or ansible_facts['os_family'] == 'Darwin'
     - packages_install_binaries | bool
   block:
     - name: Install yamllint (pipx, version-pinned)
