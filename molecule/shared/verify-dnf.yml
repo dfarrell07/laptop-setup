@@ -248,13 +248,28 @@
   changed_when: false
   become: true
 
-- name: Check login.defs PASS_MIN_DAYS=1
-  ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+1' /etc/login.defs
+- name: Check login.defs PASS_MIN_DAYS={{ system_pass_min_days }}
+  ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+{{ system_pass_min_days }}' /etc/login.defs
   changed_when: false
   become: true
 
-- name: Check login.defs PASS_WARN_AGE=7
-  ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+7' /etc/login.defs
+- name: Check login.defs PASS_WARN_AGE={{ system_pass_warn_age }}
+  ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+{{ system_pass_warn_age }}' /etc/login.defs
+  changed_when: false
+  become: true
+
+- name: Check login.defs HOME_MODE=0750 (CIS 5.4.2)
+  ansible.builtin.command: grep -q '^HOME_MODE\s\+0750' /etc/login.defs
+  changed_when: false
+  become: true
+
+- name: Check login.defs ENCRYPT_METHOD=YESCRYPT (CIS 5.3.6)
+  ansible.builtin.command: grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs
+  changed_when: false
+  become: true
+
+- name: Check login.defs YESCRYPT_COST_FACTOR=5 (CIS 5.4.1)
+  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs
   changed_when: false
   become: true
 
