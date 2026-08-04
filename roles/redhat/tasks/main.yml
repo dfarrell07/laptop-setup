@@ -11,7 +11,7 @@
 
 - name: Deploy Red Hat CA certificates
   when:
-    - is_rhel | bool or csb_detected
+    - is_rhel or csb_detected
   block:
     - name: Deploy Red Hat CA certificates
       ansible.builtin.copy:
@@ -50,7 +50,7 @@
 - name: Install Red Hat cert packages
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - is_rhel | bool or csb_detected
+    - is_rhel or csb_detected
   block:
     - name: Install Red Hat cert packages
       ansible.builtin.dnf:
@@ -94,7 +94,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - install_vpn
-    - is_rhel | bool or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
+    - is_rhel or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
   block:
     - name: Install VPN packages
       ansible.builtin.dnf:
@@ -140,11 +140,11 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: is_rhel | bool or csb_detected
+  when: is_rhel or csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
-    - is_rhel | bool or csb_detected
+    - is_rhel or csb_detected
     - redhat_splunk_user_check.rc == 0
   block:
     - name: Set splunk account shell to nologin
