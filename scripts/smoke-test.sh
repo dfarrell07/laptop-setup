@@ -1274,7 +1274,7 @@ EOF
   if [[ "$(readlink /etc/resolv.conf 2>/dev/null)" == "/run/systemd/resolve/stub-resolv.conf" ]]; then
     record "resolv-stub" "PASS"
   elif $CSB_HOST; then record "resolv-stub" "WARN" "skipped on CSB — NM/VPN manages resolv.conf on corporate networks"
-  else record "resolv-stub" "WARN" "resolv.conf not symlinked to stub-resolv.conf"; fi
+  else record "resolv-stub" "FAIL" "resolv.conf not symlinked to stub-resolv.conf — Tailscale MagicDNS broken; fix: sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"; fi
 
   # Basic DNS resolution (confirms DNS works regardless of DoT/DHCP source — critical on CSB)
   if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"

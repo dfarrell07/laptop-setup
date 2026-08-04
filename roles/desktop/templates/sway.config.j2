@@ -19,7 +19,7 @@ workspace {{ wo.workspace }} output {{ wo.output }}
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode;
 # XCURSOR vars propagated so XWayland apps pick up cursor theme and size.
-exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }} VDPAU_DRIVER={{ desktop_sway_vdpau_driver }} XCURSOR_THEME={{ desktop_sway_cursor_theme }} XCURSOR_SIZE={{ desktop_sway_cursor_size }}
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }} VDPAU_DRIVER={{ desktop_sway_vdpau_driver }} XCURSOR_THEME={{ desktop_sway_cursor_theme }} XCURSOR_SIZE={{ desktop_sway_cursor_size }}
 # Note: --systemd flag already propagates to systemd user session; no separate import-environment needed
 
 # Notification daemon (exec_always so it restarts after 'swaymsg reload')
@@ -40,7 +40,8 @@ exec swayidle -w \
     timeout {{ desktop_sway_idle_lock_timeout }} 'swaylock -f' \
     timeout {{ desktop_sway_idle_display_timeout }} 'swaymsg "output * power off"' \
     resume 'swaymsg "output * power on"' \
-    before-sleep 'swaylock -f'
+    before-sleep 'swaylock -f' \
+    lock 'swaylock -f'
 
 # Floating window drag/resize with mouse
 floating_modifier $mod
@@ -162,6 +163,12 @@ focus_follows_mouse {{ desktop_sway_focus_follows_mouse }}
 # Input
 input "type:keyboard" {
     xkb_layout {{ desktop_sway_keyboard_layout }}
+{% if desktop_sway_keyboard_variant %}
+    xkb_variant {{ desktop_sway_keyboard_variant }}
+{% endif %}
+{% if desktop_sway_keyboard_options %}
+    xkb_options {{ desktop_sway_keyboard_options }}
+{% endif %}
     repeat_delay {{ desktop_sway_repeat_delay }}
     repeat_rate {{ desktop_sway_repeat_rate }}
 }
