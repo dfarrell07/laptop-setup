@@ -682,7 +682,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 # --- Sysctl hardening: file-content assertions (system role, Linux only) ---
 # Checks that the template was deployed without live kernel reads — safe in container CI.
@@ -795,7 +795,7 @@
   register: verify_dot_conf
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Assert DNS-over-TLS config deployed
   ansible.builtin.assert:
@@ -803,7 +803,7 @@
     fail_msg: "/etc/systemd/resolved.conf.d/99-dot.conf not deployed — DNS-over-TLS regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:
@@ -940,7 +940,7 @@
   register: verify_journald_conf
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Assert journald hardening drop-in deployed
   ansible.builtin.assert:
@@ -948,14 +948,14 @@
     fail_msg: "/etc/systemd/journald.conf.d/99-hardening.conf not deployed — system role journald task regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Check journald drop-in has Storage=persistent
   ansible.builtin.command: grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - verify_journald_conf.stat.exists
 
 - name: Check sudoers drop-in has logfile directive
@@ -973,7 +973,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Assert auditd rules file deployed with mode 0640
   ansible.builtin.assert:
@@ -983,7 +983,7 @@
     fail_msg: "/etc/audit/rules.d/claude-code.rules not deployed or wrong mode — system role auditd task regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Check auditd rules contain immutability flag -e 2
   ansible.builtin.command: grep -q '^-e 2$' /etc/audit/rules.d/claude-code.rules
@@ -991,7 +991,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - verify_auditd_rules.stat.exists
 
 - name: Check auditd rules contain required watch keys
@@ -1017,7 +1017,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - verify_auditd_rules.stat.exists
 
 - name: Check chrony/chronyd service is enabled (NTP hardening)
@@ -1028,7 +1028,7 @@
   failed_when: false
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
 
 - name: Assert chrony/chronyd is enabled
   ansible.builtin.assert:
@@ -1036,7 +1036,7 @@
     fail_msg: "chrony/chronyd service not enabled — NTP authentication regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected and ansible_facts['distribution'] != 'Fedora')
+    - not csb_rhel
     - verify_chronyd is not skipped
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 

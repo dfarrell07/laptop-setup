@@ -254,6 +254,7 @@
           retries: 3
           delay: 10
           until: packages_oc_sha256sums.status == 200
+          when: packages_oc_version == 'stable'
 
         - name: Extract SHA256 for openshift-client-linux.tar.gz
           ansible.builtin.set_fact:
@@ -262,6 +263,7 @@
                  | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
                                 '\1', multiline=True)
                  | default([]) | first | default('') }}
+          when: packages_oc_version == 'stable'
 
         - name: Assert oc SHA256 was found
           ansible.builtin.assert:
@@ -370,6 +372,7 @@
           retries: 3
           delay: 10
           until: packages_opm_sha256sums.status == 200
+          when: packages_oc_version == 'stable'
 
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:
@@ -378,6 +381,7 @@
                  | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
                                 '\1', multiline=True)
                  | default([]) | first | default('') }}
+          when: packages_oc_version == 'stable'
 
         - name: Assert opm SHA256 was found
           ansible.builtin.assert:
@@ -462,7 +466,10 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  vars:
+    _kind_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    _kind_sha256: "{{ packages_kind_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_kind_sha256 }}"
   block:
     - name: Check if kind is installed at target version
       ansible.builtin.command:
@@ -474,9 +481,9 @@
     - name: Download kind binary
       when: "packages_kind_version not in (packages_kind_check.stdout)"
       ansible.builtin.get_url:
-        url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-amd64"
+        url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-{{ _kind_arch }}"
         dest: /usr/local/bin/kind
-        checksum: "sha256:{{ packages_kind_sha256 }}"
+        checksum: "sha256:{{ _kind_sha256 }}"
         mode: "0755"
       become: true
       tags: [become]
