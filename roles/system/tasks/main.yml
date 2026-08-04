@@ -1219,6 +1219,14 @@
     - ansible_facts['interfaces'] | select('match', '^wwan') | list | length == 0
   failed_when: false
 
+- name: Unmask ModemManager (WWAN interface detected)
+  ansible.builtin.systemd:
+    name: ModemManager.service
+    masked: false
+  when:
+    - ansible_facts['interfaces'] | select('match', '^wwan') | list | length > 0
+  failed_when: false
+
 # --- TLP battery charge management (ThinkPad) ---
 - name: Install TLP for ThinkPad battery charge thresholds
   ansible.builtin.dnf:

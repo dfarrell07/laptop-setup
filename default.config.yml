@@ -49,7 +49,7 @@ install_virtualization: true
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, bpfman, bpftool, ...]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
-#   packages_go_install_work: [controller-gen@v0.21.0, ...]  (roles/packages/defaults) — work-profile-only OVN-K codegen +
+#   packages_go_install_work: [controller-gen@v0.19.0, ...]  (roles/packages/defaults) — work-profile-only OVN-K codegen +
 #     Submariner Go tools; pin versions match OVN-K go.mod — bump together when OVN-K upgrades k8s
 #   desktop_deploy_chrome_policies: false (roles/desktop/defaults) — set true to deploy managed Chrome policy JSON
 #   system_timezone: America/New_York  (roles/system/defaults) — set your local timezone
@@ -222,7 +222,8 @@ install_virtualization: true
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
-#   dotfiles_internal_ca_path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem  — CA cert for internal HTTPS hosts
+#   dotfiles_internal_ca_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem  — CA cert for internal HTTPS hosts
+#     (override with a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem, to pin to one CA)
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)

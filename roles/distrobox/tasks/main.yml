@@ -134,9 +134,7 @@
       ansible.builtin.debug:
         msg: >-
           distrobox assemble create failed — container will not be available.
-          If running on a fapolicyd-enforcing host, the security policy may have
-          blocked the operation; check: journalctl -u fapolicyd
-          Otherwise check registry connectivity and available disk space.
+          Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
