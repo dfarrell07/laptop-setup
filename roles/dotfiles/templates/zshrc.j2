@@ -118,9 +118,11 @@ cw() {
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
+{% if dotfiles_work_src_dirs %}
   if [[ {% for org in dotfiles_work_src_dirs %}"$phys" == */src/{{ org }}/*{% if not loop.last %} || {% endif %}{% endfor %} ]]; then
     echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
   fi
+{% endif %}
   _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="personal-${dir}"

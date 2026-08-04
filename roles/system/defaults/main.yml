@@ -113,7 +113,7 @@ system_keymap: us
 system_tmout: 600  # CIS 5.5.5: session inactivity timeout in seconds (must be <= 900); set 0 to disable
 system_faillock_deny: 5        # PAM lockout: failed attempts before account lock
 system_faillock_unlock_time: 900  # seconds before auto-unlock after 5 failed attempts (CIS); set 300 on LUKS-encrypted single-user dev
-system_faillock_even_deny_root: true  # lock root on failed attempts; set false on single-user (root SSH blocked by PermitRootLogin no)
+system_faillock_even_deny_root: false  # lock root on failed auth; set true on shared machines
 system_pwquality_ucredit: -1   # uppercase credit: -1 = require at least 1 uppercase; 0 = no requirement
 system_pwquality_lcredit: -1   # lowercase credit: -1 = require at least 1 lowercase; 0 = no requirement
 system_pwquality_ocredit: -1   # other/special credit: -1 = require at least 1 special char; 0 = no requirement

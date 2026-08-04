@@ -70,7 +70,7 @@ install_virtualization: true
 #   system_tmout: 600                  (roles/system/defaults) — session inactivity timeout seconds (CIS<=900); 0=disabled
 #   system_faillock_deny: 5            (roles/system/defaults) — failed logins before lockout (CIS); lower for shared machines
 #   system_faillock_unlock_time: 900   (roles/system/defaults) — seconds until auto-unlock (CIS); 0=permanent until admin reset
-#   system_faillock_even_deny_root: true (roles/system/defaults) — lock root on failed logins; set false on single-user workstations
+#   system_faillock_even_deny_root: false (roles/system/defaults) — lock root on failed logins; set true on shared/multi-user machines
 #                                        (root SSH blocked by PermitRootLogin no; false reduces lockout risk)
 #   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
