@@ -89,7 +89,6 @@
   ansible.builtin.debug:
     msg: "WARNING: remount of /dev/shm failed (rc={{ _devshm_remount_result.rc }}); live nosuid/nodev/noexec may not be active"
   when:
-    - _devshm_remount_result is defined
     - _devshm_remount_result.rc | default(0) != 0
 
 # On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
@@ -232,7 +231,6 @@
   ansible.builtin.debug:
     msg: "WARNING: remount of /home failed (rc={{ _home_remount_result.rc }}); live nosuid may not be active"
   when:
-    - _home_remount_result is defined
     - _home_remount_result.rc | default(0) != 0
 
 # --- Harden /boot mount options ---
@@ -331,7 +329,6 @@
   ansible.builtin.debug:
     msg: "WARNING: remount of /boot failed (rc={{ _boot_remount_result.rc }}); live nosuid/nodev/noexec may not be active"
   when:
-    - _boot_remount_result is defined
     - _boot_remount_result.rc | default(0) != 0
 
 - name: Deploy boot-harden.service (CSB — fstab not modified)
@@ -458,7 +455,6 @@
   ansible.builtin.debug:
     msg: "WARNING: remount of /boot/efi failed (rc={{ _boot_efi_remount_result.rc }}); live nosuid/noexec may not be active"
   when:
-    - _boot_efi_remount_result is defined
     - _boot_efi_remount_result.rc | default(0) != 0
 
 - name: Deploy boot-efi-harden.service (CSB — fstab not modified)
@@ -754,7 +750,6 @@
     - system_firewalld_running | bool
     - csb_detected
     - not (system_firewall_manage_zone | bool)
-    - system_fw_info is defined
     - system_fw_info.firewalld_info.default_zone | default('') not in ['drop', '']
   failed_when: false
   notify: Apply firewall rules
@@ -1001,18 +996,18 @@
   ansible.builtin.debug:
     msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
   when: >-
-    (system_lockdown_result is defined and system_lockdown_result is changed) or
-    (system_lockdown_remove_result is defined and system_lockdown_remove_result is changed) or
-    (system_iommu_amd_result is defined and system_iommu_amd_result is changed) or
-    (system_iommu_intel_result is defined and system_iommu_intel_result is changed) or
-    (system_iommu_pt_result is defined and system_iommu_pt_result is changed) or
-    (system_iommu_pt_remove_result is defined and system_iommu_pt_remove_result is changed) or
-    (system_vsyscall_result is defined and system_vsyscall_result is changed) or
-    (system_init_on_free_result is defined and system_init_on_free_result is changed) or
-    (system_init_on_free_remove_result is defined and system_init_on_free_remove_result is changed) or
-    (system_page_shuffle_result is defined and system_page_shuffle_result is changed) or
+    system_lockdown_result is changed or
+    system_lockdown_remove_result is changed or
+    system_iommu_amd_result is changed or
+    system_iommu_intel_result is changed or
+    system_iommu_pt_result is changed or
+    system_iommu_pt_remove_result is changed or
+    system_vsyscall_result is changed or
+    system_init_on_free_result is changed or
+    system_init_on_free_remove_result is changed or
+    system_page_shuffle_result is changed or
     (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed) or
-    (system_kernel_cmdline_result is defined and system_kernel_cmdline_result is changed)
+    system_kernel_cmdline_result is changed
 
 # --- Core dumps ---
 - name: Ensure coredump config directory
@@ -1127,7 +1122,6 @@
       enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
       password reuse prevention will be unconfigured. Check authselect status manually.
   when:
-    - system_authselect_select_result is defined
     - system_authselect_select_result.rc | default(0) != 0
 
 # --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
@@ -1418,8 +1412,7 @@
     - virtnetworkd.socket
   when:
     - system_enable_libvirtd | bool
-    - system_virtqemud_check.rc is defined
-    - system_virtqemud_check.rc == 0
+    - (system_virtqemud_check.rc | default(-1)) == 0
   failed_when: false
 
 - name: Enable libvirtd (monolithic, pre-Fedora 35 fallback)
@@ -1429,7 +1422,7 @@
     enabled: true
   when:
     - system_enable_libvirtd | bool
-    - system_virtqemud_check.rc is not defined or system_virtqemud_check.rc != 0
+    - (system_virtqemud_check.rc | default(-1)) != 0
   failed_when: false
 
 - name: Detect bpfman.socket (may not be installed yet on first provision)
@@ -1451,8 +1444,7 @@
   when:
     - profile == 'work'
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - system_bpfman_check.rc is defined
-    - system_bpfman_check.rc == 0
+    - (system_bpfman_check.rc | default(-1)) == 0
   failed_when: false
 
 - name: Add user to libvirt and kvm groups
@@ -2210,7 +2202,6 @@
       WARNING: authselect enable-feature with-faillock exited
       {{ system_authselect_faillock_enable.rc }} — faillock PAM feature may not be active
   when:
-    - system_authselect_faillock_enable is defined
     - system_authselect_faillock_enable.rc | default(0) != 0
 
 # --- Debian PAM faillock (no authselect; direct PAM stack insertion) ---
@@ -2286,7 +2277,6 @@
       WARNING: authselect enable-feature with-pwhistory exited
       {{ system_authselect_pwhistory_enable.rc }} — pwhistory PAM feature may not be active
   when:
-    - system_authselect_pwhistory_enable is defined
     - system_authselect_pwhistory_enable.rc | default(0) != 0
 
 - name: Configure pam_pwhistory remember count (CIS 5.3.5)
@@ -2569,7 +2559,6 @@
     mode: "0750"
     state: directory
   when:
-    - real_user_home is defined
     - real_user_home | length > 0
     - real_user_home != '/'
   failed_when: false
@@ -2603,14 +2592,12 @@
   check_mode: false  # read-only probe — must run in check mode
   become: true
   when:
-    - real_user_id is defined
     - not csb_rhel
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
     cmd: chage -I {{ system_inactive_days }} {{ real_user_id }}
   when:
-    - real_user_id is defined
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
@@ -2620,7 +2607,7 @@
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
-  when: real_user_id is defined
+  when: real_user_id | length > 0
   block:
     - name: Ensure subuid entry exists for user
       ansible.builtin.lineinfile:

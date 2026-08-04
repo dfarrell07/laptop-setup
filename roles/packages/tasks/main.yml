@@ -1162,7 +1162,6 @@
   loop_control:
     label: "{{ item.item | default('unknown') }}"
   when:
-    - packages_go_results is defined
     - item.rc | default(0) != 0
     - item.skipped is not defined or not item.skipped
 
