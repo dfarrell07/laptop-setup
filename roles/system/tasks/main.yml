@@ -809,7 +809,7 @@
       when:
         - system_kernel_lockdown | length > 0
         - system_grubby_info.rc == 0
-        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout | default(''))"
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
       changed_when: true
       failed_when: false
 
@@ -820,7 +820,7 @@
       when:
         - system_kernel_lockdown | length == 0
         - system_grubby_info.rc == 0
-        - "'lockdown=' in (system_grubby_info.stdout | default(''))"
+        - "'lockdown=' in (system_grubby_info.stdout)"
       changed_when: true
       failed_when: false
 
@@ -830,7 +830,7 @@
       register: system_iommu_amd_result
       when:
         - system_grubby_info.rc == 0
-        - "'amd_iommu=on' not in (system_grubby_info.stdout | default(''))"
+        - "'amd_iommu=on' not in (system_grubby_info.stdout)"
         - ansible_facts['processor'] | join(' ') | lower is search('amd')
       changed_when: true
       failed_when: false
@@ -841,7 +841,7 @@
       register: system_iommu_intel_result
       when:
         - system_grubby_info.rc == 0
-        - "'intel_iommu=on' not in (system_grubby_info.stdout | default(''))"
+        - "'intel_iommu=on' not in (system_grubby_info.stdout)"
         - ansible_facts['processor'] | join(' ') | lower is search('intel')
       changed_when: true
       failed_when: false
@@ -857,7 +857,7 @@
       when:
         - system_iommu_passthrough | bool
         - system_grubby_info.rc == 0
-        - "'iommu=pt' not in (system_grubby_info.stdout | default(''))"
+        - "'iommu=pt' not in (system_grubby_info.stdout)"
         - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
           (ansible_facts['processor'] | join(' ') | lower is search('intel'))
       changed_when: true
@@ -870,7 +870,7 @@
       when:
         - not (system_iommu_passthrough | bool)
         - system_grubby_info.rc == 0
-        - "'iommu=pt' in (system_grubby_info.stdout | default(''))"
+        - "'iommu=pt' in (system_grubby_info.stdout)"
       changed_when: true
       failed_when: false
 
@@ -880,7 +880,7 @@
       register: system_vsyscall_result
       when:
         - system_grubby_info.rc == 0
-        - "'vsyscall=none' not in (system_grubby_info.stdout | default(''))"
+        - "'vsyscall=none' not in (system_grubby_info.stdout)"
       changed_when: true
       failed_when: false
 
@@ -890,7 +890,7 @@
       register: system_init_on_free_result
       when:
         - system_grubby_info.rc == 0
-        - "'init_on_free=1' not in (system_grubby_info.stdout | default(''))"
+        - "'init_on_free=1' not in (system_grubby_info.stdout)"
         - system_init_on_free | bool
       changed_when: true
       failed_when: false
@@ -901,7 +901,7 @@
       register: system_init_on_free_remove_result
       when:
         - system_grubby_info.rc == 0
-        - "'init_on_free=1' in (system_grubby_info.stdout | default(''))"
+        - "'init_on_free=1' in (system_grubby_info.stdout)"
         - not (system_init_on_free | bool)
       changed_when: true
       failed_when: false
@@ -912,7 +912,7 @@
       register: system_page_shuffle_result
       when:
         - system_grubby_info.rc == 0
-        - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout | default(''))"
+        - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout)"
       changed_when: true
       failed_when: false
 
@@ -922,7 +922,7 @@
       register: system_luks_key_cleanup
       when:
         - system_grubby_info.rc == 0
-        - "'rd.luks.key' in (system_grubby_info.stdout | default(''))"
+        - "'rd.luks.key' in (system_grubby_info.stdout)"
         - system_remove_luks_key | bool
       changed_when: true
       failed_when: false
