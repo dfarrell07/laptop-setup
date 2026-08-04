@@ -31,9 +31,6 @@ system_sysctl_hardening:
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
-  net.ipv4.tcp_syncookies: 1
-  fs.protected_hardlinks: 1  # CIS — prevents hardlink-based privilege escalation in world-writable dirs
-  fs.protected_symlinks: 1   # CIS — prevents symlink attacks in /tmp and other sticky dirs
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
@@ -52,7 +49,6 @@ system_sysctl_hardening:
   net.netfilter.nf_conntrack_max: 524288  # prevent 'table full, dropping packet' under OVN-K/Submariner load
   net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
   net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
-  kernel.randomize_va_space: 2    # CIS — full ASLR (value 2=stack+VDSO+mmap+heap; value 1=partial)
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.

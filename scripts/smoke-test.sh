@@ -1301,14 +1301,14 @@ EOF
   else record "dns-resolves" "FAIL" "DNS resolution failed for redhat.com"; fi
 
   # cron.allow restricts cron to root only (CIS 5.1.8)
-  # Skipped on CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
+  # Skipped on RHEL CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
   # non-root system users; cron.allow=root-only would silently break those IT management jobs
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
-  elif $CSB_HOST; then record "cron-allow-root" "WARN" "skipped on CSB — IT monitoring agents use cron; cron.allow not restricted to root"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "cron-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents use cron; cron.allow not restricted to root"
   else record "cron-allow-root" "FAIL" "/etc/cron.allow missing or not restricted to root (CIS 5.1.8)"; fi
   # at.allow restricts 'at' command to root only (CIS 5.1.9)
   if grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
-  elif $CSB_HOST; then record "at-allow-root" "WARN" "skipped on CSB — IT monitoring agents may use at; at.allow not restricted to root"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
   else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
   # Login banner deployed to /etc/issue (CIS 1.7.1)
