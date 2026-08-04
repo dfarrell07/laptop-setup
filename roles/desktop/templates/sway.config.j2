@@ -152,12 +152,12 @@ bindsym $mod+Shift+c reload
 bindsym $mod+Shift+e exec swaymsg exit
 
 # Appearance
-default_border pixel 1
-default_floating_border pixel 1
-hide_edge_borders smart
-gaps inner 8
-gaps outer 4
-focus_follows_mouse no
+default_border pixel {{ desktop_sway_border_width }}
+default_floating_border pixel {{ desktop_sway_floating_border_width }}
+hide_edge_borders {{ desktop_sway_hide_edge_borders }}
+gaps inner {{ desktop_sway_gaps_inner }}
+gaps outer {{ desktop_sway_gaps_outer }}
+focus_follows_mouse {{ desktop_sway_focus_follows_mouse }}
 
 # Input
 input "type:keyboard" {
@@ -169,10 +169,10 @@ input "type:keyboard" {
 seat seat0 xcursor_theme {{ desktop_sway_cursor_theme }} {{ desktop_sway_cursor_size }}
 
 input "type:touchpad" {
-    tap enabled
-    natural_scroll enabled
-    dwt enabled
-    middle_emulation enabled
+    tap {{ desktop_sway_touchpad_tap }}
+    natural_scroll {{ desktop_sway_touchpad_natural_scroll }}
+    dwt {{ desktop_sway_touchpad_dwt }}
+    middle_emulation {{ desktop_sway_touchpad_middle_emulation }}
 }
 
 # TrackPoint scroll: on_button_down (hold middle button) must be scoped to the

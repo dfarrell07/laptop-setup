@@ -754,6 +754,30 @@
         - system_tlp_enabled | default(false)
         - verify_tlp_service.status is defined
 
+    - name: Stat TLP ThinkPad config file
+      ansible.builtin.stat:
+        path: /etc/tlp.d/50-thinkpad.conf
+      register: verify_tlp_config
+      when: system_tlp_enabled | default(false)
+
+    - name: Assert TLP ThinkPad config deployed
+      ansible.builtin.assert:
+        that: verify_tlp_config.stat.exists
+        fail_msg: "/etc/tlp.d/50-thinkpad.conf not deployed — Deploy TLP ThinkPad charge threshold config task failed"
+      when: system_tlp_enabled | default(false)
+
+    - name: Stat /usr/local/bin/gitleaks
+      ansible.builtin.stat:
+        path: /usr/local/bin/gitleaks
+      register: verify_vm_gitleaks
+
+    - name: Assert gitleaks binary exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_vm_gitleaks.stat.exists
+          - verify_vm_gitleaks.stat.executable
+        fail_msg: "/usr/local/bin/gitleaks missing — gitleaks binary download regression (packages role)"
+
     # --- logind unique VM check: IdleActionSec (others covered by verify-common.yml) ---
     - name: Check logind config contains IdleActionSec
       ansible.builtin.command: grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf

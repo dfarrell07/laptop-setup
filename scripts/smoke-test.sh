@@ -273,6 +273,10 @@ if command -v i3 &>/dev/null; then
   if command -v wpctl &>/dev/null; then record "i3-wpctl" "PASS"
   else record "i3-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make desktop)"; fi
 fi
+if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
+  if command -v meld &>/dev/null; then record "meld" "PASS"
+  else record "meld" "WARN" "meld not installed — graphical diff/merge tool absent (run: make desktop)"; fi
+fi
 
 # GTK theme config (only on Sway desktop — no GNOME settings daemon)
 if command -v sway &>/dev/null; then
@@ -1390,6 +1394,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
   elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "WARN" "TLP not installed on Debian (apt package not managed by this role) — battery charge thresholds absent on laptop hardware"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
+    record "tlp-service" "WARN" "TLP intentionally absent on RHEL CSB (IT manages power policy; cycle-41 not-csb_rhel guard)"
   elif [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
   else record "tlp-service" "WARN" "tlp.service not enabled"; fi

@@ -192,15 +192,14 @@ packages_go_install:
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes)
 packages_go_install_work:
-  # Pin controller-gen and code-generator tools to match OVN-K's go.mod
-  # (hack/update-codegen.sh uses packages_code_generator_version). Bump together when OVN-K upgrades k8s.
-  - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
+  # Pin controller-gen to match OVN-K's update-codegen.sh (not go.mod — controller-tools is not a go.mod dep).
+  # Bump packages_code_generator_version together when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
+  - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0
   - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/lister-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/deepcopy-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/applyconfiguration-gen@v{{ packages_code_generator_version }}"
-  - "k8s.io/code-generator/cmd/defaulter-gen@v{{ packages_code_generator_version }}"
   # subctl: latest version installed as 'subctl'; packages_subctl_version governs the pin.
   # See packages_subctl_versioned below for older-version multi-install.
   - "github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}"
