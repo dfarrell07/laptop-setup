@@ -189,7 +189,7 @@
 - name: Report failed pulls
   ansible.builtin.debug:
     msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
-  loop: "{{ git_repos_pull_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop: "{{ git_repos_pull_results.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
   when: git_repos_pull | bool
@@ -197,13 +197,13 @@
 - name: Fail if any pulls failed
   ansible.builtin.fail:
     msg: >-
-      git pull failed for: {{ git_repos_pull_results.results | default([])
+      git pull failed for: {{ git_repos_pull_results.results
         | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
         | map(attribute='item.dest') | list | join(', ') }}
   when:
     - git_repos_pull | bool
     - >-
-      (git_repos_pull_results.results | default([])
+      (git_repos_pull_results.results
       | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
       | list | length) > 0
 

@@ -1304,7 +1304,7 @@
         HTTP_PROXY: "{{ proxy_url | default(omit) }}"
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
-        item.version not in (packages_subctl_version_check.results[loop_idx].stdout | default(''))
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout)
       changed_when: true
       failed_when: false
       register: packages_subctl_install_results
@@ -1332,7 +1332,7 @@
         remote_src: true
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
-        item.version not in (packages_subctl_version_check.results[loop_idx].stdout | default(''))
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout)
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
