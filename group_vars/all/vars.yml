@@ -41,7 +41,7 @@ needs_container_tier: "host-only"
 # Cross-role variable baselines — allow standalone invocation of roles that consume
 # variables defined in other roles' defaults or default.config.yml (which only loads
 # during full playbook runs via pre_flight_checks.yml include_vars).
-packages_install_binaries: true  # roles/packages/defaults/main.yml:240; consumed by claude, distrobox
+packages_install_binaries: true  # roles/packages/defaults/main.yml:239; consumed by packages, claude
 
 # Feature toggle baselines matching default.config.yml — eliminates | default(X) in role tasks.
 # Users override these in config.yml (higher precedence via include_vars).
