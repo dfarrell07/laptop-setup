@@ -165,7 +165,8 @@ install_virtualization: true
 #   desktop_sway_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
 #   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; most laptops use 0 (BAT0)
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
-#   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"  (roles/desktop/defaults) — find yours with: swaymsg -t get_inputs
+#   desktop_sway_trackpoint_id: <unset>   (roles/desktop/defaults) — intentionally undefined; no TrackPoint config unless set.
+#     Find yours with: swaymsg -t get_inputs | grep -A2 TrackPoint. Example: "2:10:TPPS/2_IBM_TrackPoint"
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
 #   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
 #   desktop_terminal: alacritty          (roles/desktop/defaults) — terminal emulator (alacritty/kitty/etc)
@@ -212,8 +213,8 @@ install_virtualization: true
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
-#   dotfiles_gonosumdb: '*.redhat.com,*.engineering.redhat.com'  — GONOSUMDB for internal Go modules
-#   dotfiles_goprivate: 'gitlab.cee.redhat.com,pkgs.devel.redhat.com'  — GOPRIVATE for internal Go modules
+#   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.redhat.com,*.engineering.redhat.com")
+#   dotfiles_goprivate: ""   — GOPRIVATE for internal Go repos (default: ""; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com")
 #   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
 #   dotfiles_work_src_dirs: [submariner-io, stolostron, ovnk, konflux, bpfman, ds]  — work org dirs under
 #     ~/src/ used for git identity routing (gitconfig.j2 includeIf) and Claude personal guard (zshrc.j2);

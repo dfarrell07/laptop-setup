@@ -49,7 +49,7 @@ Host gitlab.cee.redhat.com
     IdentitiesOnly yes
 {% endif %}
 
-{% if profile == 'work' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
+{% if profile == 'work' and dotfiles_internal_git_host | default('') != '' %}
 Host internal-git
     HostName {{ dotfiles_internal_git_host }}
     User git

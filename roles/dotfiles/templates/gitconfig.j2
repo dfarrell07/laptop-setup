@@ -102,7 +102,7 @@
 [credential "https://github.com"]
 	helper = !gh auth git-credential
 
-{% if profile == 'work' and ansible_facts['system'] | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
+{% if profile == 'work' and ansible_facts['system'] | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') != '' %}
 [http "https://{{ dotfiles_internal_git_host }}"]
 	sslCAInfo = {{ dotfiles_internal_ca_path }}
 {% endif %}
