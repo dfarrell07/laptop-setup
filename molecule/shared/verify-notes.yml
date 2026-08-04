@@ -31,3 +31,15 @@
     that: verify_notes_dir.stat.mode == '0700'
     fail_msg: "notes/ should be 0700 — world-readable notes regression"
   when: verify_notes.stat.exists
+
+- name: Stat notes gitleaks allowlist
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/notes/.gitleaks.toml"
+  register: verify_notes_gitleaks
+  when: verify_notes.stat.exists
+
+- name: Assert notes gitleaks allowlist deployed
+  ansible.builtin.assert:
+    that: verify_notes_gitleaks.stat.exists
+    fail_msg: "notes/.gitleaks.toml missing — pre-commit gitleaks hook will reject all notes commits"
+  when: verify_notes.stat.exists

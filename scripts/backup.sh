@@ -52,6 +52,9 @@ DOTFILES=(
   .config/alacritty/alacritty.toml
   .config/gh/config.yml
   .config/gh/hosts.yml
+  .claude/settings.json
+  .claude/settings.local.json
+  .claude/CLAUDE.md
   .claude-personal/settings.json
   .claude-personal/settings.local.json
   .claude-personal/CLAUDE.md

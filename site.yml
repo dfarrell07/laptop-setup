@@ -4,10 +4,15 @@
 - name: System setup (requires sudo)
   hosts: localhost
   become: true
-  gather_facts: true
+  gather_facts: false
   tags: [become]
 
   pre_tasks:
+    - name: Gather facts (explicit become:false so check mode works without sudo)
+      ansible.builtin.gather_facts:
+      become: false
+      tags: [always]
+
     - name: Capture real user identity
       ansible.builtin.set_fact:
         real_user_home: "{{ lookup('env', 'HOME') }}"
