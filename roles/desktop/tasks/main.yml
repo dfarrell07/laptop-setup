@@ -94,6 +94,16 @@
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
 
+- name: Install Sway packages (apt)
+  ansible.builtin.apt:
+    name: "{{ desktop_sway_apt_packages }}"
+    state: present
+  become: true
+  tags: [become]
+  when:
+    - ansible_facts['pkg_mgr'] == 'apt'
+    - desktop_effective == 'sway'
+
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory
   ansible.builtin.file:

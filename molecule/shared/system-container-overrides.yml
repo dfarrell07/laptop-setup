@@ -11,6 +11,9 @@
     system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
     system_aide_enabled: false            # AIDE DB init takes 5-10 min; useless in CI
     system_install_usbguard: false        # no USB devices to guard in containers
+                                          # CI gap: USBGuard install-configure-enable (package, rules.conf,
+                                          # daemon.conf settings, service) is NOT exercised by any
+                                          # Podman-based scenario — make test-vm is required for full USBGuard coverage
     install_virtualization: false         # libvirt not needed in CI container
     system_disable_fingerprint: false     # fprintd masking fails silently in containers; skip entirely
                                           # CI gap: fprintd masking (systemctl mask + /dev/null symlink) is NOT

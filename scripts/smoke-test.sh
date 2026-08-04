@@ -42,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _cfg="$SCRIPT_DIR/../config.yml"
 profile="work"
 grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
-_system_umask=$(grep -oE '^system_umask:[[:space:]]*"?([0-9]+)"?' "$_cfg" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+_system_umask=$(grep -oE '^system_umask:[[:space:]]*"?([0-9]+)"?' "$_cfg" 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)
 _system_umask="${_system_umask:-027}"
 unset _cfg SCRIPT_DIR
 
@@ -964,7 +964,7 @@ EOF
   if [[ "$EUID" -ne 0 ]]; then
     record "sshd-banner" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    if $CSB_HOST; then
+    if $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
       if grep -q '^Banner ' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
         record "sshd-banner" "WARN" "Banner directive present on CSB — IT manages SSH banner; may conflict with corporate policy"
       else record "sshd-banner" "PASS"; fi

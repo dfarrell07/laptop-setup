@@ -254,6 +254,7 @@
         description: Atlassian CLI
         baseurl: "{{ repos_dnf_acli_baseurl }}"
         gpgcheck: false  # Internal Red Hat repo does not publish a GPG key
+        repo_gpgcheck: false  # metadata also unsigned — same limitation as gpgcheck above
         enabled: true
   rescue:
     - name: Record acli repo failure

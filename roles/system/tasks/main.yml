@@ -1473,6 +1473,8 @@
       value: lock
     - key: IdleActionSec
       value: "{{ system_logind_idle_sec }}"
+    - key: KillUserProcesses
+      value: "no"
   notify: Restart logind
 
 # --- Disable Ctrl+Alt+Delete reboot ---
@@ -1655,7 +1657,10 @@
         state: started
         enabled: true
         daemon_reload: true
-      failed_when: false
+      register: system_usbguard_enable_result
+      failed_when:
+        - system_usbguard_enable_result.failed
+        - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 # --- Firmware updates (LVFS/fwupd) ---
 - name: Install fwupd
