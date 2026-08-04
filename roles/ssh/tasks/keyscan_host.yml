@@ -1,0 +1,32 @@
+---
+# Fetch SSH host keys for _keyscan_host and seed known_hosts.
+# Called via include_tasks with loop_var: _keyscan_host.
+- name: Pre-seed {{ _keyscan_host }} known_hosts
+  block:
+    - name: Fetch {{ _keyscan_host }} SSH host keys
+      ansible.builtin.command:
+        cmd: ssh-keyscan -T 10 {{ _keyscan_host }}
+      register: _keyscan_result
+      changed_when: false
+      failed_when: >-
+        _keyscan_result.rc != 0 or
+        _keyscan_result.stdout | length == 0
+
+    - name: Seed {{ _keyscan_host }} known_hosts entries
+      ansible.builtin.known_hosts:
+        name: "{{ _keyscan_host }}"
+        key: "{{ item }}"
+        state: present
+        hash_host: true
+      loop: >-
+        {{ _keyscan_result.stdout_lines
+           | select('match', '^' + (_keyscan_host | regex_escape))
+           | list }}
+
+  rescue:
+    - name: Warn that {{ _keyscan_host }} host key fetch failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Could not fetch {{ _keyscan_host }} SSH host keys
+          (VPN may be required). known_hosts not pre-seeded — git clone
+          for {{ _keyscan_host }} repos will prompt on first connection.

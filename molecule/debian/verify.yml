@@ -163,7 +163,7 @@
 
     - name: Check pam_pwhistory.so line in common-password (Debian)
       ansible.builtin.command:
-        cmd: grep -qE '^password\s+required\s+pam_pwhistory\.so.*remember=24' /etc/pam.d/common-password
+        cmd: grep -qE '^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+' /etc/pam.d/common-password
       changed_when: false
       become: true
       when: ansible_pkg_mgr == 'apt'

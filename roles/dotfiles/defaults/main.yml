@@ -32,7 +32,10 @@ dotfiles_mac_tailscale_host: 'mac-desktop.tail'
 # GitHub repo slug for cq() alias; override in config.yml if queue repo name differs
 dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 
-dotfiles_internal_ca_path: /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+# Stable OS-managed bundle (update-ca-trust regenerates on CA install); override with a
+# specific anchor path (e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem) to pin
+# to a single CA rather than trusting the full system bundle.
+dotfiles_internal_ca_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
 # Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks and
 # the ccp() guard in zshrc.j2 to route work repos to the work git identity / block personal Claude.

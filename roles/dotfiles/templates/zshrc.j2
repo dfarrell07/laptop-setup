@@ -145,10 +145,14 @@ cstatus() {
 }
 
 # --- Device access (Tailscale + mosh) ---
+{% if dotfiles_laptop_tailscale_host %}
 alias laptop='mosh {{ dotfiles_laptop_tailscale_host }}'
-alias mac='mosh {{ dotfiles_mac_tailscale_host }}'
 laptop-claude() { mosh {{ dotfiles_laptop_tailscale_host }} -- tmux new-session -A -s "${1:-work}"; }
+{% endif %}
+{% if dotfiles_mac_tailscale_host %}
+alias mac='mosh {{ dotfiles_mac_tailscale_host }}'
 mac-claude() { mosh {{ dotfiles_mac_tailscale_host }} -- tmux new-session -A -s "${1:-personal}"; }
+{% endif %}
 alias rc='claude --remote-control'
 
 # --- Quick nav ---

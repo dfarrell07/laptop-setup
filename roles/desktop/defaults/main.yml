@@ -24,9 +24,9 @@ desktop_gtk_theme: Adwaita-dark  # GTK theme for Sway (no GNOME settings daemon;
 desktop_gtk_icon_theme: Adwaita  # GTK icon theme for Sway
 
 # AMD k10temp PCI path for i3status CPU temperature block.
-# hwmon index varies across reboots; the glob (hwmon*) is intentional and safe.
-# ThinkPad P16v AMD default — override in config.yml for different PCI topologies.
-# Find the path with: ls /sys/devices/pci*/*/hwmon/hwmon*/temp1_input
+# hwmon index varies by machine — hwmon0 is a starting-point fallback, not a reliable default.
+# Verify the correct index with: ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
+# Set the correct index in config.yml (e.g. hwmon8 on ThinkPad P16v Gen 1 AMD).
 desktop_i3status_cpu_temp_path: "/sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon0/temp1_input"
 desktop_sway_output: "eDP-1"  # built-in display identifier (AMD ThinkPad)
 desktop_sway_adaptive_sync: "enabled"  # VRR/FreeSync; silently ignored on non-VRR displays; set "disabled" to suppress

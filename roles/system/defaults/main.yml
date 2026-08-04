@@ -57,8 +57,9 @@ system_sysctl_hardening:
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
   # Fedora 41+ default (Changes/IncreaseVmMaxMapCount); also satisfies Elasticsearch/OpenSearch
-  # minimum and large JVM/AI-ML pods in kind clusters. Must be ≥ 90-hardening.conf to avoid
-  # silently overriding /usr/lib/sysctl.d/10-map-count.conf (alphabetical precedence).
+  # minimum and large JVM/AI-ML pods in kind clusters. The 90- filename prefix ensures this
+  # file is processed after /usr/lib/sysctl.d/10-map-count.conf (sysctl.d: lexicographic order,
+  # last writer wins), so our value of 1048576 takes precedence over the distribution default.
   vm.max_map_count: 1048576
 
 # Firewall

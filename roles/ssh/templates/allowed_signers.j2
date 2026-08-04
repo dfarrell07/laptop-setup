@@ -1,4 +1,4 @@
 # {{ ansible_managed }}
 # Git commit signing allowed signers
 # See: https://git-scm.com/docs/gitformat-signature
-{{ dotfiles_user_email_work }},{{ dotfiles_user_email_personal }}{% if ssh_git_signing_pubkey | default("") %} namespaces="git" {{ ssh_git_signing_pubkey }}{% endif %}
+{{ dotfiles_user_email_work }},{{ dotfiles_user_email_personal }} namespaces="git" {{ ssh_git_signing_pubkey }}

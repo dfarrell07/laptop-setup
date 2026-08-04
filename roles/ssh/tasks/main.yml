@@ -57,67 +57,29 @@
     mode: "0600"
   failed_when: false
 
-- name: Pre-seed gitlab.cee.redhat.com known_hosts
+- name: Pre-seed work git host known_hosts
+  ansible.builtin.include_tasks: keyscan_host.yml
+  loop:
+    - gitlab.cee.redhat.com
+    - code.engineering.redhat.com
+  loop_control:
+    loop_var: _keyscan_host
   when: profile == 'work'
-  block:
-    - name: Fetch gitlab.cee.redhat.com SSH host keys
-      ansible.builtin.command:
-        cmd: ssh-keyscan -T 10 gitlab.cee.redhat.com
-      register: ssh_gitlab_cee_keyscan
-      changed_when: false
-      failed_when: >-
-        ssh_gitlab_cee_keyscan.rc != 0 or
-        ssh_gitlab_cee_keyscan.stdout | length == 0
 
-    - name: Seed gitlab.cee.redhat.com known_hosts entries
-      ansible.builtin.known_hosts:
-        name: gitlab.cee.redhat.com
-        key: "{{ item }}"
-        state: present
-        hash_host: true
-      loop: >-
-        {{ ssh_gitlab_cee_keyscan.stdout_lines
-           | select('match', '^gitlab\\.cee\\.redhat\\.com')
-           | list }}
-
-  rescue:
-    - name: Warn that gitlab.cee.redhat.com host key fetch failed
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: Could not fetch gitlab.cee.redhat.com SSH host keys
-          (VPN may be required). known_hosts not pre-seeded — git clone
-          for gitlab.cee.redhat.com repos will prompt on first connection.
-
-- name: Pre-seed code.engineering.redhat.com known_hosts
-  when: profile == 'work'
-  block:
-    - name: Fetch code.engineering.redhat.com SSH host keys
-      ansible.builtin.command:
-        cmd: ssh-keyscan -T 10 code.engineering.redhat.com
-      register: ssh_code_eng_keyscan
-      changed_when: false
-      failed_when: >-
-        ssh_code_eng_keyscan.rc != 0 or
-        ssh_code_eng_keyscan.stdout | length == 0
-
-    - name: Seed code.engineering.redhat.com known_hosts entries
-      ansible.builtin.known_hosts:
-        name: code.engineering.redhat.com
-        key: "{{ item }}"
-        state: present
-        hash_host: true
-      loop: >-
-        {{ ssh_code_eng_keyscan.stdout_lines
-           | select('match', '^code\\.engineering\\.redhat\\.com')
-           | list }}
-
-  rescue:
-    - name: Warn that code.engineering.redhat.com host key fetch failed
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: Could not fetch code.engineering.redhat.com SSH host keys
-          (VPN may be required). known_hosts not pre-seeded — git clone
-          for code.engineering.redhat.com repos will prompt on first connection.
+- name: Assert SSH auth public key type is accepted by sshd hardening
+  ansible.builtin.assert:
+    that:
+      - ssh_auth_key_pub.split()[0] in
+          ['sk-ssh-ed25519@openssh.com',
+           'sk-ssh-ed25519-cert-v01@openssh.com',
+           'ssh-ed25519']
+    fail_msg: >-
+      ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
+      which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).
+      Accepted: sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com,
+      ssh-ed25519. Writing an incompatible key would cause SSH lockout —
+      sshd silently rejects non-accepted types at login time.
+  when: ssh_auth_key_pub | default('') | trim | length > 0
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
@@ -133,21 +95,6 @@
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk.pub"
     mode: "0644"
   no_log: true
-  when: ssh_auth_key_pub | default('') | trim | length > 0
-
-- name: Assert SSH auth public key type is accepted by sshd hardening
-  ansible.builtin.assert:
-    that:
-      - ssh_auth_key_pub.split()[0] in
-          ['sk-ssh-ed25519@openssh.com',
-           'sk-ssh-ed25519-cert-v01@openssh.com',
-           'ssh-ed25519']
-    fail_msg: >-
-      ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
-      which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).
-      Accepted: sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com,
-      ssh-ed25519. Writing an incompatible key would cause SSH lockout —
-      sshd silently rejects non-accepted types at login time.
   when: ssh_auth_key_pub | default('') | trim | length > 0
 
 - name: Add SSH auth public key to authorized_keys
