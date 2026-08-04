@@ -242,8 +242,8 @@
 
     - name: Assert BPF JIT hardening
       ansible.builtin.assert:
-        that: verify_bpf.stdout == '1'
-        fail_msg: "BPF JIT hardening not set to 1 (unprivileged-only blinding; see system_bpf_jit_harden)"
+        that: verify_bpf.stdout == (system_bpf_jit_harden | default(1) | string)
+        fail_msg: "BPF JIT hardening not set to {{ system_bpf_jit_harden | default(1) }} (see system_bpf_jit_harden)"
 
     - name: Check sysctl kernel.unprivileged_bpf_disabled
       ansible.builtin.command: sysctl -n kernel.unprivileged_bpf_disabled

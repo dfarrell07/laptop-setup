@@ -126,7 +126,7 @@ make repos-downstream # downstream repos only
   `repo_gh_cli`, `repo_google_chrome`, `repo_google_cloud_sdk`, `repo_rpmfusion_free`, `repo_rpmfusion_nonfree`, `repo_slack`,
   `repo_tailscale`, `repo_acli`, `repo_docker_ce`, `repo_mullvad`, `repo_redhat`; container settings
   `container_name`, `container_image`, `container_distro`, `container_release`, `container_replace`. See
-  `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 35+
+  `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 100+
   role-defaults vars overridable in `config.yml`. Key operational ones: `system_aide_enabled` (false —
   AIDE disabled by default; enable only with a log consumer), `system_tmout` (600 s inactivity timeout,
   CIS; set 0 to disable), `system_disable_usb_storage` (true — USB drives kernel-blocked), `system_kernel_lockdown`
