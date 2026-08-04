@@ -31,7 +31,7 @@
     git_repos_filtered: >-
       {{
         git_repos_list
-        | selectattr('enabled', 'equalto', true)
+        | rejectattr('enabled', 'equalto', false)
         | selectattr('category', 'in', git_repos_active_categories)
         | list
       }}

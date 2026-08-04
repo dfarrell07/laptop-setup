@@ -4,11 +4,6 @@
   gather_facts: true
 
   tasks:
-    - name: Confirm python3 is available (non-download path unaffected by rescue)
-      ansible.builtin.command:
-        cmd: python3 --version
-      changed_when: false
-
     - name: Stat oc at /usr/local/bin/oc
       ansible.builtin.stat:
         path: /usr/local/bin/oc
