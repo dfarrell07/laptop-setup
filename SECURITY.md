@@ -25,7 +25,7 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   (CIS 4.1.3.8), pam_wheel.so (su restricted to wheel),
   root account locked, inactive account lockout chage -I 30 (CIS 5.5.1.5),
   AIDE file integrity monitoring (daily; disabled by default — set system_aide_enabled: true in config.yml only when a log consumer is in place), chrony NTS
-  (authenticated time sync)
+  (authenticated time sync), DHCP hostname privacy (NM conf.d 99-dhcp-privacy.conf — suppresses hostname advertisement to DHCP servers on non-CSB hosts)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
   `transfer.fsckObjects=true`,
   `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit
