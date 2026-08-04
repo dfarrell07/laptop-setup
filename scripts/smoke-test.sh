@@ -1220,6 +1220,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$_fprintd_state" == "masked" ]]; then record "fprintd-masked" "PASS"
   elif [[ "$_fprintd_state" == "enabled" || "$_fprintd_state" == "static" ]]; then
     record "fprintd-masked" "WARN" "fprintd.service enabled (state: $_fprintd_state) — confirm system_disable_fingerprint: false is intentional (faillock bypass risk)"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+    record "fprintd-masked" "WARN" "fprintd masking skipped on RHEL CSB — IT manages fingerprint auth; Ansible not csb_rhel gate"
   else record "fprintd-masked" "FAIL" "fprintd.service not masked (state: $_fprintd_state) — fingerprint can bypass faillock"; fi
   unset _fprintd_state
 
