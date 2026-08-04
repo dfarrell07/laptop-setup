@@ -64,6 +64,9 @@ jobs:
       - name: Run yamllint
         run: yamllint --strict .
 
+      - name: Check vars sync
+        run: python3 scripts/check-vars-sync.py
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
