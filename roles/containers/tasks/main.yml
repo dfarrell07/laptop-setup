@@ -158,6 +158,16 @@
     create: true
   when: ansible_facts['system'] == 'Linux'
 
+- name: Set containers.conf default_ulimits nofile for kind (socket-activated podman.service inherits low NOFILE)
+  community.general.ini_file:
+    path: "{{ containers_config_dir }}/containers.conf"
+    section: containers
+    option: default_ulimits
+    value: '["nofile={{ containers_kind_nofile_limit }}:{{ containers_kind_nofile_hard_limit }}"]'
+    mode: "0644"
+    create: true
+  when: ansible_facts['system'] == 'Linux'
+
 # --- periodic container storage cleanup ---
 - name: Deploy podman-prune.service
   ansible.builtin.copy:

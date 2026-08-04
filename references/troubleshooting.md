@@ -112,6 +112,61 @@ CSB manages the firewall centrally. STIG requires the `drop` zone and admin-mana
 
 ---
 
+## system: Boot Fails After grubby Kernel Parameter Changes
+
+**Symptom:**
+The machine hangs, kernel panics, or drops to an emergency shell after rebooting following `make all` or `make system`. The system role applies `lockdown=integrity`, `amd_iommu=on`/`intel_iommu=on`, `vsyscall=none`, and `init_on_free=1` via `grubby --update-kernel=ALL` on Fedora and hybrid CSB hosts.
+
+**Cause:**
+One or more kernel parameters applied by the system role is incompatible with this hardware or configuration. Common failure scenarios: `lockdown=integrity` blocks unsigned out-of-tree kernel modules (e.g., proprietary GPU or NIC drivers); IOMMU can cause DMA remapping failures on certain platforms; `vsyscall=none` breaks old glibc binaries.
+
+**Fix:**
+
+**Step 1 — Access the GRUB menu:**
+Hold **Shift** (BIOS/legacy boot) or **Esc** (UEFI) at POST, immediately after powering on. If `GRUB_TIMEOUT` is set to 0, the GRUB menu is hidden by default — hold the key before the splash screen appears (press and hold immediately at power-on).
+
+**Step 2 — Edit the boot entry (one boot only):**
+1. In the GRUB menu, highlight the default kernel entry.
+2. Press **`e`** to edit the entry.
+3. Navigate to the `linux` line and locate the offending argument (`lockdown=integrity`, `amd_iommu=on`, `intel_iommu=on`, `vsyscall=none`, or `init_on_free=1`).
+4. Delete or change the argument inline.
+5. Press **Ctrl+X** to boot with the modified parameters. This change applies to this boot only — the on-disk BLS entry is unchanged.
+
+**Step 3 — Alternatively, boot a previous kernel:**
+In the GRUB menu, scroll down to an older kernel entry (listed by release number) and select it. The older entry retains the parameters from before provisioning.
+
+**Step 4 — Use `rd.break` for an initramfs emergency shell (advanced):**
+If the system cannot reach the normal boot target at all, append `rd.break` to the `linux` line in the GRUB editor (Step 2) before pressing Ctrl+X. This drops into a `switch_root` shell inside the initramfs before the root filesystem is fully mounted. From there you can inspect the initramfs environment or chroot into `/sysroot` to edit configs:
+```bash
+# Inside the rd.break shell:
+mount -o remount,rw /sysroot
+chroot /sysroot
+# Now edit /etc/default/grub or run grubby, then exit and reboot
+```
+
+**Step 5 — Permanently remove the parameter once booted:**
+After booting successfully, permanently revert the bad parameter across all BLS entries:
+```bash
+sudo grubby --remove-args="lockdown" --update-kernel=ALL
+# Or for multiple args:
+sudo grubby --remove-args="lockdown vsyscall" --update-kernel=ALL
+# Verify:
+sudo grubby --info=ALL | grep args
+```
+
+**Step 6 — Persist the fix via config.yml and re-run:**
+Update `config.yml` with the appropriate toggle so the parameter stays removed across future `make system` runs:
+```yaml
+system_kernel_lockdown: ''   # disable lockdown (default is 'integrity')
+```
+Then re-run `make system` to apply idempotently.
+
+**Not affected:**
+- **RHEL CSB hosts** (`csb_rhel=true`): the `grubby --update-kernel=ALL` block is skipped entirely — IT manages the boot configuration on RHEL CSB and none of these parameters are written by this playbook.
+- **macOS**: `grubby` is not present; no kernel cmdline modification is performed.
+
+---
+
 ## system: SELinux Blocks Non-Default SSH Port
 
 **Symptom:**
@@ -685,6 +740,61 @@ grep pam_faillock /etc/pam.d/system-auth
 If absent, the `--force` flag did not apply — check for other active authselect overrides.
 
 **CSB IT ticket:** No. `authselect` is user-space PAM configuration. On CSB with restricted sudo, contact IT if `authselect select sssd --force` is denied.
+
+---
+
+## system: Account Lockout Recovery
+
+Three separate lockout mechanisms can block login; each has a distinct recovery path.
+
+**1. pam_faillock lockout (5 failed password attempts)**
+
+`pam_faillock` locks the account after `deny = 5` consecutive failures for `unlock_time` seconds (default 900). Symptom: "Account locked due to N failed logins" at the login prompt.
+
+Recovery (requires a root shell or another account with sudo):
+```bash
+faillock --user <username> --reset
+```
+Or wait — the lockout auto-clears after `unlock_time` seconds (900 s = 15 minutes by default) with no intervention.
+
+To reduce accidental lockout on a single-user dev machine, set in `config.yml`:
+```yaml
+system_faillock_unlock_time: 60  # seconds; default 900
+```
+Then re-run `make system`.
+
+**2. chage inactive account lockout (30 days after password expiry)**
+
+`chage -I 30` marks accounts inactive 30 days after password expiry. Symptom: "Your account has expired; please contact your system administrator" even with a correct password.
+
+Recovery (boot to rescue/single-user mode if no other root-equivalent account is available):
+1. At the GRUB menu press `e` and append `systemd.unit=rescue.target` (or `rd.break` to drop into the initramfs) to the kernel cmdline.
+2. If using `rd.break`, remount sysroot read-write: `mount -o remount,rw /sysroot && chroot /sysroot`.
+3. Reset the inactive flag and the password:
+   ```bash
+   chage -I -1 <username>   # remove inactive lockout
+   passwd <username>        # reset password and restart the expiry clock
+   ```
+4. Exit and reboot normally.
+
+**3. Root access from console when both su and sudo are unavailable**
+
+Root is intentionally password-locked (`passwd -l root`). If the regular account is also locked and SSH is unreachable, use a console boot path:
+
+- **rd.break (initramfs):** Append `rd.break` to the kernel cmdline at the GRUB menu. At the initramfs shell:
+  ```bash
+  mount -o remount,rw /sysroot
+  chroot /sysroot
+  passwd -u root    # temporarily unlock root
+  passwd root       # set a temporary root password
+  ```
+  Reboot, SSH in, restore the user account, then re-lock root: `passwd -l root`.
+
+- **rescue.target:** Append `systemd.unit=rescue.target` to the kernel cmdline. Log in as root, fix the locked account, then re-lock: `passwd -l root`.
+
+- **SysRq (hung system):** If the console is frozen, use `Alt+SysRq+S` (sync), `Alt+SysRq+U` (remount read-only), `Alt+SysRq+B` (reboot) to recover cleanly, then proceed with `rd.break` above.
+
+**CSB IT ticket:** On RHEL CSB, kernel cmdline changes at boot may require IT intervention if Secure Boot or IT policy restricts console boot modes.
 
 ---
 

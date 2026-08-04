@@ -2061,6 +2061,19 @@
   failed_when: false
   notify: Restart NetworkManager
 
+- name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      ipv4.dhcp-send-hostname=false
+      ipv6.dhcp-send-hostname=false
+    dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+    mode: "0644"
+  when: not csb_detected
+  failed_when: false
+  notify: Restart NetworkManager
+
 # tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
 # interface, not controlled by IT's firewalld policy. Trusted zone is required for
 # Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale

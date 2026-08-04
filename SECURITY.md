@@ -61,6 +61,11 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   ThinkPad P16v Gen 1 AMD requires Bluetooth for its Bluetooth mouse.
   Set `system_disable_bluetooth: true` in `config.yml` on machines that
   have no Bluetooth peripherals.
+- **ptrace_scope=0 (CIS 1.6.3)** — `kernel.yama.ptrace_scope` defaults to 0 (Fedora
+  workstation default), allowing a user to trace any of their own processes with `gdb -p`
+  or `dlv attach`. CIS Level 1 recommends 1 (parent-only). Set
+  `system_ptrace_scope: 1` in `config.yml` on machines where developer attach workflows
+  are not needed.
 - **claude.ai install.sh** — installed via `curl | bash` with no SHA256
   verification; Anthropic uses a rolling installer without pinned releases
   (note: binary SHA256 verification in the Scope section refers to other

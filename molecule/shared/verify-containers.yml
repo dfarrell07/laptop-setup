@@ -35,6 +35,11 @@
     cmd: grep -q 'pids_limit = 65536' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
+- name: Assert containers.conf sets default_ulimits for nofile
+  ansible.builtin.command:
+    cmd: grep -q 'default_ulimits.*nofile' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
 - name: Verify environment.d containers.conf is deployed by containers role
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
