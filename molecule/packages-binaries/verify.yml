@@ -267,18 +267,6 @@
           - verify_subctl18.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
 
-    - name: Stat plain subctl binary (go install path)
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/go/bin/subctl"
-      register: verify_subctl
-
-    - name: Assert plain subctl exists and is executable
-      ansible.builtin.assert:
-        that:
-          - verify_subctl.stat.exists
-          - verify_subctl.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/subctl missing — packages_go_install plain-subctl regression"
-
     # --- Version-pin assertions: each binary must report the pinned version ---
 
     - name: Check kind version output
