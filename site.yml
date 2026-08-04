@@ -32,14 +32,16 @@
       become: false
       tags: [always]
       block:
-        - ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+        - name: Include pre-flight checks
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
 
     - name: Run CSB detection (makes csb_detected available to system role tasks)
       become: false
       when: ansible_facts['system'] | default('Linux') == 'Linux'
       tags: [always]
       block:
-        - ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+        - name: Include CSB detection
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
   roles:
     - role: repos_dnf

@@ -7,7 +7,7 @@
         path: "{{ notes_repo_path }}/.git"
       register: notes_repo_stat
 
-    - name: Check if git-lfs filter is already registered
+    - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: git config --global filter.lfs.smudge
       register: notes_lfs_configured

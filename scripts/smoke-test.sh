@@ -989,6 +989,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "journald-persistent" "PASS"
   elif $CSB_HOST; then record "journald-persistent" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
+  if grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
+    record "journald-maxuse" "PASS"
+  elif $CSB_HOST; then record "journald-maxuse" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
+  else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
   _cups_browsed_state=$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)
@@ -1422,8 +1426,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   elif [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
   else record "tlp-service" "WARN" "tlp.service not enabled"; fi
-  if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
-  else record "tlp-config" "WARN" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
+  if [[ -d /sys/class/power_supply/BAT0 ]]; then
+    if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
+    else record "tlp-config" "WARN" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
+  fi
   # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
   if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
     _bat_end=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo "?")

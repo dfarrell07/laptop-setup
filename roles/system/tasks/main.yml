@@ -711,6 +711,18 @@
     - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op
   notify: Apply firewall rules
 
+- name: Allow ICMPv6 router-advertisement through drop zone (SLAAC enabled)
+  ansible.posix.firewalld:
+    zone: drop
+    icmp_block: router-advertisement
+    permanent: true
+    state: enabled
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - system_ipv6_accept_ra | int >= 2
+  notify: Apply firewall rules
+
 # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
 # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
 # Fedora hybrid case (csb_detected + Fedora) opens port 722 in the FedoraWorkstation
@@ -1191,7 +1203,9 @@
     name: bluetooth.service
     masked: true
     state: stopped
-  when: system_disable_bluetooth | bool
+  when:
+    - system_disable_bluetooth | bool
+    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
   failed_when: false
 
 - name: Unmask bluetooth service when system_disable_bluetooth disabled
@@ -1200,7 +1214,9 @@
     masked: false
     enabled: true
     state: started
-  when: not (system_disable_bluetooth | bool)
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
   failed_when: false
 
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---

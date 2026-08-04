@@ -958,6 +958,14 @@
     - not csb_rhel
     - verify_journald_conf.stat.exists
 
+- name: Check journald drop-in has SystemMaxUse=4G
+  ansible.builtin.command: grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_journald_conf.stat.exists
+
 - name: Check sudoers drop-in has logfile directive
   ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening
   changed_when: false
