@@ -950,8 +950,8 @@ EOF
     record "sshd-algorithms" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
     _bad_alg=""
-    grep -q '^Ciphers aes256-gcm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-Ciphers}"
-    grep -q '^MACs hmac-sha2-512-etm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-MACs}"
+    grep -q '^Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-Ciphers}"
+    grep -q '^MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-MACs}"
     grep -qE '^KexAlgorithms.*(mlkem768x25519|curve25519)' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-KexAlgorithms}"
     grep -q '^PubkeyAcceptedAlgorithms.*sk-ssh-ed25519@openssh.com' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-PubkeyAcceptedAlgorithms}"
     if [[ -z "$_bad_alg" ]]; then record "sshd-algorithms" "PASS"

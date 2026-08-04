@@ -651,21 +651,21 @@
   when: ansible_system == 'Linux'
 
 # These assertions catch regressions in csb_detect.yml that would silently misclassify
-# all Fedora/Debian molecule runs as CSB, suppressing repo tasks and container-tier logic.
+# all Fedora/Debian/Rocky molecule runs as CSB, suppressing repo tasks and container-tier logic.
 - name: Assert csb_detected is false on non-CSB test host
   ansible.builtin.assert:
     that: not (csb_detected)
     fail_msg: "csb_detected is true on non-CSB molecule host — csb_detect.yml regression"
   when:
-    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_distribution in ['Fedora', 'Debian', 'Rocky']
     - ansible_system == 'Linux'
 
-- name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian
+- name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian/Rocky
   ansible.builtin.assert:
     that: needs_container_tier == 'host-only'
     fail_msg: "needs_container_tier is not host-only on non-CSB host — CSB detection regression"
   when:
-    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_distribution in ['Fedora', 'Debian', 'Rocky']
     - ansible_system == 'Linux'
 
 - name: Assert fapolicyd is not running on non-CSB molecule host
@@ -673,7 +673,7 @@
     that: not (fapolicyd_installed)
     fail_msg: "fapolicyd_installed is true on non-CSB molecule host — CSB detection false positive"
   when:
-    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_distribution in ['Fedora', 'Debian', 'Rocky']
     - ansible_system == 'Linux'
 
 - name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.x)

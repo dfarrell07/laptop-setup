@@ -1695,6 +1695,32 @@
           lock out all SSH users. Run as your normal user with -K (make all), not as root.
           'sudo -i && make all' sets USER=root and would write 'AllowUsers root'.
 
+    - name: Assert real_user_id matches valid Linux username character set
+      ansible.builtin.assert:
+        that:
+          - real_user_id is regex('^[a-z_][a-z0-9_.@-]{0,31}$')
+        fail_msg: >-
+          real_user_id='{{ real_user_id }}' contains characters outside the allowed set
+          [a-z0-9_.@-] or exceeds 32 characters. A newline or space in USER would inject
+          arbitrary directives into the sshd drop-in. Unset or correct the USER environment
+          variable before re-running.
+
+    - name: Assert system_ssh_allow_tcp_forwarding is a recognised sshd value
+      ansible.builtin.assert:
+        that:
+          - system_ssh_allow_tcp_forwarding in ['yes', 'no', 'all', 'local', 'remote']
+        fail_msg: >-
+          system_ssh_allow_tcp_forwarding='{{ system_ssh_allow_tcp_forwarding }}' is not a
+          valid AllowTcpForwarding value. Accepted: yes, no, all, local, remote.
+
+    - name: Assert system_ssh_allow_agent_forwarding is a recognised sshd value
+      ansible.builtin.assert:
+        that:
+          - system_ssh_allow_agent_forwarding in ['yes', 'no']
+        fail_msg: >-
+          system_ssh_allow_agent_forwarding='{{ system_ssh_allow_agent_forwarding }}' is not
+          a valid AllowAgentForwarding value. Accepted: yes, no.
+
     - name: Ensure sshd config drop-in directory
       ansible.builtin.file:
         path: /etc/ssh/sshd_config.d

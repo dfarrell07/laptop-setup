@@ -112,3 +112,37 @@ Create this file, then encrypt the vault:
 chmod 700 scripts/vault-pass.sh
 ansible-vault encrypt group_vars/all/vault.yml
 ```
+
+### Lost or Compromised YubiKey
+
+**Backup YubiKey programming** — must be done at initial setup time, before the
+original YubiKey is ever lost. Program a second YubiKey with the same HMAC-SHA1
+secret using the original 40-character hex key:
+
+```bash
+ykpersonalize -2 -ochal-resp -ochal-hmac -ohmac-lt64 -oserial-api-visible \
+  -a <original-40-char-hex-key>
+```
+
+Without `-a <hexkey>`, `ykpersonalize` generates a new random secret and the
+backup will not produce the same vault password. The HMAC secret cannot be read
+back from a YubiKey after programming, so retroactive backup is impossible.
+
+**Password manager fallback** — store the literal output of
+
+```bash
+ykchalresp -2 "ansible-vault-laptop-setup"
+```
+
+in a hardware-backed password manager (e.g., Bitwarden) as a plaintext emergency
+copy. This is the most practical single-YubiKey recovery path.
+
+**YubiKey already lost with no backup** — if neither a backup YubiKey nor the
+stored response exists, the vault is permanently inaccessible. The only path is
+to re-encrypt from scratch: recover the secret values from memory or other
+records, edit `group_vars/all/vault.yml` with known secrets, then re-key with a
+new password source:
+
+```bash
+ansible-vault rekey group_vars/all/vault.yml
+```
