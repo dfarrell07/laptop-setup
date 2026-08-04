@@ -1213,6 +1213,16 @@
     - profile == 'work'
     - packages_subctl_versioned | default([]) | length > 0
   block:
+    - name: Check installed version of versioned subctl binaries
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }} version"
+      changed_when: false
+      failed_when: false
+      register: packages_subctl_version_check
+      loop: "{{ packages_subctl_versioned }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
+
     - name: Install subctl version with temp GOBIN
       ansible.builtin.command:
         cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
@@ -1222,10 +1232,16 @@
         GOTOOLCHAIN: auto
         HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
         HTTP_PROXY: "{{ proxy_url | default(omit) }}"
+      when: >-
+        packages_subctl_version_check.results[loop_idx].rc != 0 or
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout | default(''))
       changed_when: true
       failed_when: false
       register: packages_subctl_install_results
       loop: "{{ packages_subctl_versioned }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
+        index_var: loop_idx
 
     - name: Warn if versioned subctl go install failed
       ansible.builtin.debug:
@@ -1244,7 +1260,13 @@
         dest: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
         mode: "0755"
         remote_src: true
+      when: >-
+        packages_subctl_version_check.results[loop_idx].rc != 0 or
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout | default(''))
       loop: "{{ packages_subctl_versioned }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
+        index_var: loop_idx
       failed_when: false
 
     - name: Clean up temp GOBIN directories

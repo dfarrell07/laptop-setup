@@ -169,7 +169,7 @@
   when:
     - repo_mullvad
     - ansible_facts['distribution'] == 'Fedora'
-    - not csb_rhel
+    - not csb_detected
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
@@ -181,8 +181,8 @@
         gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
         enabled: true
   rescue:
-    # No CSB handler here: the block-level 'when' already excludes CSB machines,
-    # so csb_detected is always false when rescue runs (network failure on non-CSB host).
+    # No CSB handler here: the block-level 'when' already excludes CSB machines
+    # (not csb_detected), so csb_detected is always false when rescue runs.
     - name: Warn Mullvad VPN repo failed (network error)
       ansible.builtin.debug:
         msg: >-

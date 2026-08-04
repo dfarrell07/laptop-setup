@@ -40,8 +40,8 @@ record() { # name status [detail]
 # 'profile' is an Ansible variable never exported to the shell; read it here.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _cfg="$SCRIPT_DIR/../config.yml"
-profile="personal"
-grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="work"
+profile="work"
+grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 unset _cfg SCRIPT_DIR
 
 run() { # execute locally or inside container
@@ -106,7 +106,10 @@ for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-
 done
 # Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
 for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
-  [[ -x "$_bin" ]] && { run "$_bin" version &>/dev/null && record "$(basename "$_bin")" "PASS" || record "$(basename "$_bin")" "FAIL" "$_bin present but version failed"; }
+  if [[ -x "$_bin" ]]; then
+    if run "$_bin" version &>/dev/null; then record "$(basename "$_bin")" "PASS"
+    else record "$(basename "$_bin")" "FAIL" "$_bin present but version failed"; fi
+  fi
 done
 
 # oc (work-profile only — guard on binary presence, emit nothing when absent)
@@ -581,6 +584,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # Guard on `command -v sway` (installed) rather than XDG_CURRENT_DESKTOP (active session)
   # so the FAIL is reachable from SSH/TTY — the recommended smoke-test environment per CLAUDE.md.
   if command -v sway &>/dev/null; then
+    if [[ -f "$HOME/.config/sway/config" ]]; then
+      if grep -q 'Ansible managed' "$HOME/.config/sway/config"; then record "sway-config" "PASS"
+      else record "sway-config" "WARN" "present but not Ansible-managed"; fi
+    else
+      record "sway-config" "FAIL" "~/.config/sway/config not deployed — run: make desktop"
+    fi
     if [[ -f "$HOME/.config/swaylock/config" ]]; then
       record "swaylock-config" "PASS"
     else

@@ -38,14 +38,14 @@
           Red Hat CA certificate files could not be copied to
           /etc/pki/ca-trust/source/anchors/. Internal CA trust may be
           broken, affecting access to internal HTTPS services.
-      when: csb_rhel
+      when: csb_detected
     - name: Warn CA certificate deploy failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
           TASK FAILED: Deploy Red Hat CA certificates in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not csb_rhel
+      when: not csb_detected
 
 - name: Install Red Hat cert packages
   when:
@@ -80,7 +80,7 @@
           distribution mechanism for these certs on CSB systems.
           Blocked workflows: internal web services, container image pulls
           from internal registries, authenticated internal API calls.
-      when: csb_rhel
+      when: csb_detected
     - name: Warn cert package install failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -88,7 +88,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not csb_rhel
+      when: not csb_detected
 
 - name: Install VPN packages
   when:
@@ -120,7 +120,7 @@
           and build infrastructure are unreachable without an active tunnel.
           Blocked workflows: all internal network access when off the
           Red Hat corporate network.
-      when: csb_rhel
+      when: csb_detected
     - name: Warn VPN package install failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -128,7 +128,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
-      when: not csb_rhel
+      when: not csb_detected
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
@@ -175,11 +175,11 @@
           to set shell=/sbin/nologin at install time.
           Blocked workflows: CIS 5.6 compliance cannot be achieved while
           the CSB splunk package sets an interactive shell.
-      when: csb_rhel
+      when: csb_detected
     - name: Warn splunk account hardening failed (non-CSB)
       ansible.builtin.debug:
         msg: >-
           TASK FAILED: Restrict splunk system account shell in role redhat.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Continuing playbook execution.
-      when: not csb_rhel
+      when: not csb_detected
