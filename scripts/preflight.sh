@@ -62,7 +62,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
 fi
 if [[ "$IS_CSB" == true ]]; then
   if [[ "$has_fapolicyd" == true ]]; then
-    record "csb_detected" "warn" "CSB detected (fapolicyd installed) — expect sudo and fapolicyd constraints"
+    record "csb_detected" "warn" "CSB detected (fapolicyd installed) — see fapolicyd and container_tier checks below for enforcement status"
   else
     record "csb_detected" "warn" "CSB detected (no fapolicyd) — hybrid mode; may need --ask-become-pass"
   fi
@@ -70,11 +70,12 @@ else
   record "csb_detected" "pass" "not CSB"
 fi
 if [[ -z "$PROFILE" ]]; then
-  if [[ "$IS_CSB" == true ]]; then PROFILE="work"; else PROFILE="personal"; fi
+  PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
-  # Promote to work if config.yml explicitly sets profile: work (e.g. non-CSB work machine)
   _cfg="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
+  # Apply config.yml profile override in both directions
   grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$_cfg" 2>/dev/null && PROFILE="work"
+  grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && PROFILE="personal"
   unset _cfg
 fi
 record "profile" "pass" "$PROFILE"

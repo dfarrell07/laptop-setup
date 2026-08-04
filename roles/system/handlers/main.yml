@@ -43,16 +43,6 @@
     - system_tlp_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
-- name: Reload NetworkManager
-  ansible.builtin.systemd:
-    name: NetworkManager
-    state: reloaded
-  become: true
-  register: system_nm_reload_result
-  failed_when:
-    - system_nm_reload_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
-
 - name: Restart NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager
