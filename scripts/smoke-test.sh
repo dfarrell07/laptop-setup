@@ -923,6 +923,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
         else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make system"; fi
       else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make system"; fi
     fi
+  elif $CSB_HOST; then
+    record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule; skipped on CSB — IT manages audit rules)
