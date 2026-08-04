@@ -48,8 +48,8 @@ Host gitlab.cee.redhat.com
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
     IdentitiesOnly yes
 {% endif %}
-
 {% if profile == 'work' and dotfiles_internal_git_host | default('') != '' %}
+
 Host internal-git
     HostName {{ dotfiles_internal_git_host }}
     User git
@@ -63,6 +63,7 @@ Host {{ dotfiles_laptop_tailscale_host }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     IdentitiesOnly yes
 {% endif %}
+
 {% if dotfiles_mac_tailscale_host | default('') %}
 Host {{ dotfiles_mac_tailscale_host }}
     Port {{ ssh_port | default(722) }}

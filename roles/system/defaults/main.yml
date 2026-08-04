@@ -94,7 +94,8 @@ system_usbguard_whitelist:
   - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
   - "allow id 3297:1969 name \"Moonlander*\" with-interface one-of { 03:*:* }"
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
-  - "allow with-connect-type \"hardwired\""
+  # Interface class restriction excludes mass storage (08) and unexpected classes.
+  - "allow with-connect-type \"hardwired\" with-interface one-of { 03:*:* 09:*:* 0E:*:* 01:*:* E0:01:01 FF:*:* }"
   # STM32 DFU bootloader — Moonlander firmware flashing (Wally/qmk flash).
   # Re-enumerates as VID 0483:df11 when reset button pressed or QK_BOOT keycode used.
   - "allow id 0483:df11 name \"DFU in FS Mode\" with-interface one-of { FE:01:* }"
