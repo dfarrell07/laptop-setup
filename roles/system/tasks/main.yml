@@ -1729,6 +1729,7 @@
   when:
     - ssh_port | int != 22
     - ansible_facts['selinux'].status | default('') == 'enabled'
+    - not csb_rhel  # CSB: sshd port-722 drop-in not deployed above; no need to label port 722
   block:
     - name: Apply SELinux port label for non-default SSH port
       community.general.seport:
