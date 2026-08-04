@@ -1268,7 +1268,7 @@
   ansible.builtin.lineinfile:
     path: /etc/bluetooth/main.conf
     regexp: '^#?Privacy\s*='
-    line: 'Privacy = device'
+    line: 'Privacy = {{ system_bluetooth_privacy }}'
     insertafter: '^\[General\]'
     create: false
   when:
