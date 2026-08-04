@@ -139,3 +139,12 @@
     - name: Assert brew autoupdate formula is installed
       ansible.builtin.command: brew list autoupdate
       changed_when: false
+
+    # --- pipx tools: yamllint and ansible-lint (cycle-41b: moved from brew to pipx on macOS) ---
+    - name: Check yamllint installed via pipx
+      ansible.builtin.command: yamllint --version
+      changed_when: false
+
+    - name: Check ansible-lint installed via pipx
+      ansible.builtin.command: ansible-lint --version
+      changed_when: false
