@@ -1,30 +1,30 @@
 ---
-# Fetch SSH host keys for _keyscan_host and seed known_hosts.
+# Fetch SSH host keys and seed known_hosts.
 # Called via include_tasks with loop_var: _keyscan_host.
-- name: Pre-seed {{ _keyscan_host }} known_hosts
+- name: Pre-seed known_hosts for {{ _keyscan_host }}
   block:
-    - name: Fetch {{ _keyscan_host }} SSH host keys
+    - name: Fetch SSH host keys for {{ _keyscan_host }}
       ansible.builtin.command:
         cmd: ssh-keyscan -T 10 {{ _keyscan_host }}
-      register: _keyscan_result
+      register: ssh_keyscan_result
       changed_when: false
       failed_when: >-
-        _keyscan_result.rc != 0 or
-        _keyscan_result.stdout | length == 0
+        ssh_keyscan_result.rc != 0 or
+        ssh_keyscan_result.stdout | length == 0
 
-    - name: Seed {{ _keyscan_host }} known_hosts entries
+    - name: Seed known_hosts entries for {{ _keyscan_host }}
       ansible.builtin.known_hosts:
         name: "{{ _keyscan_host }}"
         key: "{{ item }}"
         state: present
         hash_host: true
       loop: >-
-        {{ _keyscan_result.stdout_lines
+        {{ ssh_keyscan_result.stdout_lines
            | select('match', '^' + (_keyscan_host | regex_escape))
            | list }}
 
   rescue:
-    - name: Warn that {{ _keyscan_host }} host key fetch failed
+    - name: Warn — could not fetch host keys for {{ _keyscan_host }}
       ansible.builtin.debug:
         msg: >-
           WARNING: Could not fetch {{ _keyscan_host }} SSH host keys

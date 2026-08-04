@@ -3,11 +3,6 @@
 # Claude Code install, instance isolation, settings.
 
 # --- Install Claude Code ---
-- name: Fail if claude_install_method is npm (removed, not implemented)
-  ansible.builtin.fail:
-    msg: "npm install method is removed; set claude_install_method to native"
-  when: claude_install_method == 'npm'
-
 - name: Check if Claude Code is installed
   ansible.builtin.command:
     cmd: claude --version
@@ -53,7 +48,8 @@
   ansible.builtin.fail:
     msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized;
-      Claude was not installed. Set 'claude_install_method: native' in config.yml and re-run.
+      Claude was not installed. Valid values: 'native', 'skip'.
+      Note: 'npm' was never implemented (supply chain risk — see troubleshooting.md).
   when: claude_install_method not in ['native', 'skip']
 
 # --- Instance isolation directories and settings ---
@@ -207,6 +203,14 @@
   failed_when: false
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
+- name: Check if task queue timer unit exists
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
+  register: _claude_timer_stat
+  when:
+    - not (claude_queue_enabled | bool)
+    - ansible_facts['system'] == 'Linux'
+
 - name: Stop and disable task queue timer (when disabled)
   ansible.builtin.systemd:
     name: claude-queue.timer
@@ -216,6 +220,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - ansible_facts['system'] == 'Linux'
+    - _claude_timer_stat.stat.exists
   failed_when: false
 
 - name: Remove task queue systemd unit files (when disabled)

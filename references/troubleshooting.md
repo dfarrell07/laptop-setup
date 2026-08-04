@@ -232,9 +232,9 @@ Podman rootless requires entries in `/etc/subuid` and `/etc/subgid` mapping subo
 
 **Symptom:** Setting `claude_install_method: npm` in `config.yml` causes an immediate playbook abort with:
 ```
-FATAL: npm install method is removed; set claude_install_method to native
+FATAL: claude_install_method 'npm' is unrecognized; ...Valid values: 'native', 'skip'.
 ```
-No npm command is ever executed — the `roles/claude/tasks/main.yml` hard-fails before reaching any install step.
+No npm command is ever executed — `roles/claude/tasks/main.yml` rejects any value not in `['native', 'skip']` before reaching any install step.
 
 **Cause:**
 The npm installation method was removed (not just deprecated) due to supply chain risk. In March 2026, the npm registry saw concurrent supply chain attacks (axios trojan alongside a Claude Code source leak in v2.1.88). The npm install path carries unnecessary supply chain risk with ~300 transitive dependencies.

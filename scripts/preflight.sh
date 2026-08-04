@@ -40,7 +40,11 @@ if [[ -f /etc/os-release ]]; then
     fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
-[[ "$OS_FAMILY" == "unknown" ]] && record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/darwin" || record "os_family" "pass" "$OS_FAMILY"
+if [[ "$OS_FAMILY" == "unknown" ]]; then
+  record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/darwin"
+else
+  record "os_family" "pass" "$OS_FAMILY"
+fi
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   has_certs=false has_fapolicyd=false
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
@@ -66,7 +70,7 @@ else
   record "csb_detected" "pass" "not CSB"
 fi
 if [[ -z "$PROFILE" ]]; then
-  [[ "$IS_CSB" == true ]] && PROFILE="work" || PROFILE="personal"
+  if [[ "$IS_CSB" == true ]]; then PROFILE="work"; else PROFILE="personal"; fi
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Promote to work if config.yml explicitly sets profile: work (e.g. non-CSB work machine)
   _cfg="$(cd "$(dirname "$0")/.." && pwd)/config.yml"

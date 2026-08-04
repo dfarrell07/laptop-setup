@@ -68,8 +68,6 @@
   ansible.builtin.set_fact:
     fapolicyd_installed: >-
       {{ (is_linux | bool) and (_fapolicyd_unit.rc | default(1) == 0) }}
-    fapolicyd_running: >-
-      {{ (is_linux | bool) and (_fapolicyd_active.rc | default(1) == 0) }}
     fapolicyd_enforcing: >-
       {{
         (is_linux | bool)
@@ -211,7 +209,6 @@
       Is macOS           : {{ is_macos }}
       ---
       fapolicyd installed: {{ fapolicyd_installed }}
-      fapolicyd running  : {{ fapolicyd_running }}
       fapolicyd enforcing: {{ fapolicyd_enforcing }}
       Internal CA certs  : {{ internal_ca_present }}
       ---
