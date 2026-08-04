@@ -94,7 +94,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - install_vpn
-    - is_rhel | bool or is_fedora | bool
+    - is_rhel | bool or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
   block:
     - name: Install VPN packages
       ansible.builtin.dnf:
@@ -113,8 +113,8 @@
         _csb_ticket_summary: "Cannot install VPN packages on CSB"
         _csb_ticket_body: >-
           The VPN client package could not be installed. Package name:
-          redhat-internal-globalprotect-ui (Fedora) or
-          redhat-internal-openvpn-profiles (RHEL/other).
+          redhat-internal-globalprotect-ui (Fedora or RHEL >= 10) or
+          redhat-internal-openvpn-profiles (RHEL < 10).
           Without VPN, all internal Red Hat network access is blocked
           off-site: internal registries, Jira, Confluence, source repos,
           and build infrastructure are unreachable without an active tunnel.

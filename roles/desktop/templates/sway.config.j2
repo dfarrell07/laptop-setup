@@ -138,6 +138,7 @@ bindsym XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
 bindsym XF86AudioPlay exec playerctl play-pause
 bindsym XF86AudioNext exec playerctl next
 bindsym XF86AudioPrev exec playerctl previous
+
 # Notifications
 bindsym $mod+Shift+n exec makoctl dismiss
 bindsym $mod+Ctrl+n exec makoctl dismiss --all
@@ -183,7 +184,7 @@ input "type:touchpad" {
 input "{{ desktop_sway_trackpoint_id }}" {
     scroll_method on_button_down
     scroll_button 274
-    scroll_factor 0.5
+    scroll_factor {{ desktop_sway_trackpoint_scroll_factor }}
     accel_profile {{ desktop_sway_trackpoint_accel_profile }}
     pointer_accel {{ desktop_sway_trackpoint_pointer_accel }}
 }
