@@ -133,7 +133,7 @@
 
     - name: Check AllowTcpForwarding set to valid value (shared)
       ansible.builtin.command: >-
-        grep -qE '^AllowTcpForwarding (no|local|remote|yes)$'
+        grep -qE '^AllowTcpForwarding (no|local|remote|all|yes)$'
         /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       changed_when: false
       become: true

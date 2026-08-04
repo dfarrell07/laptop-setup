@@ -20,7 +20,7 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
-  net.ipv4.conf.all.rp_filter: 2      # loose mode; applies to all existing interfaces
+  net.ipv4.conf.all.rp_filter: 2  # loose mode; acts as floor (kernel max(all,iface)); sysctl_extra per-iface values <2 are ineffective
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
