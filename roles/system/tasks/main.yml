@@ -2744,6 +2744,7 @@
 - name: System-level dconf hardening (GNOME/GDM, CIS 1.8.x)
   when:
     - '"gdm.service" in ansible_facts.services'
+    - not csb_rhel  # CSB: IT manages GDM banner and screensaver policy via Satellite/SCAP; lock files conflict
   block:
     - name: Ensure dconf local.d locks directory exists
       ansible.builtin.file:
