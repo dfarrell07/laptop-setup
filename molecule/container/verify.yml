@@ -101,3 +101,23 @@
       ansible.builtin.assert:
         that: verify_oc_exported.stat.exists
         fail_msg: "~/.local/bin/oc not present — distrobox-export step may have failed"
+
+    - name: Stat golangci-lint exported to host at ~/.local/bin/golangci-lint
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.local/bin/golangci-lint"
+      register: verify_golangci_exported
+
+    - name: Assert golangci-lint exported to host by distrobox-export
+      ansible.builtin.assert:
+        that: verify_golangci_exported.stat.exists
+        fail_msg: "~/.local/bin/golangci-lint not present — distrobox-export step may have failed"
+
+    - name: Stat kubectl exported to host at ~/.local/bin/kubectl
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.local/bin/kubectl"
+      register: verify_kubectl_exported
+
+    - name: Assert kubectl exported to host by distrobox-export
+      ansible.builtin.assert:
+        that: verify_kubectl_exported.stat.exists
+        fail_msg: "~/.local/bin/kubectl not present — distrobox-export step may have failed"

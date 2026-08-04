@@ -5,7 +5,7 @@
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
-       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries test-distrobox-role \
+       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role \
        preflight guard-not-root \
        pip-lock pip-sync
 
@@ -23,7 +23,7 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
-	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries smoke-test smoke-test-container check"
+	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-packages-binaries smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit"
@@ -87,6 +87,11 @@ hooks:
 	@echo "Git hooks installed (core.hooksPath = .githooks)"
 
 update: guard-not-root preflight
+	@if command -v npm >/dev/null 2>&1; then \
+		npm install --ignore-scripts; \
+	else \
+		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
+	fi
 	ansible-galaxy collection install -r requirements.yml --force -p ./collections
 	ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
@@ -157,7 +162,7 @@ diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
-ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-packages-binaries test-distrobox-role
+ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
 
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
@@ -198,7 +203,7 @@ commitlint:
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
 # For VM tests: make test-vm (requires: make bootstrap-test first).
-test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-packages-binaries test-distrobox-role
+test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
 
 # Syntax-check the scripts/ directory (bash -n: parse only, no execution).
 test-scripts:
@@ -230,6 +235,12 @@ test-container: .venv
 # Idempotence skipped (download always fails, rescue debug fires every run).
 test-container-offline: .venv
 	.venv/bin/molecule test -s container-offline
+
+# Rescue/degradation path test in a distrobox environment (distrobox-host-exec present).
+# Confirms container_oc_installed=false blocks the export tasks and symlink path is taken.
+# Idempotence skipped (download always fails, rescue debug fires every run).
+test-container-offline-distrobox: .venv
+	.venv/bin/molecule test -s container-offline-distrobox
 
 test-distrobox-role: .venv
 	.venv/bin/molecule test -s distrobox-role

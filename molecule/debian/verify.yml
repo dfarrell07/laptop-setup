@@ -183,7 +183,7 @@
     # On Debian/dash, the task silently no-ops without executable: /bin/bash — this assertion
     # catches that regression before it reaches production.
     - name: Get global safe.directory entries
-      ansible.builtin.command:
+      ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: git config --global --get-all safe.directory
       register: verify_safe_directory
       changed_when: false

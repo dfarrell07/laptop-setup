@@ -1,0 +1,44 @@
+---
+# Converge: exercise the rescue/degradation path in container-provision-tasks.yml
+# inside a realistic distrobox environment (/usr/bin/distrobox-host-exec present).
+# No oc stub is placed, so the download block executes for real.
+# distrobox_oc_version is set to an invalid value that produces a 404 on
+# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 0
+# and distrobox_oc_fetch_timeout: 5 make the failure fast (one attempt, 5 s cap).
+# With distrobox-host-exec present and container_oc_installed=false after the rescue,
+# the export tasks (oc/kubectl) must skip, proving the guard works correctly.
+- name: Converge (container provisioning — offline rescue path, distrobox environment)
+  hosts: all
+  become: false
+  gather_facts: false
+
+  pre_tasks:
+    - name: Gather minimal facts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - distribution
+          - env
+
+  vars:
+    distrobox_packages:
+      - git
+      - vim
+      - curl
+    distrobox_host_exec_commands:
+      - podman
+    # Invalid version → 404 on mirror.openshift.com → rescue block fires.
+    distrobox_oc_version: "0.0.0-offline-test"
+    distrobox_golangci_lint_version: "v2.12.2"
+    distrobox_subctl_version: "v0.24.0"
+    # Override retry knobs so the 404/timeout fails in ≤5 s (one attempt).
+    distrobox_oc_fetch_retries: 0
+    distrobox_oc_fetch_delay: 0
+    distrobox_oc_fetch_timeout: 5
+    distrobox_oc_mirror_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
+
+  tasks:
+    - name: Run container provisioning tasks (rescue path, distrobox environment)
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/container-provision-tasks.yml"

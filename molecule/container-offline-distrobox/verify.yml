@@ -1,0 +1,47 @@
+---
+- name: Verify (container-offline-distrobox — distrobox path with rescue)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Stat oc at /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc_absent
+
+    - name: Assert oc absent — rescue block ran and play continued gracefully
+      ansible.builtin.assert:
+        that: not verify_oc_absent.stat.exists
+        fail_msg: >-
+          /usr/local/bin/oc exists after an intentional download failure.
+          Either the rescue block did not execute, a pre-existing oc binary is present
+          in the image, or the invalid version accidentally resolved to a real release.
+
+    - name: Stat /usr/local/bin/podman
+      ansible.builtin.stat:
+        path: /usr/local/bin/podman
+        follow: false
+      register: verify_podman_symlink
+
+    - name: Assert podman is a symlink to distrobox-host-exec (not flatpak-spawn wrapper)
+      ansible.builtin.assert:
+        that:
+          - verify_podman_symlink.stat.exists
+          - verify_podman_symlink.stat.islnk
+          - verify_podman_symlink.stat.lnk_target == '/usr/bin/distrobox-host-exec'
+        fail_msg: >-
+          /usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec.
+          The distrobox branch (symlink) must be active, not the flatpak-spawn wrapper path.
+
+    - name: Stat oc host wrapper at ~/.local/bin/oc
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.local/bin/oc"
+      register: verify_oc_export_absent
+
+    - name: Assert oc export absent — container_oc_installed=false skipped the export task
+      ansible.builtin.assert:
+        that: not verify_oc_export_absent.stat.exists
+        fail_msg: >-
+          ~/.local/bin/oc exists despite oc download failure.
+          The export task guard (container_oc_installed | default(true)) must have
+          allowed the export to run — container_oc_installed=false was not set by rescue.
