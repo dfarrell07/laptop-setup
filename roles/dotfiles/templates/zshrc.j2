@@ -14,7 +14,9 @@ plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
 export EDITOR=vim
 export VISUAL=vim
 {% if profile == 'work' %}
+{% if dotfiles_aws_profile %}
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+{% endif %}
 {% if dotfiles_gonosumdb %}
 export GONOSUMDB="{{ dotfiles_gonosumdb }}"
 {% endif %}

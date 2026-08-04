@@ -22,7 +22,9 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ss
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
 {% endif %}
 {% if profile == 'work' %}
+{% if dotfiles_aws_profile %}
 export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+{% endif %}
 {% if dotfiles_gonosumdb %}
 export GONOSUMDB="{{ dotfiles_gonosumdb }}"
 {% endif %}
