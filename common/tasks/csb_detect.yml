@@ -19,7 +19,7 @@
 # ---------------------------------------------------------------------------
 - name: Detect CSB hostname suffix
   ansible.builtin.set_fact:
-    csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
+    _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@
     csb_detected: >-
       {{
         ((is_rhel | bool) and (fapolicyd_installed | bool) and (internal_ca_present | bool))
-        or ((is_fedora | bool) and (csb_hostname | bool) and (internal_ca_present | bool))
+        or ((is_fedora | bool) and (_csb_hostname | bool) and (internal_ca_present | bool))
       }}
   become: false
 
@@ -212,7 +212,7 @@
       fapolicyd enforcing: {{ fapolicyd_enforcing }}
       Internal CA certs  : {{ internal_ca_present }}
       ---
-      CSB hostname (.csb): {{ csb_hostname }}
+      CSB hostname (.csb): {{ _csb_hostname }}
       CSB detected       : {{ csb_detected }}
       CSB restricted     : {{ csb_restricted }}
       ---

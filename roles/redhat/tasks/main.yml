@@ -94,7 +94,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - install_vpn
-    - is_rhel | bool or csb_detected or is_fedora | bool
+    - is_rhel | bool or is_fedora | bool
   block:
     - name: Install VPN packages
       ansible.builtin.dnf:

@@ -324,29 +324,13 @@
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
   rescue:
-    - name: Record RPM Fusion free failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Enable RPM Fusion free repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "RPM Fusion free provides multimedia codecs. Not critical for development."
-        _csb_ticket_summary: "Exception request: RPM Fusion free repository"
-        _csb_ticket_body: >-
-          RPM Fusion free provides multimedia codecs excluded from Fedora due to patent/licensing
-          constraints (H.264, AAC, ffmpeg, VLC).
-          Repo URL: https://download1.rpmfusion.org/free/fedora/.
-          No equivalent licensed source exists in Fedora or RHEL; these packages require RPM Fusion.
-          Blocked workflows: video conferencing codec support, media playback.
-      when: csb_rhel
-    - name: Warn RPM Fusion free failed (non-CSB network error)
+    - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
           REPO SETUP FAILED: Enable RPM Fusion free repository in role repos_dnf.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not csb_rhel
 
 - name: Enable RPM Fusion nonfree repo
   when:
@@ -358,29 +342,13 @@
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
   rescue:
-    - name: Record RPM Fusion nonfree failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Enable RPM Fusion nonfree repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "RPM Fusion nonfree provides NVIDIA drivers and non-free firmware. Not critical for development."
-        _csb_ticket_summary: "Exception request: RPM Fusion nonfree repository"
-        _csb_ticket_body: >-
-          RPM Fusion nonfree provides NVIDIA proprietary drivers and non-free firmware blobs excluded
-          from Fedora due to licensing constraints.
-          Repo URL: https://download1.rpmfusion.org/nonfree/fedora/.
-          Required only on machines with discrete NVIDIA GPUs or hardware needing non-free firmware.
-          Blocked workflows: GPU-accelerated workloads, NVIDIA driver installation.
-      when: csb_rhel
-    - name: Warn RPM Fusion nonfree failed (non-CSB network error)
+    - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-
           REPO SETUP FAILED: Enable RPM Fusion nonfree repository in role repos_dnf.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not csb_rhel
 
 - name: Add Tailscale repo
   when: repo_tailscale
@@ -411,8 +379,7 @@
         _csb_task_name: "Add Tailscale repository"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: >-
-          On Fedora: dnf install tailscale (ships in standard Fedora repos, older version).
-          On RHEL/CSB: download from https://pkgs.tailscale.com/stable/ or use make container.
+          Download from https://pkgs.tailscale.com/stable/ or use make container.
         _csb_ticket_summary: "Exception request: Tailscale RPM repository"
         _csb_ticket_body: >-
           Tailscale provides a WireGuard-based mesh VPN for secure access to development infrastructure.

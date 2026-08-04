@@ -260,9 +260,8 @@ repo_redhat: true
 
 # Container settings
 container_name: fedora-dev
-# container_image and container_release track the host Fedora major version.
-# Bump both manually when upgrading to a new Fedora release (e.g. 44 → 45).
-container_image: "registry.fedoraproject.org/fedora-toolbox:44"
+# container_image and container_release default to the host Fedora major version
+# via dynamic fallbacks in roles/distrobox/defaults/main.yml and tasks/main.yml.
+# Override in config.yml only when a specific version is needed.
 container_distro: fedora
-container_release: "44"
 container_replace: false

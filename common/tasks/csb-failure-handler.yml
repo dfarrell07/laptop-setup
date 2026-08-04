@@ -18,6 +18,7 @@
 
 ---
 - name: Record CSB failure
+  become: false
   ansible.builtin.set_fact:
     csb_failures: >-
       {{
@@ -37,6 +38,7 @@
       }}
 
 - name: "CSB restriction warn: {{ _csb_task_name }}"
+  become: false
   ansible.builtin.debug:
     msg: >-
       CSB BLOCKED: {{ _csb_task_name }} in role {{ _csb_role }}.
