@@ -370,6 +370,7 @@
 - name: Enable macOS firewall
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+  register: _fw_enable_result  # noqa: var-naming[no-role-prefix]
   changed_when: true
   become: true
   tags: [become]
@@ -377,6 +378,13 @@
     - ansible_facts['os_family'] == 'Darwin'
     - "'State = 1' not in (_fw_state.stdout | default(''))"
   failed_when: false
+
+- name: Warn if macOS firewall enable failed
+  ansible.builtin.debug:
+    msg: "WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc }} — application firewall may still be off"
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - _fw_enable_result.rc | default(0) != 0
 
 - name: Check macOS firewall stealth mode state
   ansible.builtin.command:
@@ -392,6 +400,7 @@
 - name: Enable macOS firewall stealth mode
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
+  register: _fw_stealth_enable_result  # noqa: var-naming[no-role-prefix]
   changed_when: true
   become: true
   tags: [become]
@@ -399,6 +408,13 @@
     - ansible_facts['os_family'] == 'Darwin'
     - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
   failed_when: false
+
+- name: Warn if macOS firewall stealth mode enable failed
+  ansible.builtin.debug:
+    msg: "WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc }} — firewall stealth mode may still be off"
+  when:
+    - ansible_facts['os_family'] == 'Darwin'
+    - _fw_stealth_enable_result.rc | default(0) != 0
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: Check if GNOME is installed

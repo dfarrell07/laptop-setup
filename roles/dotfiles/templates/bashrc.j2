@@ -5,6 +5,7 @@ export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp
 export GOTOOLCHAIN=auto  # auto-download toolchain when go.mod requires a newer version than system Go
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
+export VISUAL=vim
 {% if ansible_facts['system'] | default('Linux') == 'Linux' %}
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 {% endif %}

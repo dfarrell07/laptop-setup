@@ -1901,6 +1901,15 @@
     - Restart sshd
     - Restart chronyd
 
+- name: Warn if crypto policy update failed (SHA1 may remain active)
+  ansible.builtin.debug:
+    msg: >
+      WARNING: update-crypto-policies --set DEFAULT:NO-SHA1 failed
+      (rc={{ system_crypto_policy_set.rc }}). SHA1-based cipher suites
+      may remain permitted — CIS DEFAULT:NO-SHA1 policy not enforced.
+  when:
+    - system_crypto_policy_set.rc | default(0) != 0
+
 # --- Kernel modules for kind ---
 - name: Load iptables kernel modules for kind
   community.general.modprobe:
@@ -2039,6 +2048,7 @@
   ansible.builtin.dnf:
     name: "{{  'dnf5-plugin-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}"
     state: present
+  register: system_dnf_automatic_installed
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not csb_rhel
@@ -2053,6 +2063,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not csb_rhel
+    - system_dnf_automatic_installed is not failed
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
@@ -2062,6 +2073,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not csb_rhel
+    - system_dnf_automatic_installed is not failed
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
