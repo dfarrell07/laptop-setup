@@ -2585,6 +2585,7 @@
   when:
     - real_user_home | length > 0
     - real_user_home != '/'
+    - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
   failed_when: false
 
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
