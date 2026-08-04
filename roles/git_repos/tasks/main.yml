@@ -98,7 +98,7 @@
     msg: >-
       VPN-gated host {{ item.item }} is unreachable (port 22).
       Repos at {{ item.item }} require Red Hat VPN — connect to VPN or expect clone failures.
-  loop: "{{ git_repos_vpn_check.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
+  loop: "{{ git_repos_vpn_check.results | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -166,7 +166,7 @@
 - name: Report failed clones
   ansible.builtin.debug:
     msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.msg | default('unknown error') }}"
-  loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop: "{{ git_repos_clone_results.results | selectattr('failed', 'defined') | selectattr('failed') | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
 

@@ -128,7 +128,7 @@
       register: distrobox_create_result
       changed_when: >-
         'already exists' not in
-        ((distrobox_create_result.stdout | default('')) + (distrobox_create_result.stderr | default('')))
+        (distrobox_create_result.stdout + distrobox_create_result.stderr)
   rescue:
     - name: Warn on distrobox assemble create failure
       ansible.builtin.debug:
@@ -228,7 +228,7 @@
     groups: containers
     ansible_connection: containers.podman.podman
     ansible_host: "{{ distrobox_container_name }}"
-    ansible_python_interpreter: "{{ distrobox_python.stdout | default('/usr/bin/python3') | trim }}"
+    ansible_python_interpreter: "{{ distrobox_python.stdout | trim }}"
     distrobox_packages: "{{ distrobox_packages }}"
     distrobox_host_exec_commands: "{{ distrobox_host_exec_commands }}"
     distrobox_oc_version: "{{ distrobox_oc_version }}"

@@ -447,7 +447,7 @@
 
 - name: Set PQ KEX availability fact
   ansible.builtin.set_fact:
-    dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in (dotfiles_ssh_kex_check.stdout | default('')) }}"
+    dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in dotfiles_ssh_kex_check.stdout }}"
 
 - name: Ensure ~/.ssh directory exists
   ansible.builtin.file:
