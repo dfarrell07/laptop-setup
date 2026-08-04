@@ -1752,6 +1752,9 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when:
+    - not csb_rhel
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
 - name: Set crypto policy to DEFAULT:NO-SHA1
   ansible.builtin.command:
@@ -2568,6 +2571,7 @@
   register: system_useradd_defaults
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not csb_rhel
 
 - name: Set default inactive days for new accounts to 30
   ansible.builtin.command:
