@@ -27,6 +27,7 @@ export GOPRIVATE="{{ dotfiles_goprivate }}"
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp is noexec on this host
+export GOTOOLCHAIN=auto  # auto-download toolchain when go.mod requires a newer version than system Go
 export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
 HISTSIZE=50000

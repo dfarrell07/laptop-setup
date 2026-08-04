@@ -48,6 +48,20 @@
     - item.rc is defined
     - item.rc != 0
 
+- name: Authenticate to container registries from vault
+  ansible.builtin.command:
+    cmd: "podman login --username {{ item.username }} --password-stdin {{ item.registry }}"
+    stdin: "{{ item.token }}"
+  loop: "{{ registry_tokens | default([]) }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - registry_tokens | default([]) | length > 0
+
 - name: Check user group membership
   ansible.builtin.command:
     cmd: id -nG

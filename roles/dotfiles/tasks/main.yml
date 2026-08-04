@@ -87,7 +87,6 @@
     remote_src: true
     mode: "0644"
   when:
-    - not dotfiles_gitconfig.stat.exists
     - dotfiles_legacy_gitconfig.stat.exists
 
 - name: Remove legacy ~/.gitconfig when migrating to XDG path
