@@ -2,11 +2,11 @@
 [user]
 	name = {{ dotfiles_user_name }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
-{% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
+{% if ssh_git_signing_pubkey | length > 0 %}
 	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 {% endif %}
 
-{% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
+{% if ssh_git_signing_pubkey | length > 0 %}
 [commit]
 	gpgsign = true
 
@@ -21,7 +21,7 @@
 	sort = -committerdate
 
 [tag]
-{% if ssh_git_signing_pubkey | default('', true) | length > 0 %}
+{% if ssh_git_signing_pubkey | length > 0 %}
 	gpgsign = true
 {% endif %}
 	sort = -version:refname
@@ -101,7 +101,7 @@
 
 [credential "https://github.com"]
 	helper = !gh auth git-credential
-{% if profile == 'work' and ansible_facts['system'] | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') != '' %}
+{% if profile == 'work' and ansible_facts['system'] | default('Linux') == 'Linux' and dotfiles_internal_git_host != '' %}
 
 [http "https://{{ dotfiles_internal_git_host }}"]
 	sslCAInfo = {{ dotfiles_internal_ca_path }}

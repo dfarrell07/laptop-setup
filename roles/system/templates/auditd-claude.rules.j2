@@ -82,7 +82,7 @@
 -w /usr/bin/auditctl -p x -k audit-tools
 -w /usr/bin/augenrules -p x -k audit-tools
 
-{% if system_aide_enabled | default(false) %}
+{% if system_aide_enabled %}
 # AIDE integrity monitoring protection (prevent covert tampering of AIDE baseline)
 -w /var/lib/aide/ -p wa -k aide-integrity
 -w /etc/aide.conf -p wa -k aide-integrity

@@ -2,7 +2,7 @@
 # Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
 
 Port {{ ssh_port }}
-{% if not (csb_detected | default(false)) %}
+{% if not csb_detected %}
 Banner /etc/issue.net
 {% endif %}
 # WARNING: password auth is disabled. Before running make all, ensure
@@ -27,12 +27,12 @@ PermitUserEnvironment no
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3
-MaxSessions {{ system_ssh_max_sessions | default(10) }}
+MaxSessions {{ system_ssh_max_sessions }}
 LoginGraceTime 30
 
 X11Forwarding no
-AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | default('no') }}
-AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | default('local') }}
+AllowAgentForwarding {{ system_ssh_allow_agent_forwarding }}
+AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}
 
 ClientAliveInterval 300
 ClientAliveCountMax 2
@@ -41,10 +41,10 @@ ClientAliveCountMax 2
 # OpenSSH 10.3 (bz3827) fixed UnusedConnectionTimeout firing prematurely after a
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
-{% if system_ssh_channel_timeout | default('') | string != '' %}
+{% if system_ssh_channel_timeout | string != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
-{% if system_ssh_unused_connection_timeout | default('') | string != '' %}
+{% if system_ssh_unused_connection_timeout | string != '' %}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no

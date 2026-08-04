@@ -8,9 +8,7 @@
 - name: Disable binary downloads on fapolicyd-enforcing CSB container tier
   ansible.builtin.set_fact:
     packages_install_binaries: false
-  when:
-    - needs_container_tier is defined
-    - needs_container_tier == 'container'
+  when: needs_container_tier == 'container'
 
 - name: Install dnf packages
   when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']

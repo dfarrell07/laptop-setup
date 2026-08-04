@@ -79,7 +79,7 @@
       Accepted: sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com,
       ssh-ed25519. Writing an incompatible key would cause SSH lockout —
       sshd silently rejects non-accepted types at login time.
-  when: ssh_auth_key_pub | default('') | trim | length > 0
+  when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
@@ -87,21 +87,21 @@
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk"
     mode: "0600"
   no_log: true
-  when: ssh_auth_key | default('') | length > 0
+  when: ssh_auth_key | length > 0
 
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key_pub }}"
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk.pub"
     mode: "0644"
-  when: ssh_auth_key_pub | default('') | trim | length > 0
+  when: ssh_auth_key_pub | trim | length > 0
 
 - name: Add SSH auth public key to authorized_keys
   ansible.posix.authorized_key:
     user: "{{ ansible_facts['user_id'] }}"
     key: "{{ ssh_auth_key_pub }}"
     state: present
-  when: ssh_auth_key_pub | default('') | trim | length > 0
+  when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH signing key
   ansible.builtin.copy:
@@ -109,14 +109,14 @@
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}"
     mode: "0600"
   no_log: true
-  when: ssh_signing_key | default('') | trim | length > 0
+  when: ssh_signing_key | trim | length > 0
 
 - name: Deploy SSH signing public key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key_pub }}"
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}.pub"
     mode: "0644"
-  when: ssh_signing_key_pub | default('') | trim | length > 0
+  when: ssh_signing_key_pub | trim | length > 0
 
 - name: Deploy Red Hat internal git key
   ansible.builtin.copy:
@@ -125,7 +125,7 @@
     mode: "0600"
   no_log: true
   when:
-    - rh_git_key | default('') | length > 0
+    - rh_git_key | length > 0
     - profile == 'work'
 
 - name: Deploy allowed signers file
@@ -133,4 +133,4 @@
     src: allowed_signers.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/allowed_signers"
     mode: "0644"
-  when: ssh_git_signing_pubkey | default('') | trim | length > 0
+  when: ssh_git_signing_pubkey | trim | length > 0
