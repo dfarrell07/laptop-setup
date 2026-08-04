@@ -70,9 +70,8 @@
     - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
 
 # Coverage gap: the wait_for loop body is never invoked in any molecule scenario.
-# All molecule scenarios that include this role (fedora, rocky, debian, vm) set
-# profile: personal, which restricts git_repos_filtered to the 'personal' category.
-# Personal repos use github.com URLs only — none match code.engineering.redhat.com or
+# Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
+# No CI test repo uses ssh:// or git@ URLs matching code.engineering.redhat.com or
 # gitlab.cee.redhat.com — so the computed loop list is always empty and wait_for is
 # skipped. A functional end-to-end test would require VPN access unavailable in CI.
 # A unit-style test using localhost:22 as a mock host could verify the task structure

@@ -161,7 +161,7 @@ make repos-downstream # downstream repos only
 - Edit: `make vault-edit`
 - **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 17) outranks
   `group_vars` (4-5), so any `vault_*` key in `config.yml` silently shadows the vault-encrypted
-  value. A runtime `assert` in `site.yml` enforces this.
+  value. A runtime `assert` in `common/tasks/pre_flight_checks.yml` (included by `site.yml`) enforces this.
 
 ## Testing
 
