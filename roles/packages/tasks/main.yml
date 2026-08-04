@@ -244,7 +244,7 @@
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        packages_oc_version not in (packages_oc_check.stdout | default(''))
+        packages_oc_version not in (packages_oc_check.stdout)
       block:
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
@@ -844,7 +844,7 @@
       failed_when: false
 
     - name: Download operator-sdk binary
-      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout | default(''))
+      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout)
       vars:
         _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
       ansible.builtin.get_url:
@@ -897,7 +897,7 @@
       failed_when: false
 
     - name: Download cosign binary
-      when: packages_cosign_version not in (packages_cosign_check.stdout | default(''))
+      when: packages_cosign_version not in (packages_cosign_check.stdout)
       ansible.builtin.get_url:
         url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-amd64"
         dest: /usr/local/bin/cosign
@@ -946,7 +946,7 @@
       failed_when: false
 
     - name: Download and install tkn
-      when: packages_tkn_version not in (packages_tkn_check.stdout | default(''))
+      when: packages_tkn_version not in (packages_tkn_check.stdout)
       block:
         - name: Download tkn tarball
           vars:
@@ -1021,7 +1021,7 @@
       failed_when: false
 
     - name: Download ec binary
-      when: packages_ec_version not in (packages_ec_check.stdout | default(''))
+      when: packages_ec_version not in (packages_ec_check.stdout)
       ansible.builtin.get_url:
         url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_amd64"
         dest: /usr/local/bin/ec
@@ -1069,7 +1069,7 @@
       failed_when: false
 
     - name: Download and install k9s
-      when: packages_k9s_version not in (packages_k9s_check.stdout | default(''))
+      when: packages_k9s_version not in (packages_k9s_check.stdout)
       block:
         - name: Download k9s tarball
           ansible.builtin.get_url:
@@ -1230,7 +1230,7 @@
 
     - name: Upgrade krew
       when:
-        - packages_krew_version not in (packages_krew_check.stdout | default(''))
+        - packages_krew_version not in (packages_krew_check.stdout)
         - packages_krew_check.rc == 0
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
@@ -1238,7 +1238,7 @@
       # NOTE: krew self-manages its upgrade path — this upgrades to krew's own latest release,
       # NOT necessarily to packages_krew_version. packages_krew_version only pins the initial tarball
       # install (above). Subsequent upgrades follow krew's own release cadence.
-      changed_when: packages_krew_upgrade.stdout | default('') | length > 0
+      changed_when: packages_krew_upgrade.stdout | length > 0
 
   rescue:
     - name: Record krew installation failure (CSB)
@@ -1265,7 +1265,7 @@
 
   always:
     - name: Clean up krew installer files
-      when: packages_krew_version not in (packages_krew_check.stdout | default(''))
+      when: packages_krew_version not in (packages_krew_check.stdout)
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
