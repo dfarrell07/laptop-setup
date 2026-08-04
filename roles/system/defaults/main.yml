@@ -218,6 +218,7 @@ system_init_on_free: true  # zero freed memory pages (init_on_free=1 kernel para
 system_ptrace_scope: 1  # CIS default; default.config.yml overrides to 0 (standalone invocation only)
 system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
                           # to add machine-specific sysctls without replacing the entire hardening dict.
+                          # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
                           # Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
