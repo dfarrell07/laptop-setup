@@ -123,9 +123,9 @@ bindsym $mod+Shift+r restart
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg exit'"
 
 # Appearance
-default_border pixel 1
-default_floating_border pixel 1
-hide_edge_borders smart
+default_border pixel {{ desktop_sway_border_width }}
+default_floating_border pixel {{ desktop_sway_floating_border_width }}
+hide_edge_borders {{ desktop_sway_hide_edge_borders }}
 
 # Status bar
 bar {
