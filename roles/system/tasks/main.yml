@@ -1881,7 +1881,9 @@
     state: enabled
   when: system_firewalld_running | bool
   failed_when: false  # tailscale0 doesn't exist on first provision; permanent config succeeds, immediate fails
-  notify: Apply firewall rules
+  notify:
+    - Apply firewall rules
+    - Restart tailscaled
 
 # failed_when: false — on CSB where the Tailscale repo is blocked, the package
 # may not be installed; silently skip rather than fail the play.

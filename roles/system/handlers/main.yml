@@ -64,7 +64,6 @@
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 - name: Restart tailscaled
-  listen: Apply firewall rules
   ansible.builtin.systemd:
     name: tailscaled
     state: restarted
