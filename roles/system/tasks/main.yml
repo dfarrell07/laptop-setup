@@ -799,7 +799,7 @@
   when: csb_rhel
 
 - name: Kernel cmdline hardening block (skipped on RHEL CSB)
-  when: not csb_detected
+  when: not csb_rhel
   block:
     - name: Enable kernel lockdown (integrity mode)
       ansible.builtin.command:
@@ -2123,7 +2123,7 @@
       value: "{{ system_faillock_deny }}"
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -2135,7 +2135,7 @@
   loop:
     - audit
     - local_users_only  # prevent double-lockout with SSSD/IPA domain users
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Configure pam_faillock even_deny_root flag
   community.general.ini_file:
@@ -2267,7 +2267,7 @@
     option: remember
     value: "{{ system_pwhistory_remember }}"
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -2276,7 +2276,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
@@ -2301,7 +2301,7 @@
       value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
       value: "{{ system_pwquality_maxrepeat }}"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -2310,7 +2310,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
@@ -2360,7 +2360,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
@@ -2398,33 +2398,35 @@
       WARNING: Non-root crontabs found and will be silently blocked by cron.allow=root:
       {{ system_existing_crontabs.files | map(attribute='path') | list }}.
       Review these jobs before proceeding.
-  when: (system_existing_crontabs.files | default([])) | length > 0
+  when:
+    - (system_existing_crontabs.files | default([])) | length > 0
+    - not csb_rhel
 
 - name: Restrict cron access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/cron.allow
     mode: "0600"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Restrict at access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/at.allow
     mode: "0600"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
   ansible.builtin.file:
     path: /etc/cron.deny
     state: absent
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
   ansible.builtin.file:
     path: /etc/at.deny
     state: absent
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -2513,7 +2515,7 @@
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -2521,7 +2523,7 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -2529,7 +2531,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
-  when: not csb_detected
+  when: not csb_rhel
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
@@ -2953,20 +2955,10 @@
           ansible.builtin.debug:
             msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
 
-        - name: Initialize AIDE database
+        - name: Initialize AIDE database and promote to active baseline
           ansible.builtin.command:
-            cmd: aide --init
+            cmd: bash -c "aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"
           changed_when: true
-
-    - name: Promote initial AIDE database
-      ansible.builtin.copy:
-        src: /var/lib/aide/aide.db.new.gz
-        dest: /var/lib/aide/aide.db.gz
-        remote_src: true
-        mode: "0600"
-      when:
-        - not (system_aide_db.stat.exists | default(false))
-        - system_aide_db_new.stat.exists | default(false)  # guard: skip if init was externally interrupted (partial .new.gz)
 
     - name: Deploy AIDE failure notification unit
       ansible.builtin.template:
