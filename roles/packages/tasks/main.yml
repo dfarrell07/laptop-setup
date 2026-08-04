@@ -1239,8 +1239,9 @@
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
       register: packages_krew_upgrade
-      # krew upgrade prints output only when an actual upgrade occurs; silence = already at latest.
-      # changed_when: true would cause perpetual false-positive reports when krew self-upgrades past packages_krew_version.
+      # NOTE: krew self-manages its upgrade path — this upgrades to krew's own latest release,
+      # NOT necessarily to packages_krew_version. packages_krew_version only pins the initial tarball
+      # install (above). Subsequent upgrades follow krew's own release cadence.
       changed_when: packages_krew_upgrade.stdout | default('') | length > 0
 
   rescue:
