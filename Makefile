@@ -170,6 +170,7 @@ check-vars-sync:
 	python3 -m venv .venv
 	.venv/bin/pip install pip-tools
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
+	touch .venv
 
 # Regenerate the hash-pinned lockfile (run after editing requirements-test.txt)
 pip-lock: .venv

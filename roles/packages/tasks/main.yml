@@ -718,7 +718,10 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  vars:
+    _sops_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    _sops_sha256: "{{ packages_sops_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_sops_sha256 }}"
   block:
     - name: Check if sops is installed at target version
       ansible.builtin.command:
@@ -730,9 +733,11 @@
     - name: Download SOPS binary
       when: packages_sops_version not in (packages_sops_check.stdout)
       ansible.builtin.get_url:
-        url: "https://github.com/getsops/sops/releases/download/v{{ packages_sops_version }}/sops-v{{ packages_sops_version }}.linux.amd64"
+        url: >-
+          https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+          }}/sops-v{{ packages_sops_version }}.linux.{{ _sops_arch }}
         dest: /usr/local/bin/sops
-        checksum: "sha256:{{ packages_sops_sha256 }}"
+        checksum: "sha256:{{ _sops_sha256 }}"
         mode: "0755"
       become: true
       tags: [become]
@@ -766,7 +771,10 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  vars:
+    _gitleaks_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}"
+    _gitleaks_sha256: "{{ packages_gitleaks_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_gitleaks_sha256 }}"
   block:
     - name: Check if gitleaks is installed at target version
       ansible.builtin.command:
@@ -782,9 +790,9 @@
           ansible.builtin.get_url:
             url: >-
               https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
-              }}/gitleaks_{{ packages_gitleaks_version }}_linux_x64.tar.gz
+              }}/gitleaks_{{ packages_gitleaks_version }}_linux_{{ _gitleaks_arch }}.tar.gz
             dest: /tmp/gitleaks.tar.gz
-            checksum: "sha256:{{ packages_gitleaks_sha256 }}"
+            checksum: "sha256:{{ _gitleaks_sha256 }}"
             mode: "0644"
           register: packages_gitleaks_download
           retries: 3
@@ -839,8 +847,13 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  vars:
+    _operator_sdk_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    _operator_sdk_sha256: >-
+      {{ packages_operator_sdk_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+      else packages_operator_sdk_sha256 }}
   block:
     - name: Check if operator-sdk is installed at target version
       ansible.builtin.command:
@@ -854,9 +867,9 @@
       vars:
         _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
       ansible.builtin.get_url:
-        url: "{{ _url_base }}/v{{ packages_operator_sdk_version }}/operator-sdk_linux_amd64"
+        url: "{{ _url_base }}/v{{ packages_operator_sdk_version }}/operator-sdk_linux_{{ _operator_sdk_arch }}"
         dest: /usr/local/bin/operator-sdk
-        checksum: "sha256:{{ packages_operator_sdk_sha256 }}"
+        checksum: "sha256:{{ _operator_sdk_sha256 }}"
         mode: "0755"
       become: true
       tags: [become]
@@ -892,8 +905,11 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  vars:
+    _cosign_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    _cosign_sha256: "{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
   block:
     - name: Check if cosign is installed at target version
       ansible.builtin.command:
@@ -905,9 +921,9 @@
     - name: Download cosign binary
       when: packages_cosign_version not in (packages_cosign_check.stdout)
       ansible.builtin.get_url:
-        url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-amd64"
+        url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-{{ _cosign_arch }}"
         dest: /usr/local/bin/cosign
-        checksum: "sha256:{{ packages_cosign_sha256 }}"
+        checksum: "sha256:{{ _cosign_sha256 }}"
         mode: "0755"
       become: true
       tags: [become]
@@ -941,8 +957,11 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  vars:
+    _tkn_arch: "{{ 'aarch64' if ansible_facts['architecture'] == 'aarch64' else 'x86_64' }}"
+    _tkn_sha256: "{{ packages_tkn_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_tkn_sha256 }}"
   block:
     - name: Check if tkn is installed at target version
       ansible.builtin.command:
@@ -957,11 +976,11 @@
         - name: Download tkn tarball
           vars:
             _tkn_base: "https://github.com/tektoncd/cli/releases/download"
-            _tkn_file: "tkn_{{ packages_tkn_version }}_Linux_x86_64.tar.gz"
+            _tkn_file: "tkn_{{ packages_tkn_version }}_Linux_{{ _tkn_arch }}.tar.gz"
           ansible.builtin.get_url:
             url: "{{ _tkn_base }}/v{{ packages_tkn_version }}/{{ _tkn_file }}"
             dest: /tmp/tkn.tar.gz
-            checksum: "sha256:{{ packages_tkn_sha256 }}"
+            checksum: "sha256:{{ _tkn_sha256 }}"
             mode: "0644"
           register: packages_tkn_download
           retries: 3
@@ -1016,8 +1035,11 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  vars:
+    _ec_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+    _ec_sha256: "{{ packages_ec_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_ec_sha256 }}"
   block:
     - name: Check if ec is installed at target version
       ansible.builtin.command:
@@ -1029,9 +1051,9 @@
     - name: Download ec binary
       when: packages_ec_version not in (packages_ec_check.stdout)
       ansible.builtin.get_url:
-        url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_amd64"
+        url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_{{ _ec_arch }}"
         dest: /usr/local/bin/ec
-        checksum: "sha256:{{ packages_ec_sha256 }}"
+        checksum: "sha256:{{ _ec_sha256 }}"
         mode: "0755"
       become: true
       tags: [become]
