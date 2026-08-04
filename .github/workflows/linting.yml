@@ -150,8 +150,10 @@ jobs:
             if head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
               continue
             fi
-            # Allow the placeholder stub (no real secrets)
-            if grep -q 'vault_placeholder' "$f" && [ "$(grep -E '^vault_' "$f" | grep -cv 'vault_placeholder')" -eq 0 ]; then
+            # Allow the placeholder stub (no real secrets): vault_placeholder present
+            # and any other vault_* vars set only to [] (empty list stub)
+            if grep -q 'vault_placeholder' "$f" && \
+               [ "$(grep -E '^vault_' "$f" | grep -Ev 'vault_placeholder|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
               echo "::notice file=${f}::Vault stub (no real secrets) — OK"
               continue
             fi

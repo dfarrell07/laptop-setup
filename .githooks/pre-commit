@@ -5,6 +5,12 @@ failed=0
 # Block unencrypted vault files
 for f in $(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml' | tr '\0' '\n'); do
   if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
+    # Allow plaintext stub: vault_placeholder present and all other vault_* vars are empty stubs ([] only)
+    if git show ":$f" | grep -q 'vault_placeholder' && \
+       [ "$(git show ":$f" | grep -E '^vault_' | grep -Ev 'vault_placeholder|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
+      echo "NOTE: $f is a plaintext stub (no real secrets) — OK" >&2
+      continue
+    fi
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
     failed=1
   fi
