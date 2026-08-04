@@ -815,7 +815,7 @@
         - system_kernel_lockdown | length > 0
         - system_grubby_info.rc == 0
         - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_lockdown_result.rc == 0
       failed_when: false
 
     - name: Remove kernel lockdown grub parameter (lockdown disabled)
@@ -826,7 +826,7 @@
         - system_kernel_lockdown | length == 0
         - system_grubby_info.rc == 0
         - "'lockdown=' in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_lockdown_remove_result.rc == 0
       failed_when: false
 
     - name: Enable IOMMU for DMA protection (AMD)
@@ -837,7 +837,7 @@
         - system_grubby_info.rc == 0
         - "'amd_iommu=on' not in (system_grubby_info.stdout)"
         - ansible_facts['processor'] | join(' ') | lower is search('amd')
-      changed_when: true
+      changed_when: system_iommu_amd_result.rc == 0
       failed_when: false
 
     - name: Enable IOMMU for DMA protection (Intel)
@@ -848,7 +848,7 @@
         - system_grubby_info.rc == 0
         - "'intel_iommu=on' not in (system_grubby_info.stdout)"
         - ansible_facts['processor'] | join(' ') | lower is search('intel')
-      changed_when: true
+      changed_when: system_iommu_intel_result.rc == 0
       failed_when: false
 
     - name: Enable iommu=pt passthrough mode for VFIO/libvirt PCI passthrough
@@ -865,7 +865,7 @@
         - "'iommu=pt' not in (system_grubby_info.stdout)"
         - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
           (ansible_facts['processor'] | join(' ') | lower is search('intel'))
-      changed_when: true
+      changed_when: system_iommu_pt_result.rc == 0
       failed_when: false
 
     - name: Remove iommu=pt grub parameter (system_iommu_passthrough false)
@@ -876,7 +876,7 @@
         - not (system_iommu_passthrough | bool)
         - system_grubby_info.rc == 0
         - "'iommu=pt' in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_iommu_pt_remove_result.rc == 0
       failed_when: false
 
     - name: Disable legacy vsyscall page (exploit gadget source)
@@ -886,7 +886,7 @@
       when:
         - system_grubby_info.rc == 0
         - "'vsyscall=none' not in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_vsyscall_result.rc == 0
       failed_when: false
 
     - name: Zero-fill freed memory pages (init_on_free — not a Fedora default)
@@ -897,7 +897,7 @@
         - system_grubby_info.rc == 0
         - "'init_on_free=1' not in (system_grubby_info.stdout)"
         - system_init_on_free | bool
-      changed_when: true
+      changed_when: system_init_on_free_result.rc == 0
       failed_when: false
 
     - name: Remove init_on_free grub parameter (system_init_on_free false — removes performance/security tradeoff param)
@@ -908,7 +908,7 @@
         - system_grubby_info.rc == 0
         - "'init_on_free=1' in (system_grubby_info.stdout)"
         - not (system_init_on_free | bool)
-      changed_when: true
+      changed_when: system_init_on_free_remove_result.rc == 0
       failed_when: false
 
     - name: Randomize page allocator free-list order (heap-spray defense)
@@ -918,7 +918,7 @@
       when:
         - system_grubby_info.rc == 0
         - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_page_shuffle_result.rc == 0
       failed_when: false
 
     - name: Remove rd.luks.key grub parameter (leaks LUKS UUID; dracut falls back to passphrase)
@@ -929,7 +929,7 @@
         - system_grubby_info.rc == 0
         - "'rd.luks.key' in (system_grubby_info.stdout)"
         - system_remove_luks_key | bool
-      changed_when: true
+      changed_when: system_luks_key_cleanup.rc == 0
       failed_when: false
       # WARNING: set system_remove_luks_key: true in config.yml only if this machine does NOT
       # use a LUKS keyfile for auto-unlock at boot. Removing rd.luks.key from the cmdline means
