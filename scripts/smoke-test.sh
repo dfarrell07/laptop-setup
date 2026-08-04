@@ -771,6 +771,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl list-unit-files sshd.socket &>/dev/null | grep -q 'sshd.socket'; then
     if [[ "$(systemctl show -p UnitFileState --value sshd.socket 2>/dev/null)" == "masked" ]]; then
       record "sshd-socket-masked" "PASS"
+    elif $CSB_HOST; then
+      record "sshd-socket-masked" "WARN" "sshd.socket not masked on CSB — IT manages sshd; port-722 drop-in not deployed"
     else
       record "sshd-socket-masked" "FAIL" "sshd.socket not masked — socket activation can reopen port 22, bypassing 00-hardening.conf"
     fi
@@ -876,6 +878,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
       record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/PubkeyAuthentication/GSSAPIAuthentication/TCPKeepAlive/LogLevel/LoginGraceTime/MaxStartups (MaxAuthTries=$_max_auth)"
+    elif $CSB_HOST; then
+      record "sshd-hardening" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd; non-FIPS algorithms skipped"
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
     # AllowUsers must contain the actual user — empty or 'root' would lock everyone out
     if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
@@ -884,6 +888,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ "$_allow_users" == "$_expected_user" ]]; then record "sshd-allowusers" "PASS"
       else record "sshd-allowusers" "FAIL" "AllowUsers='$_allow_users' expected '$_expected_user'"; fi
       unset _allow_users _expected_user
+    elif $CSB_HOST; then
+      record "sshd-allowusers" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd"
     else record "sshd-allowusers" "FAIL" "sshd drop-in not deployed"; fi
   fi
   # Ciphers, MACs, KexAlgorithms, and PubkeyAcceptedAlgorithms must be present and hardened in the drop-in
@@ -896,6 +902,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        grep -q '^PubkeyAcceptedAlgorithms.*sk-ssh-ed25519@openssh.com' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
       record "sshd-algorithms" "PASS"
     else record "sshd-algorithms" "FAIL" "Ciphers/MACs/KexAlgorithms/PubkeyAcceptedAlgorithms not hardened in sshd drop-in — check 00-hardening.conf"; fi
+  elif $CSB_HOST; then
+    record "sshd-algorithms" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd; FIPS rejects non-FIPS algorithms"
   else record "sshd-algorithms" "FAIL" "sshd drop-in not deployed"; fi
 
   # SSH Banner directive and /etc/issue.net content (NIST AC-8 login notice)
