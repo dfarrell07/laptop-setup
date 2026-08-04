@@ -1450,6 +1450,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null 2>&1; then
     record "dconf-policies" "WARN" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
+  elif $CSB_HOST; then
+    record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
   else
   # Source key files checked directly — no D-Bus session required for smoke tests.
   # Compiled databases are produced by 'dconf update'; absence means it never ran.
