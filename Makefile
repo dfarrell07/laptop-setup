@@ -5,7 +5,7 @@
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
-       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries \
+       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries test-distrobox-role \
        preflight guard-not-root \
        pip-lock pip-sync
 
@@ -157,7 +157,7 @@ diff:
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
-ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-packages-binaries
+ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-packages-binaries test-distrobox-role
 
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
@@ -198,7 +198,7 @@ commitlint:
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
 # For VM tests: make test-vm (requires: make bootstrap-test first).
-test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-packages-binaries
+test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-packages-binaries test-distrobox-role
 
 # Syntax-check the scripts/ directory (bash -n: parse only, no execution).
 test-scripts:
@@ -230,6 +230,9 @@ test-container: .venv
 # Idempotence skipped (download always fails, rescue debug fires every run).
 test-container-offline: .venv
 	.venv/bin/molecule test -s container-offline
+
+test-distrobox-role: .venv
+	.venv/bin/molecule test -s distrobox-role
 
 test-packages-binaries: .venv
 	.venv/bin/molecule test -s packages-binaries

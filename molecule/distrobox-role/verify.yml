@@ -1,0 +1,60 @@
+---
+- name: Verify (distrobox role)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Stat distrobox config directory
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.config/distrobox"
+      register: verify_distrobox_dir
+
+    - name: Assert distrobox config directory exists with mode 0755
+      ansible.builtin.assert:
+        that:
+          - verify_distrobox_dir.stat.exists
+          - verify_distrobox_dir.stat.isdir
+          - verify_distrobox_dir.stat.mode == '0755'
+        fail_msg: "~/.config/distrobox missing or wrong mode (expected 0755)"
+
+    - name: Stat distrobox.ini
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.config/distrobox/distrobox.ini"
+      register: verify_ini
+
+    - name: Assert distrobox.ini exists with mode 0644
+      ansible.builtin.assert:
+        that:
+          - verify_ini.stat.exists
+          - verify_ini.stat.mode == '0644'
+        fail_msg: "~/.config/distrobox/distrobox.ini missing or wrong mode (expected 0644)"
+
+    - name: Read distrobox.ini contents
+      ansible.builtin.slurp:
+        src: "{{ ansible_env.HOME }}/.config/distrobox/distrobox.ini"
+      register: verify_ini_contents
+
+    - name: Assert distrobox.ini contains [fedora-dev] section header
+      ansible.builtin.assert:
+        that: "'[fedora-dev]' in (verify_ini_contents.content | b64decode)"
+        fail_msg: "distrobox.ini does not contain [fedora-dev] section header"
+
+    - name: Read pass-1 distrobox call log
+      ansible.builtin.slurp:
+        src: /tmp/distrobox-calls-pass1.log
+      register: verify_pass1_log
+
+    - name: Assert pass-1 log contains --replace
+      ansible.builtin.assert:
+        that: "'--replace' in (verify_pass1_log.content | b64decode)"
+        fail_msg: "pass-1 distrobox log missing '--replace' — assemble create --replace was not called"
+
+    - name: Read pass-2 distrobox call log
+      ansible.builtin.slurp:
+        src: /tmp/distrobox-calls.log
+      register: verify_pass2_log
+
+    - name: Assert pass-2 log does not contain --replace
+      ansible.builtin.assert:
+        that: "'--replace' not in (verify_pass2_log.content | b64decode)"
+        fail_msg: "pass-2 distrobox log contains '--replace' — skip-create path was not taken"

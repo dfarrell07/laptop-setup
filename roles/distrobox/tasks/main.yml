@@ -28,6 +28,21 @@
          else ('toolbox' if (distrobox_toolbox_check.rc == 0)
          else 'none') }}
 
+- name: Warn if RHEL host will use wrong default container image version
+  ansible.builtin.debug:
+    msg: >-
+      On RHEL hosts the default container_image inherits the host OS major version
+      (e.g. fedora-toolbox:{{ ansible_facts['distribution_major_version'] }}) which does not
+      correspond to any Fedora toolbox image. Add the following to config.yml before
+      running 'make container':
+        container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
+        container_release: '44'
+      Replace 44 with the current Fedora major version you want.
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution'] != 'Fedora'
+    - container_image is not defined
+
 - name: Skip container setup if no tool available
   ansible.builtin.debug:
     verbosity: 1
@@ -101,24 +116,30 @@
   when: distrobox_tool != 'none'
 
 # --- Distrobox path ---
+- name: Ensure distrobox config directory
+  ansible.builtin.file:
+    path: "{{ distrobox_ini_path | dirname }}"
+    state: directory
+    mode: "0755"
+  when:
+    - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing)
+
+- name: Deploy distrobox.ini
+  ansible.builtin.template:
+    src: distrobox.ini.j2
+    dest: "{{ distrobox_ini_path }}"
+    mode: "0644"
+  when:
+    - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing)
+
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
-    - name: Ensure distrobox config directory
-      ansible.builtin.file:
-        path: "{{ distrobox_ini_path | dirname }}"
-        state: directory
-        mode: "0755"
-
-    - name: Deploy distrobox.ini
-      ansible.builtin.template:
-        src: distrobox.ini.j2
-        dest: "{{ distrobox_ini_path }}"
-        mode: "0644"
-
     - name: Create container with distrobox assemble
       ansible.builtin.command:
         cmd: >-

@@ -1,0 +1,39 @@
+---
+driver:
+  name: podman
+
+platforms:
+  - name: distrobox-role-test
+    # Same image as the container scenario.
+    image: docker.io/geerlingguy/docker-fedora44-ansible@sha256:64d525abb8a4f5eb6065b80656101327d68b0645ed8b7bea5b6e98ce08ee0858
+    pre_build_image: true
+    privileged: true
+    command: /usr/sbin/init
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+  config_options:
+    defaults:
+      vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      gathering: smart
+
+verifier:
+  name: ansible
+
+scenario:
+  # Idempotence excluded: two converge passes with different podman stub states
+  # cannot be expressed as a single idempotence re-run.
+  test_sequence:
+    - dependency
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

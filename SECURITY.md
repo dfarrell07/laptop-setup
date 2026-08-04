@@ -18,16 +18,16 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **System hardening** — firewall (drop zone), sysctl (49 settings),
   auditd (user persistence monitoring, immutable rules), kernel lockdown,
   SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
-  DNS-over-TLS/DNSSEC (empty FallbackDNS), core dump disable, kernel
+  DNS-over-TLS/DNSSEC (FallbackDNS: Quad9 + Google DoT), core dump disable, kernel
   module blacklist (incl. usb-storage/uas), cups-browsed/avahi masking,
-  dnf-automatic, /dev/shm noexec, /home nosuid (CIS 1.1.9), NFS server /
+  dnf-automatic, /dev/shm noexec, /home nosuid (CIS 1.1.9), home directory 0750 (CIS 6.2.x, non-RHEL-CSB), NFS server /
   rpcbind masked (CIS 2.2.7), auditd user-mgmt tool watches — chsh/chfn/newgrp/su
   (CIS 4.1.3.8), pam_wheel.so (su restricted to wheel),
   root account locked, inactive account lockout chage -I 30 (CIS 5.5.1.5),
   AIDE file integrity monitoring (daily; disabled by default — set system_aide_enabled: true in config.yml only when a log consumer is in place), chrony NTS
   (authenticated time sync)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
-  `transfer.fsckObjects=true`, `core.symlinks=false`,
+  `transfer.fsckObjects=true`,
   `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit
 - **Claude Code isolation** — instance separation, sandbox config, file
   access deny lists (43 read + 44 write paths incl. /proc/environ,

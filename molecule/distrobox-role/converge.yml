@@ -1,0 +1,48 @@
+---
+- name: Converge pass 1 — distrobox_container_replace=true (--replace branch)
+  hosts: all
+  gather_facts: true
+
+  vars:
+    fapolicyd_enforcing: false
+    distrobox_oc_version: "4.22.7"
+    distrobox_container_replace: true
+
+  roles:
+    - role: distrobox
+
+- name: Save pass-1 log and reset for pass 2
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Save pass-1 distrobox call log
+      ansible.builtin.copy:
+        src: /tmp/distrobox-calls.log
+        dest: /tmp/distrobox-calls-pass1.log
+        remote_src: true
+        mode: "0644"
+
+    - name: Clear distrobox call log for pass 2
+      ansible.builtin.copy:
+        dest: /tmp/distrobox-calls.log
+        content: ""
+        mode: "0644"
+
+    - name: Update podman stub — container now present (rc=0)
+      ansible.builtin.copy:
+        dest: /tmp/podman-container-exists-rc
+        content: "0"
+        mode: "0644"
+
+- name: Converge pass 2 — distrobox_container_replace=false (skip-create path)
+  hosts: all
+  gather_facts: true
+
+  vars:
+    fapolicyd_enforcing: false
+    distrobox_oc_version: "4.22.7"
+    distrobox_container_replace: false
+
+  roles:
+    - role: distrobox

@@ -288,8 +288,10 @@ repo_redhat: true
 
 # Container settings
 container_name: fedora-dev
-# container_image and container_release default to the host Fedora major version
-# via dynamic fallbacks in roles/distrobox/defaults/main.yml and tasks/main.yml.
-# Override in config.yml only when a specific version is needed.
+# container_image and container_release fall back to the host OS major version
+# (e.g. 9 on RHEL 9), which is wrong on RHEL — there is no fedora-toolbox:9.
+# RHEL users must override both explicitly in config.yml, e.g.:
+#   container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
+#   container_release: '44'
 container_distro: fedora
 container_replace: false
