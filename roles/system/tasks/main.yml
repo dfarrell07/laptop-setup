@@ -265,21 +265,44 @@
     - system_boot_mountpoint.rc == 0
   failed_when: false
 
-- name: Add nosuid,nodev,noexec to /boot fstab entry
+- name: Add nosuid to /boot fstab entry
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
     backrefs: true
-    line: '\1\2,nosuid,nodev,noexec\3'
+    line: '\1\2,nosuid\3'
     backup: true
     mode: "0644"
   when:
     - system_boot_mountpoint.rc == 0
     - not csb_rhel
-    - >-
-      'nosuid' not in (system_boot_fstab_opts.stdout | default('')) or
-      'nodev' not in (system_boot_fstab_opts.stdout | default('')) or
-      'noexec' not in (system_boot_fstab_opts.stdout | default(''))
+    - "'nosuid' not in (system_boot_fstab_opts.stdout | default(''))"
+
+- name: Add nodev to /boot fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nodev\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_mountpoint.rc == 0
+    - not csb_rhel
+    - "'nodev' not in (system_boot_fstab_opts.stdout | default(''))"
+
+- name: Add noexec to /boot fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,noexec\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_mountpoint.rc == 0
+    - not csb_rhel
+    - "'noexec' not in (system_boot_fstab_opts.stdout | default(''))"
 
 - name: Check /boot current mount options
   ansible.builtin.command:
@@ -383,20 +406,31 @@
     - system_boot_efi_mountpoint.rc == 0
   failed_when: false
 
-- name: Add nosuid,noexec to /boot/efi fstab entry
+- name: Add nosuid to /boot/efi fstab entry
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^(\S+\s+/boot/efi\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
     backrefs: true
-    line: '\1\2,nosuid,noexec\3'
+    line: '\1\2,nosuid\3'
     backup: true
     mode: "0644"
   when:
     - system_boot_efi_mountpoint.rc == 0
     - not csb_rhel
-    - >-
-      'nosuid' not in (system_boot_efi_fstab_opts.stdout | default('')) or
-      'noexec' not in (system_boot_efi_fstab_opts.stdout | default(''))
+    - "'nosuid' not in (system_boot_efi_fstab_opts.stdout | default(''))"
+
+- name: Add noexec to /boot/efi fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot/efi\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,noexec\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_efi_mountpoint.rc == 0
+    - not csb_rhel
+    - "'noexec' not in (system_boot_efi_fstab_opts.stdout | default(''))"
 
 - name: Check /boot/efi current mount options
   ansible.builtin.command:
@@ -765,7 +799,7 @@
   when: csb_rhel
 
 - name: Kernel cmdline hardening block (skipped on RHEL CSB)
-  when: not csb_rhel
+  when: not csb_detected
   block:
     - name: Enable kernel lockdown (integrity mode)
       ansible.builtin.command:
@@ -956,14 +990,6 @@
       become: true
       failed_when: false
 
-    - name: Skipping /etc/kernel/cmdline write on CSB
-      ansible.builtin.debug:
-        msg: >-
-          Skipping /etc/kernel/cmdline write on CSB — IT manages kernel packages
-          via CSB COPR/dnf repos; coordinate boot param changes through IT change management.
-      when:
-        - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-        - csb_detected
 
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
@@ -2097,7 +2123,7 @@
       value: "{{ system_faillock_deny }}"
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -2109,7 +2135,7 @@
   loop:
     - audit
     - local_users_only  # prevent double-lockout with SSSD/IPA domain users
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Configure pam_faillock even_deny_root flag
   community.general.ini_file:
@@ -2241,7 +2267,7 @@
     option: remember
     value: "{{ system_pwhistory_remember }}"
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -2250,7 +2276,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
@@ -2275,7 +2301,7 @@
       value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
       value: "{{ system_pwquality_maxrepeat }}"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -2284,7 +2310,7 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su
@@ -2334,7 +2360,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
@@ -2379,26 +2405,26 @@
     content: "root\n"
     dest: /etc/cron.allow
     mode: "0600"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Restrict at access to root only
   ansible.builtin.copy:
     content: "root\n"
     dest: /etc/at.allow
     mode: "0600"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
   ansible.builtin.file:
     path: /etc/cron.deny
     state: absent
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
   ansible.builtin.file:
     path: /etc/at.deny
     state: absent
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -2487,7 +2513,7 @@
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -2495,7 +2521,7 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -2503,7 +2529,7 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
-  when: not csb_rhel
+  when: not csb_detected
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:

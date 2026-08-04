@@ -4,11 +4,6 @@
   gather_facts: true
 
   tasks:
-    - name: Confirm python3 is available
-      ansible.builtin.command:
-        cmd: python3 --version
-      changed_when: false
-
     - name: Verify oc stub is present at /usr/local/bin/oc
       ansible.builtin.stat:
         path: /usr/local/bin/oc
@@ -20,6 +15,17 @@
           - verify_oc.stat.exists
           - verify_oc.stat.mode == '0755'
         fail_msg: "/usr/local/bin/oc missing or wrong permissions after converge"
+
+    - name: Run oc version to confirm stub is functional
+      ansible.builtin.command:
+        cmd: /usr/local/bin/oc version --client
+      register: verify_oc_version
+      changed_when: false
+
+    - name: Assert oc stub outputs expected version string
+      ansible.builtin.assert:
+        that: "'stub' in verify_oc_version.stdout"
+        fail_msg: "oc version output unexpected: {{ verify_oc_version.stdout }}"
 
     - name: Verify kubectl is present at /usr/local/bin/kubectl
       ansible.builtin.stat:
@@ -85,3 +91,13 @@
           - verify_container_subctl.stat.exists
           - verify_container_subctl.stat.mode == '0755'
         fail_msg: "subctl binary missing — go install may have failed silently in container provisioning"
+
+    - name: Stat oc exported to host at ~/.local/bin/oc
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.local/bin/oc"
+      register: verify_oc_exported
+
+    - name: Assert oc exported to host by distrobox-export
+      ansible.builtin.assert:
+        that: verify_oc_exported.stat.exists
+        fail_msg: "~/.local/bin/oc not present — distrobox-export step may have failed"

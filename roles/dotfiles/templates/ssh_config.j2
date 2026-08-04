@@ -71,6 +71,7 @@ Host {{ dotfiles_mac_tailscale_host }}
 {% endif %}
 
 # User-local overrides (not managed by Ansible).
-# Host-specific stanzas here take effect because specific hostnames match before Host *.
-# This Include is placed after Host * so local settings cannot override the cipher/MAC policy above.
+# Host-specific stanzas here still take effect for hosts not covered above; SSH first-match wins per
+# directive (not per block), so directives already set in Host * cannot be overridden by local includes.
+# This Include is placed after Host * so local settings cannot weaken the cipher/MAC/algorithm policy above.
 Include ~/.ssh/config.local

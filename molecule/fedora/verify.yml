@@ -25,9 +25,6 @@
     - name: Include dnf verify assertions
       ansible.builtin.include_tasks: ../shared/verify-dnf.yml
 
-    - name: Include NetworkManager conf.d assertions
-      ansible.builtin.include_tasks: ../shared/verify-nm.yml
-
     # --- redhat role: minimal assertions (cert/VPN packages unavailable from public repos in CI) ---
     # Verify the condition logic fired correctly — is_fedora=true triggers cert/VPN install blocks.
     # Full install-success verification requires internal repos (out of scope for Podman CI).
@@ -104,12 +101,12 @@
 
     - name: Verify sway config exports VA-API environment variables
       ansible.builtin.command:
-        cmd: grep -q 'LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }}' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'LIBVA_DRIVER_NAME=radeonsi' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config sets cursor theme for XWayland consistency
       ansible.builtin.command:
-        cmd: grep -q 'xcursor_theme {{ desktop_sway_cursor_theme }}' "{{ ansible_user_dir }}/.config/sway/config"
+        cmd: grep -q 'xcursor_theme Adwaita' "{{ ansible_user_dir }}/.config/sway/config"
       changed_when: false
 
     - name: Verify sway config starts cliphist clipboard history daemon

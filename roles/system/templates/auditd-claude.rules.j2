@@ -49,7 +49,8 @@
 -w /etc/security/opasswd -p wa -k identity-change
 -w /etc/pam.d/ -p wa -k auth-config
 -w /etc/selinux/ -p wa -k mac-policy
--w /etc/crypto-policies/ -p wa -k crypto-policy  # watch for unauthorized policy downgrade (e.g. re-enabling SHA1)
+# watch for unauthorized policy downgrade (e.g. re-enabling SHA1)
+-w /etc/crypto-policies/ -p wa -k crypto-policy
 -w /etc/NetworkManager/ -p wa -k network-config
 -w /etc/firewalld/ -p wa -k network-config
 
