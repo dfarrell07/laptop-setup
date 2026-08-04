@@ -1203,6 +1203,13 @@
   when: "'Intel' not in (ansible_facts['processor'] | join(' '))"
   failed_when: false
 
+- name: Unmask thermald on Intel hardware
+  ansible.builtin.systemd:
+    name: thermald
+    masked: false
+  when: "'Intel' in (ansible_facts['processor'] | join(' '))"
+  failed_when: false
+
 # --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
 - name: Mask ModemManager (no WWAN interface detected)
   ansible.builtin.systemd:

@@ -78,6 +78,18 @@
           - verify_sops.stat.executable
         fail_msg: "/usr/local/bin/sops missing or not executable — packages_install_binaries=true regression"
 
+    - name: Stat /usr/local/bin/gitleaks
+      ansible.builtin.stat:
+        path: /usr/local/bin/gitleaks
+      register: verify_gitleaks
+
+    - name: Assert gitleaks exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gitleaks.stat.exists
+          - verify_gitleaks.stat.executable
+        fail_msg: "/usr/local/bin/gitleaks missing or not executable — packages_install_binaries=true regression"
+
     # --- work-profile OCP + toolchain binaries ---
 
     - name: Stat /usr/local/bin/oc
