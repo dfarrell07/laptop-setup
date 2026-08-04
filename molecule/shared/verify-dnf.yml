@@ -79,6 +79,11 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
 
+# NOTE: The kubectl and kind assertions below are dead code in container-based molecule scenarios
+# (fedora, rocky, vm): packages_install_binaries defaults to false in verify plays because
+# group_vars/all/vars.yml is NOT loaded during molecule's ansible verify invocation.
+# Actual kubectl/kind binary verification is done in molecule/packages-binaries/verify.yml.
+# These assertions remain as documentation of the intended coverage boundary.
 - name: Check kubectl binary presence
   ansible.builtin.stat:
     path: /usr/local/bin/kubectl
