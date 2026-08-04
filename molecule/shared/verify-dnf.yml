@@ -312,6 +312,18 @@
   changed_when: false
   become: true
 
+- name: Check /etc/dnf/automatic.conf upgrade_type = security
+  ansible.builtin.command: grep -q '^upgrade_type = security' /etc/dnf/automatic.conf
+  changed_when: false
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Check /etc/dnf/automatic.conf apply_updates = yes
+  ansible.builtin.command: grep -q '^apply_updates = yes' /etc/dnf/automatic.conf
+  changed_when: false
+  become: true
+  when: not (csb_rhel | default(false))
+
 - name: Verify crypto-policy
   ansible.builtin.command: update-crypto-policies --show
   register: verify_crypto

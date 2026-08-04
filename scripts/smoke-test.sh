@@ -1463,6 +1463,8 @@ EOF
     record "dnf-automatic" "PASS"
   elif systemctl is-enabled "$timer" &>/dev/null; then
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+    record "dnf-automatic" "WARN" "skipped on RHEL CSB — IT manages updates via Satellite/RHSM; Ansible not-csb_rhel guard"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
   # TLP power management (ThinkPad battery care)

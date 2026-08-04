@@ -128,8 +128,8 @@ bindsym $mod+r mode "resize"
 bindsym $mod+Ctrl+l exec swaylock -f
 
 # Screenshot (grim + slurp)
-bindsym Print exec grim - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy -t image/png
-bindsym $mod+Print exec grim -g "$(slurp)" - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy -t image/png
+bindsym Print exec grim - | tee ~/Pictures/screenshot-$(date +%F-%H-%M-%S).png | wl-copy -t image/png
+bindsym $mod+Print exec sh -c 'f=~/Pictures/screenshot-$(date +%F-%H-%M-%S).png; grim -g "$(slurp)" "$f" && wl-copy -t image/png < "$f"'
 
 # Audio (PipeWire via wpctl; -l 1.0 caps raise at 100%)
 bindsym XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
