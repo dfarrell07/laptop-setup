@@ -454,6 +454,18 @@
     state: directory
     mode: "0700"
 
+- name: Assert real_user_id matches valid Linux username character set
+  ansible.builtin.assert:
+    that:
+      - real_user_id | default('') | length > 0
+      - real_user_id is regex('^[a-z_][a-z0-9_.@-]{0,31}$')
+    fail_msg: >-
+      real_user_id='{{ real_user_id | default("(empty)") }}' contains characters
+      outside the allowed set or is empty. A newline or space in USER would inject
+      arbitrary directives into ~/.ssh/config. Correct the USER environment variable
+      before re-running.
+  when: profile == 'work'
+
 - name: Deploy SSH client config
   ansible.builtin.template:
     src: ssh_config.j2

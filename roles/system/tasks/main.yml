@@ -194,6 +194,22 @@
     - >-
       'nosuid' not in (system_home_fstab_opts.stdout | default(''))
 
+- name: Add nodev to /home fstab entry (CIS 1.1.9)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nodev\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_home_mountpoint.rc == 0
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
+    - >-
+      'nodev' not in (system_home_fstab_opts.stdout | default(''))
+
 - name: Check /home current mount options (CIS 1.1.9)
   ansible.builtin.command:
     cmd: findmnt -n -o OPTIONS /home
@@ -207,7 +223,7 @@
 
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: mount -o remount,nosuid /home
+    cmd: mount -o remount,nosuid,nodev /home
   register: _home_remount_result  # noqa: var-naming[no-role-prefix]
   changed_when: _home_remount_result.rc == 0
   when:
@@ -217,6 +233,7 @@
       or (system_home_nosuid_force | bool)
     - >-
       'nosuid' not in (system_home_opts.stdout | default(''))
+      or 'nodev' not in (system_home_opts.stdout | default(''))
   failed_when: false
 
 - name: Warn if /home nosuid remount failed
@@ -1076,6 +1093,17 @@
     name: auditd
     state: present
   when: ansible_facts['pkg_mgr'] == 'apt'
+
+- name: Assert real_user_home is a valid absolute path before deploying auditd rules
+  ansible.builtin.assert:
+    that:
+      - real_user_home is regex('^/[a-zA-Z0-9_/.-]{1,254}$')
+      - real_user_home != '/'
+    fail_msg: >-
+      real_user_home='{{ real_user_home }}' is not a valid absolute path.
+      A newline or special character in HOME would inject arbitrary directives into
+      the auditd rules file. Ensure HOME is set correctly before running.
+  when: not csb_rhel
 
 - name: Deploy auditd rules
   ansible.builtin.template:

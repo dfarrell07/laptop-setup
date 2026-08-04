@@ -1392,9 +1392,9 @@ EOF
   # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
   if findmnt -n /home &>/dev/null; then
     _home_opts=$(findmnt -n -o OPTIONS /home 2>/dev/null || echo "")
-    if echo "$_home_opts" | grep -q nosuid; then record "home-nosuid" "PASS"
+    if echo "$_home_opts" | grep -q nosuid && echo "$_home_opts" | grep -q nodev; then record "home-nosuid" "PASS"
     elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
-    else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid not set: $_home_opts"; fi
+    else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid/nodev not set: $_home_opts"; fi
     unset _home_opts
   else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
 

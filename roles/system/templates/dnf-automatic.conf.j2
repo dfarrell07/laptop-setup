@@ -29,3 +29,8 @@ emit_no_updates = no
 # (docker-ce, chrome, slack, etc.) are excluded from auto-updates by
 # setting enabled=0 in their .repo files. The repos_dnf role creates
 # them with enabled=true; disable individually if auto-update is risky.
+
+{% if network_proxied | default(false) %}
+[main]
+proxy = {{ proxy_url }}
+{% endif %}

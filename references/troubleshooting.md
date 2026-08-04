@@ -734,7 +734,7 @@ bpfman list                          # triggers socket activation; should return
 
 **Symptom:** Print dialogs fail to open, CUPS is not running, `lpq` returns an error.
 
-**Root Cause:** The `system` role masks `cups.service`, `cups.socket`, and `cups.path` when `system_disable_printing: true` (the default). Masking prevents socket activation — even Flatpak print dialogs that trigger CUPS via socket will fail silently.
+**Root Cause:** The `system` role disables `cups.service` and masks `cups.socket` and `cups.path` when `system_disable_printing: true` (the default). `cups.service` is disabled but not masked — socket activation is blocked via the masked `cups.socket` rather than by masking the service itself.
 
 **Fix:** Set in `config.yml`:
 
