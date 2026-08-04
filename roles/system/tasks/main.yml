@@ -1570,7 +1570,9 @@
     name: fwupd
     state: present
   register: system_fwupd_install_result
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when:
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
   failed_when: false
 
 - name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
@@ -1578,6 +1580,7 @@
     name: fwupd-refresh.timer
     state: started
     enabled: true
+  when: not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
   failed_when: false
 
 - name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
@@ -1593,6 +1596,7 @@
     masked: true
     state: stopped
     daemon_reload: true
+  when: not csb_rhel  # passim is only installed alongside fwupd; skip if fwupd was not installed
   failed_when: false
   # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
   # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
