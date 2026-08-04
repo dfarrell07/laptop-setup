@@ -206,13 +206,13 @@ done
 
 # --- Dotfiles checks ---
 for f in .zshrc .vimrc .bashrc; do
-  if [[ ! -f "$HOME/$f" ]]; then record "dotfile-$f" "FAIL" "not deployed — run: make all"
-  elif ! grep -q 'Ansible managed' "$HOME/$f"; then record "dotfile-$f" "FAIL" "$f present but not Ansible-managed — check for manual overwrite"
+  if [[ ! -f "$HOME/$f" ]]; then record "dotfile-$f" "FAIL" "not deployed — run: make dotfiles"
+  elif ! grep -q 'Ansible managed' "$HOME/$f"; then record "dotfile-$f" "FAIL" "$f present but not Ansible-managed — inspect and re-run: make dotfiles"
   else record "dotfile-$f" "PASS"; fi
 done
 _tmux_conf="$HOME/.config/tmux/tmux.conf"
-if [[ ! -f "$_tmux_conf" ]]; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "not deployed — run: make all"
-elif ! grep -q 'Ansible managed' "$_tmux_conf"; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "$_tmux_conf present but not Ansible-managed — check for manual overwrite"
+if [[ ! -f "$_tmux_conf" ]]; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "not deployed — run: make dotfiles"
+elif ! grep -q 'Ansible managed' "$_tmux_conf"; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "$_tmux_conf present but not Ansible-managed — inspect and re-run: make dotfiles"
 else record "dotfile-.config/tmux/tmux.conf" "PASS"; fi
 _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
@@ -326,7 +326,7 @@ else record "omz-xdg-dir" "FAIL" "~/.local/share/oh-my-zsh/oh-my-zsh.sh missing 
 # (defaults to "" since cycle-32; absence is expected on machines without private Go modules)
 if [[ "$profile" == "work" ]]; then
   if grep -q 'GONOSUMDB' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "gonosumdb-set" "PASS"
-  else record "gonosumdb-set" "INFO" "GONOSUMDB not exported — normal unless dotfiles_gonosumdb is set in config.yml (Red Hat private Go modules)"; fi
+  else record "gonosumdb-set" "WARN" "GONOSUMDB not exported — normal unless dotfiles_gonosumdb is set in config.yml (Red Hat private Go modules)"; fi
 fi
 
 # direnv: hook and toml content
@@ -858,6 +858,38 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "sshd-allowusers" "WARN" "skipped — requires root"
   else
     _max_auth=$(grep -oP '^MaxAuthTries \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || echo "?")
+    _bad_directive=""
+    if [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
+      while IFS=: read -r _f _d _p; do
+        case "$_f" in
+          P) grep -qP "^${_d} ${_p}$" /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null ;;
+          *) grep -q "^${_d} ${_p}$" /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null ;;
+        esac || { _bad_directive="$_d"; break; }
+      done <<'EOF'
+q:PasswordAuthentication:no
+q:KbdInteractiveAuthentication:no
+q:PermitRootLogin:no
+q:PermitEmptyPasswords:no
+q:X11Forwarding:no
+P:ClientAliveCountMax:[1-9][0-9]?
+P:ClientAliveInterval:[1-9][0-9]*
+q:TCPKeepAlive:no
+q:LogLevel:VERBOSE
+q:HostKeyAlgorithms:ssh-ed25519
+q:PubkeyAuthentication:yes
+P:AllowAgentForwarding:no
+P:AllowTcpForwarding:(no|local|remote)
+q:PermitUserEnvironment:no
+P:MaxSessions:[1-9][0-9]*
+q:MaxStartups:10:30:60
+q:LoginGraceTime:30
+q:HostbasedAuthentication:no
+q:IgnoreRhosts:yes
+q:GSSAPIAuthentication:no
+q:AuthorizedKeysFile:.ssh/authorized_keys
+EOF
+      [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]] || _bad_directive="${_bad_directive:-MaxAuthTries}"
+    fi
     if grep -q '^PasswordAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
        grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
@@ -882,7 +914,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
        [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-      record "sshd-hardening" "FAIL" "sshd drop-in has wrong directives — check PasswordAuthentication/AllowForwarding/PermitUserEnvironment/HostKeyAlgorithms/PubkeyAuthentication/GSSAPIAuthentication/TCPKeepAlive/LogLevel/LoginGraceTime/MaxStartups (MaxAuthTries=$_max_auth)"
+      record "sshd-hardening" "FAIL" "${_bad_directive:-unknown} directive wrong or absent in sshd drop-in (MaxAuthTries=$_max_auth)"
     elif $CSB_HOST; then
       record "sshd-hardening" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd; non-FIPS algorithms skipped"
     else record "sshd-hardening" "FAIL" "sshd drop-in not deployed"; fi
@@ -901,12 +933,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ "$EUID" -ne 0 ]]; then
     record "sshd-algorithms" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    if grep -q '^Ciphers aes256-gcm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^MACs hmac-sha2-512-etm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qE '^KexAlgorithms.*(mlkem768x25519|curve25519)' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^PubkeyAcceptedAlgorithms.*sk-ssh-ed25519@openssh.com' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
-      record "sshd-algorithms" "PASS"
-    else record "sshd-algorithms" "FAIL" "Ciphers/MACs/KexAlgorithms/PubkeyAcceptedAlgorithms not hardened in sshd drop-in — check 00-hardening.conf"; fi
+    _bad_alg=""
+    grep -q '^Ciphers aes256-gcm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-Ciphers}"
+    grep -q '^MACs hmac-sha2-512-etm@openssh.com,' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-MACs}"
+    grep -qE '^KexAlgorithms.*(mlkem768x25519|curve25519)' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-KexAlgorithms}"
+    grep -q '^PubkeyAcceptedAlgorithms.*sk-ssh-ed25519@openssh.com' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null || _bad_alg="${_bad_alg:-PubkeyAcceptedAlgorithms}"
+    if [[ -z "$_bad_alg" ]]; then record "sshd-algorithms" "PASS"
+    else record "sshd-algorithms" "FAIL" "${_bad_alg} not hardened in sshd drop-in (check 00-hardening.conf)"; fi
   elif $CSB_HOST; then
     record "sshd-algorithms" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd; FIPS rejects non-FIPS algorithms"
   else record "sshd-algorithms" "FAIL" "sshd drop-in not deployed"; fi
@@ -951,6 +984,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
     done
   fi
+  if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then
   # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
   if [[ -f /etc/aide.conf ]]; then
     for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
@@ -958,7 +992,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
       else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
     done
-  else record "aide-not-configured" "WARN" "/etc/aide.conf absent; run: aide --init && cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"; fi
+  else record "aide-not-configured" "WARN" "/etc/aide.conf absent — run: make system (enable system_aide_enabled: true in config.yml first); after deploy, initialise with: aide --init"; fi
   # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true for laptops)
   if [[ -f /etc/tlp.conf ]]; then
     for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
@@ -966,6 +1000,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
       else record "$label" "WARN" "$_path not found in /etc/aide.conf — expected when system_tlp_enabled: true"; fi
     done
+  fi
   fi
 
   # USB storage blacklist is conditional on system_disable_usb_storage (default: true)
@@ -1562,10 +1597,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # logind IdleAction=lock (physical security)
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-lock" "PASS"
-  else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make all"; fi
+  else record "logind-idle-lock" "FAIL" "logind IdleAction not set to lock — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make system"; fi
   if grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
     record "logind-idle-sec" "PASS"
-  else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined) — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make all"; fi
+  else record "logind-idle-sec" "FAIL" "logind IdleActionSec not configured (idle-lock timeout undefined) — check /etc/systemd/logind.conf.d/99-hardening.conf; fix: make system"; fi
 
   # Session lingering (required for rootless podman.socket to survive provisioning SSH sessions)
   if loginctl show-user "${SUDO_USER:-$USER}" --property=Linger 2>/dev/null | grep -q "^Linger=yes"; then
