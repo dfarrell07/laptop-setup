@@ -1040,6 +1040,25 @@
     - verify_chronyd is not skipped
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
+- name: Check chrony NTS config in /etc/chrony.conf
+  ansible.builtin.command: grep -q nts /etc/chrony.conf
+  changed_when: false
+  failed_when: false
+  register: verify_chrony_nts
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert chrony NTS config is present
+  ansible.builtin.assert:
+    that: verify_chrony_nts.rc == 0
+    fail_msg: "NTS not configured in /etc/chrony.conf — NTS deployment regression"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_chrony_nts is not skipped
+
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false

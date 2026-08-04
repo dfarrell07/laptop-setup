@@ -42,6 +42,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _cfg="$SCRIPT_DIR/../config.yml"
 profile="work"
 grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
+_system_umask=$(grep -oE '^system_umask:[[:space:]]*"?([0-9]+)"?' "$_cfg" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+_system_umask="${_system_umask:-027}"
 unset _cfg SCRIPT_DIR
 
 run() { # execute locally or inside container
@@ -1508,15 +1510,17 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Skipped on CSB — login.defs is not modified on CSB; IPA/SSSD + IT group policy governs local
   # accounts. INACTIVE=30 in particular could lock IT-managed service accounts that don't rotate
   # passwords, so Ansible deliberately skips all login.defs writes when csb_detected is true.
-  if grep -qE '^PASS_MAX_DAYS[[:space:]]+365$' /etc/login.defs 2>/dev/null; then record "pass-max-days" "PASS"
+  _pass_max_days=$(awk '/^PASS_MAX_DAYS[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
+  if [[ -n "$_pass_max_days" && "$_pass_max_days" -ge 1 && "$_pass_max_days" -le 365 ]]; then record "pass-max-days" "PASS"
   elif $CSB_HOST; then record "pass-max-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
-  else record "pass-max-days" "FAIL" "PASS_MAX_DAYS not set to 365 in login.defs"; fi
-  if grep -qE '^UMASK[[:space:]]+027$' /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
+  else record "pass-max-days" "FAIL" "PASS_MAX_DAYS=${_pass_max_days:-unset} not in CIS range 1-365 in login.defs"; fi
+  if grep -qE "^UMASK[[:space:]]+${_system_umask}$" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
   elif $CSB_HOST; then record "umask-login-defs" "WARN" "skipped on CSB — login.defs not modified"
-  else record "umask-login-defs" "FAIL" "UMASK not set to 027 in login.defs"; fi
-  if grep -qE '^INACTIVE[[:space:]]+30$' /etc/login.defs 2>/dev/null; then record "inactive-lock" "PASS"
+  else record "umask-login-defs" "FAIL" "UMASK not set to ${_system_umask} in login.defs"; fi
+  _inactive_logindefs=$(awk '/^INACTIVE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
+  if [[ -n "$_inactive_logindefs" && "$_inactive_logindefs" -ge 1 && "$_inactive_logindefs" -le 30 ]]; then record "inactive-lock" "PASS"
   elif $CSB_HOST; then record "inactive-lock" "WARN" "skipped on CSB — INACTIVE not set (would lock IT-managed service accounts with non-rotating passwords)"
-  else record "inactive-lock" "FAIL" "INACTIVE not set to 30 in login.defs"; fi
+  else record "inactive-lock" "FAIL" "INACTIVE=${_inactive_logindefs:-unset} not in CIS range 1-30 in login.defs"; fi
   # CIS 5.5.1.5: verify chage -I 30 was applied to the existing user account (not just new-account default).
   # login.defs INACTIVE=30 only governs future accounts created with useradd — the retroactive chage
   # updates /etc/shadow field 7 directly for the pre-existing user. Requires root to read /etc/shadow.
@@ -1527,18 +1531,20 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
       record "chage-inactive-user" "WARN" "no shadow entry for '$_chage_user' (SSSD/IPA domain account?)"
     else
       _inactive_val=$(awk -F: '{print $7}' <<< "$_shadow_line")
-      if [[ "$_inactive_val" == "30" ]]; then record "chage-inactive-user" "PASS"
+      if [[ -n "$_inactive_val" && "$_inactive_val" -ge 1 && "$_inactive_val" -le 30 ]]; then record "chage-inactive-user" "PASS"
       elif $CSB_HOST; then record "chage-inactive-user" "WARN" "skipped on CSB — Ansible intentionally omits chage -I 30 (IPA krbPwdPolicy manages inactive lockout centrally)"
-      else record "chage-inactive-user" "FAIL" "shadow INACTIVE='$_inactive_val' for '$_chage_user', expected 30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
+      else record "chage-inactive-user" "FAIL" "shadow INACTIVE='$_inactive_val' for '$_chage_user', not in CIS range 1-30 (CIS 5.5.1.5 — run: chage -I 30 $_chage_user)"; fi
     fi
     unset _chage_user _inactive_val _shadow_line
   else record "chage-inactive-user" "WARN" "skipped — reading /etc/shadow requires root (re-run with sudo for full check)"; fi
-  if grep -qE '^PASS_MIN_DAYS[[:space:]]+1$' /etc/login.defs 2>/dev/null; then record "pass-min-days" "PASS"
+  _pass_min_days=$(awk '/^PASS_MIN_DAYS[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
+  if [[ -n "$_pass_min_days" && "$_pass_min_days" -ge 1 ]]; then record "pass-min-days" "PASS"
   elif $CSB_HOST; then record "pass-min-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
-  else record "pass-min-days" "FAIL" "PASS_MIN_DAYS not set to 1 in login.defs"; fi
-  if grep -qE '^PASS_WARN_AGE[[:space:]]+7$' /etc/login.defs 2>/dev/null; then record "pass-warn-age" "PASS"
+  else record "pass-min-days" "FAIL" "PASS_MIN_DAYS=${_pass_min_days:-unset} not >= 1 in login.defs (CIS minimum)"; fi
+  _pass_warn_age=$(awk '/^PASS_WARN_AGE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
+  if [[ -n "$_pass_warn_age" && "$_pass_warn_age" -ge 7 ]]; then record "pass-warn-age" "PASS"
   elif $CSB_HOST; then record "pass-warn-age" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
-  else record "pass-warn-age" "FAIL" "PASS_WARN_AGE not set to 7 in login.defs"; fi
+  else record "pass-warn-age" "FAIL" "PASS_WARN_AGE=${_pass_warn_age:-unset} not >= 7 in login.defs (CIS minimum)"; fi
   if grep -qE '^HOME_MODE[[:space:]]+0750$' /etc/login.defs 2>/dev/null; then record "home-mode" "PASS"
   elif $CSB_HOST; then record "home-mode" "WARN" "skipped on CSB — login.defs not modified"
   else record "home-mode" "FAIL" "HOME_MODE not set to 0750 in login.defs (CIS: explicit home dir permissions)"; fi

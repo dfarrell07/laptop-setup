@@ -14,6 +14,9 @@ CONTAINER ?= fedora-dev
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
 export ANSIBLE_DISPLAY_OK_HOSTS = false
+# callback_result_format is a callback plugin option not in the core config schema;
+# ansible-config validate rejects it in [defaults]. Use the env var instead.
+export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 
 help:
 	@echo "Primary:    all minimal offline container container-rebuild update"

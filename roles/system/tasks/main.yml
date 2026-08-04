@@ -2417,6 +2417,12 @@
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
+- name: Install logrotate (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: logrotate
+    state: present
+  when: ansible_facts['pkg_mgr'] == 'apt'
+
 - name: Deploy logrotate config for sudo.log
   ansible.builtin.copy:
     content: |
@@ -2561,6 +2567,7 @@
     line: "{{ item.name }}\t{{ item.value }}"
     insertafter: EOF
     create: false
+    mode: "0644"
   loop:
     - name: PASS_MAX_DAYS
       value: "{{ system_pass_max_days }}"
