@@ -38,9 +38,7 @@ setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"  # preserve existing socket if set
 {% endif %}
 {% if ansible_facts['system'] | default('Linux') == 'Linux' %}
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
-{% endif %}
 {% endif %}
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output on every cd

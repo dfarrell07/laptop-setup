@@ -1830,7 +1830,9 @@
   register: system_crypto_policy_set
   changed_when: system_crypto_policy_set.rc == 0
   failed_when: false
-  notify: Restart sshd
+  notify:
+    - Restart sshd
+    - Restart chronyd
 
 # --- Kernel modules for kind ---
 - name: Load iptables kernel modules for kind

@@ -312,6 +312,19 @@
   changed_when: false
   become: true
 
+- name: Verify crypto-policy
+  ansible.builtin.command: update-crypto-policies --show
+  register: verify_crypto
+  changed_when: false
+  become: true
+  failed_when: false
+
+- name: Assert crypto-policy is DEFAULT:NO-SHA1
+  ansible.builtin.assert:
+    that: verify_crypto.stdout == 'DEFAULT:NO-SHA1'
+    fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected DEFAULT:NO-SHA1"
+  when: verify_crypto.rc == 0
+
 # golangci-lint coverage is provided by molecule/packages-binaries/verify.yml unconditionally.
 # go_tools_installed is always false in all scenarios that include this file (fedora, rocky, vm),
 # so assertions here would be dead code. See packages-binaries scenario for golangci-lint tests.

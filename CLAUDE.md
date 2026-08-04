@@ -34,6 +34,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
      take effect after a reboot. SSH will be on port 722 after reboot.
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
+   - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
    - Log out and back in for group membership changes (libvirt, kvm groups)
    - For CSB/hybrid machines: `make container` to provision dev container
    - Re-run `make smoke-test` — confirms Tailscale WARN clears and no new failures
