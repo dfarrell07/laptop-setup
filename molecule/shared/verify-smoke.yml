@@ -240,7 +240,7 @@
         fail_msg: "nfs-server.service is not masked"
       when:
         - verify_nfs_server_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
+        - system_mask_nfs_server | default(true) | bool
 
     - name: Check rpcbind.service state (shared)
       ansible.builtin.systemd:
@@ -255,7 +255,7 @@
         fail_msg: "rpcbind.service is not masked"
       when:
         - verify_rpcbind_service_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
+        - system_mask_nfs_server | default(true) | bool
 
     - name: Check rpcbind.socket state (shared)
       ansible.builtin.systemd:
@@ -270,7 +270,7 @@
         fail_msg: "rpcbind.socket is not masked"
       when:
         - verify_rpcbind_socket_shared.status.UnitFileState | default('') != ''
-        - system_mask_nfs_server | bool
+        - system_mask_nfs_server | default(true) | bool
 
     - name: Check cockpit.service state (shared)
       ansible.builtin.systemd:

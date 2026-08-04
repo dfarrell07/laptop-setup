@@ -192,14 +192,14 @@ packages_go_install:
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes)
 packages_go_install_work:
   # Pin controller-gen and code-generator tools to match OVN-K's go.mod
-  # (hack/update-codegen.sh uses v0.36.2). Bump together when OVN-K upgrades k8s.
+  # (hack/update-codegen.sh uses packages_code_generator_version). Bump together when OVN-K upgrades k8s.
   - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
-  - k8s.io/code-generator/cmd/client-gen@v0.36.2
-  - k8s.io/code-generator/cmd/informer-gen@v0.36.2
-  - k8s.io/code-generator/cmd/lister-gen@v0.36.2
-  - k8s.io/code-generator/cmd/deepcopy-gen@v0.36.2
-  - k8s.io/code-generator/cmd/applyconfiguration-gen@v0.36.2
-  - k8s.io/code-generator/cmd/defaulter-gen@v0.36.2
+  - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/lister-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/deepcopy-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/applyconfiguration-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/defaulter-gen@v{{ packages_code_generator_version }}"
   # subctl: latest version installed as 'subctl'; packages_subctl_version governs the pin.
   # See packages_subctl_versioned below for older-version multi-install.
   - "github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}"
@@ -210,6 +210,7 @@ packages_go_install_work:
 # Example: {version: "0.18.0", suffix: "18"} → installs /usr/local/bin → ~/.local/bin/subctl18
 # Useful when managing Submariner clusters at different broker API versions.
 # The latest version should also be in packages_go_install_work (as plain 'subctl').
+packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
 packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
 
 packages_subctl_versioned:

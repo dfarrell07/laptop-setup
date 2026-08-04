@@ -32,6 +32,7 @@ DOTFILES=(
   .ssh/id_ed25519_sk_signing
   .ssh/id_ed25519_sk_signing.pub
   .ssh/id_rsa_redhat
+  .ssh/id_rsa_redhat.pub
   .config/direnv/direnv.toml
   .config/direnv/direnvrc
   .config/environment.d/ssh-agent.conf
@@ -79,6 +80,7 @@ DOTFILES=(
 
 # Machine-specific overrides and secrets (gitignored — not in the repo)
 OPTIONAL_FILES=(
+  .ssh/config.local
   laptop-setup/config.yml
   laptop-setup/scripts/vault-pass.sh
   laptop-setup/group_vars/all/vault.yml
