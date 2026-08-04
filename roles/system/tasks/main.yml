@@ -1264,6 +1264,19 @@
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
   failed_when: false
 
+- name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
+  ansible.builtin.lineinfile:
+    path: /etc/bluetooth/main.conf
+    regexp: '^#?Privacy\s*='
+    line: 'Privacy = device'
+    insertafter: '^\[General\]'
+    create: false
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel
+  failed_when: false
+  notify: Restart bluetooth
+
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
 - name: Mask thermald on non-Intel hardware
   ansible.builtin.systemd:

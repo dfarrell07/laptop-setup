@@ -1003,7 +1003,7 @@ EOF
   if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then
   # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
   if [[ -f /etc/aide.conf ]]; then
-    for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
+    for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
       label="aide-monitors-$(basename "$_path")"
       if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
       else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
@@ -1129,7 +1129,7 @@ EOF
       record "aide-timer" "WARN" "timer enabled but not active (reboot or: systemctl start aide-check.timer)"
     else record "aide-timer" "WARN" "timer not enabled"; fi
     if [[ -f /var/lib/aide/aide.db.gz ]]; then record "aide-db" "PASS"
-    else record "aide-db" "WARN" "AIDE database not initialized (run: aide --init)"; fi
+    else record "aide-db" "WARN" "AIDE database not initialized (run: sudo bash -c 'aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz')"; fi
     if grep -q '^RestrictAddressFamilies=none$' /etc/systemd/system/aide-check.service 2>/dev/null; then
       record "aide-service-no-network" "PASS"
     elif [[ -f /etc/systemd/system/aide-check.service ]]; then

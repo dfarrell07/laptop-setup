@@ -53,6 +53,13 @@
     - system_nm_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
+- name: Restart bluetooth
+  ansible.builtin.systemd:
+    name: bluetooth
+    state: restarted
+  become: true
+  failed_when: false
+
 - name: Restart tailscaled
   ansible.builtin.systemd:
     name: tailscaled

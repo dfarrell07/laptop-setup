@@ -221,8 +221,12 @@ install_virtualization: true
 #     (test-queue-poller.sh systemd user service)
 #   claude_queue_memory_max: '4G'      (roles/claude/defaults) — MemoryMax for queue poller unit; lower on 8 GiB machines
 #   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
+#   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions
+#   claude_queue_timeout: 1800  (roles/claude/defaults) — seconds before SIGTERM is sent to claude process; increase for long-running tasks
 #   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
 #     that allow external triggering of Claude sessions
+#   claude_enable_all_project_mcp_servers: false  (roles/claude/defaults) — set true to auto-trust
+#     all project-local MCP servers; false = prompt per server (more secure)
 #   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
 #     container creation and Play 3 entirely (Linux users who do not want a dev container)
 #   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:

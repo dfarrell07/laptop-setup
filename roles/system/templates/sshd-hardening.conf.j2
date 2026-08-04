@@ -2,7 +2,7 @@
 # Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
 
 Port {{ ssh_port }}
-{% if not csb_detected %}
+{% if not csb_rhel %}
 Banner /etc/issue.net
 {% endif %}
 # WARNING: password auth is disabled. Before running make all, ensure
