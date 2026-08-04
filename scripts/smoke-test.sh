@@ -723,12 +723,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
       elif $CSB_HOST; then record "sshd-port" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd port (likely 22)"
       else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected non-default port !=22 (config absent or port=22)"; fi
-      if command -v semanage &>/dev/null; then
+      if [[ -n "$_ssh_port" ]] && command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
         else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
       fi
-      if ss -tlnp 2>/dev/null | grep -q ":${_ssh_port}"; then record "sshd-port-bound" "PASS"
-      else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
+      if [[ -n "$_ssh_port" ]]; then
+        if ss -tlnp 2>/dev/null | grep -q ":${_ssh_port}"; then record "sshd-port-bound" "PASS"
+        else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
+      fi
     fi
     if [[ "$zone" == "drop" ]]; then
       # Only check drop-zone-specific rules when the drop zone is actually active
