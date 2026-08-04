@@ -1824,14 +1824,14 @@
     mode: "0644"
   when: _system_wifi_mac_rand
   failed_when: false
-  notify: Reload NetworkManager
+  notify: Restart NetworkManager
 
 - name: Remove WiFi MAC address randomization config when disabled
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     state: absent
   when: not _system_wifi_mac_rand
-  notify: Reload NetworkManager
+  notify: Restart NetworkManager
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces
   ansible.builtin.copy:
@@ -1842,7 +1842,7 @@
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   failed_when: false
-  notify: Reload NetworkManager
+  notify: Restart NetworkManager
 
 - name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
   ansible.builtin.copy:
@@ -1866,7 +1866,7 @@
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
   failed_when: false
-  notify: Reload NetworkManager
+  notify: Restart NetworkManager
 
 # tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
 # interface, not controlled by IT's firewalld policy. Trusted zone is required for

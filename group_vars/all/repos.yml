@@ -2,7 +2,7 @@
 # Git repositories to clone under ~/src/ (or git_repos_base_dir).
 # Filter with: -e repo_category=ovnk
 #
-# Categories: personal, downstream, ovnk, konflux, bpfman
+# Categories: personal, downstream, bpfman, ovnk, konflux
 # Work profile: all categories. Personal profile: personal + ovnk.
 # Repos without an enabled field are included by default (enabled is opt-in only for overrides).
 
@@ -101,19 +101,6 @@ git_repos_list:
     dest: stolostron/rhacm-docs
     category: downstream
 
-
-  # --- downstream internal (VPN required) ---
-  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/submariner-operator.git"
-    dest: ds/submariner-operator
-    category: downstream
-
-  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/submariner.git"
-    dest: ds/submariner
-    category: downstream
-
-  - url: "ssh://{{ real_user_id | default(ansible_user_id) }}@code.engineering.redhat.com:22/lighthouse.git"
-    dest: ds/lighthouse
-    category: downstream
 
   - url: "git@gitlab.cee.redhat.com:acm-cpaas-midstream/submariner-operator-midstream.git"
     dest: ds/submariner-operator-midstream

@@ -75,11 +75,9 @@
 
 # Coverage gap: the wait_for loop body is never invoked in any molecule scenario.
 # Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
-# No CI test repo uses ssh:// or git@ URLs matching code.engineering.redhat.com or
-# gitlab.cee.redhat.com — so the computed loop list is always empty and wait_for is
-# skipped. A functional end-to-end test would require VPN access unavailable in CI.
-# A unit-style test using localhost:22 as a mock host could verify the task structure
-# executes correctly without VPN, but would need a dedicated molecule scenario or test task.
+# No CI test repo uses ssh:// or git@ URLs matching gitlab.cee.redhat.com
+# so the computed loop list is always empty and wait_for is skipped.
+# A functional end-to-end test would require VPN access unavailable in CI.
 - name: Check connectivity to VPN-gated repo hosts
   ansible.builtin.wait_for:
     host: "{{ item }}"
@@ -88,10 +86,7 @@
     state: started
   loop: >-
     {{
-      (['code.engineering.redhat.com']
-       if git_repos_filtered | map(attribute='url') | select('search', 'code\\.engineering\\.redhat\\.com') | list | length > 0
-       else [])
-      + (['gitlab.cee.redhat.com']
+      (['gitlab.cee.redhat.com']
          if git_repos_filtered | map(attribute='url') | select('search', 'gitlab\\.cee\\.redhat\\.com') | list | length > 0
          else [])
     }}
