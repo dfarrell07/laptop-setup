@@ -167,10 +167,10 @@ ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debia
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
-	python3 scripts/check-vars-sync.py
+	.venv/bin/python3 scripts/check-vars-sync.py
 
-check-vars-sync:
-	python3 scripts/check-vars-sync.py
+check-vars-sync: .venv
+	.venv/bin/python3 scripts/check-vars-sync.py
 
 .venv: requirements-test.lock
 	python3 -m venv .venv

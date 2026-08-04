@@ -178,6 +178,18 @@
     - not csb_rhel or (system_home_nosuid_force | bool)
   failed_when: false
 
+- name: Warn if /home has no fstab entry — fstab hardening cannot persist (CIS 1.1.9)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /home is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/nodev
+      is applied for this session but will not survive a reboot. Add /home to /etc/fstab
+      or set system_home_nosuid_force: false to suppress this block.
+  when:
+    - system_home_mountpoint.rc == 0
+    - not csb_rhel or (system_home_nosuid_force | bool)
+    - system_home_fstab_opts.rc | default(-1) != 0
+
 - name: Add nosuid to /home fstab entry (CIS 1.1.9)
   ansible.builtin.lineinfile:
     path: /etc/fstab

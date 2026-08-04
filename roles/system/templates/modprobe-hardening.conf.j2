@@ -21,6 +21,10 @@ install udf /bin/false
 # Unused network protocols — CVE-validated attack surface
 # Note: sctp is NOT blacklisted — OVN-Kubernetes kind cluster tests and
 # Submariner use SCTP; 'install sctp /bin/false' would silently break them.
+{% if system_disable_sctp | bool %}
+blacklist sctp
+install sctp /bin/false
+{% endif %}
 blacklist dccp
 install dccp /bin/false
 blacklist rds

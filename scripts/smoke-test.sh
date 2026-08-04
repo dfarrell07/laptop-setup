@@ -1348,10 +1348,19 @@ EOF
 
   # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
   _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")
-  if echo "$_tmp_opts" | grep -q noexec && echo "$_tmp_opts" | grep -q nosuid && echo "$_tmp_opts" | grep -q nodev; then
+  _tmp_dropin="/etc/systemd/system/tmp.mount.d/hardening.conf"
+  if ! echo "$_tmp_opts" | grep -q nosuid || ! echo "$_tmp_opts" | grep -q nodev; then
+    record "tmp-hardening" "FAIL" "/tmp missing nosuid/nodev: $_tmp_opts"
+  elif echo "$_tmp_opts" | grep -q noexec; then
     record "tmp-hardening" "PASS"
-  else record "tmp-hardening" "FAIL" "/tmp missing hardening options: $_tmp_opts"; fi
-  unset _tmp_opts
+  elif [[ ! -f "$_tmp_dropin" ]]; then
+    record "tmp-hardening" "WARN" "tmp.mount.d/hardening.conf missing — system role may not have run"
+  elif grep -q noexec "$_tmp_dropin" 2>/dev/null; then
+    record "tmp-hardening" "FAIL" "/tmp noexec in drop-in but not mounted: $_tmp_opts"
+  else
+    record "tmp-hardening" "WARN" "/tmp noexec disabled — system_tmp_noexec: false (intentional)"
+  fi
+  unset _tmp_opts _tmp_dropin
   _tmp_mode=$(stat -c '%a' /tmp 2>/dev/null || echo "?")
   if [[ "$_tmp_mode" == "1777" ]]; then record "tmp-sticky-bit" "PASS"
   else record "tmp-sticky-bit" "FAIL" "/tmp mode=$_tmp_mode expected 1777 (sticky bit)"; fi
@@ -1628,6 +1637,10 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]]; then
     record "podman-socket" "PASS"
   else record "podman-socket" "WARN" "Podman user socket not present — kind create cluster will fail (re-login or restart podman.socket)"; fi
+  # Verify podman user socket is durably enabled (survives reboot); complements the runtime -S check above.
+  if systemctl --user is-enabled podman.socket &>/dev/null; then
+    record "podman-socket-enabled" "PASS"
+  else record "podman-socket-enabled" "FAIL" "podman.socket not enabled — socket will not start on reboot; fix: systemctl --user enable podman.socket"; fi
 
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
