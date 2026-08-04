@@ -167,16 +167,6 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
-- name: Check /home filesystem type (CIS 1.1.9)
-  ansible.builtin.command:
-    cmd: findmnt -n -o FSTYPE /home
-  register: system_home_fstype
-  changed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when:
-    - system_home_mountpoint.rc == 0
-  failed_when: false
-
 - name: Check /home fstab options (CIS 1.1.9)
   ansible.builtin.command:
     cmd: findmnt -n -o OPTIONS --fstab /home
@@ -1480,7 +1470,6 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not csb_rhel
   failed_when: false
 
 - name: Enable Mullvad VPN service
@@ -1492,7 +1481,6 @@
     - system_enable_mullvad | bool
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - ansible_facts['distribution'] == 'Fedora'
-    - not csb_rhel
   failed_when: false
 
 # --- USBGuard ---
@@ -1732,7 +1720,6 @@
         proto: tcp
         setype: ssh_port_t
         state: present
-      register: system_seport_result
       # No failed_when: false — if the SELinux port label fails, sshd CANNOT bind the
       # new port under SELinux enforcing. Without this label, the sshd restart handler
       # will kill sshd (stop succeeds, start denied by SELinux) leaving the machine
