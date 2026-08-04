@@ -1024,6 +1024,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   _passim_state=$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)
   if [[ "$_passim_state" == "masked" ]]; then record "passim-masked" "PASS"
   elif [[ -z "$_passim_state" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
+  elif $CSB_HOST; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
   else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
   unset _passim_state
 
@@ -1118,6 +1119,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if command -v authselect &>/dev/null; then
     # Profile must be 'sssd' — if drifted to 'local' or custom, features may behave differently
     if authselect current 2>/dev/null | grep -q 'sssd'; then record "authselect-profile" "PASS"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+      record "authselect-profile" "WARN" "skipped on RHEL CSB — IT may use custom authselect profile via Satellite/IPA/SCAP; not required to be named sssd"
     else record "authselect-profile" "FAIL" "authselect profile is not sssd (faillock/pwhistory may not wire correctly)"; fi
     if authselect is-feature-enabled with-faillock 2>/dev/null; then record "authselect-faillock" "PASS"
     elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
