@@ -1814,6 +1814,12 @@ if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then
     record "nm-tailscale-unmanaged" "PASS"
   else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make all"; fi
 fi
+if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
+  if grep -q '^ipv4.dhcp-send-hostname=false' /etc/NetworkManager/conf.d/99-dhcp-privacy.conf; then
+    record "nm-dhcp-privacy" "PASS"
+  elif $CSB_HOST; then record "nm-dhcp-privacy" "WARN" "not deployed on CSB — DHCP hostname suppression not applied (IT-managed network)"
+  else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make system"; fi
+fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
 if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
