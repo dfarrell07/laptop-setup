@@ -37,10 +37,10 @@ output * bg {{ desktop_bar_bg }} solid_color
 
 # Idle and lock
 exec swayidle -w \
-    timeout {{ desktop_sway_idle_lock_timeout }} 'swaylock -f -c {{ desktop_sway_lock_color }}' \
+    timeout {{ desktop_sway_idle_lock_timeout }} 'swaylock -f' \
     timeout {{ desktop_sway_idle_display_timeout }} 'swaymsg "output * power off"' \
     resume 'swaymsg "output * power on"' \
-    before-sleep 'swaylock -f -c {{ desktop_sway_lock_color }}'
+    before-sleep 'swaylock -f'
 
 # Floating window drag/resize with mouse
 floating_modifier $mod
@@ -124,7 +124,7 @@ mode "resize" {
 bindsym $mod+r mode "resize"
 
 # Manual screen lock ($mod+l is taken by focus-right; use $mod+Ctrl+l)
-bindsym $mod+Ctrl+l exec swaylock -f -c {{ desktop_sway_lock_color }}
+bindsym $mod+Ctrl+l exec swaylock -f
 
 # Screenshot (grim + slurp)
 bindsym Print exec grim - | tee ~/Pictures/screenshot-$(date +%F-%T).png | wl-copy -t image/png

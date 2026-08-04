@@ -158,9 +158,9 @@
   delay: 5
   ignore_errors: true  # noqa: ignore-errors — per-item failure must be captured in .results for the Report task below
 
-- name: Set successfully-cloned destinations fact
+- name: Set available repo destinations fact
   ansible.builtin.set_fact:
-    git_repos_cloned_dests: >-
+    git_repos_available_dests: >-
       {{ git_repos_clone_results.results
          | selectattr('failed', 'equalto', false)
          | map(attribute='item.dest') | list }}
@@ -183,7 +183,7 @@
     label: "{{ item.dest }}"
   when:
     - git_repos_pull | bool
-    - item.dest in git_repos_cloned_dests
+    - item.dest in git_repos_available_dests
   register: git_repos_pull_results
   changed_when: "git_repos_pull_results.rc == 0 and 'Already up to date' not in git_repos_pull_results.stdout"
   failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
@@ -220,7 +220,7 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
-  when: item.0.dest in git_repos_cloned_dests
+  when: item.0.dest in git_repos_available_dests
   register: git_repos_remote_result
   changed_when: >-
     'added' in git_repos_remote_result.stdout or
