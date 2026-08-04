@@ -316,10 +316,11 @@ else record "cargo-path" "FAIL" "$HOME/.cargo/bin not in PATH exports (.zshrc/.b
 if [[ -f "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh" ]]; then record "omz-xdg-dir" "PASS"
 else record "omz-xdg-dir" "FAIL" "~/.local/share/oh-my-zsh/oh-my-zsh.sh missing — zsh plugins unavailable; run: make dotfiles"; fi
 
-# GONOSUMDB — required for go get/install against Red Hat private modules (work profile only)
+# GONOSUMDB — optional; only needed when dotfiles_gonosumdb is set in config.yml
+# (defaults to "" since cycle-32; absence is expected on machines without private Go modules)
 if [[ "$profile" == "work" ]]; then
   if grep -q 'GONOSUMDB' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "gonosumdb-set" "PASS"
-  else record "gonosumdb-set" "WARN" "GONOSUMDB not exported — expected on work profile; Red Hat private Go modules will fail sum verification"; fi
+  else record "gonosumdb-set" "INFO" "GONOSUMDB not exported — normal unless dotfiles_gonosumdb is set in config.yml (Red Hat private Go modules)"; fi
 fi
 
 # direnv: hook and toml content
@@ -1030,8 +1031,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked (state: $_ck_sock) — web console activation possible"; fi
   unset _ck_sock
 
-  # thermald masked on non-Intel hardware (Intel-only daemon — exits immediately on AMD)
-  if [[ -f /proc/cpuinfo ]] && ! grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+  # thermald: masked on non-Intel; enabled on Intel (Intel-only thermal daemon)
+  if [[ -f /proc/cpuinfo ]] && grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+    _thermald_state="$(systemctl show -p UnitFileState --value thermald 2>/dev/null)"
+    if [[ "$_thermald_state" == "masked" ]]; then
+      record "thermald-unmasked-on-intel" "WARN" "thermald is masked on Intel hardware — run: make system"
+    else record "thermald-unmasked-on-intel" "PASS"; fi
+    unset _thermald_state
+  elif [[ -f /proc/cpuinfo ]]; then
     if [[ "$(systemctl show -p UnitFileState --value thermald 2>/dev/null)" == "masked" ]]; then
       record "thermald-masked" "PASS"
     else

@@ -181,7 +181,7 @@ system_disable_avahi: true  # mask avahi-daemon (mDNS/DNS-SD); set false in conf
 # mask nfs-server + rpcbind (CIS 2.2.7); set false if NFS server or Vagrant NFS shares are needed
 system_mask_nfs_server: true
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
-# Dangerous bits omitted from 176: raw-console(4), proc-signals/OOM-kill(64), crash(not in std bitmask).
+# Dangerous bits omitted from 176: raw-console(4), OOM-kill(64), crash/dump(8).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
 system_sysrq: 0
 

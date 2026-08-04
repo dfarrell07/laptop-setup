@@ -31,9 +31,13 @@
     git_repos_filtered: >-
       {{
         git_repos_list
-        | rejectattr('enabled', 'equalto', false)
         | selectattr('category', 'in', git_repos_active_categories)
-        | list
+        | selectattr('enabled', 'undefined') | list
+        +
+        git_repos_list
+        | selectattr('category', 'in', git_repos_active_categories)
+        | selectattr('enabled', 'defined')
+        | selectattr('enabled', 'equalto', true) | list
       }}
 
 - name: Fail when explicit category filter matches no enabled repos

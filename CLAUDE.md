@@ -53,14 +53,14 @@ make markdownlint     # markdownlint on all .md files
 make preflight        # Run preflight checks (CSB detection, prereqs) — run AFTER make bootstrap
 make container        # Distrobox/toolbox dev container
 make container-rebuild # Rebuild container from scratch
-make test-fedora      # Molecule Fedora tests (fast, Podman)
+make test-fedora      # Molecule Fedora 44 tests (fast, Podman)
 make test-rocky       # Molecule Rocky Linux 10 tests
-make test-debian      # Molecule Debian tests
+make test-debian      # Molecule Debian 13 tests
 make test-macos       # Molecule macOS tests
 make test-container   # Molecule container provisioning scenario (distrobox/Podman)
 make test-container-offline  # Molecule container rescue/degradation path (offline 404 scenario)
 make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt, subctl18; profile:work)
-make test-vm          # Molecule VM tests (full, Vagrant+libvirt)
+make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
