@@ -521,3 +521,35 @@
         fail_msg: >-
           git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
           clone task logic regression or git_repos_list filtering broken
+
+    # --- distrobox role: no-op path (packages_containers emptied in converge) ---
+    - name: Check distrobox binary presence in fedora CI (should be absent)
+      ansible.builtin.command:
+        cmd: which distrobox
+      register: verify_distrobox_bin_fedora
+      changed_when: false
+      failed_when: false
+
+    - name: Check toolbox binary presence in fedora CI (should be absent)
+      ansible.builtin.command:
+        cmd: which toolbox
+      register: verify_toolbox_bin_fedora
+      changed_when: false
+      failed_when: false
+
+    - name: Assert neither distrobox nor toolbox is installed (packages_containers emptied)
+      ansible.builtin.assert:
+        that:
+          - verify_distrobox_bin_fedora.rc != 0
+          - verify_toolbox_bin_fedora.rc != 0
+        fail_msg: "distrobox or toolbox found in PATH despite packages_containers: [] — converge override not applied?"
+
+    - name: Stat distrobox.ini (must be absent on no-op path)
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+      register: verify_distrobox_ini_fedora
+
+    - name: Assert distrobox.ini is absent when no tool is installed
+      ansible.builtin.assert:
+        that: not verify_distrobox_ini_fedora.stat.exists
+        fail_msg: "distrobox.ini was deployed despite distrobox_tool==none — role no-op guard regressed"

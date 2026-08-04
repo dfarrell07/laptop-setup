@@ -249,7 +249,7 @@
 - name: Unload task queue launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/$(id -u)
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
   when:
     - ansible_facts['os_family'] == 'Darwin'
@@ -277,7 +277,7 @@
 - name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/$(id -u)
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
   when:
     - ansible_facts['os_family'] == 'Darwin'
@@ -317,7 +317,7 @@
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
+    cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool
@@ -338,7 +338,7 @@
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/$(id -u) {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
+    cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_remote_control_enabled | bool

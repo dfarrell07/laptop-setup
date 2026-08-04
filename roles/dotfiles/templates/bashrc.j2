@@ -4,7 +4,11 @@ export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp is noexec on this host
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
+{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
+{% endif %}
+{% endif %}
 HISTSIZE=50000
 HISTFILESIZE=50000
 HISTCONTROL=ignoredups:erasedups

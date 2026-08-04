@@ -142,7 +142,7 @@
       msg=$(head -1 "$1")
       first=$(echo "$msg" | awk '{print $1}')
       first="${first%:}"
-      desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
+      desc_first=$(echo "$msg" | sed 's/^[-A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
 
       case "$msg" in
         squash!*|fixup!*|amend!*) exit 0 ;;

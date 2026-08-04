@@ -531,10 +531,10 @@ Then re-run `make system` to regenerate `/etc/modprobe.d/hardening.conf`. The mo
 **Without re-provisioning (temporary):**
 
 ```bash
-sudo modprobe usb_storage && sudo modprobe uas
+sudo modprobe --ignore-install usb_storage && sudo modprobe --ignore-install uas
 ```
 
-This re-enables USB storage for the current boot session only. It reverts at the next reboot unless you re-provision with `system_disable_usb_storage: false`.
+This re-enables USB storage for the current boot session only. Plain `modprobe usb_storage` silently fails because the `install usb_storage /bin/false` directive runs `/bin/false` instead of loading the module; `--ignore-install` bypasses that directive. It reverts at the next reboot unless you re-provision with `system_disable_usb_storage: false`.
 
 ---
 

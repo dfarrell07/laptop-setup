@@ -40,7 +40,8 @@ install firewire-sbp2 /bin/false
 # USB mass storage: kernel-blocked (system_disable_usb_storage=true in config.yml).
 # USBGuard cannot override kernel-level blocking — USB drives will not mount even with USBGuard rules.
 # Set system_disable_usb_storage: false in config.yml to allow USB storage.
-# Recovery without re-provisioning: sudo modprobe usb_storage && sudo modprobe uas
+# Recovery without re-provisioning: sudo modprobe --ignore-install usb_storage && sudo modprobe --ignore-install uas
+# (plain modprobe usb_storage runs /bin/false due to install directive — --ignore-install bypasses it)
 blacklist usb_storage
 install usb_storage /bin/false
 blacklist uas
