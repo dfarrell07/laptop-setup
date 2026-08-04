@@ -2514,6 +2514,7 @@
     validate: visudo -cf %s
   become: true
   tags: [become]
+  when: not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
 
 # --- Password aging ---
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
