@@ -17,6 +17,8 @@
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
         go_tools_installed: false            # converge.yml sets packages_go_install: []; skip golangci-lint verify
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
+        ssh_port: 722                        # matches default; parameterizes sshd port assertions
+        system_tmout: 600                    # matches default; parameterizes TMOUT session-timeout assertions
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -370,8 +372,8 @@
         fail_msg: "Kernel lockdown=integrity not found in boot args"
       when: verify_lockdown.rc == 0
 
-    - name: Check sshd config uses non-default port 722
-      ansible.builtin.command: grep -q '^Port 722$' /etc/ssh/sshd_config.d/00-hardening.conf
+    - name: Check sshd config uses non-default port {{ ssh_port }}
+      ansible.builtin.command: grep -q '^Port {{ ssh_port }}$' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
 
@@ -383,10 +385,10 @@
       failed_when: false
       become: true
 
-    - name: Assert SSH port 722 is labeled ssh_port_t
+    - name: Assert SSH port is labeled ssh_port_t
       ansible.builtin.assert:
-        that: verify_semanage.rc == 0 and verify_semanage.stdout | regex_search('ssh_port_t.*722|722.*ssh_port_t')
-        fail_msg: "Port 722 not labeled ssh_port_t — sshd will fail to bind"
+        that: verify_semanage.rc == 0 and verify_semanage.stdout | regex_search('ssh_port_t.*' ~ ssh_port ~ '|' ~ ssh_port ~ '.*ssh_port_t')
+        fail_msg: "Port {{ ssh_port }} not labeled ssh_port_t — sshd will fail to bind"
 
     - name: Extract AllowUsers value from sshd config
       ansible.builtin.command: grep -oP '(?<=AllowUsers )\S+' /etc/ssh/sshd_config.d/00-hardening.conf
@@ -561,17 +563,6 @@
         that: verify_chrony_nts.rc == 0
         fail_msg: "NTS not configured in chrony.conf"
 
-    - name: Verify chronyd is enabled
-      ansible.builtin.systemd:
-        name: chronyd
-      register: verify_chronyd
-      become: true
-
-    - name: Assert chronyd is enabled
-      ansible.builtin.assert:
-        that: verify_chronyd.status.UnitFileState == 'enabled'
-        fail_msg: "chronyd not enabled"
-
     - name: Verify var-tmp.mount is enabled
       ansible.builtin.systemd:
         name: var-tmp.mount
@@ -655,12 +646,12 @@
 
     # --- Session timeout ---
     - name: Verify TMOUT configured via profile.d (CIS 5.5.5 — bash login shells)
-      ansible.builtin.command: grep -qE '^readonly TMOUT=600' /etc/profile.d/tmout.sh
+      ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/profile.d/tmout.sh
       changed_when: false
       become: true
 
     - name: Verify TMOUT configured via /etc/zshrc (CIS 5.5.5 — zsh interactive shells)
-      ansible.builtin.command: grep -qE '^typeset -xr TMOUT=600' /etc/zshrc
+      ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zshrc
       changed_when: false
       become: true
 

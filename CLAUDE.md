@@ -43,6 +43,7 @@ make all              # Full run (asks for sudo password)
 make offline          # Full run without binary downloads (packages_install_binaries=false)
 make minimal          # Dotfiles + SSH + repos only (no sudo)
 make backup           # Back up dotfiles before re-provisioning
+make backup-dry-run   # Dry-run backup to preview what would be copied
 make bootstrap        # Initial setup (install deps, collections, hooks)
 make update           # Update collections + full run (sets -e git_repos_pull=true to fetch upstream changes)
 make lint             # ansible-lint + yamllint + shellcheck
@@ -117,6 +118,7 @@ make repos-downstream # downstream repos only
   (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host +
   dev tools in container), `container` (CSB restricted with fapolicyd enforcing — minimal host, full dev
   env via `make container`). Note: `csb_detected=true` + fapolicyd inactive = `hybrid`, not `container`.
+- **csb_rhel**: Computed boolean (`group_vars/all/vars.yml`) — true when `csb_detected` and the host is RHEL (not Fedora); false on hybrid Fedora CSB. Used in rescue blocks and task conditions to route between IT-managed (RHEL CSB) and user-managed (Fedora hybrid) paths. Pattern: guards using `not csb_rhel` apply hardening to Fedora hybrid but skip on RHEL CSB; guards using `not csb_detected` skip on all CSB tiers.
 - **CSB block/rescue**: Tasks that may fail on Corporate Standard Build use `block/rescue` to record failures for the CSB report
 - **Config override**: `default.config.yml` (tracked) + `config.yml` (gitignored, user overrides). Key
   top-level variables: `profile` (work/personal), `desktop_environment` (auto/sway/i3/gnome), `ssh_port`
@@ -171,9 +173,9 @@ make repos-downstream # downstream repos only
   Podman only, no libvirt required. CI coverage minus macOS
 - `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
   + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-packages-binaries (macOS runner required)
-- `make test-fedora` — Molecule Fedora 44 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
+- `make test-fedora` — Molecule Fedora 44 (system, repos_dnf, common, packages, dotfiles, ssh, git_repos, notes, redhat, containers, desktop, claude)
 - `make test-rocky` — Molecule Rocky Linux 10 (work profile, includes redhat role)
-- `make test-debian` — Molecule Debian 13 (common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
+- `make test-debian` — Molecule Debian 13 (system, common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-container` — Molecule container scenario (distrobox/podman container provisioning)
 - `make test-container-offline` — Molecule container-offline scenario: rescue block verification,
   fast failure via distrobox_oc_fetch_timeout: 5
