@@ -265,6 +265,15 @@
     - ansible_facts['os_family'] == 'Darwin'
     - not (claude_queue_enabled | bool)
 
+- name: Warn claude_remote_control_enabled has no effect on Linux
+  ansible.builtin.debug:
+    msg: >-
+      claude_remote_control_enabled=true has no effect on Linux — remote control is macOS-only
+      (launchd plist). No Linux systemd unit is implemented yet.
+  when:
+    - claude_remote_control_enabled | bool
+    - ansible_facts['system'] == 'Linux'
+
 - name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-  # yamllint disable-line rule:line-length

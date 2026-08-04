@@ -15,14 +15,7 @@
       ansible.builtin.set_fact:
         packages_install_binaries: true           # the critical toggle under test
         profile: work
-        packages_go_install:
-          - mvdan.cc/gofumpt@v0.11.0
-          - golang.org/x/vuln/cmd/govulncheck@v1.6.0
-          - github.com/daixiang0/gci@v0.14.0
-          - golang.org/x/tools/gopls@v0.23.0             # needs Go 1.26+ — exercises GOTOOLCHAIN=auto toolchain download
-          - github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2  # exercises the pinned v2 module path
-          - github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}  # plain subctl (go install path)
-        packages_go_install_work: []              # clear work-profile go tools
+        packages_go_install_work: []              # clear work-profile go tools; common tools use role defaults
         packages_security: []                     # avoid dnf repo dependencies
         packages_networking: []                   # avoid dnf repo dependencies
         packages_networking_work: []              # avoid dnf repo dependencies
