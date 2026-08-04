@@ -2577,7 +2577,7 @@
   ansible.builtin.command:
     cmd: useradd -D -f {{ system_inactive_days }}
   when:
-    - "'INACTIVE=' ~ system_inactive_days not in system_useradd_defaults.stdout"
+    - "'INACTIVE=' ~ system_inactive_days not in (system_useradd_defaults.stdout | default(''))"
     - not csb_rhel  # same rationale as login.defs INACTIVE guard
   changed_when: true
 

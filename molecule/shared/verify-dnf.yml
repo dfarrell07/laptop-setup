@@ -206,10 +206,10 @@
   changed_when: false
   become: true
   loop:
-    - '^dcredit = -1'
-    - '^ucredit = -1'
-    - '^lcredit = -1'
-    - '^ocredit = -1'
+    - '^dcredit = {{ system_pwquality_dcredit }}'
+    - '^ucredit = {{ system_pwquality_ucredit }}'
+    - '^lcredit = {{ system_pwquality_lcredit }}'
+    - '^ocredit = {{ system_pwquality_ocredit }}'
     - "^difok = {{ system_pwquality_difok }}"
     - "^maxrepeat = {{ system_pwquality_maxrepeat }}"
     - '^enforce_for_root'
@@ -245,6 +245,16 @@
 
 - name: Check login.defs UMASK={{ system_umask }}
   ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask }}' /etc/login.defs
+  changed_when: false
+  become: true
+
+- name: Check login.defs PASS_MIN_DAYS=1
+  ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+1' /etc/login.defs
+  changed_when: false
+  become: true
+
+- name: Check login.defs PASS_WARN_AGE=7
+  ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+7' /etc/login.defs
   changed_when: false
   become: true
 
