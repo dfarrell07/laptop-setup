@@ -217,7 +217,7 @@ _zsh_cached_completion stern completion zsh
 {% endif %}
 
 # --- Dev shortcuts ---
-alias mj='make -j$(nproc)'          # parallel make (OVN-K/bpfman builds)
+alias mj='make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)'  # parallel make (OVN-K/bpfman builds)
 alias psa='podman ps -a'             # list all containers (rootless podman default)
 alias kcc='kind create cluster --config'  # OVN-K kind cluster creation
 alias kdc='kind delete cluster'      # tear down kind cluster
