@@ -721,7 +721,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else
       _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null)
       if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
-      elif $CSB_HOST; then record "sshd-port" "WARN" "sshd drop-in not deployed on CSB — IT manages sshd port (likely 22)"
+      elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
       else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected non-default port !=22 (config absent or port=22)"; fi
       if [[ -n "$_ssh_port" ]] && command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
@@ -923,7 +923,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
         else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make system"; fi
       else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make system"; fi
     fi
-  elif $CSB_HOST; then
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
@@ -1132,7 +1132,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
     # authselect check verifies actual PAM files match profile+features — is-feature-enabled only checks state file
     if authselect check 2>/dev/null; then record "authselect-check" "PASS"
-    elif $CSB_HOST; then record "authselect-check" "WARN" "skipped on RHEL CSB — IT manages PAM via IPA/SCAP; authselect check may detect intentional drift"
+    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "authselect-check" "WARN" "skipped on RHEL CSB — IT manages PAM via IPA/SCAP; authselect check may detect intentional drift"
     else record "authselect-check" "FAIL" "authselect PAM files differ from profile — run: authselect select sssd --force"; fi
   fi
 
@@ -1458,7 +1458,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null 2>&1; then
     record "dconf-policies" "WARN" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
-  elif $CSB_HOST; then
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
     record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
   else
   # Source key files checked directly — no D-Bus session required for smoke tests.

@@ -4,7 +4,7 @@
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container \
-       ci syntax-check shellcheck markdownlint commitlint \
+       ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries \
        preflight guard-not-root \
        pip-lock pip-sync
@@ -21,7 +21,7 @@ help:
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-packages-binaries smoke-test smoke-test-container check"
-	@echo "Linting:    shellcheck markdownlint commitlint syntax-check"
+	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit"
 
@@ -158,6 +158,10 @@ ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debia
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
+	python3 scripts/check-vars-sync.py
+
+check-vars-sync:
+	python3 scripts/check-vars-sync.py
 
 .venv: requirements-test.lock
 	python3 -m venv .venv
