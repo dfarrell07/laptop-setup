@@ -2381,9 +2381,10 @@
     mode: "0644"
 
 # --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
-# CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
+# RHEL CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
 # cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
-# would silently block those IT management jobs. Skip on CSB entirely.
+# would silently block those IT management jobs. Skip on RHEL CSB only.
+# Fedora hybrid: those IT tools are absent — cron.allow=root is safe CIS 5.1.8/5.1.9 hardening.
 - name: Warn if non-root user crontabs exist before restricting cron access
   ansible.builtin.find:
     paths: /var/spool/cron
