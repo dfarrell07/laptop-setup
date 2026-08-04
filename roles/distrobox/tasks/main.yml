@@ -45,6 +45,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: distrobox_tool != 'none'
 
 - name: Re-check subgid entry for current user
   ansible.builtin.command:
@@ -53,6 +54,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: distrobox_tool != 'none'
 
 - name: Warn if rootless podman prerequisites are missing
   ansible.builtin.debug:
@@ -61,7 +63,9 @@
       Rootless podman will fail. The system role provisions these entries;
       run 'make system' as root to fix, or manually:
       sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_facts['user_id'] }}
-  when: (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)
+  when:
+    - distrobox_tool != 'none'
+    - (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)
 
 - name: Check Podman socket is active  # noqa: command-instead-of-module
   ansible.builtin.command:  # user-scope systemd requires command; service_facts uses system scope
@@ -101,7 +105,7 @@
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
-    - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
+    - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Ensure distrobox config directory
       ansible.builtin.file:
@@ -142,7 +146,7 @@
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
-    - distrobox_container_exists.rc != 0 or distrobox_container_replace | default(false) | bool
+    - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Remove existing Toolbx container for replacement
       ansible.builtin.command:
@@ -150,7 +154,7 @@
       changed_when: true
       when:
         - distrobox_container_exists.rc == 0
-        - distrobox_container_replace | default(false) | bool
+        - distrobox_container_replace | bool
 
     - name: Create Toolbx container
       ansible.builtin.command:
