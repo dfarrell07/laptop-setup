@@ -513,6 +513,12 @@ for _hook in commit-msg prepare-commit-msg pre-push; do
   fi
 done
 
+if command -v git-lfs &>/dev/null; then
+  lfs_smudge=$(git config --global filter.lfs.smudge 2>/dev/null || echo "")
+  if [[ -n "$lfs_smudge" ]]; then record "git-lfs-filter" "PASS"
+  else record "git-lfs-filter" "FAIL" "filter.lfs.smudge not in global gitconfig — git lfs install --skip-repo has not run; run: make repos"; fi
+fi
+
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 # Security config is in settings.local.json (survives /config writes); fall
 # back to settings.json for instances provisioned before this change.
@@ -525,20 +531,20 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
   if command -v jq &>/dev/null; then
     if jq -e '.sandbox.enabled' "$sec_file" &>/dev/null; then
       record "sandbox($label)" "PASS"
-    else record "sandbox($label)" "FAIL" "sandbox not enabled in $sec_file — run: make all to re-deploy claude role"; fi
+    else record "sandbox($label)" "FAIL" "sandbox not enabled in $sec_file — run: make claude"; fi
     if jq -e '.sandbox.failIfUnavailable' "$sec_file" &>/dev/null; then
       record "sandbox-failsafe($label)" "PASS"
-    else record "sandbox-failsafe($label)" "FAIL" "sandbox.failIfUnavailable not true in $sec_file — run: make all to re-deploy claude role"; fi
+    else record "sandbox-failsafe($label)" "FAIL" "sandbox.failIfUnavailable not true in $sec_file — run: make claude"; fi
     if jq -e '.sandbox.allowUnsandboxedCommands == false' "$sec_file" &>/dev/null; then
       record "sandbox-cmds($label)" "PASS"
-    else record "sandbox-cmds($label)" "FAIL" "sandbox.allowUnsandboxedCommands not false in $sec_file — run: make all to re-deploy claude role"; fi
+    else record "sandbox-cmds($label)" "FAIL" "sandbox.allowUnsandboxedCommands not false in $sec_file — run: make claude"; fi
     if jq -e '.enableAllProjectMcpServers == false' "$sec_file" &>/dev/null; then
       record "mcp-disabled($label)" "PASS"
     else record "mcp-disabled($label)" "WARN" "enableAllProjectMcpServers not false"; fi
   else
     if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("sandbox",{}).get("enabled") else 1)' "$sec_file" 2>/dev/null; then
       record "sandbox($label)" "PASS"
-    else record "sandbox($label)" "FAIL" "not enabled in $sec_file — run: make all to re-deploy claude role"; fi
+    else record "sandbox($label)" "FAIL" "not enabled in $sec_file — run: make claude"; fi
   fi
 done
 
@@ -1458,11 +1464,11 @@ EOF
   # inotify limits (required for IDE/file-watcher tools — system role sets these)
   _inotify_watches=$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo "0")
   if [[ "$_inotify_watches" -ge 1048576 ]] 2>/dev/null; then record "inotify-max-user-watches" "PASS"
-  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make all)"; fi
+  else record "inotify-max-user-watches" "FAIL" "fs.inotify.max_user_watches=$_inotify_watches, expected >=1048576 (run: make system)"; fi
   unset _inotify_watches
   _inotify_instances=$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo "0")
   if [[ "$_inotify_instances" -ge 8192 ]] 2>/dev/null; then record "inotify-max-user-instances" "PASS"
-  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make all)"; fi
+  else record "inotify-max-user-instances" "FAIL" "fs.inotify.max_user_instances=$_inotify_instances, expected >=8192 (run: make system)"; fi
   unset _inotify_instances
 
   # ctrl+alt+del disabled (physical security)
@@ -1817,7 +1823,7 @@ fi
 if [[ -f /etc/NetworkManager/conf.d/tailscale.conf ]]; then
   if grep -q 'interface-name:tailscale' /etc/NetworkManager/conf.d/tailscale.conf; then
     record "nm-tailscale-unmanaged" "PASS"
-  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make all"; fi
+  else record "nm-tailscale-unmanaged" "FAIL" "tailscale.conf missing or incomplete (/etc/NetworkManager/conf.d/tailscale.conf) — NM may manage kind/OVN/Tailscale interfaces; run: make system"; fi
 fi
 if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
   if grep -q '^ipv4.dhcp-send-hostname=false' /etc/NetworkManager/conf.d/99-dhcp-privacy.conf; then
