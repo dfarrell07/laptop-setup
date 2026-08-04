@@ -1129,6 +1129,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
     # authselect check verifies actual PAM files match profile+features — is-feature-enabled only checks state file
     if authselect check 2>/dev/null; then record "authselect-check" "PASS"
+    elif $CSB_HOST; then record "authselect-check" "WARN" "skipped on RHEL CSB — IT manages PAM via IPA/SCAP; authselect check may detect intentional drift"
     else record "authselect-check" "FAIL" "authselect PAM files differ from profile — run: authselect select sssd --force"; fi
   fi
 
