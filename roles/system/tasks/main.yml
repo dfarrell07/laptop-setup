@@ -605,7 +605,7 @@
         'kernel.core_pattern': system_core_pattern,
         'kernel.yama.ptrace_scope': system_ptrace_scope | int,
         'kernel.kexec_load_disabled': system_kexec_load_disabled | int
-      }) | combine(system_sysctl_extra | default({})) }}" # noqa: jinja[spacing]
+      }) | combine(system_sysctl_extra) }}" # noqa: jinja[spacing]
 
 # CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
 # On CSB, Red Hat IT network diagnostics rely on TCP timestamps for RTT measurement
@@ -1006,7 +1006,7 @@
     system_init_on_free_result is changed or
     system_init_on_free_remove_result is changed or
     system_page_shuffle_result is changed or
-    (system_luks_key_cleanup is defined and system_luks_key_cleanup is changed) or
+    system_luks_key_cleanup is changed or
     system_kernel_cmdline_result is changed
 
 # --- Core dumps ---
