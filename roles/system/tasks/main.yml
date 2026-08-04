@@ -202,6 +202,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - system_home_mountpoint.rc == 0
+    - not csb_rhel or (system_home_nosuid_force | bool)
   failed_when: false
 
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
