@@ -133,6 +133,7 @@ make repos-downstream # downstream repos only
   CIS; set 0 to disable), `system_disable_usb_storage` (true — USB drives kernel-blocked), `system_kernel_lockdown`
   (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging), `system_ipv6_accept_ra`
   (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (local — set "no" to disable port forwarding; "yes" for both -L and -R),
+  `system_ssh_allow_agent_forwarding` (no — set 'yes' to forward ssh-agent when SSHing into this machine; prefer ProxyJump for traversal),
   `system_dns_domains` (~. — catch-all for Tailscale MagicDNS), `system_ssh_max_sessions` (10),
   `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `desktop_i3status_battery_num`, `system_lid_switch`.
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`

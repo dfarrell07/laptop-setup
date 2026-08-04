@@ -198,7 +198,9 @@ _zsh_cached_completion oc completion zsh
 _zsh_cached_completion helm completion zsh
 _zsh_cached_completion kind completion zsh
 _zsh_cached_completion kustomize completion zsh
+_zsh_cached_completion golangci-lint completion zsh
 {% if profile == 'work' %}
+_zsh_cached_completion tkn completion zsh
 if command -v bpfman &>/dev/null; then
   _bpf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/bpfman.zsh"
   _bpf_bin=$(command -v bpfman)
@@ -211,6 +213,7 @@ if command -v bpfman &>/dev/null; then
   fi
   [[ -s "$_bpf_cache" ]] && source "$_bpf_cache"
 fi
+_zsh_cached_completion stern completion zsh
 {% endif %}
 
 # --- Dev shortcuts ---

@@ -95,10 +95,10 @@
       ansible.builtin.yum_repository:
         name: google-cloud-cli
         description: Google Cloud CLI
-        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if _gcloud_use_el10 | bool else 'el9' }}-x86_64"
+        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if _gcloud_use_el10 else 'el9' }}-x86_64"
         gpgcheck: true
         repo_gpgcheck: false  # packages.cloud.google.com does not sign repomd.xml
-        gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 | bool else 'rpm-package-key.gpg' }}"  # yamllint disable-line rule:line-length
+        gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 else 'rpm-package-key.gpg' }}"  # yamllint disable-line rule:line-length
         enabled: true
   rescue:
     - name: Record Google Cloud SDK repo failure
