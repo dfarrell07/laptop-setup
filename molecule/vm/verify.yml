@@ -906,6 +906,30 @@
         that: not verify_cron_deny.stat.exists
         fail_msg: "/etc/cron.deny exists but cron.allow is authoritative"
 
+    - name: Verify /etc/at.allow exists
+      ansible.builtin.stat:
+        path: /etc/at.allow
+      register: verify_at_allow
+      become: true
+
+    - name: Assert /etc/at.allow exists with mode 0600 (CIS 5.1.9)
+      ansible.builtin.assert:
+        that:
+          - verify_at_allow.stat.exists
+          - verify_at_allow.stat.mode == '0600'
+        fail_msg: "/etc/at.allow missing or wrong permissions"
+
+    - name: Stat /etc/at.deny
+      ansible.builtin.stat:
+        path: /etc/at.deny
+      register: verify_at_deny
+      become: true
+
+    - name: Assert /etc/at.deny is absent (CIS 5.1.9)
+      ansible.builtin.assert:
+        that: not verify_at_deny.stat.exists
+        fail_msg: "/etc/at.deny exists but at.allow is authoritative"
+
     - name: Verify /etc/cron.d permissions
       ansible.builtin.stat:
         path: /etc/cron.d

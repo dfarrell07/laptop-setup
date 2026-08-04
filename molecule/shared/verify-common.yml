@@ -1134,6 +1134,22 @@
     that: verify_git_lfs.rc == 0
     fail_msg: "git-lfs not installed — packages_cli regression (needed for repos with LFS-tracked files)"
 
+- name: Check git-lfs filter registered globally
+  ansible.builtin.command:
+    cmd: git config --global filter.lfs.smudge
+  register: verify_git_lfs_filter
+  changed_when: false
+  failed_when: false
+  when: verify_git_lfs.rc == 0
+
+- name: Assert git-lfs filter registered (git lfs install was run)
+  ansible.builtin.assert:
+    that: verify_git_lfs_filter.rc == 0
+    fail_msg: >
+      git lfs install has not been run — global LFS filter drivers not registered;
+      run: git lfs install --skip-repo
+  when: verify_git_lfs.rc == 0
+
 - name: Check zshrc has GONOSUMDB (profile=work)
   ansible.builtin.command:
     cmd: grep -q 'GONOSUMDB' "{{ ansible_user_dir }}/.zshrc"

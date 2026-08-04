@@ -135,7 +135,7 @@
 
 - name: Register git-lfs smudge/clean filter drivers
   ansible.builtin.command:
-    cmd: git lfs install
+    cmd: git lfs install --skip-repo
   changed_when: true
   when:
     - git_repos_lfs_check.rc == 0

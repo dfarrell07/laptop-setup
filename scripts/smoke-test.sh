@@ -1777,11 +1777,14 @@ fi
 # These files ARE deployed by the system role in Fedora/Rocky/Debian container CI;
 # [[ -f ]] guards make them no-ops on macOS and container scenarios without the system role.
 
-# kernel module blacklist — always-present entries (cramfs, n_hdlc); vivid/usb_storage skipped
+# kernel module blacklist — always-present entries (cramfs, n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
 # (usb_storage is conditional on system_disable_usb_storage and checked in the full gate above)
 if [[ -f /etc/modprobe.d/hardening.conf ]]; then
   if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf && \
-     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf; then
+     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
+     grep -q '^install dccp /bin/false' /etc/modprobe.d/hardening.conf && \
+     grep -q '^install rds /bin/false' /etc/modprobe.d/hardening.conf && \
+     grep -q '^install tipc /bin/false' /etc/modprobe.d/hardening.conf; then
     record "modprobe-hardening" "PASS"
   else record "modprobe-hardening" "FAIL" "modprobe hardening not deployed or missing key blacklist entries"; fi
 fi
