@@ -141,7 +141,11 @@ if [[ -x "$vscript" ]]; then
   output=$("$vscript" 2>/dev/null) || true
   len=${#output}
   if [[ $len -ge 8 ]]; then
-    record "vault" "pass" "script returned valid password"
+    if echo "$output" | grep -q 'ci-dummy-vault-password'; then
+      record "vault" "warn" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+    else
+      record "vault" "pass" "script returned valid password"
+    fi
   elif [[ $len -gt 0 ]]; then
     record "vault" "warn" "script returned only ${len} chars"
   else

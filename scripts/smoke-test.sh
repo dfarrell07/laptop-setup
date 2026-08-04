@@ -176,6 +176,19 @@ fi
 if run ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
+# vault-pass.sh stub (skip in molecule — stub is intentional in CI)
+if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
+  _vp="$(dirname "$0")/vault-pass.sh"
+  if [[ -x "$_vp" ]]; then
+    _vp_out=$(bash "$_vp" 2>/dev/null) || true
+    if echo "$_vp_out" | grep -q 'ci-dummy-vault-password'; then
+      record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+    fi
+    unset _vp_out
+  fi
+  unset _vp
+fi
+
 # Tailscale connectivity (cross-platform via CLI)
 if run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi

@@ -329,7 +329,7 @@ Running `make all` fails immediately before any task executes.
 `ansible.cfg` references `vault_password_file = scripts/vault-pass.sh`. This file is gitignored — it is never committed to the repo. On a fresh machine (or after a fresh clone without restoring from backup), the script will not exist.
 
 **Fix:**
-`scripts/vault-pass.sh` is a gitignored file — it is never in the repo and must be restored from backup or created manually per the template in `SECURITY.md`. Installing `ykpers` is a prerequisite (it provides `ykchalresp`) but does not auto-create the script.
+`scripts/vault-pass.sh` is a gitignored file — it is never in the repo and must be restored from backup or created manually per the `Setting Up vault-pass.sh` section in `SECURITY.md`. Installing `ykpers` is a prerequisite (it provides `ykchalresp`) but does not auto-create the script.
 
 Bootstrap procedure for first run:
 0. Run `make bootstrap` (installs ansible-core, git, collections, git hooks; creates vault-pass.sh stub).
