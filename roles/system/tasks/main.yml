@@ -1805,11 +1805,12 @@
       WARNING: br_netfilter module failed to load. net.bridge.bridge-nf-call-iptables
       will not be applied — Kubernetes/kind networking (NetworkPolicy) may be broken.
   when: >-
-    system_modules_result.results
+    not csb_rhel and
+    (system_modules_result.results | default([])
     | selectattr('item', 'equalto', 'br_netfilter')
     | selectattr('rc', 'defined')
     | selectattr('rc', 'ne', 0)
-    | list | length > 0
+    | list | length > 0)
 
 # --- NetworkManager Tailscale unmanaged ---
 - name: Ensure NetworkManager conf.d exists
