@@ -1317,6 +1317,7 @@
   # See packages_go_install in defaults/main.yml for rationale and pinning guidance.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
+    timeout: 300
   changed_when: true
   environment:
     GOPATH: "{{ ansible_facts['user_dir'] }}/go"
@@ -1530,6 +1531,7 @@
     - name: Install subctl version with temp GOBIN
       ansible.builtin.command:
         cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
+        timeout: 600
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
@@ -1676,6 +1678,7 @@
 - name: Update krew plugin index
   ansible.builtin.command:
     cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew update"
+    timeout: 60
   changed_when: false
   failed_when: false
   when:
@@ -1687,6 +1690,7 @@
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
     cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew install {{ item }}"
+    timeout: 120
   loop: [ctx, ns]
   register: packages_krew_plugins_result
   changed_when: '"Installed plugin" in packages_krew_plugins_result.stdout'
