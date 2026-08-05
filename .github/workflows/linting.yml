@@ -226,23 +226,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.lock
-
-      - name: Install Ansible
-        run: pip install -r requirements-test.lock
-
-      - name: Install collections (with retry)
-        run: |
-          for attempt in 1 2 3; do
-            ansible-galaxy collection install -r requirements.yml && break
-            echo "Attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
+      - name: Set up Molecule environment
+        uses: ./.github/actions/molecule-setup
 
       - name: Create vault password script for CI
         run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
