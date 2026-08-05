@@ -1102,6 +1102,8 @@
       ansible.builtin.debug:
         msg: "grubby failed ({{ item.key }}): rc={{ item.value.rc }} stderr={{ item.value.stderr | default('') }}"
       loop: "{{ _grubby_results | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
       when: item.value.rc | default(0) | int != 0
       vars:
         _grubby_results:

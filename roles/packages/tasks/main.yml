@@ -1372,6 +1372,8 @@
         path: "/tmp/subctl-v{{ item.version }}-bin"
         state: absent
       loop: "{{ packages_subctl_versioned }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
   when:
