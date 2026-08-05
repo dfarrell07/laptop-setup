@@ -39,7 +39,9 @@
 
 [merge]
 	conflictStyle = zdiff3
+{% if ansible_facts['system'] != 'Darwin' %}
 	tool = meld
+{% endif %}
 
 [mergetool]
 	prompt = false
@@ -62,7 +64,9 @@
 	# 'recent' alias removed — [branch] sort = -committerdate makes plain 'git branch' sort by recency
 
 [diff]
+{% if ansible_facts['system'] != 'Darwin' %}
 	tool = meld
+{% endif %}
 	algorithm = histogram
 
 [difftool]
