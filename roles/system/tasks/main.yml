@@ -1632,8 +1632,7 @@
     - system_firewalld_running | bool
     - system_enable_libvirtd | bool
   failed_when: >-
-    _system_libvirt_ssh_remove.rc is defined and
-    _system_libvirt_ssh_remove.rc != 0 and
+    (_system_libvirt_ssh_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
   # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is created by
   # the libvirt daemon on first start, which may not have run yet on first provision
