@@ -66,6 +66,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
 #   system_disable_printing: true      (roles/system/defaults) — masks cups.socket/cups.path; set false if printing needed
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
+#   system_disable_thunderbolt: false  (roles/system/defaults) — true to blacklist thunderbolt/thunderbolt_net;
+#                                        mitigates Thunderspy DMA attacks; only set on machines with no Thunderbolt peripherals
 #   system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
 #                                        on machines with a fingerprint reader if fingerprint auth is desired
 #   system_disable_avahi: true         (group_vars/all/vars.yml) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
