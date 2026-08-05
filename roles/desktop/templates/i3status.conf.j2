@@ -6,7 +6,7 @@ general {
 }
 
 order += "cpu_usage"
-order += "cpu_temperature 0"
+{% if desktop_i3status_cpu_temp_path %}order += "cpu_temperature 0"{% endif %}
 order += "memory"
 order += "disk /"
 order += "disk /home"
@@ -22,6 +22,7 @@ cpu_usage {
     max_threshold = 80
 }
 
+{% if desktop_i3status_cpu_temp_path %}
 # AMD k10temp via configurable hwmon path. i3status cpu_temperature requires a concrete path (no globs).
 # Override desktop_i3status_cpu_temp_path in config.yml for different PCI topologies.
 # Default: /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input (ThinkPad P16v Gen 1 AMD k10temp)
@@ -30,6 +31,7 @@ cpu_temperature 0 {
     path = "{{ desktop_i3status_cpu_temp_path }}"
     max_threshold = 90
 }
+{% endif %}
 
 memory {
     format = " %used / %total"

@@ -101,7 +101,6 @@ OPTIONAL_FILES=(
   .claude/.credentials.json
   .claude-work/.credentials.json
   .claude-personal/.credentials.json
-  .claude/settings.json
   .gnupg/trustdb.gpg
   .gnupg/pubring.kbx
 )
