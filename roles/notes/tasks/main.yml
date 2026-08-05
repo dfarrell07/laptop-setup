@@ -125,6 +125,7 @@
       register: notes_transcrypt_init_result
       no_log: true
       changed_when: notes_transcrypt_init_result.rc == 0
+      failed_when: false
       when:
         - notes_repo_available | bool
         - notes_transcrypt_available | bool

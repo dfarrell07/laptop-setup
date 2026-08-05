@@ -1216,6 +1216,7 @@
   notify: Restart auditd
   when:
     - not csb_rhel  # no SIEM at home
+    - _audit_pkg_install.rc | default(0) == 0
 
 - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
   ansible.builtin.template:
@@ -1227,6 +1228,7 @@
   notify: Restart auditd
   when:
     - not csb_rhel  # no audisp-remote at home
+    - _audit_pkg_install.rc | default(0) == 0
 
 - name: Ensure auditd is enabled and started
   ansible.builtin.systemd:
@@ -1237,6 +1239,7 @@
   when:
     - not csb_rhel
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+    - _audit_pkg_install.rc | default(0) == 0
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
