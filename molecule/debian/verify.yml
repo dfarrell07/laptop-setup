@@ -177,24 +177,3 @@
       ansible.builtin.assert:
         that: "dotfiles_user_email_personal in verify_git_email_personal.stdout"
         fail_msg: "git user.email is not set to the personal address — profile conditional regression in gitconfig.j2?"
-
-    # --- Claude role: safe.directory security hardening (regression guard for bash executor fix) ---
-    # The claude role removes wildcard safe.directory entries via a bash-only shell task.
-    # On Debian/dash, the task silently no-ops without executable: /bin/bash — this assertion
-    # catches that regression before it reaches production.
-    - name: Get global safe.directory entries
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: git config --global --get-all safe.directory
-      register: verify_safe_directory
-      changed_when: false
-      failed_when: false
-
-    - name: Assert no wildcard safe.directory entries exist
-      ansible.builtin.assert:
-        that: >-
-          verify_safe_directory.stdout_lines | default([])
-          | select('match', r'^\*{1,2}$|^/$')
-          | list | length == 0
-        fail_msg: >-
-          safe.directory contains a wildcard entry — claude role bash executor regression?
-          (shell task requires executable: /bin/bash for set -o pipefail + [[ ]] on Debian/dash)

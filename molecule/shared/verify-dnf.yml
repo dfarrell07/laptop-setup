@@ -79,39 +79,6 @@
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
 
-# NOTE: The kubectl and kind assertions below are dead code in container-based molecule scenarios
-# (fedora, rocky, vm): packages_install_binaries defaults to false in verify plays because
-# group_vars/all/vars.yml is NOT loaded during molecule's ansible verify invocation.
-# Actual kubectl/kind binary verification is done in molecule/packages-binaries/verify.yml.
-# These assertions remain as documentation of the intended coverage boundary.
-- name: Check kubectl binary presence
-  ansible.builtin.stat:
-    path: /usr/local/bin/kubectl
-  register: verify_kubectl_bin
-  when: (packages_install_binaries | bool) and (profile | default('work')) == 'work'
-
-- name: Assert kubectl binary is present and executable
-  ansible.builtin.assert:
-    that:
-      - verify_kubectl_bin.stat.exists
-      - verify_kubectl_bin.stat.executable
-    fail_msg: 'kubectl binary is missing or not executable'
-  when: (packages_install_binaries | bool) and (profile | default('work')) == 'work'
-
-- name: Check kind binary presence
-  ansible.builtin.stat:
-    path: /usr/local/bin/kind
-  register: verify_kind_bin
-  when: packages_install_binaries | bool
-
-- name: Assert kind binary is present and executable
-  ansible.builtin.assert:
-    that:
-      - verify_kind_bin.stat.exists
-      - verify_kind_bin.stat.executable
-    fail_msg: 'kind binary is missing or not executable'
-  when: packages_install_binaries | bool
-
 - name: Check gpg is installed
   ansible.builtin.command: gpg --version
   changed_when: false

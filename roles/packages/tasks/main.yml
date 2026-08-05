@@ -363,21 +363,10 @@
         'content' not in packages_opm_marker or
         packages_oc_version not in (packages_opm_marker.content | b64decode)
       block:
-        - name: Fetch OPM sha256sum.txt
-          ansible.builtin.uri:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
-            return_content: true
-          register: packages_opm_sha256sums
-          check_mode: false
-          retries: 3
-          delay: 10
-          until: packages_opm_sha256sums.status == 200
-          when: packages_oc_version == 'stable'
-
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:
             packages_opm_sha256: >-
-              {{ packages_opm_sha256sums.content
+              {{ packages_oc_sha256sums.content
                  | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
                                 '\1', multiline=True)
                  | default([]) | first | default('') }}
