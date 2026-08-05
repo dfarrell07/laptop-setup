@@ -711,7 +711,7 @@
 
 - name: Check current default firewall zone
   ansible.posix.firewalld_info:
-  register: system_fw_info
+  register: system_firewall_info
   failed_when: false
   when: system_firewalld_running | bool
 
@@ -721,7 +721,7 @@
   changed_when: true
   when:
     - system_firewalld_running | bool
-    - system_fw_info.firewalld_info.default_zone | default('') != 'drop'
+    - system_firewall_info.firewalld_info.default_zone | default('') != 'drop'
     - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Apply firewall rules
@@ -835,7 +835,7 @@
 - name: Open SSH port in default firewall zone (fallback — zone management disabled in config)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
-    zone: "{{ system_fw_info.firewalld_info.default_zone | default('FedoraWorkstation') }}"
+    zone: "{{ system_firewall_info.firewalld_info.default_zone | default('FedoraWorkstation') }}"
     permanent: true
     immediate: true
     state: enabled
@@ -843,7 +843,7 @@
     - system_firewalld_running | bool
     - csb_detected
     - not (system_firewall_manage_zone | bool)
-    - system_fw_info.firewalld_info.default_zone | default('') not in ['drop', '']
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', '']
   failed_when: false
   notify: Apply firewall rules
 
@@ -1260,7 +1260,7 @@
 - name: Warn if authselect sssd profile selection failed
   ansible.builtin.debug:
     msg: >-
-      authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
+      WARNING: authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
       enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
       password reuse prevention will be unconfigured. Check authselect status manually.
   when:
@@ -1786,17 +1786,17 @@
 - name: Check for firmware updates
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
-  register: system_fwupd
+  register: system_fwupd_check_result
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Report available firmware updates
   ansible.builtin.debug:
-    msg: "Firmware updates available: {{ system_fwupd.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
+    msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
-    - system_fwupd.rc == 0
-    - "'no available firmware updates' not in (system_fwupd.stdout | default('') | lower)"
+    - system_fwupd_check_result.rc == 0
+    - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"
 
 # --- sshd hardening ---
 - name: Ensure sshd is enabled and started
@@ -2004,7 +2004,7 @@
     name: "{{ item }}"
     state: present
     persistent: present
-  register: system_modules_result
+  register: system_modprobe_results
   loop:
     - ip6_tables
     - ip6table_nat
@@ -2031,7 +2031,7 @@
       will not be applied — Kubernetes/kind networking (NetworkPolicy) may be broken.
   when: >-
     not csb_rhel and
-    (system_modules_result.results | default([])
+    (system_modprobe_results.results | default([])
     | selectattr('item', 'equalto', 'br_netfilter')
     | selectattr('rc', 'defined')
     | selectattr('rc', 'ne', 0)
@@ -2863,7 +2863,7 @@
   # a human-readable calendar date, not the raw integer, so regex_search('30') never matches.
   ansible.builtin.command:
     cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $7}' /etc/shadow"
-  register: system_chage_status
+  register: system_chage_inactive_days
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
@@ -2878,7 +2878,7 @@
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
-    - system_chage_status.stdout | default('') | trim != system_inactive_days | string
+    - system_chage_inactive_days.stdout | default('') | trim != system_inactive_days | string
   changed_when: true
   failed_when: false
 
