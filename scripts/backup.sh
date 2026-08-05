@@ -102,7 +102,7 @@ OPTIONAL_FILES=(
   .claude-work/.credentials.json
   .claude-personal/.credentials.json
   .gnupg/trustdb.gpg
-  .gnupg/pubring.kbx
+  .gnupg/common.conf
 )
 
 count=0
@@ -164,6 +164,22 @@ if [ -d "$_gpg_dir" ]; then
     else
       mkdir -p "${BACKUP_DIR}/.gnupg/private-keys-v1.d"
       cp -p "$key" "$dest"
+    fi
+    count=$((count + 1))
+  done
+fi
+
+# ~/.gnupg/public-keys.d/ (keyboxd public key database — GnuPG 2.3+)
+_gpg_pub_dir="${HOME}/.gnupg/public-keys.d"
+if [ -d "$_gpg_pub_dir" ]; then
+  for db in "$_gpg_pub_dir"/*.db; do
+    [ -f "$db" ] || continue
+    dest="${BACKUP_DIR}/.gnupg/public-keys.d/$(basename "$db")"
+    if [ "$DRY_RUN" = true ]; then
+      echo "[dry-run] would copy $db -> $dest"
+    else
+      mkdir -p "${BACKUP_DIR}/.gnupg/public-keys.d"
+      cp -p "$db" "$dest"
     fi
     count=$((count + 1))
   done

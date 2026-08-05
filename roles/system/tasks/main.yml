@@ -1084,15 +1084,15 @@
           new="$current"
           # Append each missing hardening param (check by key prefix only)
           _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
-          {{  '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | length > 0 else '' }}
+          {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | length > 0 else '' }}
           _add "vsyscall=none"
-          {{  '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
+          {{ '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
           _add "page_alloc.shuffle=1"
           {% set is_amd = ansible_facts['processor'] | join(' ') | lower is search('amd') %}
           {% set is_intel = ansible_facts['processor'] | join(' ') | lower is search('intel') %}
-          {{  '_add "amd_iommu=on"' if is_amd else '' }}
-          {{  '_add "iommu=pt"' if system_iommu_passthrough | bool and (is_amd or is_intel) else '' }}
-          {{  '_add "intel_iommu=on"' if is_intel else '' }}
+          {{ '_add "amd_iommu=on"' if is_amd else '' }}
+          {{ '_add "iommu=pt"' if system_iommu_passthrough | bool and (is_amd or is_intel) else '' }}
+          {{ '_add "intel_iommu=on"' if is_intel else '' }}
           new=$(echo "$new" | tr -s ' ' | sed 's/^ //;s/ $//')
           if [[ "$new" != "$current" ]]; then
             echo "$new" > /etc/kernel/cmdline
@@ -2172,7 +2172,7 @@
 # ahead of IT's approval cycle or outside maintenance windows.
 - name: Install dnf-automatic
   ansible.builtin.dnf:
-    name: "{{  'dnf5-plugin-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}"
+    name: "{{ 'dnf5-plugin-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}"
     state: present
   register: system_dnf_automatic_installed
   when:
@@ -2193,7 +2193,7 @@
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
-    name: "{{  'dnf5-automatic.timer' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.timer' }}"
+    name: "{{ 'dnf5-automatic.timer' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.timer' }}"
     state: started
     enabled: true
   when:
@@ -2205,7 +2205,7 @@
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
 - name: Ensure dnf-automatic service drop-in directory exists
   ansible.builtin.file:
-    path: "/etc/systemd/system/{{  'dnf5-automatic.service' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.service' }}.d"
+    path: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.service' }}.d"
     state: directory
     mode: "0755"
   when:
@@ -2223,7 +2223,7 @@
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
       ExecStartPost=/usr/bin/bash -c '/usr/bin/aide --update; mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
-    dest: "/etc/systemd/system/{{  'dnf5-automatic.service' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
+    dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
     mode: "0644"
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
@@ -3228,7 +3228,7 @@
         - /etc/systemd/system/aide-check.service
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
-        - "/etc/systemd/system/{{  'dnf5-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
+        - "/etc/systemd/system/{{ 'dnf5-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
       loop_control:
         label: "{{ item }}"
       register: system_aide_unit_removal

@@ -178,12 +178,14 @@
     distrobox_tool: "none"
   when:
     - distrobox_use_toolbox | bool
+    - not (fapolicyd_enforcing)
     - not (packages_install_binaries | default(true) | bool)
     - distrobox_container_exists.rc != 0
 
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
+    - not (fapolicyd_enforcing)
     - packages_install_binaries | default(true) | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:

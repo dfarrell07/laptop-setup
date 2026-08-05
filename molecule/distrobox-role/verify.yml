@@ -2,6 +2,8 @@
 - name: Verify (distrobox role)
   hosts: all
   gather_facts: true
+  vars:
+    distrobox_container_name: "fedora-dev"
 
   tasks:
     - name: Stat distrobox config directory
@@ -34,10 +36,10 @@
         src: "{{ ansible_env.HOME }}/.config/distrobox/distrobox.ini"
       register: verify_ini_contents
 
-    - name: Assert distrobox.ini contains [fedora-dev] section header
+    - name: Assert distrobox.ini contains container section header
       ansible.builtin.assert:
-        that: "'[fedora-dev]' in (verify_ini_contents.content | b64decode)"
-        fail_msg: "distrobox.ini does not contain [fedora-dev] section header"
+        that: "'[' ~ distrobox_container_name ~ ']' in (verify_ini_contents.content | b64decode)"
+        fail_msg: "distrobox.ini does not contain [{{ distrobox_container_name }}] section header"
 
     - name: Read pass-1 distrobox call log
       ansible.builtin.slurp:
