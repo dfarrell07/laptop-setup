@@ -129,6 +129,9 @@
     - name: Include Alacritty and Chrome policy assertions
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
+    - name: Include sway config assertions
+      ansible.builtin.import_tasks: ../shared/verify-sway.yml
+
     # --- Containers ---
     - name: Include containers.conf assertions
       ansible.builtin.import_tasks: ../shared/verify-containers.yml
