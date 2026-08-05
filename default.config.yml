@@ -68,9 +68,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
 #   system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
 #                                        on machines with a fingerprint reader if fingerprint auth is desired
-#   system_disable_avahi: true         (roles/system/defaults) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
+#   system_disable_avahi: true         (group_vars/all/vars.yml) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
 #                                        resolution or DNS-SD lab tooling
-#   system_mask_nfs_server: true     (roles/system/defaults) — masks nfs-server and rpcbind (CIS 2.2.7);
+#   system_mask_nfs_server: true     (group_vars/all/vars.yml) — masks nfs-server and rpcbind (CIS 2.2.7);
 #                                        set false if Vagrant NFS synced folders, NFS exports, or rpcbind are needed
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
@@ -95,21 +95,19 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_sysctl_extra: {}            (roles/system/defaults) — additional sysctl key=value pairs merged into the hardening dict;
 #                                        use in config.yml to add machine-specific sysctls without replacing the entire dict.
 #                                        Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
-#   system_kernel_panic: 10            (roles/system/defaults) — auto-reboot after panic (CIS: 10 s);
-#                                        default.config.yml overrides to 0 for kdump/dev use; set 10 in config.yml to restore CIS compliance
-#   system_kernel_panic_on_oops: 1     (roles/system/defaults) — CIS 1.5.3; default.config.yml overrides to 0 for dev use;
-#                                        set 1 in config.yml to restore CIS compliance
-#   system_kexec_load_disabled: 1      (roles/system/defaults) — CIS: blocks kexec at runtime;
-#                                        default.config.yml overrides to 0 for kdump/dev use; set 1 in config.yml to restore
-#                                        strict CIS compliance
+#   system_kernel_panic: 0            (group_vars/all/vars.yml) — dev workstation default; CIS target is 10 (auto-reboot after panic);
+#                                        set 10 in config.yml for CIS compliance
+#   system_kernel_panic_on_oops: 0     (group_vars/all/vars.yml) — dev workstation default; CIS 1.5.3 target is 1 (halt on oops);
+#                                        set 1 in config.yml for CIS compliance
+#   system_kexec_load_disabled: 0      (group_vars/all/vars.yml) — kdump/dev workstation default; CIS target is 1 (blocks kexec);
+#                                        set 1 in config.yml for strict CIS compliance
 #   system_io_uring_disabled: 1        (roles/system/defaults) — value=1 restricts to CAP_SYS_ADMIN;
 #                                        set 2 in config.yml to fully disable for all users
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
-#   system_ptrace_scope: 1             (roles/system/defaults) — YAMA ptrace scope (1=parent-only CIS; 0=Fedora workstation default);
-#                                        default.config.yml overrides to 0 for gdb -p / strace -p; set 1 in config.yml
-#                                        to restore CIS compliance
-#   system_init_on_free: true          (roles/system/defaults) — zero freed memory pages on kernel free (init_on_free=1);
+#   system_ptrace_scope: 0             (group_vars/all/vars.yml) — Fedora workstation default; CIS target is 1 (parent-only YAMA);
+#                                        set 1 in config.yml for CIS compliance (disables gdb -p / strace -p on unrelated processes)
+#   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
 #   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
 #                                        (default: kernel-blocked, no override via USBGuard)
@@ -187,7 +185,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   desktop_sway_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
 #   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; most laptops use 0 (BAT0)
 #   desktop_i3status_show_battery: true  (roles/desktop/defaults) — set false on desktops/VMs without a battery
-#   desktop_i3status_cpu_temp_path: ".../hwmon8/temp1_input"  (roles/desktop/defaults) — k10temp hwmon sysfs path;
+#   desktop_i3status_cpu_temp_path: ""  (roles/desktop/defaults) — empty disables the CPU temp block; set correct
+#     hwmon sysfs path in config.yml, e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input on ThinkPad P16v AMD.
 #     hwmon index varies by machine/kernel. Verify: ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
 #   desktop_sway_output: "eDP-1"       (roles/desktop/defaults) — built-in display identifier
 #   desktop_sway_adaptive_sync: "enabled"  (roles/desktop/defaults) — VRR/FreeSync;
@@ -247,8 +246,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
 #   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
 #   dotfiles_aws_profile: ""   — AWS CLI named profile (default: ""; e.g. "aws-acm-subm"); empty omits export
-#   dotfiles_laptop_tailscale_host: CHANGE_ME  — Tailscale hostname for laptop mosh/tmux alias (empty disables)
-#   dotfiles_mac_tailscale_host: CHANGE_ME  — Tailscale hostname for desktop mosh/tmux alias (empty disables)
+#   dotfiles_laptop_tailscale_host: ""  — Tailscale hostname for laptop mosh/tmux alias (e.g. laptop.tail); empty disables
+#   dotfiles_mac_tailscale_host: ""  — Tailscale hostname for desktop mosh/tmux alias (e.g. mac-desktop.tail); empty disables
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
