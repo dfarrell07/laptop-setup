@@ -15,6 +15,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    For HiDPI displays (e.g. ThinkPad P16v 2560x1600), also add
    `desktop_sway_hidpi_scale: 1.5` — without it, Sway defaults to 1.0 scale and fonts
    are microscopic on a 16-inch screen.
+   Also set `system_timezone` (e.g. `America/Chicago`) — the default is a `CHANGE_ME` sentinel that will fail the system role (`timedatectl set-timezone CHANGE_ME` is invalid); run `timedatectl list-timezones` to find yours.
 3. Populate `group_vars/all/vault.yml` with real SSH keys (see Vault section below)
    *then* `ansible-vault encrypt group_vars/all/vault.yml` and replace `scripts/vault-pass.sh`
    with your YubiKey HMAC-SHA1 implementation. For a first provision without real secrets,
@@ -48,7 +49,7 @@ make backup           # Back up dotfiles before re-provisioning
 make backup-dry-run   # Dry-run backup to preview what would be copied
 make bootstrap        # Initial setup (install deps, collections, hooks)
 make update           # Update collections + full run (sets -e git_repos_pull=true to fetch upstream changes)
-make lint             # ansible-lint + yamllint + shellcheck
+make lint             # ansible-lint + yamllint + shellcheck + check-vars-sync
 make shellcheck       # Run shellcheck on scripts and hooks (also run by lint)
 make syntax-check     # Playbook syntax validation only
 make markdownlint     # markdownlint on all .md files
@@ -77,6 +78,7 @@ make ci               # Lint + syntax + test-scripts + test-poller + all non-VM 
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
+make check-vars-sync  # Verify vars sync between group_vars/all/vars.yml and roles/system/defaults/main.yml
 make pip-lock         # Regenerate requirements-test.lock from current .venv
 make pip-sync         # Create reproducible .venv from requirements-test.lock
 ```
@@ -170,7 +172,8 @@ make repos-downstream # downstream repos only
 
 ## Testing
 
-- `make lint` — ansible-lint (production profile) + yamllint + shellcheck
+- `make lint` — ansible-lint (production profile) + yamllint + check-vars-sync (shellcheck runs as a prerequisite target)
+- `make check-vars-sync` — Verify security hardening vars in sync between group_vars/all/vars.yml and roles/system/defaults/main.yml
 - `make syntax-check` — Playbook syntax validation
 - `make test-scripts` — Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
