@@ -30,6 +30,7 @@ dotfiles_github_user: 'CHANGE_ME'
 dotfiles_user_name: 'CHANGE_ME'
 dotfiles_user_email_work: 'CHANGE_ME'
 dotfiles_user_email_personal: 'CHANGE_ME'
+system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
 # Feature toggles (naming: install_<feature>)
 install_docker: false  # true = leave docker.socket unmasked; does NOT install docker-ce (use repo_docker_ce)
@@ -39,9 +40,9 @@ install_virtualization: true
 # Additional toggles available via role defaults (override in config.yml):
 #   system_install_usbguard: true      (roles/system/defaults)
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
-#   system_auditd_max_log_file: 8      (roles/system/defaults) — MB per audit log file; machines with a dedicated /var/log/audit partition
+#   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; machines with a dedicated /var/log/audit partition
 #                                        or high-volume workloads (kind clusters, bpfman eBPF load tests) may want 32–64 MB
-#   system_auditd_num_logs: 5          (roles/system/defaults) — rotated files to keep; total = max_log_file * num_logs (40 MB default)
+#   system_auditd_num_logs: 5          (group_vars/all/vars.yml) — rotated files to keep; total = max_log_file * num_logs (40 MB default)
 #   system_aide_check_calendar: '*-*-* 05:00:00'  (roles/system/defaults) — OnCalendar for aide-check.timer
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   packages_install_binaries: true    (roles/packages/defaults)
@@ -72,10 +73,10 @@ install_virtualization: true
 #   system_tlp_cpu_energy_policy_bat: balance_power       (roles/system/defaults) — CPU EPP on battery
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
 #   system_sysrq: 0                    (roles/system/defaults) — 0=disabled (CIS), 176=emergency recovery
-#   system_tmout: 600                  (roles/system/defaults) — session inactivity timeout seconds (CIS<=900); 0=disabled
-#   system_faillock_deny: 5            (roles/system/defaults) — failed logins before lockout (CIS); lower for shared machines
-#   system_faillock_unlock_time: 900   (roles/system/defaults) — seconds until auto-unlock (CIS); 0=permanent until admin reset
-#   system_faillock_even_deny_root: false (roles/system/defaults) — lock root on failed logins; set true on shared/multi-user machines
+#   system_tmout: 600                  (group_vars/all/vars.yml) — session inactivity timeout seconds (CIS<=900); 0=disabled
+#   system_faillock_deny: 5            (group_vars/all/vars.yml) — failed logins before lockout (CIS); lower for shared machines
+#   system_faillock_unlock_time: 900   (group_vars/all/vars.yml) — seconds until auto-unlock (CIS); 0=permanent until admin reset
+#   system_faillock_even_deny_root: false (group_vars/all/vars.yml) — lock root on failed logins; set true on shared/multi-user machines
 #                                        (root SSH blocked by PermitRootLogin no; false reduces lockout risk)
 #   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
@@ -144,20 +145,20 @@ install_virtualization: true
 #                                        gdb/dlv or use coredumpctl debug); 'none' disables; 'journal' embeds in journald
 #   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
 #                                           2G matches systemd upstream default
-#   system_pwquality_dcredit: -1          (roles/system/defaults) — digit requirement (-1=require 1, 0=none)
-#   system_pwquality_ucredit: -1          (roles/system/defaults) — uppercase requirement (-1=require 1, 0=none)
-#   system_pwquality_lcredit: -1          (roles/system/defaults) — lowercase requirement (-1=require 1, 0=none)
-#   system_pwquality_ocredit: -1          (roles/system/defaults) — special-char requirement (-1=require 1, 0=none)
+#   system_pwquality_dcredit: -1          (group_vars/all/vars.yml) — digit requirement (-1=require 1, 0=none)
+#   system_pwquality_ucredit: -1          (group_vars/all/vars.yml) — uppercase requirement (-1=require 1, 0=none)
+#   system_pwquality_lcredit: -1          (group_vars/all/vars.yml) — lowercase requirement (-1=require 1, 0=none)
+#   system_pwquality_ocredit: -1          (group_vars/all/vars.yml) — special-char requirement (-1=require 1, 0=none)
 #                                           set all four to 0 to disable composition requirements while preserving minlen=14
-#   system_pwquality_minlen: 14           (roles/system/defaults) — minimum password length (CIS 5.3.2)
-#   system_pwquality_difok: 4             (roles/system/defaults) — characters that must differ from previous password
-#   system_pwquality_maxrepeat: 3         (roles/system/defaults) — maximum consecutive repeated characters
-#   system_pwhistory_remember: 24         (roles/system/defaults) — previous passwords remembered (CIS 5.3.5)
-#   system_pass_max_days: 365             (roles/system/defaults) — login.defs PASS_MAX_DAYS; max password age in days
-#   system_pass_min_days: 1               (roles/system/defaults) — login.defs PASS_MIN_DAYS; minimum days between changes
-#   system_pass_warn_age: 7               (roles/system/defaults) — login.defs PASS_WARN_AGE; days warning before expiry
-#   system_umask: "027"                   (roles/system/defaults) — login.defs UMASK; set 022 to allow group reads
-#   system_inactive_days: 30              (roles/system/defaults) — days inactive before account lock (login.defs INACTIVE,
+#   system_pwquality_minlen: 14           (group_vars/all/vars.yml) — minimum password length (CIS 5.3.2)
+#   system_pwquality_difok: 4             (group_vars/all/vars.yml) — characters that must differ from previous password
+#   system_pwquality_maxrepeat: 3         (group_vars/all/vars.yml) — maximum consecutive repeated characters
+#   system_pwhistory_remember: 24         (group_vars/all/vars.yml) — previous passwords remembered (CIS 5.3.5)
+#   system_pass_max_days: 365             (group_vars/all/vars.yml) — login.defs PASS_MAX_DAYS; max password age in days
+#   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
+#   system_pass_warn_age: 7               (group_vars/all/vars.yml) — login.defs PASS_WARN_AGE; days warning before expiry
+#   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
+#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (login.defs INACTIVE,
 #                                           useradd -D -f, chage -I); CIS 5.5.1.5
 #   system_logind_idle_sec: 300           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
@@ -238,8 +239,8 @@ install_virtualization: true
 #   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
 #   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
 #   dotfiles_aws_profile: ""   — AWS CLI named profile (default: ""; e.g. "aws-acm-subm"); empty omits export
-#   dotfiles_laptop_tailscale_host: laptop.tail  — Tailscale hostname for laptop mosh/tmux alias
-#   dotfiles_mac_tailscale_host: mac-desktop.tail  — Tailscale hostname for desktop mosh/tmux alias
+#   dotfiles_laptop_tailscale_host: CHANGE_ME  — Tailscale hostname for laptop mosh/tmux alias (empty disables)
+#   dotfiles_mac_tailscale_host: CHANGE_ME  — Tailscale hostname for desktop mosh/tmux alias (empty disables)
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
