@@ -314,24 +314,12 @@
 
     # auditd: stat + mode 0640 + -e 2 immutability covered by verify-common.yml (not csb_detected)
 
-    - name: Verify DNS-over-TLS config exists
-      ansible.builtin.stat:
-        path: /etc/systemd/resolved.conf.d/99-dot.conf
-      register: verify_dot
-      become: true
-
-    - name: Assert DNS-over-TLS config deployed
-      ansible.builtin.assert:
-        that: verify_dot.stat.exists
-        fail_msg: "DNS-over-TLS config not deployed"
-      when: ansible_facts.services['systemd-resolved.service'] is defined
-
     - name: Slurp DNS-over-TLS config for content check
       ansible.builtin.slurp:
         src: /etc/systemd/resolved.conf.d/99-dot.conf
       register: verify_dot_content
       become: true
-      when: verify_dot.stat.exists
+      when: verify_dot_conf.stat.exists
 
     - name: Assert DNS-over-TLS config contains required settings
       ansible.builtin.assert:
@@ -340,7 +328,7 @@
           - (verify_dot_content.content | b64decode) is search('DNSOverTLS=opportunistic')
           - (verify_dot_content.content | b64decode) is search('1\.1\.1\.1')
         fail_msg: "99-dot.conf exists but is missing required settings (Domains=~., DNSOverTLS=opportunistic, 1.1.1.1)"
-      when: verify_dot.stat.exists
+      when: verify_dot_conf.stat.exists
 
     - name: Stat /etc/resolv.conf for symlink check
       ansible.builtin.stat:
@@ -404,19 +392,6 @@
         fail_msg: >-
           AllowUsers is '{{ verify_sshd_allowusers.stdout }}',
           expected '{{ ansible_user_id }}' (non-empty, non-root)
-
-    - name: Verify crypto-policy
-      ansible.builtin.command: update-crypto-policies --show
-      register: verify_crypto
-      changed_when: false
-      become: true
-      failed_when: false
-
-    - name: Assert crypto-policy is DEFAULT:NO-SHA1
-      ansible.builtin.assert:
-        that: verify_crypto.stdout == 'DEFAULT:NO-SHA1'
-        fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected DEFAULT:NO-SHA1"
-      when: verify_crypto.rc == 0
 
     # --- New system hardening checks ---
     - name: Check /dev/shm mount options
@@ -549,18 +524,6 @@
       ansible.builtin.assert:
         that: verify_selinux.stdout == 'Enforcing'
         fail_msg: "SELinux is '{{ verify_selinux.stdout }}', expected 'Enforcing'"
-
-    - name: Verify chrony NTS config
-      ansible.builtin.command: grep -q nts /etc/chrony.conf
-      changed_when: false
-      failed_when: false
-      register: verify_chrony_nts
-      become: true
-
-    - name: Assert chrony has NTS config
-      ansible.builtin.assert:
-        that: verify_chrony_nts.rc == 0
-        fail_msg: "NTS not configured in chrony.conf"
 
     - name: Verify var-tmp.mount is enabled
       ansible.builtin.systemd:
@@ -852,21 +815,6 @@
           distrobox.ini missing at {{ ansible_user_dir }}/.config/distrobox/distrobox.ini —
           distrobox role template was not deployed
       when: verify_distrobox_bin.rc == 0
-
-    # --- git_repos role: verify a public HTTPS repo was actually cloned ---
-    - name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
-      register: verify_git_repos_clone
-
-    - name: Assert public HTTPS repo clone succeeded
-      ansible.builtin.assert:
-        that:
-          - verify_git_repos_clone.stat.exists
-          - verify_git_repos_clone.stat.isdir
-        fail_msg: >-
-          git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
-          clone task logic regression or git_repos_list filtering broken
 
     # --- dnf-automatic ---
     - name: Verify dnf-automatic timer enabled

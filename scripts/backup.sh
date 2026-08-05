@@ -117,6 +117,8 @@ for f in "${DOTFILES[@]}"; do
       cp -p "$src" "$dest"
     fi
     count=$((count + 1))
+  elif [ -L "$src" ]; then
+    echo "[warn] broken symlink, skipping: $src" >&2
   fi
 done
 

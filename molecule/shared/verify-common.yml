@@ -456,6 +456,21 @@
       - verify_repos_dir.stat.isdir
     fail_msg: "Git repos base directory ~/src was not created"
 
+# --- git_repos role: verify a public HTTPS repo was actually cloned ---
+- name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
+  register: verify_git_repos_clone
+
+- name: Assert git_repos clone ran successfully
+  ansible.builtin.assert:
+    that:
+      - verify_git_repos_clone.stat.exists
+      - verify_git_repos_clone.stat.isdir
+    fail_msg: >-
+      git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
+      clone task logic regression or git_repos_list filtering broken
+
 # --- Claude ---
 - name: Verify Claude personal config directory
   ansible.builtin.stat:

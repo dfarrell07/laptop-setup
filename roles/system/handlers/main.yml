@@ -159,19 +159,3 @@
     daemon_reload: true
   become: true
   failed_when: false
-
-- name: Reinitialize AIDE database
-  ansible.builtin.shell:  # noqa: command-instead-of-module
-    cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
-  become: true
-  changed_when: true
-  register: system_aide_reinit_result
-  failed_when:
-    - system_aide_reinit_result.rc != 0
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
-  when:
-    - system_aide_enabled | bool
-    - not csb_rhel  # RHEL CSB: IT manages AIDE baseline; Fedora hybrid is owner-managed
-  # Triggered when aide.conf paths change so new entries take effect immediately.
-  # Without this, added paths are written to the config but the database never
-  # includes them until a manual 'aide --init'.

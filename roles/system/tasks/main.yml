@@ -3417,15 +3417,15 @@
           changed_when: true
 
     - name: Deploy AIDE failure notification unit
-      ansible.builtin.template:
-        src: aide-notify@.service.j2
+      ansible.builtin.copy:
+        src: aide-notify@.service
         dest: /etc/systemd/system/aide-notify@.service
         mode: "0644"
       notify: Restart aide-check timer
 
     - name: Deploy AIDE check service
-      ansible.builtin.template:
-        src: aide-check.service.j2
+      ansible.builtin.copy:
+        src: aide-check.service
         dest: /etc/systemd/system/aide-check.service
         mode: "0644"
       notify: Restart aide-check timer

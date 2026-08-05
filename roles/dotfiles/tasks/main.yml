@@ -309,8 +309,8 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
 - name: Deploy vimrc
-  ansible.builtin.template:
-    src: vimrc.j2
+  ansible.builtin.copy:
+    src: vimrc
     dest: "{{ ansible_facts['user_dir'] }}/.vimrc"
     mode: "0644"
 - name: Ensure nvim config directory exists
@@ -322,7 +322,7 @@
 - name: Deploy nvim init.vim (sources ~/.vimrc)
   ansible.builtin.copy:
     content: |
-      " Managed by Ansible — edit roles/dotfiles/templates/vimrc.j2
+      " Managed by Ansible — edit roles/dotfiles/files/vimrc
       source ~/.vimrc
     dest: "{{ ansible_facts['user_dir'] }}/.config/nvim/init.vim"
     mode: "0644"
@@ -536,8 +536,8 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnv.toml"
     mode: "0644"
 - name: Deploy direnv user stdlib (direnvrc with layout_go)
-  ansible.builtin.template:
-    src: direnvrc.j2
+  ansible.builtin.copy:
+    src: direnvrc
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
 - name: Set .npmrc permissions if exists
