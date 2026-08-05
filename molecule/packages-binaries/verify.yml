@@ -402,6 +402,40 @@
         that: packages_gofumpt_version in verify_gofumpt_ver.stdout
         fail_msg: "gofumpt version mismatch — expected {{ packages_gofumpt_version }}, got: {{ verify_gofumpt_ver.stdout }}"
 
+    - name: Check govulncheck version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/govulncheck -version"
+      register: verify_govulncheck_ver
+      changed_when: false
+      failed_when: false
+
+    - name: Assert govulncheck version matches packages_govulncheck_version
+      ansible.builtin.assert:
+        that: packages_govulncheck_version in (verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr)
+        fail_msg: "govulncheck version mismatch — expected {{ packages_govulncheck_version }}"
+
+    - name: Check gci version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gci --version"
+      register: verify_gci_ver
+      changed_when: false
+
+    - name: Assert gci version matches packages_gci_version
+      ansible.builtin.assert:
+        that: packages_gci_version in verify_gci_ver.stdout
+        fail_msg: "gci version mismatch — expected {{ packages_gci_version }}, got: {{ verify_gci_ver.stdout }}"
+
+    - name: Check gopls version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gopls version"
+      register: verify_gopls_ver
+      changed_when: false
+
+    - name: Assert gopls version matches packages_gopls_version
+      ansible.builtin.assert:
+        that: packages_gopls_version in verify_gopls_ver.stdout
+        fail_msg: "gopls version mismatch — expected {{ packages_gopls_version }}, got: {{ verify_gopls_ver.stdout }}"
+
     - name: Check subctl18 version output
       ansible.builtin.command:
         cmd: "{{ ansible_user_dir }}/.local/bin/subctl18 version"
