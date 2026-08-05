@@ -23,18 +23,18 @@
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
 
     # NOTE: verify-smoke.yml hardcodes --user-only. A second play below (become: true)
     # runs smoke-test.sh without --user-only as root to cover system-level checks
     # (auditd watch keys, pwquality details, chrony NTS cookies, pwhistory, yescrypt,
     # TMOUT bounds, /var/tmp bind-mount) that the user-only run cannot reach.
     - name: Include smoke-test verification
-      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
     # --- repos_dnf checks ---
     # gh-cli repo assertion removed: gh ships in standard Fedora repos (F43+),
@@ -958,7 +958,7 @@
 
     # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
     - name: Verify notes role
-      ansible.builtin.include_tasks: ../shared/verify-notes.yml
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
 - name: Verify (VM) — root smoke-test
   hosts: all

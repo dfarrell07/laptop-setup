@@ -16,14 +16,14 @@
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
 
     - name: Include smoke-test verification
-      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
     # --- redhat role: minimal assertions (cert/VPN packages unavailable from public repos in CI) ---
     # Verify the condition logic fired correctly — is_fedora=true triggers cert/VPN install blocks.
@@ -57,11 +57,11 @@
 
     # --- Notes role ---
     - name: Verify notes role
-      ansible.builtin.include_tasks: ../shared/verify-notes.yml
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
     - name: Include Alacritty and Chrome policy assertions
-      ansible.builtin.include_tasks: ../shared/verify-desktop-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Desktop WM configs (converge sets desktop_environment: sway) ---
     - name: Verify sway config deployed

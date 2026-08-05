@@ -15,13 +15,13 @@
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
 
     - name: Include smoke-test verification
-      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     - name: Include NetworkManager conf.d assertions
-      ansible.builtin.include_tasks: ../shared/verify-nm.yml
+      ansible.builtin.import_tasks: ../shared/verify-nm.yml
 
     # --- Packages (apt) ---
     - name: Check vim is installed
@@ -123,15 +123,15 @@
 
     # --- Notes role ---
     - name: Verify notes role
-      ansible.builtin.include_tasks: ../shared/verify-notes.yml
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
     - name: Include Alacritty and Chrome policy assertions
-      ansible.builtin.include_tasks: ../shared/verify-desktop-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Containers ---
     - name: Include containers.conf assertions
-      ansible.builtin.include_tasks: ../shared/verify-containers.yml
+      ansible.builtin.import_tasks: ../shared/verify-containers.yml
 
     # --- PAM faillock (Debian) ---
     - name: Check pam_faillock.so preauth line in common-auth (Debian)

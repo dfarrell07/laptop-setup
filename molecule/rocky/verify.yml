@@ -13,14 +13,14 @@
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
 
     - name: Include smoke-test verification
-      ansible.builtin.include_tasks: ../shared/verify-smoke.yml
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
@@ -108,11 +108,11 @@
 
     # --- Notes role ---
     - name: Verify notes role
-      ansible.builtin.include_tasks: ../shared/verify-notes.yml
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
     - name: Include Alacritty and Chrome policy assertions
-      ansible.builtin.include_tasks: ../shared/verify-desktop-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---
     # Rocky has ansible_distribution='Rocky' not 'RedHat', so is_rhel=False and

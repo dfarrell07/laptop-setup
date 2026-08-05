@@ -9,6 +9,7 @@
 - name: Check for CSB failures
   ansible.builtin.set_fact:
     _csb_has_failures: "{{ (csb_failures | default([])) | length > 0 }}"
+  tags: [always]
 
 # No-failures message removed: a clean run with no output is self-evidently successful.
 
@@ -33,6 +34,7 @@
 
       {% endfor %}
   when: _csb_has_failures | bool
+  tags: [always]
 
 - name: Report — IT ticket templates
   ansible.builtin.debug:
@@ -53,6 +55,7 @@
   loop_control:
     label: "{{ item.ticket.summary }}"
   when: _csb_has_failures | bool
+  tags: [always]
 
 - name: Write CSB report to file
   ansible.builtin.copy:
@@ -93,6 +96,7 @@
     mode: "0600"
     backup: true
   when: _csb_has_failures | bool
+  tags: [always]
 
 - name: Display report file location
   ansible.builtin.debug:
@@ -101,3 +105,4 @@
       {{ ansible_user_dir }}/csb-report.md
       — review and file {{ csb_failures | default([]) | length }} IT ticket(s).
   when: _csb_has_failures | bool
+  tags: [always]

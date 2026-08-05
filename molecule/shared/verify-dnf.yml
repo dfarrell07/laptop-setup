@@ -152,10 +152,10 @@
     - system_init_on_free | bool
 
 - name: Include containers.conf assertions
-  ansible.builtin.include_tasks: verify-containers.yml
+  ansible.builtin.import_tasks: verify-containers.yml
 
 - name: Include NetworkManager conf.d assertions
-  ansible.builtin.include_tasks: verify-nm.yml
+  ansible.builtin.import_tasks: verify-nm.yml
 
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
 - name: Check authselect with-faillock is active
