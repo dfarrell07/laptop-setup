@@ -693,7 +693,6 @@
 - name: Apply sysctl hardening values immediately  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: sysctl --system
-  become: true
   changed_when: false
   failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
 
@@ -1114,7 +1113,6 @@
       changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
       when:
         - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-      become: true
       failed_when: false
 
     - name: Log grubby stderr for any non-zero return code
@@ -1185,7 +1183,6 @@
       root hard    core    0
     dest: /etc/security/limits.d/90-coredump.conf
     mode: "0644"
-  become: true
   when:
     - system_coredump_storage == 'none'
     - ansible_facts['system'] == 'Linux'
@@ -1251,7 +1248,6 @@
     name: auditd
     enabled: true
     state: started
-  become: true
   when:
     - not csb_rhel
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
@@ -1868,7 +1864,6 @@
     name: sshd
     enabled: true
     state: started
-  become: true
   failed_when: false
   when:
     - ansible_facts.services['sshd.service'] is defined
@@ -1926,7 +1921,6 @@
       changed_when: false
       failed_when: false
       check_mode: false  # read-only probe — must run in check mode
-      become: true
       register: system_sshd_include_check
 
     - name: Add Include /etc/ssh/sshd_config.d/*.conf when missing (rpmnew unmerged or old config)
@@ -1936,14 +1930,12 @@
         insertbefore: BOF
         state: present
         backup: true
-      become: true
       when: system_sshd_include_check.rc != 0
 
     - name: Warn if unreviewed sshd_config.rpmnew is present
       ansible.builtin.stat:
         path: /etc/ssh/sshd_config.rpmnew
       register: system_sshd_rpmnew
-      become: true
 
     - name: Emit warning for unmerged sshd_config.rpmnew
       ansible.builtin.debug:
@@ -2093,7 +2085,6 @@
 - name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: sysctl --system
-  become: true
   changed_when: false
   failed_when: false
 
@@ -2852,7 +2843,6 @@
     dest: /etc/sudoers.d/go-env
     mode: "0440"
     validate: visudo -cf %s
-  become: true
   when: not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
 
 # --- Password aging ---
@@ -2939,7 +2929,6 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  become: true
   when:
     - not csb_rhel
 
@@ -2961,7 +2950,6 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: true
   when:
     - not csb_rhel
     - real_user_id | length > 0
@@ -2983,7 +2971,6 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: true
   when:
     - not csb_rhel
     - real_user_id | length > 0
@@ -3005,7 +2992,6 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: true
   when:
     - not csb_rhel
     - real_user_id | length > 0
@@ -3376,7 +3362,6 @@
     - name: Reinitialize AIDE database when conf changed
       ansible.builtin.shell:  # noqa: command-instead-of-module
         cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
-      become: true
       changed_when: true
       register: system_aide_reinit_result
       failed_when:

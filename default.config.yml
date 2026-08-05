@@ -286,10 +286,6 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     packages_operator_sdk_version, and others in roles/packages/defaults/main.yml;
 #     distrobox_oc_version, distrobox_golangci_lint_version in roles/distrobox/defaults/main.yml
 
-system_kexec_load_disabled: 0  # kdump requires kexec; kexec_load_disabled=1 blocks kdump even without Secure Boot; CIS default is 1
-system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1
-system_kernel_panic_on_oops: 0  # dev workstation: non-fatal kernel oops should log-and-continue rather than halt (CIS default is 1)
-system_kernel_panic: 0          # dev workstation: preserve oops state for kernel debugging (KASAN/UBSAN); CIS default is 10 (auto-reboot)
 # Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
 # Set these in config.yml to activate the acli and redhat-internal repo tasks:
 #   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror

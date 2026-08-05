@@ -318,7 +318,7 @@
   when:
     - repo_rpmfusion_free
     - ansible_facts['distribution'] == 'Fedora'
-    - not csb_detected
+    - not csb_rhel
   block:
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
@@ -337,7 +337,7 @@
   when:
     - repo_rpmfusion_nonfree
     - ansible_facts['distribution'] == 'Fedora'
-    - not csb_detected
+    - not csb_rhel
   block:
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
