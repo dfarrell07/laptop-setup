@@ -103,7 +103,7 @@
     - system_resolved_restart_result.failed
     - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
-- name: Restart logind  # noqa: command-instead-of-module
+- name: Reload logind  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
   become: true
