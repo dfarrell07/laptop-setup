@@ -249,6 +249,7 @@
     dest: /etc/logrotate.d/claude-queue-poller
     mode: "0644"
   become: true
+  tags: [become]
   when:
     - claude_queue_enabled | bool
     - ansible_facts['system'] == 'Linux'
