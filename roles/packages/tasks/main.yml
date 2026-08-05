@@ -314,6 +314,7 @@
           ansible.builtin.file:
             path: /tmp/openshift-client-linux.tar.gz
             state: absent
+          when: packages_oc_download is defined and packages_oc_download is changed
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)

@@ -87,6 +87,7 @@
   loop: "{{ containers_vault_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry | default('unknown') }}"
+  no_log: true
   when:
     - item.rc is defined
     - item.rc != 0
