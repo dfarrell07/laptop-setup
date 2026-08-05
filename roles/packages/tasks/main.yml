@@ -1195,6 +1195,36 @@
     - item.rc | default(0) != 0
     - item.skipped is not defined or not item.skipped
 
+- name: Collect failed Go tool names
+  ansible.builtin.set_fact:
+    _packages_go_failed: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | rejectattr('skipped', 'defined')
+        | map(attribute='item')
+        | list
+      }}
+
+- name: Record Go tool install failures (CSB)
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+  vars:
+    _csb_role: packages
+    _csb_task_name: "Go tools (go install)"
+    _csb_error: "Failed tools: {{ _packages_go_failed | join(', ') }}"
+    _csb_action: >-
+      Install Go tools manually or configure GOPROXY/GONOSUMDB/GOPRIVATE
+      to allow access via the corporate proxy.
+    _csb_ticket_summary: "Cannot install Go tools on CSB (network/proxy restriction)"
+    _csb_ticket_body: >-
+      'go install' failed for: {{ _packages_go_failed | join(', ') }}.
+      The corporate network may block go.googlesource.com or Go module proxies.
+      Configure GOPROXY, GONOSUMDB, and GOPRIVATE, or install tools manually.
+  when:
+    - csb_rhel | bool
+    - _packages_go_failed | length > 0
+
 # --- pip/pipx installs ---
 
 - name: Install pipx packages (yamllint, ansible-lint)
@@ -1212,6 +1242,20 @@
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
   rescue:
+    - name: Record pipx install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "pipx install (yamllint/ansible-lint)"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install yamllint and ansible-lint manually via pipx or an alternative method
+        _csb_ticket_summary: "Cannot install yamllint/ansible-lint via pipx on CSB"
+        _csb_ticket_body: >-
+          yamllint and ansible-lint could not be installed via pipx on CSB.
+          This may be due to fapolicyd policy blocking pip/pipx or missing network access.
+          Install manually via pipx or an alternative method.
+      when: csb_rhel
     - name: Warn pipx install failed
       ansible.builtin.debug:
         msg: >-
@@ -1219,6 +1263,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing pipx/pip access.
           Continuing playbook execution.
+      when: not csb_rhel
 
 - name: Install krew
   when:
