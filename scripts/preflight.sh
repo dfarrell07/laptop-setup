@@ -241,15 +241,12 @@ fi
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" != "darwin" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
-    tmpscript=$(mktemp /tmp/preflight-fap-XXXXXX.sh)
-    printf '#!/bin/bash\n' > "$tmpscript" && chmod +x "$tmpscript"
-    if "$tmpscript" &>/dev/null; then
-      record "fapolicyd" "warn" "active but /tmp execution allowed"
+    if grep -qiP '^permissive\s*=\s*1' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
+      record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      record "fapolicyd" "warn" "active and blocking /tmp execution — mitigated by pipelining=true in ansible.cfg"
+      record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
     fi
-    rm -f "$tmpscript"
   else
     record "fapolicyd" "pass" "not active"
   fi
