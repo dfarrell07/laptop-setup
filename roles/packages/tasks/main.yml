@@ -1515,7 +1515,8 @@
         HTTP_PROXY: "{{ proxy_url | default(omit) }}"
       vars:
         _subctl_installed: >-
-          {{ packages_subctl_version_check.results[loop_idx].stdout
+          {{ (packages_subctl_version_check.results[loop_idx].stdout ~
+              packages_subctl_version_check.results[loop_idx].stderr)
              | regex_search('subctl v?(\S+)', '\1') | default([]) | first | default('') }}
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
@@ -1547,7 +1548,8 @@
         remote_src: true
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
-        item.version not in (packages_subctl_version_check.results[loop_idx].stdout)
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout +
+        packages_subctl_version_check.results[loop_idx].stderr)
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
@@ -1591,7 +1593,8 @@
       failed_when: false
       when: >-
         packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
-        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default(''))
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
@@ -1616,7 +1619,8 @@
       failed_when: false
       when: >-
         packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
-        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default(''))
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.suffix }}"
