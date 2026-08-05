@@ -1368,6 +1368,11 @@
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
   failed_when: false
 
+- name: Stat /etc/bluetooth/main.conf
+  ansible.builtin.stat:
+    path: /etc/bluetooth/main.conf
+  register: system_bluetooth_conf_stat
+
 - name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
   ansible.builtin.lineinfile:
     path: /etc/bluetooth/main.conf
@@ -1378,6 +1383,21 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel
+    - system_bluetooth_conf_stat.stat.exists
+  notify: Restart bluetooth
+
+- name: Set BlueZ Name in /etc/bluetooth/main.conf
+  ansible.builtin.lineinfile:
+    path: /etc/bluetooth/main.conf
+    regexp: '^#?Name\s*='
+    line: 'Name = {{ system_bluetooth_name }}'
+    insertafter: '^\[General\]'
+    create: false
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel
+    - system_bluetooth_conf_stat.stat.exists
+    - system_bluetooth_name | length > 0
   failed_when: false
   notify: Restart bluetooth
 

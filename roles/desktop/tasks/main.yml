@@ -95,14 +95,24 @@
           Continuing playbook execution.
 
 - name: Install Sway packages (apt)
-  ansible.builtin.apt:
-    name: "{{ desktop_sway_apt_packages }}"
-    state: present
-  become: true
-  tags: [become]
   when:
     - ansible_facts['pkg_mgr'] == 'apt'
     - desktop_effective == 'sway'
+  block:
+    - name: Install Sway packages (apt)
+      ansible.builtin.apt:
+        name: "{{ desktop_sway_apt_packages }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt Sway package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Sway packages in role desktop.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
 
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory
@@ -336,7 +346,7 @@
   tags: [become]
   when:
     - ansible_facts['system'] == 'Linux'
-    - ansible_facts['env']['SHELL'] | default('/bin/bash') != '/bin/zsh'
+    - ansible_facts['user_shell'] != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
 - name: Ensure AeroSpace config directory (macOS)
@@ -381,7 +391,7 @@
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
   register: _fw_enable_result
-  changed_when: true
+  changed_when: _fw_enable_result.rc == 0
   become: true
   tags: [become]
   when:
@@ -411,7 +421,7 @@
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
   register: _fw_stealth_enable_result
-  changed_when: true
+  changed_when: _fw_stealth_enable_result.rc == 0
   become: true
   tags: [become]
   when:

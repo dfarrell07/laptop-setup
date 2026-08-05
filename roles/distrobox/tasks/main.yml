@@ -161,13 +161,29 @@
         'already exists' not in
         (distrobox_create_result.stdout + distrobox_create_result.stderr)
   rescue:
-    - name: Warn on distrobox assemble create failure
+    - name: Record distrobox create failure for CSB report
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: distrobox
+        _csb_task_name: "Create dev container via distrobox"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "Check registry connectivity and disk space; re-run 'make container' once resolved"
+        _csb_ticket_summary: "Cannot create distrobox dev container on CSB"
+        _csb_ticket_body: >-
+          distrobox assemble create failed on a CSB-detected host. The dev
+          container is the primary development environment on CSB-managed
+          machines. Registry access restrictions or disk space may be the cause.
+          Re-run 'make container' once the underlying issue is resolved.
+        _csb_ticket_priority: "High"
+      when: csb_detected
+    - name: Warn on distrobox assemble create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
           distrobox assemble create failed — container will not be available.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
+      when: not csb_detected
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
@@ -207,15 +223,29 @@
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
   rescue:
-    - name: Warn on toolbox create failure
+    - name: Record toolbox create failure for CSB report
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: distrobox
+        _csb_task_name: "Create dev container via toolbox"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "Check registry connectivity and disk space; re-run 'make container' once resolved"
+        _csb_ticket_summary: "Cannot create toolbox dev container on CSB"
+        _csb_ticket_body: >-
+          toolbox create failed on a CSB-detected host. The dev container is
+          the primary development environment on CSB-managed machines.
+          Registry access restrictions or disk space may be the cause.
+          Re-run 'make container' once the underlying issue is resolved.
+        _csb_ticket_priority: "High"
+      when: csb_detected
+    - name: Warn on toolbox create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
           toolbox create failed — container will not be available.
           Error: {{ ansible_failed_result.msg | default("unknown") | truncate(200) }}.
-          If running on a fapolicyd-enforcing host, the security policy may have
-          blocked the operation; check: journalctl -u fapolicyd
-          Otherwise check registry connectivity and available disk space.
+          Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
+      when: not csb_detected
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
