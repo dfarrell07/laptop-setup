@@ -2734,6 +2734,8 @@
       mode: "0700"
     - path: /etc/cron.d
       mode: "0700"
+  loop_control:
+    label: "{{ item.path }}"
   when: not csb_rhel
   failed_when: false
 
