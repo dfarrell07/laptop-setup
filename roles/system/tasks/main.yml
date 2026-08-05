@@ -2015,7 +2015,7 @@
     - name: Fail after cleaning up sshd drop-in due to SELinux port label failure
       ansible.builtin.fail:
         msg: >-
-          SELinux port label for port 722 failed — 00-hardening.conf has been removed
+          SELinux port label for port {{ ssh_port }} failed — 00-hardening.conf has been removed
           to prevent SSH lockout on next sshd restart. Install policycoreutils-python-utils
           and re-run make system.
 

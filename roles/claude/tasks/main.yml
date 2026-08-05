@@ -105,6 +105,7 @@
       # shell-snapshots, cache, etc.  No symlinks exist under ~/.claude.
       d %h/.claude 0700 - - -
       Z %h/.claude 0700 - - -
+      z %h/.claude/settings.local.json 0600 - - -
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
   when: ansible_facts['system'] == 'Linux'
@@ -201,6 +202,27 @@
     - claude_queue_enabled | bool
     - ansible_facts['system'] == 'Linux'
   failed_when: false
+
+- name: Deploy logrotate config for claude-queue-poller.log
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      {{ ansible_facts['user_dir'] }}/.local/share/claude-queue/logs/poller.log {
+          su {{ ansible_user }} {{ ansible_user }}
+          daily
+          rotate 14
+          compress
+          delaycompress
+          missingok
+          notifempty
+          copytruncate
+      }
+    dest: /etc/logrotate.d/claude-queue-poller
+    mode: "0644"
+  become: true
+  when:
+    - claude_queue_enabled | bool
+    - ansible_facts['system'] == 'Linux'
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
 - name: Check if task queue timer unit exists
