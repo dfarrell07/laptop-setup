@@ -40,6 +40,7 @@ if [[ -f /etc/os-release ]]; then
     fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi
+IS_RHEL=false; [[ "${ID:-}" == "rhel" ]] && IS_RHEL=true
 if [[ "$OS_FAMILY" == "unknown" ]]; then
   record "os_family" "warn" "unrecognized OS: $(uname -s) — playbook supports fedora/rhel/darwin"
 else
@@ -124,7 +125,7 @@ if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
   if command -v ykchalresp &>/dev/null; then
     echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-    if timeout 5 ykchalresp -2 "preflight-test" &>/dev/null; then
+    if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
       record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
     else
       record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
@@ -245,7 +246,11 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
+      if grep -qE '^pipelining\s*=\s*true' "${SCRIPT_DIR}/../ansible.cfg" 2>/dev/null; then
+        record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
+      else
+        record "fapolicyd" "fail" "active and enforcing — pipelining NOT set in ansible.cfg; Ansible module execution will be blocked"
+      fi
     fi
   else
     record "fapolicyd" "pass" "not active"
@@ -253,12 +258,10 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
 fi
 
 # --- Container tier derivation ---
-if [[ "$IS_CSB" == true ]]; then
-  if [[ "$FAPOLICYD_BLOCKING" == true ]]; then
-    record "container_tier" "warn" "container — fapolicyd enforcing: run 'make container' for dev tools; 'make all' will be restricted"
-  else
-    record "container_tier" "warn" "hybrid — run 'make all' for host setup, then 'make container' for dev tools"
-  fi
+if [[ "$IS_CSB" == true && "$FAPOLICYD_BLOCKING" == true ]]; then
+  record "container_tier" "warn" "container — fapolicyd enforcing: run 'make container' for dev tools; 'make all' will be restricted"
+elif [[ "$IS_CSB" == true || "$IS_RHEL" == true ]]; then
+  record "container_tier" "warn" "hybrid — run 'make all' for host setup, then 'make container' for dev tools"
 else
   record "container_tier" "pass" "host-only — run 'make all' for full provisioning"
 fi
