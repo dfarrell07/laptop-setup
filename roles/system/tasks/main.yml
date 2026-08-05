@@ -3320,6 +3320,7 @@
         src: aide-notify@.service.j2
         dest: /etc/systemd/system/aide-notify@.service
         mode: "0644"
+      notify: Restart aide-check timer
 
     - name: Deploy AIDE check service
       ansible.builtin.template:
