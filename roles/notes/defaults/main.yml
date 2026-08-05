@@ -8,3 +8,5 @@ notes_remote_url: "git@github.com:{{ dotfiles_github_user }}/notes.git"
 notes_remote_url_https: "https://github.com/{{ dotfiles_github_user }}/notes.git"
 notes_transcrypt_cipher: aes-256-cbc
 notes_transcrypt_password: ""  # set vault_notes_transcrypt_password in vault.yml; empty = transcrypt init skipped
+notes_transcrypt_available: false  # set via set_fact in tasks/main.yml when transcrypt is found
+notes_transcrypt_inited: false      # set via set_fact in tasks/main.yml when transcrypt --display succeeds

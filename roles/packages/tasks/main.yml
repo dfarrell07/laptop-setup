@@ -1178,6 +1178,9 @@
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   register: packages_go_results
   failed_when: false
+  retries: 3
+  delay: 5
+  until: packages_go_results.rc == 0
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux' or ansible_facts['system'] == 'Darwin'

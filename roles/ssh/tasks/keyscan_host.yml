@@ -22,6 +22,8 @@
         {{ ssh_keyscan_result.stdout_lines
            | select('match', '^' + (_keyscan_host | regex_escape))
            | list }}
+      loop_control:
+        label: "{{ item.split()[1] | default('key') }}"
 
   rescue:
     - name: Warn — could not fetch host keys for {{ _keyscan_host }}
