@@ -249,6 +249,7 @@
           ansible.builtin.uri:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
             return_content: true
+            timeout: 300
           register: packages_oc_sha256sums
           check_mode: false
           retries: 3
@@ -372,7 +373,7 @@
                  | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
                                 '\1', multiline=True)
                  | default([]) | first | default('') }}
-          when: packages_oc_version == 'stable'
+          when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
 
         - name: Assert opm SHA256 was found
           ansible.builtin.assert:

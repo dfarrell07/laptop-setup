@@ -12,6 +12,7 @@
   ansible.builtin.uri:
     url: "{{ ssh_github_known_hosts_url }}"
     return_content: true
+    timeout: 30
   register: ssh_github_meta
   changed_when: false
   check_mode: false
