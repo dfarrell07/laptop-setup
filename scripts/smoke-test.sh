@@ -161,13 +161,13 @@ fi
 
 # GitHub CLI authenticated (skip when gh binary is absent — tools loop already records FAIL)
 if command -v gh &>/dev/null; then
-  if run gh auth status &>/dev/null 2>&1; then record "gh-auth" "PASS"
+  if run gh auth status &>/dev/null; then record "gh-auth" "PASS"
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 fi
 
 # registry.redhat.io authenticated (work-profile only — RH subctl oc image extract silently fails when unauth'd)
 if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/local/bin/oc ]]; then
-  if podman login --get-login registry.redhat.io &>/dev/null 2>&1; then
+  if podman login --get-login registry.redhat.io &>/dev/null; then
     record "registry-redhat-auth" "PASS"
   else
     record "registry-redhat-auth" "WARN" "not authenticated — RH subctl oc image extract will silently fail (run: podman login registry.redhat.io)"
@@ -572,7 +572,7 @@ fi
 if [[ -d "$HOME/notes/.git" ]]; then
   record "notes-repo" "PASS"
   if command -v transcrypt &>/dev/null; then
-    if (cd "$HOME/notes" && transcrypt --display) &>/dev/null 2>&1; then
+    if (cd "$HOME/notes" && transcrypt --display) &>/dev/null; then
       # Spot-check: verify decryption actually works — if the password is wrong,
       # smudge-filtered files remain as encrypted blobs (non-text) in the working tree
       _any_text=false
@@ -795,7 +795,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone"; fi
     # libvirt zone must not have ssh enabled (VMs could reach host sshd — lateral movement path)
     if firewall-cmd --get-zones 2>/dev/null | grep -q '\blibvirt\b'; then
-      if firewall-cmd --zone=libvirt --query-service=ssh &>/dev/null 2>&1; then
+      if firewall-cmd --zone=libvirt --query-service=ssh &>/dev/null; then
         record "firewall-libvirt-no-ssh" "FAIL" "ssh service in libvirt zone — VMs on virbr0 can reach host sshd"
       else record "firewall-libvirt-no-ssh" "PASS"; fi
     fi
@@ -1001,7 +1001,7 @@ EOF
       else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
     done
   fi
-  if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then
+  if systemctl list-unit-files aide-check.timer &>/dev/null; then
   # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
   if [[ -f /etc/aide.conf ]]; then
     for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
@@ -1123,7 +1123,7 @@ EOF
   fi
 
   # AIDE file integrity — only check if aide-check.timer is deployed (skips cleanly when AIDE disabled)
-  if systemctl list-unit-files aide-check.timer &>/dev/null 2>&1; then
+  if systemctl list-unit-files aide-check.timer &>/dev/null; then
     if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
       record "aide-timer" "PASS"
     elif systemctl is-enabled aide-check.timer &>/dev/null; then
@@ -1532,7 +1532,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
 
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
-  if ! systemctl cat gdm.service &>/dev/null 2>&1; then
+  if ! systemctl cat gdm.service &>/dev/null; then
     record "dconf-policies" "WARN" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
   elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
     record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
