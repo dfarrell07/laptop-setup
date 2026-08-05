@@ -469,7 +469,7 @@
       failed_when: false
 
     - name: Download kind binary
-      when: "packages_kind_version not in (packages_kind_check.stdout)"
+      when: "packages_kind_version not in (packages_kind_check.stdout + packages_kind_check.stderr)"
       ansible.builtin.get_url:
         url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-{{ _kind_arch }}"
         dest: /usr/local/bin/kind
@@ -520,7 +520,7 @@
       failed_when: false
 
     - name: Download and extract helm
-      when: "packages_helm_version not in (packages_helm_check.stdout)"
+      when: "packages_helm_version not in (packages_helm_check.stdout + packages_helm_check.stderr)"
       block:
         - name: Download helm tarball
           ansible.builtin.get_url:
@@ -596,7 +596,7 @@
       failed_when: false
 
     - name: Download and extract kustomize
-      when: "packages_kustomize_version not in (packages_kustomize_check.stdout)"
+      when: "packages_kustomize_version not in (packages_kustomize_check.stdout + packages_kustomize_check.stderr)"
       block:
         - name: Download kustomize tarball
           vars:
@@ -671,7 +671,7 @@
       failed_when: false
 
     - name: Download transcrypt script
-      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout)
+      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout + packages_transcrypt_check.stderr)
       ansible.builtin.get_url:
         url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
         dest: /usr/local/bin/transcrypt
@@ -774,7 +774,7 @@
       failed_when: false
 
     - name: Download and install gitleaks
-      when: packages_gitleaks_version not in (packages_gitleaks_check.stdout)
+      when: packages_gitleaks_version not in (packages_gitleaks_check.stdout + packages_gitleaks_check.stderr)
       block:
         - name: Download gitleaks tarball
           ansible.builtin.get_url:
@@ -847,7 +847,7 @@
       failed_when: false
 
     - name: Download and install actionlint
-      when: packages_actionlint_version not in (packages_actionlint_check.stdout)
+      when: packages_actionlint_version not in (packages_actionlint_check.stdout + packages_actionlint_check.stderr)
       block:
         - name: Download actionlint tarball
           ansible.builtin.get_url:
@@ -919,7 +919,7 @@
       failed_when: false
 
     - name: Download and install zizmor
-      when: packages_zizmor_version not in (packages_zizmor_check.stdout)
+      when: packages_zizmor_version not in (packages_zizmor_check.stdout + packages_zizmor_check.stderr)
       block:
         - name: Download zizmor tarball
           ansible.builtin.get_url:
@@ -997,7 +997,7 @@
       failed_when: false
 
     - name: Download operator-sdk binary
-      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout)
+      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout + packages_operator_sdk_check.stderr)
       vars:
         _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
       ansible.builtin.get_url:
@@ -1053,7 +1053,7 @@
       failed_when: false
 
     - name: Download cosign binary
-      when: packages_cosign_version not in (packages_cosign_check.stdout)
+      when: packages_cosign_version not in (packages_cosign_check.stdout + packages_cosign_check.stderr)
       ansible.builtin.get_url:
         url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-{{ _cosign_arch }}"
         dest: /usr/local/bin/cosign
@@ -1105,7 +1105,7 @@
       failed_when: false
 
     - name: Download and install tkn
-      when: packages_tkn_version not in (packages_tkn_check.stdout)
+      when: packages_tkn_version not in (packages_tkn_check.stdout + packages_tkn_check.stderr)
       block:
         - name: Download tkn tarball
           vars:
@@ -1183,7 +1183,7 @@
       failed_when: false
 
     - name: Download ec binary
-      when: packages_ec_version not in (packages_ec_check.stdout)
+      when: packages_ec_version not in (packages_ec_check.stdout + packages_ec_check.stderr)
       ansible.builtin.get_url:
         url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_{{ _ec_arch }}"
         dest: /usr/local/bin/ec
@@ -1232,7 +1232,7 @@
       failed_when: false
 
     - name: Download and install k9s
-      when: packages_k9s_version not in (packages_k9s_check.stdout)
+      when: packages_k9s_version not in (packages_k9s_check.stdout + packages_k9s_check.stderr)
       block:
         - name: Download k9s tarball
           ansible.builtin.get_url:
@@ -1441,7 +1441,7 @@
 
     - name: Upgrade krew
       when:
-        - packages_krew_bootstrap_version not in (packages_krew_check.stdout)
+        - packages_krew_bootstrap_version not in (packages_krew_check.stdout + packages_krew_check.stderr)
         - packages_krew_check.rc == 0
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
