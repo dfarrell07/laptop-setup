@@ -8,11 +8,6 @@
       {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
          | default(playbook_dir, true) }}
 
-- name: Run CSB detection
-  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
-  when: csb_detected is not defined
-  # ansible_facts['system'] guard removed — csb_detect.yml is internally Linux-safe (guards each command)
-
 - name: Ensure prerequisite directories exist (group/world traversable)
   ansible.builtin.file:
     path: "{{ item }}"
