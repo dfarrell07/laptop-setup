@@ -86,7 +86,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version --short" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
