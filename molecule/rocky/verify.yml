@@ -152,85 +152,11 @@
         fail_msg: "RH-IT-Root-CA.crt deployed on Rocky — redhat role should skip cert when is_rhel=false"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
-    - name: Verify claude-queue.service deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
-      register: verify_claude_queue_service
-
-    - name: Assert claude-queue.service exists with mode 0644
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_service.stat.exists
-          - verify_claude_queue_service.stat.mode == '0644'
-        fail_msg: "claude-queue.service missing or wrong permissions — template regression?"
-
-    - name: Verify claude-queue.timer deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
-      register: verify_claude_queue_timer
-
-    - name: Assert claude-queue.timer exists with mode 0644
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_timer.stat.exists
-          - verify_claude_queue_timer.stat.mode == '0644'
-        fail_msg: "claude-queue.timer missing or wrong permissions — template regression?"
-
-    - name: Verify claude-queue-poller.sh deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
-      register: verify_claude_queue_poller
-
-    - name: Assert claude-queue-poller.sh exists with mode 0700
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_poller.stat.exists
-          - verify_claude_queue_poller.stat.mode == '0700'
-        fail_msg: "claude-queue-poller.sh missing or wrong permissions — expected 0700"
-
-    - name: Verify queue-repos.conf deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/claude/queue-repos.conf"
-      register: verify_claude_queue_repos_conf
-
-    - name: Assert queue-repos.conf exists with mode 0600
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_repos_conf.stat.exists
-          - verify_claude_queue_repos_conf.stat.mode == '0600'
-        fail_msg: "queue-repos.conf missing or wrong permissions — expected 0600"
+    - ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
     # --- distrobox role: no-op path (packages_containers emptied in converge) ---
-    - name: Check distrobox binary presence in rocky CI (should be absent)
-      ansible.builtin.command:
-        cmd: which distrobox
-      register: verify_distrobox_bin_rocky
-      changed_when: false
-      failed_when: false
-
-    - name: Check toolbox binary presence in rocky CI (should be absent)
-      ansible.builtin.command:
-        cmd: which toolbox
-      register: verify_toolbox_bin_rocky
-      changed_when: false
-      failed_when: false
-
-    - name: Assert neither distrobox nor toolbox is installed (packages_containers emptied)
-      ansible.builtin.assert:
-        that:
-          - verify_distrobox_bin_rocky.rc != 0
-          - verify_toolbox_bin_rocky.rc != 0
-        fail_msg: "distrobox or toolbox found in PATH despite packages_containers: [] — converge override not applied?"
-
-    - name: Stat distrobox.ini (must be absent on no-op path)
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
-      register: verify_distrobox_ini_rocky
-
-    - name: Assert distrobox.ini is absent when no tool is installed
-      ansible.builtin.assert:
-        that: not verify_distrobox_ini_rocky.stat.exists
-        fail_msg: "distrobox.ini was deployed despite distrobox_tool==none — role no-op guard regressed"
+    - name: Import distrobox no-op path assertions
+      ansible.builtin.import_tasks: ../shared/verify-distrobox-noop.yml
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 

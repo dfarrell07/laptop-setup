@@ -154,65 +154,6 @@
     # --- System role: usbguard ---
     # usbguard assertions are handled by molecule/shared/verify-smoke.yml.
 
-    # --- System role: TLP battery charge management ---
-    # TLP is only installed when system_tlp_enabled is true (auto-detected from
-    # ansible_form_factor Notebook/Portable/Laptop). The converge container is not
-    # a laptop, so these assertions are skipped in normal CI runs. The structure
-    # is here so that if system_tlp_enabled is forced true in converge, TLP
-    # configuration is verified automatically.
-    - name: Check tlp package is installed
-      ansible.builtin.command: rpm -q tlp  # noqa: command-instead-of-module
-      register: verify_tlp_pkg
-      changed_when: false
-      failed_when: false
-
-    - name: Check tlp.service is enabled
-      ansible.builtin.command: systemctl is-enabled tlp  # noqa: command-instead-of-module
-      register: verify_tlp_service
-      changed_when: false
-      failed_when: false
-      when: verify_tlp_pkg.rc == 0
-
-    - name: Assert tlp.service is enabled
-      ansible.builtin.assert:
-        that: verify_tlp_service.rc == 0
-        fail_msg: "tlp.service is not enabled — ThinkPad battery thresholds will not apply on boot"
-      when: verify_tlp_pkg.rc == 0
-
-    - name: Stat /etc/tlp.d/50-thinkpad.conf
-      ansible.builtin.stat:
-        path: /etc/tlp.d/50-thinkpad.conf
-      register: verify_tlp_conf
-      when: verify_tlp_pkg.rc == 0
-
-    - name: Assert /etc/tlp.d/50-thinkpad.conf is deployed
-      ansible.builtin.assert:
-        that: verify_tlp_conf.stat.exists
-        fail_msg: "/etc/tlp.d/50-thinkpad.conf not deployed — battery threshold drop-in missing"
-      when: verify_tlp_pkg.rc == 0
-
-    - name: Check START_CHARGE_THRESH_BAT0=20 in TLP config (default start threshold)
-      ansible.builtin.command:
-        cmd: grep -q '^START_CHARGE_THRESH_BAT0=20$' /etc/tlp.d/50-thinkpad.conf
-      changed_when: false
-      when:
-        - verify_tlp_pkg.rc == 0
-        - verify_tlp_conf.stat.exists
-
-    - name: Check power-profiles-daemon is masked (conflicts with TLP)
-      ansible.builtin.systemd:
-        name: power-profiles-daemon
-      register: verify_ppd
-      become: true
-      failed_when: false
-      when: verify_tlp_pkg.rc == 0
-
-    - name: Assert power-profiles-daemon is masked when TLP is active
-      ansible.builtin.assert:
-        that: verify_ppd.status.UnitFileState == 'masked'
-        fail_msg: "power-profiles-daemon is not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"
-      when: verify_tlp_pkg.rc == 0 and verify_ppd.status.UnitFileState | default('') != ''
-
     # --- Work profile: Claude work instance directory ---
     - name: Verify Claude work config directory
       ansible.builtin.stat:
@@ -265,53 +206,7 @@
         fail_msg: "Claude CLAUDE.md not deployed (work profile)"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
-    - name: Verify claude-queue.service deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
-      register: verify_claude_queue_service
-
-    - name: Assert claude-queue.service exists with mode 0644
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_service.stat.exists
-          - verify_claude_queue_service.stat.mode == '0644'
-        fail_msg: "claude-queue.service missing or wrong permissions — template regression?"
-
-    - name: Verify claude-queue.timer deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
-      register: verify_claude_queue_timer
-
-    - name: Assert claude-queue.timer exists with mode 0644
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_timer.stat.exists
-          - verify_claude_queue_timer.stat.mode == '0644'
-        fail_msg: "claude-queue.timer missing or wrong permissions — template regression?"
-
-    - name: Verify claude-queue-poller.sh deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
-      register: verify_claude_queue_poller
-
-    - name: Assert claude-queue-poller.sh exists with mode 0700
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_poller.stat.exists
-          - verify_claude_queue_poller.stat.mode == '0700'
-        fail_msg: "claude-queue-poller.sh missing or wrong permissions — expected 0700"
-
-    - name: Verify queue-repos.conf deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/claude/queue-repos.conf"
-      register: verify_claude_queue_repos_conf
-
-    - name: Assert queue-repos.conf exists with mode 0600
-      ansible.builtin.assert:
-        that:
-          - verify_claude_queue_repos_conf.stat.exists
-          - verify_claude_queue_repos_conf.stat.mode == '0600'
-        fail_msg: "queue-repos.conf missing or wrong permissions — expected 0600"
+    - ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
@@ -331,33 +226,5 @@
           clone task logic regression or git_repos_list filtering broken
 
     # --- distrobox role: no-op path (packages_containers emptied in converge) ---
-    - name: Check distrobox binary presence in fedora CI (should be absent)
-      ansible.builtin.command:
-        cmd: which distrobox
-      register: verify_distrobox_bin_fedora
-      changed_when: false
-      failed_when: false
-
-    - name: Check toolbox binary presence in fedora CI (should be absent)
-      ansible.builtin.command:
-        cmd: which toolbox
-      register: verify_toolbox_bin_fedora
-      changed_when: false
-      failed_when: false
-
-    - name: Assert neither distrobox nor toolbox is installed (packages_containers emptied)
-      ansible.builtin.assert:
-        that:
-          - verify_distrobox_bin_fedora.rc != 0
-          - verify_toolbox_bin_fedora.rc != 0
-        fail_msg: "distrobox or toolbox found in PATH despite packages_containers: [] — converge override not applied?"
-
-    - name: Stat distrobox.ini (must be absent on no-op path)
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
-      register: verify_distrobox_ini_fedora
-
-    - name: Assert distrobox.ini is absent when no tool is installed
-      ansible.builtin.assert:
-        that: not verify_distrobox_ini_fedora.stat.exists
-        fail_msg: "distrobox.ini was deployed despite distrobox_tool==none — role no-op guard regressed"
+    - name: Import distrobox no-op path assertions
+      ansible.builtin.import_tasks: ../shared/verify-distrobox-noop.yml
