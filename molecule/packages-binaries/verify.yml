@@ -368,3 +368,48 @@
       ansible.builtin.assert:
         that: packages_ec_version in verify_ec_ver.stdout
         fail_msg: "ec version mismatch — expected {{ packages_ec_version }}, got: {{ verify_ec_ver.stdout }}"
+
+    - name: Check krew version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew version"
+      register: verify_krew_ver
+      changed_when: false
+
+    - name: Assert krew version matches packages_krew_bootstrap_version
+      ansible.builtin.assert:
+        that: packages_krew_bootstrap_version in verify_krew_ver.stdout
+        fail_msg: "krew version mismatch — expected {{ packages_krew_bootstrap_version }}, got: {{ verify_krew_ver.stdout }}"
+
+    - name: Check golangci-lint version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/golangci-lint --version"
+      register: verify_golangci_lint_ver
+      changed_when: false
+
+    - name: Assert golangci-lint version matches packages_golangci_lint_version
+      ansible.builtin.assert:
+        that: packages_golangci_lint_version in verify_golangci_lint_ver.stdout
+        fail_msg: "golangci-lint version mismatch — expected {{ packages_golangci_lint_version }}"
+
+    - name: Check gofumpt version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gofumpt --version"
+      register: verify_gofumpt_ver
+      changed_when: false
+
+    - name: Assert gofumpt version matches packages_gofumpt_version
+      ansible.builtin.assert:
+        that: packages_gofumpt_version in verify_gofumpt_ver.stdout
+        fail_msg: "gofumpt version mismatch — expected {{ packages_gofumpt_version }}, got: {{ verify_gofumpt_ver.stdout }}"
+
+    - name: Check subctl18 version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.local/bin/subctl18 version"
+      register: verify_subctl18_ver
+      changed_when: false
+      failed_when: false
+
+    - name: Assert subctl18 version matches packages_subctl_versioned entry
+      ansible.builtin.assert:
+        that: packages_subctl_versioned[0].version in (verify_subctl18_ver.stdout + verify_subctl18_ver.stderr)
+        fail_msg: "subctl18 version mismatch — expected {{ packages_subctl_versioned[0].version }}, got: {{ verify_subctl18_ver.stdout }}"
