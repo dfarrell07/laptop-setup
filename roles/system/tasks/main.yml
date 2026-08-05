@@ -160,6 +160,8 @@
     daemon_reload: true
   when:
     - csb_rhel
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
   ignore_errors: true
   register: system_dev_shm_enable
 
@@ -422,6 +424,8 @@
   when:
     - system_boot_mountpoint.rc == 0
     - csb_rhel
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
   ignore_errors: true
   register: system_boot_harden_enable
 
@@ -549,6 +553,8 @@
   when:
     - system_boot_efi_mountpoint.rc == 0
     - csb_rhel
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
   ignore_errors: true
   register: system_boot_efi_harden_enable
 

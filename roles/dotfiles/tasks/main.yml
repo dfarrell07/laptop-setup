@@ -10,6 +10,9 @@
     depth: 100
     update: false
   register: dotfiles_ohmyzsh_result
+  # ignore_errors (not failed_when: false): .failed must remain True on clone failure —
+  # it guards the warning below (line 18) and the legacy ~/.oh-my-zsh removal (line 39).
+  # failed_when: false would always set .failed=False, silently breaking that guard.
   ignore_errors: true
 
 - name: Warn if oh-my-zsh clone failed
@@ -25,12 +28,12 @@
     depth: 1
     update: false
   register: dotfiles_forgit_result
-  ignore_errors: true
+  failed_when: false
 
 - name: Warn if forgit clone failed
   ansible.builtin.debug:
     msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
-  when: dotfiles_forgit_result.failed
+  when: dotfiles_forgit_result.rc | default(0) != 0
 
 - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
   ansible.builtin.file:

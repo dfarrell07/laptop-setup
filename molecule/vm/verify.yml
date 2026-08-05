@@ -632,6 +632,8 @@
         - path: /etc/crypto-policies
         - path: /etc/selinux
         - path: /etc/usbguard
+      loop_control:
+        label: "{{ item.path }}"
       when:
         - system_aide_enabled | default(false)
         - item.path != '/etc/usbguard' or usbguard_expected | default(true)
