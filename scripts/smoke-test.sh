@@ -968,9 +968,9 @@ EOF
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
-  # auditd rules (verify immutability flag and sentinel watch rule; skipped on CSB — IT manages audit rules)
-  if $CSB_HOST; then
-    record "auditd-rules" "WARN" "skipped on CSB — audit rules managed by IT/SIEM pipeline"
+  # auditd rules (verify immutability flag and sentinel watch rule; skipped on RHEL CSB — IT manages audit rules)
+  if $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+    record "auditd-rules" "WARN" "skipped on RHEL CSB — audit rules managed by IT/SIEM pipeline"
   elif grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
@@ -982,8 +982,8 @@ EOF
   else
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi
-  # Auditd watch keys for new paths deployed by the system role (skipped on CSB — IT manages rules)
-  if ! $CSB_HOST; then
+  # Auditd watch keys for new paths deployed by the system role (skipped on RHEL CSB — IT manages rules)
+  if ! $CSB_HOST || grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
     for _key in power-config device-policy kernel-params kernel-modules logins kernel-module-load kernel-module-unload perm_mod bpfman-config crypto-policy user-mgmt aide-integrity mac-policy network-config; do
       if grep -q " -k ${_key}$" /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
         record "auditd-watch-${_key}" "PASS"

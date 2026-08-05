@@ -1421,6 +1421,16 @@
     - profile == 'work'
     - packages_subctl_rh_versions | default([]) | length > 0
   block:
+    - name: Check installed version of downstream RH subctl binaries
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }} version"
+      changed_when: false
+      failed_when: false
+      register: packages_subctl_rh_version_check
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
+
     - name: Extract downstream subctl tarball from registry image
       ansible.builtin.command:
         cmd: >-
@@ -1430,9 +1440,13 @@
       register: _pkg_subctl_extract
       changed_when: _pkg_subctl_extract.rc == 0
       failed_when: false
+      when: >-
+        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default(''))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
+        index_var: loop_idx
 
     - name: Extract and install versioned RH subctl to ~/.local/bin
       ansible.builtin.shell:
@@ -1451,9 +1465,13 @@
       register: _pkg_subctl_install
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       failed_when: false
+      when: >-
+        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default(''))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.suffix }}"
+        index_var: loop_idx
 
 - name: Update krew plugin index
   ansible.builtin.command:

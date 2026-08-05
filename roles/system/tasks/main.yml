@@ -1170,7 +1170,16 @@
     name: audit
     state: present
   when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  register: _audit_pkg_install
   failed_when: false
+
+- name: Warn if audit package install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: audit package install failed (rc={{ _audit_pkg_install.rc | default('n/a') }});
+      auditd rules and configuration deployment may also fail on this host
+  when:
+    - _audit_pkg_install.rc | default(0) != 0
 
 - name: Install auditd package (Debian/Ubuntu)
   ansible.builtin.apt:
@@ -1217,7 +1226,7 @@
   become: true
   when:
     - not csb_rhel
-  failed_when: false
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
@@ -3222,7 +3231,7 @@
         - /etc/systemd/system/aide-notify@.service
         - "/etc/systemd/system/{{  'dnf5-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
       loop_control:
-        label: "{{ item.key }}"
+        label: "{{ item }}"
       register: system_aide_unit_removal
 
     - name: Reload systemd after removing AIDE units  # noqa: no-handler
