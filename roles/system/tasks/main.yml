@@ -612,7 +612,8 @@
         msg: >-
           WARNING: var-tmp.mount could not be enabled or started. /var/tmp is NOT
           hardened — world-writable space can execute code. Check: systemctl status
-          var-tmp.mount; journalctl -u var-tmp.mount
+          var-tmp.mount; journalctl -u var-tmp.mount.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
 
 - name: Check if var-tmp.mount unit file exists
   ansible.builtin.stat:
@@ -3376,6 +3377,7 @@
       ansible.builtin.debug:
         msg: >-
           AIDE initialization failed (disk exhaustion, OOM, or signal interruption).
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           To recover: free disk space, remove any partial /var/lib/aide/aide.db.new.gz,
           then run 'sudo aide --init && sudo cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'.
           Re-run this playbook once space is available to complete AIDE setup.
