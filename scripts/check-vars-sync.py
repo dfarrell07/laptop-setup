@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Check that security hardening variables are in sync between
-group_vars/all/vars.yml and roles/system/defaults/main.yml.
+"""Verify security hardening variables are present and have expected types in
+group_vars/all/vars.yml, which is the single source of truth for these values.
 
-Both files must define these variables because molecule verify plays run as
-standalone plays where role defaults (precedence 2) are unavailable; group_vars
-(precedence 5) is authoritative. If they diverge, the role default becomes dead
-code that misleads readers.
+These vars were previously duplicated in roles/system/defaults/main.yml but that
+copy was removed (cycle 1 refactor); vars.yml is now authoritative for both
+full-playbook and standalone molecule verify invocations (group_vars, precedence 5).
 """
 import sys
 import pathlib
@@ -13,32 +12,32 @@ import yaml
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
-DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
 
-SYNCED_KEYS = [
-    "system_tmout",
-    "system_faillock_deny",
-    "system_faillock_unlock_time",
-    "system_pwquality_minlen",
-    "system_pwquality_difok",
-    "system_pwquality_ucredit",
-    "system_pwquality_lcredit",
-    "system_pwquality_ocredit",
-    "system_pwquality_dcredit",
-    "system_pwquality_maxrepeat",
-    "system_pwhistory_remember",
-    "system_inactive_days",
-    "system_pass_max_days",
-    "system_pass_min_days",
-    "system_pass_warn_age",
-    "system_auditd_max_log_file",
-    "system_auditd_num_logs",
-    "system_umask",
-    "system_disable_avahi",
-    "system_mask_nfs_server",
-    "system_init_on_free",
-    "system_faillock_even_deny_root",
-]
+# These must be present in vars.yml with the expected Python type.
+REQUIRED_KEYS = {
+    "system_tmout": int,
+    "system_faillock_deny": int,
+    "system_faillock_unlock_time": int,
+    "system_pwquality_minlen": int,
+    "system_pwquality_difok": int,
+    "system_pwquality_ucredit": int,
+    "system_pwquality_lcredit": int,
+    "system_pwquality_ocredit": int,
+    "system_pwquality_dcredit": int,
+    "system_pwquality_maxrepeat": int,
+    "system_pwhistory_remember": int,
+    "system_inactive_days": int,
+    "system_pass_max_days": int,
+    "system_pass_min_days": int,
+    "system_pass_warn_age": int,
+    "system_auditd_max_log_file": int,
+    "system_auditd_num_logs": int,
+    "system_umask": str,
+    "system_disable_avahi": bool,
+    "system_mask_nfs_server": bool,
+    "system_init_on_free": bool,
+    "system_faillock_even_deny_root": bool,
+}
 
 
 def load_yaml(path):
@@ -48,31 +47,30 @@ def load_yaml(path):
 
 def main():
     vars_data = load_yaml(VARS_FILE)
-    defaults_data = load_yaml(DEFAULTS_FILE)
 
-    drift = []
-    for key in SYNCED_KEYS:
-        vars_val = vars_data.get(key)
-        defaults_val = defaults_data.get(key)
-        if vars_val != defaults_val:
-            drift.append(
-                f"  {key}: group_vars/all/vars.yml={vars_val!r}"
-                f"  roles/system/defaults/main.yml={defaults_val!r}"
+    errors = []
+    for key, expected_type in REQUIRED_KEYS.items():
+        val = vars_data.get(key)
+        if val is None:
+            errors.append(f"  MISSING: {key} not found in vars.yml")
+        elif not isinstance(val, expected_type):
+            errors.append(
+                f"  WRONG TYPE: {key}={val!r} expected {expected_type.__name__},"
+                f" got {type(val).__name__}"
             )
 
-    if drift:
-        print("ERROR: vars.yml / roles/system/defaults/main.yml drift detected:", file=sys.stderr)
-        for line in drift:
+    if errors:
+        print("ERROR: group_vars/all/vars.yml missing or wrong-type security vars:", file=sys.stderr)
+        for line in errors:
             print(line, file=sys.stderr)
         print(
-            "Update BOTH files to the same value. "
-            "group_vars (precedence 5) is authoritative; role defaults (precedence 2) "
-            "exist for standalone molecule verify plays.",
+            "vars.yml is the single source of truth for these values "
+            "(roles/system/defaults/main.yml no longer carries them).",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    print(f"OK: {len(SYNCED_KEYS)} synced keys match between vars.yml and defaults/main.yml")
+    print(f"OK: {len(REQUIRED_KEYS)} security hardening keys present and correctly typed in vars.yml")
 
 
 if __name__ == "__main__":
