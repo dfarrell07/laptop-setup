@@ -907,7 +907,7 @@
   register: verify_sudoers_go_env
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected | default(false))
+    - not csb_rhel
 
 - name: Assert sudoers go-env drop-in deployed
   ansible.builtin.assert:
@@ -915,7 +915,7 @@
     fail_msg: "/etc/sudoers.d/go-env not deployed — system role sudoers go-env task regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected | default(false))
+    - not csb_rhel
 
 - name: Stat logrotate sudo config (/var/log/sudo.log rotation)
   ansible.builtin.stat:
@@ -924,7 +924,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected | default(false))
+    - not csb_rhel
 
 - name: Assert logrotate sudo config deployed
   ansible.builtin.assert:
@@ -932,7 +932,7 @@
     fail_msg: "/etc/logrotate.d/sudo not deployed — system role logrotate task regression"
   when:
     - ansible_system == 'Linux'
-    - not (csb_detected | default(false))
+    - not csb_rhel
 
 - name: Stat journald hardening drop-in (system role deploys it on non-CSB Linux)
   ansible.builtin.stat:

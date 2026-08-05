@@ -1324,10 +1324,11 @@ EOF
   else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
   # Login banner deployed to /etc/issue (CIS 1.7.1)
-  # Skipped on CSB — IT deploys a mandated corporate legal banner; Ansible guard intentionally
-  # omits this task so the IT-managed banner is not overwritten
+  # Skipped on RHEL CSB only — IT deploys a mandated corporate legal banner; Ansible does not
+  # write /etc/issue on RHEL CSB (csb_rhel guard). On Fedora hybrid CSB, Ansible does deploy
+  # the banner (not csb_rhel is true), so a missing banner is a real FAIL there.
   if grep -qi 'authorized users' /etc/issue 2>/dev/null; then record "login-banner" "PASS"
-  elif $CSB_HOST; then record "login-banner" "WARN" "skipped on CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
+  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "login-banner" "WARN" "skipped on RHEL CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
   else record "login-banner" "FAIL" "login banner not deployed or missing expected text (/etc/issue)"; fi
 
   # Critical file permissions (CIS 6.1.x)
