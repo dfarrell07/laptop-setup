@@ -183,6 +183,8 @@ if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
     _vp_out=$(bash "$_vp" 2>/dev/null) || true
     if echo "$_vp_out" | grep -q 'ci-dummy-vault-password'; then
       record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+    else
+      record "vault-pass-stub" "PASS"
     fi
     unset _vp_out
   fi
@@ -1049,11 +1051,11 @@ EOF
   if grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-persistent" "PASS"
   elif $CSB_HOST; then record "journald-persistent" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
-  else record "journald-persistent" "FAIL" "journald Storage=persistent not configured"; fi
+  else record "journald-persistent" "FAIL" "journald Storage=persistent not configured — run: make system"; fi
   if grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf 2>/dev/null; then
     record "journald-maxuse" "PASS"
   elif $CSB_HOST; then record "journald-maxuse" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
-  else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured"; fi
+  else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make system"; fi
 
   # cups-browsed masked (CVE-2024-47176 RCE vector)
   _cups_browsed_state=$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)
