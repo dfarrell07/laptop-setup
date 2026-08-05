@@ -17,7 +17,7 @@ permissions:
 jobs:
   ansible-lint:
     name: Ansible Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -43,7 +43,7 @@ jobs:
 
   yamllint:
     name: YAML Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -64,12 +64,32 @@ jobs:
       - name: Run yamllint
         run: yamllint --strict .
 
+  vars-sync:
+    name: Vars Sync Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-test.lock
+
+      - name: Install dependencies
+        run: pip install -r requirements-test.lock
+
       - name: Check vars sync
         run: python3 scripts/check-vars-sync.py
 
   shellcheck:
     name: ShellCheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -94,7 +114,7 @@ jobs:
 
   lockfile-lint:
     name: Lockfile Integrity Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out the repository
@@ -137,7 +157,7 @@ jobs:
 
   vault-encryption:
     name: Vault Encryption Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out the repository
@@ -218,7 +238,7 @@ jobs:
 
   syntax-check:
     name: Ansible Syntax Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -237,7 +257,7 @@ jobs:
 
   markdownlint:
     name: Markdown Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -259,7 +279,7 @@ jobs:
 
   gitleaks:
     name: Secret Detection
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -268,7 +288,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Download gitleaks
+      - name: Download gitleaks  # Last bumped: 2026-08-05; check https://github.com/gitleaks/gitleaks/releases
         env:
           GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
@@ -282,7 +302,7 @@ jobs:
 
   actionlint:
     name: Action Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out the repository
@@ -290,7 +310,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download actionlint
+      - name: Download actionlint  # Last bumped: 2026-08-05; check https://github.com/rhysd/actionlint/releases
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
@@ -304,7 +324,7 @@ jobs:
 
   zizmor:
     name: Workflow Security Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -312,7 +332,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download zizmor
+      - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
@@ -326,7 +346,7 @@ jobs:
 
   commitlint:
     name: Commit Message Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:

@@ -2799,7 +2799,6 @@
     mode: "0440"
     validate: visudo -cf %s
   become: true
-  tags: [become]
   when: not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
 
 # --- Password aging ---
@@ -3327,7 +3326,7 @@
     # anywhere in the play up to this point, not just the AIDE one. On a run where
     # SSH config, NM, resolved, chronyd, journald, or dconf tasks also changed,
     # those handlers (Restart sshd, Restart NetworkManager, etc.) fire here rather
-    # than at play end. sshd restart sends SIGHUP to the controlling SSH session;
+    # than at play end. NetworkManager restart briefly drops managed interfaces, disconnecting SSH sessions over those interfaces;
     # run under tmux to survive it (documented in CLAUDE.md and troubleshooting.md).
     - name: Flush AIDE handlers before database existence check
       ansible.builtin.meta: flush_handlers

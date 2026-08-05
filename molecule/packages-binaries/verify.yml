@@ -346,3 +346,25 @@
       ansible.builtin.assert:
         that: packages_gitleaks_version in verify_gitleaks_ver.stdout
         fail_msg: "gitleaks version mismatch — expected {{ packages_gitleaks_version }}, got: {{ verify_gitleaks_ver.stdout }}"
+
+    - name: Check tkn version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/tkn version --component=cli
+      register: verify_tkn_ver
+      changed_when: false
+
+    - name: Assert tkn version matches packages_tkn_version
+      ansible.builtin.assert:
+        that: packages_tkn_version in verify_tkn_ver.stdout
+        fail_msg: "tkn version mismatch — expected {{ packages_tkn_version }}, got: {{ verify_tkn_ver.stdout }}"
+
+    - name: Check ec version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/ec version
+      register: verify_ec_ver
+      changed_when: false
+
+    - name: Assert ec version matches packages_ec_version
+      ansible.builtin.assert:
+        that: packages_ec_version in verify_ec_ver.stdout
+        fail_msg: "ec version mismatch — expected {{ packages_ec_version }}, got: {{ verify_ec_ver.stdout }}"

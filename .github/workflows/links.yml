@@ -27,20 +27,27 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Download lychee  # Last bumped: 2026-08-05; check https://github.com/lycheeverse/lychee/releases
+        env:
+          LYCHEE_SHA256: <sha256sum of lychee-x86_64-unknown-linux-gnu.tar.gz>
+        run: |
+          curl -sSLO https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz
+          echo "${LYCHEE_SHA256}  lychee-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
+          tar xzf lychee-x86_64-unknown-linux-gnu.tar.gz lychee
+          chmod +x lychee
+
       - name: Check links
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8  # v2.9.0
-        with:
-          args: >-
-            --no-progress
-            --exclude-path node_modules
-            --exclude-path collections
-            --exclude-path .claude
-            --exclude 'registry\.redhat\.io'
-            --exclude 'code\.engineering\.redhat\.com'
-            --exclude 'gitlab\.cee\.redhat\.com'
-            --exclude 'github\.com/dfarrell07/laptop-setup/security'
+        run: |
+          ./lychee \
+            --no-progress \
+            --exclude-path node_modules \
+            --exclude-path collections \
+            --exclude-path .claude \
+            --exclude 'registry\.redhat\.io' \
+            --exclude 'code\.engineering\.redhat\.com' \
+            --exclude 'gitlab\.cee\.redhat\.com' \
+            --exclude 'github\.com/dfarrell07/laptop-setup/security' \
             '**/*.md'
-          fail: true
 
   report:
     name: Create Issue on Failure
@@ -51,31 +58,14 @@ jobs:
       issues: write
     steps:
       - name: Create issue on failure
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
-        with:
-          script: |
-            const body = 'Link check failed. See run: ' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId;
-            const {data: issues} = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: 'documentation',
-              state: 'open',
-              creator: 'github-actions[bot]'
-            });
-            const existing = issues.find(i => i.title === 'Broken links detected');
-            if (existing) {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing.number,
-                body: body
-              });
-            } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: 'Broken links detected',
-                body: body,
-                labels: ['documentation']
-              });
-            }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Broken links detected"
+          BODY="Link check failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          EXISTING=$(gh issue list --label documentation --state open --search "$TITLE in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "documentation" 2>/dev/null || true
+          fi
