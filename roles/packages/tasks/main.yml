@@ -1449,7 +1449,7 @@
         label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Extract and install versioned RH subctl to ~/.local/bin
+    - name: Extract and install versioned RH subctl to ~/.local/bin  # noqa: command-instead-of-module risky-shell-pipe
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
