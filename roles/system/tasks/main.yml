@@ -672,7 +672,13 @@
     src: sysctl-hardening.conf.j2
     dest: /etc/sysctl.d/90-hardening.conf
     mode: "0644"
-  notify: Reload sysctl
+
+- name: Apply sysctl hardening values immediately  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: sysctl --system
+  become: true
+  changed_when: false
+  failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
 
 # --- Firewall (drop zone) ---
 - name: Ensure firewalld is running
