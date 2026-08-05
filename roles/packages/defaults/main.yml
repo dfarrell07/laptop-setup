@@ -190,20 +190,26 @@ packages_opm_sha256: "d3779a2c28450ff5b3e0b5f1cc63c6e63891f3b63467062a89aed03041
 
 packages_golangci_lint_version: "2.12.2"
 packages_gofumpt_version: "0.11.0"
+packages_govulncheck_version: "1.6.0"
+packages_gci_version: "0.14.0"
+packages_gopls_version: "0.23.0"
 
 packages_go_install:
   # General Go development tools (all profiles)
   - "mvdan.cc/gofumpt@v{{ packages_gofumpt_version }}"
-  - golang.org/x/vuln/cmd/govulncheck@v1.6.0
-  - github.com/daixiang0/gci@v0.14.0
-  - golang.org/x/tools/gopls@v0.23.0
+  - "golang.org/x/vuln/cmd/govulncheck@v{{ packages_govulncheck_version }}"
+  - "github.com/daixiang0/gci@v{{ packages_gci_version }}"
+  - "golang.org/x/tools/gopls@v{{ packages_gopls_version }}"
   - "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v{{ packages_golangci_lint_version }}"
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes)
+packages_controller_gen_version: "0.19.0"
+packages_stern_version: "1.34.0"
+
 packages_go_install_work:
   # Pin controller-gen to match OVN-K's update-codegen.sh (not go.mod — controller-tools is not a go.mod dep).
   # Bump packages_code_generator_version together when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
-  - sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0
+  - "sigs.k8s.io/controller-tools/cmd/controller-gen@v{{ packages_controller_gen_version }}"
   - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/lister-gen@v{{ packages_code_generator_version }}"
@@ -213,7 +219,7 @@ packages_go_install_work:
   # See packages_subctl_versioned below for older-version multi-install.
   - "github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}"
   # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
-  - github.com/stern/stern@v1.34.0
+  - "github.com/stern/stern@v{{ packages_stern_version }}"
 
 # Versioned subctl installs: each entry becomes subctl<major><minor> in ~/.local/bin.
 # Example: {version: "0.18.0", suffix: "18"} → installs /usr/local/bin → ~/.local/bin/subctl18
