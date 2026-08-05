@@ -717,11 +717,11 @@
 - name: Check sysctl hardening config contains security-critical keys
   ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
-    - kernel.yama.ptrace_scope
-    - kernel.dmesg_restrict
-    - kernel.kptr_restrict
-    - kernel.unprivileged_bpf_disabled
-    - kernel.io_uring_disabled
+    - kernel.yama.ptrace_scope = {{ system_ptrace_scope }}
+    - kernel.dmesg_restrict = 1
+    - kernel.kptr_restrict = 1
+    - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled }}
+    - kernel.io_uring_disabled = {{ system_io_uring_disabled }}
     - net.ipv4.ip_forward
     - net.bridge.bridge-nf-call-iptables
     - net.ipv6.conf.all.forwarding
@@ -756,6 +756,40 @@
   when:
     - ansible_system == 'Linux'
     - verify_tmp_hardening.stat.exists
+
+# --- modprobe hardening: file-content assertions (system role, Linux only) ---
+- name: Stat /etc/modprobe.d/hardening.conf (asserts system role deployed it)
+  ansible.builtin.stat:
+    path: /etc/modprobe.d/hardening.conf
+  register: verify_modprobe_hardening
+  when: ansible_system == 'Linux'
+
+- name: Assert /etc/modprobe.d/hardening.conf deployed
+  ansible.builtin.assert:
+    that: verify_modprobe_hardening.stat.exists
+    fail_msg: "/etc/modprobe.d/hardening.conf not deployed — system role did not run or template broken"
+  when: ansible_system == 'Linux'
+
+- name: Check modprobe hardening contains unconditional blacklist entries
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/modprobe.d/hardening.conf
+  loop:
+    - "install cramfs /bin/false"
+    - "install dccp /bin/false"
+    - "install firewire-core /bin/false"
+    - "install vivid /bin/false"
+    - "install n_hdlc /bin/false"
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+
+- name: Check modprobe hardening contains usb_storage blacklist entry
+  ansible.builtin.command: grep -qF 'install usb_storage /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_usb_storage | default(true) | bool
 
 # --- sshd hardening drop-in: file-content assertions (system role, Linux only) ---
 # File is mode 0600 root:root — become: true required for stat and grep.
