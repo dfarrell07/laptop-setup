@@ -32,6 +32,9 @@
             repo: "{{ notes_remote_url }}"
             dest: "{{ notes_repo_path }}"
             update: false  # Never auto-pull: transcrypt init required first; do not overwrite plaintext working tree
+          environment:
+            GIT_TERMINAL_PROMPT: "0"
+          timeout: 60
       rescue:
         - name: Warn that SSH clone failed
           ansible.builtin.debug:
