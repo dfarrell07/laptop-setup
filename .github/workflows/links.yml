@@ -19,7 +19,7 @@ permissions:
 jobs:
   links:
     name: Check Markdown Links
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
@@ -29,7 +29,7 @@ jobs:
 
       - name: Download lychee  # Last bumped: 2026-08-05; check https://github.com/lycheeverse/lychee/releases
         env:
-          LYCHEE_SHA256: <sha256sum of lychee-x86_64-unknown-linux-gnu.tar.gz>
+          LYCHEE_SHA256: 0d48569e2dc11c1917fa98321dfd7aa675fba03b79f41e8e74afa3223e30d379
         run: |
           curl -sSLO https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz
           echo "${LYCHEE_SHA256}  lychee-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
@@ -53,7 +53,7 @@ jobs:
     name: Create Issue on Failure
     needs: links
     if: failure() && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       issues: write
     steps:
