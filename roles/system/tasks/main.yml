@@ -1484,7 +1484,7 @@
   loop:
     - power-profiles-daemon
     - tuned-ppd
-  when: not (system_tlp_enabled | bool) or csb_rhel
+  when: not (system_tlp_enabled | bool) and not csb_rhel
   failed_when: false
 
 - name: Deploy TLP ThinkPad charge threshold config
@@ -1539,6 +1539,23 @@
   loop:
     - cups.socket
     - cups.path
+  failed_when: false
+
+# --- Mask ABRT crash reporter (redundant with systemd-coredump; skip on RHEL CSB where IT manages it via Satellite) ---
+- name: Mask ABRT services (redundant with systemd-coredump)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-xorg.service
+  when:
+    - system_mask_abrt | bool
+    - not csb_rhel
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
