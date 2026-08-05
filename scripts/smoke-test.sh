@@ -651,7 +651,7 @@ if [[ -f /etc/kernel/cmdline ]]; then
     grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
   fi
   if $_kcmd_ok; then record "kernel-cmdline" "PASS"
-  else record "kernel-cmdline" "WARN" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
+  else record "kernel-cmdline" "FAIL" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
   unset _kcmd _kcmd_ok
 fi
 
@@ -1515,6 +1515,8 @@ EOF
   if command -v tlp &>/dev/null || [[ -d /etc/tlp.d ]]; then
     if [[ "$(systemctl show -p UnitFileState --value power-profiles-daemon 2>/dev/null)" == "masked" ]]; then record "ppd-masked" "PASS"
     else record "ppd-masked" "FAIL" "power-profiles-daemon not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"; fi
+    if [[ "$(systemctl show -p UnitFileState --value tuned-ppd 2>/dev/null)" == "masked" ]]; then record "tuned-ppd-masked" "PASS"
+    else record "tuned-ppd-masked" "FAIL" "tuned-ppd not masked — conflicts with TLP on Fedora 44"; fi
   fi
 
   # Chrome policies (verify key security settings, not just file existence)
