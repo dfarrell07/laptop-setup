@@ -44,6 +44,8 @@ profile="work"
 grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 _system_umask=$(grep -oE '^system_umask:[[:space:]]*"?([0-9]+)"?' "$_cfg" 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)
 _system_umask="${_system_umask:-027}"
+_notes_enabled=false
+grep -qE '^notes_enabled:[[:space:]]*true' "$_cfg" 2>/dev/null && _notes_enabled=true
 unset _cfg SCRIPT_DIR
 
 run() { # execute locally or inside container
@@ -86,7 +88,7 @@ fi
 # smoke run exits 0 and the assert in verify-smoke.yml passes.
 _tool_absent="FAIL"
 [[ -n "${MOLECULE_PROJECT_DIRECTORY:-}" ]] && _tool_absent="WARN"
-for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version"; do
+for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
   if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
@@ -349,7 +351,7 @@ _dtf="$HOME/.config/direnv/direnv.toml"
 if command -v direnv >/dev/null 2>&1; then
   if direnv hook zsh >/dev/null 2>&1; then record "direnv-hook-zsh" "PASS"
   else record "direnv-hook-zsh" "FAIL" "'direnv hook zsh' failed — direnv may be broken"; fi
-else record "direnv-hook-zsh" "WARN" "direnv not found — skipping hook check"; fi
+fi
 if [[ -f "$_dtf" ]]; then
   if grep -q 'strict_env = true' "$_dtf" && grep -q 'disable_stdin = true' "$_dtf"; then
     record "direnv-toml" "PASS"
@@ -591,7 +593,11 @@ if [[ -d "$HOME/notes/.git" ]]; then
     record "notes-transcrypt" "WARN" "transcrypt not installed"
   fi
 else
-  record "notes-repo" "WARN" "notes repo not cloned — run 'make notes'"
+  if $_notes_enabled; then
+    record "notes-repo" "WARN" "notes repo not cloned — run 'make notes'"
+  else
+    record "notes-repo" "PASS" "notes disabled — set notes_enabled: true in config.yml to enable"
+  fi
 fi
 
 # --- Wayland desktop tools (Linux only — not installed on macOS) ---

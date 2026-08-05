@@ -276,6 +276,7 @@
             dest: /tmp/openshift-client-linux.tar.gz
             checksum: "sha256:{{ packages_oc_sha256 }}"
             mode: "0644"
+            timeout: 300
           register: packages_oc_download
           retries: 3
           delay: 10
@@ -384,6 +385,7 @@
             dest: /tmp/opm-linux.tar.gz
             checksum: "sha256:{{ packages_opm_sha256 }}"
             mode: "0644"
+            timeout: 300
           register: packages_opm_download
           retries: 3
           delay: 10
@@ -475,6 +477,7 @@
         dest: /usr/local/bin/kind
         checksum: "sha256:{{ _kind_sha256 }}"
         mode: "0755"
+        timeout: 120
       become: true
       tags: [become]
       register: packages_kind_download
@@ -528,6 +531,7 @@
             dest: /tmp/helm.tar.gz
             checksum: "sha256:{{ _helm_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_helm_download
           retries: 3
           delay: 10
@@ -606,6 +610,7 @@
             dest: /tmp/kustomize.tar.gz
             checksum: "sha256:{{ _kustomize_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_kustomize_download
           retries: 3
           delay: 10
@@ -677,6 +682,7 @@
         dest: /usr/local/bin/transcrypt
         checksum: "sha256:{{ packages_transcrypt_sha256 }}"
         mode: "0755"
+        timeout: 120
       become: true
       tags: [become]
       register: packages_transcrypt_download
@@ -729,6 +735,7 @@
         dest: /usr/local/bin/sops
         checksum: "sha256:{{ _sops_sha256 }}"
         mode: "0755"
+        timeout: 120
       become: true
       tags: [become]
       register: packages_sops_download
@@ -784,6 +791,7 @@
             dest: /tmp/gitleaks.tar.gz
             checksum: "sha256:{{ _gitleaks_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_gitleaks_download
           retries: 3
           delay: 10
@@ -857,6 +865,7 @@
             dest: /tmp/actionlint.tar.gz
             checksum: "sha256:{{ packages_actionlint_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_actionlint_download
           retries: 3
           delay: 10
@@ -929,6 +938,7 @@
             dest: /tmp/zizmor.tar.gz
             checksum: "sha256:{{ packages_zizmor_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_zizmor_download
           retries: 3
           delay: 10
@@ -1005,6 +1015,7 @@
         dest: /usr/local/bin/operator-sdk
         checksum: "sha256:{{ _operator_sdk_sha256 }}"
         mode: "0755"
+        timeout: 300
       become: true
       tags: [become]
       register: packages_operator_sdk_download
@@ -1059,6 +1070,7 @@
         dest: /usr/local/bin/cosign
         checksum: "sha256:{{ _cosign_sha256 }}"
         mode: "0755"
+        timeout: 300
       become: true
       tags: [become]
       register: packages_cosign_download
@@ -1116,6 +1128,7 @@
             dest: /tmp/tkn.tar.gz
             checksum: "sha256:{{ _tkn_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_tkn_download
           retries: 3
           delay: 10
@@ -1189,6 +1202,7 @@
         dest: /usr/local/bin/ec
         checksum: "sha256:{{ _ec_sha256 }}"
         mode: "0755"
+        timeout: 120
       become: true
       tags: [become]
       register: packages_ec_download
@@ -1240,6 +1254,7 @@
             dest: /tmp/k9s.tar.gz
             checksum: "sha256:{{ packages_k9s_sha256 }}"
             mode: "0644"
+            timeout: 120
           register: packages_k9s_download
           retries: 3
           delay: 10
@@ -1421,6 +1436,7 @@
         dest: /tmp/krew.tar.gz
         checksum: "sha256:{{ packages_krew_sha256 }}"
         mode: "0644"
+        timeout: 120
       register: packages_krew_download
       retries: 3
       delay: 10
@@ -1590,7 +1606,6 @@
           --confirm
       register: _pkg_subctl_extract
       changed_when: _pkg_subctl_extract.rc == 0
-      failed_when: false
       when: >-
         packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
         item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
@@ -1625,6 +1640,31 @@
       loop_control:
         label: "{{ item.suffix }}"
         index_var: loop_idx
+
+  rescue:
+    - name: Record downstream RH subctl installation failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "downstream RH subctl (oc image extract)"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Run `podman login registry.redhat.io` with your Red Hat credentials, then
+          re-run `make packages`. Alternatively, use `make container` to provision
+          subctl inside the dev container where registry auth is pre-configured.
+        _csb_ticket_summary: "Cannot pull downstream subctl from registry.redhat.io on CSB"
+        _csb_ticket_body: >-
+          oc image extract from registry.redhat.io/rhacm2 failed. This typically means
+          registry auth is missing. Run `podman login registry.redhat.io` or use
+          `make container` for the dev-container path.
+      when: csb_rhel
+    - name: Warn downstream RH subctl extraction failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: oc image extract from registry.redhat.io failed for downstream subctl.
+          Run `podman login registry.redhat.io` then retry, or use `make container`.
+          Error: {{ ansible_failed_result.msg | default('unknown error') | truncate(200) }}
+      when: not csb_rhel
 
 - name: Update krew plugin index
   ansible.builtin.command:
