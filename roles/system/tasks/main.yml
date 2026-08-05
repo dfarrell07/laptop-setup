@@ -1548,6 +1548,8 @@
       value: "{{ system_logind_idle_sec }}"
     - key: KillUserProcesses
       value: "no"
+  loop_control:
+    label: "{{ item.key }}"
   notify: Restart logind
 
 # --- Disable Ctrl+Alt+Delete reboot ---
@@ -2571,6 +2573,8 @@
       value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
       value: "{{ system_pwquality_maxrepeat }}"
+  loop_control:
+    label: "{{ item.key }}"
   when: not csb_rhel
 
 - name: Enforce pwquality for root (CIS 5.3.4)
@@ -2798,6 +2802,8 @@
       value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
+  loop_control:
+    label: "{{ item.name }}"
   when: not csb_rhel
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
@@ -3066,6 +3072,8 @@
     - path: /etc/gshadow
       group: "{{ 'shadow' if ansible_facts['pkg_mgr'] == 'apt' else 'root' }}"
       mode: "{{ '0640' if ansible_facts['pkg_mgr'] == 'apt' else '0000' }}"
+  loop_control:
+    label: "{{ item.path }}"
 
 # --- System-level dconf hardening (CIS 1.8.x — GNOME/GDM only) ---
 # Written as root to /etc/dconf/db/ so settings are locked and cannot be
