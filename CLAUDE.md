@@ -61,6 +61,8 @@ make test-debian      # Molecule Debian 13 tests
 make test-macos       # Molecule macOS tests
 make test-container   # Molecule container provisioning scenario (distrobox/Podman)
 make test-container-offline  # Molecule container rescue/degradation path (offline 404 scenario)
+make test-container-offline-distrobox  # Molecule container-offline-distrobox rescue-path scenario (distrobox variant)
+make test-distrobox-role  # Molecule distrobox-role scenario (distrobox role unit tests)
 make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt, subctl18; profile:work)
 make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
@@ -70,8 +72,8 @@ make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
-make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/packages-binaries); Podman only
-make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, packages-binaries)
+make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries); Podman only
+make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, container-offline-distrobox, distrobox-role, packages-binaries)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
@@ -109,7 +111,7 @@ make repos-downstream # downstream repos only
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
 - **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks),
   backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
-- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, debian, vm, macos, packages-binaries) + shared verify includes
+- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, container-offline-distrobox, distrobox-role, debian, vm, macos, packages-binaries) + shared verify includes
 
 ## Key Patterns
 
@@ -172,16 +174,18 @@ make repos-downstream # downstream repos only
 - `make syntax-check` — Playbook syntax validation
 - `make test-scripts` — Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
-- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/packages-binaries);
+- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries);
   Podman only, no libvirt required. CI molecule coverage minus macOS (omits lint/syntax-check from full ci)
 - `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
-  + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-packages-binaries (macOS runner required)
+  + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-container-offline-distrobox + test-distrobox-role + test-packages-binaries (macOS runner required)
 - `make test-fedora` — Molecule Fedora 44 (system, repos_dnf, common, packages, dotfiles, ssh, git_repos, notes, redhat, containers, desktop, claude)
 - `make test-rocky` — Molecule Rocky Linux 10 (work profile, includes redhat role)
 - `make test-debian` — Molecule Debian 13 (system, common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
 - `make test-container` — Molecule container scenario (distrobox/podman container provisioning)
 - `make test-container-offline` — Molecule container-offline scenario: rescue block verification,
   fast failure via distrobox_oc_fetch_timeout: 5
+- `make test-container-offline-distrobox` — Molecule container-offline-distrobox rescue-path scenario (distrobox variant)
+- `make test-distrobox-role` — Molecule distrobox-role scenario (distrobox role unit tests)
 - `make test-vm` — Molecule with Vagrant+libvirt (full system including firewall, sysctl, services); requires `make bootstrap-test` first
 - `make smoke-test` — Post-provisioning verification (SSH, tools, hardening)
 - CI runs linting + Fedora/Rocky/Debian/container/packages-binaries/macOS molecule tests on every PR, VM tests locally
