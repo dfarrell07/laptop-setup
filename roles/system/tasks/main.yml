@@ -1170,6 +1170,7 @@
     name: audit
     state: present
   when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  failed_when: false
 
 - name: Install auditd package (Debian/Ubuntu)
   ansible.builtin.apt:
@@ -1216,6 +1217,7 @@
   become: true
   when:
     - not csb_rhel
+  failed_when: false
 
 # --- Bolt (Thunderbolt device authorization daemon) ---
 - name: Install bolt for Thunderbolt device authorization
