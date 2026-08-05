@@ -721,7 +721,7 @@
       failed_when: false
 
     - name: Download SOPS binary
-      when: packages_sops_version not in (packages_sops_check.stdout)
+      when: packages_sops_version not in (packages_sops_check.stdout + packages_sops_check.stderr)
       ansible.builtin.get_url:
         url: >-
           https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
