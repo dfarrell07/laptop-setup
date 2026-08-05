@@ -69,13 +69,6 @@
   when:
     - ansible_facts['system'] == 'Linux'
     - registry_tokens | default([]) | length > 0
-    - >-
-      (containers_vault_pre_auth.results |
-       selectattr('item.registry', 'equalto', item.registry) |
-       selectattr('rc', 'ne', 0) | list | length > 0) or
-      ((containers_vault_pre_auth.results |
-        selectattr('item.registry', 'equalto', item.registry) |
-        map(attribute='stdout') | list | first | default('') | trim) != item.username)
 
 - name: Warn if vault registry login did not persist credentials
   ansible.builtin.debug:
@@ -87,7 +80,6 @@
   loop: "{{ containers_vault_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry | default('unknown') }}"
-  no_log: true
   when:
     - item.rc is defined
     - item.rc != 0

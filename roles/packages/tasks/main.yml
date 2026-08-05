@@ -68,7 +68,6 @@
   tags: [become]
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - ansible_facts['system'] == 'Linux'
     - profile == 'work'  # bpfman is in packages_networking_work (work-profile only)
   failed_when: false
 
@@ -120,7 +119,6 @@
   tags: [become]
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - ansible_facts['system'] == 'Linux'
     - install_virtualization | bool
     - "'libvirt' in packages_virtualization"
   failed_when: false
@@ -134,7 +132,6 @@
   tags: [become]
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - ansible_facts['system'] == 'Linux'
     - install_virtualization | bool
     - real_user_id | length > 0
   failed_when: false
@@ -1345,7 +1342,6 @@
     label: "{{ item.item | default('unknown') }}"
   when:
     - item.rc | default(0) != 0
-    - item.skipped is not defined or not item.skipped
 
 - name: Collect failed Go tool names
   ansible.builtin.set_fact:
@@ -1354,7 +1350,6 @@
         packages_go_results.results | default([])
         | selectattr('rc', 'defined')
         | selectattr('rc', '!=', 0)
-        | rejectattr('skipped', 'defined')
         | map(attribute='item')
         | list
       }}
