@@ -184,18 +184,7 @@ system_bpf_jit_harden: 1
 # needed for bpfman/bpftrace debugging). Value 2=write-once locked (root cannot re-enable).
 # Value 0=allow all (insecure). Override in config.yml if needed.
 system_unprivileged_bpf_disabled: 1
-# Kernel panic behavior: auto-reboot delay and oops halt behavior.
-# system_kernel_panic: seconds before auto-reboot after panic (0=disable auto-reboot; preserves crash state
-# for kdump or live analysis). system_kernel_panic_on_oops: 1=halt on OOPS (CIS 1.5.3); 0=log and continue
-# (useful for OVN-K/bpfman development with KASAN/UBSAN where a non-fatal oops should not crash the host).
-# Set both to 0 in config.yml to preserve panic state for OVN-K/bpfman kernel debugging.
-system_kernel_panic: 10       # CIS default; default.config.yml overrides to 0 (applies on all site.yml/Makefile runs)
-system_kernel_panic_on_oops: 1  # CIS 1.5.3; default.config.yml overrides to 0 (applies on all site.yml/Makefile runs)
 system_init_on_free: true  # zero freed memory pages (init_on_free=1 kernel param); set false in config.yml to disable
-# ptrace scope: 1=restrict to parent process only (CIS; value 2=admin-only, 3=none); 0=unrestricted within
-# user namespace (Fedora workstation default). For OVN-K/bpfman kernel development, set 0 in config.yml
-# to allow gdb -p and strace -p on your own running processes without sudo.
-system_ptrace_scope: 1  # CIS default; default.config.yml overrides to 0 (applies on all site.yml/Makefile runs)
 system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
                           # to add machine-specific sysctls without replacing the entire hardening dict.
                           # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
@@ -206,11 +195,6 @@ system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; 
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
-# kexec_load_disabled: 1=block kexec (CIS — prevents loading a new kernel at runtime,
-# preserving Secure Boot chain of trust). Even with Secure Boot disabled, kexec_load_disabled=1
-# makes kdump impossible (kdump uses kexec to jump into the crash kernel). Set 0 in config.yml
-# if kdump is required on this machine (e.g. kernel debug or production crash capture).
-system_kexec_load_disabled: 1  # CIS default; default.config.yml overrides to 0 (applies on all site.yml/Makefile runs)
 system_io_uring_disabled: 1  # value=1 restricts to CAP_SYS_ADMIN; set 2 in config.yml to fully disable for all users
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
