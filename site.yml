@@ -162,7 +162,7 @@
 
     - role: redhat
       tags: [redhat]
-      when: profile == 'work' and ansible_facts['os_family'] == 'RedHat'
+      when: profile == 'work' and (is_rhel or csb_detected)
 
     - role: containers
       tags: [containers]
