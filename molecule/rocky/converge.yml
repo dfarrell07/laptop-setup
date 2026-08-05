@@ -109,6 +109,7 @@
     - role: redhat
       when: is_rhel or csb_detected
     - role: containers
+    - role: distrobox
     - role: desktop
       vars:
         desktop_environment: 'unknown'
@@ -119,6 +120,8 @@
     - role: claude
       vars:
         claude_install_method: skip
+        claude_queue_enabled: true
+        claude_queue_repo: "dfarrell07/laptop-setup"
 
   post_tasks:
     - name: Generate CSB compatibility report

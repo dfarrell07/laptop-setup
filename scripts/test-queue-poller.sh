@@ -123,7 +123,7 @@ assert_contains "gh list fails: log line" "Failed to fetch issues" "$_err_out"
 # --- log ---
 _TMPLOGDIR=$(mktemp -d)
 LOG_DIR="$_TMPLOGDIR"
-eval "$(sed -n '/^log()/,/^}/p' "$POLLER")"
+eval "$(grep '^log()' "$POLLER")"
 declare -f log >/dev/null || { echo "FATAL: log not extracted from $POLLER"; exit 1; }
 _log_out=$(log "hello world")
 assert_contains "log: message in output" "hello world" "$_log_out"
@@ -146,9 +146,9 @@ eval "$(sed -n '/^fail_issue()/,/^}/p' "$POLLER")"
 fail_issue "42" "Something went wrong"
 _gh_calls=$(cat "$_GH_LOG")
 assert_contains "fail_issue: gh edit removes processing" \
-  "issue edit 42 --repo owner/queue --remove-label processing --add-label failed" \
+  "issue edit 42 --repo owner/queue --remove-label processing --remove-label queued --add-label failed" \
   "$_gh_calls"
-assert_not_contains "fail_issue: does not remove queued label" \
+assert_contains "fail_issue: also removes queued label" \
   "--remove-label queued" \
   "$_gh_calls"
 assert_contains "fail_issue: gh comment with message" \
@@ -229,6 +229,137 @@ assert_contains "integration: pr create called"   "pr create"          "$_int_gh
 assert_contains "integration: processing→done"    "--add-label done"   "$_int_gh"
 assert_contains "integration: issue closed"       "issue close 7"      "$_int_gh"
 assert_contains "integration: completed log line" "Issue #7 completed" "$_int_out"
+
+# --- Integration: no-changes failure path (git diff --quiet exits 0 → fail_issue) ---
+_NC_TMPBIN=$(mktemp -d)
+_NC_TMPHOME=$(mktemp -d)
+_NC_TMPLOCKDIR=$(mktemp -d)
+_NC_TMPREPO=$(mktemp -d)
+_NC_GH_LOG=$(mktemp)
+
+cat > "$_NC_TMPBIN/gh" << 'GHEOF'
+#!/bin/bash
+echo "$*" >> "$GH_LOG_FILE"
+case "$1 $2" in
+  "issue list") echo '{"number":8,"title":"No-op task","body":"repo: testrepo\n\nDo something useful"}' ;;
+esac
+exit 0
+GHEOF
+chmod +x "$_NC_TMPBIN/gh"
+
+# Stub git: exit 0 for all calls including diff --quiet — simulates no changes produced
+cat > "$_NC_TMPBIN/git" << 'GITEOF'
+#!/bin/bash
+echo "git $*" >> "$GH_LOG_FILE"
+exit 0
+GITEOF
+chmod +x "$_NC_TMPBIN/git"
+
+cat > "$_NC_TMPBIN/claude-stub" << 'CLAUDEOF'
+#!/bin/bash
+cat > /dev/null
+exit 0
+CLAUDEOF
+chmod +x "$_NC_TMPBIN/claude-stub"
+
+mkdir -p "$_NC_TMPHOME/.config/claude" "$_NC_TMPHOME/.local/share/claude-queue/logs"
+printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
+  "$_NC_TMPREPO" > "$_NC_TMPHOME/.config/claude/queue-repos.conf"
+
+_NC_PATCHED=$(mktemp)
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_NC_TMPLOCKDIR/test.lock"'"|' \
+  "$POLLER" > "$_NC_PATCHED"
+
+set +e
+_nc_out=$(
+  GH_LOG_FILE="$_NC_GH_LOG" \
+  CLAUDE_QUEUE_REPO="test/q" \
+  CLAUDE_BIN="$_NC_TMPBIN/claude-stub" \
+  CLAUDE_QUEUE_TIMEOUT=10 \
+  HOME="$_NC_TMPHOME" \
+  PATH="$_NC_TMPBIN:$PATH" \
+  bash "$_NC_PATCHED" 2>&1
+)
+_nc_exit=$?
+set -e
+rm -f "$_NC_PATCHED"
+
+_nc_gh=$(cat "$_NC_GH_LOG")
+rm -rf "$_NC_TMPBIN" "$_NC_TMPHOME" "$_NC_TMPLOCKDIR" "$_NC_TMPREPO"
+rm -f "$_NC_GH_LOG"
+
+assert_eq           "no-changes: exit 0"                          "0"                  "$_nc_exit"
+assert_contains     "no-changes: fail_issue adds failed label"    "--add-label failed" "$_nc_gh"
+assert_contains     "no-changes: fail comment mentions no changes" "no changes"        "$_nc_gh"
+assert_not_contains "no-changes: done label not added"            "--add-label done"   "$_nc_gh"
+assert_not_contains "no-changes: issue not closed"                "issue close"        "$_nc_gh"
+
+# --- Integration: Claude non-zero exit path ---
+_CE_TMPBIN=$(mktemp -d)
+_CE_TMPHOME=$(mktemp -d)
+_CE_TMPLOCKDIR=$(mktemp -d)
+_CE_TMPREPO=$(mktemp -d)
+_CE_GH_LOG=$(mktemp)
+
+cat > "$_CE_TMPBIN/gh" << 'GHEOF'
+#!/bin/bash
+echo "$*" >> "$GH_LOG_FILE"
+case "$1 $2" in
+  "issue list") echo '{"number":9,"title":"Fail task","body":"repo: testrepo\n\nDo something"}' ;;
+  "pr create")  echo "https://github.com/owner/testrepo/pull/100" ;;
+esac
+exit 0
+GHEOF
+chmod +x "$_CE_TMPBIN/gh"
+
+# Stub git: log calls; diff --quiet exits 0 (no changes checked; CLAUDE_EXIT fires first)
+cat > "$_CE_TMPBIN/git" << 'GITEOF'
+#!/bin/bash
+echo "git $*" >> "$GH_LOG_FILE"
+exit 0
+GITEOF
+chmod +x "$_CE_TMPBIN/git"
+
+# Stub CLAUDE_BIN: exit 1 to trigger the non-zero exit path
+cat > "$_CE_TMPBIN/claude-stub" << 'CLAUDEOF'
+#!/bin/bash
+cat > /dev/null
+exit 1
+CLAUDEOF
+chmod +x "$_CE_TMPBIN/claude-stub"
+
+mkdir -p "$_CE_TMPHOME/.config/claude" "$_CE_TMPHOME/.local/share/claude-queue/logs"
+printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
+  "$_CE_TMPREPO" > "$_CE_TMPHOME/.config/claude/queue-repos.conf"
+
+_CE_PATCHED=$(mktemp)
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_CE_TMPLOCKDIR/test.lock"'"|' \
+  "$POLLER" > "$_CE_PATCHED"
+
+set +e
+_ce_out=$(
+  GH_LOG_FILE="$_CE_GH_LOG" \
+  CLAUDE_QUEUE_REPO="test/q" \
+  CLAUDE_BIN="$_CE_TMPBIN/claude-stub" \
+  CLAUDE_QUEUE_TIMEOUT=10 \
+  HOME="$_CE_TMPHOME" \
+  PATH="$_CE_TMPBIN:$PATH" \
+  bash "$_CE_PATCHED" 2>&1
+)
+_ce_exit=$?
+set -e
+rm -f "$_CE_PATCHED"
+
+_ce_gh=$(cat "$_CE_GH_LOG")
+rm -rf "$_CE_TMPBIN" "$_CE_TMPHOME" "$_CE_TMPLOCKDIR" "$_CE_TMPREPO"
+rm -f "$_CE_GH_LOG"
+
+assert_eq           "claude-exit: exit 0"                          "0"                  "$_ce_exit"
+assert_contains     "claude-exit: fail_issue removes processing"   "--remove-label processing --remove-label queued --add-label failed" "$_ce_gh"
+assert_contains     "claude-exit: comment mentions exit 1"         "exit 1"             "$_ce_gh"
+assert_contains     "claude-exit: branch pushed"                   "git push origin"    "$_ce_gh"
+assert_not_contains "claude-exit: done label not added"            "--add-label done"   "$_ce_gh"
+assert_not_contains "claude-exit: issue not closed"                "issue close"        "$_ce_gh"
 
 # --- Flock concurrency guard: second instance exits immediately ---
 _FLOCK_TMPLOCKDIR=$(mktemp -d)

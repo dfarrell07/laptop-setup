@@ -41,7 +41,7 @@ parse_prompt() {
 fail_issue() {
   local issue_num="$1" message="$2"
   gh issue edit "$issue_num" --repo "$TASK_QUEUE_REPO" \
-    --remove-label processing --add-label failed 2>/dev/null || true
+    --remove-label processing --remove-label queued --add-label failed 2>/dev/null || true
   gh issue comment "$issue_num" --repo "$TASK_QUEUE_REPO" \
     --body "$message" 2>/dev/null || true
   log "Issue #$issue_num failed"
