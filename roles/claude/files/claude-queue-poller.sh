@@ -59,6 +59,19 @@ if ! flock -n 200; then
   exit 0
 fi
 
+STALE_THRESHOLD=$(( TIMEOUT_SECONDS + 300 ))
+STALE_ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
+  --label processing --state open \
+  --json number,updatedAt \
+  --jq ".[] | select((now - (.updatedAt | fromdateiso8601)) > $STALE_THRESHOLD) | .number" \
+  2>/dev/null) || true
+if [[ -n "$STALE_ISSUES" ]]; then
+  while IFS= read -r STALE_NUM; do
+    log "Recovering stuck issue #$STALE_NUM (processing >${STALE_THRESHOLD}s)"
+    fail_issue "$STALE_NUM" "Timed out in processing state (>${STALE_THRESHOLD}s); poller likely crashed. Re-open and re-label as queued to retry."
+  done <<< "$STALE_ISSUES"
+fi
+
 log "Polling for queued issues..."
 
 ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
@@ -108,10 +121,26 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     continue
   fi
 
+  # Re-fetch labels to reduce multi-host race window before claiming the issue.
+  # Skipped on empty/error output (network failure or test stub) — fail open.
+  _REFETCH_LABELS=$(gh issue view "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
+    --json labels --jq '[.labels[].name]' 2>/dev/null) || true
+  if [[ -n "$_REFETCH_LABELS" ]]; then
+    if echo "$_REFETCH_LABELS" | jq -e 'index("processing") != null' >/dev/null 2>&1; then
+      log "Issue #$ISSUE_NUM already claimed by another host, skipping"
+      continue
+    fi
+    if ! echo "$_REFETCH_LABELS" | jq -e 'index("queued") != null' >/dev/null 2>&1; then
+      log "Issue #$ISSUE_NUM no longer queued, skipping"
+      continue
+    fi
+  fi
+
   gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
-    --remove-label queued --add-label processing
+    --remove-label queued --add-label processing \
+    || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping"; continue; }
   gh issue comment "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
-    --body "Processing started at $(date -Iseconds) on $(hostname)"
+    --body "Processing started at $(date -Iseconds) on $(hostname)" || true
 
   BRANCH_NAME="claude/${ISSUE_NUM}-$(slugify "$ISSUE_TITLE")"
   START_TIME=$(date +%s)
@@ -150,7 +179,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
       exit 0  # already handled — exit 0 prevents outer || handler from double-calling fail_issue
     fi
 
-    git push -u origin "$BRANCH_NAME"
+    git push -u --force-with-lease origin "$BRANCH_NAME"
 
     PR_URL=$(gh pr create \
       --repo "$TARGET_REMOTE" \
