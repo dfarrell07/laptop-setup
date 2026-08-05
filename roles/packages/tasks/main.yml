@@ -1449,6 +1449,12 @@
         dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
         remote_src: true
 
+    - name: Set krew installer executable
+      when: packages_krew_check.rc != 0
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+        mode: "0755"
+
     - name: Run krew installer
       when: packages_krew_check.rc != 0
       ansible.builtin.command:

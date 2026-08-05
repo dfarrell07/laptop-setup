@@ -115,6 +115,19 @@
     state: absent
   when: dotfiles_legacy_gitconfig.stat.exists
 
+- name: Assert identity variables are set (not CHANGE_ME sentinels)
+  ansible.builtin.assert:
+    that:
+      - dotfiles_github_user != 'CHANGE_ME'
+      - dotfiles_user_name != 'CHANGE_ME'
+      - dotfiles_user_email_work != 'CHANGE_ME'
+      - dotfiles_user_email_personal != 'CHANGE_ME'
+    fail_msg: >-
+      Set dotfiles_github_user, dotfiles_user_name, dotfiles_user_email_work, and
+      dotfiles_user_email_personal in config.yml before provisioning.
+      These drive git commit attribution and repo URLs; 'CHANGE_ME' would be written
+      to ~/.config/git/config for every git commit.
+
 - name: Deploy gitconfig
   ansible.builtin.template:
     src: gitconfig.j2
