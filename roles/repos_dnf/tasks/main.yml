@@ -202,21 +202,16 @@
       ansible.builtin.yum_repository:
         name: docker-ce
         description: Docker CE Stable
-        baseurl: >-
-          https://download.docker.com/linux/{{
-          'fedora' if ansible_facts['distribution'] == 'Fedora'
-          else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
-          else 'rhel')
-          }}/$releasever/$basearch/stable
+        baseurl: "https://download.docker.com/linux/{{ _docker_distro }}/$releasever/$basearch/stable"
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: >-
-          https://download.docker.com/linux/{{
-          'fedora' if ansible_facts['distribution'] == 'Fedora'
-          else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
-          else 'rhel')
-          }}/gpg
+        gpgkey: "https://download.docker.com/linux/{{ _docker_distro }}/gpg"
         enabled: true
+      vars:
+        _docker_distro: >-
+          {{ 'fedora' if ansible_facts['distribution'] == 'Fedora'
+             else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
+             else 'rhel') }}
   rescue:
     - name: Record Docker CE repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -323,6 +318,7 @@
   when:
     - repo_rpmfusion_free
     - ansible_facts['distribution'] == 'Fedora'
+    - not csb_detected
   block:
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
@@ -341,6 +337,7 @@
   when:
     - repo_rpmfusion_nonfree
     - ansible_facts['distribution'] == 'Fedora'
+    - not csb_detected
   block:
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
@@ -359,22 +356,17 @@
   when: repo_tailscale
   block:
     - name: Add Tailscale stable repo
+      vars:
+        _ts_path: >-
+          {{ 'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora' else 'fedora' }}
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable
         # Tailscale uses a single static 'fedora' path for all Fedora releases (no per-version subdirectory)
-        baseurl: >-
-          https://pkgs.tailscale.com/stable/{{
-          'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora'
-          else 'fedora'
-          }}/$basearch
+        baseurl: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/$basearch"
         gpgcheck: true
         repo_gpgcheck: true
-        gpgkey: >-
-          https://pkgs.tailscale.com/stable/{{
-          'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora'
-          else 'fedora'
-          }}/repo.gpg
+        gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
         enabled: true
   rescue:
     - name: Record Tailscale repo failure

@@ -71,8 +71,6 @@
     src: zshrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
     mode: "0644"
-    backup: true
-
 - name: Check if gitconfig exists
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.config/git/config"
@@ -103,8 +101,6 @@
     src: gitconfig.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/config"
     mode: "0644"
-    backup: true
-
 - name: Ensure git global hook template directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks"
@@ -115,7 +111,6 @@
   ansible.builtin.copy:
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-commit"
     mode: "0755"
-    backup: true
     content: |
       #!/bin/sh
       # Use '# gitleaks:allow' on a line to suppress a false positive
@@ -138,7 +133,6 @@
   ansible.builtin.copy:
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/commit-msg"
     mode: "0755"
-    backup: true
     content: |
       #!/bin/sh
       msg=$(head -1 "$1")
@@ -204,7 +198,6 @@
   ansible.builtin.copy:
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/prepare-commit-msg"
     mode: "0755"
-    backup: true
     content: |
       #!/bin/sh
       # Chain to per-repo prepare-commit-msg hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
@@ -217,7 +210,6 @@
   ansible.builtin.copy:
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-push"
     mode: "0755"
-    backup: true
     content: |
       #!/bin/sh
       # Chain to per-repo pre-push hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
@@ -244,7 +236,6 @@
         co: pr checkout
     dest: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
     mode: "0600"
-    backup: true
     force: false
 
 - name: Deploy git conditional includes
@@ -252,7 +243,6 @@
     src: "{{ item }}.j2"
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/{{ item }}"
     mode: "0644"
-    backup: true
   loop:
     - config-work
     - config-personal
@@ -262,8 +252,6 @@
     src: gitignore_global.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/ignore"
     mode: "0644"
-    backup: true
-
 - name: Ensure ripgrep config directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/ripgrep"
@@ -275,8 +263,6 @@
     src: ripgreprc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
-    backup: true
-
 - name: Ensure tmux config directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/tmux"
@@ -288,15 +274,11 @@
     src: tmux.conf.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
-    backup: true
-
 - name: Deploy vimrc
   ansible.builtin.template:
     src: vimrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.vimrc"
     mode: "0644"
-    backup: true
-
 - name: Ensure nvim config directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/nvim"
@@ -310,15 +292,11 @@
       source ~/.vimrc
     dest: "{{ ansible_facts['user_dir'] }}/.config/nvim/init.vim"
     mode: "0644"
-    backup: true
-
 - name: Deploy bashrc
   ansible.builtin.template:
     src: bashrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
-    backup: true
-
 - name: Ensure autostart config directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
@@ -333,7 +311,6 @@
       Hidden=true
     dest: "{{ ansible_facts['user_dir'] }}/.config/autostart/gnome-keyring-ssh.desktop"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 - name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
@@ -355,7 +332,6 @@
     src: ssh-agent.service.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/ssh-agent.service"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
   notify: Restart ssh-agent
 
@@ -374,7 +350,6 @@
     content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy XDG base directory environment.d config
@@ -386,7 +361,6 @@
       XDG_CACHE_HOME=$HOME/.cache
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/xdg.conf"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
@@ -394,7 +368,6 @@
     content: "GOTMPDIR=$HOME/tmp\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 # --- macOS: SSH agent via launchd ---
@@ -424,7 +397,6 @@
     src: ssh-agent.plist.j2
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
     mode: "0644"
-    backup: true
   when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
@@ -474,14 +446,11 @@
     src: ssh_config.j2
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
     mode: "0600"
-    backup: true
-
 - name: Deploy SSH socket tmpfiles config
   ansible.builtin.copy:
     content: "d %t/ssh 0700 - - -\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/ssh-sockets.conf"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 - name: Deploy tmux socket tmpfiles config (TMUX_TMPDIR=$XDG_RUNTIME_DIR/tmux)
@@ -489,7 +458,6 @@
     content: "d %t/tmux 0700 - - -\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/tmux-sockets.conf"
     mode: "0644"
-    backup: true
   when: ansible_facts['system'] == 'Linux'
 
 - name: Create SSH socket directory in XDG runtime dir
@@ -525,15 +493,11 @@
       warn_timeout = "10s"
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnv.toml"
     mode: "0644"
-    backup: true
-
 - name: Deploy direnv user stdlib (direnvrc with layout_go)
   ansible.builtin.template:
     src: direnvrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
-    backup: true
-
 - name: Set .npmrc permissions if exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.npmrc"
@@ -559,6 +523,5 @@
       # export ANTHROPIC_VERTEX_PROJECT_ID=...
     dest: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
     mode: "0600"
-    backup: true
     force: false
   when: profile == 'work'

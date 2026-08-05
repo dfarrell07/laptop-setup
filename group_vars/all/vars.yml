@@ -95,3 +95,6 @@ ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and
 # false on hybrid Fedora CSB where the user manages their own system.
 # Used in rescue blocks to route IT ticket vs. generic warning.
 csb_rhel: "{{ csb_detected and ansible_facts['distribution'] != 'Fedora' }}"
+
+containers_registries: >-
+  {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}

@@ -190,7 +190,7 @@ fi
 
 # --- Identity vars CHANGE_ME check ---
 if [[ -f "$CONFIG_FILE" ]]; then
-  for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal; do
+  for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal system_timezone; do
     if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "warn" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
     elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then

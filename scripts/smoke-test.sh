@@ -636,6 +636,7 @@ if [[ -f /etc/kernel/cmdline ]]; then
   _kcmd_ok=true
   echo "$_kcmd" | grep -q "vsyscall=none"       || _kcmd_ok=false
   echo "$_kcmd" | grep -q "page_alloc.shuffle=1" || _kcmd_ok=false
+  echo "$_kcmd" | grep -q "init_on_free=1"       || _kcmd_ok=false
   if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
     echo "$_kcmd" | grep -q "amd_iommu=on"       || _kcmd_ok=false
     grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
@@ -1640,7 +1641,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
   _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
-  _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-1}" "sysctl-kexec-disabled"
+  _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-0}" "sysctl-kexec-disabled"
   _io_uring_expected=$(awk -F' *= *' '/^kernel\.io_uring_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
@@ -1750,11 +1751,11 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "kernel.sysrq" "${_sysrq_expected:-0}" "sysctl-sysrq-disabled"
   # kernel.panic: read expected value from deployed config (system_kernel_panic defaults to 0 in default.config.yml)
   _panic_expected=$(awk -F' *= *' '/^kernel\.panic /{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
-  _sysctl_check "kernel.panic" "${_panic_expected:-10}" "sysctl-panic-reboot"
+  _sysctl_check "kernel.panic" "${_panic_expected:-0}" "sysctl-panic-reboot"
   # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 1).
   # Hardcoding 1 here would false-FAIL on machines with system_kernel_panic_on_oops: 0 (OVN-K/bpfman debugging).
   _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
-  _sysctl_check "kernel.panic_on_oops" "${_panic_on_oops_expected:-1}" "sysctl-panic-on-oops"
+  _sysctl_check "kernel.panic_on_oops" "${_panic_on_oops_expected:-0}" "sysctl-panic-on-oops"
   # accept_ra: read expected value from deployed config (system_ipv6_accept_ra in config.yml may override default 0).
   _accept_ra_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.ipv6.conf.all.accept_ra" "${_accept_ra_expected:-0}" "sysctl-no-accept-ra"
