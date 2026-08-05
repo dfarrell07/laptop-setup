@@ -156,6 +156,7 @@
           distrobox assemble create
           {{ '--replace' if distrobox_container_replace | bool else '' }}
           --file {{ distrobox_ini_path }}
+        timeout: "{{ distrobox_create_timeout | default(600) }}"
       register: distrobox_create_result
       changed_when: >-
         'already exists' not in
@@ -220,6 +221,7 @@
           --distro {{ container_distro | default('fedora') }}
           --release {{ container_release | default(ansible_facts['distribution_major_version']) }}
           {{ distrobox_container_name }}
+        timeout: "{{ distrobox_create_timeout | default(600) }}"
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
   rescue:

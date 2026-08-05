@@ -110,6 +110,7 @@
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto
   register: container_golangci_lint_result
+  timeout: 300
   failed_when: false
 
 - name: Install subctl via go install (Submariner cluster management)
@@ -117,6 +118,7 @@
     cmd: >-
       go install github.com/submariner-io/subctl/cmd/subctl@{{ distrobox_subctl_version }}
     creates: "{{ ansible_env.HOME }}/go/bin/subctl"
+    timeout: 600
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"

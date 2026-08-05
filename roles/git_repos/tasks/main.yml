@@ -187,6 +187,7 @@
   register: git_repos_pull_results
   changed_when: "git_repos_pull_results.rc == 0 and 'Already up to date' not in git_repos_pull_results.stdout"
   failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
+  timeout: 120
 
 - name: Report failed pulls
   ansible.builtin.debug:
