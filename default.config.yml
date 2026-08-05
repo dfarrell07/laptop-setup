@@ -109,6 +109,12 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set 1 in config.yml for CIS compliance (disables gdb -p / strace -p on unrelated processes)
 #   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
+#   system_enable_ip_forward: true      (roles/system/defaults) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
+#                                        for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts
+#   system_bluetooth_name: "Bluetooth"  (roles/system/defaults) — BlueZ Name= shown to Bluetooth scanners; set to hostname
+#                                        or team alias to avoid broadcasting the machine's FQDN
+#   system_crypto_policy_target: DEFAULT:NO-SHA1  (roles/system/defaults) — crypto policy applied by update-crypto-policies;
+#                                        override in config.yml e.g. DEFAULT:NO-SHA1:NO-RSASSA-PSS for stricter SHA-1 removal
 #   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
 #                                        (default: kernel-blocked, no override via USBGuard)
 #   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
