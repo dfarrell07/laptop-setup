@@ -3209,6 +3209,8 @@
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
         - "/etc/systemd/system/{{  'dnf5-automatic' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
+      loop_control:
+        label: "{{ item.key }}"
       register: system_aide_unit_removal
 
     - name: Reload systemd after removing AIDE units  # noqa: no-handler
