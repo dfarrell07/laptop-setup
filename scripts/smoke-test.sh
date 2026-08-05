@@ -1838,10 +1838,11 @@ fi
 
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
 if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
-  if grep -qE '^DNSOverTLS=' /etc/systemd/resolved.conf.d/99-dot.conf; then
+  if grep -qE '^DNSOverTLS=' /etc/systemd/resolved.conf.d/99-dot.conf && \
+     grep -qE '^Domains=~\.' /etc/systemd/resolved.conf.d/99-dot.conf; then
     record "resolved-dot-conf" "PASS"
   else
-    record "resolved-dot-conf" "FAIL" "99-dot.conf missing DNSOverTLS= directive — run: make system"
+    record "resolved-dot-conf" "FAIL" "99-dot.conf missing DNSOverTLS= or Domains=~. directive — run: make system"
   fi
 fi
 

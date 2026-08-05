@@ -228,6 +228,10 @@ system_dns_fallback: "9.9.9.9#dns.quad9.net 8.8.8.8#dns.google"
 # ~. = catch-all required for Tailscale MagicDNS; VPN routing domains (redhat.com, ts.net) always win by specificity
 system_dns_domains: "~."
 
+# Crypto policy target for update-crypto-policies (Fedora/RHEL non-CSB only).
+# Override in config.yml, e.g. system_crypto_policy_target: DEFAULT:NO-SHA1:NO-RSASSA-PSS
+system_crypto_policy_target: DEFAULT:NO-SHA1
+
 # /tmp mount hardening (CIS 1.1.2.x): noexec,nosuid,nodev via systemd drop-in.
 # Set false if non-Go dev tools (pip, cargo, etc.) need to exec from /tmp; nosuid/nodev are preserved.
 system_tmp_noexec: true

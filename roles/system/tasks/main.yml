@@ -1954,6 +1954,7 @@
       ansible.builtin.command:
         cmd: sshd -t
       changed_when: false
+      check_mode: false  # read-only probe — must run in check mode
 
   rescue:
     - name: Remove broken sshd drop-in to prevent SSH lockout on next restart
@@ -1969,13 +1970,21 @@
 
 # Mask sshd.socket to prevent port-22 socket activation (sshd.service on port 722 is authoritative).
 # Without masking, 'systemctl start sshd.socket' would reopen port 22 bypassing the drop-in.
+- name: Check if sshd.socket unit file exists
+  ansible.builtin.command: systemctl cat sshd.socket
+  register: _sshd_socket_exists
+  changed_when: false
+  failed_when: false
+  when: not csb_rhel
+
 - name: Mask sshd.socket to prevent port-22 socket activation
   ansible.builtin.systemd:
     name: sshd.socket
     masked: true
     enabled: false
-  when: not csb_rhel  # only relevant when our port-722 sshd drop-in is deployed above
-  failed_when: false
+  when:
+    - not csb_rhel
+    - _sshd_socket_exists.rc | default(1) == 0
 
 # --- SELinux SSH port label ---
 - name: Label non-default SSH port for SELinux
@@ -2020,12 +2029,12 @@
     - not csb_rhel
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
-- name: Set crypto policy to DEFAULT:NO-SHA1
+- name: Set crypto policy to {{ system_crypto_policy_target }}
   ansible.builtin.command:
-    cmd: update-crypto-policies --set DEFAULT:NO-SHA1
+    cmd: update-crypto-policies --set {{ system_crypto_policy_target }}
   when:
     - system_crypto_policy.rc | default(-1) == 0
-    - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
+    - system_crypto_policy.stdout | default('') != system_crypto_policy_target
     - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
   register: system_crypto_policy_set
