@@ -3,7 +3,7 @@
   ansible.builtin.command:
     cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | bool else '' }} /tmp"
   become: true
-  register: _tmp_remount_handler_result  # noqa: var-naming[no-role-prefix]
+  register: _tmp_remount_handler_result
   changed_when: _tmp_remount_handler_result.rc == 0
   failed_when: false
 

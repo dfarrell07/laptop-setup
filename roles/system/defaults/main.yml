@@ -225,12 +225,12 @@ system_kernel_lockdown: integrity
 # locking out all users on the next sshd restart.
 # Must use lookup('env') not ansible_facts['user_id']/dir: those Ansible facts
 # resolve to root/root when the role runs with become: true at play level.
-real_user_home: "{{ lookup('env', 'HOME') }}"  # noqa: var-naming[no-role-prefix]
-real_user_id: "{{ lookup('env', 'USER') }}"  # noqa: var-naming[no-role-prefix]
+real_user_home: "{{ lookup('env', 'HOME') }}"
+real_user_id: "{{ lookup('env', 'USER') }}"
 
 # Fallback for standalone invocation — site.yml loads default.config.yml first.
 # Must match ssh_port in default.config.yml (currently 722); update both together.
-ssh_port: 722  # noqa: var-naming[no-role-prefix]
+ssh_port: 722
 system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
 system_ssh_channel_timeout: ""  # disabled: sshd 10.2p1 (Fedora 44) has bz3827 — UnusedConnectionTimeout fires immediately after
 system_ssh_unused_connection_timeout: 600  # seconds before idle connection with no channels is closed (0 to disable)

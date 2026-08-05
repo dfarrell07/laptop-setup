@@ -41,7 +41,7 @@
     msg: |
 
       ════════════════════════════════════════════════════════════════
-      IT TICKET {{ loop.index }}: {{ item.ticket.summary }}
+      IT TICKET {{ ansible_loop.index }}: {{ item.ticket.summary }}
       ════════════════════════════════════════════════════════════════
       Priority:  {{ item.ticket.priority }}
       Category:  {{ item.ticket.category }}
@@ -54,6 +54,7 @@
   loop: "{{ csb_failures }}"
   loop_control:
     label: "{{ item.ticket.summary }}"
+    extended: true
   when: _csb_has_failures | bool
   tags: [always]
 

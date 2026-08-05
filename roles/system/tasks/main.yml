@@ -67,7 +67,7 @@
     _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
   ansible.builtin.command:
     cmd: "mount -o remount,nosuid,nodev{{ _noexec_opt }} /tmp"
-  register: _tmp_remount_result  # noqa: var-naming[no-role-prefix]
+  register: _tmp_remount_result
   changed_when: _tmp_remount_result.rc == 0
   when:
     - >-
@@ -110,7 +110,7 @@
 - name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
-  register: _devshm_remount_result  # noqa: var-naming[no-role-prefix]
+  register: _devshm_remount_result
   changed_when: _devshm_remount_result.rc == 0
   when:
     - >-
@@ -272,7 +272,7 @@
 - name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev /home
-  register: _home_remount_result  # noqa: var-naming[no-role-prefix]
+  register: _home_remount_result
   changed_when: _home_remount_result.rc == 0
   when:
     - system_home_mountpoint.rc == 0
@@ -373,7 +373,7 @@
 - name: Apply /boot hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /boot
-  register: _boot_remount_result  # noqa: var-naming[no-role-prefix]
+  register: _boot_remount_result
   changed_when: _boot_remount_result.rc == 0
   when:
     - system_boot_mountpoint.rc == 0
@@ -503,7 +503,7 @@
 - name: Apply /boot/efi hardening immediately via remount  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,noexec /boot/efi
-  register: _boot_efi_remount_result  # noqa: var-naming[no-role-prefix]
+  register: _boot_efi_remount_result
   changed_when: _boot_efi_remount_result.rc == 0
   when:
     - system_boot_efi_mountpoint.rc == 0
@@ -3311,6 +3311,12 @@
     # Fire the AIDE reinit handler here if any conf path changed — this avoids
     # running aide --init twice on first provision (once from the handler, once
     # from the first-run block below when stat shows DB absent after handler built it).
+    # CAUTION: meta: flush_handlers has global scope — it drains every handler queued
+    # anywhere in the play up to this point, not just the AIDE one. On a run where
+    # SSH config, NM, resolved, chronyd, journald, or dconf tasks also changed,
+    # those handlers (Restart sshd, Restart NetworkManager, etc.) fire here rather
+    # than at play end. sshd restart sends SIGHUP to the controlling SSH session;
+    # run under tmux to survive it (documented in CLAUDE.md and troubleshooting.md).
     - name: Flush AIDE handlers before database existence check
       ansible.builtin.meta: flush_handlers
 

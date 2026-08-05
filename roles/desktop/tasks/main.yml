@@ -369,7 +369,7 @@
 - name: Check macOS firewall state
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
-  register: _fw_state  # noqa: var-naming[no-role-prefix]
+  register: _fw_state
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   become: true
@@ -380,7 +380,7 @@
 - name: Enable macOS firewall
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-  register: _fw_enable_result  # noqa: var-naming[no-role-prefix]
+  register: _fw_enable_result
   changed_when: true
   become: true
   tags: [become]
@@ -399,7 +399,7 @@
 - name: Check macOS firewall stealth mode state
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
-  register: _fw_stealth  # noqa: var-naming[no-role-prefix]
+  register: _fw_stealth
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   become: true
@@ -410,7 +410,7 @@
 - name: Enable macOS firewall stealth mode
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
-  register: _fw_stealth_enable_result  # noqa: var-naming[no-role-prefix]
+  register: _fw_stealth_enable_result
   changed_when: true
   become: true
   tags: [become]

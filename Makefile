@@ -23,10 +23,10 @@ help:
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
-	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-packages-binaries smoke-test smoke-test-container check"
+	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks"
-	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit"
+	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit pip-lock pip-sync"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)

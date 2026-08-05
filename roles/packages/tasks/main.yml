@@ -1427,7 +1427,7 @@
           oc image extract registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}
           --path="/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz":/tmp/
           --confirm
-      register: _pkg_subctl_extract  # noqa: var-naming[no-role-prefix]
+      register: _pkg_subctl_extract
       changed_when: _pkg_subctl_extract.rc == 0
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
@@ -1448,7 +1448,7 @@
           rm -rf "$TMPDIR" "$TARBALL"
           echo "INSTALLED"
         executable: /bin/bash
-      register: _pkg_subctl_install  # noqa: var-naming[no-role-prefix]
+      register: _pkg_subctl_install
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       failed_when: false
       loop: "{{ packages_subctl_rh_versions }}"
