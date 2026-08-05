@@ -91,8 +91,8 @@
     - name: Warn that oc + kubectl download failed
       ansible.builtin.debug:
         msg: >-
-          WARNING: Failed to download oc/kubectl from the OpenShift mirror
-          (network unreachable or mirror unavailable inside the container).
+          WARNING: Failed to download oc/kubectl from the OpenShift mirror.
+          Error: {{ ansible_failed_result.msg | default('unknown error') | truncate(200) }}.
           Play 3 continues — oc will not be available until the next provision run.
 
     - name: Record that oc was not installed

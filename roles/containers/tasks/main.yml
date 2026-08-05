@@ -25,6 +25,72 @@
     mode: "0600"
   when: containers_auth_stat.stat.exists
 
+- name: Check vault registry pre-auth status
+  ansible.builtin.command:
+    cmd: "podman login --get-login {{ item.registry }}"
+  loop: "{{ registry_tokens | default([]) }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  register: containers_vault_pre_auth
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - registry_tokens | default([]) | length > 0
+
+- name: Authenticate to container registries from vault
+  ansible.builtin.command:
+    cmd: "podman login --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
+    stdin: "{{ item.item.token }}"
+  loop: "{{ containers_vault_pre_auth.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.registry }}"
+  no_log: true
+  changed_when: true
+  failed_when: false
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - registry_tokens | default([]) | length > 0
+    - item.rc != 0 or (item.stdout | trim) != item.item.username
+
+- name: Check registry auth status after vault login
+  ansible.builtin.command:
+    cmd: "podman login --get-login {{ item.registry }}"
+  loop: "{{ registry_tokens | default([]) }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  register: containers_vault_auth_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - ansible_facts['system'] == 'Linux'
+    - registry_tokens | default([]) | length > 0
+    - >-
+      (containers_vault_pre_auth.results |
+       selectattr('item.registry', 'equalto', item.registry) |
+       selectattr('rc', 'ne', 0) | list | length > 0) or
+      ((containers_vault_pre_auth.results |
+        selectattr('item.registry', 'equalto', item.registry) |
+        map(attribute='stdout') | list | first | default('') | trim) != item.username)
+
+- name: Warn if vault registry login did not persist credentials
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: vault login for {{ item.item.registry }} did not persist credentials
+      (podman login --get-login returned rc={{ item.rc }}).
+      Check that vault_registry_tokens has correct username/token and
+      the registry is reachable.
+  loop: "{{ containers_vault_auth_status.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.registry | default('unknown') }}"
+  when:
+    - item.rc is defined
+    - item.rc != 0
+
 - name: Check registry auth status
   ansible.builtin.command:
     cmd: "podman login --get-login {{ item }}"
@@ -44,49 +110,6 @@
   loop: "{{ containers_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item | default('unknown') }}"
-  when:
-    - item.rc is defined
-    - item.rc != 0
-
-- name: Authenticate to container registries from vault
-  ansible.builtin.command:
-    cmd: "podman login --username {{ item.username }} --password-stdin {{ item.registry }}"
-    stdin: "{{ item.token }}"
-  loop: "{{ registry_tokens | default([]) }}"
-  loop_control:
-    label: "{{ item.registry }}"
-  no_log: true
-  changed_when: false
-  failed_when: false
-  when:
-    - ansible_facts['system'] == 'Linux'
-    - registry_tokens | default([]) | length > 0
-
-- name: Check registry auth status after vault login
-  ansible.builtin.command:
-    cmd: "podman login --get-login {{ item.registry }}"
-  loop: "{{ registry_tokens | default([]) }}"
-  loop_control:
-    label: "{{ item.registry }}"
-  no_log: true
-  register: containers_vault_auth_status
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  when:
-    - ansible_facts['system'] == 'Linux'
-    - registry_tokens | default([]) | length > 0
-
-- name: Warn if vault registry login did not persist credentials
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: vault login for {{ item.item.registry }} did not persist credentials
-      (podman login --get-login returned rc={{ item.rc }}).
-      Check that vault_registry_tokens has correct username/token and
-      the registry is reachable.
-  loop: "{{ containers_vault_auth_status.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.registry | default('unknown') }}"
   when:
     - item.rc is defined
     - item.rc != 0
@@ -139,7 +162,7 @@
   failed_when: false
 
 # --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---
-- name: Set containers.conf log_driver for kind (k8s-file avoids journald issues)
+- name: Set containers.conf log_driver to k8s-file (global; avoids journald issues in kind nodes, applies to all containers)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
