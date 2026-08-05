@@ -32,12 +32,21 @@ dotfiles_user_email_work: 'CHANGE_ME'
 dotfiles_user_email_personal: 'CHANGE_ME'
 system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
-# Feature toggles (naming: install_<feature>)
-install_docker: false  # true = leave docker.socket unmasked; does NOT install docker-ce (use repo_docker_ce)
-install_vpn: true  # true = Mullvad VPN on Fedora (system role) + corporate VPN packages on RHEL/CSB (redhat role)
-install_virtualization: true
-
 # Additional toggles available via role defaults (override in config.yml):
+#   install_docker: false              (group_vars/all/vars.yml) — leave docker.socket unmasked; does NOT install docker-ce
+#   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
+#   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
+#   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on Fedora F43+ (gh in standard repos); activates on RHEL/Rocky
+#   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
+#   repo_google_cloud_sdk: false       (group_vars/all/vars.yml) — opt in when gcloud needed; GCP repo adds dnf metadata overhead
+#   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
+#   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
+#   repo_slack: false                  (group_vars/all/vars.yml) — packagecloud RPM has gpgcheck=false; opt in or use Flatpak
+#   repo_tailscale: true               (group_vars/all/vars.yml)
+#   repo_acli: true                    (group_vars/all/vars.yml) — no-op without repos_dnf_acli_baseurl in config.yml
+#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer rootless Podman; Docker CE conflicts with Podman
+#   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
+#   repo_redhat: true                  (group_vars/all/vars.yml)
 #   system_install_usbguard: true      (roles/system/defaults)
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
 #   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; machines with a dedicated /var/log/audit partition
@@ -273,18 +282,6 @@ system_kexec_load_disabled: 0  # kdump requires kexec; kexec_load_disabled=1 blo
 system_ptrace_scope: 0  # gdb -p / dlv attach on own running processes; 0 is Fedora workstation default; CIS default is 1
 system_kernel_panic_on_oops: 0  # dev workstation: non-fatal kernel oops should log-and-continue rather than halt (CIS default is 1)
 system_kernel_panic: 0          # dev workstation: preserve oops state for kernel debugging (KASAN/UBSAN); CIS default is 10 (auto-reboot)
-# Third-party repos (naming: repo_<name>, dnf-based OS only)
-repo_gh_cli: true  # no-op on Fedora (gh ships in standard repos F43+); only activates on RHEL/Rocky
-repo_google_chrome: false  # opt in; nothing auto-installed on Linux and Chrome repo adds dnf metadata overhead
-repo_google_cloud_sdk: false  # opt in when gcloud is needed; GCP repo adds metadata overhead on every dnf invocation
-repo_rpmfusion_free: true    # Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC; nothing auto-installed
-repo_rpmfusion_nonfree: false  # Fedora-only; NVIDIA proprietary drivers, non-free firmware; opt in explicitly
-repo_slack: false   # packagecloud Slack RPM repo has gpgcheck=false — opt in explicitly or use Flatpak instead
-repo_tailscale: true
-repo_acli: true  # no-op without repos_dnf_acli_baseurl in config.yml (internal Red Hat Jira/Confluence CLI mirror)
-repo_docker_ce: false  # false: prefer rootless Podman (ships with Fedora); Docker CE conflicts with Podman
-repo_mullvad: true  # privacy/anonymity VPN (distinct from Tailscale); Fedora-only, skipped on RHEL/Rocky and CSB
-repo_redhat: true
 # Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
 # Set these in config.yml to activate the acli and redhat-internal repo tasks:
 #   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror

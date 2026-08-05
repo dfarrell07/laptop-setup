@@ -43,8 +43,9 @@ needs_container_tier: "host-only"
 # during full playbook runs via pre_flight_checks.yml include_vars).
 packages_install_binaries: true  # roles/packages/defaults/main.yml:239; consumed by packages, claude
 
-# Feature toggle baselines matching default.config.yml — eliminates | default(X) in role tasks.
-# Users override these in config.yml (higher precedence via include_vars).
+# Feature toggle baselines (single source of truth) — eliminates | default(X) in role tasks.
+# Users override these in config.yml (higher precedence via include_vars). These are NOT
+# duplicated in default.config.yml; vars.yml is authoritative for standalone role invocations.
 repo_gh_cli: true
 repo_google_chrome: false
 repo_google_cloud_sdk: false
