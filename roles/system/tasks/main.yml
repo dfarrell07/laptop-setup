@@ -2225,7 +2225,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not csb_rhel
-    - system_dnf_automatic_installed is not failed
+    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
@@ -2235,7 +2235,7 @@
   when:
     - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
     - not csb_rhel
-    - system_dnf_automatic_installed is not failed
+    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---

@@ -1273,7 +1273,7 @@
     - name: Download krew tarball
       when: packages_krew_check.rc != 0
       ansible.builtin.get_url:
-        url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_version }}/krew-linux_amd64.tar.gz"
+        url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
         dest: /tmp/krew.tar.gz
         checksum: "sha256:{{ packages_krew_sha256 }}"
         mode: "0644"
@@ -1297,13 +1297,13 @@
 
     - name: Upgrade krew
       when:
-        - packages_krew_version not in (packages_krew_check.stdout)
+        - packages_krew_bootstrap_version not in (packages_krew_check.stdout)
         - packages_krew_check.rc == 0
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
       register: packages_krew_upgrade
       # NOTE: krew self-manages its upgrade path — this upgrades to krew's own latest release,
-      # NOT necessarily to packages_krew_version. packages_krew_version only pins the initial tarball
+      # NOT necessarily to packages_krew_bootstrap_version. packages_krew_bootstrap_version only pins the initial tarball
       # install (above). Subsequent upgrades follow krew's own release cadence.
       changed_when: packages_krew_upgrade.stdout | length > 0
 

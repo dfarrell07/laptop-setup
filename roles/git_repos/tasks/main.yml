@@ -148,6 +148,7 @@
     update: false
     version: HEAD
     depth: "{{ item.depth | default(omit) }}"
+    accept_hostkey: true
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
