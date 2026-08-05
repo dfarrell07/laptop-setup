@@ -29,6 +29,7 @@
     update: false
   register: dotfiles_forgit_result
   failed_when: false
+  when: not dotfiles_ohmyzsh_result.failed
 
 - name: Warn if forgit clone failed
   ansible.builtin.debug:
@@ -343,7 +344,15 @@
     enabled: true
     daemon_reload: true
   when: ansible_facts['system'] == 'Linux'
+  register: _dotfiles_ssh_agent_enable
   failed_when: false
+
+- name: Warn if SSH agent enable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: SSH agent user service could not be enabled (no systemd --user?).
+      SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
+  when: _dotfiles_ssh_agent_enable.rc | default(0) != 0
 
 - name: Deploy SSH agent environment.d config
   ansible.builtin.copy:

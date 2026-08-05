@@ -711,10 +711,14 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if lsblk -o FSTYPE 2>/dev/null | grep -q "crypto_LUKS"; then record "luks-encryption" "PASS"
   else record "luks-encryption" "WARN" "no LUKS volumes found — full-disk encryption not confirmed"; fi
   # Stale rd.luks.key param: if cmdline references a keyfile but it doesn't exist on /boot,
-  # that's a latent foothold — a keyfile dropped there unlocks LUKS without passphrase
+  # that's a latent foothold — a keyfile dropped there unlocks LUKS without passphrase.
+  # UUID-device form (rd.luks.key=/path:UUID=...) means keyfile is on a separate device —
+  # intentional and active; do not warn.
   if grep -q 'rd.luks.key' /proc/cmdline 2>/dev/null; then
     if [[ -f /boot/keyfile ]]; then
       record "luks-no-keyfile" "FAIL" "rd.luks.key in cmdline AND /boot/keyfile exists — LUKS key exposed on unencrypted /boot"
+    elif grep -qE 'rd\.luks\.key=[^[:space:]:]+:(UUID=|/dev/)' /proc/cmdline; then
+      record "luks-no-keyfile" "PASS"
     else
       record "luks-no-keyfile" "WARN" "stale rd.luks.key param in cmdline but no keyfile on /boot — clean up with grubby --remove-args"
     fi
