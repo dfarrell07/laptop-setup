@@ -672,6 +672,11 @@
         'kernel.io_uring_disabled': system_io_uring_disabled | int
       }) | combine(system_sysctl_extra) }}" # noqa: jinja[spacing]
 
+- name: Merge ip_forward sysctls when system_enable_ip_forward
+  ansible.builtin.set_fact:
+    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'net.ipv4.ip_forward': 1, 'net.ipv6.conf.all.forwarding': 1}) }}"
+  when: system_enable_ip_forward | bool
+
 # CIS 3.3.9 sets tcp_timestamps=0 to prevent OS fingerprinting and uptime disclosure.
 # On CSB, Red Hat IT network diagnostics rely on TCP timestamps for RTT measurement
 # (tcpdump analysis, network quality monitoring, PAWS). Restore to the kernel default
@@ -740,11 +745,16 @@
     permanent: true
     immediate: true
     state: enabled
-  loop: "{{ ansible_facts['interfaces'] | reject('match', '^(lo|tailscale\\d*|virbr.*|podman.*|br-.*|veth.*|docker.*)$') | list }}"
+  loop: "{{ ansible_facts['interfaces'] | reject('match', '^(lo|tailscale\\d*|tun\\d*|virbr.*|podman.*|br-.*|veth.*|docker.*)$') | list }}"
+  register: _system_iface_drop_zone
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above
-  failed_when: false
+  failed_when: >-
+    _system_iface_drop_zone.failed | default(false) and
+    'ZONE_ALREADY_SET' not in (_system_iface_drop_zone.msg | default(''))
+  # ZONE_ALREADY_SET is tolerated: interface already in drop zone is idempotency, not a failure.
+  # All other failures (NM conflict, zone not found, permission denied) are surfaced.
 
 - name: Remove default services from public zone
   ansible.posix.firewalld:

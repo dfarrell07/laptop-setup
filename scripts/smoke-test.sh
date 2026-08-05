@@ -1768,7 +1768,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.default.log_martians"        "1" "sysctl-log-martians-default"
   _sysctl_check "net.ipv4.icmp_echo_ignore_broadcasts"      "1" "sysctl-icmp-no-echo-broadcast"
   _sysctl_check "net.ipv4.icmp_ignore_bogus_error_responses" "1" "sysctl-icmp-no-bogus-error"
-  _sysctl_check "net.ipv4.ip_forward"                 "1" "sysctl-ip-forward"
+  _ip_fwd_expected=$(awk -F' *= *' '/^net\.ipv4\.ip_forward/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  if [[ -n "$_ip_fwd_expected" ]]; then
+    _sysctl_check "net.ipv4.ip_forward" "$_ip_fwd_expected" "sysctl-ip-forward"
+  else
+    record "sysctl-ip-forward" "WARN" "net.ipv4.ip_forward not in 90-hardening.conf (system_enable_ip_forward: false — Kubernetes/Tailscale routing not expected)"
+  fi
   # nf_conntrack_max: module-gated sysctl — WARN if nf_conntrack not yet loaded, FAIL if loaded but wrong
   _nfct=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null) || true
   if [[ -z "$_nfct" ]]; then record "sysctl-conntrack-max" "WARN" "nf_conntrack module not loaded (net.netfilter.nf_conntrack_max unavailable)"

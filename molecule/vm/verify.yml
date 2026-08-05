@@ -299,6 +299,7 @@
       ansible.builtin.assert:
         that: verify_ip_forward.stdout == '1'
         fail_msg: "net.ipv4.ip_forward is not 1 — pod routing and Tailscale subnet routing will fail"
+      when: hostvars[inventory_hostname].system_enable_ip_forward | default(true) | bool
 
     - name: Check sysctl net.bridge.bridge-nf-call-iptables
       ansible.builtin.command: sysctl -n net.bridge.bridge-nf-call-iptables
