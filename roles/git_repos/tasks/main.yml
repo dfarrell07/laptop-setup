@@ -211,10 +211,10 @@
 - name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: >-
-      old=$(git remote get-url "{{ item.1.name }}" 2>/dev/null);
-      if [ "$old" = "{{ item.1.url }}" ]; then true;
-      elif [ -n "$old" ]; then git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" && echo updated;
-      else git remote add "{{ item.1.name }}" "{{ item.1.url }}" && echo added; fi
+      old=$(git remote get-url {{ item.1.name | quote }} 2>/dev/null);
+      if [ "$old" = {{ item.1.url | quote }} ]; then true;
+      elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
+      else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:

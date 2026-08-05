@@ -40,6 +40,16 @@ install firewire-ohci /bin/false
 blacklist firewire-sbp2
 install firewire-sbp2 /bin/false
 
+{% if system_disable_thunderbolt | bool %}
+# Thunderbolt disabled — system_disable_thunderbolt=true in config.yml.
+# Mitigates Thunderspy-class DMA attacks; only set on machines with no Thunderbolt peripherals.
+# Default is false (enabled) — required for Thunderbolt docks, displays, and peripherals.
+blacklist thunderbolt
+install thunderbolt /bin/false
+blacklist thunderbolt_net
+install thunderbolt_net /bin/false
+{% endif %}
+
 {% if system_disable_usb_storage | bool %}
 # USB mass storage: kernel-blocked (system_disable_usb_storage=true in config.yml).
 # USBGuard cannot override kernel-level blocking — USB drives will not mount even with USBGuard rules.

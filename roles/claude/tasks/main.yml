@@ -43,6 +43,12 @@
           WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
           Install manually: curl -fsSL {{ claude_install_url }} | bash
       when: not csb_rhel
+    - name: Fail — Claude Code install failed on non-CSB machine
+      ansible.builtin.fail:
+        msg: >-
+          Claude Code install failed ({{ claude_install_url }} may be blocked).
+          Install manually: curl -fsSL {{ claude_install_url }} | bash
+      when: not csb_rhel
 
 - name: Fail when install method is unrecognized
   ansible.builtin.fail:
@@ -143,6 +149,13 @@
   failed_when: false
 
 # --- Task queue (systemd timer + poller script) ---
+- name: Assert claude_queue_repo is set when queue is enabled
+  ansible.builtin.assert:
+    that:
+      - claude_queue_repo | length > 0
+    fail_msg: "claude_queue_repo must be set in config.yml when claude_queue_enabled=true"
+  when: claude_queue_enabled | bool
+
 - name: Install util-linux for flock (macOS, queue enabled)
   community.general.homebrew:
     name: util-linux

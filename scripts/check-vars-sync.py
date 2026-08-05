@@ -5,13 +5,26 @@ group_vars/all/vars.yml, which is the single source of truth for these values.
 These vars were previously duplicated in roles/system/defaults/main.yml but that
 copy was removed (cycle 1 refactor); vars.yml is now authoritative for both
 full-playbook and standalone molecule verify invocations (group_vars, precedence 5).
+
+Also verifies that pipx version pins in roles/packages/defaults/main.yml satisfy
+the specifier ranges in requirements-test.txt, keeping the two files in sync.
 """
 import sys
 import pathlib
 import yaml
+from packaging.version import Version
+from packaging.specifiers import SpecifierSet
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
+PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
+REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
+
+# Mapping from Ansible var name to pip package name as it appears in requirements-test.txt.
+PIPX_VERSION_VARS = {
+    "packages_yamllint_version": "yamllint",
+    "packages_ansible_lint_version": "ansible-lint",
+}
 
 # These must be present in vars.yml with the expected Python type.
 REQUIRED_KEYS = {
@@ -45,6 +58,55 @@ def load_yaml(path):
         return yaml.safe_load(f)
 
 
+def parse_requirements(path):
+    """Return a dict mapping pip package name to its SpecifierSet from requirements-test.txt."""
+    result = {}
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Split on first specifier character to get the package name.
+            for i, ch in enumerate(line):
+                if ch in (">", "<", "=", "!"):
+                    pkg_name = line[:i].strip()
+                    specifier_str = line[i:].strip()
+                    result[pkg_name] = SpecifierSet(specifier_str)
+                    break
+    return result
+
+
+def check_pipx_version_sync():
+    """Verify pipx version pins in packages defaults satisfy requirements-test.txt ranges."""
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    req_specifiers = parse_requirements(REQUIREMENTS_FILE)
+
+    errors = []
+    for var_name, pip_pkg in PIPX_VERSION_VARS.items():
+        pinned = packages_data.get(var_name)
+        if pinned is None:
+            errors.append(f"  MISSING: {var_name} not found in roles/packages/defaults/main.yml")
+            continue
+        pinned_str = str(pinned)
+        specifier = req_specifiers.get(pip_pkg)
+        if specifier is None:
+            errors.append(
+                f"  MISSING: {pip_pkg} not found in requirements-test.txt"
+                f" (expected to match {var_name}={pinned_str!r})"
+            )
+            continue
+        try:
+            if Version(pinned_str) not in specifier:
+                errors.append(
+                    f"  MISMATCH: {var_name}={pinned_str!r} does not satisfy"
+                    f" requirements-test.txt constraint {pip_pkg}{specifier}"
+                )
+        except Exception as exc:
+            errors.append(f"  ERROR: could not parse version {pinned_str!r} for {var_name}: {exc}")
+
+    return errors
+
+
 def main():
     vars_data = load_yaml(VARS_FILE)
 
@@ -71,6 +133,24 @@ def main():
         sys.exit(1)
 
     print(f"OK: {len(REQUIRED_KEYS)} security hardening keys present and correctly typed in vars.yml")
+
+    pipx_errors = check_pipx_version_sync()
+    if pipx_errors:
+        print(
+            "ERROR: pipx version pins in roles/packages/defaults/main.yml"
+            " do not satisfy requirements-test.txt ranges:",
+            file=sys.stderr,
+        )
+        for line in pipx_errors:
+            print(line, file=sys.stderr)
+        print(
+            "Update packages_yamllint_version / packages_ansible_lint_version"
+            " in roles/packages/defaults/main.yml to match the requirements-test.txt specifiers.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"OK: {len(PIPX_VERSION_VARS)} pipx version pins satisfy requirements-test.txt ranges")
 
 
 if __name__ == "__main__":
