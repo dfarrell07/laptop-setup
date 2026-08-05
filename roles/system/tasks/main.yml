@@ -53,6 +53,7 @@
 - name: Reload systemd after deploying tmp.mount drop-in
   ansible.builtin.systemd:
     daemon_reload: true
+  changed_when: false
 
 - name: Check /tmp current mount options
   ansible.builtin.command:
