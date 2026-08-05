@@ -15,13 +15,6 @@
     - _tmp_remount_handler_result is defined
     - _tmp_remount_handler_result.rc | default(0) != 0
 
-- name: Reload sysctl
-  ansible.builtin.command:
-    cmd: sysctl --system
-  become: true
-  changed_when: true
-  failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
-
 - name: Reload firewalld
   listen: Apply firewall rules
   ansible.builtin.command:

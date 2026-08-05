@@ -48,7 +48,11 @@
       Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
-  notify: Remount /tmp
+  notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
+
+- name: Reload systemd after deploying tmp.mount drop-in
+  ansible.builtin.systemd:
+    daemon_reload: true
 
 - name: Check /tmp current mount options
   ansible.builtin.command:
@@ -2008,7 +2012,13 @@
   when:
     - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
   failed_when: false
-  notify: Reload sysctl
+
+- name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: sysctl --system
+  become: true
+  changed_when: false
+  failed_when: false
 
 - name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
   ansible.builtin.debug:
