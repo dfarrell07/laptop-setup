@@ -1621,10 +1621,17 @@
     permanent: true
     immediate: true
     state: disabled
+  register: _system_libvirt_ssh_remove
   when:
     - system_firewalld_running | bool
     - system_enable_libvirtd | bool
-  failed_when: false
+  failed_when: >-
+    _system_libvirt_ssh_remove.rc is defined and
+    _system_libvirt_ssh_remove.rc != 0 and
+    'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
+  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is created by
+  # the libvirt daemon on first start, which may not have run yet on first provision
+  # before the packages role installs and starts libvirt. All other failures surface.
   notify: Apply firewall rules
 
 - name: Install Mullvad VPN

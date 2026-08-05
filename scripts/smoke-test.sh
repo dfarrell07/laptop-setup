@@ -1700,16 +1700,28 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv6.conf.default.accept_source_route" "0" "sysctl-no-source-route-v6-default"
   _sysctl_check "net.ipv4.conf.all.secure_redirects"        "0" "sysctl-no-secure-redirects"
   _sysctl_check "net.ipv4.conf.default.secure_redirects"    "0" "sysctl-no-secure-redirects-default"
-  # bridge-nf: WARN if br_netfilter module not loaded (persistent via modules-load.d; reboot activates)
+  # bridge-nf: WARN if br_netfilter module not loaded (reboot activates only when persistence file exists)
   _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null) || true
   if [[ "$_bridge_nf" == "1" ]]; then record "sysctl-bridge-nf-iptables" "PASS"
   elif [[ -z "$_bridge_nf" ]]; then
-    record "sysctl-bridge-nf-iptables" "WARN" "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
+    if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
+      record "sysctl-bridge-nf-iptables" "WARN" \
+        "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make system"
+    else
+      record "sysctl-bridge-nf-iptables" "WARN" \
+        "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
+    fi
   else record "sysctl-bridge-nf-iptables" "FAIL" "net.bridge.bridge-nf-call-iptables=$_bridge_nf expected 1"; fi
   _bridge_nf6=$(sysctl -n net.bridge.bridge-nf-call-ip6tables 2>/dev/null) || true
   if [[ "$_bridge_nf6" == "1" ]]; then record "sysctl-bridge-nf-ip6tables" "PASS"
   elif [[ -z "$_bridge_nf6" ]]; then
-    record "sysctl-bridge-nf-ip6tables" "WARN" "br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"
+    if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
+      record "sysctl-bridge-nf-ip6tables" "WARN" \
+        "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make system"
+    else
+      record "sysctl-bridge-nf-ip6tables" "WARN" \
+        "br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"
+    fi
   else record "sysctl-bridge-nf-ip6tables" "FAIL" "net.bridge.bridge-nf-call-ip6tables=$_bridge_nf6 expected 1"; fi
   _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
 
