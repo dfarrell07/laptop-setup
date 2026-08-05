@@ -357,8 +357,8 @@
   when: ansible_facts['os_family'] == 'Darwin'
 
 - name: Deploy AeroSpace config (macOS)
-  ansible.builtin.template:
-    src: aerospace.toml.j2
+  ansible.builtin.copy:
+    src: aerospace.toml
     dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
     mode: "0644"
   when: ansible_facts['os_family'] == 'Darwin'
