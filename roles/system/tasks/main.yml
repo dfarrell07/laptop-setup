@@ -2393,6 +2393,8 @@
       value: "{{ system_faillock_deny }}"
     - key: unlock_time
       value: "{{ system_faillock_unlock_time }}"
+  loop_control:
+    label: "{{ item.key }}"
   when: not csb_rhel
 
 - name: Configure pam_faillock boolean flags
