@@ -17,6 +17,19 @@
           Either the rescue block did not execute, a pre-existing oc binary is present
           in the image, or the invalid version accidentally resolved to a real release.
 
+    - name: Stat golangci-lint at ~/go/bin/golangci-lint
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
+      register: verify_golangci_absent
+
+    - name: Assert golangci-lint absent — go install failed and failed_when swallowed it
+      ansible.builtin.assert:
+        that: not verify_golangci_absent.stat.exists
+        fail_msg: >-
+          golangci-lint exists after an intentional offline run.
+          Either go is installed and the network was reachable, or the distrobox-export
+          stub unexpectedly caused an install side-effect.
+
     - name: Stat /usr/local/bin/podman
       ansible.builtin.stat:
         path: /usr/local/bin/podman

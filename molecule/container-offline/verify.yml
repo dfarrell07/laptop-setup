@@ -22,13 +22,13 @@
         path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
       register: verify_golangci_absent
 
-    - name: Assert golangci-lint absent — go install failed and failed_when swallowed it
+    - name: Assert golangci-lint absent — go binary absent so go install was a no-op
       ansible.builtin.assert:
         that: not verify_golangci_absent.stat.exists
         fail_msg: >-
-          golangci-lint exists after an intentional offline run.
-          Either go is installed and the network was reachable, or a stub was placed
-          unexpectedly (check that no prepare.yml exists for this scenario).
+          golangci-lint exists — go must be installed in the test image and go install
+          succeeded unexpectedly; check distrobox_packages in offline-vars.yml and the
+          container image.
 
     - name: Stat flatpak-spawn wrapper for podman
       ansible.builtin.stat:
