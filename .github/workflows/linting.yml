@@ -428,3 +428,27 @@ jobs:
             fi
           done
           exit $failed
+
+  all-checks-pass:
+    name: All Checks Pass
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - ansible-lint
+      - yamllint
+      - vars-sync
+      - shellcheck
+      - lockfile-lint
+      - vault-encryption
+      - syntax-check
+      - markdownlint
+      - gitleaks
+      - actionlint
+      - zizmor
+      - commitlint
+    steps:
+      - name: Verify no required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more required jobs failed or were cancelled"
+          exit 1
