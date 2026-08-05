@@ -6,6 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+TimeoutStopSec={{ claude_queue_timeout | int + 300 }}
 ExecStart={{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh
 Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo }}
 Environment=CLAUDE_BIN={{ ansible_facts['user_dir'] }}/.local/bin/claude

@@ -214,7 +214,19 @@
   when:
     - claude_queue_enabled | bool
     - ansible_facts['system'] == 'Linux'
-  failed_when: false
+  register: _timer_enable
+  ignore_errors: "{{ ansible_virtualization_type in ['container', 'podman', 'docker'] }}"
+
+- name: Warn if timer enable failed (container — no systemd user session)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: claude-queue.timer enable failed ({{ _timer_enable.msg | default('unknown error') }}).
+      This is expected in containers without a systemd user session; the timer will be active on real machines.
+  when:
+    - claude_queue_enabled | bool
+    - ansible_facts['system'] == 'Linux'
+    - _timer_enable is defined
+    - _timer_enable.failed | default(false)
 
 - name: Deploy logrotate config for claude-queue-poller.log
   ansible.builtin.copy:
