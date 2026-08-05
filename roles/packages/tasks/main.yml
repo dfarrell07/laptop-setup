@@ -243,7 +243,7 @@
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        packages_oc_version not in (packages_oc_check.stdout)
+        (packages_oc_check.stdout | regex_search('Client Version: (\S+)', '\1') | default([]) | first | default('')) != packages_oc_version
       block:
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
@@ -833,6 +833,150 @@
           The pre-commit hook gracefully skips if gitleaks is absent.
       when: not csb_rhel
 
+- name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
+  when:
+    - packages_install_binaries | bool
+    - ansible_facts['system'] == 'Linux'
+    - ansible_facts['architecture'] == 'x86_64'
+  block:
+    - name: Check if actionlint is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/actionlint --version
+      register: packages_actionlint_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install actionlint
+      when: packages_actionlint_version not in (packages_actionlint_check.stdout)
+      block:
+        - name: Download actionlint tarball
+          ansible.builtin.get_url:
+            url: >-
+              https://github.com/rhysd/actionlint/releases/download/v{{ packages_actionlint_version
+              }}/actionlint_{{ packages_actionlint_version }}_linux_amd64.tar.gz
+            dest: /tmp/actionlint.tar.gz
+            checksum: "sha256:{{ packages_actionlint_sha256 }}"
+            mode: "0644"
+          register: packages_actionlint_download
+          retries: 3
+          delay: 10
+          until: packages_actionlint_download is succeeded
+
+        - name: Extract actionlint binary
+          ansible.builtin.unarchive:
+            src: /tmp/actionlint.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: ["--no-same-owner", "actionlint"]
+          become: true
+          tags: [become]
+
+        - name: Set permissions on actionlint
+          ansible.builtin.file:
+            path: /usr/local/bin/actionlint
+            mode: "0755"
+          become: true
+          tags: [become]
+
+      always:
+        - name: Clean up actionlint tarball
+          ansible.builtin.file:
+            path: /tmp/actionlint.tar.gz
+            state: absent
+
+  rescue:
+    - name: Record actionlint download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "actionlint"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install actionlint manually from https://github.com/rhysd/actionlint/releases
+        _csb_ticket_summary: "Cannot download actionlint binary on CSB"
+        _csb_ticket_body: >-
+          actionlint binary could not be downloaded from github.com/rhysd/actionlint.
+          Install manually from https://github.com/rhysd/actionlint/releases
+      when: csb_rhel
+    - name: Warn actionlint download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download actionlint: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/rhysd/actionlint/releases.
+      when: not csb_rhel
+
+- name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
+  when:
+    - packages_install_binaries | bool
+    - ansible_facts['system'] == 'Linux'
+    - ansible_facts['architecture'] == 'x86_64'
+  block:
+    - name: Check if zizmor is installed at target version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/zizmor --version
+      register: packages_zizmor_check
+      changed_when: false
+      failed_when: false
+
+    - name: Download and install zizmor
+      when: packages_zizmor_version not in (packages_zizmor_check.stdout)
+      block:
+        - name: Download zizmor tarball
+          ansible.builtin.get_url:
+            url: >-
+              https://github.com/zizmorcore/zizmor/releases/download/v{{ packages_zizmor_version
+              }}/zizmor-x86_64-unknown-linux-gnu.tar.gz
+            dest: /tmp/zizmor.tar.gz
+            checksum: "sha256:{{ packages_zizmor_sha256 }}"
+            mode: "0644"
+          register: packages_zizmor_download
+          retries: 3
+          delay: 10
+          until: packages_zizmor_download is succeeded
+
+        - name: Extract zizmor binary
+          ansible.builtin.unarchive:
+            src: /tmp/zizmor.tar.gz
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: ["--no-same-owner", "zizmor"]
+          become: true
+          tags: [become]
+
+        - name: Set permissions on zizmor
+          ansible.builtin.file:
+            path: /usr/local/bin/zizmor
+            mode: "0755"
+          become: true
+          tags: [become]
+
+      always:
+        - name: Clean up zizmor tarball
+          ansible.builtin.file:
+            path: /tmp/zizmor.tar.gz
+            state: absent
+
+  rescue:
+    - name: Record zizmor download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "zizmor"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install zizmor manually from https://github.com/zizmorcore/zizmor/releases
+        _csb_ticket_summary: "Cannot download zizmor binary on CSB"
+        _csb_ticket_body: >-
+          zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
+          Install manually from https://github.com/zizmorcore/zizmor/releases
+      when: csb_rhel
+    - name: Warn zizmor download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download zizmor: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://github.com/zizmorcore/zizmor/releases.
+      when: not csb_rhel
+
 - name: Install operator-sdk
   when:
     - packages_install_binaries | bool
@@ -1369,9 +1513,13 @@
         GOTOOLCHAIN: auto
         HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
         HTTP_PROXY: "{{ proxy_url | default(omit) }}"
+      vars:
+        _subctl_installed: >-
+          {{ packages_subctl_version_check.results[loop_idx].stdout
+             | regex_search('subctl v?(\S+)', '\1') | default([]) | first | default('') }}
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
-        item.version not in (packages_subctl_version_check.results[loop_idx].stdout)
+        _subctl_installed != item.version
       changed_when: true
       failed_when: false
       register: packages_subctl_install_results

@@ -169,6 +169,8 @@ lint: .venv shellcheck
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	.venv/bin/python3 scripts/check-vars-sync.py
+	@command -v actionlint >/dev/null 2>&1 && actionlint -color || echo "SKIP: actionlint not installed (run: make packages)"
+	@command -v zizmor >/dev/null 2>&1 && zizmor .github/workflows/ || echo "SKIP: zizmor not installed (run: make packages)"
 
 check-vars-sync: .venv
 	.venv/bin/python3 scripts/check-vars-sync.py

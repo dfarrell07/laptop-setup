@@ -53,22 +53,8 @@
         fail_msg: "google-chrome repo not configured"
       when: repo_google_chrome
 
-    - name: Verify Chrome security policy deployed
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/security.json
-      register: verify_chrome_policy
-
-    - name: Assert Chrome security policy exists
-      ansible.builtin.assert:
-        that: verify_chrome_policy.stat.exists
-        fail_msg: "Chrome security policy not deployed — desktop role did not deploy chrome policies"
-
-    - name: Validate Chrome security policy JSON
-      ansible.builtin.command:
-        cmd: >-
-          python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
-          assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
-      changed_when: false
+    - name: Include desktop common assertions (Alacritty + Chrome policy)
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     - name: Verify mullvad repo configured
       ansible.builtin.stat:
