@@ -234,6 +234,18 @@
       ansible.builtin.assert:
         that: verify_fw_icmp_inversion.rc == 0
         fail_msg: "icmp-block-inversion not enabled — ICMP blocks now BLOCK (not allow); NDP and PMTU discovery broken"
+
+    - name: Check drop zone interface list excludes tun* interfaces
+      ansible.builtin.command: firewall-cmd --zone=drop --list-interfaces
+      register: verify_fw_drop_ifaces
+      changed_when: false
+      become: true
+
+    - name: Assert no tun* interfaces in drop zone (VPN exclusion from reject filter)
+      ansible.builtin.assert:
+        that: not (verify_fw_drop_ifaces.stdout | regex_search('tun[0-9]+'))
+        fail_msg: "tun* interface found in drop zone — VPN tunnel traffic will be silently dropped"
+
     - name: Check sysctl net.core.bpf_jit_harden
       ansible.builtin.command: sysctl -n net.core.bpf_jit_harden
       register: verify_bpf

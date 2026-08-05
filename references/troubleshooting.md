@@ -157,7 +157,8 @@ sudo grubby --info=ALL | grep args
 **Step 6 — Persist the fix via config.yml and re-run:**
 Update `config.yml` with the appropriate toggle so the parameter stays removed across future `make system` runs:
 ```yaml
-system_kernel_lockdown: ''   # disable lockdown (default is 'integrity')
+system_kernel_lockdown: ''    # disable lockdown (default is 'integrity')
+system_init_on_free: false    # suppress init_on_free=1 (default is true)
 ```
 Then re-run `make system` to apply idempotently.
 
@@ -922,6 +923,8 @@ ssh_port: 22
 Then re-run `make system`. This redeploys the drop-in with `Port 22` and relabels SELinux.
 
 **Note:** The firewall opens port `{{ ssh_port }}` in the drop zone and SELinux labels it `ssh_port_t`. If you change the port, both are updated automatically.
+
+**Note:** `sshd.socket` is masked (not just disabled) on non-RHEL-CSB hosts. Socket activation would allow `systemctl start sshd.socket` to reopen port 22 and bypass `00-hardening.conf`. The `system` role first probes with `systemctl cat sshd.socket`; if the unit file does not exist (e.g. on minimal images), the mask step is skipped. To verify: `systemctl show -p UnitFileState --value sshd.socket` — expected output is `masked`. Recovery if needed: `systemctl unmask sshd.socket`, then re-run `make system` to re-evaluate and re-apply.
 
 ---
 

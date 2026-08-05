@@ -83,6 +83,24 @@
     - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
     - verify_usbguard_pkg_shared.rc == 0
 
+- name: Check AuditBackend=LinuxAudit in usbguard-daemon.conf (shared)
+  ansible.builtin.command: grep -q 'AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf
+  changed_when: false
+  become: true
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
+- name: Check IPCAllowedGroups=wheel in usbguard-daemon.conf (shared)
+  ansible.builtin.command: grep -q 'IPCAllowedGroups=wheel' /etc/usbguard/usbguard-daemon.conf
+  changed_when: false
+  become: true
+  when:
+    - usbguard_expected | default(false)
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+    - verify_usbguard_pkg_shared.rc == 0
+
 - name: Check usbguard.service is enabled (active skipped — systemd mocked in containers)
   ansible.builtin.command: systemctl is-enabled usbguard.service  # noqa: command-instead-of-module
   register: verify_usbguard_svc_shared
@@ -322,3 +340,32 @@
         that: verify_passim_shared.status.UnitFileState == 'masked'
         fail_msg: "passim is not masked — port 27500 may be reachable from Tailscale peers via tailscale0 trusted zone"
       when: verify_passim_shared.status.UnitFileState | default('') != ''
+
+# --- BlueZ inline assertions ---
+# Stat-gated so these skip in container scenarios where /etc/bluetooth/main.conf
+# does not exist. When the file exists, assert the Privacy and Name lines were
+# written by the system role lineinfile tasks (regexp/insertafter regression guard).
+- name: BlueZ config assertions (Linux + dnf only)
+  when:
+    - ansible_system == 'Linux'
+    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+  block:
+    - name: Stat /etc/bluetooth/main.conf (shared verify)
+      ansible.builtin.stat:
+        path: /etc/bluetooth/main.conf
+      register: verify_bluetooth_conf
+      become: true
+
+    - name: Check BlueZ Privacy=device in /etc/bluetooth/main.conf
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: grep -qE '^Privacy = device$' /etc/bluetooth/main.conf
+      changed_when: false
+      become: true
+      when: verify_bluetooth_conf.stat.exists
+
+    - name: Check BlueZ Name line present in /etc/bluetooth/main.conf
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: grep -qE '^Name = .+$' /etc/bluetooth/main.conf
+      changed_when: false
+      become: true
+      when: verify_bluetooth_conf.stat.exists
