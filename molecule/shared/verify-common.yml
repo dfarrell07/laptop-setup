@@ -1119,6 +1119,7 @@
       — socket activation would reopen port 22 bypassing the port-722 hardening
   when:
     - ansible_system == 'Linux'
+    - not csb_rhel
     - masked_sshd_socket_state.rc == 0
     - masked_sshd_socket_state.stdout | length > 0
 

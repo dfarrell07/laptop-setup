@@ -1732,7 +1732,6 @@
         regexp: '^ImplicitPolicyTarget='
         line: 'ImplicitPolicyTarget=block'
         state: present
-      failed_when: false
       notify: Restart usbguard
 
     - name: Enforce AuditBackend=LinuxAudit in usbguard-daemon.conf
@@ -1741,7 +1740,6 @@
         regexp: '^AuditBackend='
         line: 'AuditBackend=LinuxAudit'
         state: present
-      failed_when: false
       notify: Restart usbguard
 
     - name: Enforce IPCAllowedGroups=wheel in usbguard-daemon.conf
@@ -1750,7 +1748,6 @@
         regexp: '^IPCAllowedGroups='
         line: 'IPCAllowedGroups=wheel'
         state: present
-      failed_when: false
       notify: Restart usbguard
 
     - name: Enable USBGuard service
@@ -3265,7 +3262,7 @@
         regexp: '^/usr/local/bin'
         line: '/usr/local/bin NORMAL'
         state: present
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r1
 
     - name: Add /etc paths to AIDE monitoring
       ansible.builtin.lineinfile:
@@ -3277,7 +3274,7 @@
       loop: "{{ system_aide_monitoring_etc_paths }}"
       loop_control:
         label: "{{ item }}"
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r2
 
     - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
       ansible.builtin.lineinfile:
@@ -3287,7 +3284,7 @@
         insertbefore: '^/etc\s'
         state: present
       when: system_tlp_enabled | bool
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r3
 
     - name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
       ansible.builtin.lineinfile:
@@ -3297,7 +3294,7 @@
         insertbefore: '^/etc\s'
         state: present
       when: system_tlp_enabled | bool
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r4
 
     - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
       ansible.builtin.lineinfile:
@@ -3306,7 +3303,7 @@
         line: '/etc/usbguard NORMAL'
         insertbefore: '^/etc\s'
         state: present
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r5
       when: system_install_usbguard | bool
 
     - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
@@ -3315,21 +3312,24 @@
         regexp: '^/boot'
         line: '/boot NORMAL'
         state: present
-      notify: Reinitialize AIDE database
+      register: _aide_conf_r6
       # grubby modifies /boot/loader/entries/ directly; auditd watches /boot for writes
       # but AIDE provides the content integrity baseline to detect unauthorized changes.
 
-    # Fire the AIDE reinit handler here if any conf path changed — this avoids
-    # running aide --init twice on first provision (once from the handler, once
-    # from the first-run block below when stat shows DB absent after handler built it).
-    # CAUTION: meta: flush_handlers has global scope — it drains every handler queued
-    # anywhere in the play up to this point, not just the AIDE one. On a run where
-    # SSH config, NM, resolved, chronyd, journald, or dconf tasks also changed,
-    # those handlers (Restart sshd, Restart NetworkManager, etc.) fire here rather
-    # than at play end. NetworkManager restart briefly drops managed interfaces, disconnecting SSH sessions over those interfaces;
-    # run under tmux to survive it (documented in CLAUDE.md and troubleshooting.md).
-    - name: Flush AIDE handlers before database existence check
-      ansible.builtin.meta: flush_handlers
+    - name: Reinitialize AIDE database when conf changed
+      ansible.builtin.shell:  # noqa: command-instead-of-module
+        cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      become: true
+      changed_when: true
+      when:
+        - _aide_conf_r1 is changed
+          or _aide_conf_r2 is changed
+          or _aide_conf_r3 is changed
+          or _aide_conf_r4 is changed
+          or _aide_conf_r5 is changed
+          or _aide_conf_r6 is changed
+        - system_aide_enabled | bool
+        - not csb_rhel
 
     - name: Check if AIDE database exists
       ansible.builtin.stat:
