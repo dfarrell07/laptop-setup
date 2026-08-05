@@ -407,8 +407,9 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
   if grep -q 'ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
   else record "ssh-config-control-master" "WARN" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
-  if ! grep -q 'MACs' "$HOME/.ssh/config" || ! grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "PASS"
-  else record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"; fi
+  if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
+  elif grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"
+  else record "ssh-config-no-non-etm-macs" "PASS"; fi
 else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make dotfiles"; fi
 
 # SSH signing key file (required for git commit signing — deployed by ssh role from vault)
@@ -468,7 +469,7 @@ else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750
 # the signing key is absent (expected on first provision with plaintext vault).
 _signing_key_present=false
 [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]] && _signing_key_present=true
-for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub"; do
+for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub" "protocol.allow=never" "protocol.https.allow=always" "protocol.ssh.allow=always" "push.autoSetupRemote=true" "fetch.prune=true"; do
   key="${check%%=*}" expected="${check#*=}"
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
@@ -598,9 +599,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # cliphist: clipboard history manager — exec wl-paste --watch cliphist store in sway config;
   # clipboard contents die with source app if this is missing
   if command -v cliphist &>/dev/null; then record "cliphist" "PASS"
-  elif ! command -v sway &>/dev/null; then
-    record "cliphist" "PASS"  # not a sway machine
-  else record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
+  elif command -v sway &>/dev/null; then record "cliphist" "FAIL" "not found (clipboard history broken in sway — check desktop_sway_packages)"; fi
   # wl-paste/wl-copy (wl-clipboard): installed via desktop_sway_packages (sway desktop);
   # not present on non-sway Fedora. tmux copy-pipe benefits from it on any Wayland desktop,
   # so its absence on non-sway is a WARN rather than a hard failure.
@@ -918,28 +917,7 @@ q:AuthorizedKeysFile:.ssh/authorized_keys
 EOF
       [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]] || _bad_directive="${_bad_directive:-MaxAuthTries}"
     fi
-    if grep -q '^PasswordAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^KbdInteractiveAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^PermitRootLogin no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^PermitEmptyPasswords no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^X11Forwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^ClientAliveCountMax [1-9][0-9]?$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^ClientAliveInterval [1-9][0-9]*$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^TCPKeepAlive no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^LogLevel VERBOSE$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^HostKeyAlgorithms ssh-ed25519$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^PubkeyAuthentication yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^AllowAgentForwarding no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^AllowTcpForwarding (no|local|remote)$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^PermitUserEnvironment no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -qP '^MaxSessions [1-9][0-9]*$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^MaxStartups 10:30:60$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^LoginGraceTime 30$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^HostbasedAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^IgnoreRhosts yes$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^GSSAPIAuthentication no$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       grep -q '^AuthorizedKeysFile .ssh/authorized_keys$' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null && \
-       [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]]; then
+    if [[ -z "$_bad_directive" && -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
       record "sshd-hardening" "PASS"
     elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
       record "sshd-hardening" "FAIL" "${_bad_directive:-unknown} directive wrong or absent in sshd drop-in (MaxAuthTries=$_max_auth)"
@@ -1859,6 +1837,16 @@ if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
   else
     record "resolved-dot-conf" "FAIL" "99-dot.conf missing DNSOverTLS= directive — run: make system"
   fi
+fi
+
+# resolved.conf.d/98-llmnr.conf content check — file-gated; silently skips on macOS or where system role was not run
+if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
+  grep -q 'LLMNR=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
+    grep -q 'MulticastDNS=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
+    record 'llmnr-disabled' 'PASS' || \
+    record 'llmnr-disabled' 'FAIL' '98-llmnr.conf missing LLMNR=no or MulticastDNS=no'
+elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
+  record 'llmnr-disabled' 'FAIL' '/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make system'
 fi
 
 # ---- Output ----

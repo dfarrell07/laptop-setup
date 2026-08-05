@@ -134,10 +134,20 @@
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
 
+- name: Mark container unavailable when offline and container does not exist (distrobox path)
+  ansible.builtin.set_fact:
+    distrobox_tool: "none"
+  when:
+    - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing)
+    - not (packages_install_binaries | default(true) | bool)
+    - distrobox_container_exists.rc != 0
+
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
+    - packages_install_binaries | default(true) | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Create container with distrobox assemble
@@ -162,9 +172,18 @@
         distrobox_tool: "none"
 
 # --- Toolbx path ---
+- name: Mark container unavailable when offline and container does not exist (toolbox path)
+  ansible.builtin.set_fact:
+    distrobox_tool: "none"
+  when:
+    - distrobox_use_toolbox | bool
+    - not (packages_install_binaries | default(true) | bool)
+    - distrobox_container_exists.rc != 0
+
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
+    - packages_install_binaries | default(true) | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Remove existing Toolbx container for replacement
