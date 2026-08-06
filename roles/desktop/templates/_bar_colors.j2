@@ -1,0 +1,15 @@
+bar {
+    status_command i3status --config {{ ansible_facts['user_dir'] }}/.config/i3status/config
+    position top
+    colors {
+        background {{ desktop_bar_bg }}
+        statusline {{ desktop_bar_fg }}
+        separator {{ desktop_bar_separator }}
+        # Workspace button colors (border / background / text)
+        focused_workspace  {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_text }}
+        active_workspace   {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_text }}
+        inactive_workspace {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_text }}
+        urgent_workspace   {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_text }}
+        binding_mode       {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_text }}
+    }
+}

@@ -9,12 +9,16 @@
   "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
   "permissions": {
     "deny": [
+{% set deny_entries = [] %}
 {% for path in claude_deny_read %}
-      "Read({{ path }})"{{ "," if not loop.last or claude_deny_write | length > 0 else "" }}
+{% set _ = deny_entries.append("Read(" + path + ")") %}
 {% endfor %}
 {% for path in claude_deny_write %}
-      "Edit({{ path }})",
-      "Write({{ path }})"{{ "," if not loop.last else "" }}
+{% set _ = deny_entries.append("Edit(" + path + ")") %}
+{% set _ = deny_entries.append("Write(" + path + ")") %}
+{% endfor %}
+{% for entry in deny_entries %}
+      "{{ entry }}"{{ "," if not loop.last else "" }}
 {% endfor %}
     ]
   }

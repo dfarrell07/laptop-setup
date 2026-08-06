@@ -127,19 +127,5 @@ default_border pixel {{ desktop_wm_border_width }}
 default_floating_border pixel {{ desktop_wm_floating_border_width }}
 hide_edge_borders {{ desktop_wm_hide_edge_borders }}
 
-# Status bar (bar colors block is identical in sway.config.j2 — keep in sync)
-bar {
-    status_command i3status --config {{ ansible_facts['user_dir'] }}/.config/i3status/config
-    position top
-    colors {
-        background {{ desktop_bar_bg }}
-        statusline {{ desktop_bar_fg }}
-        separator {{ desktop_bar_separator }}
-        # Workspace button colors (border / background / text)
-        focused_workspace  {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_bg }} {{ desktop_bar_focused_ws_text }}
-        active_workspace   {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_bg }} {{ desktop_bar_active_ws_text }}
-        inactive_workspace {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_bg }} {{ desktop_bar_inactive_ws_text }}
-        urgent_workspace   {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_bg }} {{ desktop_bar_urgent_ws_text }}
-        binding_mode       {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_bg }} {{ desktop_bar_binding_mode_text }}
-    }
-}
+# Status bar
+{% include '_bar_colors.j2' %}

@@ -1352,23 +1352,12 @@
   changed_when: true
   failed_when: false
 
-- name: Mask fprintd.service (PAM fingerprint disabled; prevent D-Bus activation)
+- name: Configure fprintd.service mask (fingerprint auth control)
   ansible.builtin.systemd:
     name: fprintd.service
-    masked: true
-    state: stopped
-  when:
-    - system_disable_fingerprint | bool
-    - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth via authselect
-  failed_when: false
-
-- name: Unmask fprintd.service (fingerprint auth enabled)
-  ansible.builtin.systemd:
-    name: fprintd.service
-    masked: false
-  when:
-    - not (system_disable_fingerprint | bool)
-    - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
+    masked: "{{ system_disable_fingerprint | bool }}"
+    state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
+  when: not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
   failed_when: false
 
 - name: Enable authselect with-fingerprint feature
@@ -1572,6 +1561,7 @@
   when:
     - system_mask_abrt | bool
     - not csb_rhel
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---

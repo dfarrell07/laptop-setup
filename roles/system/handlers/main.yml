@@ -17,34 +17,25 @@
 
 - name: Reload firewalld
   listen: Apply firewall rules
-  ansible.builtin.command:
-    cmd: firewall-cmd --reload
+  ansible.builtin.systemd:
+    name: firewalld
+    state: reloaded
   become: true
-  changed_when: true
-  register: system_firewalld_reload_result
-  failed_when:
-    - system_firewalld_reload_result.rc != 0
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart tlp
   ansible.builtin.systemd:
     name: tlp
     state: restarted
   become: true
-  register: system_tlp_restart_result
-  failed_when:
-    - system_tlp_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager
     state: reloaded
   become: true
-  register: system_nm_restart_result
-  failed_when:
-    - system_nm_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart bluetooth
   ansible.builtin.systemd:
@@ -68,60 +59,42 @@
     cmd: service auditd restart
   become: true
   changed_when: true
-  register: system_auditd_restart_result
-  failed_when:
-    - system_auditd_restart_result.rc != 0
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart usbguard
   ansible.builtin.systemd:
     name: usbguard
     state: restarted
   become: true
-  register: system_usbguard_restart_result
-  failed_when:
-    - system_usbguard_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart sshd
   ansible.builtin.systemd:
     name: sshd
     state: restarted
   become: true
-  register: system_sshd_restart_result
-  failed_when:
-    - system_sshd_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
   become: true
-  register: system_resolved_restart_result
-  failed_when:
-    - system_resolved_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Reload logind  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
   become: true
   changed_when: true
-  register: system_logind_restart_result
-  failed_when:
-    - system_logind_restart_result.rc != 0
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart chronyd
   ansible.builtin.systemd:
     name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
     state: restarted
   become: true
-  register: system_chronyd_restart_result
-  failed_when:
-    - system_chronyd_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -129,10 +102,7 @@
     state: restarted
     daemon_reload: true
   become: true
-  register: system_aide_timer_result
-  failed_when:
-    - system_aide_timer_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
   when: system_aide_enabled | bool
 
 - name: Restart systemd-journald
@@ -140,10 +110,7 @@
     name: systemd-journald
     state: restarted
   become: true
-  register: system_journald_restart_result
-  failed_when:
-    - system_journald_restart_result.failed
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
 - name: Run dconf update  # noqa: command-instead-of-module
   ansible.builtin.command:

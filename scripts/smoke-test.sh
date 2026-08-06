@@ -185,7 +185,7 @@ elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "
 else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
 
 # --- Editor checks ---
-if command -v vim >/dev/null 2>&1; then record "vim-binary" "PASS"
+if command -v vim &>/dev/null; then record "vim-binary" "PASS"
 else record "vim-binary" "WARN" "vim not found"; fi
 
 # --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
@@ -328,8 +328,8 @@ fi
 
 # direnv: hook and toml content
 _dtf="$HOME/.config/direnv/direnv.toml"
-if command -v direnv >/dev/null 2>&1; then
-  if direnv hook zsh >/dev/null 2>&1; then record "direnv-hook-zsh" "PASS"
+if command -v direnv &>/dev/null; then
+  if direnv hook zsh &>/dev/null; then record "direnv-hook-zsh" "PASS"
   else record "direnv-hook-zsh" "FAIL" "'direnv hook zsh' failed — direnv may be broken"; fi
 fi
 if [[ -f "$_dtf" ]]; then
@@ -484,13 +484,7 @@ else
 fi
 unset _expected_hooks
 
-if [[ -x "$HOME/.config/git/template/hooks/pre-commit" ]]; then
-  record "git-hooks-pre-commit" "PASS"
-else
-  record "git-hooks-pre-commit" "FAIL" "gitleaks pre-commit hook missing or not executable: $HOME/.config/git/template/hooks/pre-commit — run: make dotfiles"
-fi
-
-for _hook in commit-msg prepare-commit-msg pre-push; do
+for _hook in pre-commit commit-msg prepare-commit-msg pre-push; do
   if [[ -x "$HOME/.config/git/template/hooks/$_hook" ]]; then
     record "git-hooks-$_hook" "PASS"
   else
@@ -656,6 +650,9 @@ if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
 fi
 
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
+
+  _csb_non_fedora=false
+  $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _csb_non_fedora=true
 
   # DNS-over-TLS: check config is deployed (not runtime negotiation — DoT is opportunistic so
   # +DNSOverTLS flag may be absent on port-853-blocked networks without indicating a problem)
@@ -1058,7 +1055,7 @@ EOF
   _passim_state=$(systemctl show -p UnitFileState --value passim.service 2>/dev/null)
   if [[ "$_passim_state" == "masked" ]]; then record "passim-masked" "PASS"
   elif [[ -z "$_passim_state" ]]; then record "passim-masked" "WARN" "passim unit not found — package not installed (no port-27500 exposure)"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
+  elif $_csb_non_fedora; then record "passim-masked" "WARN" "passim masking skipped on RHEL CSB (state: $_passim_state) — IT manages fwupd/firmware; Ansible not csb_rhel gate"
   else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
   unset _passim_state
 
@@ -1165,37 +1162,37 @@ EOF
   if command -v authselect &>/dev/null; then
     # Profile must be 'sssd' — if drifted to 'local' or custom, features may behave differently
     if authselect current 2>/dev/null | grep -q 'sssd'; then record "authselect-profile" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    elif $_csb_non_fedora; then
       record "authselect-profile" "WARN" "skipped on RHEL CSB — IT may use custom authselect profile via Satellite/IPA/SCAP; not required to be named sssd"
     else record "authselect-profile" "FAIL" "authselect profile is not sssd (faillock/pwhistory may not wire correctly)"; fi
     if authselect is-feature-enabled with-faillock 2>/dev/null; then record "authselect-faillock" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    elif $_csb_non_fedora; then
       record "authselect-faillock" "WARN" "skipped on RHEL CSB — Ansible intentionally omits enable-feature on RHEL (IPA/SSSD owns PAM policy)"
     else record "authselect-faillock" "FAIL" "authselect with-faillock not enabled (faillock settings won't apply)"; fi
     if authselect is-feature-enabled with-pwhistory 2>/dev/null; then record "authselect-pwhistory" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    elif $_csb_non_fedora; then
       record "authselect-pwhistory" "WARN" "skipped on RHEL CSB — Ansible intentionally omits enable-feature on RHEL (IPA/SSSD owns PAM policy)"
     else record "authselect-pwhistory" "FAIL" "authselect with-pwhistory not enabled (history reuse won't enforce)"; fi
     # authselect check verifies actual PAM files match profile+features — is-feature-enabled only checks state file
     if authselect check 2>/dev/null; then record "authselect-check" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "authselect-check" "WARN" "skipped on RHEL CSB — IT manages PAM via IPA/SCAP; authselect check may detect intentional drift"
+    elif $_csb_non_fedora; then record "authselect-check" "WARN" "skipped on RHEL CSB — IT manages PAM via IPA/SCAP; authselect check may detect intentional drift"
     else record "authselect-check" "FAIL" "authselect PAM files differ from profile — run: authselect select sssd --force"; fi
   fi
 
   # faillock.conf (deny=5, unlock_time=900, local_users_only for SSSD safety)
   # CSB RHEL: IPA/SSSD owns PAM policy; faillock.conf not written by Ansible — WARN not FAIL
-  if grep -qE '^deny = 5$' /etc/security/faillock.conf 2>/dev/null; then record "faillock-deny" "PASS"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    record "faillock-deny" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
-  else record "faillock-deny" "FAIL" "faillock deny not set to 5"; fi
-  if grep -q '^local_users_only' /etc/security/faillock.conf 2>/dev/null; then record "faillock-local-only" "PASS"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    record "faillock-local-only" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
-  else record "faillock-local-only" "FAIL" "faillock missing local_users_only (SSSD double-lockout risk)"; fi
-  if grep -qE '^unlock_time = 900$' /etc/security/faillock.conf 2>/dev/null; then record "faillock-unlock-time" "PASS"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    record "faillock-unlock-time" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
-  else record "faillock-unlock-time" "FAIL" "faillock unlock_time not set to 900"; fi
+  _skip_faillock=false
+  $_csb_non_fedora && _skip_faillock=true
+  for _flk in \
+    '^deny = 5$:faillock-deny:faillock deny not set to 5' \
+    '^local_users_only:faillock-local-only:faillock missing local_users_only (SSSD double-lockout risk)' \
+    '^unlock_time = 900$:faillock-unlock-time:faillock unlock_time not set to 900'; do
+    _pat=${_flk%%:*}; _rest=${_flk#*:}; _key=${_rest%%:*}; _msg=${_rest#*:}
+    if grep -qE "$_pat" /etc/security/faillock.conf 2>/dev/null; then record "$_key" "PASS"
+    elif $_skip_faillock; then record "$_key" "WARN" "skipped on RHEL CSB — IT policy governs faillock thresholds"
+    else record "$_key" "FAIL" "$_msg"; fi
+  done
+  unset _skip_faillock
   # even_deny_root: default.config.yml sets this to false (root SSH blocked by sshd; no self-lockout risk on single-user machine).
   # If explicitly set to true in config.yml, PASS when present; if false (default), absence is correct — WARN not FAIL.
   if grep -q '^even_deny_root' /etc/security/faillock.conf 2>/dev/null; then record "faillock-even-deny-root" "PASS"
@@ -1204,7 +1201,7 @@ EOF
   # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
   # CSB RHEL: IPA/SSSD owns password policy; pwquality.conf not written by Ansible — WARN not FAIL
   _skip_pwquality=false
-  $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _skip_pwquality=true
+  $_csb_non_fedora && _skip_pwquality=true
   for _pwq in \
     '^minlen = 14:pwquality-minlen:pwquality minlen not set to 14' \
     '^dcredit = -1:pwquality-dcredit:pwquality dcredit not set to -1' \
@@ -1227,18 +1224,18 @@ EOF
        grep -qE '^Defaults[[:space:]].*logfile=' /etc/sudoers.d/99-hardening 2>/dev/null && \
        grep -qE '^Defaults[[:space:]].*umask=' /etc/sudoers.d/99-hardening 2>/dev/null; then
       record "sudoers-hardening" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers via Satellite/SCAP; 99-hardening not deployed"
+    elif $_csb_non_fedora; then record "sudoers-hardening" "WARN" "skipped on RHEL CSB — IT manages sudoers via Satellite/SCAP; 99-hardening not deployed"
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
   else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
   # pwhistory remember=24 (CIS 5.3.5) — skipped on RHEL CSB (IPA/SSSD owns PAM policy; pwhistory.conf not written)
   if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+  elif $_csb_non_fedora; then
     record "pwhistory-remember" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
   else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
 
   if grep -q '^enforce_for_root' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-enforce-root" "PASS"
-  elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+  elif $_csb_non_fedora; then
     record "pwhistory-enforce-root" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
   else record "pwhistory-enforce-root" "FAIL" "pwhistory enforce_for_root not set — root can reuse passwords despite remember=24 (CIS 5.3.5)"; fi
 
@@ -1394,7 +1391,7 @@ EOF
   if findmnt -n /home &>/dev/null; then
     _home_opts=$(findmnt -n -o OPTIONS /home 2>/dev/null || echo "")
     if echo "$_home_opts" | grep -q nosuid && echo "$_home_opts" | grep -q nodev; then record "home-nosuid" "PASS"
-    elif $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
+    elif $_csb_non_fedora; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
     else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid/nodev not set: $_home_opts"; fi
     unset _home_opts
   else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
