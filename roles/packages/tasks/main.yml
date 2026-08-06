@@ -481,157 +481,55 @@
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_tarball.yml
   vars:
-    _helm_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _helm_sha256: "{{ packages_helm_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_helm_sha256 }}"
-  block:
-    - name: Check if helm is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/helm version
-      register: packages_helm_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and extract helm
-      when: "packages_helm_version not in (packages_helm_check.stdout + packages_helm_check.stderr)"
-      block:
-        - name: Download helm tarball
-          ansible.builtin.get_url:
-            url: "https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-{{ _helm_arch }}.tar.gz"
-            dest: /tmp/helm.tar.gz
-            checksum: "sha256:{{ _helm_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_helm_download
-          retries: 3
-          delay: 10
-          until: packages_helm_download is succeeded
-
-        - name: Extract helm binary
-          ansible.builtin.unarchive:
-            src: /tmp/helm.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --no-same-owner
-              - --strip-components=1
-              - "linux-{{ _helm_arch }}/helm"
-          become: true
-          tags: [become]
-
-        - name: Set permissions on helm
-          ansible.builtin.file:
-            path: /usr/local/bin/helm
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up helm tarball
-          ansible.builtin.file:
-            path: /tmp/helm.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record helm download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "helm"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install helm manually from https://helm.sh/docs/intro/install/
-        _csb_ticket_summary: "Cannot download helm binary on CSB"
-        _csb_ticket_body: >-
-          helm binary could not be downloaded from get.helm.sh.
-          Install manually from https://helm.sh/docs/intro/install/
-      when: csb_rhel
-    - name: Warn helm download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download helm: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://helm.sh/docs/intro/install/.
-      when: not csb_rhel
+    binary_name: helm
+    url: >-
+      https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-{{
+      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
+    tarball: /tmp/helm.tar.gz
+    dest: /usr/local/bin/helm
+    checksum: >-
+      sha256:{{ packages_helm_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+      else packages_helm_sha256 }}
+    version_check_cmd: /usr/local/bin/helm version
+    version_string: "{{ packages_helm_version }}"
+    strip_components: 1
+    binary_in_archive: >-
+      linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}/helm
+    csb_action: >-
+      Install helm manually from https://helm.sh/docs/intro/install/
+    csb_ticket_summary: "Cannot download helm binary on CSB"
+    csb_ticket_body: >-
+      helm binary could not be downloaded from get.helm.sh.
+      Install manually from https://helm.sh/docs/intro/install/
 
 - name: Install kustomize
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_tarball.yml
   vars:
-    _kustomize_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _kustomize_sha256: "{{ packages_kustomize_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_kustomize_sha256 }}"
-  block:
-    - name: Check if kustomize is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/kustomize version
-      register: packages_kustomize_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and extract kustomize
-      when: "packages_kustomize_version not in (packages_kustomize_check.stdout + packages_kustomize_check.stderr)"
-      block:
-        - name: Download kustomize tarball
-          vars:
-            _ver: "{{ packages_kustomize_version }}"
-          ansible.builtin.get_url:
-            url: "{{ packages_kustomize_url_base }}/kustomize%2Fv{{ _ver }}/kustomize_v{{ _ver }}_linux_{{ _kustomize_arch }}.tar.gz"
-            dest: /tmp/kustomize.tar.gz
-            checksum: "sha256:{{ _kustomize_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_kustomize_download
-          retries: 3
-          delay: 10
-          until: packages_kustomize_download is succeeded
-
-        - name: Extract kustomize binary
-          ansible.builtin.unarchive:
-            src: /tmp/kustomize.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --no-same-owner
-          become: true
-          tags: [become]
-
-        - name: Set permissions on kustomize
-          ansible.builtin.file:
-            path: /usr/local/bin/kustomize
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up kustomize tarball
-          ansible.builtin.file:
-            path: /tmp/kustomize.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record kustomize download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "kustomize"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install kustomize manually from
-          https://kubectl.docs.kubernetes.io/installation/kustomize/
-        _csb_ticket_summary: "Cannot download kustomize binary on CSB"
-        _csb_ticket_body: >-
-          kustomize binary could not be downloaded from github.com/kubernetes-sigs/kustomize.
-          Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/
-      when: csb_rhel
-    - name: Warn kustomize download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download kustomize: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/.
-      when: not csb_rhel
+    binary_name: kustomize
+    url: >-
+      {{ packages_kustomize_url_base }}/kustomize%2Fv{{ packages_kustomize_version
+      }}/kustomize_v{{ packages_kustomize_version }}_linux_{{
+      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
+    tarball: /tmp/kustomize.tar.gz
+    dest: /usr/local/bin/kustomize
+    checksum: >-
+      sha256:{{ packages_kustomize_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+      else packages_kustomize_sha256 }}
+    version_check_cmd: /usr/local/bin/kustomize version
+    version_string: "{{ packages_kustomize_version }}"
+    csb_action: >-
+      Install kustomize manually from
+      https://kubectl.docs.kubernetes.io/installation/kustomize/
+    csb_ticket_summary: "Cannot download kustomize binary on CSB"
+    csb_ticket_body: >-
+      kustomize binary could not be downloaded from github.com/kubernetes-sigs/kustomize.
+      Install manually from https://kubectl.docs.kubernetes.io/installation/kustomize/
 
 # --- Standalone script/binary downloads ---
 
@@ -681,226 +579,75 @@
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_tarball.yml
   vars:
-    _gitleaks_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}"
-    _gitleaks_sha256: "{{ packages_gitleaks_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_gitleaks_sha256 }}"
-  block:
-    - name: Check if gitleaks is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/gitleaks version
-      register: packages_gitleaks_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and install gitleaks
-      when: packages_gitleaks_version not in (packages_gitleaks_check.stdout + packages_gitleaks_check.stderr)
-      block:
-        - name: Download gitleaks tarball
-          ansible.builtin.get_url:
-            url: >-
-              https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
-              }}/gitleaks_{{ packages_gitleaks_version }}_linux_{{ _gitleaks_arch }}.tar.gz
-            dest: /tmp/gitleaks.tar.gz
-            checksum: "sha256:{{ _gitleaks_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_gitleaks_download
-          retries: 3
-          delay: 10
-          until: packages_gitleaks_download is succeeded
-
-        - name: Extract gitleaks binary
-          ansible.builtin.unarchive:
-            src: /tmp/gitleaks.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts: ["--no-same-owner", "gitleaks"]
-          become: true
-          tags: [become]
-
-        - name: Set permissions on gitleaks
-          ansible.builtin.file:
-            path: /usr/local/bin/gitleaks
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up gitleaks tarball
-          ansible.builtin.file:
-            path: /tmp/gitleaks.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record gitleaks download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "gitleaks"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install gitleaks manually from https://github.com/gitleaks/gitleaks/releases
-        _csb_ticket_summary: "Cannot download gitleaks binary on CSB"
-        _csb_ticket_body: >-
-          gitleaks binary could not be downloaded from github.com/gitleaks/gitleaks.
-          Install manually from https://github.com/gitleaks/gitleaks/releases
-      when: csb_rhel
-    - name: Warn gitleaks download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download gitleaks: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/gitleaks/gitleaks/releases.
-          The pre-commit hook gracefully skips if gitleaks is absent.
-      when: not csb_rhel
+    binary_name: gitleaks
+    url: >-
+      https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
+      }}/gitleaks_{{ packages_gitleaks_version }}_linux_{{
+      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}.tar.gz
+    tarball: /tmp/gitleaks.tar.gz
+    dest: /usr/local/bin/gitleaks
+    checksum: >-
+      sha256:{{ packages_gitleaks_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+      else packages_gitleaks_sha256 }}
+    version_check_cmd: /usr/local/bin/gitleaks version
+    version_string: "{{ packages_gitleaks_version }}"
+    binary_in_archive: gitleaks
+    csb_action: >-
+      Install gitleaks manually from https://github.com/gitleaks/gitleaks/releases
+    csb_ticket_summary: "Cannot download gitleaks binary on CSB"
+    csb_ticket_body: >-
+      gitleaks binary could not be downloaded from github.com/gitleaks/gitleaks.
+      Install manually from https://github.com/gitleaks/gitleaks/releases
 
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
-  block:
-    - name: Check if actionlint is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/actionlint --version
-      register: packages_actionlint_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and install actionlint
-      when: packages_actionlint_version not in (packages_actionlint_check.stdout + packages_actionlint_check.stderr)
-      block:
-        - name: Download actionlint tarball
-          ansible.builtin.get_url:
-            url: >-
-              https://github.com/rhysd/actionlint/releases/download/v{{ packages_actionlint_version
-              }}/actionlint_{{ packages_actionlint_version }}_linux_amd64.tar.gz
-            dest: /tmp/actionlint.tar.gz
-            checksum: "sha256:{{ packages_actionlint_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_actionlint_download
-          retries: 3
-          delay: 10
-          until: packages_actionlint_download is succeeded
-
-        - name: Extract actionlint binary
-          ansible.builtin.unarchive:
-            src: /tmp/actionlint.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts: ["--no-same-owner", "actionlint"]
-          become: true
-          tags: [become]
-
-        - name: Set permissions on actionlint
-          ansible.builtin.file:
-            path: /usr/local/bin/actionlint
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up actionlint tarball
-          ansible.builtin.file:
-            path: /tmp/actionlint.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record actionlint download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "actionlint"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install actionlint manually from https://github.com/rhysd/actionlint/releases
-        _csb_ticket_summary: "Cannot download actionlint binary on CSB"
-        _csb_ticket_body: >-
-          actionlint binary could not be downloaded from github.com/rhysd/actionlint.
-          Install manually from https://github.com/rhysd/actionlint/releases
-      when: csb_rhel
-    - name: Warn actionlint download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download actionlint: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/rhysd/actionlint/releases.
-      when: not csb_rhel
+  ansible.builtin.include_tasks: install_tarball.yml
+  vars:
+    binary_name: actionlint
+    url: >-
+      https://github.com/rhysd/actionlint/releases/download/v{{ packages_actionlint_version
+      }}/actionlint_{{ packages_actionlint_version }}_linux_amd64.tar.gz
+    tarball: /tmp/actionlint.tar.gz
+    dest: /usr/local/bin/actionlint
+    checksum: "sha256:{{ packages_actionlint_sha256 }}"
+    version_check_cmd: /usr/local/bin/actionlint --version
+    version_string: "{{ packages_actionlint_version }}"
+    binary_in_archive: actionlint
+    csb_action: >-
+      Install actionlint manually from https://github.com/rhysd/actionlint/releases
+    csb_ticket_summary: "Cannot download actionlint binary on CSB"
+    csb_ticket_body: >-
+      actionlint binary could not be downloaded from github.com/rhysd/actionlint.
+      Install manually from https://github.com/rhysd/actionlint/releases
 
 - name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
-  block:
-    - name: Check if zizmor is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/zizmor --version
-      register: packages_zizmor_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and install zizmor
-      when: packages_zizmor_version not in (packages_zizmor_check.stdout + packages_zizmor_check.stderr)
-      block:
-        - name: Download zizmor tarball
-          ansible.builtin.get_url:
-            url: >-
-              https://github.com/zizmorcore/zizmor/releases/download/v{{ packages_zizmor_version
-              }}/zizmor-x86_64-unknown-linux-gnu.tar.gz
-            dest: /tmp/zizmor.tar.gz
-            checksum: "sha256:{{ packages_zizmor_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_zizmor_download
-          retries: 3
-          delay: 10
-          until: packages_zizmor_download is succeeded
-
-        - name: Extract zizmor binary
-          ansible.builtin.unarchive:
-            src: /tmp/zizmor.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts: ["--no-same-owner", "zizmor"]
-          become: true
-          tags: [become]
-
-        - name: Set permissions on zizmor
-          ansible.builtin.file:
-            path: /usr/local/bin/zizmor
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up zizmor tarball
-          ansible.builtin.file:
-            path: /tmp/zizmor.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record zizmor download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "zizmor"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install zizmor manually from https://github.com/zizmorcore/zizmor/releases
-        _csb_ticket_summary: "Cannot download zizmor binary on CSB"
-        _csb_ticket_body: >-
-          zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
-          Install manually from https://github.com/zizmorcore/zizmor/releases
-      when: csb_rhel
-    - name: Warn zizmor download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download zizmor: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/zizmorcore/zizmor/releases.
-      when: not csb_rhel
+  ansible.builtin.include_tasks: install_tarball.yml
+  vars:
+    binary_name: zizmor
+    url: >-
+      https://github.com/zizmorcore/zizmor/releases/download/v{{ packages_zizmor_version
+      }}/zizmor-x86_64-unknown-linux-gnu.tar.gz
+    tarball: /tmp/zizmor.tar.gz
+    dest: /usr/local/bin/zizmor
+    checksum: "sha256:{{ packages_zizmor_sha256 }}"
+    version_check_cmd: /usr/local/bin/zizmor --version
+    version_string: "{{ packages_zizmor_version }}"
+    binary_in_archive: zizmor
+    csb_action: >-
+      Install zizmor manually from https://github.com/zizmorcore/zizmor/releases
+    csb_ticket_summary: "Cannot download zizmor binary on CSB"
+    csb_ticket_body: >-
+      zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
+      Install manually from https://github.com/zizmorcore/zizmor/releases
 
 - name: Install operator-sdk
   when:
@@ -960,78 +707,27 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  ansible.builtin.include_tasks: install_tarball.yml
   vars:
-    _tkn_arch: "{{ 'aarch64' if ansible_facts['architecture'] == 'aarch64' else 'x86_64' }}"
-    _tkn_sha256: "{{ packages_tkn_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_tkn_sha256 }}"
-  block:
-    - name: Check if tkn is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/tkn version --component=cli
-      register: packages_tkn_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and install tkn
-      when: packages_tkn_version not in (packages_tkn_check.stdout + packages_tkn_check.stderr)
-      block:
-        - name: Download tkn tarball
-          vars:
-            _tkn_base: "https://github.com/tektoncd/cli/releases/download"
-            _tkn_file: "tkn_{{ packages_tkn_version }}_Linux_{{ _tkn_arch }}.tar.gz"
-          ansible.builtin.get_url:
-            url: "{{ _tkn_base }}/v{{ packages_tkn_version }}/{{ _tkn_file }}"
-            dest: /tmp/tkn.tar.gz
-            checksum: "sha256:{{ _tkn_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_tkn_download
-          retries: 3
-          delay: 10
-          until: packages_tkn_download is succeeded
-
-        - name: Extract tkn binary
-          ansible.builtin.unarchive:
-            src: /tmp/tkn.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts: ["--no-same-owner", "tkn"]
-          become: true
-          tags: [become]
-
-        - name: Set permissions on tkn
-          ansible.builtin.file:
-            path: /usr/local/bin/tkn
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up tkn tarball
-          ansible.builtin.file:
-            path: /tmp/tkn.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record tkn download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "tkn"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install tkn manually from https://github.com/tektoncd/cli/releases
-        _csb_ticket_summary: "Cannot download tkn binary on CSB"
-        _csb_ticket_body: >-
-          tkn (Tekton CLI) binary could not be downloaded from github.com/tektoncd/cli.
-          Install manually from https://github.com/tektoncd/cli/releases
-      when: csb_rhel
-    - name: Warn tkn download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download tkn: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/tektoncd/cli/releases.
-      when: not csb_rhel
+    binary_name: tkn
+    url: >-
+      https://github.com/tektoncd/cli/releases/download/v{{ packages_tkn_version
+      }}/tkn_{{ packages_tkn_version }}_Linux_{{
+      'aarch64' if ansible_facts['architecture'] == 'aarch64' else 'x86_64' }}.tar.gz
+    tarball: /tmp/tkn.tar.gz
+    dest: /usr/local/bin/tkn
+    checksum: >-
+      sha256:{{ packages_tkn_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+      else packages_tkn_sha256 }}
+    version_check_cmd: /usr/local/bin/tkn version --component=cli
+    version_string: "{{ packages_tkn_version }}"
+    binary_in_archive: tkn
+    csb_action: >-
+      Install tkn manually from https://github.com/tektoncd/cli/releases
+    csb_ticket_summary: "Cannot download tkn binary on CSB"
+    csb_ticket_body: >-
+      tkn (Tekton CLI) binary could not be downloaded from github.com/tektoncd/cli.
+      Install manually from https://github.com/tektoncd/cli/releases
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
@@ -1063,72 +759,24 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
-  block:
-    - name: Check if k9s is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/k9s version
-      register: packages_k9s_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download and install k9s
-      when: packages_k9s_version not in (packages_k9s_check.stdout + packages_k9s_check.stderr)
-      block:
-        - name: Download k9s tarball
-          ansible.builtin.get_url:
-            url: "https://github.com/derailed/k9s/releases/download/v{{ packages_k9s_version }}/k9s_Linux_amd64.tar.gz"
-            dest: /tmp/k9s.tar.gz
-            checksum: "sha256:{{ packages_k9s_sha256 }}"
-            mode: "0644"
-            timeout: 120
-          register: packages_k9s_download
-          retries: 3
-          delay: 10
-          until: packages_k9s_download is succeeded
-
-        - name: Extract k9s binary
-          ansible.builtin.unarchive:
-            src: /tmp/k9s.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts: ["--no-same-owner", "k9s"]
-          become: true
-          tags: [become]
-
-        - name: Set permissions on k9s
-          ansible.builtin.file:
-            path: /usr/local/bin/k9s
-            mode: "0755"
-          become: true
-          tags: [become]
-
-      always:
-        - name: Clean up k9s tarball
-          ansible.builtin.file:
-            path: /tmp/k9s.tar.gz
-            state: absent
-
-  rescue:
-    - name: Record k9s download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "k9s"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install k9s manually from https://github.com/derailed/k9s/releases
-        _csb_ticket_summary: "Cannot download k9s binary on CSB"
-        _csb_ticket_body: >-
-          k9s binary could not be downloaded from github.com/derailed/k9s.
-          Install manually from https://github.com/derailed/k9s/releases
-      when: csb_rhel
-    - name: Warn k9s download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download k9s: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/derailed/k9s/releases.
-      when: not csb_rhel
+  ansible.builtin.include_tasks: install_tarball.yml
+  vars:
+    binary_name: k9s
+    url: >-
+      https://github.com/derailed/k9s/releases/download/v{{ packages_k9s_version
+      }}/k9s_Linux_amd64.tar.gz
+    tarball: /tmp/k9s.tar.gz
+    dest: /usr/local/bin/k9s
+    checksum: "sha256:{{ packages_k9s_sha256 }}"
+    version_check_cmd: /usr/local/bin/k9s version
+    version_string: "{{ packages_k9s_version }}"
+    binary_in_archive: k9s
+    csb_action: >-
+      Install k9s manually from https://github.com/derailed/k9s/releases
+    csb_ticket_summary: "Cannot download k9s binary on CSB"
+    csb_ticket_body: >-
+      k9s binary could not be downloaded from github.com/derailed/k9s.
+      Install manually from https://github.com/derailed/k9s/releases
 
 # --- Go install tools ---
 

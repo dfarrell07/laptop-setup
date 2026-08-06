@@ -1,0 +1,89 @@
+---
+# roles/packages/tasks/install_tarball.yml
+# Shared block/rescue skeleton for tarball downloads with binary extraction.
+# Mirrors install_binary.yml for the download-tarball → extract → chmod pattern.
+#
+# Required vars (pass via include_tasks vars:):
+#   binary_name        — display name, e.g. "helm"
+#   url                — download URL
+#   tarball            — temp file path, e.g. /tmp/helm.tar.gz
+#   dest               — install path, e.g. /usr/local/bin/helm
+#   checksum           — e.g. "sha256:{{ computed_sha }}"
+#   version_check_cmd  — shell command to test installed version
+#   version_string     — expected string in version output
+#   csb_action         — manual install instructions
+#   csb_ticket_summary — CSB ticket one-liner
+#   csb_ticket_body    — CSB ticket detail
+#
+# Optional vars:
+#   strip_components   — integer; adds --strip-components=N to tar (default: omit)
+#   binary_in_archive  — path inside the tarball to extract (default: extract all)
+#   timeout            — get_url timeout in seconds (default: 120)
+
+- name: "Download and install {{ binary_name }}"
+  block:
+    - name: "Check if {{ binary_name }} is installed at target version"
+      ansible.builtin.command:
+        cmd: "{{ version_check_cmd }}"
+      register: _install_tarball_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "Download and extract {{ binary_name }}"
+      when: version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
+      block:
+        - name: "Download {{ binary_name }} tarball"
+          ansible.builtin.get_url:
+            url: "{{ url }}"
+            dest: "{{ tarball }}"
+            checksum: "{{ checksum }}"
+            mode: "0644"
+            timeout: "{{ timeout | default(120) }}"
+          register: _install_tarball_download
+          retries: 3
+          delay: 10
+          until: _install_tarball_download is succeeded
+
+        - name: "Extract {{ binary_name }} binary"
+          ansible.builtin.unarchive:
+            src: "{{ tarball }}"
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: >-
+              {{ ['--no-same-owner']
+                 + (['--strip-components=' ~ strip_components] if strip_components is defined else [])
+                 + ([binary_in_archive] if binary_in_archive is defined else []) }}
+          become: true
+          tags: [become]
+
+        - name: "Set permissions on {{ binary_name }}"
+          ansible.builtin.file:
+            path: "{{ dest }}"
+            mode: "0755"
+          become: true
+          tags: [become]
+
+      always:
+        - name: "Clean up {{ binary_name }} tarball"
+          ansible.builtin.file:
+            path: "{{ tarball }}"
+            state: absent
+
+  rescue:
+    - name: "Record {{ binary_name }} download failure (CSB)"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "{{ binary_name }}"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "{{ csb_action }}"
+        _csb_ticket_summary: "{{ csb_ticket_summary }}"
+        _csb_ticket_body: "{{ csb_ticket_body }}"
+      when: csb_rhel
+    - name: "Warn {{ binary_name }} download failed"
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download {{ binary_name }}: {{ ansible_failed_result.msg | default('unknown error') }}.
+          {{ csb_action }}
+      when: not csb_rhel

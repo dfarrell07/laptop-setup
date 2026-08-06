@@ -95,6 +95,30 @@
           - verify_gitleaks.stat.executable
         fail_msg: "/usr/local/bin/gitleaks missing or not executable — packages_install_binaries=true regression"
 
+    - name: Stat /usr/local/bin/actionlint
+      ansible.builtin.stat:
+        path: /usr/local/bin/actionlint
+      register: verify_actionlint
+
+    - name: Assert actionlint exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_actionlint.stat.exists
+          - verify_actionlint.stat.executable
+        fail_msg: "/usr/local/bin/actionlint missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/zizmor
+      ansible.builtin.stat:
+        path: /usr/local/bin/zizmor
+      register: verify_zizmor
+
+    - name: Assert zizmor exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_zizmor.stat.exists
+          - verify_zizmor.stat.executable
+        fail_msg: "/usr/local/bin/zizmor missing or not executable — packages_install_binaries=true regression"
+
     # --- work-profile OCP + toolchain binaries ---
 
     - name: Stat /usr/local/bin/oc
@@ -350,6 +374,32 @@
         fail_msg: >-
           gitleaks version mismatch — expected {{ packages_gitleaks_version }},
           got: {{ verify_gitleaks_ver.stdout + verify_gitleaks_ver.stderr }}
+
+    - name: Check actionlint version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/actionlint --version
+      register: verify_actionlint_ver
+      changed_when: false
+
+    - name: Assert actionlint version matches packages_actionlint_version
+      ansible.builtin.assert:
+        that: packages_actionlint_version in (verify_actionlint_ver.stdout + verify_actionlint_ver.stderr)
+        fail_msg: >-
+          actionlint version mismatch — expected {{ packages_actionlint_version }},
+          got: {{ verify_actionlint_ver.stdout + verify_actionlint_ver.stderr }}
+
+    - name: Check zizmor version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/zizmor --version
+      register: verify_zizmor_ver
+      changed_when: false
+
+    - name: Assert zizmor version matches packages_zizmor_version
+      ansible.builtin.assert:
+        that: packages_zizmor_version in (verify_zizmor_ver.stdout + verify_zizmor_ver.stderr)
+        fail_msg: >-
+          zizmor version mismatch — expected {{ packages_zizmor_version }},
+          got: {{ verify_zizmor_ver.stdout + verify_zizmor_ver.stderr }}
 
     - name: Check tkn version output
       ansible.builtin.command:
