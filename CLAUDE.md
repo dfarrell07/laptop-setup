@@ -148,6 +148,7 @@ make repos-downstream # downstream repos only
   `system_enable_ip_forward` (true — enables ip_forward sysctls for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts), `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `desktop_i3status_battery_num`, `system_lid_switch`, `system_logind_idle_sec`,
   `system_coredump_storage` (external — systemd-coredump store path; 'none' disables), `system_coredump_process_size_max` (2G — max core size; 0 disables),
   `system_mask_abrt` (true — masks ABRT crash-reporter daemons; set false to restore ABRT, e.g. when `system_coredump_storage: none`),
+  `system_disable_avahi` (true — masks avahi-daemon for mDNS/DNS-SD; set false to restore .local resolution),
   `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl),
   `system_chrony_service_enabled` (`not system_is_container` — chrony disabled in containers; set `true` to force-enable inside a container).
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`

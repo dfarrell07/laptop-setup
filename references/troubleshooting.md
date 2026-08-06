@@ -901,6 +901,24 @@ Then re-run `make system`. This unmasks all five ABRT units and restores crash r
 
 ---
 
+## system: mDNS / .local Resolution Broken After Provisioning
+
+**Symptom:** `ping hostname.local` or service discovery via `.local` names fails. Applications that use mDNS (Avahi/Bonjour) cannot find local devices.
+
+**Root Cause:** The `system` role masks `avahi-daemon.service` and `avahi-daemon.socket` when `system_disable_avahi: true` (the default). Masking prevents socket-activation from restarting the daemon unexpectedly.
+
+**Fix:** Set in `config.yml`:
+
+```yaml
+system_disable_avahi: false
+```
+
+Then re-run `make system`. This unmasks both units and restores `.local` mDNS resolution.
+
+**CSB IT ticket:** No. This is a per-machine playbook setting.
+
+---
+
 ## system: Shell Sessions Terminate After 10 Minutes of Inactivity
 
 **Symptom:** SSH sessions or terminal emulator shells die after 10 minutes idle. Interactive prompts close unexpectedly. Long-running `ansible-playbook` runs are killed by the shell.
