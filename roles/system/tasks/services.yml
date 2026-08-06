@@ -1,0 +1,208 @@
+---
+# --- Services ---
+- name: Detect libvirt daemon architecture (modular vs monolithic)
+  ansible.builtin.command: # noqa: command-instead-of-module
+    cmd: systemctl cat virtqemud.socket
+  register: system_virtqemud_check
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: system_enable_libvirtd | bool
+
+- name: Enable modular libvirt sockets (Fedora 35+)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - virtqemud.socket
+    - virtnetworkd.socket
+  when:
+    - system_enable_libvirtd | bool
+    - (system_virtqemud_check.rc | default(-1)) == 0
+  failed_when: false
+
+- name: Enable libvirtd (monolithic, pre-Fedora 35 fallback)
+  ansible.builtin.systemd:
+    name: libvirtd
+    state: started
+    enabled: true
+  when:
+    - system_enable_libvirtd | bool
+    - (system_virtqemud_check.rc | default(-1)) != 0
+  failed_when: false
+
+- name: Detect bpfman.socket (may not be installed yet on first provision)
+  ansible.builtin.command: # noqa: command-instead-of-module
+    cmd: systemctl cat bpfman.socket
+  register: system_bpfman_check
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - profile == 'work'
+    - is_dnf
+
+- name: Enable bpfman.socket (no-op if bpfman not yet installed)
+  ansible.builtin.systemd:
+    name: bpfman.socket
+    state: started
+    enabled: true
+  when:
+    - profile == 'work'
+    - is_dnf
+    - (system_bpfman_check.rc | default(-1)) == 0
+  failed_when: false
+
+- name: Add user to libvirt and kvm groups
+  ansible.builtin.user:
+    name: "{{ real_user_id }}"
+    groups: [libvirt, kvm]
+    append: true
+  when: system_enable_libvirtd | bool
+  failed_when: false
+  # libvirt/kvm groups are created by package install in Play 2 (packages role).
+  # On first provision this task runs in Play 1 before the packages exist — usermod
+  # fails with "group does not exist". failed_when: false prevents play abort;
+  # the packages role re-runs this after installing libvirt, completing membership.
+
+- name: Start virtnetworkd service to initialize libvirt firewall zone
+  ansible.builtin.systemd:
+    name: virtnetworkd.service
+    state: started
+  when:
+    - system_enable_libvirtd | bool
+    - system_firewalld_running | bool
+    - (system_virtqemud_check.rc | default(-1)) == 0
+  failed_when: false
+  # Starting the service (not just the socket) ensures virtnetworkd creates the
+  # libvirt firewall zone in firewalld before the ssh removal task below runs.
+  # Socket-based activation is lazy; the zone may not exist until a client connects.
+  # No-op on first provision when libvirt is not yet installed.
+
+- name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
+  ansible.posix.firewalld:
+    zone: libvirt
+    service: ssh
+    permanent: true
+    immediate: true
+    state: disabled
+  register: _system_libvirt_ssh_remove
+  when:
+    - system_firewalld_running | bool
+    - system_enable_libvirtd | bool
+  failed_when: >-
+    (_system_libvirt_ssh_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
+  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is created by
+  # the libvirt daemon on first start, which may not have run yet on first provision
+  # before the packages role installs and starts libvirt. All other failures surface.
+  notify: Apply firewall rules
+
+- name: Install Mullvad VPN
+  ansible.builtin.dnf:
+    name: mullvad-vpn
+    state: present
+  register: _system_mullvad_install
+  when:
+    - system_enable_mullvad | bool
+    - is_dnf
+    - is_fedora
+  failed_when: false
+
+- name: Warn if Mullvad VPN package install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
+      mullvad-daemon will not be enabled and VPN protection is not active on this host
+  when:
+    - system_enable_mullvad | bool
+    - is_dnf
+    - is_fedora
+    - _system_mullvad_install.rc | default(0) != 0
+
+- name: Enable Mullvad VPN service
+  ansible.builtin.systemd:
+    name: mullvad-daemon
+    state: started
+    enabled: true
+  when:
+    - system_enable_mullvad | bool
+    - is_dnf
+    - is_fedora
+    - _system_mullvad_install.rc | default(0) == 0
+  failed_when: false
+
+# --- USBGuard ---
+- name: Configure USBGuard
+  when:
+    - system_install_usbguard | bool
+    - is_dnf  # usbguard-selinux is Fedora/RHEL-only
+  block:
+    - name: Install USBGuard
+      ansible.builtin.dnf:
+        name:
+          - usbguard
+          - usbguard-selinux
+        state: present
+
+    - name: Deploy USBGuard whitelist rules
+      ansible.builtin.template:
+        src: usbguard-rules.conf.j2
+        dest: /etc/usbguard/rules.conf
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Restart usbguard
+      # No failed_when: false — a missing or corrupt rules.conf means USBGuard starts
+      # with ImplicitPolicyTarget=block and an empty ruleset, blocking all USB devices
+      # including the keyboard. Template failure must be a hard stop.
+
+    - name: Verify USBGuard rules.conf is non-empty before enabling service
+      ansible.builtin.stat:
+        path: /etc/usbguard/rules.conf
+      register: system_usbguard_rules_stat
+
+    - name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
+      ansible.builtin.assert:
+        that:
+          - system_usbguard_rules_stat.stat.exists | default(false)
+          - system_usbguard_rules_stat.stat.size | default(0) > 0
+        fail_msg: >-
+          /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
+          ALL USB devices including the keyboard. Fix the template and re-run before enabling.
+
+    - name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^ImplicitPolicyTarget='
+        line: 'ImplicitPolicyTarget=block'
+        state: present
+      notify: Restart usbguard
+
+    - name: Enforce AuditBackend=LinuxAudit in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^AuditBackend='
+        line: 'AuditBackend=LinuxAudit'
+        state: present
+      notify: Restart usbguard
+
+    - name: Enforce IPCAllowedGroups=wheel in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^IPCAllowedGroups='
+        line: 'IPCAllowedGroups=wheel'
+        state: present
+      notify: Restart usbguard
+
+    - name: Enable USBGuard service
+      ansible.builtin.systemd:
+        name: usbguard
+        state: started
+        enabled: true
+        daemon_reload: true
+      register: system_usbguard_enable_result
+      failed_when:
+        - system_usbguard_enable_result.failed
+        - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']

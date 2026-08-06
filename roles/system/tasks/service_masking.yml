@@ -1,0 +1,291 @@
+---
+# --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
+- name: Mask bluetooth service
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    masked: true
+    state: stopped
+  when:
+    - system_disable_bluetooth | bool
+    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+  failed_when: false
+
+- name: Unmask bluetooth service when system_disable_bluetooth disabled
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    masked: false
+    enabled: true
+    state: started
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+  failed_when: false
+
+- name: Stat /etc/bluetooth/main.conf
+  ansible.builtin.stat:
+    path: /etc/bluetooth/main.conf
+  register: system_bluetooth_conf_stat
+
+- name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
+  ansible.builtin.lineinfile:
+    path: /etc/bluetooth/main.conf
+    regexp: '^#?Privacy\s*='
+    line: 'Privacy = {{ system_bluetooth_privacy }}'
+    insertafter: '^\[General\]'
+    create: false
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel
+    - system_bluetooth_conf_stat.stat.exists
+  notify: Restart bluetooth
+
+- name: Set BlueZ Name in /etc/bluetooth/main.conf
+  ansible.builtin.lineinfile:
+    path: /etc/bluetooth/main.conf
+    regexp: '^#?Name\s*='
+    line: 'Name = {{ system_bluetooth_name }}'
+    insertafter: '^\[General\]'
+    create: false
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel
+    - system_bluetooth_conf_stat.stat.exists
+    - system_bluetooth_name | length > 0
+  notify: Restart bluetooth
+
+# --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
+- name: Mask/unmask thermald (Intel-only daemon)
+  vars:
+    _intel: "{{ 'Intel' in (ansible_facts['processor'] | join(' ')) }}"
+  ansible.builtin.systemd:
+    name: thermald
+    masked: "{{ not _intel }}"
+    state: "{{ 'stopped' if not _intel else omit }}"
+  failed_when: false
+
+# --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
+- name: Mask ModemManager (no WWAN interface detected)
+  ansible.builtin.systemd:
+    name: ModemManager.service
+    masked: true
+    state: stopped
+  when:
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
+  failed_when: false
+
+- name: Unmask ModemManager (WWAN interface detected)
+  ansible.builtin.systemd:
+    name: ModemManager.service
+    masked: false
+  when:
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length > 0
+  failed_when: false
+
+# --- TLP battery charge management (ThinkPad) ---
+- name: Install TLP for ThinkPad battery charge thresholds
+  ansible.builtin.dnf:
+    name:
+      - tlp
+      - tlp-rdw
+    state: present
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not override
+    - is_dnf
+  failed_when: false
+  register: _system_tlp_install
+
+- name: Warn if TLP install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: TLP install failed (rc={{ _system_tlp_install.rc | default('n/a') }});
+      power management daemon masking, config deploy, and service enable will be skipped
+  when:
+    - _system_tlp_install.rc | default(0) != 0
+
+- name: Mask power management daemons that conflict with TLP
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - power-profiles-daemon
+    - tuned-ppd
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
+    - is_dnf
+    - _system_tlp_install.rc | default(0) == 0
+  failed_when: false
+
+- name: Unmask power management daemons when TLP disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: true
+    state: started
+  loop:
+    - power-profiles-daemon
+    - tuned-ppd
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel
+  failed_when: false
+
+- name: Deploy TLP ThinkPad charge threshold config
+  ansible.builtin.template:
+    src: tlp-thinkpad.conf.j2
+    dest: /etc/tlp.d/50-thinkpad.conf
+    mode: "0644"
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel
+    - _system_tlp_install.rc | default(0) == 0
+  failed_when: false
+  notify: Restart tlp
+
+- name: Enable and start TLP service
+  ansible.builtin.systemd:
+    name: tlp
+    state: started
+    enabled: true
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel
+    - _system_tlp_install.rc | default(0) == 0
+  failed_when: false
+
+# --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
+# cups-browsed is masked (not just disabled) because it's an active RCE target.
+# cups.service is disabled/stopped but NOT masked — Flatpak print dialogs rely on
+# cups.socket for activation, and masking cups.service while leaving cups.socket
+# enabled creates a broken half-masked state (socket accepts, activation fails).
+# When system_disable_printing is true (default), cups.socket and cups.path are also
+# masked so socket activation cannot start the CUPS daemon regardless of cups.service
+# state. Set system_disable_printing: false in config.yml if printing is required.
+- name: Mask cups-browsed (RCE entry point)
+  ansible.builtin.systemd:
+    name: cups-browsed
+    masked: true
+    state: stopped
+  failed_when: false
+
+- name: Configure cups.service (disable when system_disable_printing)
+  ansible.builtin.systemd:
+    name: cups
+    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
+    enabled: "{{ not (system_disable_printing | bool) }}"
+  failed_when: false
+
+- name: Configure cups.socket and cups.path masking
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_disable_printing | bool }}"
+    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
+    enabled: "{{ not (system_disable_printing | bool) }}"
+  loop:
+    - cups.socket
+    - cups.path
+  failed_when: false
+
+# --- Mask ABRT crash reporter (redundant with systemd-coredump; skip on RHEL CSB where IT manages it via Satellite) ---
+- name: Mask ABRT services (redundant with systemd-coredump)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-xorg.service
+  when:
+    - system_mask_abrt | bool
+    - not csb_rhel
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+  failed_when: false
+
+# --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
+- name: Configure avahi-daemon masking (mask when system_disable_avahi)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_disable_avahi | bool }}"
+    state: "{{ 'stopped' if system_disable_avahi else 'started' }}"
+    enabled: "{{ not (system_disable_avahi | bool) }}"
+  loop:
+    - avahi-daemon.service
+    - avahi-daemon.socket
+  failed_when: false
+
+# --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
+# Note: NFS stays stopped/disabled even when unmasked — workstations never serve NFS.
+- name: Configure NFS server and rpcbind masking (CIS 2.2.7)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_mask_nfs_server | bool }}"
+    enabled: false
+    state: stopped
+  loop:
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+  failed_when: false
+
+# --- Cockpit (web console — port 9090; disabled by default) ---
+- name: Configure cockpit masking (mask when not system_enable_cockpit)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ not (system_enable_cockpit | bool) }}"
+    state: "{{ 'started' if system_enable_cockpit else 'stopped' }}"
+    enabled: "{{ system_enable_cockpit | bool }}"
+  loop:
+    - cockpit.service
+    - cockpit.socket
+  failed_when: false
+
+# --- Logind lid close ---
+# Write to a drop-in so package upgrades can't clobber the settings.
+- name: Ensure logind drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Configure lid close behavior
+  community.general.ini_file:
+    path: /etc/systemd/logind.conf.d/99-hardening.conf
+    section: Login
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    no_extra_spaces: true
+    mode: "0644"
+    create: true
+  loop:
+    - key: HandleLidSwitch
+      value: "{{ system_lid_switch }}"
+    - key: HandleLidSwitchExternalPower
+      value: "{{ system_lid_switch_external }}"
+    - key: HandleLidSwitchDocked
+      value: "{{ system_lid_switch_docked }}"
+    - key: HandleHibernateKey
+      value: ignore
+    - key: HandlePowerKey
+      value: lock
+    - key: IdleAction
+      value: lock
+    - key: IdleActionSec
+      value: "{{ system_logind_idle_sec }}"
+    - key: KillUserProcesses
+      value: "no"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Reload logind
+
+# --- Disable Ctrl+Alt+Delete reboot ---
+- name: Mask Ctrl+Alt+Delete reboot target
+  ansible.builtin.systemd:
+    name: ctrl-alt-del.target
+    masked: true
+  failed_when: false
