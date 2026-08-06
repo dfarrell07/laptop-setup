@@ -321,6 +321,10 @@
         # masking of alias units requires removing the pre-existing symlink first.
         # The VM scenario (make test-vm) exercises full masking on real systemd.
         - verify_cad_shared.status.UnitFileState != 'alias'
+        # 'enabled' on Rocky 10 privileged Podman container CI gap: systemd cannot mask
+        # ctrl-alt-del.target; service_masking.yml uses failed_when: false so it silently
+        # passes. The VM scenario (make test-vm) exercises the full masking path.
+        - verify_cad_shared.status.UnitFileState != 'enabled'
 
     - name: Check passim service state (shared)
       ansible.builtin.systemd:
