@@ -37,23 +37,23 @@
         state: directory
         mode: "0755"
 
-    - name: "Create stub golangci-lint binary (satisfies 'creates:' guard in converge)"
+    - name: Create stub golangci-lint binary (satisfies version-string guard in converge)
       ansible.builtin.copy:
         dest: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
         content: |
           #!/bin/sh
-          # Molecule stub — satisfies the 'creates:' guard so go install is skipped.
-          echo "golangci-lint version stub (molecule test)"
+          # Molecule stub — satisfies the version-string guard so go install is skipped.
+          echo "golangci-lint version v2.12.2"
           exit 0
         mode: "0755"
 
-    - name: Create stub subctl binary (satisfies 'creates:' guard in converge)
+    - name: Create stub subctl binary (satisfies version-string guard in converge)
       ansible.builtin.copy:
         dest: "{{ ansible_env.HOME }}/go/bin/subctl"
         content: |
           #!/bin/sh
-          # Molecule stub — satisfies the 'creates:' guard so go install is skipped.
-          echo "subctl version stub (molecule test)"
+          # Molecule stub — satisfies the version-string guard so go install is skipped.
+          echo "subctl version v0.24.0"
           exit 0
         mode: "0755"
 
