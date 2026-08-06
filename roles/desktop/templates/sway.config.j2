@@ -37,8 +37,8 @@ output * bg {{ desktop_bar_bg }} solid_color
 
 # Idle and lock
 exec swayidle -w \
-    timeout {{ desktop_sway_idle_lock_timeout }} 'swaylock -f' \
-    timeout {{ desktop_sway_idle_display_timeout }} 'swaymsg "output * power off"' \
+    timeout {{ desktop_wm_idle_lock_timeout }} 'swaylock -f' \
+    timeout {{ desktop_wm_idle_display_timeout }} 'swaymsg "output * power off"' \
     resume 'swaymsg "output * power on"' \
     before-sleep 'swaylock -f' \
     lock 'swaylock -f'
@@ -76,7 +76,7 @@ bindsym $mod+Shift+l move right
 # Split
 bindsym $mod+b splith
 bindsym $mod+v splitv
-bindsym $mod+Shift+b exec {{ desktop_sway_browser }}
+bindsym $mod+Shift+b exec {{ desktop_wm_browser }}
 
 # Layout
 bindsym $mod+s layout stacking
@@ -153,9 +153,9 @@ bindsym $mod+Shift+c reload
 bindsym $mod+Shift+e exec swaymsg exit
 
 # Appearance
-default_border pixel {{ desktop_sway_border_width }}
-default_floating_border pixel {{ desktop_sway_floating_border_width }}
-hide_edge_borders {{ desktop_sway_hide_edge_borders }}
+default_border pixel {{ desktop_wm_border_width }}
+default_floating_border pixel {{ desktop_wm_floating_border_width }}
+hide_edge_borders {{ desktop_wm_hide_edge_borders }}
 gaps inner {{ desktop_sway_gaps_inner }}
 gaps outer {{ desktop_sway_gaps_outer }}
 focus_follows_mouse {{ desktop_sway_focus_follows_mouse }}
@@ -169,8 +169,8 @@ input "type:keyboard" {
 {% if desktop_sway_keyboard_options %}
     xkb_options {{ desktop_sway_keyboard_options }}
 {% endif %}
-    repeat_delay {{ desktop_sway_repeat_delay }}
-    repeat_rate {{ desktop_sway_repeat_rate }}
+    repeat_delay {{ desktop_wm_repeat_delay }}
+    repeat_rate {{ desktop_wm_repeat_rate }}
 }
 
 seat seat0 xcursor_theme {{ desktop_sway_cursor_theme }} {{ desktop_sway_cursor_size }}

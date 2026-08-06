@@ -6,12 +6,12 @@ set $term {{ desktop_terminal }}
 font pango:{{ desktop_wm_font_family }} {{ desktop_wm_font_size }}
 
 # Autostart
-exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork -c {{ desktop_sway_lock_color }}
-exec --no-startup-id xautolock -time {{ (desktop_sway_idle_lock_timeout | int // 60) }} -locker 'i3lock -c {{ desktop_sway_lock_color }}'
-exec --no-startup-id xset dpms 0 0 {{ desktop_sway_idle_display_timeout }}
-exec --no-startup-id xset r rate {{ desktop_sway_repeat_delay }} {{ desktop_sway_repeat_rate }}
+exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork -c {{ desktop_wm_lock_color }}
+exec --no-startup-id xautolock -time {{ (desktop_wm_idle_lock_timeout | int // 60) }} -locker 'i3lock -c {{ desktop_wm_lock_color }}'
+exec --no-startup-id xset dpms 0 0 {{ desktop_wm_idle_display_timeout }}
+exec --no-startup-id xset r rate {{ desktop_wm_repeat_delay }} {{ desktop_wm_repeat_rate }}
 exec --no-startup-id dunst
-exec --no-startup-id /usr/bin/lxpolkit  # polkit-gnome removed Fedora 41+
+exec --no-startup-id {{ desktop_i3_polkit_agent }}  # polkit-gnome removed Fedora 41+
 exec --no-startup-id clipit -n  # clipboard manager daemon — persists clipboard content after source app closes
 exec_always --no-startup-id nm-applet
 exec_always --no-startup-id autorandr --change
@@ -107,11 +107,11 @@ bindsym XF86AudioStop exec --no-startup-id playerctl stop
 bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl set +5%
 bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
 
-# Browser (uses same variable as Sway: desktop_sway_browser)
-bindsym $mod+Shift+b exec {{ desktop_sway_browser }}
+# Browser (uses same variable as Sway: desktop_wm_browser)
+bindsym $mod+Shift+b exec {{ desktop_wm_browser }}
 
 # Manual screen lock ($mod+l is taken by focus-right)
-bindsym $mod+Ctrl+l exec --no-startup-id i3lock -c {{ desktop_sway_lock_color }}
+bindsym $mod+Ctrl+l exec --no-startup-id i3lock -c {{ desktop_wm_lock_color }}
 
 # Screenshot (scrot for X11)
 bindsym Print exec --no-startup-id scrot ~/Pictures/screenshot-%F-%H-%M-%S.png
@@ -123,9 +123,9 @@ bindsym $mod+Shift+r restart
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg exit'"
 
 # Appearance
-default_border pixel {{ desktop_sway_border_width }}
-default_floating_border pixel {{ desktop_sway_floating_border_width }}
-hide_edge_borders {{ desktop_sway_hide_edge_borders }}
+default_border pixel {{ desktop_wm_border_width }}
+default_floating_border pixel {{ desktop_wm_floating_border_width }}
+hide_edge_borders {{ desktop_wm_hide_edge_borders }}
 
 # Status bar (bar colors block is identical in sway.config.j2 — keep in sync)
 bar {
