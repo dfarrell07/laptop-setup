@@ -308,6 +308,12 @@
     src: tmux.conf.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
+
+- name: Remove legacy ~/.tmux.conf (migrated to XDG path)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
+    state: absent
+
 - name: Deploy vimrc
   ansible.builtin.copy:
     src: vimrc
