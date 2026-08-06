@@ -7,7 +7,7 @@
   failed_when: false
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: system_enable_libvirtd | bool
+  when: install_virtualization | bool
 
 - name: Enable modular libvirt sockets (Fedora 35+)
   ansible.builtin.systemd:
@@ -18,7 +18,7 @@
     - virtqemud.socket
     - virtnetworkd.socket
   when:
-    - system_enable_libvirtd | bool
+    - install_virtualization | bool
     - (system_virtqemud_check.rc | default(-1)) == 0
   failed_when: false
 
@@ -28,7 +28,7 @@
     state: started
     enabled: true
   when:
-    - system_enable_libvirtd | bool
+    - install_virtualization | bool
     - (system_virtqemud_check.rc | default(-1)) != 0
   failed_when: false
 
@@ -59,7 +59,7 @@
     name: "{{ real_user_id }}"
     groups: [libvirt, kvm]
     append: true
-  when: system_enable_libvirtd | bool
+  when: install_virtualization | bool
   failed_when: false
   # libvirt/kvm groups are created by package install in Play 2 (packages role).
   # On first provision this task runs in Play 1 before the packages exist — usermod
@@ -71,7 +71,7 @@
     name: virtnetworkd.service
     state: started
   when:
-    - system_enable_libvirtd | bool
+    - install_virtualization | bool
     - system_firewalld_running | bool
     - (system_virtqemud_check.rc | default(-1)) == 0
   failed_when: false
@@ -90,7 +90,7 @@
   register: _system_libvirt_ssh_remove
   when:
     - system_firewalld_running | bool
-    - system_enable_libvirtd | bool
+    - install_virtualization | bool
   failed_when: >-
     (_system_libvirt_ssh_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
@@ -105,7 +105,7 @@
     state: present
   register: _system_mullvad_install
   when:
-    - system_enable_mullvad | bool
+    - install_vpn | bool
     - is_dnf
     - is_fedora
   failed_when: false
@@ -116,7 +116,7 @@
       WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
       mullvad-daemon will not be enabled and VPN protection is not active on this host
   when:
-    - system_enable_mullvad | bool
+    - install_vpn | bool
     - is_dnf
     - is_fedora
     - _system_mullvad_install.rc | default(0) != 0
@@ -127,7 +127,7 @@
     state: started
     enabled: true
   when:
-    - system_enable_mullvad | bool
+    - install_vpn | bool
     - is_dnf
     - is_fedora
     - _system_mullvad_install.rc | default(0) == 0

@@ -74,10 +74,6 @@ system_firewall_icmp_types:
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
   - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
 
-# Services
-system_enable_libvirtd: "{{ install_virtualization }}"
-system_enable_mullvad: "{{ install_vpn }}"
-
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
 # 'none' disables collection entirely; 'journal' embeds core in journald (adds size pressure, requires extra extraction step)

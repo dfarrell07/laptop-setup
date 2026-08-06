@@ -84,8 +84,8 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
   # No interface is ever assigned to the public zone on hardened hosts; cleaning
-  # its default services is safe on all tiers (including CSB where IT manages
-  # zone assignments but leaves default services in place).
+  # its default services is safe on tiers where zone management is enabled
+  # (RHEL CSB: skipped because IT manages zone policy; hybrid Fedora CSB: runs normally).
   failed_when: false
 
 - name: Remove default services from FedoraWorkstation zone
@@ -99,6 +99,22 @@
     - ssh
     - dhcpv6-client
     - samba-client
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  failed_when: false
+
+- name: Remove default services from FedoraServer zone
+  ansible.posix.firewalld:
+    zone: FedoraServer
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - ssh
+    - dhcpv6-client
+    - cockpit
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
