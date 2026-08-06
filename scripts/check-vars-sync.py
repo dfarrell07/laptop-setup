@@ -9,6 +9,7 @@ in molecule (which generates a temp inventory that does not load project group_v
 Also verifies that pipx version pins in roles/packages/defaults/main.yml satisfy
 the specifier ranges in requirements-test.txt, keeping the two files in sync.
 """
+import re
 import sys
 import pathlib
 import yaml
@@ -20,6 +21,13 @@ VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
 SYSTEM_DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
 PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
+MOLECULE_DIR = REPO_ROOT / "molecule"
+
+# molecule files intentionally set distrobox_oc_version to a non-release value
+# (e.g. "0.0.0-offline-test") to exercise rescue/degradation paths — skip them.
+_OC_VERSION_SKIP = {
+    MOLECULE_DIR / "shared" / "offline-vars.yml",
+}
 
 # Mapping from Ansible var name to pip package name as it appears in requirements-test.txt.
 PIPX_VERSION_VARS = {
@@ -112,6 +120,47 @@ def check_pipx_version_sync():
     return errors
 
 
+def check_oc_version_sync():
+    """Verify distrobox_oc_version in molecule files matches packages_oc_version.
+
+    molecule/shared/offline-vars.yml intentionally uses "0.0.0-offline-test" to
+    trigger a 404 rescue path — it is excluded from this check.
+    """
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    expected = str(packages_data.get("packages_oc_version", ""))
+    if not expected:
+        return ["  MISSING: packages_oc_version not found in roles/packages/defaults/main.yml"]
+
+    errors = []
+
+    for yml_file in sorted(MOLECULE_DIR.rglob("*.yml")):
+        if yml_file in _OC_VERSION_SKIP:
+            continue
+        content = yml_file.read_text()
+        for match in re.finditer(r'distrobox_oc_version:\s*["\']([^"\']+)["\']', content):
+            found = match.group(1)
+            if found != expected:
+                errors.append(
+                    f"  MISMATCH: {yml_file.relative_to(REPO_ROOT)}: "
+                    f"distrobox_oc_version={found!r} != packages_oc_version={expected!r}"
+                )
+
+    # Also check the stub shell script in container/prepare.yml: the echo output
+    # must match so comments stay accurate when packages_oc_version is bumped.
+    prepare_file = MOLECULE_DIR / "container" / "prepare.yml"
+    if prepare_file.exists() and prepare_file not in _OC_VERSION_SKIP:
+        content = prepare_file.read_text()
+        for match in re.finditer(r'Client Version:\s*(\d+\.\d+\.\d+)', content):
+            found = match.group(1)
+            if found != expected:
+                errors.append(
+                    f"  MISMATCH: {prepare_file.relative_to(REPO_ROOT)}: "
+                    f"stub 'Client Version: {found}' != packages_oc_version={expected!r}"
+                )
+
+    return errors
+
+
 def main():
     vars_data = load_yaml(VARS_FILE)
 
@@ -180,6 +229,28 @@ def main():
         sys.exit(1)
 
     print(f"OK: {len(PIPX_VERSION_VARS)} pipx version pins satisfy requirements-test.txt ranges")
+
+    oc_errors = check_oc_version_sync()
+    if oc_errors:
+        print(
+            "ERROR: distrobox_oc_version in molecule files does not match"
+            " packages_oc_version in roles/packages/defaults/main.yml:",
+            file=sys.stderr,
+        )
+        for line in oc_errors:
+            print(line, file=sys.stderr)
+        print(
+            "Update distrobox_oc_version in the listed molecule files to match"
+            " packages_oc_version, or bump packages_oc_version first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    print(
+        f"OK: distrobox_oc_version in molecule files matches"
+        f" packages_oc_version={packages_data.get('packages_oc_version')!r}"
+    )
 
 
 if __name__ == "__main__":

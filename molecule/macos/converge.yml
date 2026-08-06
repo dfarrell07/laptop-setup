@@ -5,11 +5,8 @@
   become: false
 
   pre_tasks:
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
-
-    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
     - name: Override profile
       ansible.builtin.set_fact:

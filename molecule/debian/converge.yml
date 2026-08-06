@@ -11,15 +11,8 @@
         real_user_id: "{{ lookup('env', 'USER') }}"
       become: false
 
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
-
-    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
-
-    - name: Set project root for include paths
-      ansible.builtin.set_fact:
-        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
@@ -38,11 +31,8 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
-
-    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
     - name: Override profile
       ansible.builtin.set_fact:

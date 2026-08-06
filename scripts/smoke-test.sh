@@ -975,22 +975,22 @@ EOF
     done
   fi
   if systemctl list-unit-files aide-check.timer &>/dev/null; then
-  # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
-  if [[ -f /etc/aide.conf ]]; then
-    for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
-      label="aide-monitors-$(basename "$_path")"
-      if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
-      else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
-    done
-  else record "aide-not-configured" "WARN" "/etc/aide.conf absent — run: make system (enable system_aide_enabled: true in config.yml first); after deploy, initialise with: aide --init"; fi
-  # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true for laptops)
-  if [[ -f /etc/tlp.conf ]]; then
-    for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
-      label="aide-monitors-$(basename "$_path")"
-      if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
-      else record "$label" "WARN" "$_path not found in /etc/aide.conf — expected when system_tlp_enabled: true"; fi
-    done
-  fi
+    # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
+    if [[ -f /etc/aide.conf ]]; then
+      for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
+        label="aide-monitors-$(basename "$_path")"
+        if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
+        else record "$label" "WARN" "$_path not found in /etc/aide.conf"; fi
+      done
+    else record "aide-not-configured" "WARN" "/etc/aide.conf absent — run: make system (enable system_aide_enabled: true in config.yml first); after deploy, initialise with: aide --init"; fi
+    # TLP paths only added to aide.conf when TLP is enabled (system_tlp_enabled=true for laptops)
+    if [[ -f /etc/tlp.conf ]]; then
+      for _path in "/etc/tlp.d" "/etc/tlp.conf"; do
+        label="aide-monitors-$(basename "$_path")"
+        if grep -qF "$_path" /etc/aide.conf 2>/dev/null; then record "$label" "PASS"
+        else record "$label" "WARN" "$_path not found in /etc/aide.conf — expected when system_tlp_enabled: true"; fi
+      done
+    fi
   fi
 
   # USB storage blacklist is conditional on system_disable_usb_storage (default: true)
@@ -1849,10 +1849,12 @@ fi
 
 # resolved.conf.d/98-llmnr.conf content check — file-gated; silently skips on macOS or where system role was not run
 if [[ -f /etc/systemd/resolved.conf.d/98-llmnr.conf ]]; then
-  grep -q 'LLMNR=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
-    grep -q 'MulticastDNS=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
-    record 'llmnr-disabled' 'PASS' || \
+  if grep -q 'LLMNR=no' /etc/systemd/resolved.conf.d/98-llmnr.conf && \
+     grep -q 'MulticastDNS=no' /etc/systemd/resolved.conf.d/98-llmnr.conf; then
+    record 'llmnr-disabled' 'PASS'
+  else
     record 'llmnr-disabled' 'FAIL' '98-llmnr.conf missing LLMNR=no or MulticastDNS=no'
+  fi
 elif $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]]; then
   record 'llmnr-disabled' 'FAIL' '/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — run: make system'
 fi
