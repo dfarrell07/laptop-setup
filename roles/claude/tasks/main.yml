@@ -229,12 +229,13 @@
     - is_linux
     - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
   register: _timer_enable
+  failed_when: false
 
-- name: Warn if timer enable failed (container — no systemd user session)
+- name: Warn if timer enable failed (no active user systemd session)
   ansible.builtin.debug:
     msg: >-
       WARNING: claude-queue.timer enable failed ({{ _timer_enable.msg | default('unknown error') }}).
-      This is expected in containers without a systemd user session; the timer will be active on real machines.
+      This is expected on real machines provisioned without an active user session; the timer will be active after login.
   when:
     - claude_queue_enabled | bool
     - is_linux

@@ -25,6 +25,11 @@
 - name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: sysctl --system
+  # changed_when: false — sysctl --system provides no reliable stdout/exit-code indicator for
+  # "values actually changed vs already current"; suppressing the change signal is pragmatic.
+  # On first provision this task does activate bridge-nf-call-iptables/ip6tables in the running
+  # kernel for the first time (br_netfilter was not loaded when hardening_core.yml ran sysctl),
+  # but "ok" vs "changed" is indistinguishable from the command's output alone.
   changed_when: false
   failed_when: false
   when: not system_is_container
