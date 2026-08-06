@@ -10,51 +10,46 @@
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
   failed_when: false
 
-- name: Unmask bluetooth service when system_disable_bluetooth disabled
-  ansible.builtin.systemd:
-    name: bluetooth.service
-    masked: false
-    enabled: true
-    state: started
+- name: Bluetooth service enable and configure (system_disable_bluetooth disabled)
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
-    - not system_is_container
-  failed_when: false
-
-- name: Stat /etc/bluetooth/main.conf
-  ansible.builtin.stat:
-    path: /etc/bluetooth/main.conf
-  register: system_bluetooth_conf_stat
-
-- name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
-  ansible.builtin.lineinfile:
-    path: /etc/bluetooth/main.conf
-    regexp: '^#?Privacy\s*='
-    line: 'Privacy = {{ system_bluetooth_privacy }}'
-    insertafter: '^\[General\]'
-    create: false
-  when:
-    - not (system_disable_bluetooth | bool)
-    - not csb_rhel
     - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
-    - system_bluetooth_conf_stat.stat.exists
-  notify: Restart bluetooth
+  block:
+    - name: Unmask bluetooth service when system_disable_bluetooth disabled
+      ansible.builtin.systemd:
+        name: bluetooth.service
+        masked: false
+        enabled: true
+        state: started
+      failed_when: false
 
-- name: Set BlueZ Name in /etc/bluetooth/main.conf
-  ansible.builtin.lineinfile:
-    path: /etc/bluetooth/main.conf
-    regexp: '^#?Name\s*='
-    line: 'Name = {{ system_bluetooth_name }}'
-    insertafter: '^\[General\]'
-    create: false
-  when:
-    - not (system_disable_bluetooth | bool)
-    - not csb_rhel
-    - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
-    - system_bluetooth_conf_stat.stat.exists
-    - system_bluetooth_name | length > 0
-  notify: Restart bluetooth
+    - name: Stat /etc/bluetooth/main.conf
+      ansible.builtin.stat:
+        path: /etc/bluetooth/main.conf
+      register: system_bluetooth_conf_stat
+
+    - name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
+      ansible.builtin.lineinfile:
+        path: /etc/bluetooth/main.conf
+        regexp: '^#?Privacy\s*='
+        line: 'Privacy = {{ system_bluetooth_privacy }}'
+        insertafter: '^\[General\]'
+        create: false
+      when: system_bluetooth_conf_stat.stat.exists
+      notify: Restart bluetooth
+
+    - name: Set BlueZ Name in /etc/bluetooth/main.conf
+      ansible.builtin.lineinfile:
+        path: /etc/bluetooth/main.conf
+        regexp: '^#?Name\s*='
+        line: 'Name = {{ system_bluetooth_name }}'
+        insertafter: '^\[General\]'
+        create: false
+      when:
+        - system_bluetooth_conf_stat.stat.exists
+        - system_bluetooth_name | length > 0
+      notify: Restart bluetooth
 
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
 - name: Mask/unmask thermald (Intel-only daemon)

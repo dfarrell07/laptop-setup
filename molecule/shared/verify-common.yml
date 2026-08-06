@@ -718,6 +718,8 @@
     - kernel.kptr_restrict = 1
     - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(1) }}
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
+    - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(0) }}
+    - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
     - net.bridge.bridge-nf-call-iptables
     - net.ipv6.conf.all.use_tempaddr
     - net.ipv4.conf.all.rp_filter
@@ -855,6 +857,27 @@
   ansible.builtin.assert:
     that: verify_dot_conf.stat.exists
     fail_msg: "/etc/systemd/resolved.conf.d/99-dot.conf not deployed — DNS-over-TLS regression"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Stat /etc/resolv.conf (symlink check)
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    follow: false
+  register: verify_resolv_conf
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /etc/resolv.conf is symlink to stub-resolv.conf
+  ansible.builtin.assert:
+    that:
+      - verify_resolv_conf.stat.islnk
+      - verify_resolv_conf.stat.lnk_target == '/run/systemd/resolve/stub-resolv.conf'
+    fail_msg: >-
+      /etc/resolv.conf is not a symlink to /run/systemd/resolve/stub-resolv.conf —
+      split DNS / Tailscale MagicDNS will not work; dns_over_tls.yml creates this symlink
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -1319,6 +1342,61 @@
     - not csb_rhel
     - masked_sshd_socket_state.rc == 0
     - masked_sshd_socket_state.stdout | length > 0
+
+# --- USBGuard config content verification (system role, DNF Linux, system_install_usbguard only) ---
+# Gated on system_install_usbguard — verification skips on hosts where USBGuard is not installed.
+# rules.conf is deployed mode 0600 — become: true required to read.
+# usbguard-daemon.conf checks verify ImplicitPolicyTarget=block (prevents silent policy downgrade)
+# and AuditBackend=LinuxAudit (ensures USB events flow through the audit subsystem).
+- name: Stat /etc/usbguard/rules.conf
+  ansible.builtin.stat:
+    path: /etc/usbguard/rules.conf
+  register: verify_usbguard_rules
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - system_install_usbguard | default(false) | bool
+    - ansible_os_family != 'Debian'
+
+- name: Assert USBGuard rules.conf deployed (mode 0600, non-empty)
+  ansible.builtin.assert:
+    that:
+      - verify_usbguard_rules.stat.exists
+      - verify_usbguard_rules.stat.mode == '0600'
+      - verify_usbguard_rules.stat.size | default(0) > 0
+    fail_msg: "/etc/usbguard/rules.conf missing, wrong mode, or empty — system role USBGuard template regression"
+  when:
+    - ansible_system == 'Linux'
+    - system_install_usbguard | default(false) | bool
+    - ansible_os_family != 'Debian'
+
+- name: Check USBGuard rules.conf contains hardwired-device allow rule
+  ansible.builtin.command: grep -q 'with-connect-type "hardwired"' /etc/usbguard/rules.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - system_install_usbguard | default(false) | bool
+    - ansible_os_family != 'Debian'
+    - verify_usbguard_rules.stat.exists
+
+- name: Check usbguard-daemon.conf has ImplicitPolicyTarget=block
+  ansible.builtin.command: grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - system_install_usbguard | default(false) | bool
+    - ansible_os_family != 'Debian'
+
+- name: Check usbguard-daemon.conf has AuditBackend=LinuxAudit
+  ansible.builtin.command: grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - system_install_usbguard | default(false) | bool
+    - ansible_os_family != 'Debian'
 
 - name: Check git-lfs is installed (packages role)
   ansible.builtin.command:
