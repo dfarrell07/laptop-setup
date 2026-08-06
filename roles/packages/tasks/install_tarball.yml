@@ -22,7 +22,7 @@
 
 - name: "Download and install {{ binary_name }}"
   block:
-    - name: "Check if {{ binary_name }} is installed at target version"
+    - name: "Version check: {{ binary_name }}"
       ansible.builtin.command:
         cmd: "{{ version_check_cmd }}"
       register: _install_tarball_check
@@ -33,7 +33,7 @@
     - name: "Download and extract {{ binary_name }}"
       when: version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
       block:
-        - name: "Download {{ binary_name }} tarball"
+        - name: "Tarball download: {{ binary_name }}"
           ansible.builtin.get_url:
             url: "{{ url }}"
             dest: "{{ tarball }}"
@@ -45,7 +45,7 @@
           delay: 10
           until: _install_tarball_download is succeeded
 
-        - name: "Extract {{ binary_name }} binary"
+        - name: "Binary extraction: {{ binary_name }}"
           ansible.builtin.unarchive:
             src: "{{ tarball }}"
             dest: /usr/local/bin
@@ -65,13 +65,13 @@
           tags: [become]
 
       always:
-        - name: "Clean up {{ binary_name }} tarball"
+        - name: "Tarball cleanup: {{ binary_name }}"
           ansible.builtin.file:
             path: "{{ tarball }}"
             state: absent
 
   rescue:
-    - name: "Record {{ binary_name }} download failure (CSB)"
+    - name: "CSB failure record: {{ binary_name }}"
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
         _csb_role: packages
@@ -81,7 +81,7 @@
         _csb_ticket_summary: "{{ csb_ticket_summary }}"
         _csb_ticket_body: "{{ csb_ticket_body }}"
       when: csb_rhel
-    - name: "Warn {{ binary_name }} download failed"
+    - name: "Download failure warning: {{ binary_name }}"
       ansible.builtin.debug:
         msg: >-
           Failed to download {{ binary_name }}: {{ ansible_failed_result.msg | default('unknown error') }}.
