@@ -37,7 +37,7 @@
   when:
     - desktop_effective == 'unknown'
     - desktop_environment == 'auto'
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Install common desktop packages
   ansible.builtin.dnf:
@@ -78,7 +78,7 @@
     - desktop_effective == 'gnome'
 
 - name: Install desktop packages (apt)
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
   block:
     - name: Install desktop packages (apt)
       ansible.builtin.apt:
@@ -98,7 +98,7 @@
 
 - name: Install Sway packages (apt)
   when:
-    - ansible_facts['pkg_mgr'] == 'apt'
+    - is_apt
     - desktop_effective == 'sway'
   block:
     - name: Install Sway packages (apt)
@@ -182,7 +182,7 @@
   ansible.builtin.set_fact:
     desktop_sway_polkit_agent: /usr/bin/lxqt-policykit-agent
   when:
-    - ansible_facts['pkg_mgr'] == 'apt'
+    - is_apt
     - desktop_effective == 'sway'
 
 - name: Deploy Sway configuration and GTK settings
@@ -252,7 +252,7 @@
     mode: "0644"
     backup: true
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - desktop_effective == 'sway'
 
 - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
@@ -261,7 +261,7 @@
     value: "'prefer-dark'"
   failed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - desktop_effective == 'sway'
 
 # --- i3status config (shared by i3 and Sway) ---
@@ -286,12 +286,12 @@
   register: desktop_csb_chrome
   when:
     - desktop_deploy_chrome_policies
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Chrome and Chromium managed policies
   when:
     - desktop_deploy_chrome_policies
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - not (desktop_csb_chrome.stat.exists | default(false))
   block:
     - name: Create Chrome managed policies directory
@@ -336,7 +336,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['user_shell'] != '/bin/zsh'
 
 # --- macOS: AeroSpace config ---
@@ -345,14 +345,14 @@
     path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
     state: directory
     mode: "0755"
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
 
 - name: Deploy AeroSpace config (macOS)
   ansible.builtin.copy:
     src: aerospace.toml
     dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
     mode: "0644"
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
 
 # --- macOS: defaults ---
 - name: Set macOS defaults
@@ -364,7 +364,7 @@
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
 
 # --- macOS: firewall ---
 - name: Check macOS firewall state
@@ -375,7 +375,7 @@
   check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
   failed_when: false
 
 - name: Enable macOS firewall
@@ -386,7 +386,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - "'State = 1' not in (_fw_state.stdout | default(''))"
   failed_when: false
 
@@ -394,7 +394,7 @@
   ansible.builtin.debug:
     msg: "WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc }} — application firewall may still be off"
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - _fw_enable_result.rc | default(0) != 0
 
 - name: Check macOS firewall stealth mode state
@@ -405,7 +405,7 @@
   check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
   failed_when: false
 
 - name: Enable macOS firewall stealth mode
@@ -416,7 +416,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
   failed_when: false
 
@@ -424,7 +424,7 @@
   ansible.builtin.debug:
     msg: "WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc }} — firewall stealth mode may still be off"
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - _fw_stealth_enable_result.rc | default(0) != 0
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
@@ -436,12 +436,12 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - desktop_effective == 'gnome'
 
 - name: GNOME hardening dconf settings
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - desktop_effective == 'gnome'
     - desktop_gnome_check.rc == 0
   block:

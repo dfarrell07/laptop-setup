@@ -6,10 +6,7 @@
 
   pre_tasks:
     - name: Capture real user identity
-      ansible.builtin.set_fact:
-        real_user_home: "{{ lookup('env', 'HOME') }}"
-        real_user_id: "{{ lookup('env', 'USER') }}"
-      become: false
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/capture-user-identity.yml"
 
     - name: Load CI pre-tasks (config, group_vars, project root)
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"

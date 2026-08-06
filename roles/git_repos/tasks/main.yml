@@ -73,34 +73,27 @@
     - git_repos_ssh_agent.rc in [1, 2]
     - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
 
-# Coverage gap: the wait_for loop body is never invoked in any molecule scenario.
+# Coverage gap: the wait_for task is never invoked in any molecule scenario.
 # Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
-# No CI test repo uses ssh:// or git@ URLs matching gitlab.cee.redhat.com
-# so the computed loop list is always empty and wait_for is skipped.
+# No CI test repo URL matches gitlab.cee.redhat.com so the when: condition is
+# always false and wait_for is skipped.
 # A functional end-to-end test would require VPN access unavailable in CI.
 - name: Check connectivity to VPN-gated repo hosts
   ansible.builtin.wait_for:
-    host: "{{ item }}"
+    host: gitlab.cee.redhat.com
     port: 22
     timeout: 3
     state: started
-  loop: >-
-    {{
-      (['gitlab.cee.redhat.com']
-         if git_repos_filtered | map(attribute='url') | select('search', 'gitlab\\.cee\\.redhat\\.com') | list | length > 0
-         else [])
-    }}
+  when: git_repos_filtered | map(attribute='url') | select('search', 'gitlab\\.cee\\.redhat\\.com') | list | length > 0
   register: git_repos_vpn_check
   ignore_errors: true
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
-      VPN-gated host {{ item.item }} is unreachable (port 22).
-      Repos at {{ item.item }} require Red Hat VPN — connect to VPN or expect clone failures.
-  loop: "{{ git_repos_vpn_check.results | selectattr('failed', 'equalto', true) | list }}"
-  loop_control:
-    label: "{{ item.item }}"
+      VPN-gated host gitlab.cee.redhat.com is unreachable (port 22).
+      Repos at gitlab.cee.redhat.com require Red Hat VPN — connect to VPN or expect clone failures.
+  when: git_repos_vpn_check.failed | default(false)
 
 - name: Ensure base directory exists
   ansible.builtin.file:

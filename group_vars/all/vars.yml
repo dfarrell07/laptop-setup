@@ -92,10 +92,11 @@ system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (
 system_kexec_load_disabled: 0      # kdump requires kexec; CIS default is 1 (blocks kexec); set 1 in config.yml for strict CIS
 system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
-# Computed boolean: true on RHEL CSB where IT manages security baselines;
-# false on hybrid Fedora CSB where the user manages their own system.
+# Baseline false — csb_detect.yml overrides at runtime via set_fact
+# (csb_detected and is_rhel). True on RHEL CSB where IT manages security
+# baselines; false on hybrid Fedora CSB where the user manages their own system.
 # Used in rescue blocks to route IT ticket vs. generic warning.
-csb_rhel: "{{ csb_detected and ansible_facts['distribution'] != 'Fedora' }}"
+csb_rhel: false
 
 containers_registries: >-
   {{ ['quay.io'] + (['registry.redhat.io'] if (profile | default('work')) == 'work' else []) }}

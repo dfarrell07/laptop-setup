@@ -129,7 +129,7 @@ if [[ -x /usr/local/bin/oc ]]; then
   fi
 fi
 # work-profile binaries (guard on presence, emit nothing when absent)
-for _b in "cosign:cosign version" "tkn:tkn version --component=cli" \
+for _b in "cosign:cosign version" "tkn:tkn version --component=client" \
            "operator-sdk:operator-sdk version" "opm:opm version" "ec:ec version"; do
   _bname="${_b%%:*}"; _bvcmd="${_b#*:}"
   if [[ -x "/usr/local/bin/$_bname" ]]; then

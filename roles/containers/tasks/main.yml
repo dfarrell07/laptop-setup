@@ -37,7 +37,7 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - registry_tokens | default([]) | length > 0
 
 - name: Authenticate to container registries from vault
@@ -51,7 +51,7 @@
   changed_when: true
   failed_when: false
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Check registry auth status after vault login
@@ -66,7 +66,7 @@
   failed_when: false
   check_mode: false
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - registry_tokens | default([]) | length > 0
 
 - name: Warn if vault registry login did not persist credentials
@@ -91,7 +91,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 - name: Report unauthenticated registries
   ansible.builtin.debug:
@@ -127,7 +127,7 @@
     enabled: true
     scope: user
   register: containers_podman_socket
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
   failed_when: false
 
 - name: Warn if podman user socket failed to start
@@ -137,7 +137,7 @@
       kind and docker-compatible CLIs will not work. Fix: systemctl --user enable --now podman.socket.
       If that fails: systemctl --user status podman.socket; journalctl --user -u podman.socket
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - containers_podman_socket.status.ActiveState | default('') not in ['active', 'activating']
 
 - name: Disable Docker socket by default
@@ -149,7 +149,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - not (install_docker)
   failed_when: false
 
@@ -162,7 +162,7 @@
     value: '"{{ containers_kind_log_driver }}"'
     mode: "0644"
     create: true
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 - name: Set containers.conf pids_limit for kind (kind nodes spawn many processes)
   community.general.ini_file:
@@ -172,7 +172,7 @@
     value: "{{ containers_kind_pids_limit }}"
     mode: "0644"
     create: true
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 - name: Set containers.conf default_ulimits nofile for kind (socket-activated podman.service inherits low NOFILE)
   community.general.ini_file:
@@ -182,7 +182,7 @@
     value: '["nofile={{ containers_kind_nofile_limit }}:{{ containers_kind_nofile_hard_limit }}"]'
     mode: "0644"
     create: true
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 # --- periodic container storage cleanup ---
 - name: Deploy podman-prune.service
@@ -199,7 +199,7 @@
       # because they are tagged (not dangling) — podman system prune without --all
       # skips non-dangling images regardless of the label filter
       ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
   register: containers_prune_service
 
 - name: Deploy podman-prune.timer
@@ -216,7 +216,7 @@
 
       [Install]
       WantedBy=timers.target
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
   register: containers_prune_timer
 
 - name: Reload systemd user daemon after deploying prune units
@@ -224,7 +224,7 @@
     scope: user
     daemon_reload: true
   when:
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - containers_prune_service.changed or containers_prune_timer.changed
   failed_when: false
 
@@ -234,7 +234,7 @@
     state: started
     enabled: true
     scope: user
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
   failed_when: false
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
@@ -249,7 +249,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/containers.conf"
     mode: "0644"
     backup: true
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
   # environment.d is processed by systemd-environment-d-generator at user session start,
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or

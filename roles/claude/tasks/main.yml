@@ -118,19 +118,19 @@
       z %h/.claude/settings.local.json 0600 - - -
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 - name: Apply claude-privacy tmpfiles now
   ansible.builtin.command:
     cmd: systemd-tmpfiles --user --create
   changed_when: false
-  when: ansible_facts['system'] == 'Linux'
+  when: is_linux
 
 - name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.claude"
     mode: "0700"
-  when: ansible_facts['system'] == 'Darwin'
+  when: is_macos | bool
   failed_when: false
 
 # --- Git safety (defense-in-depth) ---
@@ -166,7 +166,7 @@
     state: present
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
 
 - name: Ensure ~/.config/claude directory exists (queue config)
   ansible.builtin.file:
@@ -197,7 +197,7 @@
     mode: "0644"
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Deploy task queue systemd timer
   ansible.builtin.template:
@@ -206,7 +206,7 @@
     mode: "0644"
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Enable task queue timer
   ansible.builtin.systemd:
@@ -217,7 +217,7 @@
     daemon_reload: true
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
   register: _timer_enable
   ignore_errors: "{{ ansible_virtualization_type in ['container', 'podman', 'docker'] }}"
 
@@ -228,7 +228,7 @@
       This is expected in containers without a systemd user session; the timer will be active on real machines.
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - _timer_enable is defined
     - _timer_enable.failed | default(false)
 
@@ -252,7 +252,7 @@
   tags: [become]
   when:
     - claude_queue_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
 - name: Check if task queue timer unit exists
@@ -261,7 +261,7 @@
   register: _claude_timer_stat
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Stop and disable task queue timer (when disabled)
   ansible.builtin.systemd:
@@ -271,7 +271,7 @@
     enabled: false
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - _claude_timer_stat.stat.exists
   failed_when: false
 
@@ -285,7 +285,7 @@
   register: _claude_queue_unit_removal
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Reload systemd user daemon after removing task queue unit files  # noqa: no-handler
   ansible.builtin.systemd:
@@ -293,7 +293,7 @@
     daemon_reload: true
   when:
     - not (claude_queue_enabled | bool)
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - _claude_queue_unit_removal.changed
   failed_when: false
 
@@ -305,7 +305,7 @@
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
   register: _claude_queue_bootout_result
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - not (claude_queue_enabled | bool)
   changed_when: _claude_queue_bootout_result.rc == 0
   failed_when: false
@@ -315,7 +315,7 @@
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     state: absent
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - not (claude_queue_enabled | bool)
 
 - name: Warn claude_remote_control_enabled has no effect on Linux
@@ -325,7 +325,7 @@
       (launchd plist). No Linux systemd unit is implemented yet.
   when:
     - claude_remote_control_enabled | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
 
 - name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -334,7 +334,7 @@
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
   register: _claude_rc_bootout_result
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - not (claude_remote_control_enabled | bool)
   changed_when: _claude_rc_bootout_result.rc == 0
   failed_when: false
@@ -344,7 +344,7 @@
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     state: absent
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - not (claude_remote_control_enabled | bool)
 
 # --- macOS: launchd services ---
@@ -354,7 +354,7 @@
     state: directory
     mode: "0755"
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
 - name: Deploy task queue launchd plist (macOS)
@@ -363,7 +363,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     mode: "0644"
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - claude_queue_enabled | bool
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
@@ -373,7 +373,7 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - claude_queue_enabled | bool
   register: _claude_queue_bootstrap_result
   changed_when: _claude_queue_bootstrap_result.rc == 0
@@ -385,7 +385,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     mode: "0644"
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - claude_remote_control_enabled | bool
 
 - name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
@@ -395,11 +395,8 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - claude_remote_control_enabled | bool
   register: _claude_rc_bootstrap_result
   changed_when: _claude_rc_bootstrap_result.rc == 0
   failed_when: false
-
-# brew autoupdate moved to roles/packages/tasks/main.yml — it manages all Homebrew
-# packages, not Claude-specific functionality, and belongs with the packages role.

@@ -1,0 +1,8 @@
+---
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - "!min"
+      - distribution
+      - env

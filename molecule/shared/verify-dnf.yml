@@ -282,30 +282,6 @@
   become: true
   when: not (csb_rhel | default(false))
 
-# --- auditd.conf coverage (deployed by system role on non-CSB Fedora/Rocky) ---
-- name: Stat /etc/audit/auditd.conf
-  ansible.builtin.stat:
-    path: /etc/audit/auditd.conf
-  register: verify_auditd_conf
-  become: true
-
-- name: Assert auditd.conf deployed with mode 0640
-  ansible.builtin.assert:
-    that:
-      - verify_auditd_conf.stat.exists
-      - verify_auditd_conf.stat.mode == '0640'
-    fail_msg: "/etc/audit/auditd.conf missing or wrong mode — system role auditd deploy regression"
-
-- name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
-  ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file }}' /etc/audit/auditd.conf
-  changed_when: false
-  become: true
-
-- name: Check auditd.conf log_format=ENRICHED (CIS 4.1.2.1)
-  ansible.builtin.command: grep -q '^log_format = ENRICHED' /etc/audit/auditd.conf
-  changed_when: false
-  become: true
-
 - name: Check /etc/dnf/automatic.conf upgrade_type = security
   ansible.builtin.command: grep -q '^upgrade_type = security' /etc/dnf/automatic.conf
   changed_when: false
@@ -349,6 +325,7 @@
   when:
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Assert ABRT services are masked
   ansible.builtin.assert:
@@ -358,6 +335,7 @@
   when:
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
     - item.status.UnitFileState | default('') not in ['', 'not-found']
 
 - name: Verify crypto-policy

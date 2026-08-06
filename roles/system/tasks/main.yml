@@ -355,7 +355,7 @@
   ansible.builtin.apt:
     name: auditd
     state: present
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
 
 - name: Assert real_user_home is a valid absolute path before deploying auditd rules
   ansible.builtin.assert:
@@ -592,6 +592,15 @@
     - not csb_rhel  # RHEL CSB: IT manages power daemons; do not override
     - is_dnf
   failed_when: false
+  register: _system_tlp_install
+
+- name: Warn if TLP install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: TLP install failed (rc={{ _system_tlp_install.rc | default('n/a') }});
+      power management daemon masking, config deploy, and service enable will be skipped
+  when:
+    - _system_tlp_install.rc | default(0) != 0
 
 - name: Mask power management daemons that conflict with TLP
   ansible.builtin.systemd:
@@ -604,6 +613,8 @@
   when:
     - system_tlp_enabled | bool
     - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
+    - is_dnf
+    - _system_tlp_install.rc | default(0) == 0
   failed_when: false
 
 - name: Unmask power management daemons when TLP disabled
@@ -628,6 +639,7 @@
   when:
     - system_tlp_enabled | bool
     - not csb_rhel
+    - _system_tlp_install.rc | default(0) == 0
   failed_when: false
   notify: Restart tlp
 
@@ -639,6 +651,7 @@
   when:
     - system_tlp_enabled | bool
     - not csb_rhel
+    - _system_tlp_install.rc | default(0) == 0
   failed_when: false
 
 # --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
@@ -879,11 +892,23 @@
   ansible.builtin.dnf:
     name: mullvad-vpn
     state: present
+  register: _system_mullvad_install
   when:
     - system_enable_mullvad | bool
     - is_dnf
     - is_fedora
   failed_when: false
+
+- name: Warn if Mullvad VPN package install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
+      mullvad-daemon will not be enabled and VPN protection is not active on this host
+  when:
+    - system_enable_mullvad | bool
+    - is_dnf
+    - is_fedora
+    - _system_mullvad_install.rc | default(0) != 0
 
 - name: Enable Mullvad VPN service
   ansible.builtin.systemd:
@@ -894,6 +919,7 @@
     - system_enable_mullvad | bool
     - is_dnf
     - is_fedora
+    - _system_mullvad_install.rc | default(0) == 0
   failed_when: false
 
 # --- USBGuard ---
@@ -1594,7 +1620,7 @@
     name: chrony
     state: present
   when:
-    - ansible_facts['pkg_mgr'] == 'apt'
+    - is_apt
     # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
     # false) to prevent the daemon start from crashing the Podman container.
     - system_chrony_service_enabled | bool
@@ -1614,7 +1640,7 @@
 
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
-    name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
+    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
     state: started
     enabled: true
   when:
@@ -1719,7 +1745,7 @@
     line: 'auth    required                        pam_faillock.so preauth'
     insertbefore: '^auth\s'
     mode: "0644"
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
 
 - name: Ensure pam_faillock.so authfail line is in common-auth (Debian)
   ansible.builtin.lineinfile:
@@ -1728,7 +1754,7 @@
     line: 'auth    [default=die]                  pam_faillock.so authfail'
     insertafter: '^auth.*pam_unix\.so'
     mode: "0644"
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
 
 - name: Ensure pam_faillock.so account line is in common-account (Debian)
   ansible.builtin.lineinfile:
@@ -1737,7 +1763,7 @@
     line: 'account required                        pam_faillock.so'
     insertbefore: '^account\s'
     mode: "0644"
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
 
 # Debian: pam_pwhistory.so must be inserted directly (no authselect).
 # authselect enable-feature with-pwhistory (below) is RHEL/Fedora only.
@@ -1749,7 +1775,7 @@
     line: 'password required                        pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember }} enforce_for_root'
     insertbefore: '^password.*pam_unix\.so'
     mode: "0644"
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
 
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
@@ -1844,7 +1870,7 @@
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^#.*pam_wheel.so'
   when:
-    - ansible_facts['pkg_mgr'] != 'apt'  # Debian uses 'sudo' group not 'wheel'; skip entirely
+    - not is_apt  # Debian uses 'sudo' group not 'wheel'; skip entirely
     - not csb_rhel
 
 # --- Journald persistent logging and retention ---
@@ -2155,7 +2181,7 @@
       ansible.builtin.lineinfile:
         path: /etc/subuid
         regexp: "^{{ real_user_id }}:"
-        line: "{{ real_user_id }}:100000:65536"
+        line: "{{ real_user_id }}:165536:165536"
         create: true
         mode: "0644"
 
@@ -2163,7 +2189,7 @@
       ansible.builtin.lineinfile:
         path: /etc/subgid
         regexp: "^{{ real_user_id }}:"
-        line: "{{ real_user_id }}:100000:65536"
+        line: "{{ real_user_id }}:165536:165536"
         create: true
         mode: "0644"
 
@@ -2269,14 +2295,14 @@
       group: root
       mode: "0644"
     - path: /etc/shadow
-      group: "{{ 'shadow' if ansible_facts['pkg_mgr'] == 'apt' else 'root' }}"
-      mode: "{{ '0640' if ansible_facts['pkg_mgr'] == 'apt' else '0000' }}"
+      group: "{{ 'shadow' if is_apt else 'root' }}"
+      mode: "{{ '0640' if is_apt else '0000' }}"
     - path: /etc/group
       group: root
       mode: "0644"
     - path: /etc/gshadow
-      group: "{{ 'shadow' if ansible_facts['pkg_mgr'] == 'apt' else 'root' }}"
-      mode: "{{ '0640' if ansible_facts['pkg_mgr'] == 'apt' else '0000' }}"
+      group: "{{ 'shadow' if is_apt else 'root' }}"
+      mode: "{{ '0640' if is_apt else '0000' }}"
   loop_control:
     label: "{{ item.path }}"
 

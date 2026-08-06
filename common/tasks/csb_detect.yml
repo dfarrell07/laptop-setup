@@ -13,6 +13,7 @@
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
     is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+    is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
     _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
 
@@ -165,6 +166,11 @@
         else ('hybrid' if ((is_rhel | bool) or (csb_detected | bool))
         else 'host-only')
       }}
+  become: false
+
+- name: Derive csb_rhel
+  ansible.builtin.set_fact:
+    csb_rhel: "{{ csb_detected and is_rhel }}"
   become: false
 
 # ---------------------------------------------------------------------------

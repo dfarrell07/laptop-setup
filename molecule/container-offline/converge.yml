@@ -16,12 +16,7 @@
 
   pre_tasks:
     - name: Gather minimal facts
-      ansible.builtin.setup:
-        gather_subset:
-          - "!all"
-          - "!min"
-          - distribution
-          - env
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/gather-minimal-facts.yml"
 
     - name: Load shared offline scenario vars
       ansible.builtin.include_vars:

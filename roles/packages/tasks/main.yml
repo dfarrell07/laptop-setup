@@ -123,6 +123,15 @@
     - "'libvirt' in packages_virtualization"
   failed_when: false
 
+- name: Refresh /etc/group facts for libvirt/kvm membership check
+  ansible.builtin.getent:
+    database: group
+  become: true
+  tags: [become]
+  when:
+    - is_dnf
+    - install_virtualization | bool
+
 - name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
   ansible.builtin.user:
     name: "{{ real_user_id }}"
@@ -134,12 +143,12 @@
     - is_dnf
     - install_virtualization | bool
     - real_user_id | length > 0
-  failed_when: false
-  # System role (Play 1) and this task both use failed_when:false because libvirt/kvm groups
-  # may not exist if the package install was rescued. This task completes the membership.
+    - "'libvirt' in ansible_etc_group"
+    - "'kvm' in ansible_etc_group"
+  # No failed_when:false — groups are confirmed present, failures are real errors.
 
 - name: Install apt packages (Debian/Ubuntu)
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when: is_apt
   block:
     - name: Install apt packages (Debian/Ubuntu)
       ansible.builtin.apt:
@@ -162,10 +171,10 @@
     name: "{{ item }}"
     state: present
   loop: "{{ packages_brew_taps }}"
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
 
 - name: Install Homebrew packages (macOS)
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
   block:
     - name: Install Homebrew packages (macOS)
       community.general.homebrew:
@@ -182,7 +191,7 @@
           Continuing playbook execution.
 
 - name: Install Homebrew cask packages (macOS)
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
   block:
     - name: Install Homebrew cask packages (macOS)
       community.general.homebrew_cask:
@@ -201,12 +210,12 @@
   community.general.homebrew:
     name: theseal/ssh-askpass/ssh-askpass
     state: present
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: brew autoupdate start 43200 --upgrade --cleanup
-  when: ansible_facts['os_family'] == 'Darwin'
+  when: is_macos | bool
   changed_when: false
   failed_when: false
   register: _packages_brew_autoupdate
@@ -217,7 +226,7 @@
       brew autoupdate start failed (rc={{ _packages_brew_autoupdate.rc }}).
       Run 'brew autoupdate' interactively to complete trust if this is the first run.
   when:
-    - ansible_facts['os_family'] == 'Darwin'
+    - is_macos | bool
     - _packages_brew_autoupdate.rc | default(0) != 0
 
 # --- Binary downloads (SHA256-verified, pinned versions) ---
@@ -225,7 +234,7 @@
 - name: Set Linux x86 work binary install fact
   ansible.builtin.set_fact:
     _packages_linux_x86_work: "{{ packages_install_binaries | bool
-      and ansible_facts['system'] == 'Linux'
+      and is_linux
       and ansible_facts['architecture'] == 'x86_64'
       and profile == 'work' }}"
 
@@ -456,7 +465,7 @@
 - name: Install kind
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_binary.yml
   vars:
@@ -478,7 +487,7 @@
 - name: Install helm
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
@@ -506,7 +515,7 @@
 - name: Install kustomize
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
@@ -535,7 +544,7 @@
 - name: Install transcrypt
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
   ansible.builtin.include_tasks: install_binary.yml
   vars:
     binary_name: transcrypt
@@ -554,7 +563,7 @@
 - name: Install SOPS
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_binary.yml
   vars:
@@ -576,7 +585,7 @@
 - name: Install gitleaks (secret scanner; version pinned to match CI linting.yml)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
@@ -603,7 +612,7 @@
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] == 'x86_64'
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
@@ -627,7 +636,7 @@
 - name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] == 'x86_64'
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
@@ -651,7 +660,7 @@
 - name: Install operator-sdk
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
@@ -679,7 +688,7 @@
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
@@ -703,7 +712,7 @@
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
   ansible.builtin.include_tasks: install_tarball.yml
@@ -732,7 +741,7 @@
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
+    - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
@@ -806,7 +815,7 @@
   until: packages_go_results.rc == 0
   when:
     - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux' or ansible_facts['system'] == 'Darwin'
+    - is_linux or is_macos | bool
 
 - name: Report failed Go tool installs
   ansible.builtin.debug:
@@ -850,7 +859,7 @@
 
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'apt'] or ansible_facts['os_family'] == 'Darwin'
+    - is_dnf or is_apt or is_macos | bool
     - packages_install_binaries | bool
   block:
     - name: Install yamllint (pipx, version-pinned)

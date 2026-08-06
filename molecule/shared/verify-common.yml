@@ -1103,6 +1103,42 @@
     - not csb_rhel
     - verify_auditd_rules.stat.exists
 
+# --- auditd.conf coverage (deployed by system role on non-CSB Linux) ---
+- name: Stat /etc/audit/auditd.conf
+  ansible.builtin.stat:
+    path: /etc/audit/auditd.conf
+  register: verify_auditd_conf
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert auditd.conf deployed with mode 0640
+  ansible.builtin.assert:
+    that:
+      - verify_auditd_conf.stat.exists
+      - verify_auditd_conf.stat.mode == '0640'
+    fail_msg: "/etc/audit/auditd.conf missing or wrong mode — system role auditd deploy regression"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
+  ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file }}' /etc/audit/auditd.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check auditd.conf log_format=ENRICHED (CIS 4.1.2.1)
+  ansible.builtin.command: grep -q '^log_format = ENRICHED' /etc/audit/auditd.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
 - name: Check chrony/chronyd service is enabled (NTP hardening)
   ansible.builtin.systemd:
     name: "{{ 'chrony' if ansible_pkg_mgr == 'apt' else 'chronyd' }}"

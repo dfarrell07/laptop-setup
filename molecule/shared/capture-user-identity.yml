@@ -1,0 +1,6 @@
+---
+- name: Capture real user identity
+  ansible.builtin.set_fact:
+    real_user_home: "{{ lookup('env', 'HOME') }}"
+    real_user_id: "{{ lookup('env', 'USER') }}"
+  become: false

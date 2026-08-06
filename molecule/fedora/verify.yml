@@ -4,6 +4,9 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
     # set_fact from converge does not persist to a separate verify invocation.
     # Fedora converge sets profile: work; re-apply here so verify-common.yml
     # GONOSUMDB/GOPRIVATE checks evaluate in the correct profile context.
