@@ -396,6 +396,12 @@
           delay: 10
           until: packages_krew_download is succeeded
 
+        - name: Ensure ~/.local/bin exists for krew installer
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            state: directory
+            mode: '0755'
+
         - name: Extract krew installer
           ansible.builtin.unarchive:
             src: /tmp/krew.tar.gz
