@@ -131,7 +131,6 @@
     - is_dnf
     - is_fedora
     - _system_mullvad_install.rc | default(0) == 0
-  failed_when: false
 
 # --- USBGuard ---
 - name: Configure USBGuard
@@ -201,7 +200,6 @@
         name: usbguard
         state: started
         enabled: true
-        daemon_reload: true
       register: system_usbguard_enable_result
       failed_when:
         - system_usbguard_enable_result.failed
