@@ -24,7 +24,7 @@
           {{ claude_install_url }} |
           {% if claude_pinned_version %}CLAUDE_VERSION={{ claude_pinned_version }} {% endif %}bash
         executable: /bin/bash
-        timeout: 120
+      timeout: 120
   rescue:
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

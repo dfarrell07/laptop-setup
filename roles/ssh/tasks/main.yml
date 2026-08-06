@@ -32,6 +32,8 @@
     state: present
     hash_host: true
   loop: "{{ (ssh_github_meta.json.ssh_keys | default([])) }}"
+  loop_control:
+    label: "{{ item.split()[0] }}"
   when: ssh_github_ok
 
 - name: Pre-seed GitHub known_hosts from fallback keys
@@ -41,6 +43,8 @@
     state: present
     hash_host: true
   loop: "{{ ssh_github_known_hosts_fallback }}"
+  loop_control:
+    label: "{{ item.split()[0] }}"
   when: not ssh_github_ok
 
 - name: Warn if GitHub SSH key fetch failed (used pinned fallback)
