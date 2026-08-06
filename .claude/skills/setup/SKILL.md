@@ -85,6 +85,10 @@ targets that do not apply to this OS/profile or that the user did not request):
 9. `make containers` (some tasks need sudo)
 10. `make desktop` (Linux and macOS desktop, needs sudo on Linux)
 11. `make distrobox` (creates container + provisions via Play 3)
+    **Long-running**: this step and any molecule container test (`molecule test -s container`)
+    exceed the default 150-second Bash tool timeout. Pass `timeout=600000` to the Bash
+    tool call, or use `run_in_background=true` and wait for the completion notification
+    before reading results.
 12. `make claude`
 
 Note: `common` role is tagged `always` and runs automatically with any target.
