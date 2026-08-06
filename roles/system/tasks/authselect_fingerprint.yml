@@ -55,12 +55,13 @@
 - name: Disable authselect with-fingerprint feature
   ansible.builtin.command:
     cmd: authselect disable-feature with-fingerprint
+  register: system_authselect_disable_fp_result
   when:
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc == 0
     - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
-  changed_when: true
+  changed_when: system_authselect_disable_fp_result.rc == 0
   failed_when: false
 
 - name: Configure fprintd.service mask (fingerprint auth control)
@@ -74,10 +75,11 @@
 - name: Enable authselect with-fingerprint feature
   ansible.builtin.command:
     cmd: authselect enable-feature with-fingerprint
+  register: system_authselect_enable_fp_result
   when:
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc != 0
     - not csb_rhel  # CSB: IT manages authselect; all authselect action tasks carry this guard
-  changed_when: true
+  changed_when: system_authselect_enable_fp_result.rc == 0
   failed_when: false

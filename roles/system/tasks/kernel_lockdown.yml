@@ -22,12 +22,13 @@
     - name: Remove stale kernel lockdown parameter before mode change
       ansible.builtin.command:
         cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      register: system_lockdown_stale_remove_result
       when:
         - system_kernel_lockdown | length > 0
         - system_grubby_info.rc == 0
         - "'lockdown=' in (system_grubby_info.stdout)"
         - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
-      changed_when: true
+      changed_when: system_lockdown_stale_remove_result.rc == 0
       failed_when: false
 
     - name: Enable kernel lockdown (integrity mode)
@@ -231,6 +232,7 @@
       vars:
         _grubby_results:
           lockdown: "{{ system_lockdown_result | default({}) }}"
+          lockdown_stale_remove: "{{ system_lockdown_stale_remove_result | default({}) }}"
           lockdown_remove: "{{ system_lockdown_remove_result | default({}) }}"
           iommu_amd: "{{ system_iommu_amd_result | default({}) }}"
           iommu_intel: "{{ system_iommu_intel_result | default({}) }}"

@@ -218,8 +218,8 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   register: _timer_enable
-  ignore_errors: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'podman', 'docker'] }}"
 
 - name: Warn if timer enable failed (container — no systemd user session)
   ansible.builtin.debug:

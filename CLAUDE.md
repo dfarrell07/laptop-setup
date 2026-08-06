@@ -145,7 +145,7 @@ make repos-downstream # downstream repos only
   (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (local — set "no" to disable port forwarding; "yes" for both -L and -R),
   `system_ssh_allow_agent_forwarding` (no — set 'yes' to forward ssh-agent when SSHing into this machine; prefer ProxyJump for traversal),
   `system_dns_domains` (~. — catch-all for Tailscale MagicDNS), `system_ssh_max_sessions` (10),
-  `system_enable_ip_forward` (true — enables ip_forward sysctls for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts), `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `desktop_i3status_battery_num`, `system_lid_switch`,
+  `system_enable_ip_forward` (true — enables ip_forward sysctls for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts), `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `desktop_i3status_battery_num`, `system_lid_switch`, `system_logind_idle_sec`,
   `system_coredump_storage` (external — systemd-coredump store path; 'none' disables), `system_coredump_process_size_max` (2G — max core size; 0 disables),
   `system_mask_abrt` (true — masks ABRT crash-reporter daemons; set false to restore ABRT, e.g. when `system_coredump_storage: none`),
   `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl),
