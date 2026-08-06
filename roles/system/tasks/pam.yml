@@ -98,7 +98,9 @@
     line: 'auth    required                        pam_faillock.so preauth'
     insertbefore: '^auth\s'
     mode: "0644"
-  when: is_apt
+  when:
+    - is_apt
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Ensure pam_faillock.so authfail line is in common-auth (Debian)
   ansible.builtin.lineinfile:
@@ -107,7 +109,9 @@
     line: 'auth    [default=die]                  pam_faillock.so authfail'
     insertafter: '^auth.*pam_unix\.so'
     mode: "0644"
-  when: is_apt
+  when:
+    - is_apt
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Ensure pam_faillock.so account line is in common-account (Debian)
   ansible.builtin.lineinfile:
@@ -116,7 +120,9 @@
     line: 'account required                        pam_faillock.so'
     insertbefore: '^account\s'
     mode: "0644"
-  when: is_apt
+  when:
+    - is_apt
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 # Debian: pam_pwhistory.so must be inserted directly (no authselect).
 # authselect enable-feature with-pwhistory (below) is RHEL/Fedora only.
@@ -128,7 +134,9 @@
     line: 'password required                        pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember }} enforce_for_root'
     insertbefore: '^password.*pam_unix\.so'
     mode: "0644"
-  when: is_apt
+  when:
+    - is_apt
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
