@@ -111,6 +111,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.gitconfig.pre-xdg-migration"
     remote_src: true
     mode: "0644"
+    force: false
   when:
     - dotfiles_legacy_gitconfig.stat.exists
 
