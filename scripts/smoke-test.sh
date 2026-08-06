@@ -366,13 +366,13 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   elif [[ ! -f "$_saf" ]]; then record "env-d-ssh-agent" "FAIL" "missing: $_saf — SSH_AUTH_SOCK not set in systemd session"
   else record "env-d-ssh-agent" "FAIL" "SSH_AUTH_SOCK missing from $_saf"; fi
   unset _saf
-  if [[ "$SSH_AUTH_SOCK" == */ssh-agent.socket ]]; then
+  if [[ "${SSH_AUTH_SOCK:-}" == */ssh-agent.socket ]]; then
     record "ssh-auth-sock" "PASS"
   elif [[ -f "$HOME/.config/environment.d/ssh-agent.conf" ]] && \
        grep -q "SSH_AUTH_SOCK" "$HOME/.config/environment.d/ssh-agent.conf"; then
     record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK not yet updated — environment.d/ssh-agent.conf is deployed; log out and back in to activate (current: ${SSH_AUTH_SOCK:-<unset>})"
   else
-    record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK=${SSH_AUTH_SOCK} does not point to custom ssh-agent (expected .../ssh-agent.socket) — run: make dotfiles"
+    record "ssh-auth-sock" "WARN" "SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} does not point to custom ssh-agent (expected .../ssh-agent.socket) — run: make dotfiles"
   fi
   # subuid/subgid required for rootless Podman user namespaces (/etc/subuid is world-readable)
   # Skipped with --user-only or --container: requires system role (not run in container scenarios)
