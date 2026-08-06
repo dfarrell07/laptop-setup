@@ -1,0 +1,60 @@
+---
+# roles/packages/tasks/install_binary.yml
+# Shared block/rescue skeleton for direct-binary get_url downloads.
+#
+# Required vars (pass via include_tasks vars:):
+#   binary_name        — display name, e.g. "kind"
+#   url                — download URL (Jinja2 evaluated in caller context)
+#   dest               — install path, e.g. /usr/local/bin/kind
+#   checksum           — e.g. "sha256:{{ computed_sha }}"
+#   version_check_cmd  — shell command to test installed version
+#   version_string     — expected string in version output
+#   csb_action         — manual install instructions (used in both CSB and non-CSB messages)
+#   csb_ticket_summary — CSB ticket one-liner
+#   csb_ticket_body    — CSB ticket detail
+#
+# Optional vars:
+#   timeout            — get_url timeout in seconds (default: 120)
+
+- name: "Download and install {{ binary_name }}"
+  block:
+    - name: "Check if {{ binary_name }} is installed at target version"
+      ansible.builtin.command:
+        cmd: "{{ version_check_cmd }}"
+      register: _install_binary_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: "Download {{ binary_name }} binary"
+      when: version_string not in (_install_binary_check.stdout + _install_binary_check.stderr)
+      ansible.builtin.get_url:
+        url: "{{ url }}"
+        dest: "{{ dest }}"
+        checksum: "{{ checksum }}"
+        mode: "0755"
+        timeout: "{{ timeout | default(120) }}"
+      become: true
+      tags: [become]
+      register: _install_binary_download
+      retries: 3
+      delay: 10
+      until: _install_binary_download is succeeded
+
+  rescue:
+    - name: "Record {{ binary_name }} download failure (CSB)"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "{{ binary_name }}"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "{{ csb_action }}"
+        _csb_ticket_summary: "{{ csb_ticket_summary }}"
+        _csb_ticket_body: "{{ csb_ticket_body }}"
+      when: csb_rhel
+    - name: "Warn {{ binary_name }} download failed"
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download {{ binary_name }}: {{ ansible_failed_result.msg | default('unknown error') }}.
+          {{ csb_action }}
+      when: not csb_rhel

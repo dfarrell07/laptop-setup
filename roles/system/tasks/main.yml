@@ -2011,7 +2011,7 @@
 
 # Mask sshd.socket to prevent port-22 socket activation (sshd.service on port 722 is authoritative).
 # Without masking, 'systemctl start sshd.socket' would reopen port 22 bypassing the drop-in.
-- name: Check if sshd.socket unit file exists
+- name: Check if sshd.socket unit file exists  # noqa: command-instead-of-module
   ansible.builtin.command: systemctl cat sshd.socket
   register: _sshd_socket_exists
   changed_when: false
@@ -2973,68 +2973,35 @@
   changed_when: true
   failed_when: false
 
-- name: Check current minimum password age for existing user account
+- name: Check current password aging fields for existing user account
   ansible.builtin.command:
-    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $4}' /etc/shadow"
-  register: system_chage_min_days
+    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print ${{ item.field }}}' /etc/shadow"
+  register: system_chage_fields
   changed_when: false
   failed_when: false
   check_mode: false
   when:
     - not csb_rhel
     - real_user_id | length > 0
+  loop:
+    - {field: 4, flag: '-m', var: 'system_pass_min_days', cis: 'CIS 5.5.1.2'}
+    - {field: 5, flag: '-M', var: 'system_pass_max_days', cis: 'CIS 5.5.1.1'}
+    - {field: 6, flag: '-W', var: 'system_pass_warn_age', cis: 'CIS 5.5.1.3'}
+  loop_control:
+    label: "{{ item.cis }}"
 
-- name: Set minimum password age for existing user account (CIS 5.5.1.2)
+- name: Set password aging fields for existing user account
   ansible.builtin.command:
-    cmd: chage -m {{ system_pass_min_days }} {{ real_user_id }}
+    cmd: chage {{ item.item.flag }} {{ vars[item.item.var] }} {{ real_user_id }}
   when:
     - not csb_rhel
     - real_user_id | length > 0
-    - system_chage_min_days.stdout | default('') | trim != system_pass_min_days | string
+    - item.stdout | default('') | trim != vars[item.item.var] | string
   changed_when: true
   failed_when: false
-
-- name: Check current maximum password age for existing user account
-  ansible.builtin.command:
-    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $5}' /etc/shadow"
-  register: system_chage_max_days
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  when:
-    - not csb_rhel
-    - real_user_id | length > 0
-
-- name: Set maximum password age for existing user account (CIS 5.5.1.1)
-  ansible.builtin.command:
-    cmd: chage -M {{ system_pass_max_days }} {{ real_user_id }}
-  when:
-    - not csb_rhel
-    - real_user_id | length > 0
-    - system_chage_max_days.stdout | default('') | trim != system_pass_max_days | string
-  changed_when: true
-  failed_when: false
-
-- name: Check current password warning age for existing user account
-  ansible.builtin.command:
-    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $6}' /etc/shadow"
-  register: system_chage_warn_age
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  when:
-    - not csb_rhel
-    - real_user_id | length > 0
-
-- name: Set password warning age for existing user account (CIS 5.5.1.3)
-  ansible.builtin.command:
-    cmd: chage -W {{ system_pass_warn_age }} {{ real_user_id }}
-  when:
-    - not csb_rhel
-    - real_user_id | length > 0
-    - system_chage_warn_age.stdout | default('') | trim != system_pass_warn_age | string
-  changed_when: true
-  failed_when: false
+  loop: "{{ system_chage_fields.results }}"
+  loop_control:
+    label: "{{ item.item.cis }}"
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
@@ -3404,8 +3371,6 @@
           or _aide_conf_r4 is changed
           or _aide_conf_r5 is changed
           or _aide_conf_r6 is changed
-        - system_aide_enabled | bool
-        - not csb_rhel
 
     - name: Check if AIDE database exists
       ansible.builtin.stat:

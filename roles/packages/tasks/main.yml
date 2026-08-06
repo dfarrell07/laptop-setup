@@ -459,53 +459,22 @@
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_binary.yml
   vars:
-    _kind_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _kind_sha256: "{{ packages_kind_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_kind_sha256 }}"
-  block:
-    - name: Check if kind is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/kind version
-      register: packages_kind_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download kind binary
-      when: "packages_kind_version not in (packages_kind_check.stdout + packages_kind_check.stderr)"
-      ansible.builtin.get_url:
-        url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-{{ _kind_arch }}"
-        dest: /usr/local/bin/kind
-        checksum: "sha256:{{ _kind_sha256 }}"
-        mode: "0755"
-        timeout: 120
-      become: true
-      tags: [become]
-      register: packages_kind_download
-      retries: 3
-      delay: 10
-      until: packages_kind_download is succeeded
-
-  rescue:
-    - name: Record kind download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "kind"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install kind manually from https://kind.sigs.k8s.io/dl/
-        _csb_ticket_summary: "Cannot download kind binary on CSB"
-        _csb_ticket_body: >-
-          kind binary could not be downloaded from kind.sigs.k8s.io.
-          Install manually from https://kind.sigs.k8s.io/dl/
-      when: csb_rhel
-    - name: Warn kind download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download kind: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://kind.sigs.k8s.io/dl/.
-      when: not csb_rhel
+    binary_name: kind
+    url: >-
+      https://kind.sigs.k8s.io/dl/v{{ packages_kind_version
+      }}/kind-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /usr/local/bin/kind
+    checksum: "sha256:{{ packages_kind_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_kind_sha256 }}"
+    version_check_cmd: /usr/local/bin/kind version
+    version_string: "{{ packages_kind_version }}"
+    csb_action: >-
+      Install kind manually from https://kind.sigs.k8s.io/dl/
+    csb_ticket_summary: "Cannot download kind binary on CSB"
+    csb_ticket_body: >-
+      kind binary could not be downloaded from kind.sigs.k8s.io.
+      Install manually from https://kind.sigs.k8s.io/dl/
 
 - name: Install helm
   when:
@@ -670,104 +639,42 @@
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
-  block:
-    - name: Check if transcrypt is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/transcrypt --version
-      register: packages_transcrypt_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download transcrypt script
-      when: packages_transcrypt_version not in (packages_transcrypt_check.stdout + packages_transcrypt_check.stderr)
-      ansible.builtin.get_url:
-        url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
-        dest: /usr/local/bin/transcrypt
-        checksum: "sha256:{{ packages_transcrypt_sha256 }}"
-        mode: "0755"
-        timeout: 120
-      become: true
-      tags: [become]
-      register: packages_transcrypt_download
-      retries: 3
-      delay: 10
-      until: packages_transcrypt_download is succeeded
-  rescue:
-    - name: Record transcrypt download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "transcrypt"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install transcrypt manually from https://github.com/elasticdog/transcrypt
-        _csb_ticket_summary: "Cannot download transcrypt binary on CSB"
-        _csb_ticket_body: >-
-          transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
-          Install manually from https://github.com/elasticdog/transcrypt
-      when: csb_rhel
-    - name: Warn transcrypt download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download transcrypt: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/elasticdog/transcrypt.
-      when: not csb_rhel
+  ansible.builtin.include_tasks: install_binary.yml
+  vars:
+    binary_name: transcrypt
+    url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
+    dest: /usr/local/bin/transcrypt
+    checksum: "sha256:{{ packages_transcrypt_sha256 }}"
+    version_check_cmd: /usr/local/bin/transcrypt --version
+    version_string: "{{ packages_transcrypt_version }}"
+    csb_action: >-
+      Install transcrypt manually from https://github.com/elasticdog/transcrypt
+    csb_ticket_summary: "Cannot download transcrypt binary on CSB"
+    csb_ticket_body: >-
+      transcrypt script could not be downloaded from github.com/elasticdog/transcrypt.
+      Install manually from https://github.com/elasticdog/transcrypt
 
 - name: Install SOPS
   when:
     - packages_install_binaries | bool
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+  ansible.builtin.include_tasks: install_binary.yml
   vars:
-    _sops_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _sops_sha256: "{{ packages_sops_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_sops_sha256 }}"
-  block:
-    - name: Check if sops is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/sops --version
-      register: packages_sops_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download SOPS binary
-      when: packages_sops_version not in (packages_sops_check.stdout + packages_sops_check.stderr)
-      ansible.builtin.get_url:
-        url: >-
-          https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
-          }}/sops-v{{ packages_sops_version }}.linux.{{ _sops_arch }}
-        dest: /usr/local/bin/sops
-        checksum: "sha256:{{ _sops_sha256 }}"
-        mode: "0755"
-        timeout: 120
-      become: true
-      tags: [become]
-      register: packages_sops_download
-      retries: 3
-      delay: 10
-      until: packages_sops_download is succeeded
-
-  rescue:
-    - name: Record sops download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "sops"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install sops manually from https://github.com/getsops/sops/releases
-        _csb_ticket_summary: "Cannot download sops binary on CSB"
-        _csb_ticket_body: >-
-          sops binary could not be downloaded from github.com/getsops/sops.
-          Install manually from https://github.com/getsops/sops/releases
-      when: csb_rhel
-    - name: Warn sops download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download sops: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/getsops/sops/releases.
-      when: not csb_rhel
+    binary_name: sops
+    url: >-
+      https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+      }}/sops-v{{ packages_sops_version }}.linux.{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /usr/local/bin/sops
+    checksum: "sha256:{{ packages_sops_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_sops_sha256 }}"
+    version_check_cmd: /usr/local/bin/sops --version
+    version_string: "{{ packages_sops_version }}"
+    csb_action: >-
+      Install sops manually from https://github.com/getsops/sops/releases
+    csb_ticket_summary: "Cannot download sops binary on CSB"
+    csb_ticket_body: >-
+      sops binary could not be downloaded from github.com/getsops/sops.
+      Install manually from https://github.com/getsops/sops/releases
 
 - name: Install gitleaks (secret scanner; version pinned to match CI linting.yml)
   when:
@@ -1001,59 +908,27 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  ansible.builtin.include_tasks: install_binary.yml
   vars:
-    _operator_sdk_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _operator_sdk_sha256: >-
-      {{ packages_operator_sdk_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
-      else packages_operator_sdk_sha256 }}
-  block:
-    - name: Check if operator-sdk is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/operator-sdk version
-      register: packages_operator_sdk_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download operator-sdk binary
-      when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout + packages_operator_sdk_check.stderr)
-      vars:
-        _url_base: "https://github.com/operator-framework/operator-sdk/releases/download"
-      ansible.builtin.get_url:
-        url: "{{ _url_base }}/v{{ packages_operator_sdk_version }}/operator-sdk_linux_{{ _operator_sdk_arch }}"
-        dest: /usr/local/bin/operator-sdk
-        checksum: "sha256:{{ _operator_sdk_sha256 }}"
-        mode: "0755"
-        timeout: 300
-      become: true
-      tags: [become]
-      register: packages_operator_sdk_download
-      retries: 3
-      delay: 10
-      until: packages_operator_sdk_download is succeeded
-
-  rescue:
-    - name: Record operator-sdk download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "operator-sdk"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install operator-sdk manually from
-          https://github.com/operator-framework/operator-sdk/releases
-        _csb_ticket_summary: "Cannot download operator-sdk binary on CSB"
-        _csb_ticket_body: >-
-          operator-sdk binary could not be downloaded from
-          github.com/operator-framework/operator-sdk.
-          Install manually from https://github.com/operator-framework/operator-sdk/releases
-      when: csb_rhel
-    - name: Warn operator-sdk download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download operator-sdk: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/operator-framework/operator-sdk/releases.
-      when: not csb_rhel
+    binary_name: operator-sdk
+    url: >-
+      https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
+      }}/operator-sdk_linux_{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /usr/local/bin/operator-sdk
+    checksum: >-
+      sha256:{{ packages_operator_sdk_sha256_arm64 if ansible_facts['architecture'] ==
+      'aarch64' else packages_operator_sdk_sha256 }}
+    version_check_cmd: /usr/local/bin/operator-sdk version
+    version_string: "{{ packages_operator_sdk_version }}"
+    timeout: 300
+    csb_action: >-
+      Install operator-sdk manually from
+      https://github.com/operator-framework/operator-sdk/releases
+    csb_ticket_summary: "Cannot download operator-sdk binary on CSB"
+    csb_ticket_body: >-
+      operator-sdk binary could not be downloaded from
+      github.com/operator-framework/operator-sdk.
+      Install manually from https://github.com/operator-framework/operator-sdk/releases
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
@@ -1061,53 +936,23 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  ansible.builtin.include_tasks: install_binary.yml
   vars:
-    _cosign_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _cosign_sha256: "{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
-  block:
-    - name: Check if cosign is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/cosign version
-      register: packages_cosign_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download cosign binary
-      when: packages_cosign_version not in (packages_cosign_check.stdout + packages_cosign_check.stderr)
-      ansible.builtin.get_url:
-        url: "https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version }}/cosign-linux-{{ _cosign_arch }}"
-        dest: /usr/local/bin/cosign
-        checksum: "sha256:{{ _cosign_sha256 }}"
-        mode: "0755"
-        timeout: 300
-      become: true
-      tags: [become]
-      register: packages_cosign_download
-      retries: 3
-      delay: 10
-      until: packages_cosign_download is succeeded
-
-  rescue:
-    - name: Record cosign download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "cosign"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install cosign manually from https://github.com/sigstore/cosign/releases
-        _csb_ticket_summary: "Cannot download cosign binary on CSB"
-        _csb_ticket_body: >-
-          cosign binary could not be downloaded from github.com/sigstore/cosign.
-          Install manually from https://github.com/sigstore/cosign/releases
-      when: csb_rhel
-    - name: Warn cosign download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download cosign: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/sigstore/cosign/releases.
-      when: not csb_rhel
+    binary_name: cosign
+    url: >-
+      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /usr/local/bin/cosign
+    checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
+    version_check_cmd: /usr/local/bin/cosign version
+    version_string: "{{ packages_cosign_version }}"
+    timeout: 300
+    csb_action: >-
+      Install cosign manually from https://github.com/sigstore/cosign/releases
+    csb_ticket_summary: "Cannot download cosign binary on CSB"
+    csb_ticket_body: >-
+      cosign binary could not be downloaded from github.com/sigstore/cosign.
+      Install manually from https://github.com/sigstore/cosign/releases
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
@@ -1195,53 +1040,22 @@
     - ansible_facts['system'] == 'Linux'
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+  ansible.builtin.include_tasks: install_binary.yml
   vars:
-    _ec_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    _ec_sha256: "{{ packages_ec_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_ec_sha256 }}"
-  block:
-    - name: Check if ec is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/ec version
-      register: packages_ec_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Download ec binary
-      when: packages_ec_version not in (packages_ec_check.stdout + packages_ec_check.stderr)
-      ansible.builtin.get_url:
-        url: "https://github.com/conforma/cli/releases/download/v{{ packages_ec_version }}/ec_linux_{{ _ec_arch }}"
-        dest: /usr/local/bin/ec
-        checksum: "sha256:{{ _ec_sha256 }}"
-        mode: "0755"
-        timeout: 120
-      become: true
-      tags: [become]
-      register: packages_ec_download
-      retries: 3
-      delay: 10
-      until: packages_ec_download is succeeded
-
-  rescue:
-    - name: Record ec download failure (CSB)
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: packages
-        _csb_task_name: "ec"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          Install ec manually from https://github.com/conforma/cli/releases
-        _csb_ticket_summary: "Cannot download ec binary on CSB"
-        _csb_ticket_body: >-
-          ec (Enterprise Contract CLI) binary could not be downloaded from github.com/conforma/cli.
-          Install manually from https://github.com/conforma/cli/releases
-      when: csb_rhel
-    - name: Warn ec download failed
-      ansible.builtin.debug:
-        msg: >-
-          Failed to download ec: {{ ansible_failed_result.msg | default('unknown error') }}.
-          Install manually from https://github.com/conforma/cli/releases.
-      when: not csb_rhel
+    binary_name: ec
+    url: >-
+      https://github.com/conforma/cli/releases/download/v{{ packages_ec_version
+      }}/ec_linux_{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /usr/local/bin/ec
+    checksum: "sha256:{{ packages_ec_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_ec_sha256 }}"
+    version_check_cmd: /usr/local/bin/ec version
+    version_string: "{{ packages_ec_version }}"
+    csb_action: >-
+      Install ec manually from https://github.com/conforma/cli/releases
+    csb_ticket_summary: "Cannot download ec binary on CSB"
+    csb_ticket_body: >-
+      ec (Enterprise Contract CLI) binary could not be downloaded from github.com/conforma/cli.
+      Install manually from https://github.com/conforma/cli/releases
 
 - name: Install k9s (Kubernetes TUI)
   when:
@@ -1584,14 +1398,14 @@
         mode: "0755"
         remote_src: true
       when: >-
-        packages_subctl_version_check.results[loop_idx].rc != 0 or
+        (packages_subctl_version_check.results[loop_idx].rc != 0 or
         item.version not in (packages_subctl_version_check.results[loop_idx].stdout +
-        packages_subctl_version_check.results[loop_idx].stderr)
+        packages_subctl_version_check.results[loop_idx].stderr)) and
+        (packages_subctl_install_results.results[loop_idx].rc | default(0)) == 0
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
         index_var: loop_idx
-      failed_when: false
 
     - name: Clean up temp GOBIN directories
       ansible.builtin.file:

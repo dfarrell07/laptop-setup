@@ -1081,6 +1081,18 @@ EOF
   else record "cockpit-socket-masked" "FAIL" "cockpit.socket not masked (state: $_ck_sock) — web console activation possible"; fi
   unset _ck_sock
 
+  # ABRT crash reporter services masked (redundant with systemd-coredump; skipped on RHEL CSB where IT manages via Satellite)
+  if ! $CSB_HOST || grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    for _abrt_svc in abrtd.service abrt-journal-core.service abrt-oops.service abrt-vmcore.service abrt-xorg.service; do
+      _abrt_state=$(systemctl show -p UnitFileState --value "$_abrt_svc" 2>/dev/null)
+      [[ -z "$_abrt_state" || "$_abrt_state" == "not-found" ]] && continue
+      _abrt_key="abrt-${_abrt_svc%.service}-masked"
+      if [[ "$_abrt_state" == "masked" ]]; then record "$_abrt_key" "PASS"
+      else record "$_abrt_key" "FAIL" "$_abrt_svc not masked (state: $_abrt_state) — ABRT should be masked in favour of systemd-coredump"; fi
+    done
+    unset _abrt_svc _abrt_state _abrt_key
+  fi
+
   # thermald: masked on non-Intel; enabled on Intel (Intel-only thermal daemon)
   if [[ -f /proc/cpuinfo ]] && grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
     _thermald_state="$(systemctl show -p UnitFileState --value thermald 2>/dev/null)"
