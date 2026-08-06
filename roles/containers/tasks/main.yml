@@ -114,13 +114,16 @@
   register: containers_user_groups
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
 
 - name: Warn if user is in Docker group
   ansible.builtin.debug:
     msg: >-
       Docker group membership = passwordless root. Never join.
       Use rootless Podman or rootless Docker instead.
-  when: "'docker' in containers_user_groups.stdout.split()"
+  when:
+    - is_linux
+    - "'docker' in containers_user_groups.stdout.split()"
 
 - name: Enable podman user socket (needed for kind, docker-compatible CLIs, devcontainers)
   ansible.builtin.systemd:
