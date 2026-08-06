@@ -114,7 +114,7 @@ distrobox_host_exec_commands:
 # No hardcoded fallback: packages_oc_version is always defined via packages/defaults/main.yml.
 distrobox_oc_version: "{{ packages_oc_version }}"
 distrobox_oc_mirror_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
-distrobox_golangci_lint_version: "v{{ packages_golangci_lint_version }}"
+distrobox_golangci_lint_version: "v{{ packages_golangci_lint_version | default('2.12.2') }}"
 distrobox_subctl_version: "v{{ packages_subctl_version | default('0.24.0') }}"  # synced with packages_subctl_version
 distrobox_create_timeout: 600
 distrobox_oc_fetch_timeout: 30
