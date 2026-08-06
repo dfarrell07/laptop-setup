@@ -1,0 +1,48 @@
+---
+# roles/packages/tasks/install_dnf_packages.yml
+# Main dnf package installation (cli, languages, security, containers, networking).
+# Runs only when is_dnf; includes CSB rescue handler.
+- name: Install dnf packages
+  when: is_dnf
+  block:
+    - name: Install dnf packages
+      ansible.builtin.dnf:
+        name: >-
+          {{ packages_cli
+             + packages_languages
+             + packages_security
+             + packages_containers
+             + (packages_containers_kubectl
+                if (profile != 'work'
+                    or ansible_facts['architecture'] != 'x86_64'
+                    or not (packages_install_binaries | bool))
+                else [])
+             + packages_networking
+             + (packages_networking_work if profile == 'work' else []) }}
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Record dnf package install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "Install dnf packages"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          One or more packages in packages_cli/languages/security/containers/networking/networking_work
+          could not be installed; check repo access or install manually
+        _csb_ticket_summary: "Cannot install core dnf packages on CSB"
+        _csb_ticket_body: >-
+          One or more packages from packages_cli, packages_languages, packages_security,
+          packages_containers, packages_networking, or packages_networking_work could not be installed.
+          This may be due to fapolicyd repo policy or a missing repository.
+      when: csb_rhel
+    - name: Warn dnf package install failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install dnf packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+      when: not csb_rhel
