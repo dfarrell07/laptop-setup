@@ -1401,6 +1401,7 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
   failed_when: false
 
 - name: Stat /etc/bluetooth/main.conf
@@ -2762,6 +2763,12 @@
     name: logrotate
     state: present
   when: ansible_facts['pkg_mgr'] == 'apt'
+
+- name: Install logrotate (Fedora/RHEL)
+  ansible.builtin.dnf:
+    name: logrotate
+    state: present
+  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
 - name: Deploy logrotate config for sudo.log
   ansible.builtin.copy:
