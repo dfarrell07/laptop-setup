@@ -1,0 +1,67 @@
+---
+# --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
+# RHEL CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
+# cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
+# would silently block those IT management jobs. Skip on RHEL CSB only.
+# Fedora hybrid: those IT tools are absent — cron.allow=root is safe CIS 5.1.8/5.1.9 hardening.
+- name: Warn if non-root user crontabs exist before restricting cron access
+  ansible.builtin.find:
+    paths: /var/spool/cron
+    excludes: root
+    file_type: file
+  register: system_existing_crontabs
+  failed_when: false
+  when: not csb_rhel
+
+- name: Alert operator about user crontabs that will be silently blocked
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Non-root crontabs found and will be silently blocked by cron.allow=root:
+      {{ system_existing_crontabs.files | map(attribute='path') | list }}.
+      Review these jobs before proceeding.
+  when:
+    - (system_existing_crontabs.files | default([])) | length > 0
+    - not csb_rhel
+
+- name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
+  ansible.builtin.copy:
+    content: "root\n"
+    dest: "{{ item }}"
+    mode: "0600"
+  loop:
+    - /etc/cron.allow
+    - /etc/at.allow
+  when: not csb_rhel
+
+- name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/cron.deny
+    - /etc/at.deny
+  when: not csb_rhel
+
+- name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/crontab
+      mode: "0600"
+    - path: /etc/cron.hourly
+      mode: "0700"
+    - path: /etc/cron.daily
+      mode: "0700"
+    - path: /etc/cron.weekly
+      mode: "0700"
+    - path: /etc/cron.monthly
+      mode: "0700"
+    - path: /etc/cron.d
+      mode: "0700"
+  loop_control:
+    label: "{{ item.path }}"
+  when: not csb_rhel
+  failed_when: false
