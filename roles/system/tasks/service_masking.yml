@@ -131,6 +131,7 @@
   when:
     - not (system_tlp_enabled | bool)
     - not csb_rhel
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 - name: Deploy TLP ThinkPad charge threshold config
