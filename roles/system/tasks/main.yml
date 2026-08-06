@@ -74,6 +74,7 @@
 
 - name: Chrony NTS
   ansible.builtin.import_tasks: chrony.yml
+  when: not system_is_container  # chrony apt install + systemd start hang in Debian 13 privileged Podman containers
 
 - name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
   ansible.builtin.import_tasks: pam.yml
