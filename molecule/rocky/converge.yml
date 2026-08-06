@@ -40,6 +40,8 @@
     - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
+        csb_rhel: true          # Rocky = RHEL CSB path; overrides system-container-overrides.yml baseline
+        csb_detected: true      # Rocky is CSB-detected (RHEL CSB)
         notes_enabled: true
         git_repos_list:
           - url: https://github.com/dfarrell07/laptop-setup
