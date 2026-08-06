@@ -712,6 +712,7 @@
     cmd: sysctl --system
   changed_when: false
   failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
+  when: ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 # --- Firewall (drop zone) ---
 - name: Ensure firewalld is running
@@ -2142,6 +2143,7 @@
     cmd: sysctl --system
   changed_when: false
   failed_when: false
+  when: ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
   ansible.builtin.debug:

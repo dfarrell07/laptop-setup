@@ -1095,6 +1095,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
 
 - name: Assert chrony/chronyd is enabled
   ansible.builtin.assert:
@@ -1103,6 +1104,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
     - verify_chronyd is not skipped
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
