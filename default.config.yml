@@ -66,7 +66,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     update-codegen.sh (not go.mod — controller-tools is not a go.mod dep) — bump together when OVN-K upgrades k8s
 #   desktop_deploy_chrome_policies: false (roles/desktop/defaults) — set true to deploy managed Chrome policy JSON
 #   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
-#   system_disable_printing: true      (roles/system/defaults) — masks cups.socket/cups.path; set false if printing needed
+#   system_disable_printing: true      (roles/system/defaults) — masks cups-browsed/socket/path; disables cups.service; set false if needed
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
 #   system_disable_thunderbolt: false  (roles/system/defaults) — true to blacklist thunderbolt/thunderbolt_net;
 #                                        mitigates Thunderspy DMA attacks; only set on machines with no Thunderbolt peripherals
@@ -260,7 +260,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions
 #   claude_queue_timeout: 1800  (roles/claude/defaults) — seconds before SIGTERM is sent to claude process; increase for long-running tasks
 #   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
-#     that allow external triggering of Claude sessions
+#     that allow external triggering of Claude sessions (macOS-only; no-op warning on Linux)
 #   claude_enable_all_project_mcp_servers: false  (roles/claude/defaults) — set true to auto-trust
 #     all project-local MCP servers; false = prompt per server (more secure)
 #   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
