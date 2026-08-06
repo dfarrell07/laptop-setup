@@ -148,8 +148,6 @@
   loop_control:
     label: "{{ item.dest }}"
   register: git_repos_clone_results
-  retries: 3
-  delay: 5
   ignore_errors: true  # noqa: ignore-errors — per-item failure must be captured in .results for the Report task below
   timeout: 300
 
