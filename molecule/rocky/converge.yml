@@ -89,6 +89,8 @@
         packages_networking: []
         packages_networking_work: []  # must also clear work-specific list after packages split
         packages_go_install_work: []  # work-profile OVN-K codegen go tools — not installable in CI
+        packages_containers_kubectl: []  # kubectl has no Rocky 10 / EPEL 10 package
+        desktop_environment: 'unknown'  # p19 set_fact beats include_vars p18; no WM in Rocky CI
         # install_virtualization, packages_install_binaries, ssh_signing_key_pub are in molecule/shared/system-container-overrides.yml
 
     - name: Create mock notes repo structure for CI
@@ -115,9 +117,9 @@
         claude_queue_repo: "dfarrell07/laptop-setup"
 
   post_tasks:
-    # Desktop role called via include_role so vars: are at role-params precedence (p20),
-    # overriding include_vars desktop_environment: auto (p18) from default.config.yml.
-    # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
+    # desktop_environment is set to 'unknown' in the pre_tasks set_fact (p19) so the role
+    # sees it correctly. The vars: here override package lists only; desktop_environment
+    # is redundant but kept for clarity.
     - name: Converge desktop role (unknown — no WM in Rocky CI)
       ansible.builtin.include_role:
         name: desktop
