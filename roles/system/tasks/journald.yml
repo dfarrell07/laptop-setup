@@ -1,44 +1,44 @@
 ---
 # roles/system/tasks/journald.yml
 # --- Journald persistent logging and retention ---
-# The drop-in directory and /var/log/journal are created unconditionally (no CSB guard).
-# Rationale: Storage=auto (journald's default) writes to /var/log/journal only when that
-# directory exists; creating it is additive. If CSB IT has set Storage=volatile in their
-# own drop-in, it wins and this directory has no effect. If they use Storage=auto, switching
-# to persistent logging is a security benefit (logs survive reboots for incident response),
-# not a conflict. journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM
-# pipeline uses audisp-remote (auditd), a completely separate subsystem.
-# The opinionated config below (rate limits, disk quota) IS CSB-guarded because those
-# specific numbers may conflict with IT's journald tuning or centralized log management.
-- name: Ensure journald drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/journald.conf.d
-    state: directory
-    mode: "0755"
-  when: not system_is_container  # inotify on journald.conf.d triggers journald restart, crashes privileged containers
+# Skipped entirely in containers: inotify on /etc/systemd/journald.conf.d and creating
+# /var/log/journal both trigger journald restart, which crashes privileged Podman containers.
+# Rationale for /var/log/journal: Storage=auto writes there only when the directory exists;
+# creating it is additive. If CSB IT uses Storage=volatile in their own drop-in, it wins;
+# if they use Storage=auto, persistent logging is a security benefit (logs survive reboots).
+# journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM pipeline uses
+# audisp-remote (auditd), a completely separate subsystem.
+# The opinionated config (rate limits, disk quota) is also CSB-guarded because those specific
+# numbers may conflict with IT's journald tuning or centralized log management.
+- name: Configure journald (skip in containers)
+  when: not system_is_container
+  block:
+    - name: Ensure journald drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
 
-- name: Ensure /var/log/journal exists for persistent storage
-  ansible.builtin.file:
-    path: /var/log/journal
-    state: directory
-    owner: root
-    group: systemd-journal
-    mode: "2755"
+    - name: Ensure /var/log/journal exists for persistent storage
+      ansible.builtin.file:
+        path: /var/log/journal
+        state: directory
+        owner: root
+        group: systemd-journal
+        mode: "2755"
 
-- name: Deploy journald hardening config
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      [Journal]
-      Storage=persistent
-      SystemMaxUse=4G
-      MaxRetentionSec=6month
-      SystemKeepFree=1G
-      RateLimitIntervalSec=30s
-      RateLimitBurst=20000
-    dest: /etc/systemd/journald.conf.d/99-hardening.conf
-    mode: "0644"
-  when:
-    - not csb_rhel
-    - not system_is_container  # writing journald.conf.d triggers systemd inotify → journald restart → crashes privileged containers
-  notify: Restart systemd-journald
+    - name: Deploy journald hardening config
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          [Journal]
+          Storage=persistent
+          SystemMaxUse=4G
+          MaxRetentionSec=6month
+          SystemKeepFree=1G
+          RateLimitIntervalSec=30s
+          RateLimitBurst=20000
+        dest: /etc/systemd/journald.conf.d/99-hardening.conf
+        mode: "0644"
+      when: not csb_rhel
+      notify: Restart systemd-journald

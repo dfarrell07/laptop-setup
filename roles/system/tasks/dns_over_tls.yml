@@ -16,6 +16,7 @@
     path: /etc/systemd/resolved.conf.d
     state: directory
     mode: "0755"
+  when: not system_is_container  # inotify on /etc/systemd/resolved.conf.d triggers resolved restart, crashes containers
 
 - name: Disable LLMNR and mDNS via resolved drop-in
   ansible.builtin.copy:

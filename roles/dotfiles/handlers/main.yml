@@ -9,3 +9,22 @@
     daemon_reload: true
   when: ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
+
+- name: Reload ssh-agent launchd bootout (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}/com.{{ dotfiles_github_user }}.ssh-agent
+  listen: Reload ssh-agent launchd (macOS)
+  when: is_macos
+  failed_when: false
+  changed_when: false
+
+- name: Reload ssh-agent launchd bootstrap (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-
+      launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
+  listen: Reload ssh-agent launchd (macOS)
+  when: is_macos
+  failed_when: false
+  changed_when: false

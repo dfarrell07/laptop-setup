@@ -12,6 +12,7 @@
   when:
     - is_dnf
     - not csb_rhel
+    - not system_is_container  # RPM post-install calls systemctl daemon-reload, crashes Podman container systemd
   failed_when: false
 
 - name: Deploy dnf-automatic config

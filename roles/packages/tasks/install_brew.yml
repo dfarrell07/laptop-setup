@@ -3,11 +3,23 @@
 # Install Homebrew packages and configure autoupdate.
 
 - name: Add Homebrew taps (macOS)
-  community.general.homebrew_tap:
-    name: "{{ item }}"
-    state: present
-  loop: "{{ packages_brew_taps }}"
   when: is_macos
+  block:
+    - name: Add Homebrew taps (macOS)
+      community.general.homebrew_tap:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_brew_taps }}"
+      async: 600
+      poll: 10
+  rescue:
+    - name: Warn Homebrew tap add failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Add Homebrew taps in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or an invalid tap.
+          Continuing playbook execution.
 
 - name: Install Homebrew packages (macOS)
   when: is_macos
@@ -17,6 +29,8 @@
         name: "{{ packages_brew }}"
         state: present
         update_homebrew: "{{ packages_brew_update }}"
+      async: 600
+      poll: 10
   rescue:
     - name: Warn Homebrew package install failed
       ansible.builtin.debug:
@@ -33,6 +47,8 @@
       community.general.homebrew_cask:
         name: "{{ packages_brew_cask }}"
         state: present
+      async: 600
+      poll: 10
   rescue:
     - name: Warn Homebrew cask package install failed
       ansible.builtin.debug:

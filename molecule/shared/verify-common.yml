@@ -814,6 +814,22 @@
     - verify_modprobe_hardening.stat.exists
     - system_disable_usb_storage | default(true) | bool
 
+- name: Check modprobe hardening contains udf blacklist entry
+  ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_udf | default(true) | bool
+
+- name: Check modprobe hardening contains sctp blacklist entry
+  ansible.builtin.command: grep -qF 'install sctp /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_sctp | default(false) | bool
+
 # --- sshd hardening drop-in: file-content assertions (system role, Linux only) ---
 # File is mode 0600 root:root — become: true required for stat and grep.
 # Catches directive-value regressions that pass sshd -t syntax validation.
@@ -1045,49 +1061,28 @@
     - ansible_system == 'Linux'
     - not csb_rhel
 
-- name: Check journald drop-in has Storage=persistent
-  ansible.builtin.command: grep -q '^Storage=persistent' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
+- name: Slurp journald hardening drop-in for directive checks
+  ansible.builtin.slurp:
+    src: /etc/systemd/journald.conf.d/99-hardening.conf
+  register: journald_conf_content
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
     - verify_journald_conf.stat.exists
 
-- name: Check journald drop-in has SystemMaxUse=4G
-  ansible.builtin.command: grep -q '^SystemMaxUse=4G' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - verify_journald_conf.stat.exists
-
-- name: Check journald drop-in has MaxRetentionSec=6month
-  ansible.builtin.command: grep -q '^MaxRetentionSec=6month' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - verify_journald_conf.stat.exists
-
-- name: Check journald drop-in has SystemKeepFree=1G
-  ansible.builtin.command: grep -q '^SystemKeepFree=1G' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - verify_journald_conf.stat.exists
-
-- name: Check journald drop-in has RateLimitIntervalSec=30s
-  ansible.builtin.command: grep -q '^RateLimitIntervalSec=30s' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - verify_journald_conf.stat.exists
-
-- name: Check journald drop-in has RateLimitBurst=20000
-  ansible.builtin.command: grep -q '^RateLimitBurst=20000' /etc/systemd/journald.conf.d/99-hardening.conf
-  changed_when: false
+- name: Assert journald drop-in contains required directives
+  ansible.builtin.assert:
+    that: >-
+      (journald_conf_content.content | b64decode).splitlines()
+      | select('match', item) | list | length > 0
+    fail_msg: "Missing journald directive: {{ item }}"
+  loop:
+    - Storage=persistent
+    - SystemMaxUse=4G
+    - MaxRetentionSec=6month
+    - SystemKeepFree=1G
+    - RateLimitIntervalSec=30s
+    - RateLimitBurst=20000
   when:
     - ansible_system == 'Linux'
     - not csb_rhel

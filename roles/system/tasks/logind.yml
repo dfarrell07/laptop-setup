@@ -1,40 +1,42 @@
 ---
 # --- Logind session policy ---
 # Write to a drop-in so package upgrades can't clobber the settings.
-- name: Ensure logind drop-in directory exists
-  ansible.builtin.file:
-    path: /etc/systemd/logind.conf.d
-    state: directory
-    mode: "0755"
-  when: not system_is_container  # inotify on /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
+# inotify on /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
+- name: Configure logind session policy
+  when: not system_is_container
+  block:
+    - name: Ensure logind drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/logind.conf.d
+        state: directory
+        mode: "0755"
 
-- name: Configure lid close behavior
-  community.general.ini_file:
-    path: /etc/systemd/logind.conf.d/99-hardening.conf
-    section: Login
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    no_extra_spaces: true
-    mode: "0644"
-    create: true
-  loop:
-    - key: HandleLidSwitch
-      value: "{{ system_lid_switch }}"
-    - key: HandleLidSwitchExternalPower
-      value: "{{ system_lid_switch_external }}"
-    - key: HandleLidSwitchDocked
-      value: "{{ system_lid_switch_docked }}"
-    - key: HandleHibernateKey
-      value: ignore
-    - key: HandlePowerKey
-      value: lock
-    - key: IdleAction
-      value: lock
-    - key: IdleActionSec
-      value: "{{ system_logind_idle_sec }}"
-    - key: KillUserProcesses
-      value: "no"
-  loop_control:
-    label: "{{ item.key }}"
-  notify: Reload logind
-  when: not system_is_container  # writing to /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
+    - name: Configure lid close behavior
+      community.general.ini_file:
+        path: /etc/systemd/logind.conf.d/99-hardening.conf
+        section: Login
+        option: "{{ item.key }}"
+        value: "{{ item.value }}"
+        no_extra_spaces: true
+        mode: "0644"
+        create: true
+      loop:
+        - key: HandleLidSwitch
+          value: "{{ system_lid_switch }}"
+        - key: HandleLidSwitchExternalPower
+          value: "{{ system_lid_switch_external }}"
+        - key: HandleLidSwitchDocked
+          value: "{{ system_lid_switch_docked }}"
+        - key: HandleHibernateKey
+          value: ignore
+        - key: HandlePowerKey
+          value: lock
+        - key: IdleAction
+          value: lock
+        - key: IdleActionSec
+          value: "{{ system_logind_idle_sec }}"
+        - key: KillUserProcesses
+          value: "no"
+      loop_control:
+        label: "{{ item.key }}"
+      notify: Reload logind

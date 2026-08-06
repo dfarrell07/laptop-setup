@@ -5,7 +5,6 @@
     name: sshd
     enabled: true
     state: started
-  failed_when: false
   when:
     - ansible_facts.services['sshd.service'] is defined
     - not system_is_container  # starting sshd triggers daemon-reload, crashes privileged Podman containers
@@ -145,7 +144,6 @@
     - not csb_rhel
     - not system_is_container  # masking sshd.socket kills the container SSH connection
     - _sshd_socket_exists.rc | default(1) == 0
-  failed_when: false
 
 # --- SELinux SSH port label ---
 - name: Label non-default SSH port for SELinux
@@ -208,8 +206,8 @@
 - name: Warn if crypto policy update failed (SHA1 may remain active)
   ansible.builtin.debug:
     msg: >-
-      WARNING: update-crypto-policies --set DEFAULT:NO-SHA1 failed
+      WARNING: update-crypto-policies --set {{ system_crypto_policy_target }} failed
       (rc={{ system_crypto_policy_set.rc }}). SHA1-based cipher suites
-      may remain permitted — CIS DEFAULT:NO-SHA1 policy not enforced.
+      may remain permitted — CIS {{ system_crypto_policy_target }} policy not enforced.
   when:
     - system_crypto_policy_set.rc | default(0) != 0

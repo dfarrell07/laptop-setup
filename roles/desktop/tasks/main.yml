@@ -146,29 +146,25 @@
         mode: "0644"
 
 # --- i3 TrackPoint config (X11 persistent, via xorg.conf.d) ---
-- name: Ensure /etc/X11/xorg.conf.d exists (i3 TrackPoint)
-  ansible.builtin.file:
-    path: /etc/X11/xorg.conf.d
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
+- name: TrackPoint config for i3 (X11, xorg.conf.d)
   when:
     - desktop_effective == 'i3'
     - desktop_i3_trackpoint_id is defined
     - desktop_i3_trackpoint_id | length > 0
+  become: true
+  tags: [become]
+  block:
+    - name: Ensure /etc/X11/xorg.conf.d exists (i3 TrackPoint)
+      ansible.builtin.file:
+        path: /etc/X11/xorg.conf.d
+        state: directory
+        mode: "0755"
 
-- name: Deploy TrackPoint libinput config (i3/X11)
-  ansible.builtin.template:
-    src: xorg-trackpoint.conf.j2
-    dest: /etc/X11/xorg.conf.d/90-trackpoint.conf
-    mode: "0644"
-  become: true
-  tags: [become]
-  when:
-    - desktop_effective == 'i3'
-    - desktop_i3_trackpoint_id is defined
-    - desktop_i3_trackpoint_id | length > 0
+    - name: Deploy TrackPoint libinput config (i3/X11)
+      ansible.builtin.template:
+        src: xorg-trackpoint.conf.j2
+        dest: /etc/X11/xorg.conf.d/90-trackpoint.conf
+        mode: "0644"
 
 # --- Sway config ---
 - name: Ensure Pictures directory exists for screenshots
@@ -265,19 +261,20 @@
     - desktop_effective == 'sway'
 
 # --- i3status config (shared by i3 and Sway) ---
-- name: Ensure i3status config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/i3status"
-    state: directory
-    mode: "0755"
+- name: Deploy i3status config (shared by i3 and Sway)
   when: desktop_effective in ['i3', 'sway']
+  block:
+    - name: Ensure i3status config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/i3status"
+        state: directory
+        mode: "0755"
 
-- name: Deploy i3status config
-  ansible.builtin.template:
-    src: i3status.conf.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
-    mode: "0644"
-  when: desktop_effective in ['i3', 'sway']
+    - name: Deploy i3status config
+      ansible.builtin.template:
+        src: i3status.conf.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
+        mode: "0644"
 
 # --- Chrome managed policies ---
 - name: Stat CSB Chrome managed policy file

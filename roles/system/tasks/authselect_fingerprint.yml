@@ -65,12 +65,24 @@
   changed_when: system_authselect_disable_fp_result.rc == 0
   failed_when: false
 
+- name: Warn if authselect disable-feature with-fingerprint failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: authselect disable-feature with-fingerprint returned non-zero
+      (rc={{ system_authselect_disable_fp_result.rc }}).
+      Fingerprint auth may still be active and bypass pam_faillock.
+      Check authselect status manually.
+  when:
+    - system_authselect_disable_fp_result.rc | default(0) != 0
+
 - name: Configure fprintd.service mask (fingerprint auth control)
   ansible.builtin.systemd:
     name: fprintd.service
     masked: "{{ system_disable_fingerprint | bool }}"
     state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
-  when: not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
+  when:
+    - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
+    - not system_is_container  # systemctl mask writes to /etc/systemd/system/, triggers inotify → daemon-reload → crashes containers
   failed_when: false
 
 - name: Enable authselect with-fingerprint feature

@@ -1,31 +1,31 @@
 ---
 # Prepare: wait for systemd to stabilize before converge.
-# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1. Ansible may connect
-# before all late-init units have activated, causing non-deterministic
+# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
+# before all late-init units have activated, which can disrupt
+# /root/.ansible/tmp or the connection itself and cause non-deterministic
 # UNREACHABLE failures at different task offsets.
-# NOTE: do NOT modify /etc/systemd/system/ in prepare — creating symlinks
-# there triggers an inotify daemon-reload that crashes the container.
+#
+# Key fix: systemctl is-system-running returns rc=1 for "degraded" state,
+# so the until condition must NOT require rc==0. Use stdout-only match.
+#
+# NOTE: do NOT modify /etc/systemd/system/ here — it triggers an inotify
+# daemon-reload during systemd init that can crash the container.
 - name: Prepare (wait for systemd)
   hosts: all
   gather_facts: false
-  become: true
-  ignore_unreachable: true
 
   tasks:
-    - name: Wait for systemd to reach running or degraded state
+    - name: Wait for container connection to be available
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+        delay: 2
+        sleep: 2
+
+    - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module
       ansible.builtin.command: systemctl is-system-running
       register: systemd_state
       retries: 30
       delay: 2
       until: systemd_state.stdout in ['running', 'degraded']
-      failed_when: false
-      changed_when: false
-
-    - name: Wait for auditd restart loop to exhaust (kernel audit disabled in containers)  # noqa: command-instead-of-module
-      ansible.builtin.command: systemctl is-active auditd.service
-      register: auditd_active
-      retries: 30
-      delay: 1
-      until: auditd_active.stdout not in ['activating', 'reloading']
       failed_when: false
       changed_when: false

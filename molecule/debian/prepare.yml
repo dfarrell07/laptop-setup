@@ -1,0 +1,45 @@
+---
+# molecule/debian/prepare.yml
+# Waits for container systemd to stabilize before converge begins.
+# Debian 13 (Trixie) with systemd 257 in privileged Podman containers has
+# several kernel-filesystem units (binfmt_misc, configfs, debugfs, tracefs,
+# kernel module loader) that fail at boot because container namespaces do not
+# expose those kernel subsystems. Without waiting, converge tasks race against
+# systemd's restart loops on these failed units, causing PID 1 crashes.
+#
+# NOTE: openssh-server is NOT pre-installed here — apt postinst triggers
+# pam-auth-update which restarts systemd-logind, which crashes PID 1 in
+# privileged Podman containers. The converge skips the openssh-server apt
+# task (when: not system_is_container) to avoid the crash.
+# CI gap: sshd hardening block is not exercised in Debian container CI;
+# make test-vm exercises full sshd hardening on Debian.
+- name: Prepare — wait for systemd to stabilize
+  hosts: all
+  gather_facts: false
+  ignore_unreachable: true  # container may not be ready immediately after create
+
+  tasks:
+    - name: Wait for container systemd to reach running or degraded state
+      ansible.builtin.command: podman exec {{ inventory_hostname }} systemctl is-system-running
+      delegate_to: localhost
+      register: _boot
+      until: "'running' in _boot.stdout | default('') or 'degraded' in _boot.stdout | default('')"
+      retries: 30
+      delay: 3
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for kernel-filesystem unit restart loops to exhaust
+      # binfmt_misc/configfs/debugfs/tracefs fail in containers; systemd retries
+      # them for ~15-30s before marking permanently failed. Converge must not start
+      # while these loops run — they steal CPU and can destabilize PID 1.
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Clear failed unit state so systemd considers itself stable
+      # After the retry loops exhaust, reset-failed clears the failed counters.
+      # This prevents further retry attempts and improves overall systemd stability.
+      ansible.builtin.command: podman exec {{ inventory_hostname }} systemctl reset-failed
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false

@@ -5,6 +5,7 @@
     path: /etc/NetworkManager/conf.d
     state: directory
     mode: "0755"
+  when: not system_is_container  # NM watches conf.d via inotify; creating dir triggers NM reload, can crash container
   failed_when: false
 
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
@@ -24,7 +25,9 @@
       wifi.cloned-mac-address=stable-ssid
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     mode: "0644"
-  when: _system_wifi_mac_rand
+  when:
+    - _system_wifi_mac_rand
+    - not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   failed_when: false
   notify: Restart NetworkManager
 
@@ -43,6 +46,7 @@
       unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:ovn-k8s-mp0
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
+  when: not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   failed_when: false
   notify: Restart NetworkManager
 
@@ -56,6 +60,7 @@
     mode: "0644"
   when:
     - not csb_rhel  # paired with resolv.conf
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   failed_when: false
   notify: Restart NetworkManager
 
@@ -72,7 +77,9 @@
       wifi.powersave=2
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
-  when: _system_wifi_powersave
+  when:
+    - _system_wifi_powersave
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   failed_when: false
   notify: Restart NetworkManager
 
@@ -80,7 +87,9 @@
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     state: absent
-  when: not _system_wifi_powersave
+  when:
+    - not _system_wifi_powersave
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
@@ -92,7 +101,9 @@
       ipv6.dhcp-send-hostname=false
     dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
     mode: "0644"
-  when: not csb_detected
+  when:
+    - not csb_detected
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   failed_when: false
   notify: Restart NetworkManager
 

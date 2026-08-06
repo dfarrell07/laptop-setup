@@ -28,30 +28,29 @@
 # net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
 # recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
 # (OVN-K, Submariner). No conditional override is applied.
-- name: Ensure /etc/sysctl.d exists
-  ansible.builtin.file:
-    path: /etc/sysctl.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when: not system_is_container
+- when: not system_is_container
+  block:
+    - name: Ensure /etc/sysctl.d exists
+      ansible.builtin.file:
+        path: /etc/sysctl.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
 
-- name: Deploy sysctl hardening config
-  ansible.builtin.template:
-    src: sysctl-hardening.conf.j2
-    dest: /etc/sysctl.d/90-hardening.conf
-    mode: "0644"
-  when: not system_is_container
+    - name: Deploy sysctl hardening config
+      ansible.builtin.template:
+        src: sysctl-hardening.conf.j2
+        dest: /etc/sysctl.d/90-hardening.conf
+        mode: "0644"
 
-- name: Apply sysctl hardening values immediately  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: sysctl --system
-  register: sysctl_system_result
-  changed_when: false
-  # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both
-  failed_when: >
-    sysctl_system_result.rc != 0 and
-    'No such file or directory' not in sysctl_system_result.stderr and
-    'invalid argument' not in sysctl_system_result.stderr | lower
-  when: not system_is_container
+    - name: Apply sysctl hardening values immediately  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: sysctl --system
+      register: sysctl_system_result
+      changed_when: false
+      # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both
+      failed_when: >
+        sysctl_system_result.rc != 0 and
+        'No such file or directory' not in sysctl_system_result.stderr and
+        'invalid argument' not in sysctl_system_result.stderr | lower

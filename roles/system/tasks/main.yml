@@ -6,6 +6,14 @@
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
+  when: not system_is_container  # systemctl list-units --all crashes PID 1 in Debian 13 privileged Podman containers
+
+- name: Seed empty service facts for container environments
+  # Ensures ansible_facts.services is defined so downstream 'is defined' guards
+  # (firewall.yml, sshd.yml, main.yml gdm check) evaluate safely to False.
+  ansible.builtin.set_fact:
+    ansible_facts: "{{ ansible_facts | combine({'services': {}}) }}"
+  when: system_is_container
 
 # --- Prerequisites (needed by seport and other system tasks) ---
 - name: Ensure policycoreutils-python-utils is installed
@@ -15,6 +23,7 @@
   when:
     - is_dnf
     - not csb_rhel
+    - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
 
 - ansible.builtin.import_tasks: hardening_core.yml
 

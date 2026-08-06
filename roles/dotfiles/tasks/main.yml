@@ -412,6 +412,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
     mode: "0644"
   when: is_macos
+  notify: Reload ssh-agent launchd (macOS)
 
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
   # 'launchctl bootstrap' is the modern replacement for the deprecated

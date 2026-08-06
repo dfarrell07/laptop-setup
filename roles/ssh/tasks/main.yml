@@ -92,7 +92,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_hardware_key_basename }}"
     mode: "0600"
   no_log: true
-  when: ssh_auth_key | length > 0
+  when: ssh_auth_key | trim | length > 0
 
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
@@ -130,8 +130,15 @@
     mode: "0600"
   no_log: true
   when:
-    - rh_git_key | length > 0
+    - rh_git_key | trim | length > 0
     - profile == 'work'
+
+- name: Ensure git config directory exists for allowed signers
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/git"
+    state: directory
+    mode: "0755"
+  when: ssh_git_signing_pubkey | trim | length > 0
 
 - name: Deploy allowed signers file
   ansible.builtin.template:

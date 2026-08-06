@@ -77,6 +77,7 @@
     mode: "0644"
   when:
     - not csb_rhel  # CSB (RHEL): IT-managed fstab
+    - not system_is_container  # fstab writes trigger inotify/systemd re-evaluation; crashes container PID 1
 
 - name: Check /dev/shm current mount options
   ansible.builtin.command:
@@ -92,6 +93,7 @@
   register: _devshm_remount_result
   changed_when: _devshm_remount_result.rc == 0
   when:
+    - not system_is_container
     - >-
       'noexec' not in (system_devshm_opts.stdout | default('')) or
       'nosuid' not in (system_devshm_opts.stdout | default('')) or

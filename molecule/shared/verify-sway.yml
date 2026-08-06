@@ -36,13 +36,14 @@
 
 - name: Verify sway output line contains scale directive and adaptive_sync
   ansible.builtin.command:
-    cmd: grep -q 'output.*scale.*adaptive_sync enabled' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: grep -q 'output.*scale.*adaptive_sync {{ desktop_sway_adaptive_sync }}' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
 - name: Verify sway config exports VA-API environment variables
   ansible.builtin.command:
-    cmd: grep -q 'LIBVA_DRIVER_NAME=radeonsi' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: grep -q 'LIBVA_DRIVER_NAME=' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
+  when: desktop_sway_libva_driver | length > 0
 
 - name: Verify sway config sets cursor theme for XWayland consistency
   ansible.builtin.command:
@@ -82,6 +83,11 @@
 - name: Verify portals.conf routes ScreenCast to wlr backend
   ansible.builtin.command:
     cmd: grep -q 'ScreenCast=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
+  changed_when: false
+
+- name: Verify portals.conf routes Screenshot to wlr backend
+  ansible.builtin.command:
+    cmd: grep -q 'Screenshot=wlr' "{{ ansible_user_dir }}/.config/xdg-desktop-portal/portals.conf"
   changed_when: false
 
 - name: Verify i3status config deployed (shared by sway)
@@ -152,6 +158,21 @@
 - name: Verify sway config exports Electron Wayland platform hint
   ansible.builtin.command:
     cmd: grep -q 'ELECTRON_OZONE_PLATFORM_HINT=wayland' "{{ ansible_user_dir }}/.config/sway/config"
+  changed_when: false
+
+- name: Stat terminal.conf environment.d file
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/environment.d/terminal.conf"
+  register: verify_terminal_conf
+
+- name: Assert terminal.conf exists
+  ansible.builtin.assert:
+    that: verify_terminal_conf.stat.exists
+    fail_msg: "terminal.conf not deployed — TERMINAL env var missing, Sway terminal keybind broken"
+
+- name: Verify terminal.conf exports TERMINAL variable
+  ansible.builtin.command:
+    cmd: grep -q '^TERMINAL=' "{{ ansible_user_dir }}/.config/environment.d/terminal.conf"
   changed_when: false
 
 - name: Stat GTK 3.0 settings.ini
