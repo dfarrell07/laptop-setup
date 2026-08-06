@@ -19,7 +19,7 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 - name: Stat /etc/bluetooth/main.conf
@@ -117,7 +117,7 @@
     - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
     - is_dnf
     - _system_tlp_install.rc | default(0) == 0
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 - name: Unmask power management daemons when TLP disabled
@@ -132,7 +132,7 @@
   when:
     - not (system_tlp_enabled | bool)
     - not csb_rhel
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 - name: Deploy TLP ThinkPad charge threshold config
@@ -156,7 +156,7 @@
     - system_tlp_enabled | bool
     - not csb_rhel
     - _system_tlp_install.rc | default(0) == 0
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 # --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
@@ -189,7 +189,7 @@
     enabled: true
   when:
     - not (system_disable_printing | bool)
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 - name: Mask cups.socket and cups.path when system_disable_printing
@@ -214,7 +214,7 @@
     - cups.path
   when:
     - not (system_disable_printing | bool)
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 # --- Mask ABRT crash reporter (redundant with systemd-coredump; skip on RHEL CSB where IT manages it via Satellite) ---
@@ -232,7 +232,7 @@
   when:
     - system_mask_abrt | bool
     - not csb_rhel
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not system_is_container
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---

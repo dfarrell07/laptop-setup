@@ -62,5 +62,5 @@
     state: started
   when:
     - not csb_rhel
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+    - not system_is_container
     - _audit_pkg_install.rc | default(0) == 0

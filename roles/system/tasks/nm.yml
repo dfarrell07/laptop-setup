@@ -1,0 +1,111 @@
+---
+# --- NetworkManager Tailscale unmanaged ---
+- name: Ensure NetworkManager conf.d exists
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    mode: "0755"
+  failed_when: false
+
+# On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
+# authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
+# break corporate WiFi auth. Skip on CSB (default) and rely on IT's NM configuration.
+- name: Set WiFi MAC randomization effective flag
+  ansible.builtin.set_fact:
+    _system_wifi_mac_rand: "{{ system_wifi_mac_rand | default(not csb_detected) | bool }}"
+
+- name: Configure WiFi MAC address randomization
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [device]
+      wifi.scan-rand-mac-address=yes
+      [connection]
+      wifi.cloned-mac-address=stable-ssid
+    dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    mode: "0644"
+  when: _system_wifi_mac_rand
+  failed_when: false
+  notify: Restart NetworkManager
+
+- name: Remove WiFi MAC address randomization config when disabled
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    state: absent
+  when: not _system_wifi_mac_rand
+  notify: Restart NetworkManager
+
+- name: Configure NetworkManager to ignore Tailscale and kind interfaces
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [keyfile]
+      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:ovn-k8s-mp0
+    dest: /etc/NetworkManager/conf.d/tailscale.conf
+    mode: "0644"
+  failed_when: false
+  notify: Restart NetworkManager
+
+- name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [main]
+      dns=systemd-resolved
+    dest: /etc/NetworkManager/conf.d/99-dns.conf
+    mode: "0644"
+  when:
+    - not csb_rhel  # paired with resolv.conf
+  failed_when: false
+  notify: Restart NetworkManager
+
+- name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      wifi.powersave=2
+    dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    mode: "0644"
+  failed_when: false
+  notify: Restart NetworkManager
+
+- name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      ipv4.dhcp-send-hostname=false
+      ipv6.dhcp-send-hostname=false
+    dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+    mode: "0644"
+  when: not csb_detected
+  failed_when: false
+  notify: Restart NetworkManager
+
+# tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
+# interface, not controlled by IT's firewalld policy. Trusted zone is required for
+# Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale
+# peers can reach any listening port on this machine (passim, etc. are masked separately).
+- name: Assign tailscale0 to firewall trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: tailscale0
+    permanent: true
+    immediate: true
+    state: enabled
+  when: system_firewalld_running | bool
+  failed_when: false  # tailscale0 doesn't exist on first provision; permanent config succeeds, immediate fails
+  notify:
+    - Apply firewall rules
+    - Restart tailscaled
+
+# failed_when: false — on CSB where the Tailscale repo is blocked, the package
+# may not be installed; silently skip rather than fail the play.
+- name: Enable and start tailscaled
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+  failed_when: false
+  when: not system_is_container
