@@ -251,6 +251,12 @@ system_var_tmp_noexec: false
 # NOTE: on Fedora hybrid (csb_detected=true, Fedora distribution), nosuid is applied
 # regardless of this flag — /home is a local btrfs partition and nosuid is always safe.
 system_home_nosuid_force: false
+# SELinux enforcement assertion: set false only in container CI environments where the
+# container image reports SELinux as disabled regardless of host policy (e.g., geerlingguy
+# Rocky images in Podman). On real hosts, leave true — the assert catches mis-configured
+# hosts before security-sensitive tasks run.
+# CI gap: SELinux enforcement is NOT verified by Podman-based scenarios when set false.
+system_selinux_enforcing_required: true
 # LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
 # LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
 # If rd.luks.key is active and you set this true, the machine will require manual LUKS

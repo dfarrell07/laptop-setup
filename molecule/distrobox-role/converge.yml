@@ -12,7 +12,7 @@
     - role: distrobox
 
 - name: Save pass-1 log and reset for pass 2
-  hosts: all
+  hosts: distrobox-role-test
   gather_facts: false
 
   tasks:
@@ -36,7 +36,7 @@
         mode: "0644"
 
 - name: Converge pass 2 — distrobox_container_replace=false (skip-create path)
-  hosts: all
+  hosts: distrobox-role-test
   gather_facts: true
 
   vars:

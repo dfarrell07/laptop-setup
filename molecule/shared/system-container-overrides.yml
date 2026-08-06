@@ -25,5 +25,8 @@
     ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
     ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
     csb_rhel: false                       # molecule temp inventory does not load project group_vars; set baseline here
+    system_selinux_enforcing_required: false  # geerlingguy images report SELinux disabled regardless of host policy
+    # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required
     csb_detected: false                   # molecule temp inventory baseline
     needs_container_tier: "host-only"     # molecule temp inventory baseline
+    ansible_managed: "Ansible managed — do not edit"  # group_vars/all/vars.yml not loaded by molecule temp inventory

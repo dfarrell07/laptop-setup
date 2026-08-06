@@ -26,7 +26,11 @@
       (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
       Fix: sudo setenforce 1 && sudo sed -i
       's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-  when: ansible_facts['selinux'] is defined and ansible_facts['selinux'] is mapping and ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when:
+    - ansible_facts['selinux'] is defined
+    - ansible_facts['selinux'] is mapping
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - system_selinux_enforcing_required | bool
 
 # --- Harden /tmp mount options (CIS 1.1.2.x) ---
 - name: Ensure tmp.mount drop-in directory exists
@@ -35,11 +39,9 @@
     state: directory
     mode: "0755"
 
-- name: Set /tmp noexec mount option string
-  ansible.builtin.set_fact:
-    _system_noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
-
 - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
+  vars:
+    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -47,7 +49,7 @@
       # Must include all options from tmp.mount base unit.
       # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
       [Mount]
-      Options=mode=1777,strictatime,nosuid,nodev{{ _system_noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+      Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
   notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
@@ -649,6 +651,14 @@
       when: system_var_tmp_unit_removal.changed
 
 # --- Kernel module blacklist ---
+- name: Ensure /etc/modprobe.d exists
+  ansible.builtin.file:
+    path: /etc/modprobe.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Deploy kernel module blacklist
   ansible.builtin.template:
     src: modprobe-hardening.conf.j2
