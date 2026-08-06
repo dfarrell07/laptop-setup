@@ -10,7 +10,7 @@ on:
       - '**/*.md'
 
 concurrency:
-  group: links
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:

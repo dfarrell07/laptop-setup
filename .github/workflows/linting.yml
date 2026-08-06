@@ -146,6 +146,12 @@ jobs:
           print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
           "
 
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
       - name: Install packages for audit
         run: npm ci --ignore-scripts
 
@@ -342,7 +348,7 @@ jobs:
           chmod +x zizmor
 
       - name: Run zizmor
-        run: ./zizmor .github/workflows/
+        run: ./zizmor .github/
 
   commitlint:
     name: Commit Message Lint

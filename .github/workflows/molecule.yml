@@ -48,12 +48,25 @@ jobs:
             echo "ansible=false" >> "$GITHUB_OUTPUT"
           fi
 
-  fedora:
-    name: Molecule (Fedora)
+  molecule:
+    name: Molecule (${{ matrix.name }})
     needs: changes
     if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {scenario: fedora, runner: ubuntu-24.04, timeout: 30, name: Fedora}
+          - {scenario: rocky, runner: ubuntu-24.04, timeout: 30, name: Rocky Linux 10}
+          - {scenario: debian, runner: ubuntu-24.04, timeout: 30, name: Debian}
+          - {scenario: container, runner: ubuntu-24.04, timeout: 30, name: container provisioning}
+          - {scenario: container-offline, runner: ubuntu-24.04, timeout: 30, name: container-offline rescue path}
+          - {scenario: container-offline-distrobox, runner: ubuntu-24.04, timeout: 30, name: container-offline-distrobox rescue path}
+          - {scenario: distrobox-role, runner: ubuntu-24.04, timeout: 30, name: distrobox-role}
+          - {scenario: packages-binaries, runner: ubuntu-24.04, timeout: 45, name: packages-binaries}
+          - {scenario: macos, runner: macos-15, timeout: 30, name: macOS}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -63,149 +76,5 @@ jobs:
       - name: Set up Molecule environment
         uses: ./.github/actions/molecule-setup
 
-      - name: Run Molecule Fedora scenario
-        run: molecule test -s fedora
-
-  rocky:
-    name: Molecule (Rocky Linux 10)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule Rocky Linux 10 scenario
-        run: molecule test -s rocky
-
-  debian:
-    name: Molecule (Debian)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule Debian scenario
-        run: molecule test -s debian
-
-  container:
-    name: Molecule (container provisioning)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule container provisioning scenario
-        run: molecule test -s container
-
-  container-offline:
-    name: Molecule (container-offline rescue path)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule container-offline scenario
-        run: molecule test -s container-offline
-
-  container-offline-distrobox:
-    name: Molecule (container-offline-distrobox rescue path)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule container-offline-distrobox scenario
-        run: molecule test -s container-offline-distrobox
-
-  distrobox-role:
-    name: Molecule (distrobox-role)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule distrobox-role scenario
-        run: molecule test -s distrobox-role
-
-  packages-binaries:
-    name: Molecule (packages-binaries)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule packages-binaries scenario
-        run: molecule test -s packages-binaries
-
-  macos:
-    name: Molecule (macOS)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true'
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
-
-      - name: Run Molecule macOS scenario
-        run: molecule test -s macos
+      - name: Run Molecule ${{ matrix.name }} scenario
+        run: molecule test -s ${{ matrix.scenario }}
