@@ -324,7 +324,7 @@
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-        disable_gpgcheck: true
+        disable_gpg_check: true
   rescue:
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
@@ -345,7 +345,7 @@
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-        disable_gpgcheck: true
+        disable_gpg_check: true
   rescue:
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:

@@ -26,7 +26,7 @@
         sleep: 2
 
     - name: Wait for systemd to reach running or degraded state (pre-install)
-      ansible.builtin.command: systemctl is-system-running
+      ansible.builtin.command: systemctl is-system-running # noqa: command-instead-of-module
       register: systemd_state_pre
       retries: 30
       delay: 2
@@ -44,7 +44,7 @@
       failed_when: false
 
     - name: Wait for systemd to remain stable after package installs
-      ansible.builtin.command: systemctl is-system-running
+      ansible.builtin.command: systemctl is-system-running # noqa: command-instead-of-module
       register: systemd_state_post
       retries: 15
       delay: 2

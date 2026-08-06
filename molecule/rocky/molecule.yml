@@ -9,6 +9,7 @@ platforms:
     image: docker.io/geerlingguy/docker-rockylinux10-ansible@sha256:776b46ac22b0c351319b3c58ea48cb21e53b6912d125c7ff6823d6b5f246ff53
     pre_build_image: true
     privileged: true
+    extra_opts: ["--cgroupns=host"]
     command: /usr/sbin/init
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw

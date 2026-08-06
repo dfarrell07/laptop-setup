@@ -28,11 +28,14 @@
 
     - name: Install dnf packages (container — skip scriptlets to prevent systemd daemon-reload crash)  # noqa: command-instead-of-module
       ansible.builtin.command:
-        # --setopt=tsflags=noscripts: RPM scriptlets (systemd-update-helper, etc.) trigger
-        # daemon-reload in privileged containers, crashing systemd PID 1. Scriptlets are
-        # skipped safely in containers (services aren't started; /etc/shells not needed for CI).
+        # --setopt=tsflags=noscripts,notriggers: suppresses all RPM script execution in the
+        # DNF5 transaction. noscripts covers %pre/%post/%preun/%postun scriptlets;
+        # notriggers covers %trigger/%triggerin/%triggerun/%triggerpostun — both call
+        # systemd-update-helper / daemon-reload and crash systemd PID 1 in privileged
+        # containers. rpm_opts (DNF4) is silently ignored by DNF5/libdnf5; tsflags is correct.
+        # Skipped safely in containers (services aren't started; /etc/shells not needed for CI).
         cmd: >-
-          dnf install -y --setopt=tsflags=noscripts
+          dnf install -y --setopt=tsflags=noscripts,notriggers
           {{ (packages_cli
              + packages_languages
              + packages_security
