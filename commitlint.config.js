@@ -11,12 +11,14 @@ module.exports = {
       'Notes', 'Redhat', 'Containers', 'Desktop', 'System', 'Distrobox',
       'Claude', 'Ci', 'Docs', 'Chore', 'Smoke', 'Molecule', 'Multi',
       'Sshd', 'Nm', 'Auditd', 'Backup', 'Handlers', 'Security',
+      'Vault', 'Preflight',
     ]],
     'scope-enum': [0, 'always', [
       'common', 'repos-dnf', 'packages', 'dotfiles', 'ssh', 'git-repos',
       'notes', 'redhat', 'containers', 'desktop', 'system', 'distrobox',
       'claude', 'ci', 'docs', 'chore', 'smoke', 'molecule', 'multi',
       'sshd', 'nm', 'auditd', 'backup', 'handlers', 'security', 'deps',
+      'vault', 'preflight',
     ]],
   },
 };

@@ -161,7 +161,8 @@ make repos-downstream # downstream repos only
   keeps lowercase reference for rule matching): `Common`, `Repos-dnf`, `Packages`,
   `Dotfiles`, `Ssh`, `Git-repos`, `Notes`, `Redhat`, `Containers`, `Desktop`,
   `System`, `Distrobox`, `Claude`, `Ci`, `Docs`, `Chore`, `Smoke`, `Molecule`,
-  `Multi`, `Sshd`, `Nm`, `Auditd`, `Backup`, `Handlers`, `Security`
+  `Multi`, `Sshd`, `Nm`, `Auditd`, `Backup`, `Handlers`, `Security`,
+  `Vault`, `Preflight`
 
 ## Vault
 
