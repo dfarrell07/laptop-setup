@@ -98,7 +98,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
 #   system_bpf_jit_harden: 1           (group_vars/all/vars.yml) — BPF JIT hardening (1=unprivileged only, default here;
 #                                        2=all incl root for strict CIS/STIG but breaks bpftool prog dump jited)
-#   system_unprivileged_bpf_disabled: 1 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, root can re-enable;
+#   system_unprivileged_bpf_disabled: 2 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, root can re-enable;
 #                                        2=write-once locked, even root cannot re-enable; 0=allow all)
 #   system_sysctl_extra: {}            (roles/system/defaults) — additional sysctl key=value pairs merged into the hardening dict;
 #                                        use in config.yml to add machine-specific sysctls without replacing the entire dict.

@@ -281,6 +281,15 @@
     path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
   register: _dotfiles_legacy_tmux
 
+- name: Back up legacy ~/.tmux.conf before XDG migration
+  ansible.builtin.copy:
+    src: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.tmux.conf.pre-xdg-migration"
+    remote_src: true
+    mode: "0644"
+    force: false
+  when: _dotfiles_legacy_tmux.stat.exists
+
 - name: Remove legacy ~/.tmux.conf (migrated to XDG path)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
