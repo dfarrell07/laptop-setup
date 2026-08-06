@@ -220,6 +220,7 @@
       changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
       when:
         - is_dnf
+        - not system_is_container  # writing /etc/kernel/cmdline triggers systemd-boot inotify → daemon-reload → container crash
       failed_when: false
 
     - name: Log grubby stderr for any non-zero return code
