@@ -2,6 +2,7 @@
 # roles/packages/tasks/install_dnf_packages.yml
 # Main dnf package installation (cli, languages, security, containers, networking).
 # Runs only when is_dnf; includes CSB rescue handler.
+# --- DNF package installation ---
 - name: Install dnf packages
   when: is_dnf
   block:
@@ -17,7 +18,8 @@
                     or ansible_facts['architecture'] != 'x86_64'
                     or not (packages_install_binaries | bool))
                 else [])
-             + packages_networking
+             + (packages_networking | reject('equalto', 'tailscale') | list
+                if not repo_tailscale else packages_networking)
              + (packages_networking_work if profile == 'work' else []) }}
         state: present
       become: true
