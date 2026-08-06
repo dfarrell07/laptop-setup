@@ -74,10 +74,7 @@
 - name: Assert SSH auth public key type is accepted by sshd hardening
   ansible.builtin.assert:
     that:
-      - ssh_auth_key_pub.split()[0] in
-          ['sk-ssh-ed25519@openssh.com',
-           'sk-ssh-ed25519-cert-v01@openssh.com',
-           'ssh-ed25519']
+      - ssh_auth_key_pub.split()[0] in ssh_pubkey_accepted_algorithms
     fail_msg: >-
       ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
       which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).

@@ -21,6 +21,7 @@ system_sysctl_hardening:
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
   net.ipv4.conf.all.rp_filter: 2  # loose mode; acts as floor (kernel max(all,iface)); sysctl_extra per-iface values <2 are ineffective
+  # duplicates Fedora 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
   net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
@@ -199,6 +200,9 @@ system_disable_udf: true          # kernel-blocks udf module; set false if UDF m
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
+# The default value duplicates /usr/lib/sysctl.d/50-coredump.conf intentionally — writing it to
+# 90-hardening.conf anchors it against third-party drop-ins that might modify core_pattern
+# (sysctl.d uses lexicographic ordering; 90- wins over any competing file except 99-*).
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
 system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
@@ -290,6 +294,7 @@ system_chrony_service_enabled: "{{ not system_is_container }}"
 # (which overrides these at precedence 5 when running via the project inventory).
 # Duplicated here so the system role is standalone-invocable in molecule scenarios,
 # where the molecule temp inventory does not load the project's group_vars directory.
+is_dnf5: false             # OS-detection baseline; csb_detect.yml overrides at runtime; kept here for standalone molecule invocability
 system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
 system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS
 system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)

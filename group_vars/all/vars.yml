@@ -35,7 +35,6 @@ is_dnf5: false
 is_apt: false
 fapolicyd_installed: false
 fapolicyd_enforcing: false
-internal_ca_present: false
 needs_container_tier: "host-only"
 network_proxied: false  # csb_detect.yml overrides at runtime from proxy env vars
 proxy_url: ''           # csb_detect.yml overrides at runtime
@@ -103,6 +102,7 @@ system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
 system_unprivileged_bpf_disabled: 1  # restrict unprivileged BPF (kernel.unprivileged_bpf_disabled)
 system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
+ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
 # Baseline false — csb_detect.yml overrides at runtime via set_fact
 # (csb_detected and is_rhel). True on RHEL CSB where IT manages security
 # baselines; false on hybrid Fedora CSB where the user manages their own system.
