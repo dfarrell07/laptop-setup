@@ -1,8 +1,9 @@
 ---
 # molecule/shared/ci-pre-tasks.yml
 # Loads default.config.yml + group_vars/all/vars.yml and sets common_project_root.
-# Molecule does not auto-load group_vars, so this is required in every converge.yml.
-# Include at the start of converge pre_tasks before any role invocation.
+# Molecule does not auto-load group_vars, so this is required in converge.yml for full-role scenarios
+# (fedora, rocky, debian, macos, vm, packages-binaries). Container-provisioning and
+# distrobox-role scenarios load vars directly or are self-contained — see those converge files.
 - name: Load configuration
   ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 

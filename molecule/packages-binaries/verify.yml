@@ -295,7 +295,6 @@
           - verify_gopls.stat.exists
           - verify_gopls.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
-      when: verify_gopls.stat.exists
 
     - name: Stat subctl18 binary
       ansible.builtin.stat:
@@ -308,7 +307,6 @@
           - verify_subctl18.stat.exists
           - verify_subctl18.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
-      when: verify_subctl18.stat.exists
 
     # --- Version-pin assertions: each binary must report the pinned version ---
 

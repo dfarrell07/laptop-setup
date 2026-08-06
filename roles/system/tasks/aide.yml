@@ -4,11 +4,20 @@
 # On non-DNF systems (Debian, macOS) this entire section skips cleanly.
 # Individual tasks drop their redundant 'when: system_aide_enabled | bool' —
 # the block-level condition covers both the pkg_mgr and enabled checks.
+- name: Warn that AIDE (CIS 1.3) is disabled
+  ansible.builtin.debug:
+    msg: 'CIS 1.3 WARNING: system_aide_enabled=false — filesystem integrity monitoring inactive; set true in config.yml to enable'
+  when:
+    - not system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
 - name: AIDE file integrity monitoring
   when:
     - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
+    - not system_is_container
   block:
     - name: Install AIDE
       ansible.builtin.dnf:

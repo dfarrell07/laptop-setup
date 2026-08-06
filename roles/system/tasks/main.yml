@@ -25,22 +25,27 @@
     - not csb_rhel
     - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
 
-- ansible.builtin.import_tasks: hardening_core.yml
+- name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
+  ansible.builtin.import_tasks: hardening_core.yml
 
 # --- Auditd ---
 - name: Auditd tasks
   ansible.builtin.import_tasks: auditd.yml
 
-- ansible.builtin.import_tasks: bolt.yml
+- name: "Bolt hardening"
+  ansible.builtin.import_tasks: bolt.yml
 
 - name: Authselect and fingerprint auth
   ansible.builtin.import_tasks: authselect_fingerprint.yml
 
-- ansible.builtin.import_tasks: service_masking.yml
+- name: "Service masking"
+  ansible.builtin.import_tasks: service_masking.yml
 
-- ansible.builtin.import_tasks: logind.yml
+- name: "Logind configuration"
+  ansible.builtin.import_tasks: logind.yml
 
-- ansible.builtin.import_tasks: services.yml
+- name: "Service enable/disable"
+  ansible.builtin.import_tasks: services.yml
 
 - name: Firmware updates
   ansible.builtin.import_tasks: firmware.yml
@@ -61,7 +66,8 @@
   ansible.builtin.import_tasks: dns_over_tls.yml
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
-- ansible.builtin.import_tasks: session_timeout.yml
+- name: "Session timeout"
+  ansible.builtin.import_tasks: session_timeout.yml
 
 - name: Timezone and locale
   ansible.builtin.import_tasks: timezone_locale.yml
@@ -78,7 +84,8 @@
 - name: Logrotate for sudo.log
   ansible.builtin.import_tasks: logrotate_sudo.yml
 
-- ansible.builtin.import_tasks: cron.yml
+- name: "Cron access restriction"
+  ansible.builtin.import_tasks: cron.yml
 
 - name: Login banner
   ansible.builtin.import_tasks: login_banner.yml
@@ -93,7 +100,8 @@
     - '"gdm.service" in ansible_facts.services'
     - not csb_rhel
 
-- ansible.builtin.import_tasks: aide_cleanup.yml
+- name: "AIDE cleanup"
+  ansible.builtin.import_tasks: aide_cleanup.yml
 
 - name: AIDE configuration
   ansible.builtin.import_tasks: aide.yml

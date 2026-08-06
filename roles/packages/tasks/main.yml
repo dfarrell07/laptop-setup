@@ -10,7 +10,8 @@
     packages_install_binaries: false
   when: needs_container_tier == 'container'
 
-- ansible.builtin.include_tasks: install_dnf_packages.yml
+- name: Install dnf packages
+  ansible.builtin.include_tasks: install_dnf_packages.yml
   when: is_dnf
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
@@ -67,7 +68,8 @@
       and ansible_facts['architecture'] == 'x86_64'
       and profile == 'work' }}"
 
-- ansible.builtin.import_tasks: install_binary_downloads.yml
+- name: Install binary downloads
+  ansible.builtin.import_tasks: install_binary_downloads.yml
 
 # --- Go install tools ---
 

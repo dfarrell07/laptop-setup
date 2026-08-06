@@ -48,6 +48,7 @@ REQUIRED_KEYS = {
     "system_pwquality_ocredit": int,
     "system_pwquality_dcredit": int,
     "system_pwquality_maxrepeat": int,
+    "system_pwquality_maxsequence": int,
     "system_pwhistory_remember": int,
     "system_inactive_days": int,
     "system_pass_max_days": int,
@@ -97,9 +98,19 @@ def parse_requirements(path):
     return result
 
 
-def check_pipx_version_sync():
+def _fail_on_errors(errors, header, advice):
+    """Print errors to stderr and exit 1; no-op when errors is empty."""
+    if not errors:
+        return
+    print(f"ERROR: {header}", file=sys.stderr)
+    for line in errors:
+        print(line, file=sys.stderr)
+    print(advice, file=sys.stderr)
+    sys.exit(1)
+
+
+def check_pipx_version_sync(packages_data):
     """Verify pipx version pins in packages defaults satisfy requirements-test.txt ranges."""
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
     req_specifiers = parse_requirements(REQUIREMENTS_FILE)
 
     errors = []
@@ -128,13 +139,12 @@ def check_pipx_version_sync():
     return errors
 
 
-def check_oc_version_sync():
+def check_oc_version_sync(packages_data):
     """Verify distrobox_oc_version in molecule files matches packages_oc_version.
 
     molecule/shared/offline-vars.yml intentionally uses "0.0.0-offline-test" to
     trigger a 404 rescue path — it is excluded from this check.
     """
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
     expected = str(packages_data.get("packages_oc_version", ""))
     if not expected:
         return ["  MISSING: packages_oc_version not found in roles/packages/defaults/main.yml"]
@@ -169,15 +179,13 @@ def check_oc_version_sync():
     return errors
 
 
-def check_distrobox_version_sync():
+def check_distrobox_version_sync(packages_data):
     """Verify distrobox_golangci_lint_version and distrobox_subctl_version in
     molecule files match packages_golangci_lint_version and packages_subctl_version.
 
     Unlike distrobox_oc_version, both vars carry real version strings in all
     molecule files (including offline-vars.yml), so no skip set is needed.
     """
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
-
     distrobox_version_vars = {
         "distrobox_golangci_lint_version": "packages_golangci_lint_version",
         "distrobox_subctl_version": "packages_subctl_version",
@@ -206,7 +214,7 @@ def check_distrobox_version_sync():
     return errors
 
 
-def check_linting_ci_sync():
+def check_linting_ci_sync(packages_data):
     """Verify binary versions and SHA256s in linting.yml match packages defaults.
 
     Extracts hardcoded version strings from tarball filenames (e.g.
@@ -218,8 +226,6 @@ def check_linting_ci_sync():
     roles/packages/defaults/main.yml.
     """
     content = LINTING_CI_FILE.read_text()
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
-
     checks = [
         {
             "tool": "gitleaks",
@@ -295,6 +301,7 @@ def check_linting_ci_sync():
 
 def main():
     vars_data = load_yaml(VARS_FILE)
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
 
     errors = []
     for key, expected_type in REQUIRED_KEYS.items():
@@ -306,18 +313,12 @@ def main():
                 f"  WRONG TYPE: {key}={val!r} expected {expected_type.__name__},"
                 f" got {type(val).__name__}"
             )
-
-    if errors:
-        print("ERROR: group_vars/all/vars.yml missing or wrong-type security vars:", file=sys.stderr)
-        for line in errors:
-            print(line, file=sys.stderr)
-        print(
-            "vars.yml is the single source of truth for security hardening values "
-            "(roles/system/defaults/main.yml mirrors them for standalone molecule use).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
+    _fail_on_errors(
+        errors,
+        "group_vars/all/vars.yml missing or wrong-type security vars:",
+        "vars.yml is the single source of truth for security hardening values "
+        "(roles/system/defaults/main.yml mirrors them for standalone molecule use).",
+    )
     print(f"OK: {len(REQUIRED_KEYS)} security hardening keys present and correctly typed in vars.yml")
 
     defaults_data = load_yaml(SYSTEM_DEFAULTS_FILE)
@@ -331,84 +332,46 @@ def main():
                 f"  MISMATCH: {key}: vars.yml={vars_data[key]!r}"
                 f" != roles/system/defaults/main.yml={defaults_data[key]!r}"
             )
-
-    if defaults_errors:
-        print(
-            "ERROR: roles/system/defaults/main.yml missing or mismatched security vars"
-            " (required mirror for standalone molecule runs):",
-            file=sys.stderr,
-        )
-        for line in defaults_errors:
-            print(line, file=sys.stderr)
-        print(
-            "Update roles/system/defaults/main.yml to match vars.yml.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
+    _fail_on_errors(
+        defaults_errors,
+        "roles/system/defaults/main.yml missing or mismatched security vars"
+        " (required mirror for standalone molecule runs):",
+        "Update roles/system/defaults/main.yml to match vars.yml.",
+    )
     print(
         f"OK: {len(REQUIRED_KEYS)} security hardening keys present and matching in"
         " roles/system/defaults/main.yml (molecule mirror)"
     )
 
-    pipx_errors = check_pipx_version_sync()
-    if pipx_errors:
-        print(
-            "ERROR: pipx version pins in roles/packages/defaults/main.yml"
-            " do not satisfy requirements-test.txt ranges:",
-            file=sys.stderr,
-        )
-        for line in pipx_errors:
-            print(line, file=sys.stderr)
-        print(
-            "Update packages_yamllint_version / packages_ansible_lint_version"
-            " in roles/packages/defaults/main.yml to match the requirements-test.txt specifiers.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
+    _fail_on_errors(
+        check_pipx_version_sync(packages_data),
+        "pipx version pins in roles/packages/defaults/main.yml"
+        " do not satisfy requirements-test.txt ranges:",
+        "Update packages_yamllint_version / packages_ansible_lint_version"
+        " in roles/packages/defaults/main.yml to match the requirements-test.txt specifiers.",
+    )
     print(f"OK: {len(PIPX_VERSION_VARS)} pipx version pins satisfy requirements-test.txt ranges")
 
-    oc_errors = check_oc_version_sync()
-    if oc_errors:
-        print(
-            "ERROR: distrobox_oc_version in molecule files does not match"
-            " packages_oc_version in roles/packages/defaults/main.yml:",
-            file=sys.stderr,
-        )
-        for line in oc_errors:
-            print(line, file=sys.stderr)
-        print(
-            "Update distrobox_oc_version in the listed molecule files to match"
-            " packages_oc_version, or bump packages_oc_version first.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    _fail_on_errors(
+        check_oc_version_sync(packages_data),
+        "distrobox_oc_version in molecule files does not match"
+        " packages_oc_version in roles/packages/defaults/main.yml:",
+        "Update distrobox_oc_version in the listed molecule files to match"
+        " packages_oc_version, or bump packages_oc_version first.",
+    )
     print(
         f"OK: distrobox_oc_version in molecule files matches"
         f" packages_oc_version={packages_data.get('packages_oc_version')!r}"
     )
 
-    distrobox_errors = check_distrobox_version_sync()
-    if distrobox_errors:
-        print(
-            "ERROR: distrobox tool versions in molecule files do not match"
-            " packages defaults in roles/packages/defaults/main.yml:",
-            file=sys.stderr,
-        )
-        for line in distrobox_errors:
-            print(line, file=sys.stderr)
-        print(
-            "Update distrobox_golangci_lint_version / distrobox_subctl_version"
-            " in the listed molecule files to match the packages defaults,"
-            " or bump the packages defaults first.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    _fail_on_errors(
+        check_distrobox_version_sync(packages_data),
+        "distrobox tool versions in molecule files do not match"
+        " packages defaults in roles/packages/defaults/main.yml:",
+        "Update distrobox_golangci_lint_version / distrobox_subctl_version"
+        " in the listed molecule files to match the packages defaults,"
+        " or bump the packages defaults first.",
+    )
     print(
         f"OK: distrobox_golangci_lint_version and distrobox_subctl_version in"
         f" molecule files match packages defaults"
@@ -416,24 +379,14 @@ def main():
         f" subctl={packages_data.get('packages_subctl_version')!r})"
     )
 
-    linting_ci_errors = check_linting_ci_sync()
-    if linting_ci_errors:
-        print(
-            "ERROR: binary versions/SHA256s in .github/workflows/linting.yml"
-            " do not match roles/packages/defaults/main.yml:",
-            file=sys.stderr,
-        )
-        for line in linting_ci_errors:
-            print(line, file=sys.stderr)
-        print(
-            "Update packages_gitleaks_version/sha256, packages_actionlint_version/sha256,"
-            " or packages_zizmor_version/sha256 in roles/packages/defaults/main.yml to match"
-            " linting.yml, or bump linting.yml to match.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    _fail_on_errors(
+        check_linting_ci_sync(packages_data),
+        "binary versions/SHA256s in .github/workflows/linting.yml"
+        " do not match roles/packages/defaults/main.yml:",
+        "Update packages_gitleaks_version/sha256, packages_actionlint_version/sha256,"
+        " or packages_zizmor_version/sha256 in roles/packages/defaults/main.yml to match"
+        " linting.yml, or bump linting.yml to match.",
+    )
     print(
         f"OK: gitleaks, actionlint, zizmor versions and SHA256s match between"
         f" linting.yml and packages defaults"

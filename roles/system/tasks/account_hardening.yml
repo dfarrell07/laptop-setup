@@ -183,7 +183,9 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  when: real_user_id | length > 0
+  when:
+    - real_user_id | length > 0
+    - not system_is_container  # getent uses NSS/systemd-userdb D-Bus; crashes Debian 13 container PID 1
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
@@ -238,6 +240,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # /etc/passwd access triggers NSS/systemd-userdb; crashes Debian 13 container PID 1
 
 - name: Assert no non-root UID 0 accounts (CIS 6.2.9)
   ansible.builtin.assert:
@@ -257,6 +260,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # same NSS/D-Bus crash risk as uid0 probe above
 
 - name: Assert no non-root GID 0 primary group accounts (CIS 6.2.x)
   ansible.builtin.assert:
@@ -276,6 +280,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # /etc/shadow access crashes Debian 13 container PID 1
 
 - name: Assert no empty password accounts (CIS 6.2.2)
   ansible.builtin.assert:
@@ -297,6 +302,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # same NSS/D-Bus crash risk as uid0 probe above
 
 - name: Assert all passwd entries use shadowed passwords (CIS 6.2.1)
   ansible.builtin.assert:

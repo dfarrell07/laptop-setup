@@ -41,7 +41,8 @@
       the auditd rules file. Ensure HOME is set correctly before running.
   when: not csb_rhel
 
-- when:
+- name: Apply auditd rules and configuration
+  when:
     - not csb_rhel  # no SIEM at home; audit package not installed in container CI (see comment above)
     - not system_is_container
     - _audit_pkg_install.rc | default(0) == 0

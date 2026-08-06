@@ -4,7 +4,8 @@
 # cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
 # would silently block those IT management jobs. Skip on RHEL CSB only.
 # Fedora hybrid: those IT tools are absent — cron.allow=root is safe CIS 5.1.8/5.1.9 hardening.
-- when:
+- name: Cron access restriction (skip on RHEL CSB and containers)
+  when:
     - not system_is_container
     - not csb_rhel
   block:

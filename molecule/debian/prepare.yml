@@ -33,11 +33,13 @@
       # binfmt_misc/configfs/debugfs/tracefs mounts and kernel module loader fail in
       # privileged Podman containers (restricted kernel namespaces). Without masking,
       # systemd retries these in activate/fail loops that eventually crash PID 1.
-      # Masking with --now stops any in-flight activation and prevents further retries.
+      # Mask WITHOUT --now: stopping units mid-restart triggers daemon-reload which
+      # itself can crash the container. Masking alone prevents further activation
+      # attempts after the current restart cycle exhausts naturally.
       # Uses podman exec (delegate_to: localhost) to avoid Ansible connection dependency
       # during the unstable early-boot window.
       ansible.builtin.command: >-
-        podman exec {{ inventory_hostname }} systemctl mask --now
+        podman exec {{ inventory_hostname }} systemctl mask
         proc-sys-fs-binfmt_misc.automount
         sys-kernel-config.mount
         sys-kernel-debug.mount

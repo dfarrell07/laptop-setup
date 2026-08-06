@@ -99,7 +99,11 @@
 # those settings have NO effect. Two insertions are required:
 #   preauth  — before pam_unix.so, checks if account is already locked
 #   authfail — after pam_unix.so, records failed attempts
-- block:
+- name: Debian PAM faillock and pwhistory direct stack insertion
+  when:
+    - is_apt
+    - not system_is_container
+  block:
     - name: Ensure pam_faillock.so preauth line is in common-auth (Debian)
       ansible.builtin.lineinfile:
         path: /etc/pam.d/common-auth
@@ -134,9 +138,6 @@
         line: 'password required                        pam_pwhistory.so use_authtok'
         insertbefore: '^password.*pam_unix\.so'
         mode: "0644"
-  when:
-    - is_apt
-    - not system_is_container
 
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
@@ -215,6 +216,8 @@
       value: "{{ system_pwquality_difok }}"
     - key: maxrepeat
       value: "{{ system_pwquality_maxrepeat }}"
+    - key: maxsequence
+      value: "{{ system_pwquality_maxsequence }}"
   loop_control:
     label: "{{ item.key }}"
   when:
