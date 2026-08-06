@@ -24,6 +24,7 @@
       ansible.builtin.dnf:
         name: openssh-server
         state: present
+        update_cache: true
       when: _openssh_present.rc != 0
 
   roles:
