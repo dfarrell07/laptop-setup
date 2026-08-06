@@ -49,7 +49,7 @@ Host internal-git
 {% set _ts_hosts = [dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host] | select | list %}
 {% if _ts_hosts %}
 Host {{ _ts_hosts | join(' ') }}
-    Port {{ ssh_port | default(722) }}
+    Port {{ ssh_port }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
 {% endif %}
 
