@@ -19,6 +19,8 @@ system_sysctl_hardening:
   net.ipv6.conf.default.accept_redirects: 0
   net.ipv4.conf.all.accept_source_route: 0
   net.ipv4.conf.default.accept_source_route: 0
+  net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; pinned to block sysctl.d override
+  net.ipv6.conf.default.accept_source_route: 0
   # all.rp_filter NOT in 50-default.conf (defaults to 0); floor so sysctl_extra per-iface values stay >= loose-mode
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
   # loose mode; duplicates 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
