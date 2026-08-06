@@ -33,7 +33,7 @@
         dest: "{{ dest }}"
         checksum: "{{ checksum }}"
         mode: "0755"
-        timeout: "{{ timeout | default(120) }}"
+        timeout: "{{ download_timeout | default(120) }}"
       become: true
       tags: [become]
       register: _install_binary_download

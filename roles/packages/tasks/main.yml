@@ -667,7 +667,7 @@
       'aarch64' else packages_operator_sdk_sha256 }}
     version_check_cmd: /usr/local/bin/operator-sdk version
     version_string: "{{ packages_operator_sdk_version }}"
-    timeout: 300
+    download_timeout: 300
     csb_action: >-
       Install operator-sdk manually from
       https://github.com/operator-framework/operator-sdk/releases
@@ -693,7 +693,7 @@
     checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
     version_check_cmd: /usr/local/bin/cosign version
     version_string: "{{ packages_cosign_version }}"
-    timeout: 300
+    download_timeout: 300
     csb_action: >-
       Install cosign manually from https://github.com/sigstore/cosign/releases
     csb_ticket_summary: "Cannot download cosign binary on CSB"
@@ -905,37 +905,36 @@
       changed_when: false
       failed_when: false
 
-    - name: Download krew tarball
+    - name: Install krew from tarball
       when: packages_krew_check.rc != 0
-      ansible.builtin.get_url:
-        url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
-        dest: /tmp/krew.tar.gz
-        checksum: "sha256:{{ packages_krew_sha256 }}"
-        mode: "0644"
-        timeout: 120
-      register: packages_krew_download
-      retries: 3
-      delay: 10
-      until: packages_krew_download is succeeded
+      block:
+        - name: Download krew tarball
+          ansible.builtin.get_url:
+            url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
+            dest: /tmp/krew.tar.gz
+            checksum: "sha256:{{ packages_krew_sha256 }}"
+            mode: "0644"
+            timeout: 120
+          register: packages_krew_download
+          retries: 3
+          delay: 10
+          until: packages_krew_download is succeeded
 
-    - name: Extract krew installer
-      when: packages_krew_check.rc != 0
-      ansible.builtin.unarchive:
-        src: /tmp/krew.tar.gz
-        dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
-        remote_src: true
+        - name: Extract krew installer
+          ansible.builtin.unarchive:
+            src: /tmp/krew.tar.gz
+            dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            remote_src: true
 
-    - name: Set krew installer executable
-      when: packages_krew_check.rc != 0
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
-        mode: "0755"
+        - name: Set krew installer executable
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+            mode: "0755"
 
-    - name: Run krew installer
-      when: packages_krew_check.rc != 0
-      ansible.builtin.command:
-        cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
-      changed_when: true
+        - name: Run krew installer
+          ansible.builtin.command:
+            cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
+          changed_when: true
 
     - name: Upgrade krew
       when:
@@ -1124,6 +1123,17 @@
       loop_control:
         label: "{{ item.suffix }}"
         index_var: loop_idx
+
+    - name: Warn if versioned RH subctl install failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: subctl install failed for {{ item.item.suffix }};
+          RC={{ item.rc }} stderr={{ item.stderr | default('') | truncate(200) }}
+      loop: >-
+        {{ _pkg_subctl_install.results | default([])
+           | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}
+      loop_control:
+        label: "{{ item.item.suffix }}"
 
   rescue:
     - name: Record downstream RH subctl installation failure (CSB)

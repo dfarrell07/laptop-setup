@@ -39,7 +39,7 @@
             dest: "{{ tarball }}"
             checksum: "{{ checksum }}"
             mode: "0644"
-            timeout: "{{ timeout | default(120) }}"
+            timeout: "{{ download_timeout | default(120) }}"
           register: _install_tarball_download
           retries: 3
           delay: 10
