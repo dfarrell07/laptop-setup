@@ -215,6 +215,7 @@ _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"
 else record "dotfile-gitconfig" "PASS"; fi
+if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "~/.gitconfig exists alongside XDG config — run: make dotfiles"; else record "legacy-gitconfig" "PASS"; fi
 # git identity must be set to non-placeholder values
 _git_name=$(git config --global user.name 2>/dev/null || echo "")
 _git_email=$(git config --global user.email 2>/dev/null || echo "")
@@ -318,6 +319,13 @@ else record "cargo-path" "FAIL" "$HOME/.cargo/bin not in PATH exports (.zshrc/.b
 # oh-my-zsh XDG path (dotfiles role clones to ~/.local/share/oh-my-zsh; legacy ~/.oh-my-zsh removed)
 if [[ -f "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh" ]]; then record "omz-xdg-dir" "PASS"
 else record "omz-xdg-dir" "FAIL" "~/.local/share/oh-my-zsh/oh-my-zsh.sh missing — zsh plugins unavailable; run: make dotfiles"; fi
+
+# Required user directories (dotfiles + git_repos roles)
+for _d in "bin:$HOME/bin" ".local-bin:$HOME/.local/bin" "src:$HOME/src"; do
+  _name="${_d%%:*}"; _path="${_d#*:}"
+  [[ -d "$_path" ]] && record "dir-$_name" 'PASS' || record "dir-$_name" 'FAIL' "$_path missing — run: make dotfiles repos"
+done
+unset _d _name _path
 
 # GONOSUMDB — optional; only needed when dotfiles_gonosumdb is set in config.yml
 # (defaults to "" since cycle-32; absence is expected on machines without private Go modules)
@@ -453,7 +461,7 @@ else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750
 # the signing key is absent (expected on first provision with plaintext vault).
 _signing_key_present=false
 [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]] && _signing_key_present=true
-for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub" "protocol.allow=never" "protocol.https.allow=always" "protocol.ssh.allow=always" "push.autoSetupRemote=true" "fetch.prune=true"; do
+for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub" "protocol.allow=never" "protocol.https.allow=always" "protocol.ssh.allow=always" "push.autoSetupRemote=true" "fetch.prune=true" "alias.revert-s=revert -s" "core.excludesfile=~/.config/git/ignore"; do
   key="${check%%=*}" expected="${check#*=}"
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
@@ -476,13 +484,7 @@ if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E
   record "git-safe-directory" "FAIL" "unsafe wildcard entries: $dirs"
 else record "git-safe-directory" "PASS"; fi
 
-# git alias.revert-s must equal 'revert -s' (alias.revert shadows the git built-in)
-_rev=$(run git config --global alias.revert-s 2>/dev/null || echo "")
-if [[ "$_rev" == "revert -s" ]]; then record "git-alias-revert-s" "PASS"
-else record "git-alias-revert-s" "FAIL" "alias.revert-s='${_rev:-<unset>}' expected 'revert -s' — run: make dotfiles"; fi
-unset _rev
-
-# git hooksPath and excludesfile configured to correct paths (git returns tilde-literal, not expanded $HOME)
+# git hooksPath configured to correct path (git returns tilde-literal, not expanded $HOME)
 _expected_hooks="~/.config/git/template/hooks"
 hp=$(run git config --global core.hooksPath 2>/dev/null || echo "")
 if [[ "$hp" == "$_expected_hooks" ]]; then
@@ -491,12 +493,6 @@ else
   record "git-hooks-path" "FAIL" "core.hooksPath='${hp:-<unset>}' expected '$_expected_hooks' — run: make dotfiles"
 fi
 unset _expected_hooks
-
-_expected_excl="~/.config/git/ignore"
-excl=$(run git config --global core.excludesfile 2>/dev/null || echo "")
-if [[ "$excl" == "$_expected_excl" ]]; then record "git-excludesfile" "PASS"
-else record "git-excludesfile" "FAIL" "core.excludesfile='${excl:-<unset>}' expected '$_expected_excl' — run: make dotfiles"; fi
-unset _expected_excl excl
 
 for _hook in pre-commit commit-msg prepare-commit-msg pre-push; do
   if [[ -x "$HOME/.config/git/template/hooks/$_hook" ]]; then
@@ -554,6 +550,15 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   else record "claude-privacy-tmpfiles" "FAIL" "claude-privacy.conf tmpfiles not deployed — run: make claude"; fi
 fi
 unset _ctf
+
+# Claude project CLAUDE.md presence
+for _cd in "$HOME/.claude-personal" "$HOME/.claude-work"; do
+  [[ -d "$_cd" ]] || continue
+  label="${_cd##*/}"
+  if [[ -f "$_cd/CLAUDE.md" ]]; then record "claude-md($label)" 'PASS'
+  else record "claude-md($label)" 'FAIL' "CLAUDE.md missing from $_cd — run: make claude"; fi
+done
+unset _cd label
 
 # Config file validation
 if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then

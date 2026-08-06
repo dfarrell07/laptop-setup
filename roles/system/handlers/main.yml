@@ -41,7 +41,7 @@
     name: bluetooth
     state: restarted
   become: true
-  failed_when: false
+  ignore_errors: true
 
 # Always co-notified with 'Apply firewall rules' (tailscale0 firewalld zone task).
 # Tailscaled has no config files managed by this role; zone-change is the only
@@ -51,7 +51,7 @@
     name: tailscaled
     state: restarted
   become: true
-  failed_when: false
+  ignore_errors: true
 
 # Must use SysV wrapper, not 'systemctl restart auditd': the SysV script calls
 # auditctl to reload rules into the kernel; systemctl sends SIGTERM and skips
@@ -127,4 +127,4 @@
     state: restarted
     daemon_reload: true
   become: true
-  failed_when: false
+  ignore_errors: true
