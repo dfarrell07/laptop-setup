@@ -18,11 +18,10 @@
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/gather-minimal-facts.yml"
 
   vars:
-    # Minimal package set — keeps the test fast; packages role is tested elsewhere.
-    distrobox_packages:
-      - git
-      - vim
-      - curl
+    # Empty — dnf installs with become:true trigger daemon-reload inside the
+    # privileged systemd container, crashing PID 1 before the symlink task runs.
+    # Package installation is tested by the fedora/rocky/debian molecule scenarios.
+    distrobox_packages: []
     # Single command to exercise the flatpak-spawn wrapper creation path.
     distrobox_host_exec_commands:
       - podman

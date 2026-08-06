@@ -10,6 +10,7 @@
     state: present
   become: true  # distrobox containers have passwordless sudo; without this dnf5 refuses non-root install
   failed_when: false
+  when: distrobox_packages | length > 0
   register: container_dnf_result
 
 # --- Binary downloads ---
@@ -19,6 +20,7 @@
     state: directory
     mode: "0755"
   become: true
+  when: not (system_is_container | default(false))
 
 - name: Check if oc is installed
   ansible.builtin.command:
