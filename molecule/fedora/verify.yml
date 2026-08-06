@@ -12,6 +12,8 @@
         profile: work
         go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
         is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"  # set_fact from converge does not persist
+        system_chrony_service_enabled: false  # converge suppresses chrony enable; skip chrony assertions
+        system_mask_abrt: false  # matches converge override; prevents guard defaulting to true in verify
 
   tasks:
     # --- Shared assertions (all platforms) ---

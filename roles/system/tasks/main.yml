@@ -2480,7 +2480,11 @@
   ansible.builtin.apt:
     name: chrony
     state: present
-  when: ansible_facts['pkg_mgr'] == 'apt'
+  when:
+    - ansible_facts['pkg_mgr'] == 'apt'
+    # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
+    # false) to prevent the daemon start from crashing the Podman container.
+    - system_chrony_service_enabled | bool
 
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
@@ -2492,6 +2496,8 @@
     # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
     # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
     - not csb_rhel
+    # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
+    - system_chrony_service_enabled | bool
 
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:

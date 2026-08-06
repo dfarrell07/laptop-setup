@@ -519,11 +519,13 @@
       register: verify_selinux
       changed_when: false
       become: true
+      when: system_selinux_enforcing_required | default(true) | bool
 
     - name: Assert SELinux is enforcing
       ansible.builtin.assert:
         that: verify_selinux.stdout == 'Enforcing'
         fail_msg: "SELinux is '{{ verify_selinux.stdout }}', expected 'Enforcing'"
+      when: system_selinux_enforcing_required | default(true) | bool
 
     - name: Verify var-tmp.mount is enabled
       ansible.builtin.systemd:
