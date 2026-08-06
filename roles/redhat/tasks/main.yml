@@ -49,7 +49,7 @@
 
 - name: Install Red Hat cert packages
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - csb_rhel
   block:
     - name: Install Red Hat cert packages
@@ -92,7 +92,7 @@
 
 - name: Install VPN packages
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - install_vpn
     - is_rhel or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
   block:

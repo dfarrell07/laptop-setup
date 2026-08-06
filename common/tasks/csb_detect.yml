@@ -12,6 +12,7 @@
     is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
     is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+    is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
     _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
 

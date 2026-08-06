@@ -45,7 +45,7 @@
     state: present
   become: true
   tags: [become]
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when: is_dnf
 
 - name: Install Sway packages
   ansible.builtin.dnf:
@@ -54,7 +54,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - desktop_effective == 'sway'
 
 - name: Install i3 packages
@@ -64,7 +64,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - desktop_effective == 'i3'
 
 - name: Install GNOME packages
@@ -74,7 +74,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - desktop_effective == 'gnome'
 
 - name: Install desktop packages (apt)

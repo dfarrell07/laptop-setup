@@ -13,7 +13,7 @@
     name: policycoreutils-python-utils
     state: present
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not csb_rhel
 
 # --- SELinux enforcement check ---
@@ -31,7 +31,7 @@
   when:
     - ansible_facts['selinux'] is defined
     - ansible_facts['selinux'] is mapping
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - system_selinux_enforcing_required | bool
 
 # --- Harden /tmp mount options (CIS 1.1.2.x) ---
@@ -898,7 +898,7 @@
   when:
     - system_firewalld_running | bool
     - csb_detected
-    - ansible_facts['distribution'] == 'Fedora'
+    - is_fedora
   failed_when: false
   notify: Apply firewall rules
 
@@ -912,7 +912,7 @@
   when:
     - system_firewalld_running | bool
     - csb_detected
-    - ansible_facts['distribution'] == 'Fedora'
+    - is_fedora
     - ssh_port | int != 22
   failed_when: false
   notify: Apply firewall rules
@@ -1136,7 +1136,7 @@
       register: system_kernel_cmdline_result
       changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
       when:
-        - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+        - is_dnf
       failed_when: false
 
     - name: Log grubby stderr for any non-zero return code
@@ -1215,7 +1215,7 @@
   ansible.builtin.dnf:
     name: audit
     state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when: is_dnf
   register: _audit_pkg_install
   failed_when: false
 
@@ -1281,14 +1281,14 @@
   ansible.builtin.dnf:
     name: bolt
     state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when: is_dnf
   failed_when: false
 
 - name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
   ansible.builtin.systemd:
     name: bolt
     state: started
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when: is_dnf
   failed_when: false
 
 # --- Authselect profile baseline ---
@@ -1318,7 +1318,7 @@
   register: system_authselect_select_result
   when:
     - system_authselect_bin.stat.exists
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
+    - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
     - system_authselect_current.stdout | default('') is not search('^sssd\b')
     - not csb_rhel
   changed_when: true
@@ -1466,7 +1466,7 @@
   when:
     - system_tlp_enabled | bool
     - not csb_rhel  # RHEL CSB: IT manages power daemons; do not override
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
   failed_when: false
 
 - name: Mask power management daemons that conflict with TLP
@@ -1693,7 +1693,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - profile == 'work'
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
 
 - name: Enable bpfman.socket (no-op if bpfman not yet installed)
   ansible.builtin.systemd:
@@ -1702,7 +1702,7 @@
     enabled: true
   when:
     - profile == 'work'
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - (system_bpfman_check.rc | default(-1)) == 0
   failed_when: false
 
@@ -1757,8 +1757,8 @@
     state: present
   when:
     - system_enable_mullvad | bool
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - ansible_facts['distribution'] == 'Fedora'
+    - is_dnf
+    - is_fedora
   failed_when: false
 
 - name: Enable Mullvad VPN service
@@ -1768,15 +1768,15 @@
     enabled: true
   when:
     - system_enable_mullvad | bool
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
-    - ansible_facts['distribution'] == 'Fedora'
+    - is_dnf
+    - is_fedora
   failed_when: false
 
 # --- USBGuard ---
 - name: Configure USBGuard
   when:
     - system_install_usbguard | bool
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']  # usbguard-selinux is Fedora/RHEL-only
+    - is_dnf  # usbguard-selinux is Fedora/RHEL-only
   block:
     - name: Install USBGuard
       ansible.builtin.dnf:
@@ -1853,7 +1853,7 @@
     state: present
   register: system_fwupd_install_result
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
   failed_when: false
 
@@ -2079,7 +2079,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - not csb_rhel
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
 
 - name: Set crypto policy to {{ system_crypto_policy_target }}
   ansible.builtin.command:
@@ -2088,7 +2088,7 @@
     - system_crypto_policy.rc | default(-1) == 0
     - system_crypto_policy.stdout | default('') != system_crypto_policy_target
     - not csb_rhel  # RHEL CSB: IT may enforce FIPS/FUTURE
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
   register: system_crypto_policy_set
   changed_when: system_crypto_policy_set.rc == 0
   failed_when: false
@@ -2267,7 +2267,7 @@
     state: present
   register: system_dnf_automatic_installed
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not csb_rhel
   failed_when: false
 
@@ -2278,7 +2278,7 @@
     mode: "0644"
   notify: Restart dnf-automatic timer
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not csb_rhel
     - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
 
@@ -2288,7 +2288,7 @@
     state: started
     enabled: true
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not csb_rhel
     - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
   failed_when: false
@@ -2300,7 +2300,7 @@
     state: directory
     mode: "0755"
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel
   failed_when: false
@@ -2317,7 +2317,7 @@
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
     mode: "0644"
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # dnf-automatic not installed on CSB
   notify: Restart dnf-automatic timer
@@ -3265,7 +3265,7 @@
 # so aide-check.timer doesn't keep running on an unmanaged installation.
 - name: Remove AIDE infrastructure when disabled
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - not (system_aide_enabled | bool)
     - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
   block:
@@ -3307,7 +3307,7 @@
 # the block-level condition covers both the pkg_mgr and enabled checks.
 - name: AIDE file integrity monitoring
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
   block:

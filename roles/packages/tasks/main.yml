@@ -11,7 +11,7 @@
   when: needs_container_tier == 'container'
 
 - name: Install dnf packages
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+  when: is_dnf
   block:
     - name: Install dnf packages
       ansible.builtin.dnf:
@@ -67,13 +67,13 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - profile == 'work'  # bpfman is in packages_networking_work (work-profile only)
   failed_when: false
 
 - name: Install virtualization packages
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - install_virtualization | bool
   block:
     - name: Install virtualization packages
@@ -118,7 +118,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - install_virtualization | bool
     - "'libvirt' in packages_virtualization"
   failed_when: false
@@ -131,7 +131,7 @@
   become: true
   tags: [become]
   when:
-    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - is_dnf
     - install_virtualization | bool
     - real_user_id | length > 0
   failed_when: false
