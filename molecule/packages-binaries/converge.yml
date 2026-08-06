@@ -7,6 +7,12 @@
     - name: Load configuration
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 
+    - name: Load group_vars baselines (csb_rhel, needs_container_tier, feature toggles)
+      # Molecule generates its own inventory in a temp dir; the project's group_vars/all/
+      # are not auto-loaded. Load vars.yml explicitly so roles that reference csb_rhel,
+      # needs_container_tier, etc. don't fail with 'variable is undefined'.
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
     - name: Set project root for include paths
       ansible.builtin.set_fact:
         common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
