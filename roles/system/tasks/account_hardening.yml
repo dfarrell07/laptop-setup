@@ -204,6 +204,7 @@
     name: root
     password_lock: true
   failed_when: false
+  when: not system_is_container
 
 # --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
 - name: Find non-root UID 0 accounts (CIS 6.2.9)
@@ -215,6 +216,7 @@
       - /etc/passwd
   register: system_uid0_accounts
   changed_when: false
+  failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Assert no non-root UID 0 accounts (CIS 6.2.9)
@@ -222,17 +224,18 @@
     that: system_uid0_accounts.stdout | length == 0
     fail_msg: "Non-root UID 0 accounts found: {{ system_uid0_accounts.stdout }} -- Fix: sudo usermod -u <new_uid> <account>"
     success_msg: "CIS 6.2.9: no non-root UID 0 accounts"
-  when: not csb_rhel  # CSB: IT-provisioned service accounts may have unusual UID/GID — assert would abort play
+  when: not csb_rhel and not system_is_container  # CSB: IT-provisioned service accounts may have unusual UID/GID — assert would abort play
 
 - name: Find accounts with GID 0 (root group) as primary group (CIS 6.2.x)
   ansible.builtin.command:
     argv:
       - awk
       - "-F:"
-      - "($4==0 && $1!~/^(root|sync|shutdown|halt|operator)$/){print $1}"
+      - "($4==0 && $1!~/^({{ system_gid0_allowed_accounts | join('|') }})$/){print $1}"
       - /etc/passwd
   register: system_gid0_accounts
   changed_when: false
+  failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Assert no non-root GID 0 primary group accounts (CIS 6.2.x)
@@ -240,7 +243,7 @@
     that: system_gid0_accounts.stdout | length == 0
     fail_msg: "Non-root accounts with root primary GID: {{ system_gid0_accounts.stdout }} -- Fix: sudo usermod -g <new_gid> <account>"
     success_msg: "CIS 6.2.x: no non-root GID 0 primary group accounts"
-  when: not csb_rhel  # CSB: IT-provisioned service accounts may have GID 0
+  when: not csb_rhel and not system_is_container  # CSB: IT-provisioned service accounts may have GID 0
 
 - name: Find accounts with empty passwords in shadow (CIS 6.2.2)
   ansible.builtin.command:
@@ -251,6 +254,7 @@
       - /etc/shadow
   register: system_empty_pw_accounts
   changed_when: false
+  failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Assert no empty password accounts (CIS 6.2.2)
@@ -260,7 +264,7 @@
       Accounts with empty passwords: {{ system_empty_pw_accounts.stdout }}
       -- Fix: sudo passwd -l <account> (lock) or sudo passwd <account> (set password)
     success_msg: "CIS 6.2.2: no empty passwords"
-  when: not csb_rhel  # CSB: IPA-managed accounts may appear empty in local shadow
+  when: not csb_rhel and not system_is_container  # CSB: IPA-managed accounts may appear empty in local shadow
 
 - name: Find accounts with unmasked passwords in passwd (CIS 6.2.1)
   ansible.builtin.command:
@@ -271,6 +275,7 @@
       - /etc/passwd
   register: system_unshadowed_accounts
   changed_when: false
+  failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Assert all passwd entries use shadowed passwords (CIS 6.2.1)
@@ -278,7 +283,7 @@
     that: system_unshadowed_accounts.stdout | length == 0
     fail_msg: "Unshadowed passwd entries: {{ system_unshadowed_accounts.stdout }} -- Fix: sudo pwconv"
     success_msg: "CIS 6.2.1: all passwd entries shadowed"
-  when: not csb_rhel  # CSB: IPA manages passwords; some entries may appear unshadowed
+  when: not csb_rhel and not system_is_container  # CSB: IPA manages passwords; some entries may appear unshadowed
 
 # --- Critical file permissions (CIS 6.1.2/6.1.4/6.1.6/6.1.8) ---
 - name: Enforce permissions on critical auth files

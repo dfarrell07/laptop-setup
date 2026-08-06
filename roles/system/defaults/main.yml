@@ -9,6 +9,7 @@ system_sysctl_hardening:
   kernel.perf_event_paranoid: 2    # Fedora 44 default; all perf_event_open requires CAP_PERFMON
   # set 1 in config.yml via system_sysctl_extra for host-side profiling (user-space perf without CAP_PERFMON)
   # value 3 = requires CAP_SYS_ADMIN (strictest)
+  kernel.randomize_va_space: 2  # CIS 1.5.2 — full ASLR (stack, heap, mmap); explicit to survive conflicting sysctl.d drop-ins
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
   net.ipv4.conf.all.accept_redirects: 0
@@ -30,10 +31,13 @@ system_sysctl_hardening:
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
+  fs.protected_hardlinks: 1  # CIS — prevents privilege escalation via hardlinks to SUID binaries in world-writable dirs
+  fs.protected_symlinks: 1  # CIS — prevents symlink TOCTOU attacks in sticky directories
   fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
+  net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — SYN flood protection; explicit enforcement prevents /etc/sysctl.d override
   # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
@@ -191,6 +195,7 @@ system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_
                           # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
                           # Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
+system_disable_udf: true          # kernel-blocks udf module; pairs with system_disable_usb_storage — set false if UDF media needed
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
@@ -267,6 +272,7 @@ system_remove_luks_key: false
 # not assigned to a VM, trading full DMA isolation for passthrough performance.
 system_iommu_passthrough: false
 # system_wifi_mac_rand: not set — defaults true on non-CSB, false on CSB; override in config.yml
+# system_wifi_powersave: not set — defaults true (powersave=2) on non-CSB-RHEL, false on csb_rhel; override in config.yml
 system_enable_cockpit: false  # set true to unmask cockpit web console (port 9090); drop zone still blocks external access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block
@@ -301,6 +307,12 @@ system_pwquality_dcredit: -1       # require at least 1 digit (CIS 5.3.3)
 system_pwquality_maxrepeat: 3      # maximum consecutive repeated characters
 system_pwhistory_remember: 24      # number of previous passwords to remember (CIS 5.3.5)
 system_inactive_days: 30           # days inactive before account lock (CIS 5.5.1.5)
+system_gid0_allowed_accounts:     # accounts exempt from the GID-0 primary-group assert (CIS 6.2.x)
+  - root
+  - sync
+  - shutdown
+  - halt
+  - operator
 system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
 system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
 system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)
