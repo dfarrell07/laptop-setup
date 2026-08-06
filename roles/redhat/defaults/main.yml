@@ -7,7 +7,7 @@ redhat_ca_dest: /etc/pki/ca-trust/source/anchors
 
 redhat_vpn_packages:
   - "{{ 'redhat-internal-globalprotect-ui'
-       if (ansible_facts['distribution'] == 'Fedora'
+       if (is_fedora
            or (ansible_facts['distribution'] in ['RedHat', 'CentOS']
                and ansible_facts['distribution_major_version'] | int >= 10))
        else 'redhat-internal-openvpn-profiles' }}"

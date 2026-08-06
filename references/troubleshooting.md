@@ -41,6 +41,28 @@ Steps required after every `make all`. Complete these in order before the machin
 
 ---
 
+## smoke-test: Expected WARNs on a Fresh Provision
+
+Running `make smoke-test` immediately after `make all` on a first provision produces WARNs in three categories. All are expected — none represent automation gaps; the code paths are correctly wired.
+
+**Vault/YubiKey-dependent** (clear by populating vault and re-provisioning):
+- `ssh-signing-key-file`, `authorized-keys-exists` — SSH key fields empty in plaintext vault
+- `git-commit.gpgsign`, `git-tag.gpgsign`, `git-gpg.format`, `git-gpg.ssh.allowedSignersFile`, `git-user.signingkey` — downgraded to WARN while signing pub key is absent
+- `git-allowed-signers` — file not generated until signing key is deployed from vault
+- `yubikey`, `ssh-agent-key`, `github-ssh-auth` — YubiKey not plugged in or not yet enrolled
+
+**Interactive steps required** (clear by following the Post-Provisioning Checklist above):
+- `tailscale` — `tailscale up` not yet run
+- `gh-auth` — `gh auth login` not yet run
+- `ssh-auth-sock` — logout/login required to activate `environment.d` SSH_AUTH_SOCK change
+
+**Pre-packages** (clear by running `make packages` or `make all`):
+- `vim-binary`, `pipx-yamllint`, `pipx-ansible-lint` — packages role not yet run (or `make minimal` used)
+
+After completing the Post-Provisioning Checklist, a re-run of `make smoke-test` should clear all of these. The `tailscale` WARN clears after `tailscale up`; vault-gated WARNs clear after populating `group_vars/all/vault.yml` and re-provisioning.
+
+---
+
 ## repos_dnf: Third-Party Repos Blocked on CSB
 
 **Symptom:**

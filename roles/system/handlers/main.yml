@@ -21,21 +21,21 @@
     name: firewalld
     state: reloaded
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart tlp
   ansible.builtin.systemd:
     name: tlp
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager
     state: reloaded
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart bluetooth
   ansible.builtin.systemd:
@@ -44,6 +44,9 @@
   become: true
   failed_when: false
 
+# Always co-notified with 'Apply firewall rules' (tailscale0 firewalld zone task).
+# Tailscaled has no config files managed by this role; zone-change is the only
+# trigger. If tailscaled config management is added later, include a notify here.
 - name: Restart tailscaled
   ansible.builtin.systemd:
     name: tailscaled
@@ -59,42 +62,42 @@
     cmd: service auditd restart
   become: true
   changed_when: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart usbguard
   ansible.builtin.systemd:
     name: usbguard
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart sshd
   ansible.builtin.systemd:
     name: sshd
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Reload logind  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
   become: true
   changed_when: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart chronyd
   ansible.builtin.systemd:
     name: "{{ 'chrony' if ansible_facts['pkg_mgr'] == 'apt' else 'chronyd' }}"
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -102,7 +105,7 @@
     state: restarted
     daemon_reload: true
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
   when: system_aide_enabled | bool
 
 - name: Restart systemd-journald
@@ -110,7 +113,7 @@
     name: systemd-journald
     state: restarted
   become: true
-  ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
+  ignore_errors: "{{ system_is_container }}"
 
 - name: Apply dconf schema database  # noqa: command-instead-of-module
   ansible.builtin.command:
