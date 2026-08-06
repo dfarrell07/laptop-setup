@@ -50,8 +50,11 @@
     fapolicyd_enforcing: false
     distrobox_oc_version: "4.22.7"
     distrobox_container_replace: false
-    csb_rhel: false
     common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+  pre_tasks:
+    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
 
   roles:
     - role: distrobox
