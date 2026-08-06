@@ -1,0 +1,32 @@
+---
+# roles/system/tasks/chrony.yml
+# --- Chrony NTS (authenticated time sync) ---
+- name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+  when:
+    - is_apt
+    # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
+    # false) to prevent the daemon start from crashing the Podman container.
+    - system_chrony_service_enabled | bool
+
+- name: Deploy NTS-authenticated chrony config
+  ansible.builtin.template:
+    src: chrony-nts.conf.j2
+    dest: /etc/chrony.conf
+    mode: "0644"
+  notify: Restart chronyd
+  when:
+    # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
+    # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
+    - not csb_rhel
+    # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
+    - system_chrony_service_enabled | bool
+
+- name: Ensure chrony/chronyd is enabled
+  ansible.builtin.systemd:
+    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
+    state: started
+    enabled: true
+  when: system_chrony_service_enabled | bool

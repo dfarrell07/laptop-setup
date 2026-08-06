@@ -37,20 +37,8 @@
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml
 
-# --- Kernel module blacklist ---
-- name: Ensure /etc/modprobe.d exists
-  ansible.builtin.file:
-    path: /etc/modprobe.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Deploy kernel module blacklist
-  ansible.builtin.template:
-    src: modprobe-hardening.conf.j2
-    dest: /etc/modprobe.d/hardening.conf
-    mode: "0644"
+- name: Kernel module blacklist
+  ansible.builtin.include_tasks: kernel_modules_blacklist.yml
 
 - name: Sysctl hardening
   ansible.builtin.include_tasks: sysctl.yml
@@ -61,36 +49,8 @@
 - name: Kernel lockdown
   ansible.builtin.include_tasks: kernel_lockdown.yml
 
-# --- Core dumps ---
-- name: Ensure coredump config directory
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d
-    state: directory
-    mode: "0755"
-
-- name: Remove legacy coredump disable.conf drop-in (renamed in cycle 2)
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d/disable.conf
-    state: absent
-
-- name: Configure coredump storage
-  ansible.builtin.template:
-    src: coredump.conf.j2
-    dest: /etc/systemd/coredump.conf.d/coredump.conf
-    mode: "0644"
-
-- name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      # CIS 1.5.1: restrict core dump acquisition to root-controlled processes.
-      # Hard limit prevents users from overriding the soft limit.
-      *    hard    core    0
-      root hard    core    0
-    dest: /etc/security/limits.d/90-coredump.conf
-    mode: "0644"
-  when:
-    - system_coredump_storage == 'none'
+- name: Core dumps
+  ansible.builtin.include_tasks: coredumps.yml
 
 # --- Auditd ---
 - name: Auditd tasks
@@ -143,57 +103,11 @@
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - ansible.builtin.include_tasks: session_timeout.yml
 
-# --- Timezone and locale ---
-- name: Set system timezone
-  community.general.timezone:
-    name: "{{ system_timezone }}"
+- name: Timezone and locale
+  ansible.builtin.include_tasks: timezone_locale.yml
 
-- name: Set system locale
-  ansible.builtin.copy:
-    content: "LANG={{ system_locale }}\n"
-    dest: /etc/locale.conf
-    mode: "0644"
-
-- name: Set console keymap
-  ansible.builtin.lineinfile:
-    path: /etc/vconsole.conf
-    regexp: '^KEYMAP='
-    line: "KEYMAP={{ system_keymap }}"
-    create: true
-    mode: "0644"
-  # lineinfile: manages only the KEYMAP line; preserves FONT and other vconsole.conf settings
-  # (copy would overwrite the entire file, destroying eurlatgr FONT on fresh Fedora)
-
-# --- Chrony NTS (authenticated time sync) ---
-- name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
-  ansible.builtin.apt:
-    name: chrony
-    state: present
-  when:
-    - is_apt
-    # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
-    # false) to prevent the daemon start from crashing the Podman container.
-    - system_chrony_service_enabled | bool
-
-- name: Deploy NTS-authenticated chrony config
-  ansible.builtin.template:
-    src: chrony-nts.conf.j2
-    dest: /etc/chrony.conf
-    mode: "0644"
-  notify: Restart chronyd
-  when:
-    # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
-    # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
-    - not csb_rhel
-    # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
-    - system_chrony_service_enabled | bool
-
-- name: Ensure chrony/chronyd is enabled
-  ansible.builtin.systemd:
-    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
-    state: started
-    enabled: true
-  when: system_chrony_service_enabled | bool
+- name: Chrony NTS
+  ansible.builtin.include_tasks: chrony.yml
 
 - name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
   ansible.builtin.include_tasks: pam.yml
@@ -201,45 +115,13 @@
 - name: Journald persistent logging
   ansible.builtin.include_tasks: journald.yml
 
-# --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
-- name: Install logrotate
-  ansible.builtin.package:
-    name: logrotate
-    state: present
-
-- name: Deploy logrotate config for sudo.log
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      /var/log/sudo.log {
-          weekly
-          rotate 8
-          compress
-          delaycompress
-          missingok
-          notifempty
-          create 0640 root root
-      }
-    dest: /etc/logrotate.d/sudo
-    mode: "0644"
-  when: not csb_rhel  # only meaningful when sudoers hardening task below creates /var/log/sudo.log
+- name: Logrotate for sudo.log
+  ansible.builtin.include_tasks: logrotate_sudo.yml
 
 - ansible.builtin.include_tasks: cron.yml
 
-# --- Login banner ---
-- name: Deploy login banners (/etc/issue and /etc/issue.net)
-  ansible.builtin.copy:
-    content: |
-      NOTICE: This system is for authorized users only. Unauthorized access
-      or use is strictly prohibited and may result in disciplinary action
-      and/or criminal prosecution. All activities on this system may be
-      monitored, recorded, and audited. By accessing this system, you
-      consent to such monitoring and recording.
-    dest: "{{ item }}"
-    mode: "0644"
-  loop: [/etc/issue, /etc/issue.net]
-  when: not csb_rhel  # no IT banner at home
-  failed_when: false
+- name: Login banner
+  ansible.builtin.include_tasks: login_banner.yml
 
 - name: Account hardening
   ansible.builtin.import_tasks: account_hardening.yml

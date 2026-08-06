@@ -1,0 +1,23 @@
+---
+# roles/system/tasks/timezone_locale.yml
+# Set system timezone, locale, and console keymap.
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: "LANG={{ system_locale }}\n"
+    dest: /etc/locale.conf
+    mode: "0644"
+
+- name: Set console keymap
+  ansible.builtin.lineinfile:
+    path: /etc/vconsole.conf
+    regexp: '^KEYMAP='
+    line: "KEYMAP={{ system_keymap }}"
+    create: true
+    mode: "0644"
+  # lineinfile: manages only the KEYMAP line; preserves FONT and other vconsole.conf settings
+  # (copy would overwrite the entire file, destroying eurlatgr FONT on fresh Fedora)

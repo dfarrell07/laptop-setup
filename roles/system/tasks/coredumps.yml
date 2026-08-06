@@ -1,0 +1,32 @@
+---
+# roles/system/tasks/coredumps.yml
+# --- Core dumps ---
+- name: Ensure coredump config directory
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Remove legacy coredump disable.conf drop-in (renamed in cycle 2)
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d/disable.conf
+    state: absent
+
+- name: Configure coredump storage
+  ansible.builtin.template:
+    src: coredump.conf.j2
+    dest: /etc/systemd/coredump.conf.d/coredump.conf
+    mode: "0644"
+
+- name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # CIS 1.5.1: restrict core dump acquisition to root-controlled processes.
+      # Hard limit prevents users from overriding the soft limit.
+      *    hard    core    0
+      root hard    core    0
+    dest: /etc/security/limits.d/90-coredump.conf
+    mode: "0644"
+  when:
+    - system_coredump_storage == 'none'

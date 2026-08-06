@@ -1,0 +1,24 @@
+---
+# roles/system/tasks/logrotate_sudo.yml
+# --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
+- name: Install logrotate
+  ansible.builtin.package:
+    name: logrotate
+    state: present
+
+- name: Deploy logrotate config for sudo.log
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      /var/log/sudo.log {
+          weekly
+          rotate 8
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 root root
+      }
+    dest: /etc/logrotate.d/sudo
+    mode: "0644"
+  when: not csb_rhel  # only meaningful when sudoers hardening task below creates /var/log/sudo.log
