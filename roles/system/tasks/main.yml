@@ -154,7 +154,9 @@
   ansible.builtin.systemd:
     name: bolt
     state: started
-  when: is_dnf
+  when:
+    - is_dnf
+    - not system_is_container  # D-Bus activation crashes Podman containers
   failed_when: false
 
 # --- Authselect profile baseline ---

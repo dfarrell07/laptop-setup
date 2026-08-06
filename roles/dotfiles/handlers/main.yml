@@ -7,4 +7,5 @@
     scope: user
     state: restarted
     daemon_reload: true
+  when: ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
