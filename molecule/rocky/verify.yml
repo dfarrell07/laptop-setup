@@ -152,7 +152,8 @@
         fail_msg: "RH-IT-Root-CA.crt deployed on Rocky — redhat role should skip cert when is_rhel=false"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
-    - ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
     # --- distrobox role: no-op path (packages_containers emptied in converge) ---
     - name: Import distrobox no-op path assertions

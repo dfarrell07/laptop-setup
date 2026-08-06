@@ -206,7 +206,8 @@
         fail_msg: "Claude CLAUDE.md not deployed (work profile)"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
-    - ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
