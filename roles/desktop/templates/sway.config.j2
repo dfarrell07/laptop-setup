@@ -19,7 +19,7 @@ workspace {{ wo.workspace }} output {{ wo.output }}
 
 # Wayland-native rendering for Qt and Electron apps; AMD VA-API hardware decode;
 # XCURSOR vars propagated so XWayland apps pick up cursor theme and size.
-exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland{% if desktop_sway_libva_driver %} LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }}{% endif %} VDPAU_DRIVER={{ desktop_sway_vdpau_driver }} XCURSOR_THEME={{ desktop_sway_cursor_theme }} XCURSOR_SIZE={{ desktop_sway_cursor_size }}
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway QT_QPA_PLATFORM=wayland ELECTRON_OZONE_PLATFORM_HINT=wayland{% if desktop_sway_libva_driver %} LIBVA_DRIVER_NAME={{ desktop_sway_libva_driver }}{% endif %}{% if desktop_sway_vdpau_driver %} VDPAU_DRIVER={{ desktop_sway_vdpau_driver }}{% endif %} XCURSOR_THEME={{ desktop_sway_cursor_theme }} XCURSOR_SIZE={{ desktop_sway_cursor_size }}
 # Note: --systemd flag already propagates to systemd user session; no separate import-environment needed
 
 # Notification daemon (exec_always so it restarts after 'swaymsg reload')

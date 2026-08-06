@@ -80,7 +80,6 @@
     - ssh
     - dhcpv6-client
     - mdns
-    - cockpit
   when:
     - system_firewalld_running | bool
   # No interface is ever assigned to the public zone on hardened hosts; cleaning
@@ -98,8 +97,23 @@
   loop:
     - ssh
     - dhcpv6-client
-    - mdns
     - samba-client
+    - cockpit
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  failed_when: false
+
+- name: Remove broad port rules from FedoraWorkstation zone
+  ansible.posix.firewalld:
+    zone: FedoraWorkstation
+    port: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - 1025-65535/tcp
+    - 1025-65535/udp
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool

@@ -77,7 +77,7 @@
     - is_dnf
     - desktop_effective == 'gnome'
 
-- name: Install desktop packages (apt)
+- name: Install apt desktop packages (with rescue)
   when: is_apt
   block:
     - name: Install desktop packages (apt)
@@ -96,7 +96,7 @@
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
 
-- name: Install Sway packages (apt)
+- name: Install apt Sway packages (with rescue)
   when:
     - is_apt
     - desktop_effective == 'sway'

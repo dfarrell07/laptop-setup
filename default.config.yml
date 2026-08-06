@@ -86,7 +86,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_tlp_cpu_energy_policy_ac: balance_performance  (roles/system/defaults) — CPU EPP on AC
 #   system_tlp_cpu_energy_policy_bat: balance_power       (roles/system/defaults) — CPU EPP on battery
 #   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
-#   system_sysrq: 0                    (roles/system/defaults) — 0=disabled (CIS), 176=emergency recovery
+#   system_sysrq: 0                    (group_vars/all/vars.yml) — 0=disabled (CIS), 176=emergency recovery
 #   system_tmout: 600                  (group_vars/all/vars.yml) — session inactivity timeout seconds (CIS<=900); 0=disabled
 #   system_faillock_deny: 5            (group_vars/all/vars.yml) — failed logins before lockout (CIS); lower for shared machines
 #   system_faillock_unlock_time: 900   (group_vars/all/vars.yml) — seconds until auto-unlock (CIS); 0=permanent until admin reset
@@ -94,9 +94,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        (root SSH blocked by PermitRootLogin no; false reduces lockout risk)
 #   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
 #                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
-#   system_bpf_jit_harden: 1           (roles/system/defaults) — BPF JIT hardening (1=unprivileged only, default here;
+#   system_bpf_jit_harden: 1           (group_vars/all/vars.yml) — BPF JIT hardening (1=unprivileged only, default here;
 #                                        2=all incl root for strict CIS/STIG but breaks bpftool prog dump jited)
-#   system_unprivileged_bpf_disabled: 1 (roles/system/defaults) — unprivileged BPF block (1=block non-root, root can re-enable;
+#   system_unprivileged_bpf_disabled: 1 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, root can re-enable;
 #                                        2=write-once locked, even root cannot re-enable; 0=allow all)
 #   system_sysctl_extra: {}            (roles/system/defaults) — additional sysctl key=value pairs merged into the hardening dict;
 #                                        use in config.yml to add machine-specific sysctls without replacing the entire dict.
@@ -107,7 +107,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set 1 in config.yml for CIS compliance
 #   system_kexec_load_disabled: 0      (group_vars/all/vars.yml) — kdump/dev workstation default; CIS target is 1 (blocks kexec);
 #                                        set 1 in config.yml for strict CIS compliance
-#   system_io_uring_disabled: 1        (roles/system/defaults) — value=1 restricts to CAP_SYS_ADMIN;
+#   system_io_uring_disabled: 1        (group_vars/all/vars.yml) — value=1 restricts to CAP_SYS_ADMIN;
 #                                        set 2 in config.yml to fully disable for all users
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
@@ -121,8 +121,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        or team alias to avoid broadcasting the machine's FQDN
 #   system_crypto_policy_target: DEFAULT:NO-SHA1  (roles/system/defaults) — crypto policy applied by update-crypto-policies;
 #                                        override in config.yml e.g. DEFAULT:NO-SHA1:NO-RSASSA-PSS for stricter SHA-1 removal
-#   system_disable_usb_storage: true   (roles/system/defaults) — false to allow USB drives
+#   system_disable_usb_storage: true   (group_vars/all/vars.yml) — false to allow USB drives
 #                                        (default: kernel-blocked, no override via USBGuard)
+#   system_disable_udf: true             (group_vars/all/vars.yml) — true to kernel-block the udf module (CIS);
+#                                        set false if UDF media (optical discs, UDF-formatted drives) is needed
 #   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
 #                                        (VS Code Remote needs >=10)
 #   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
@@ -174,6 +176,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_pwquality_minlen: 14           (group_vars/all/vars.yml) — minimum password length (CIS 5.3.2)
 #   system_pwquality_difok: 4             (group_vars/all/vars.yml) — characters that must differ from previous password
 #   system_pwquality_maxrepeat: 3         (group_vars/all/vars.yml) — maximum consecutive repeated characters
+#   system_pwquality_maxsequence: 3       (group_vars/all/vars.yml) — maximum consecutive characters in a
+#                                           monotonic sequence (e.g. "abcd", "1234")
 #   system_pwhistory_remember: 24         (group_vars/all/vars.yml) — previous passwords remembered (CIS 5.3.5)
 #   system_pass_max_days: 365             (group_vars/all/vars.yml) — login.defs PASS_MAX_DAYS; max password age in days
 #   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
@@ -303,12 +307,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 # Without them the tasks are silently skipped (guarded by `is defined`).
 
 # Container settings
-container_name: fedora-dev
 # container_image and container_release fall back to the host OS major version
 # (e.g. 9 on RHEL 9), which is wrong on RHEL — there is no fedora-toolbox:9.
 # RHEL users must override both explicitly in config.yml, e.g.:
 #   container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
 #   container_release: '44'
-container_distro: fedora
-container_replace: false
 #   distrobox_create_timeout: 600       (roles/distrobox/defaults) — seconds before container create is killed; raise on slow networks

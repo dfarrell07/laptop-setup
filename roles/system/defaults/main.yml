@@ -31,10 +31,7 @@ system_sysctl_hardening:
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
   net.ipv4.icmp_echo_ignore_broadcasts: 1
   net.ipv4.icmp_ignore_bogus_error_responses: 1
-  fs.protected_hardlinks: 1  # CIS — prevents privilege escalation via hardlinks to SUID binaries in world-writable dirs
-  fs.protected_symlinks: 1  # CIS — prevents symlink TOCTOU attacks in sticky directories
-  fs.protected_fifos: 1      # CIS — prevents TOCTOU via FIFOs in sticky directories
-  fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
+  fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only; Fedora default)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
   net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — SYN flood protection; explicit enforcement prevents /etc/sysctl.d override
@@ -76,7 +73,6 @@ system_firewall_icmp_types:
   - packet-too-big
   - time-exceeded
   - echo-request  # Required for ping — OVN-K/kind pod-to-host-gw connectivity testing
-  - echo-reply
   - parameter-problem
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
   - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
@@ -167,8 +163,9 @@ system_disable_printing: true
 system_disable_bluetooth: false
 system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
 # install/start bolt; false on VMs and containers
+# authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
-system_disable_sctp: false
+system_disable_sctp: false  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_bluetooth_privacy: device   # BlueZ Privacy= in /etc/bluetooth/main.conf; 'off' to disable
 system_bluetooth_name: "Bluetooth"  # BlueZ Name= in /etc/bluetooth/main.conf; shown to Bluetooth scanners
 system_disable_fingerprint: true  # mask fprintd — set false in config.yml to enable fingerprint auth
@@ -176,7 +173,7 @@ system_mask_abrt: true  # mask ABRT crash reporter daemons — redundant with sy
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
 # Dangerous bits omitted from 176: raw-console(4), process-signalling(64), crash/dump(8).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
-system_sysrq: 0
+system_sysrq: 0  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 
 # IPv6 Router Advertisement acceptance: 0=disabled (CIS — prevents SLAAC).
 # To enable SLAAC: set system_ipv6_accept_ra: 2 in config.yml (value 2, NOT 1).
@@ -186,24 +183,24 @@ system_ipv6_accept_ra: 0
 # BPF JIT hardening: 1=constant blinding for unprivileged users only (default here;
 # value 2=blind all callers including root — breaks bpftool prog dump jited).
 # Set 2 in config.yml for strict CIS/STIG compliance if you don't need JIT inspection.
-system_bpf_jit_harden: 1
+system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 # Unprivileged BPF: 1=block unprivileged users but root can re-enable at runtime (default here;
 # needed for bpfman/bpftrace debugging). Value 2=write-once locked (root cannot re-enable).
 # Value 0=allow all (insecure). Override in config.yml if needed.
-system_unprivileged_bpf_disabled: 1
+system_unprivileged_bpf_disabled: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
 system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
                           # to add machine-specific sysctls without replacing the entire hardening dict.
                           # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
                           # Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
-system_disable_usb_storage: true  # kernel-blocks usb_storage/uas via modprobe; set false if USB drives needed
-system_disable_udf: true          # kernel-blocks udf module; pairs with system_disable_usb_storage — set false if UDF media needed
+system_disable_usb_storage: true  # kernel-blocks usb_storage/uas; set false if USB drives needed; authoritative in group_vars/all/vars.yml
+system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
 # and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
 # core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
 # SUID processes from dumping regardless of core_pattern.
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
-system_io_uring_disabled: 1  # value=1 restricts to CAP_SYS_ADMIN; set 2 in config.yml to fully disable for all users
+system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires

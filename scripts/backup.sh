@@ -37,7 +37,6 @@ DOTFILES=(
   .config/direnv/direnvrc
   .config/environment.d/ssh-agent.conf
   .config/environment.d/containers.conf
-  .config/environment.d/xdg.conf
   .config/environment.d/gotmpdir.conf
   .config/git/config-work
   .config/git/config-personal

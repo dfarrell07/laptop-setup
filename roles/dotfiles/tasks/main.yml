@@ -99,10 +99,6 @@
     src: zshrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
     mode: "0644"
-- name: Check if gitconfig exists
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.config/git/config"
-  register: dotfiles_gitconfig
 
 - name: Check if legacy ~/.gitconfig exists
   ansible.builtin.stat:
@@ -366,19 +362,6 @@
   ansible.builtin.copy:
     content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
-    mode: "0644"
-  when:
-    - is_linux
-    - not (system_is_container | default(false))
-
-- name: Deploy XDG base directory environment.d config
-  ansible.builtin.copy:
-    content: |
-      XDG_CONFIG_HOME=$HOME/.config
-      XDG_DATA_HOME=$HOME/.local/share
-      XDG_STATE_HOME=$HOME/.local/state
-      XDG_CACHE_HOME=$HOME/.cache
-    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/xdg.conf"
     mode: "0644"
   when:
     - is_linux

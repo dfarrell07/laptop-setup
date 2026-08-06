@@ -66,14 +66,10 @@ packages_virtualization:
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
-  # packet capture
-  - wireshark-cli   # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted
   # socket/connection
   - socat           # socket relay utility (moved from packages_cli)
-  - conntrack-tools
   # scanning/perf
   - nmap            # network scanner (moved from packages_cli)
-  - iperf3
   # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults (always installed)
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
@@ -91,6 +87,9 @@ packages_networking_work:
   - perf           # kernel performance profiling
   - bpftrace       # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
   - sos            # Red Hat support diagnostic bundle tool (sosreport); work profile only (CSB/RHEL support cases)
+  - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
+  - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
+  - iperf3         # network bandwidth measurement; work profile only
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
@@ -109,6 +108,7 @@ packages_apt:
   - fzf
   - zoxide
   - gnupg          # Debian does not auto-install gnupg; needed for SSH role and git commit signing
+  - openssh-client  # provides ssh-keygen; needed by ansible.builtin.known_hosts hash_host:true in ssh role
   # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
   - socat
