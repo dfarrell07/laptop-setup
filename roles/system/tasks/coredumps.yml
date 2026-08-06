@@ -34,6 +34,7 @@
     mode: "0644"
   when:
     - system_coredump_storage == 'none'
+    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 
 - name: Remove RLIMIT_CORE limits when coredump storage is active
   ansible.builtin.file:
@@ -41,3 +42,4 @@
     state: absent
   when:
     - system_coredump_storage != 'none'
+    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
