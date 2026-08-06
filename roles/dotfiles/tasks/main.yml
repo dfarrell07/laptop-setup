@@ -328,7 +328,7 @@
   when:
     - is_linux
     - not (csb_restricted)  # Only skip on fapolicyd-enforcing CSB (smart-card/PIV auth via gcr)
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not (system_is_container | default(false))  # scope:user systemd crashes containers; virtualization_type unreliable in nested-VM CI
   failed_when: false
 
 - name: Deploy SSH agent systemd user service
@@ -348,7 +348,7 @@
     daemon_reload: true
   when:
     - is_linux
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    - not (system_is_container | default(false))  # scope:user systemd crashes containers; virtualization_type unreliable in nested-VM CI
   register: _dotfiles_ssh_agent_enable
   failed_when: false
 

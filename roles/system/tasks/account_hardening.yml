@@ -14,7 +14,9 @@
     dest: /etc/sudoers.d/99-hardening
     mode: "0440"
     validate: visudo -cf %s
-  when: not csb_rhel  # CSB: IT manages sudoers via Satellite/SCAP; log_input/log_output conflict with IT monitoring
+  when:
+    - not csb_rhel  # CSB: IT manages sudoers via Satellite/SCAP; log_input/log_output conflict with IT monitoring
+    - not system_is_container
 
 - name: Propagate GOTMPDIR through sudo (go test under sudo)
   ansible.builtin.copy:
@@ -24,7 +26,9 @@
     dest: /etc/sudoers.d/go-env
     mode: "0440"
     validate: visudo -cf %s
-  when: not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
+  when:
+    - not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
+    - not system_is_container  # /etc/sudoers.d is not meaningful inside a container
 
 # --- Password aging ---
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
@@ -86,6 +90,7 @@
     - real_user_home | length > 0
     - real_user_home != '/'
     - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
+    - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
   failed_when: false
 
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
@@ -95,7 +100,9 @@
   register: system_useradd_defaults
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container  # useradd/chage shadow ops trigger PAM events that crash Debian 13 container PID 1
 
 - name: Set default inactive days for new accounts to 30
   ansible.builtin.command:
@@ -103,6 +110,7 @@
   when:
     - "'INACTIVE=' ~ system_inactive_days not in (system_useradd_defaults.stdout | default(''))"
     - not csb_rhel  # same rationale as login.defs INACTIVE guard
+    - not system_is_container
   changed_when: true
 
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
@@ -118,6 +126,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - not csb_rhel
+    - not system_is_container
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
@@ -127,6 +136,7 @@
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
+    - not system_is_container
     - system_chage_inactive_days.rc | default(1) == 0
     - system_chage_inactive_days.stdout | default('') | trim != system_inactive_days | string
   changed_when: _chage_inactive_result.rc == 0
@@ -141,6 +151,7 @@
   check_mode: false
   when:
     - not csb_rhel
+    - not system_is_container
     - real_user_id | length > 0
   loop:
     - {field: 4, flag: '-m', var: 'system_pass_min_days', cis: 'CIS 5.5.1.2'}
@@ -155,6 +166,7 @@
   register: _chage_set_result
   when:
     - not csb_rhel
+    - not system_is_container
     - real_user_id | length > 0
     - item.rc | default(1) == 0
     - item.stdout | default('') | trim != vars[item.item.var] | string
@@ -313,3 +325,4 @@
       mode: "{{ '0640' if is_apt else '0000' }}"
   loop_control:
     label: "{{ item.path }}"
+  when: not system_is_container  # mode 0000 on /etc/shadow breaks PAM auth → crashes systemd in privileged Podman containers

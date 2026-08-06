@@ -7,7 +7,7 @@
     scope: user
     state: restarted
     daemon_reload: true
-  when: ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+  when: not (system_is_container | default(false))  # scope:user systemd crashes containers; virtualization_type unreliable in nested-VM CI
   failed_when: false
 
 - name: Reload ssh-agent launchd bootout (macOS)  # noqa: command-instead-of-module

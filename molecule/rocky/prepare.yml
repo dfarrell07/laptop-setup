@@ -15,12 +15,6 @@
   gather_facts: false
 
   tasks:
-    - name: Wait for container connection to be available
-      ansible.builtin.wait_for_connection:
-        timeout: 60
-        delay: 2
-        sleep: 2
-
     - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module
       ansible.builtin.command: systemctl is-system-running
       register: systemd_state
