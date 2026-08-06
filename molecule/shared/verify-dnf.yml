@@ -291,6 +291,22 @@
   become: true
   when: not (csb_rhel | default(false))
 
+- name: Verify dnf-automatic timer enabled
+  ansible.builtin.systemd:
+    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
+  register: verify_dnf_auto
+  become: true
+  failed_when: false
+  when: not (csb_rhel | default(false))
+
+- name: Assert dnf-automatic timer is enabled
+  ansible.builtin.assert:
+    that: verify_dnf_auto.status.UnitFileState == 'enabled'
+    fail_msg: "dnf-automatic timer not enabled"
+  when:
+    - not (csb_rhel | default(false))
+    - verify_dnf_auto.status.UnitFileState | default('') != ''
+
 - name: Verify crypto-policy
   ansible.builtin.command: update-crypto-policies --show
   register: verify_crypto
@@ -307,3 +323,90 @@
 # golangci-lint coverage is provided by molecule/packages-binaries/verify.yml unconditionally.
 # go_tools_installed is always false in all scenarios that include this file (fedora, rocky, vm),
 # so assertions here would be dead code. See packages-binaries scenario for golangci-lint tests.
+
+# --- Cron/at access restriction (CIS 5.1.x) ---
+- name: Verify /etc/cron.allow exists
+  ansible.builtin.stat:
+    path: /etc/cron.allow
+  register: verify_cron_allow
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/cron.allow exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - verify_cron_allow.stat.exists
+      - verify_cron_allow.stat.mode == '0600'
+    fail_msg: "/etc/cron.allow missing or wrong permissions"
+  when: not (csb_rhel | default(false))
+
+- name: Stat /etc/cron.deny
+  ansible.builtin.stat:
+    path: /etc/cron.deny
+  register: verify_cron_deny
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/cron.deny is absent (CIS 5.1.8)
+  ansible.builtin.assert:
+    that: not verify_cron_deny.stat.exists
+    fail_msg: "/etc/cron.deny exists but cron.allow is authoritative"
+  when: not (csb_rhel | default(false))
+
+- name: Verify /etc/at.allow exists
+  ansible.builtin.stat:
+    path: /etc/at.allow
+  register: verify_at_allow
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/at.allow exists with mode 0600 (CIS 5.1.9)
+  ansible.builtin.assert:
+    that:
+      - verify_at_allow.stat.exists
+      - verify_at_allow.stat.mode == '0600'
+    fail_msg: "/etc/at.allow missing or wrong permissions"
+  when: not (csb_rhel | default(false))
+
+- name: Stat /etc/at.deny
+  ansible.builtin.stat:
+    path: /etc/at.deny
+  register: verify_at_deny
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/at.deny is absent (CIS 5.1.9)
+  ansible.builtin.assert:
+    that: not verify_at_deny.stat.exists
+    fail_msg: "/etc/at.deny exists but at.allow is authoritative"
+  when: not (csb_rhel | default(false))
+
+- name: Stat /etc/cron.d
+  ansible.builtin.stat:
+    path: /etc/cron.d
+  register: verify_crond
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/cron.d has mode 0700 (CIS 5.1.7)
+  ansible.builtin.assert:
+    that: verify_crond.stat.mode == '0700'
+    fail_msg: "/etc/cron.d wrong permissions (expected 0700)"
+  when:
+    - not (csb_rhel | default(false))
+    - verify_crond.stat.exists
+
+- name: Stat /etc/cron.daily
+  ansible.builtin.stat:
+    path: /etc/cron.daily
+  register: verify_cron_daily
+  become: true
+  when: not (csb_rhel | default(false))
+
+- name: Assert /etc/cron.daily has mode 0700 (CIS 5.1.4)
+  ansible.builtin.assert:
+    that: verify_cron_daily.stat.mode == '0700'
+    fail_msg: "/etc/cron.daily wrong permissions (expected 0700)"
+  when:
+    - not (csb_rhel | default(false))
+    - verify_cron_daily.stat.exists

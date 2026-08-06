@@ -3,6 +3,14 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    # set_fact from converge does not persist to a separate verify invocation.
+    # macOS converge sets dotfiles_github_user: dfarrell07; re-apply here so
+    # the SSH agent launchd plist path resolves correctly.
+    - name: Set dotfiles_github_user for verify context
+      ansible.builtin.set_fact:
+        dotfiles_github_user: 'dfarrell07'
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
@@ -70,6 +78,10 @@
 
     - name: Check neovim is installed (packages_brew)
       ansible.builtin.command: nvim --version
+      changed_when: false
+
+    - name: Check gitleaks is installed (packages_brew)
+      ansible.builtin.command: gitleaks version
       changed_when: false
 
     - name: Verify SSH sockets directory exists (macOS ControlPath)

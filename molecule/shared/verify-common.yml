@@ -1237,3 +1237,14 @@
   when:
     - ansible_system == 'Linux'
     - profile | default('personal') == 'work'
+
+# --- subuid/subgid (rootless Podman) ---
+- name: Check /etc/subuid has entry for ansible_user_id
+  ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subuid
+  changed_when: false
+  when: ansible_system == 'Linux'
+
+- name: Check /etc/subgid has entry for ansible_user_id
+  ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subgid
+  changed_when: false
+  when: ansible_system == 'Linux'

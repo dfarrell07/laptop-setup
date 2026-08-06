@@ -1466,6 +1466,12 @@ EOF
     record "dnf-automatic" "WARN" "skipped on RHEL CSB — IT manages updates via Satellite/RHSM; Ansible not-csb_rhel guard"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
+  # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
+  if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+    if dnf repolist 2>/dev/null | grep -q '^rpmfusion-free\b'; then record "rpmfusion-free-repo" "PASS"
+    else record "rpmfusion-free-repo" "WARN" "rpmfusion-free repo not enabled (run: make repos_dnf; default repo_rpmfusion_free=true)"; fi
+  fi
+
   # TLP power management (ThinkPad battery care)
   if systemctl is-enabled tlp.service &>/dev/null && systemctl is-active tlp.service &>/dev/null; then
     record "tlp-service" "PASS"

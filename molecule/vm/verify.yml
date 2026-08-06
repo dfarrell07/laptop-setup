@@ -749,17 +749,6 @@
       become: true
       when: verify_logind_conf.stat.exists
 
-    # --- subuid/subgid (rootless Podman) ---
-    - name: Check /etc/subuid has entry for ansible_user_id
-      ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subuid
-      changed_when: false
-      become: true
-
-    - name: Check /etc/subgid has entry for ansible_user_id
-      ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subgid
-      changed_when: false
-      become: true
-
     # --- packages_security (ykpers / YubiKey challenge-response) ---
     - name: Check ykpers is installed (provides ykchalresp for vault HMAC-SHA1)
       ansible.builtin.command: rpm -q ykpers  # noqa: command-instead-of-module
