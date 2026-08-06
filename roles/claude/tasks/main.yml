@@ -11,9 +11,16 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
+- name: Set claude install-needed fact
+  ansible.builtin.set_fact:
+    _claude_needs_install: >
+      {{ claude_version_check.rc != 0 or
+         (claude_pinned_version | length > 0 and
+          claude_pinned_version not in (claude_version_check.stdout | default(''))) }}
+
 - name: Install Claude Code via native binary
   when:
-    - claude_version_check.rc != 0
+    - _claude_needs_install
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:
@@ -24,7 +31,7 @@
           {{ claude_install_url }} |
           {% if claude_pinned_version %}CLAUDE_VERSION={{ claude_pinned_version }} {% endif %}bash
         executable: /bin/bash
-      timeout: 120
+      timeout: 150
   rescue:
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
