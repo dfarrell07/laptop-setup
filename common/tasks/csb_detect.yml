@@ -111,6 +111,7 @@
         or ((is_fedora | bool) and (_csb_hostname | bool) and (internal_ca_present | bool))
       }}
   become: false
+  when: not (_csb_molecule_force | default(false))
 
 - name: Set CSB restricted fact
   ansible.builtin.set_fact:
@@ -173,6 +174,7 @@
   ansible.builtin.set_fact:
     csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"
   become: false
+  when: not (_csb_molecule_force | default(false))
 
 # ---------------------------------------------------------------------------
 # 13. Summary for the user
