@@ -106,22 +106,6 @@
   when:
     - _system_tlp_install.rc | default(0) != 0
 
-- name: Mask power management daemons that conflict with TLP
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: true
-    state: stopped
-  loop:
-    - power-profiles-daemon
-    - tuned-ppd
-  when:
-    - system_tlp_enabled | bool
-    - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
-    - is_dnf
-    - _system_tlp_install.rc | default(0) == 0
-    - not system_is_container
-  failed_when: false
-
 - name: Unmask power management daemons when TLP disabled
   ansible.builtin.systemd:
     name: "{{ item }}"
@@ -137,29 +121,41 @@
     - not system_is_container
   failed_when: false
 
-- name: Deploy TLP ThinkPad charge threshold config
-  ansible.builtin.template:
-    src: tlp-thinkpad.conf.j2
-    dest: /etc/tlp.d/50-thinkpad.conf
-    mode: "0644"
+- name: TLP power management (enabled, install succeeded, not RHEL CSB)
   when:
     - system_tlp_enabled | bool
-    - not csb_rhel
+    - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
     - _system_tlp_install.rc | default(0) == 0
-  failed_when: false
-  notify: Restart tlp
+  block:
+    - name: Mask power management daemons that conflict with TLP
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: true
+        state: stopped
+      loop:
+        - power-profiles-daemon
+        - tuned-ppd
+      when:
+        - is_dnf
+        - not system_is_container
+      failed_when: false
 
-- name: Enable and start TLP service
-  ansible.builtin.systemd:
-    name: tlp
-    state: started
-    enabled: true
-  when:
-    - system_tlp_enabled | bool
-    - not csb_rhel
-    - _system_tlp_install.rc | default(0) == 0
-    - not system_is_container
-  failed_when: false
+    - name: Deploy TLP ThinkPad charge threshold config
+      ansible.builtin.template:
+        src: tlp-thinkpad.conf.j2
+        dest: /etc/tlp.d/50-thinkpad.conf
+        mode: "0644"
+      failed_when: false
+      notify: Restart tlp
+
+    - name: Enable and start TLP service
+      ansible.builtin.systemd:
+        name: tlp
+        state: started
+        enabled: true
+      when:
+        - not system_is_container
+      failed_when: false
 
 # --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
 # cups-browsed is masked (not just disabled) because it's an active RCE target.
