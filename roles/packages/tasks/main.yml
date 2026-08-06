@@ -719,7 +719,7 @@
     checksum: >-
       sha256:{{ packages_tkn_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
       else packages_tkn_sha256 }}
-    version_check_cmd: /usr/local/bin/tkn version --component=cli
+    version_check_cmd: /usr/local/bin/tkn version --component=client
     version_string: "{{ packages_tkn_version }}"
     binary_in_archive: tkn
     csb_action: >-
