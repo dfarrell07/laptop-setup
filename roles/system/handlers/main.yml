@@ -98,7 +98,7 @@
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  when: system_chrony_service_enabled | bool  # skip when disabled (container default)
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
