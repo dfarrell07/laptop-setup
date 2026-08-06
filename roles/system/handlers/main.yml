@@ -75,7 +75,8 @@
     name: sshd
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  when: not system_is_container  # sshd restart kills Ansible SSH connection in containers
+  ignore_errors: true  # noqa: ignore-errors
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
