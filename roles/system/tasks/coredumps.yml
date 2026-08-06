@@ -1,25 +1,26 @@
 ---
 # roles/system/tasks/coredumps.yml
 # --- Core dumps ---
-- name: Ensure coredump config directory
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d
-    state: directory
-    mode: "0755"
-  when: not system_is_container  # creating /etc/systemd/coredump.conf.d triggers inotify → coredump reload → crashes Debian containers
+# inotify on /etc/systemd/coredump.conf.d triggers coredump service reload, crashes containers
+- name: Configure coredumps (skip in containers)
+  when: not system_is_container
+  block:
+    - name: Ensure coredump config directory
+      ansible.builtin.file:
+        path: /etc/systemd/coredump.conf.d
+        state: directory
+        mode: "0755"
 
-- name: Remove legacy coredump disable.conf drop-in (renamed in cycle 2)
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d/disable.conf
-    state: absent
-  when: not system_is_container  # coredump.conf.d not created in containers (guard above)
+    - name: Remove legacy coredump disable.conf drop-in (renamed in cycle 2)
+      ansible.builtin.file:
+        path: /etc/systemd/coredump.conf.d/disable.conf
+        state: absent
 
-- name: Configure coredump storage
-  ansible.builtin.template:
-    src: coredump.conf.j2
-    dest: /etc/systemd/coredump.conf.d/coredump.conf
-    mode: "0644"
-  when: not system_is_container  # writing coredump.conf.d triggers systemd inotify → coredump service reload → destabilizes container
+    - name: Configure coredump storage
+      ansible.builtin.template:
+        src: coredump.conf.j2
+        dest: /etc/systemd/coredump.conf.d/coredump.conf
+        mode: "0644"
 
 - name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
   ansible.builtin.copy:

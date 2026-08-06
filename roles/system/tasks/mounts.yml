@@ -1,7 +1,8 @@
 ---
 # --- Harden /tmp mount options (CIS 1.1.2.x) ---
 # Writing to /etc/systemd/system/ triggers inotify → /tmp remount → clears Ansible temp files
-- when: not system_is_container
+- name: Harden /tmp mount options (CIS 1.1.2.x)
+  when: not system_is_container
   block:
     - name: Ensure tmp.mount drop-in directory exists
       ansible.builtin.file:
