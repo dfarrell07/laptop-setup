@@ -14,5 +14,9 @@ ssh_signing_key_basename: id_ed25519_sk_signing  # fallback for standalone invoc
 dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; dotfiles role sets the canonical value
 profile: work  # fallback for standalone invocation
 dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; dotfiles role sets the canonical value
+ssh_pubkey_accepted_algorithms:  # fallback; authoritative definition in group_vars/all/vars.yml
+  - sk-ssh-ed25519@openssh.com
+  - sk-ssh-ed25519-cert-v01@openssh.com
+  - ssh-ed25519
 dotfiles_user_email_work: 'CHANGE_ME'
 dotfiles_user_email_personal: 'CHANGE_ME'

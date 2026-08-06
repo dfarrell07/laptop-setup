@@ -20,9 +20,10 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0
   net.ipv6.conf.default.accept_source_route: 0
-  net.ipv4.conf.all.rp_filter: 2  # loose mode; acts as floor (kernel max(all,iface)); sysctl_extra per-iface values <2 are ineffective
-  # duplicates Fedora 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
-  net.ipv4.conf.default.rp_filter: 2  # loose mode; applies to newly created interfaces
+  # all.rp_filter NOT in 50-default.conf (defaults to 0); floor so sysctl_extra per-iface values stay >= loose-mode
+  net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
+  # loose mode; duplicates 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
+  net.ipv4.conf.default.rp_filter: 2  # applies to newly created interfaces
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
   net.ipv4.conf.all.secure_redirects: 0

@@ -66,10 +66,6 @@ packages_virtualization:
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
-  # socket/connection
-  - socat           # socket relay utility (moved from packages_cli)
-  # scanning/perf
-  - nmap            # network scanner (moved from packages_cli)
   # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults (always installed)
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
@@ -90,6 +86,8 @@ packages_networking_work:
   - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
   - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
   - iperf3         # network bandwidth measurement; work profile only
+  - socat          # socket relay utility; work profile only (moved from packages_networking)
+  - nmap           # network scanner; work profile only (moved from packages_networking)
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
