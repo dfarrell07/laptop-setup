@@ -1,0 +1,10 @@
+---
+# Prepare: gather_facts forces Ansible to wait for the connection and for
+# systemd PID 1 to finish initializing before converge starts.  Without this
+# step, converge runs dnf5 with become:true immediately after container
+# creation; dnf5 post-install scriptlets trigger systemctl daemon-reload while
+# systemd is still booting, crashing PID 1 (rc=143) and taking down the
+# container.  The next task then gets UNREACHABLE: Container not found.
+- name: Prepare (container-offline — wait for systemd)
+  hosts: all
+  gather_facts: true
