@@ -160,11 +160,23 @@
 # When system_disable_printing is true (default), cups.socket and cups.path are also
 # masked so socket activation cannot start the CUPS daemon regardless of cups.service
 # state. Set system_disable_printing: false in config.yml if printing is required.
-- name: Mask cups-browsed (RCE entry point)
+- name: Mask cups-browsed (RCE entry point) when printing disabled
   ansible.builtin.systemd:
     name: cups-browsed
     masked: true
     state: stopped
+  when:
+    - system_disable_printing | bool
+    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
+  failed_when: false
+
+- name: Unmask cups-browsed when printing enabled
+  ansible.builtin.systemd:
+    name: cups-browsed
+    masked: false
+  when:
+    - not (system_disable_printing | bool)
+    - not system_is_container
   failed_when: false
 
 - name: Disable cups.service when system_disable_printing
@@ -172,7 +184,9 @@
     name: cups
     state: stopped
     enabled: false
-  when: system_disable_printing | bool
+  when:
+    - system_disable_printing | bool
+    - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
   failed_when: false
 
 - name: Enable and start cups.service when printing enabled
@@ -193,7 +207,9 @@
   loop:
     - cups.socket
     - cups.path
-  when: system_disable_printing | bool
+  when:
+    - system_disable_printing | bool
+    - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
   failed_when: false
 
 - name: Unmask and start cups.socket and cups.path when printing enabled
@@ -228,6 +244,24 @@
     - not system_is_container
   failed_when: false
 
+- name: Unmask ABRT services when system_mask_abrt disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: true
+    state: started
+  loop:
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-xorg.service
+  when:
+    - not (system_mask_abrt | bool)
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
 - name: Configure avahi-daemon masking (mask when system_disable_avahi)
   ansible.builtin.systemd:
@@ -238,6 +272,7 @@
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
+  when: not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
 
 # --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
