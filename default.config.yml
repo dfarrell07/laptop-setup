@@ -218,6 +218,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     example: [{workspace: 1, output: eDP-1}, {workspace: 2, output: HDMI-A-1}]
 #   desktop_sway_trackpoint_id: <unset>   (roles/desktop/defaults) — intentionally undefined; no TrackPoint config unless set.
 #     Find yours with: swaymsg -t get_inputs | grep -A2 TrackPoint. Example: "2:10:TPPS/2_IBM_TrackPoint"
+#   desktop_i3_trackpoint_id: ""   (roles/desktop/defaults) — empty disables TrackPoint config;
+#     set to e.g. "TPPS/2 Elan TrackPoint" (find with: xinput list | grep -i track)
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
 #   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
 #   desktop_sway_trackpoint_scroll_factor: 0.5    (roles/desktop/defaults) — TrackPoint scroll speed; lower = slower

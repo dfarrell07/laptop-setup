@@ -68,6 +68,23 @@
   when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
   tags: [always]
 
+- name: Assert identity vars are not CHANGE_ME placeholders
+  ansible.builtin.assert:
+    that:
+      - dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME'
+      - dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME'
+      - dotfiles_user_email_work | default('CHANGE_ME') != 'CHANGE_ME'
+      - dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME'
+    fail_msg: >-
+      Set identity vars in config.yml before running make all.
+      The following still have the 'CHANGE_ME' placeholder:
+      dotfiles_github_user, dotfiles_user_name, dotfiles_user_email_work,
+      dotfiles_user_email_personal. Without these, git commits are attributed
+      to 'CHANGE_ME', LaunchAgent plists are misnamed, and the notes clone fails.
+  become: false
+  when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+  tags: [always]
+
 - block:
     - name: Warn when vault.yml has not been populated with real secrets
       ansible.builtin.debug:

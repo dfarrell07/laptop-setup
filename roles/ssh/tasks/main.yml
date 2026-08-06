@@ -64,9 +64,7 @@
 
 - name: Pre-seed work git host known_hosts
   ansible.builtin.include_tasks: keyscan_host.yml
-  loop:
-    - gitlab.cee.redhat.com
-    - code.engineering.redhat.com
+  loop: "{{ ssh_work_keyscan_hosts }}"
   loop_control:
     loop_var: _keyscan_host
   when: profile == 'work'
