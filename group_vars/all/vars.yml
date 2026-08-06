@@ -67,6 +67,8 @@ system_mask_nfs_server: true      # mask nfs-server; most workstations don't exp
 system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)
 system_faillock_even_deny_root: false  # lock root on failed auth; set false on single-user workstations
 system_disable_sctp: false
+system_disable_usb_storage: true
+system_disable_udf: true
 
 # Security hardening parameter baselines. Defined here (group_vars, precedence 4-5) rather than in
 # roles/system/defaults/main.yml because molecule verify plays run as standalone invocations where
@@ -93,6 +95,10 @@ system_kernel_panic: 0             # dev workstation: preserve panic state for k
 system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (CIS 1.5.3 default is 1 = halt)
 system_kexec_load_disabled: 0      # kdump requires kexec; CIS default is 1 (blocks kexec); set 1 in config.yml for strict CIS
 system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
+system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
+system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
+system_unprivileged_bpf_disabled: 1  # restrict unprivileged BPF (kernel.unprivileged_bpf_disabled)
+system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
 # Baseline false — csb_detect.yml overrides at runtime via set_fact
 # (csb_detected and is_rhel). True on RHEL CSB where IT manages security

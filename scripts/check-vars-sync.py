@@ -61,10 +61,16 @@ REQUIRED_KEYS = {
     "system_init_on_free": bool,
     "system_faillock_even_deny_root": bool,
     "system_disable_sctp": bool,
+    "system_disable_usb_storage": bool,
+    "system_disable_udf": bool,
     "system_kernel_panic": int,
     "system_kernel_panic_on_oops": int,
     "system_kexec_load_disabled": int,
     "system_ptrace_scope": int,
+    "system_sysrq": int,
+    "system_bpf_jit_harden": int,
+    "system_unprivileged_bpf_disabled": int,
+    "system_io_uring_disabled": int,
 }
 
 
