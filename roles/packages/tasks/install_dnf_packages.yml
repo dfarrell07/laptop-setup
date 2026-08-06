@@ -28,11 +28,11 @@
 
     - name: Install dnf packages (container — skip scriptlets to prevent systemd daemon-reload crash)  # noqa: command-instead-of-module
       ansible.builtin.command:
-        # --setopt=rpm_opts=--noscripts: RPM scriptlets (systemd-update-helper, etc.) trigger
+        # --setopt=tsflags=noscripts: RPM scriptlets (systemd-update-helper, etc.) trigger
         # daemon-reload in privileged containers, crashing systemd PID 1. Scriptlets are
         # skipped safely in containers (services aren't started; /etc/shells not needed for CI).
         cmd: >-
-          dnf install -y --setopt=rpm_opts=--noscripts
+          dnf install -y --setopt=tsflags=noscripts
           {{ (packages_cli
              + packages_languages
              + packages_security

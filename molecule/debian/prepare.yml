@@ -10,6 +10,9 @@
 # KEY CONSTRAINT: Do NOT use systemctl mask/disable or any operation that writes
 # to /etc/systemd/ during prepare — even 'mask' without --now creates symlinks
 # that trigger systemd inotify → daemon-reload → container PID 1 crash.
+# Do NOT use reset-failed — resets retry counters, allowing additional crash cycles.
+# Do NOT stop services via systemctl — D-Bus signal processing can destabilize
+# systemd when it is in a fragile post-boot degraded state.
 #
 # NOTE: openssh-server is NOT pre-installed here — apt postinst triggers
 # pam-auth-update which restarts systemd-logind, which crashes PID 1 in
@@ -34,26 +37,10 @@
       failed_when: false
 
     - name: Wait for kernel-filesystem unit restart loops to permanently exhaust
-      # binfmt_misc/configfs/debugfs/tracefs fail in containers; systemd retries
-      # each unit up to StartLimitBurst=5 within StartLimitIntervalSec (~10s per cycle).
-      # All 5 units cycle independently, total exhaustion takes ~45-60s.
-      # Do NOT use systemctl mask (creates /etc/systemd/ symlinks → inotify → daemon-reload → crash).
-      # Do NOT use reset-failed (resets retry counter, allowing more crash cycles).
-      # Just wait: after loops exhaust, units are permanently failed, container is stable.
+      # binfmt_misc/configfs/debugfs/tracefs fail in containers (restricted kernel namespaces).
+      # Each unit retries up to StartLimitBurst=5 times, cycling independently.
+      # After ~40-50s all loops exhaust permanently — no more retries, container stable.
+      # No systemctl operations during this wait: any systemd interaction (mask, stop, reset-failed)
+      # in a fragile post-boot degraded state can trigger daemon-reload → PID 1 crash.
       ansible.builtin.pause:
         seconds: 50
-
-    - name: Stop apt-daily timers to prevent in-test apt-get from crashing container
-      # apt-daily.timer and apt-daily-upgrade.timer fire at random boot offsets.
-      # If they fire during converge, apt-get triggers pam-auth-update → daemon-reload
-      # → PID 1 crash. systemctl stop (via podman exec) does NOT write to /etc/systemd/
-      # (it sends a transient D-Bus message only) — safe under the KEY CONSTRAINT above.
-      ansible.builtin.command: >-
-        podman exec {{ inventory_hostname }} systemctl stop
-        apt-daily.timer
-        apt-daily-upgrade.timer
-        dpkg-db-backup.timer
-        systemd-tmpfiles-clean.timer
-      delegate_to: localhost
-      changed_when: false
-      failed_when: false
