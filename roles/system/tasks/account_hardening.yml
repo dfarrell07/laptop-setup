@@ -190,7 +190,6 @@
         cmd: loginctl enable-linger {{ real_user_id }}
         creates: /var/lib/systemd/linger/{{ real_user_id }}
       failed_when: false
-      changed_when: false
       when:
         - system_real_user_exists.rc | default(1) == 0
         - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']

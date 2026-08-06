@@ -246,44 +246,6 @@
     - cockpit.socket
   failed_when: false
 
-# --- Logind lid close ---
-# Write to a drop-in so package upgrades can't clobber the settings.
-- name: Ensure logind drop-in directory exists
-  ansible.builtin.file:
-    path: /etc/systemd/logind.conf.d
-    state: directory
-    mode: "0755"
-
-- name: Configure lid close behavior
-  community.general.ini_file:
-    path: /etc/systemd/logind.conf.d/99-hardening.conf
-    section: Login
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    no_extra_spaces: true
-    mode: "0644"
-    create: true
-  loop:
-    - key: HandleLidSwitch
-      value: "{{ system_lid_switch }}"
-    - key: HandleLidSwitchExternalPower
-      value: "{{ system_lid_switch_external }}"
-    - key: HandleLidSwitchDocked
-      value: "{{ system_lid_switch_docked }}"
-    - key: HandleHibernateKey
-      value: ignore
-    - key: HandlePowerKey
-      value: lock
-    - key: IdleAction
-      value: lock
-    - key: IdleActionSec
-      value: "{{ system_logind_idle_sec }}"
-    - key: KillUserProcesses
-      value: "no"
-  loop_control:
-    label: "{{ item.key }}"
-  notify: Reload logind
-
 # --- Disable Ctrl+Alt+Delete reboot ---
 - name: Mask Ctrl+Alt+Delete reboot target
   ansible.builtin.systemd:

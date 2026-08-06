@@ -161,6 +161,43 @@ def check_oc_version_sync():
     return errors
 
 
+def check_distrobox_version_sync():
+    """Verify distrobox_golangci_lint_version and distrobox_subctl_version in
+    molecule files match packages_golangci_lint_version and packages_subctl_version.
+
+    Unlike distrobox_oc_version, both vars carry real version strings in all
+    molecule files (including offline-vars.yml), so no skip set is needed.
+    """
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+
+    distrobox_version_vars = {
+        "distrobox_golangci_lint_version": "packages_golangci_lint_version",
+        "distrobox_subctl_version": "packages_subctl_version",
+    }
+
+    errors = []
+    for distrobox_var, packages_var in distrobox_version_vars.items():
+        expected = str(packages_data.get(packages_var, ""))
+        if not expected:
+            errors.append(
+                f"  MISSING: {packages_var} not found in roles/packages/defaults/main.yml"
+            )
+            continue
+
+        for yml_file in sorted(MOLECULE_DIR.rglob("*.yml")):
+            content = yml_file.read_text()
+            pattern = rf'{re.escape(distrobox_var)}:\s*["\']([^"\']+)["\']'
+            for match in re.finditer(pattern, content):
+                found = match.group(1).lstrip("v")
+                if found != expected:
+                    errors.append(
+                        f"  MISMATCH: {yml_file.relative_to(REPO_ROOT)}: "
+                        f"{distrobox_var}={match.group(1)!r} != {packages_var}={expected!r}"
+                    )
+
+    return errors
+
+
 def main():
     vars_data = load_yaml(VARS_FILE)
 
@@ -250,6 +287,31 @@ def main():
     print(
         f"OK: distrobox_oc_version in molecule files matches"
         f" packages_oc_version={packages_data.get('packages_oc_version')!r}"
+    )
+
+    distrobox_errors = check_distrobox_version_sync()
+    if distrobox_errors:
+        print(
+            "ERROR: distrobox tool versions in molecule files do not match"
+            " packages defaults in roles/packages/defaults/main.yml:",
+            file=sys.stderr,
+        )
+        for line in distrobox_errors:
+            print(line, file=sys.stderr)
+        print(
+            "Update distrobox_golangci_lint_version / distrobox_subctl_version"
+            " in the listed molecule files to match the packages defaults,"
+            " or bump the packages defaults first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    print(
+        f"OK: distrobox_golangci_lint_version and distrobox_subctl_version in"
+        f" molecule files match packages defaults"
+        f" (golangci-lint={packages_data.get('packages_golangci_lint_version')!r},"
+        f" subctl={packages_data.get('packages_subctl_version')!r})"
     )
 
 
