@@ -56,12 +56,7 @@ system_sysctl_hardening:
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
-  # Fedora 41+ default (Changes/IncreaseVmMaxMapCount); also satisfies Elasticsearch/OpenSearch
-  # minimum and large JVM/AI-ML pods in kind clusters. The 90- filename prefix ensures this
-  # file is processed after /usr/lib/sysctl.d/10-map-count.conf (sysctl.d: lexicographic order,
-  # last writer wins), so our value of 1048576 takes precedence over the distribution default.
-  # Last direct entry in system_sysctl_hardening (kernel.unprivileged_bpf_disabled merged via
-  # system_unprivileged_bpf_disabled combine() in tasks.yml — see top of block).
+  # Fedora 41+ default (IncreaseVmMaxMapCount); pinned here so 90-hardening.conf wins if the distro default ever changes.
   vm.max_map_count: 1048576
 
 # Firewall

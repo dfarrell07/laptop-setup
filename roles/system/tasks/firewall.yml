@@ -82,6 +82,7 @@
     - mdns
   when:
     - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
   # No interface is ever assigned to the public zone on hardened hosts; cleaning
   # its default services is safe on all tiers (including CSB where IT manages
   # zone assignments but leaves default services in place).
