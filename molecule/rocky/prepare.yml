@@ -1,16 +1,15 @@
 ---
-# Prepare: wait for systemd to finish initializing before converge, then stabilize.
-# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
-# before all late-init units have activated, which can disrupt
-# /root/.ansible/tmp or the connection itself and cause non-deterministic
+# Prepare: wait for systemd to stabilize before converge.
+# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1. Ansible may connect
+# before all late-init units have activated, causing non-deterministic
 # UNREACHABLE failures at different task offsets.
-# auditd fails at container startup (kernel audit disabled + EPERM from setpriority).
-# The repeated restart attempts stress systemd PID 1. Masking auditd here prevents
-# further restart loops from interfering with converge tasks.
-- name: Prepare (wait for systemd, then stabilize)
+# NOTE: do NOT modify /etc/systemd/system/ in prepare — creating symlinks
+# there triggers an inotify daemon-reload that crashes the container.
+- name: Prepare (wait for systemd)
   hosts: all
   gather_facts: false
   become: true
+  ignore_unreachable: true
 
   tasks:
     - name: Wait for systemd to reach running or degraded state
@@ -22,11 +21,11 @@
       failed_when: false
       changed_when: false
 
-    - name: Mask auditd to stop restart cascade (kernel audit disabled in containers)
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        masked: true
-      loop:
-        - auditd.service
-        - audit-rules.service
+    - name: Wait for auditd restart loop to exhaust (kernel audit disabled in containers)  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-active auditd.service
+      register: auditd_active
+      retries: 30
+      delay: 1
+      until: auditd_active.stdout not in ['activating', 'reloading']
       failed_when: false
+      changed_when: false

@@ -92,15 +92,19 @@
         fail_msg: "fapolicyd_installed is true or undefined on Rocky molecule host — CSB detection false positive or variable never set"
 
     # Downstream consequence of is_rhel=false: redhat role skips CA cert deployment
-    - name: Stat Red Hat internal CA cert (must be absent on Rocky — redhat role skipped)
+    - name: Stat Red Hat internal CA certs (must be absent on Rocky — redhat role skipped)
       ansible.builtin.stat:
-        path: /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt
+        path: "/etc/pki/ca-trust/source/anchors/{{ item }}"
+      loop:
+        - 2022-IT-Root-CA.pem
+        - Eng-CA.crt
       register: verify_rhit_ca_rocky
 
-    - name: Assert Red Hat CA cert absent on Rocky (is_rhel=false → redhat role skipped)
+    - name: Assert Red Hat CA certs absent on Rocky (is_rhel=false → redhat role skipped)
       ansible.builtin.assert:
-        that: not verify_rhit_ca_rocky.stat.exists
-        fail_msg: "RH-IT-Root-CA.crt deployed on Rocky — redhat role should skip cert when is_rhel=false"
+        that: not item.stat.exists
+        fail_msg: "{{ item.item }} deployed on Rocky — redhat role should skip cert when is_rhel=false"
+      loop: "{{ verify_rhit_ca_rocky.results }}"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
     - name: Import Claude queue verification tasks

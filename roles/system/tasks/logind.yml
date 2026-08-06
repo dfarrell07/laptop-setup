@@ -6,6 +6,7 @@
     path: /etc/systemd/logind.conf.d
     state: directory
     mode: "0755"
+  when: not system_is_container  # inotify on /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
 
 - name: Configure lid close behavior
   community.general.ini_file:
@@ -36,3 +37,4 @@
   loop_control:
     label: "{{ item.key }}"
   notify: Reload logind
+  when: not system_is_container  # writing to /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers

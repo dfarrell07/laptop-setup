@@ -5,6 +5,7 @@
     name: firewalld
     state: started
     enabled: true
+  when: not system_is_container  # enabling+starting firewalld triggers daemon-reload, crashes privileged Podman containers
   failed_when: false
 
 - name: Re-gather service facts after firewalld start

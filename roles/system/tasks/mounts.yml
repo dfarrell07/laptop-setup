@@ -5,6 +5,7 @@
     path: /etc/systemd/system/tmp.mount.d
     state: directory
     mode: "0755"
+  when: not system_is_container  # writing to /etc/systemd/system/ triggers inotify → systemd remounts /tmp → clears Ansible temp files
 
 - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
   vars:
@@ -20,6 +21,7 @@
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
   notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
+  when: not system_is_container  # writing tmp.mount.d triggers inotify → /tmp remount → clears Ansible temp files mid-run
 
 - name: Reload systemd after deploying tmp.mount drop-in
   ansible.builtin.systemd:

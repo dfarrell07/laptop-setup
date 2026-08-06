@@ -9,6 +9,7 @@
   when:
     - is_dnf
     - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
+    - not system_is_container  # RPM post-install calls systemctl preset + daemon-reload, crashes Podman container systemd
   failed_when: false
 
 - name: Enable fwupd-refresh.timer for automatic LVFS metadata updates

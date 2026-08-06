@@ -102,6 +102,13 @@
         mode: "0600"
       notify: Restart sshd
 
+    - name: Generate missing SSH host keys so sshd -t can run  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: ssh-keygen -A
+      changed_when: false
+      check_mode: false  # idempotent; must run in check mode so sshd -t below succeeds
+      when: system_is_container  # containers skip sshd.service start, so sshd-keygen.service never runs
+
     - name: Validate sshd config syntax after deploying drop-in  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: sshd -t

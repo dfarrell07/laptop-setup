@@ -1,0 +1,233 @@
+---
+# molecule/shared/verify-git-security.yml
+# Git security config assertions (dotfiles role).
+# Imported by verify-common.yml.
+
+# --- Git security ---
+- name: Check git core.fsmonitor
+  ansible.builtin.command: git config --global core.fsmonitor  # noqa: command-instead-of-module
+  register: verify_fsmonitor
+  changed_when: false
+  failed_when: false
+
+- name: Assert git core.fsmonitor is false
+  ansible.builtin.assert:
+    that: verify_fsmonitor.stdout == 'false'
+    fail_msg: "git core.fsmonitor is not set to false"
+
+- name: Check git core.hooksPath
+  ansible.builtin.command: git config --global core.hooksPath  # noqa: command-instead-of-module
+  register: verify_hooks_path
+  changed_when: false
+  failed_when: false
+
+- name: Assert core.hooksPath is set
+  ansible.builtin.assert:
+    that: "verify_hooks_path.stdout | trim == '~/.config/git/template/hooks'"
+    fail_msg: "git core.hooksPath not set to ~/.config/git/template/hooks"
+
+- name: Check git push.autoSetupRemote
+  ansible.builtin.command: git config --global push.autoSetupRemote  # noqa: command-instead-of-module
+  register: verify_auto_remote
+  changed_when: false
+  failed_when: false
+
+- name: Assert push.autoSetupRemote is true
+  ansible.builtin.assert:
+    that: verify_auto_remote.stdout == 'true'
+    fail_msg: "git push.autoSetupRemote not set"
+
+- name: Check git fetch.prune
+  ansible.builtin.command: git config --global fetch.prune  # noqa: command-instead-of-module
+  register: verify_fetch_prune
+  changed_when: false
+  failed_when: false
+
+- name: Assert fetch.prune is true
+  ansible.builtin.assert:
+    that: verify_fetch_prune.stdout == 'true'
+    fail_msg: "git fetch.prune not set to true — stale remote-tracking branches will accumulate"
+
+- name: Check git commit.gpgsign
+  ansible.builtin.command: git config --global commit.gpgsign  # noqa: command-instead-of-module
+  register: verify_gpgsign
+  changed_when: false
+  failed_when: false
+
+- name: Assert commit.gpgsign is true
+  ansible.builtin.assert:
+    that: verify_gpgsign.stdout == 'true'
+    fail_msg: "git commit.gpgsign not enabled"
+
+- name: Check git tag.gpgsign setting
+  ansible.builtin.command: git config --global tag.gpgsign  # noqa: command-instead-of-module
+  register: verify_tag_gpgsign
+  changed_when: false
+  failed_when: false
+
+- name: Assert tag.gpgsign is true
+  ansible.builtin.assert:
+    that: verify_tag_gpgsign.stdout == 'true'
+    fail_msg: "git tag.gpgsign not enabled — tags would be unsigned"
+
+- name: Check git gpg.ssh.allowedSignersFile setting
+  ansible.builtin.command: git config --global gpg.ssh.allowedSignersFile  # noqa: command-instead-of-module
+  register: verify_signers_file_path
+  changed_when: false
+  failed_when: false
+
+- name: Assert gpg.ssh.allowedSignersFile points to allowed_signers
+  ansible.builtin.assert:
+    that: verify_signers_file_path.stdout == '~/.config/git/allowed_signers'
+    fail_msg: >-
+      git gpg.ssh.allowedSignersFile is '{{ verify_signers_file_path.stdout }}',
+      expected '~/.config/git/allowed_signers'
+
+- name: Check git safe.bareRepository setting
+  ansible.builtin.command: git config --global safe.bareRepository  # noqa: command-instead-of-module
+  register: verify_bare_repo
+  changed_when: false
+  failed_when: false
+
+- name: Assert git safe.bareRepository is explicit
+  ansible.builtin.assert:
+    that: verify_bare_repo.stdout == 'explicit'
+    fail_msg: "git safe.bareRepository is not set to explicit"
+
+- name: Check git protocol.allow
+  ansible.builtin.command: git config --global protocol.allow  # noqa: command-instead-of-module
+  register: verify_protocol_allow
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.allow is never
+  ansible.builtin.assert:
+    that: verify_protocol_allow.stdout == 'never'
+    fail_msg: "git protocol.allow is not set to never — arbitrary protocol escalation not blocked"
+
+- name: Check git protocol.https.allow
+  ansible.builtin.command: git config --global protocol.https.allow  # noqa: command-instead-of-module
+  register: verify_protocol_https
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.https.allow is always
+  ansible.builtin.assert:
+    that: verify_protocol_https.stdout == 'always'
+    fail_msg: "git protocol.https.allow is not set to always — HTTPS clones will be blocked"
+
+- name: Check git protocol.ssh.allow
+  ansible.builtin.command: git config --global protocol.ssh.allow  # noqa: command-instead-of-module
+  register: verify_protocol_ssh
+  changed_when: false
+  failed_when: false
+
+- name: Assert git protocol.ssh.allow is always
+  ansible.builtin.assert:
+    that: verify_protocol_ssh.stdout == 'always'
+    fail_msg: "git protocol.ssh.allow is not set to always — SSH clones will be blocked"
+
+- name: Check git gpg.format
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: git config --global gpg.format
+  register: verify_gpg_format
+  changed_when: false
+  failed_when: false
+
+- name: Assert gpg.format is ssh
+  ansible.builtin.assert:
+    that: verify_gpg_format.stdout == 'ssh'
+    fail_msg: "gpg.format not set to ssh — SSH commit signing not configured"
+
+- name: Check git user.signingkey
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: git config --global user.signingkey
+  register: verify_signingkey
+  changed_when: false
+  failed_when: false
+
+- name: Assert user.signingkey is set
+  ansible.builtin.assert:
+    that: "verify_signingkey.stdout | trim == '~/.ssh/' ~ (ssh_signing_key_basename) ~ '.pub'"
+    fail_msg: "git user.signingkey not set to ~/.ssh/{{ ssh_signing_key_basename }}.pub"
+
+- name: Verify ~/.config/git/allowed_signers exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/allowed_signers"
+  register: verify_allowed_signers
+
+- name: Assert allowed_signers file exists
+  ansible.builtin.assert:
+    that: verify_allowed_signers.stat.exists
+    fail_msg: "~/.config/git/allowed_signers was not deployed — SSH signing verification will not work"
+
+- name: Assert allowed_signers exists and is non-empty
+  ansible.builtin.assert:
+    that:
+      - verify_allowed_signers.stat.size > 0
+    fail_msg: "~/.config/git/allowed_signers is empty — SSH signature verification not configured"
+  when: verify_allowed_signers.stat.exists
+
+- name: Check allowed_signers contains sk-ssh-ed25519 key
+  ansible.builtin.command:
+    cmd: grep -qE '(sk-)?ssh-ed25519' "{{ ansible_user_dir }}/.config/git/allowed_signers"
+  register: verify_allowed_signers_key
+  changed_when: false
+  failed_when: false
+  when: verify_allowed_signers.stat.exists
+
+- name: Assert allowed_signers contains sk-ssh-ed25519 key
+  ansible.builtin.assert:
+    that: verify_allowed_signers_key.rc == 0
+    fail_msg: "allowed_signers does not contain an sk-ssh-ed25519 key — YubiKey SSH signing key not registered"
+  when: verify_allowed_signers.stat.exists
+
+- name: Check git alias.revert-s (must exist; 'revert' shadows built-in)
+  ansible.builtin.command: git config --global alias.revert-s  # noqa: command-instead-of-module
+  register: verify_revert_s_alias
+  changed_when: false
+  failed_when: false
+
+- name: Assert git alias.revert-s equals revert -s
+  ansible.builtin.assert:
+    that: verify_revert_s_alias.stdout | trim == 'revert -s'
+    fail_msg: >-
+      git alias.revert-s is '{{ verify_revert_s_alias.stdout | trim }}', expected 'revert -s'.
+      If the alias was renamed back to 'revert' it silently shadows the git built-in.
+
+- name: Get global safe.directory entries (claude role cleanup regression guard)
+  ansible.builtin.command:
+    cmd: git config --global --get-all safe.directory
+  register: verify_safe_directory_common
+  changed_when: false
+  failed_when: false
+
+- name: Assert no wildcard safe.directory entries exist
+  ansible.builtin.assert:
+    that: >-
+      verify_safe_directory_common.stdout_lines | default([])
+      | select('match', '^\*{1,2}$|^/$') | list | length == 0
+    fail_msg: >-
+      safe.directory contains a wildcard entry — claude role cleanup task regression?
+      (shell task requires executable: /bin/bash for set -o pipefail + [[ ]] on Debian/dash)
+
+- name: Verify ~/.config/git/ignore exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/ignore"
+  register: verify_gitignore_global
+
+- name: Assert global gitignore exists
+  ansible.builtin.assert:
+    that: verify_gitignore_global.stat.exists
+    fail_msg: "~/.config/git/ignore was not deployed"
+
+- name: Check git core.excludesfile
+  ansible.builtin.command: git config --global core.excludesfile  # noqa: command-instead-of-module
+  register: verify_excludesfile
+  changed_when: false
+  failed_when: false
+
+- name: Assert core.excludesfile points to ~/.config/git/ignore
+  ansible.builtin.assert:
+    that: "verify_excludesfile.stdout | trim == '~/.config/git/ignore'"
+    fail_msg: "git core.excludesfile not set to ~/.config/git/ignore — global gitignore directive missing from gitconfig template"

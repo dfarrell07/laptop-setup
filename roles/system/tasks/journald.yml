@@ -15,6 +15,7 @@
     path: /etc/systemd/journald.conf.d
     state: directory
     mode: "0755"
+  when: not system_is_container  # inotify on journald.conf.d triggers journald restart, crashes privileged containers
 
 - name: Ensure /var/log/journal exists for persistent storage
   ansible.builtin.file:
@@ -37,5 +38,7 @@
       RateLimitBurst=20000
     dest: /etc/systemd/journald.conf.d/99-hardening.conf
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container  # writing journald.conf.d triggers systemd inotify → journald restart → crashes privileged containers
   notify: Restart systemd-journald
