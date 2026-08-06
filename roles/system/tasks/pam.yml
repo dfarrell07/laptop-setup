@@ -73,6 +73,7 @@
   when:
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not system_is_container  # authselect enable-feature triggers PAM reload → inotify → daemon-reload → crashes container
     - system_authselect_faillock_check.rc | default(0) != 0
   changed_when: system_authselect_faillock_enable.rc | default(1) == 0
   failed_when: false
@@ -150,6 +151,7 @@
   when:
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not system_is_container  # authselect enable-feature triggers PAM reload → inotify → daemon-reload → crashes container
     - system_authselect_pwhistory_check.rc | default(0) != 0
   changed_when: system_authselect_pwhistory_enable.rc | default(1) == 0
   failed_when: false
