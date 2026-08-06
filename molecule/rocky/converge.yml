@@ -14,6 +14,10 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Purge stale DNF package cache (geerlingguy image ships with incomplete cache)
+      ansible.builtin.command: dnf clean all
+      changed_when: true
+
     - name: Refresh DNF cache so system role sees current mirror metadata
       ansible.builtin.dnf:
         update_cache: true
