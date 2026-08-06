@@ -116,14 +116,10 @@ for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
   fi
 done
 
-# oc (work-profile only — guard on binary presence, emit nothing when absent)
 if [[ -x /usr/local/bin/oc ]]; then
   if run oc version --client &>/dev/null; then record "oc" "PASS"
   else record "oc" "FAIL" "oc binary present but 'oc version --client' failed"; fi
-fi
-# kubectl-ocp (work-profile only — oc and kubectl come from the same OCP tarball;
-# if /usr/local/bin/oc is present the tarball succeeded, so kubectl must be present too)
-if [[ -x /usr/local/bin/oc ]]; then
+  # kubectl comes from the same OCP tarball; if oc is present, kubectl must be present too
   if [[ ! -x /usr/local/bin/kubectl ]]; then
     record "kubectl-ocp" "FAIL" "/usr/local/bin/kubectl absent despite oc present — OCP tarball extraction incomplete"
   elif run /usr/local/bin/kubectl version --client &>/dev/null; then
@@ -132,32 +128,16 @@ if [[ -x /usr/local/bin/oc ]]; then
     record "kubectl-ocp" "FAIL" "OCP kubectl present but version check failed"
   fi
 fi
-# cosign (work-profile only — guard on binary presence, emit nothing when absent)
-if [[ -x /usr/local/bin/cosign ]]; then
-  if run cosign version &>/dev/null; then record "cosign" "PASS"
-  else record "cosign" "FAIL" "cosign binary present but version command failed"; fi
-fi
-# tkn (work-profile only — guard on binary presence, emit nothing when absent)
-if [[ -x /usr/local/bin/tkn ]]; then
-  if run tkn version --component=cli &>/dev/null; then record "tkn" "PASS"
-  else record "tkn" "FAIL" "tkn binary present but 'tkn version --component=cli' failed"; fi
-fi
-# operator-sdk (work-profile only — guard on binary presence, emit nothing when absent)
-if [[ -x /usr/local/bin/operator-sdk ]]; then
-  if run operator-sdk version &>/dev/null; then record "operator-sdk" "PASS"
-  else record "operator-sdk" "FAIL" "operator-sdk binary present but version command failed"; fi
-fi
-# opm (work-profile only — guard on binary presence, emit nothing when absent)
-if [[ -x /usr/local/bin/opm ]]; then
-  if run opm version &>/dev/null; then record "opm" "PASS"
-  else record "opm" "FAIL" "opm binary present but version command failed"; fi
-fi
-
-# ec CLI (work-profile only — guard on binary presence)
-if [[ -x /usr/local/bin/ec ]]; then
-  if run ec version &>/dev/null; then record "ec" "PASS"
-  else record "ec" "FAIL" "ec version command failed (binary present but not functional)"; fi
-fi
+# work-profile binaries (guard on presence, emit nothing when absent)
+for _b in "cosign:cosign version" "tkn:tkn version --component=cli" \
+           "operator-sdk:operator-sdk version" "opm:opm version" "ec:ec version"; do
+  _bname="${_b%%:*}"; _bvcmd="${_b#*:}"
+  if [[ -x "/usr/local/bin/$_bname" ]]; then
+    # shellcheck disable=SC2086
+    if run $_bvcmd &>/dev/null; then record "$_bname" "PASS"
+    else record "$_bname" "FAIL" "$_bname binary present but version command failed"; fi
+  fi
+done
 
 # GitHub CLI authenticated (skip when gh binary is absent — tools loop already records FAIL)
 if command -v gh &>/dev/null; then
@@ -861,21 +841,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else record "bpfman-socket" "FAIL" "bpfman.socket not enabled — bpfman load/list will fail at runtime"; fi
   fi  # bpfman absent = not installed on this profile — no record emitted
 
-  # tc (iproute-tc, work-profile only — guard on binary presence, emit nothing when absent)
-  if command -v tc &>/dev/null; then
-    if run tc -V &>/dev/null; then record "tc" "PASS"
-    else record "tc" "FAIL" "tc binary present but -V failed"; fi
-  fi
-  # strace (work-profile only — guard on binary presence, emit nothing when absent)
-  if command -v strace &>/dev/null; then
-    if run strace --version &>/dev/null; then record "strace" "PASS"
-    else record "strace" "FAIL" "strace binary present but --version failed"; fi
-  fi
-  # bpftool (work-profile only — guard on binary presence, emit nothing when absent)
-  if command -v bpftool &>/dev/null; then
-    if run bpftool version &>/dev/null; then record "bpftool" "PASS"
-    else record "bpftool" "FAIL" "bpftool binary present but version failed"; fi
-  fi
+  # tc/strace/bpftool (work-profile only — guard on binary presence, emit nothing when absent)
+  for _t in "tc:-V" "strace:--version" "bpftool:version"; do
+    _tname="${_t%%:*}"; _targ="${_t#*:}"
+    if command -v "$_tname" &>/dev/null; then
+      # shellcheck disable=SC2086
+      if run "$_tname" $_targ &>/dev/null; then record "$_tname" "PASS"
+      else record "$_tname" "FAIL" "$_tname binary present but $_targ failed"; fi
+    fi
+  done
 
   # auditd service enabled and running
   if systemctl is-active auditd &>/dev/null && systemctl is-enabled auditd &>/dev/null; then
@@ -1217,30 +1191,20 @@ EOF
   # CSB RHEL: IPA/SSSD owns password policy; pwquality.conf not written by Ansible — WARN not FAIL
   _skip_pwquality=false
   $CSB_HOST && ! grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && _skip_pwquality=true
-  if grep -q '^minlen = 14' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-minlen" "PASS"
-  elif $_skip_pwquality; then record "pwquality-minlen" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-minlen" "FAIL" "pwquality minlen not set to 14"; fi
-  if grep -q '^dcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-dcredit" "PASS"
-  elif $_skip_pwquality; then record "pwquality-dcredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-dcredit" "FAIL" "pwquality dcredit not set to -1"; fi
-  if grep -q '^ucredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ucredit" "PASS"
-  elif $_skip_pwquality; then record "pwquality-ucredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-ucredit" "FAIL" "pwquality ucredit not set to -1"; fi
-  if grep -q '^lcredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-lcredit" "PASS"
-  elif $_skip_pwquality; then record "pwquality-lcredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-lcredit" "FAIL" "pwquality lcredit not set to -1"; fi
-  if grep -q '^ocredit = -1' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-ocredit" "PASS"
-  elif $_skip_pwquality; then record "pwquality-ocredit" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-ocredit" "FAIL" "pwquality ocredit not set to -1"; fi
-  if grep -q '^difok = 4' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-difok" "PASS"
-  elif $_skip_pwquality; then record "pwquality-difok" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-difok" "FAIL" "pwquality difok not set to 4"; fi
-  if grep -q '^maxrepeat = 3' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-maxrepeat" "PASS"
-  elif $_skip_pwquality; then record "pwquality-maxrepeat" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-maxrepeat" "FAIL" "pwquality maxrepeat not set to 3"; fi
-  if grep -q '^enforce_for_root' /etc/security/pwquality.conf 2>/dev/null; then record "pwquality-enforce-root" "PASS"
-  elif $_skip_pwquality; then record "pwquality-enforce-root" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
-  else record "pwquality-enforce-root" "FAIL" "pwquality enforce_for_root not set (CIS 5.3.4)"; fi
+  for _pwq in \
+    '^minlen = 14:pwquality-minlen:pwquality minlen not set to 14' \
+    '^dcredit = -1:pwquality-dcredit:pwquality dcredit not set to -1' \
+    '^ucredit = -1:pwquality-ucredit:pwquality ucredit not set to -1' \
+    '^lcredit = -1:pwquality-lcredit:pwquality lcredit not set to -1' \
+    '^ocredit = -1:pwquality-ocredit:pwquality ocredit not set to -1' \
+    '^difok = 4:pwquality-difok:pwquality difok not set to 4' \
+    '^maxrepeat = 3:pwquality-maxrepeat:pwquality maxrepeat not set to 3' \
+    '^enforce_for_root:pwquality-enforce-root:pwquality enforce_for_root not set (CIS 5.3.4)'; do
+    _pat=${_pwq%%:*}; _rest=${_pwq#*:}; _key=${_rest%%:*}; _msg=${_rest#*:}
+    if grep -q "$_pat" /etc/security/pwquality.conf 2>/dev/null; then record "$_key" "PASS"
+    elif $_skip_pwquality; then record "$_key" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy"
+    else record "$_key" "FAIL" "$_msg"; fi
+  done
   unset _skip_pwquality
 
   # sudoers hardening drop-in (mode 0440 — unreadable by non-root; WARN not FAIL)
