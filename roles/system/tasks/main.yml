@@ -185,7 +185,7 @@
   when:
     - system_authselect_bin.stat.exists
     - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
-    - system_authselect_current.stdout | default('') is not search('^sssd\b')
+    - system_authselect_current.stdout | default('') is not search('^sssd( |$)')
     - not csb_rhel
   changed_when: true
   failed_when: false

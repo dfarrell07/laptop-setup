@@ -82,7 +82,7 @@
       register: system_aide_reinit_result
       failed_when:
         - system_aide_reinit_result.rc != 0
-        - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+        - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
       when:
         - _aide_conf_r1 is changed
           or _aide_conf_r2 is changed

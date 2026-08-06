@@ -43,6 +43,7 @@
           ansible.builtin.assert:
             that: packages_oc_sha256 | length == 64
             fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
+          when: packages_oc_version == 'stable'
 
         - name: Download OpenShift client tarball (SHA256-verified)
           ansible.builtin.get_url:
@@ -148,6 +149,7 @@
           ansible.builtin.assert:
             that: packages_opm_sha256 | length == 64
             fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
+          when: packages_oc_version == 'stable'
 
         - name: Download opm tarball (SHA256-verified)
           ansible.builtin.get_url:
