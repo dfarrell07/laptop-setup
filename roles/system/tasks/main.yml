@@ -693,6 +693,14 @@
 # net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
 # recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
 # (OVN-K, Submariner). No conditional override is applied.
+- name: Ensure /etc/sysctl.d exists
+  ansible.builtin.file:
+    path: /etc/sysctl.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Deploy sysctl hardening config
   ansible.builtin.template:
     src: sysctl-hardening.conf.j2

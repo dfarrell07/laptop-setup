@@ -15,6 +15,8 @@
                                           # daemon.conf settings, service) is NOT exercised by any
                                           # Podman-based scenario — make test-vm is required for full USBGuard coverage
     install_virtualization: false         # libvirt not needed in CI container
+    install_vpn: false                    # VPN packages not applicable in CI container
+    install_docker: false                 # docker socket not applicable in CI container
     system_disable_fingerprint: false     # fprintd masking fails silently in containers; skip entirely
                                           # CI gap: fprintd masking (systemctl mask + /dev/null symlink) is NOT
                                           # exercised by any Podman-based scenario — make test-vm is required for
