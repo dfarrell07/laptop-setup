@@ -19,9 +19,12 @@
 - name: Warn that firewalld is not running — all firewall hardening tasks will be skipped
   ansible.builtin.debug:
     msg: >-
-      WARNING: firewalld is not running. All firewall hardening tasks (drop zone,
-      port 722, ICMP rules, tailscale0, libvirt zone) will be skipped. Install
-      and start firewalld before re-running if firewall management is required.
+      WARNING: firewalld is not running. Firewall hardening tasks in this file
+      (drop zone, port 722, ICMP rules) will be skipped. Related tasks in
+      other files — nm.yml (tailscale0 trusted zone) and services.yml (libvirt
+      zone ssh removal) — also guard on this fact and will likewise be skipped.
+      Install and start firewalld before re-running if firewall management is
+      required.
   when: not (system_firewalld_running | bool)
 
 - name: Check current default firewall zone
@@ -102,6 +105,7 @@
     zone: drop
     icmp_block_inversion: true
     permanent: true
+    immediate: true
     state: enabled
   when:
     - system_firewalld_running | bool
@@ -115,6 +119,7 @@
     zone: drop
     icmp_block: "{{ item }}"
     permanent: true
+    immediate: true
     state: enabled
   loop: "{{ system_firewall_icmp_types }}"
   when:
@@ -127,6 +132,7 @@
     zone: drop
     icmp_block: router-advertisement
     permanent: true
+    immediate: true
     state: enabled
   when:
     - system_firewalld_running | bool
