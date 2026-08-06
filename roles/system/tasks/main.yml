@@ -24,6 +24,33 @@
 
 - ansible.builtin.import_tasks: bolt.yml
 
+- name: Authselect and fingerprint auth
+  ansible.builtin.import_tasks: authselect_fingerprint.yml
+
+- ansible.builtin.import_tasks: service_masking.yml
+
+- ansible.builtin.import_tasks: logind.yml
+
+- ansible.builtin.import_tasks: services.yml
+
+- name: Firmware updates
+  ansible.builtin.import_tasks: firmware.yml
+
+- name: SSHD hardening, SELinux port label, and crypto policy
+  ansible.builtin.import_tasks: sshd.yml
+
+- name: Kernel modules for kind
+  ansible.builtin.import_tasks: kernel_modules_kind.yml
+
+- name: NetworkManager configuration
+  ansible.builtin.import_tasks: nm.yml
+
+- name: dnf-automatic
+  ansible.builtin.import_tasks: dnf_automatic.yml
+
+- name: DNS-over-TLS
+  ansible.builtin.import_tasks: dns_over_tls.yml
+
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - ansible.builtin.import_tasks: session_timeout.yml
 

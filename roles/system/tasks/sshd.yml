@@ -135,6 +135,7 @@
     enabled: false
   when:
     - not csb_rhel
+    - not system_is_container  # masking sshd.socket kills the container SSH connection
     - _sshd_socket_exists.rc | default(1) == 0
   failed_when: false
 

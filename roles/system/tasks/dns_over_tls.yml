@@ -25,6 +25,7 @@
     dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
     mode: "0644"
   notify: Restart systemd-resolved
+  when: not system_is_container  # resolved restart crashes privileged Podman containers
 
 # yamllint disable rule:line-length
 - name: Deploy DNS-over-TLS resolved config
@@ -41,6 +42,7 @@
     mode: "0644"
   when:
     - not csb_rhel  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
+    - not system_is_container  # resolved restart crashes privileged Podman containers
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
 
@@ -53,4 +55,5 @@
     force: true
   when:
     - not csb_rhel
+    - not system_is_container  # dangling symlink breaks DNS when resolved is not running in containers
   failed_when: false
