@@ -59,6 +59,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, bpfman, bpftool, ...]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
+#   packages_networking: [socat, nmap, tailscale]  (roles/packages/defaults) — universal networking tools; personal users can
+#     override to drop nmap: packages_networking: [socat, tailscale]
 #   packages_go_install_work: [controller-gen@v0.19.0, ...]  (roles/packages/defaults) — work-profile-only OVN-K codegen +
 #     Submariner Go tools; entries need full module paths (go install MODULE@VERSION); pin versions match OVN-K
 #     update-codegen.sh (not go.mod — controller-tools is not a go.mod dep) — bump together when OVN-K upgrades k8s

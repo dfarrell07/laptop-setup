@@ -449,36 +449,24 @@
     src: ssh_config.j2
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
     mode: "0600"
-- name: Deploy SSH socket tmpfiles config
+- name: Deploy socket tmpfiles configs (ssh, tmux)
   ansible.builtin.copy:
-    content: "d %t/ssh 0700 - - -\n"
-    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/ssh-sockets.conf"
+    content: "d %t/{{ item }} 0700 - - -\n"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/{{ item }}-sockets.conf"
     mode: "0644"
-  when: is_linux
-
-- name: Deploy tmux socket tmpfiles config (TMUX_TMPDIR=$XDG_RUNTIME_DIR/tmux)
-  ansible.builtin.copy:
-    content: "d %t/tmux 0700 - - -\n"
-    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/tmux-sockets.conf"
-    mode: "0644"
+  loop: [ssh, tmux]
   when: is_linux
 
 # /run/user/$UID is a tmpfs cleared on reboot; the user-tmpfiles.d configs deployed
 # above recreate these dirs on every login via systemd-tmpfiles. These tasks only
 # ensure the dirs exist immediately during the current Ansible session (before reboot).
 # The file module truthfully reports changed when the dir is absent and must be created.
-- name: Create SSH socket directory in XDG runtime dir
+- name: Create socket directories in XDG runtime dir
   ansible.builtin.file:
-    path: "/run/user/{{ ansible_facts['user_uid'] }}/ssh"
+    path: "/run/user/{{ ansible_facts['user_uid'] }}/{{ item }}"
     state: directory
     mode: "0700"
-  when: is_linux
-
-- name: Create tmux socket directory in XDG runtime dir
-  ansible.builtin.file:
-    path: "/run/user/{{ ansible_facts['user_uid'] }}/tmux"
-    state: directory
-    mode: "0700"
+  loop: [ssh, tmux]
   when: is_linux
 
 - name: Deploy safe direnv config

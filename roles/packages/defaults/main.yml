@@ -108,7 +108,8 @@ packages_apt:
   - fzf
   - zoxide
   - gnupg          # Debian does not auto-install gnupg; needed for SSH role and git commit signing
-  - openssh-client  # provides ssh-keygen; needed by ansible.builtin.known_hosts hash_host:true in ssh role
+  - openssh-client  # not a Debian 13 desktop default in minimal/container images;
+                    # needed by ansible.builtin.known_hosts hash_host:true in ssh role
   # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
   - socat
