@@ -15,3 +15,6 @@
 - name: Set project root for include paths
   ansible.builtin.set_fact:
     common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+- name: Load shared CI default vars (git_repos_list, dotfiles identity, and other shared defaults)
+  ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-default-vars.yml"

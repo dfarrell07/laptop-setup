@@ -1,0 +1,65 @@
+---
+# Install Homebrew packages and configure autoupdate (extracted from main.yml)
+
+- name: Add Homebrew taps (macOS)
+  community.general.homebrew_tap:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ packages_brew_taps }}"
+  when: is_macos
+
+- name: Install Homebrew packages (macOS)
+  when: is_macos
+  block:
+    - name: Install Homebrew packages (macOS)
+      community.general.homebrew:
+        name: "{{ packages_brew }}"
+        state: present
+        update_homebrew: "{{ packages_brew_update }}"
+  rescue:
+    - name: Warn Homebrew package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing formula.
+          Continuing playbook execution.
+
+- name: Install Homebrew cask packages (macOS)
+  when: is_macos
+  block:
+    - name: Install Homebrew cask packages (macOS)
+      community.general.homebrew_cask:
+        name: "{{ packages_brew_cask }}"
+        state: present
+  rescue:
+    - name: Warn Homebrew cask package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew cask packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing cask.
+          Continuing playbook execution.
+
+- name: Install ssh-askpass (macOS)
+  community.general.homebrew:
+    name: theseal/ssh-askpass/ssh-askpass
+    state: present
+  when: is_macos
+
+- name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: brew autoupdate start 43200 --upgrade --cleanup
+  when: is_macos
+  changed_when: false
+  failed_when: false
+  register: _packages_brew_autoupdate
+
+- name: Warn if brew autoupdate failed (may need interactive trust step)
+  ansible.builtin.debug:
+    msg: >-
+      brew autoupdate start failed (rc={{ _packages_brew_autoupdate.rc }}).
+      Run 'brew autoupdate' interactively to complete trust if this is the first run.
+  when:
+    - is_macos
+    - _packages_brew_autoupdate.rc | default(0) != 0

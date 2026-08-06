@@ -1,0 +1,97 @@
+---
+# roles/packages/tasks/install_krew.yml
+# Install krew (kubectl plugin manager) — bootstrap and upgrade.
+# Included from main.yml with when: _packages_linux_x86_work.
+
+- name: Install krew
+  block:
+    - name: Check if krew is installed at target version
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
+      register: packages_krew_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install krew from tarball
+      when: packages_krew_check.rc != 0
+      block:
+        - name: Download krew tarball
+          ansible.builtin.get_url:
+            url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
+            dest: /tmp/krew.tar.gz
+            checksum: "sha256:{{ packages_krew_sha256 }}"
+            mode: "0644"
+            timeout: 120
+          register: packages_krew_download
+          retries: 3
+          delay: 10
+          until: packages_krew_download is succeeded
+
+        - name: Ensure ~/.local/bin exists for krew installer
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            state: directory
+            mode: '0755'
+
+        - name: Extract krew installer
+          ansible.builtin.unarchive:
+            src: /tmp/krew.tar.gz
+            dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            remote_src: true
+
+        - name: Set krew installer executable
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+            mode: "0755"
+
+        - name: Run krew installer
+          ansible.builtin.command:
+            cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
+          changed_when: true
+
+    - name: Upgrade krew
+      when:
+        - packages_krew_bootstrap_version not in (packages_krew_check.stdout + packages_krew_check.stderr)
+        - packages_krew_check.rc == 0
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
+      register: packages_krew_upgrade
+      # NOTE: krew self-manages its upgrade path — this upgrades to krew's own latest release,
+      # NOT necessarily to packages_krew_bootstrap_version. packages_krew_bootstrap_version only pins the initial tarball
+      # install (above). Subsequent upgrades follow krew's own release cadence.
+      changed_when: packages_krew_upgrade.stdout | length > 0
+
+  rescue:
+    - name: Record krew installation failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "krew"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install krew manually from
+          https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+        _csb_ticket_summary: "Cannot install krew on CSB"
+        _csb_ticket_body: >-
+          krew (kubectl plugin manager) could not be downloaded or installed from
+          github.com/kubernetes-sigs/krew.
+          Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+      when: csb_rhel
+    - name: Warn krew installation failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
+      when: not csb_rhel
+
+  always:
+    - name: Clean up krew installer files
+      when: packages_krew_check.rc != 0
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/krew.tar.gz
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64.yaml"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin/LICENSE"

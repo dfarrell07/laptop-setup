@@ -24,8 +24,8 @@
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
         GOTOOLCHAIN: auto
-        HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
-        HTTP_PROXY: "{{ proxy_url | default(omit) }}"
+        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
       vars:
         _subctl_installed: >-
           {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~

@@ -1,0 +1,42 @@
+---
+# roles/packages/tasks/install_pipx.yml
+# Install yamllint and ansible-lint via pipx (version-pinned).
+# Called from main.yml when is_dnf or is_apt or is_macos, and packages_install_binaries.
+
+- name: Install pipx packages (yamllint, ansible-lint)
+  when:
+    - is_dnf or is_apt or is_macos
+    - packages_install_binaries | bool
+  block:
+    - name: Install yamllint (pipx, version-pinned)
+      community.general.pipx:
+        name: "yamllint=={{ packages_yamllint_version }}"
+        state: install
+
+    - name: Install ansible-lint (pipx, version-pinned)
+      community.general.pipx:
+        name: "ansible-lint=={{ packages_ansible_lint_version }}"
+        state: install
+  rescue:
+    - name: Record pipx install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "pipx install (yamllint/ansible-lint)"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install yamllint and ansible-lint manually via pipx or an alternative method
+        _csb_ticket_summary: "Cannot install yamllint/ansible-lint via pipx on CSB"
+        _csb_ticket_body: >-
+          yamllint and ansible-lint could not be installed via pipx on CSB.
+          This may be due to fapolicyd policy blocking pip/pipx or missing network access.
+          Install manually via pipx or an alternative method.
+      when: csb_rhel
+    - name: Warn pipx install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install pipx packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing pipx/pip access.
+          Continuing playbook execution.
+      when: not csb_rhel
