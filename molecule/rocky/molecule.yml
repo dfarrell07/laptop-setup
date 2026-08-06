@@ -24,6 +24,7 @@ provisioner:
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
       collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
       gathering: smart
+      remote_tmp: /tmp
 
 verifier:
   name: ansible
@@ -32,6 +33,7 @@ scenario:
   test_sequence:
     - dependency
     - create
+    - prepare
     - converge
     # idempotence excluded: bolt D-Bus activation and systemd unit state differ
     # between first and second run in privileged Podman containers

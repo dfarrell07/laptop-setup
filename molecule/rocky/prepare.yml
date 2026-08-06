@@ -1,0 +1,18 @@
+---
+# Prepare: wait for systemd to finish initializing before converge.
+# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
+# before all late-init units have activated, which can disrupt
+# /root/.ansible/tmp or the connection itself and cause non-deterministic
+# UNREACHABLE failures at different task offsets.
+- name: Prepare (wait for systemd)
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Wait for systemd to reach running or degraded state
+      ansible.builtin.command: systemctl is-system-running
+      register: systemd_state
+      retries: 30
+      delay: 2
+      until: systemd_state.rc == 0 and systemd_state.stdout in ['running', 'degraded']
+      changed_when: false
