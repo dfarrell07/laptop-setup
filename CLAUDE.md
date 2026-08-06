@@ -67,6 +67,7 @@ make test-distrobox-role  # Molecule distrobox-role scenario (distrobox role uni
 make test-packages-binaries  # Molecule packages-binaries scenario (kind, helm, kustomize, k9s, krew, gofumpt, subctl18; profile:work)
 make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
+make smoke-test-user  # Post-run verification (user-space only, no sudo; wraps smoke-test.sh --user-only)
 make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
 make diff             # Dotfiles check+diff (dry run)
@@ -98,7 +99,8 @@ make redhat           # redhat role only (sudo)
 make containers       # containers role only (sudo)
 make claude           # claude role only (no sudo)
 make distrobox        # alias for make container (backwards compatibility)
-# Per repo-group subsets of `make repos`:
+# Per repo-group subsets of `make repos` — pattern rule: make repos-<group>
+# runs git_repos role with git_repos_group=<group>; any group name is valid
 make repos-ovnk       # OVN-Kubernetes repos only
 make repos-konflux    # Konflux repos only
 make repos-personal   # personal repos only
@@ -113,12 +115,15 @@ make repos-downstream # downstream repos only
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
 - **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks),
   backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
-- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, container-offline-distrobox, distrobox-role, debian, vm, macos, packages-binaries) + shared verify includes
+- **molecule/** — Test scenarios (fedora, rocky, container, container-offline, container-offline-distrobox, distrobox-role, debian, vm, macos, packages-binaries); `shared/` holds reusable task includes (ci-pre-tasks.yml, capture-user-identity.yml, gather-minimal-facts.yml, verify-* checks, etc.) imported by multiple scenario converge/verify playbooks
+- **System role task split**: `roles/system/tasks/main.yml` (orchestrator) delegates to `mounts.yml` (filesystem/tmpfs hardening) and `kernel_lockdown.yml` (grubby kernel cmdline lockdown); edit the sub-file, not main.yml, when touching those subsystems
+- **Packages role task split**: `roles/packages/tasks/main.yml` delegates binary installs to `install_binary.yml` (single-file curl+install) and `install_tarball.yml` (tar.gz extract + copy); add new binaries in the appropriate extractor file
 
 ## Key Patterns
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
+- **is_dnf / is_apt**: Computed booleans in `group_vars/all/vars.yml` (set false there, overridden by `common/tasks/gather-minimal-facts.yml` at runtime). Use `when: is_dnf` / `when: is_apt` instead of `ansible_pkg_mgr` comparisons for package-manager branching across Fedora/RHEL (dnf) and Debian (apt) targets.
 - **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present)
   or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only`
   (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host +
@@ -142,7 +147,9 @@ make repos-downstream # downstream repos only
   `system_dns_domains` (~. — catch-all for Tailscale MagicDNS), `system_ssh_max_sessions` (10),
   `system_enable_ip_forward` (true — enables ip_forward sysctls for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts), `system_install_usbguard`, `system_tlp_enabled`, `system_timezone`, `desktop_sway_hidpi_scale`, `desktop_i3status_battery_num`, `system_lid_switch`,
   `system_coredump_storage` (external — systemd-coredump store path; 'none' disables), `system_coredump_process_size_max` (2G — max core size; 0 disables),
-  `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl).
+  `system_mask_abrt` (true — masks ABRT crash-reporter daemons; set false to restore ABRT, e.g. when `system_coredump_storage: none`),
+  `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl),
+  `system_chrony_service_enabled` (`not system_is_container` — chrony disabled in containers; set `true` to force-enable inside a container).
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`
   (interactive shells) AND `~/.config/environment.d/containers.conf` (systemd user session generator).
   The environment.d path is critical for OVN-K/Submariner `make kind` since `make` spawns `sh` not

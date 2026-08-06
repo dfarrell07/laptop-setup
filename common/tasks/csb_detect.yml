@@ -182,9 +182,12 @@
     msg: |
       === CSB Detection Summary ===
       OS family          : {{ ansible_facts.distribution | default('unknown') }} {{ ansible_facts.distribution_version | default('') }}
+      Is Linux           : {{ is_linux }}
       Is RHEL            : {{ is_rhel }}
       Is Fedora          : {{ is_fedora }}
       Is macOS           : {{ is_macos }}
+      Is DNF             : {{ is_dnf }}
+      Is APT             : {{ is_apt }}
       ---
       fapolicyd installed: {{ fapolicyd_installed }}
       fapolicyd enforcing: {{ fapolicyd_enforcing }}
@@ -193,6 +196,7 @@
       CSB hostname (.csb): {{ _csb_hostname }}
       CSB detected       : {{ csb_detected }}
       CSB restricted     : {{ csb_restricted }}
+      CSB RHEL           : {{ csb_rhel }}
       ---
       Proxy URL          : {{ proxy_url | regex_replace('://[^@]+@', '://***@') }}
       ---

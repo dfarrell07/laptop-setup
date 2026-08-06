@@ -1,4 +1,8 @@
 ---
+# molecule/shared/capture-user-identity.yml
+# Sets real_user_home and real_user_id facts from the environment.
+# Included by molecule/{fedora,rocky,debian}/converge.yml pre_tasks.
+# NOTE: vm/converge.yml inlines this with real_user_id: vagrant instead of ENV USER.
 - name: Capture real user identity
   ansible.builtin.set_fact:
     real_user_home: "{{ lookup('env', 'HOME') }}"
