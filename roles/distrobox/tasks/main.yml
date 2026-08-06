@@ -140,14 +140,14 @@
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
-    - not (packages_install_binaries | default(true) | bool)
+    - not (packages_install_binaries | bool)
     - distrobox_container_exists.rc != 0
 
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Create container with distrobox assemble
@@ -156,7 +156,7 @@
           distrobox assemble create
           {{ '--replace' if distrobox_container_replace | bool else '' }}
           --file {{ distrobox_ini_path }}
-      timeout: "{{ distrobox_create_timeout | default(600) }}"
+      timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_create_result
       changed_when: >-
         'already exists' not in
@@ -196,14 +196,14 @@
   when:
     - distrobox_use_toolbox | bool
     - not (fapolicyd_enforcing)
-    - not (packages_install_binaries | default(true) | bool)
+    - not (packages_install_binaries | bool)
     - distrobox_container_exists.rc != 0
 
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
     - not (fapolicyd_enforcing)
-    - packages_install_binaries | default(true) | bool
+    - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
     - name: Remove existing Toolbx container for replacement
@@ -221,7 +221,7 @@
           --distro {{ container_distro | default('fedora') }}
           --release {{ container_release | default(ansible_facts['distribution_major_version']) }}
           {{ distrobox_container_name }}
-      timeout: "{{ distrobox_create_timeout | default(600) }}"
+      timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_toolbox_create
       changed_when: distrobox_toolbox_create.rc == 0
   rescue:
