@@ -34,7 +34,7 @@ system_sysctl_hardening:
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
-  net.ipv4.tcp_timestamps: 1      # kernel default; 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
+  # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
   # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
