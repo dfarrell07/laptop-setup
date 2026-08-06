@@ -123,7 +123,7 @@
 
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:
-    name: "{{ 'dnf5-automatic.timer' if ansible_facts['pkg_mgr'] == 'dnf5' else 'dnf-automatic.timer' }}"
+    name: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
     state: restarted
     daemon_reload: true
   become: true

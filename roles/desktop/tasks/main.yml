@@ -156,7 +156,7 @@
   when:
     - desktop_effective == 'i3'
     - desktop_i3_trackpoint_id is defined
-    - desktop_i3_trackpoint_id
+    - desktop_i3_trackpoint_id | length > 0
 
 - name: Deploy TrackPoint libinput config (i3/X11)
   ansible.builtin.template:
@@ -168,7 +168,7 @@
   when:
     - desktop_effective == 'i3'
     - desktop_i3_trackpoint_id is defined
-    - desktop_i3_trackpoint_id
+    - desktop_i3_trackpoint_id | length > 0
 
 # --- Sway config ---
 - name: Ensure Pictures directory exists for screenshots
