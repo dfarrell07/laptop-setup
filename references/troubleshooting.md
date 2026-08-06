@@ -881,6 +881,24 @@ Then re-run `make system`. This unmasks CUPS and restores printing.
 
 ---
 
+## system: ABRT Crash Reporting Daemons Masked After Provisioning
+
+**Symptom:** `abrt-cli list` returns nothing or errors. `systemctl status abrtd` shows `masked`. All five ABRT daemons are inactive and masked: `abrtd`, `abrt-journal-core`, `abrt-oops`, `abrt-vmcore`, `abrt-xorg`.
+
+**Root Cause:** The `system` role masks all ABRT services when `system_mask_abrt: true` (the default). ABRT is masked rather than disabled to prevent socket-activation or transient starts from re-enabling crash collection unexpectedly.
+
+**Fix:** Set in `config.yml`:
+
+```yaml
+system_mask_abrt: false
+```
+
+Then re-run `make system`. This unmasks all five ABRT units and restores crash reporting via `abrt-cli`.
+
+**CSB IT ticket:** No. ABRT masking is a per-machine playbook setting; no IT changes required.
+
+---
+
 ## system: Shell Sessions Terminate After 10 Minutes of Inactivity
 
 **Symptom:** SSH sessions or terminal emulator shells die after 10 minutes idle. Interactive prompts close unexpectedly. Long-running `ansible-playbook` runs are killed by the shell.
