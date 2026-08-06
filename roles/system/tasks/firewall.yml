@@ -104,6 +104,22 @@
     - system_firewall_manage_zone | bool
   failed_when: false
 
+- name: Remove default services from FedoraServer zone
+  ansible.posix.firewalld:
+    zone: FedoraServer
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - ssh
+    - dhcpv6-client
+    - cockpit
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  failed_when: false
+
 - name: Remove broad port rules from FedoraWorkstation zone
   ansible.posix.firewalld:
     zone: FedoraWorkstation
