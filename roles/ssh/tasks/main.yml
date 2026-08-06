@@ -78,8 +78,7 @@
     fail_msg: >-
       ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
       which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).
-      Accepted: sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com,
-      ssh-ed25519. Writing an incompatible key would cause SSH lockout —
+      Accepted: {{ ssh_pubkey_accepted_algorithms | join(', ') }}. Writing an incompatible key would cause SSH lockout —
       sshd silently rejects non-accepted types at login time.
   when: ssh_auth_key_pub | trim | length > 0
 
