@@ -38,4 +38,6 @@
     - "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
     - "{{ ansible_facts['user_dir'] }}/.config/environment.d"
     - "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d"
-  when: is_linux
+  when:
+    - is_linux
+    - not system_is_container | default(false)  # ~/.config/systemd/user triggers systemd user inotify; crashes Debian 13 container PID 1
