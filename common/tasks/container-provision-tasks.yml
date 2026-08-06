@@ -102,11 +102,18 @@
         container_oc_installed: false
 
 # --- Go tools (not in Fedora repos) ---
+- name: Check golangci-lint version
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/go/bin/golangci-lint version --format short"
+  register: container_golangci_lint_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Install golangci-lint via go install
   ansible.builtin.command:
     cmd: >-
       go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{ distrobox_golangci_lint_version }}
-    creates: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
@@ -114,12 +121,22 @@
   register: container_golangci_lint_result
   timeout: 300
   failed_when: false
+  when: >-
+    container_golangci_lint_check.rc != 0 or
+    distrobox_golangci_lint_version not in container_golangci_lint_check.stdout
+
+- name: Check subctl version
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/go/bin/subctl version"
+  register: container_subctl_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
 - name: Install subctl via go install (Submariner cluster management)
   ansible.builtin.command:
     cmd: >-
       go install github.com/submariner-io/subctl/cmd/subctl@{{ distrobox_subctl_version }}
-    creates: "{{ ansible_env.HOME }}/go/bin/subctl"
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
@@ -127,6 +144,9 @@
   register: container_subctl_result
   timeout: 600
   failed_when: false
+  when: >-
+    container_subctl_check.rc != 0 or
+    distrobox_subctl_version not in container_subctl_check.stdout
 
 - name: Report go install failures
   ansible.builtin.debug:

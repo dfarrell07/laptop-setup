@@ -377,6 +377,7 @@
   tags: [become]
   when: is_macos
   failed_when: false
+  timeout: 30
 
 - name: Enable macOS firewall
   ansible.builtin.command:
@@ -389,10 +390,13 @@
     - is_macos
     - "'State = 1' not in (_fw_state.stdout | default(''))"
   failed_when: false
+  timeout: 30
 
 - name: Warn if macOS firewall enable failed
   ansible.builtin.debug:
-    msg: "WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc }} — application firewall may still be off"
+    msg: >-
+      WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc | default(0) }}
+      — application firewall may still be off
   when:
     - is_macos
     - _fw_enable_result.rc | default(0) != 0
@@ -407,6 +411,7 @@
   tags: [become]
   when: is_macos
   failed_when: false
+  timeout: 30
 
 - name: Enable macOS firewall stealth mode
   ansible.builtin.command:
@@ -419,10 +424,13 @@
     - is_macos
     - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
   failed_when: false
+  timeout: 30
 
 - name: Warn if macOS firewall stealth mode enable failed
   ansible.builtin.debug:
-    msg: "WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc }} — firewall stealth mode may still be off"
+    msg: >-
+      WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc | default(0) }}
+      — firewall stealth mode may still be off
   when:
     - is_macos
     - _fw_stealth_enable_result.rc | default(0) != 0
@@ -435,6 +443,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  timeout: 30
   when:
     - is_linux
     - desktop_effective == 'gnome'

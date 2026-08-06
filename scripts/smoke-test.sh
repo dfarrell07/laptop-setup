@@ -174,12 +174,16 @@ if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
 fi
 
 # Tailscale connectivity (cross-platform via CLI)
-if run tailscale status &>/dev/null; then record "tailscale" "PASS"
+if ! command -v tailscale &>/dev/null; then
+  record "tailscale" "WARN" "tailscale not installed (run: make packages)"
+elif run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 out=$(run ssh-add -L 2>&1 || true)
 if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
+elif echo "$out" | grep -qE 'Error connecting|Connection refused'; then
+  record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "$out" != *"Error"* ]]; then
   record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"
 else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
@@ -461,12 +465,17 @@ _signing_key_present=false
 [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]] && _signing_key_present=true
 for check in "core.fsmonitor=false" "safe.bareRepository=explicit" "commit.gpgsign=true" "tag.gpgsign=true" "gpg.format=ssh" "gpg.ssh.allowedSignersFile=~/.config/git/allowed_signers" "user.signingkey=~/.ssh/id_ed25519_sk_signing.pub" "protocol.allow=never" "protocol.https.allow=always" "protocol.ssh.allow=always" "push.autoSetupRemote=true" "fetch.prune=true" "alias.revert-s=revert -s" "core.excludesfile=~/.config/git/ignore"; do
   key="${check%%=*}" expected="${check#*=}"
+  # Skip per-key signing checks when key absent — consolidated WARN emitted below
+  if { [[ "$key" =~ ^(commit|tag|gpg)\. ]] || [[ "$key" == "user.signingkey" ]]; } && [[ "$_signing_key_present" == "false" ]]; then
+    continue
+  fi
   actual=$(run git config --global "$key" 2>/dev/null || echo "")
   if [[ "$actual" == "$expected" ]]; then record "git-$key" "PASS"
-  elif { [[ "$key" =~ ^(commit|tag|gpg)\. ]] || [[ "$key" == "user.signingkey" ]]; } && [[ "$_signing_key_present" == "false" ]]; then
-    record "git-$key" "WARN" "signing key absent (populate vault + re-provision) — got '$actual'"
   else record "git-$key" "FAIL" "got '$actual', expected '$expected'"; fi
 done
+if [[ "$_signing_key_present" == "false" ]]; then
+  record "git-signing-config" "WARN" "signing key absent — commit.gpgsign, tag.gpgsign, gpg.format, gpg.ssh.allowedSignersFile, user.signingkey skipped (populate vault + re-provision)"
+fi
 unset _signing_key_present
 
 # git allowed_signers file (required for SSH commit verification)

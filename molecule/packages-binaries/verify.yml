@@ -59,6 +59,19 @@
           - verify_transcrypt.stat.executable
         fail_msg: "/usr/local/bin/transcrypt missing or not executable — packages_install_binaries=true regression"
 
+    - name: Check transcrypt version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/transcrypt --version
+      register: verify_transcrypt_ver
+      changed_when: false
+
+    - name: Assert transcrypt version matches packages_transcrypt_version
+      ansible.builtin.assert:
+        that: packages_transcrypt_version in (verify_transcrypt_ver.stdout + verify_transcrypt_ver.stderr)
+        fail_msg: >-
+          transcrypt version mismatch — expected {{ packages_transcrypt_version }},
+          got: {{ verify_transcrypt_ver.stdout + verify_transcrypt_ver.stderr }}
+
     - name: Stat /usr/local/bin/k9s
       ansible.builtin.stat:
         path: /usr/local/bin/k9s
@@ -425,6 +438,19 @@
       ansible.builtin.assert:
         that: packages_ec_version in (verify_ec_ver.stdout + verify_ec_ver.stderr)
         fail_msg: "ec version mismatch — expected {{ packages_ec_version }}, got: {{ verify_ec_ver.stdout + verify_ec_ver.stderr }}"
+
+    - name: Check operator-sdk version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/operator-sdk version
+      register: verify_operator_sdk_ver
+      changed_when: false
+
+    - name: Assert operator-sdk version matches packages_operator_sdk_version
+      ansible.builtin.assert:
+        that: packages_operator_sdk_version in (verify_operator_sdk_ver.stdout + verify_operator_sdk_ver.stderr)
+        fail_msg: >-
+          operator-sdk version mismatch — expected {{ packages_operator_sdk_version }},
+          got: {{ verify_operator_sdk_ver.stdout + verify_operator_sdk_ver.stderr }}
 
     - name: Check krew version output
       ansible.builtin.command:

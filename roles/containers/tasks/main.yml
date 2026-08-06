@@ -44,6 +44,7 @@
   ansible.builtin.command:
     cmd: "podman login --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
     stdin: "{{ item.item.token }}"
+  timeout: 60
   loop: "{{ containers_vault_pre_auth.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry }}"

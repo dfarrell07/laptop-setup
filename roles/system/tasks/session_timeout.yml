@@ -12,6 +12,24 @@
   when:
     - system_tmout | int > 0
 
+- name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
+  ansible.builtin.lineinfile:
+    path: /etc/bash.bashrc
+    line: "readonly TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    regexp: '^\s*(readonly\s+)?TMOUT='
+  when:
+    - is_apt
+    - system_tmout | int > 0
+
+- name: Export TMOUT in /etc/bash.bashrc (Debian bash interactive shells)
+  ansible.builtin.lineinfile:
+    path: /etc/bash.bashrc
+    line: "export TMOUT  # CIS 5.5.5"
+    regexp: '^\s*export TMOUT\b'
+  when:
+    - is_apt
+    - system_tmout | int > 0
+
 # /etc/profile.d/*.sh is bash-only; zsh needs TMOUT set directly.
 # On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
 # On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
@@ -38,13 +56,31 @@
     - is_apt
     - system_tmout | int > 0
 
-# Cleanup: remove TMOUT artifacts when system_tmout=0 (operator disables timeout).
+# Cleanup: remove TMOUT artifacts when system_tmout<=0 (operator disables timeout).
 # Without this, readonly TMOUT=600 persists and cannot be overridden in user dotfiles.
 - name: Remove session timeout from profile.d when disabled
   ansible.builtin.file:
     path: /etc/profile.d/tmout.sh
     state: absent
   when:
+    - system_tmout | int <= 0
+
+- name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
+  ansible.builtin.lineinfile:
+    path: /etc/bash.bashrc
+    regexp: '^\s*(readonly\s+)?TMOUT='
+    state: absent
+  when:
+    - is_apt
+    - system_tmout | int == 0
+
+- name: Remove TMOUT export from /etc/bash.bashrc when disabled (Debian)
+  ansible.builtin.lineinfile:
+    path: /etc/bash.bashrc
+    regexp: '^\s*export TMOUT\b'
+    state: absent
+  when:
+    - is_apt
     - system_tmout | int == 0
 
 - name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL)
@@ -54,7 +90,7 @@
     state: absent
   when:
     - not is_apt
-    - system_tmout | int == 0
+    - system_tmout | int <= 0
 
 - name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)
   ansible.builtin.lineinfile:
@@ -63,4 +99,4 @@
     state: absent
   when:
     - is_apt
-    - system_tmout | int == 0
+    - system_tmout | int <= 0

@@ -6,6 +6,7 @@
   register: _tmp_remount_handler_result
   changed_when: _tmp_remount_handler_result.rc == 0
   failed_when: false
+  when: not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
 
 - name: Warn if /tmp remount failed (handler)
   ansible.builtin.debug:
@@ -76,14 +77,14 @@
     state: restarted
   become: true
   when: not system_is_container  # sshd restart kills Ansible SSH connection in containers
-  ignore_errors: true  # noqa: ignore-errors
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  when: not system_is_container  # resolved restart crashes privileged Podman containers
 
 - name: Reload logind  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -120,7 +121,9 @@
     cmd: dconf update
   become: true
   changed_when: true
-  failed_when: false  # dconf may be absent on non-GNOME hosts; notifying tasks run on all Linux
+  # No failed_when: false — handler is only notified from dconf.yml which is
+  # guarded by '"gdm.service" in ansible_facts.services', so dconf is always
+  # present when this runs. Surface real failures.
 
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:

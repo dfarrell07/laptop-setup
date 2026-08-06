@@ -2,7 +2,7 @@
 distrobox_enabled: true  # set false in config.yml to skip container creation and Play 3 entirely
 
 distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
-distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ ansible_facts['distribution_major_version']) }}"  # yamllint disable-line rule:line-length
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ (ansible_facts['distribution_major_version'] | default('44'))) }}"  # yamllint disable-line rule:line-length
 distrobox_container_replace: "{{ container_replace | default(false) }}"
 
 distrobox_ini_path: "{{ ansible_facts['user_dir'] }}/.config/distrobox/distrobox.ini"

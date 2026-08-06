@@ -6,7 +6,9 @@
     name: systemd-resolved
     state: started
     enabled: true
-  when: not system_is_container  # starting resolved triggers systemd re-exec, crashes privileged Podman containers
+  # container detection is unreliable in Molecule; starting resolved triggers
+  # systemd re-exec, crashing undetected privileged Podman containers
+  when: not system_is_container
   failed_when: false
 
 - name: Ensure resolved drop-in directory
@@ -56,4 +58,3 @@
   when:
     - not csb_rhel
     - not system_is_container  # dangling symlink breaks DNS when resolved is not running in containers
-  failed_when: false

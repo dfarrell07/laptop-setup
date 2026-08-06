@@ -96,10 +96,18 @@
         path: /var/lib/aide/aide.db.gz
       register: system_aide_db
 
-    - name: Check if partial AIDE new database exists
+    - name: Check if AIDE new database exists (interrupted prior init)
       ansible.builtin.stat:
         path: /var/lib/aide/aide.db.new.gz
       register: system_aide_db_new
+
+    - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
+      ansible.builtin.command:
+        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      when:
+        - not (system_aide_db.stat.exists | default(false))
+        - system_aide_db_new.stat.exists | default(false)
+      changed_when: true
 
     - name: Initialize AIDE database (first run only)
       when:

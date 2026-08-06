@@ -142,6 +142,8 @@
     version: HEAD
     depth: "{{ item.depth | default(omit) }}"
     accept_hostkey: true
+  environment:
+    GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
@@ -171,6 +173,7 @@
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
   environment:
     LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
+    GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging on expired HTTPS auth
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"

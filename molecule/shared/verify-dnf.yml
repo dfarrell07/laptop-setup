@@ -128,6 +128,14 @@
   changed_when: false
   when: verify_kernel_cmdline.stat.exists
 
+- name: Assert /etc/kernel/cmdline contains lockdown={{ system_kernel_lockdown }}
+  ansible.builtin.command:
+    cmd: grep -q 'lockdown={{ system_kernel_lockdown }}' /etc/kernel/cmdline
+  changed_when: false
+  when:
+    - verify_kernel_cmdline.stat.exists
+    - system_kernel_lockdown | length > 0
+
 # --- repos_dnf role: third-party repo files ---
 - name: Verify tailscale-stable.repo exists
   ansible.builtin.stat:

@@ -226,3 +226,4 @@
   when:
     - not is_apt  # Debian uses 'sudo' group not 'wheel'; skip entirely
     - not csb_rhel
+    - not system_is_container  # /etc/pam.d/su absent in minimal containers

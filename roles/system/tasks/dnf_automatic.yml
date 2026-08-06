@@ -57,7 +57,7 @@
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
-      ExecStartPost=/usr/bin/bash -c '/usr/bin/aide --update; mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
+      ExecStartPost=/usr/bin/bash -c '/usr/bin/aide --update && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
     mode: "0644"
   when:

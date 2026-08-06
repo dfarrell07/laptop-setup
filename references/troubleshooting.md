@@ -47,7 +47,7 @@ Running `make smoke-test` immediately after `make all` on a first provision prod
 
 **Vault/YubiKey-dependent** (clear by populating vault and re-provisioning):
 - `ssh-signing-key-file`, `authorized-keys-exists` — SSH key fields empty in plaintext vault
-- `git-commit.gpgsign`, `git-tag.gpgsign`, `git-gpg.format`, `git-gpg.ssh.allowedSignersFile`, `git-user.signingkey` — downgraded to WARN while signing pub key is absent
+- `git-signing-config` — consolidated WARN while signing pub key is absent (covers commit.gpgsign, tag.gpgsign, gpg.format, gpg.ssh.allowedSignersFile, user.signingkey)
 - `git-allowed-signers` — file not generated until signing key is deployed from vault
 - `yubikey`, `ssh-agent-key`, `github-ssh-auth` — YubiKey not plugged in or not yet enrolled
 - `vault-pass-stub` — `scripts/vault-pass.sh` is still the CI dummy stub created by `make bootstrap`; clears after replacing it with a real YubiKey HMAC-SHA1 implementation (see `SECURITY.md` "Setting Up vault-pass.sh")
@@ -1000,6 +1000,39 @@ system_dot_mode: "no"
 **Fix (VPN split-DNS issue):** If internal hostnames fail on VPN, check whether the VPN pushes DNS search domains via `resolvectl status`. VPN-pushed specific domains (e.g., `~redhat.com`) win over the `~.` catch-all automatically — if split-DNS is failing, the VPN may not be integrating with systemd-resolved correctly. Run `make system` with `system_dns_domains: ""` to remove the catch-all if needed.
 
 **CSB note:** This resolved config is skipped entirely on CSB hosts (the task has `when: not csb_detected`).
+
+---
+
+## system: resolv.conf Symlink Fails (NetworkManager Controls resolv.conf)
+
+**Symptom:** The `Ensure resolv.conf points to systemd-resolved stub` task fails with a permission or conflict error. `/etc/resolv.conf` is a regular file managed by NetworkManager, not a symlink to the resolved stub.
+
+**Root Cause:** NetworkManager writes `/etc/resolv.conf` directly when it is not configured to delegate DNS to systemd-resolved. In this state, the symlink task cannot replace a NM-owned file — and even if it could, NM would overwrite it on the next network event.
+
+**Fix:** Configure NetworkManager to use systemd-resolved as the DNS backend:
+
+```bash
+nmcli general hostname "$(hostname)"   # triggers NM to write dns=systemd-resolved
+# or set it directly:
+sudo tee /etc/NetworkManager/conf.d/99-resolved.conf <<'EOF'
+[main]
+dns=systemd-resolved
+systemd-resolved=false
+EOF
+sudo systemctl restart NetworkManager
+sudo systemctl restart systemd-resolved
+```
+
+After restarting both services, NM will stop managing `/etc/resolv.conf` and systemd-resolved will own it. Re-run `make system` (or the DNS task individually) to apply the symlink cleanly.
+
+Verify:
+```bash
+readlink /etc/resolv.conf
+# Expected: /run/systemd/resolve/stub-resolv.conf
+resolvectl status
+```
+
+**CSB IT ticket:** No. NetworkManager configuration is a user-level file drop-in requiring only sudo.
 
 ---
 

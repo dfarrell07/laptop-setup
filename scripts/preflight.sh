@@ -246,7 +246,7 @@ if [[ "$OS_FAMILY" != "darwin" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      if grep -qE '^pipelining\s*=\s*true' "${SCRIPT_DIR}/../ansible.cfg" 2>/dev/null; then
+      if grep -qiE '^pipelining\s*=\s*(true|yes|1|on)' "${SCRIPT_DIR}/../ansible.cfg" 2>/dev/null; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
       else
         record "fapolicyd" "fail" "active and enforcing — pipelining NOT set in ansible.cfg; Ansible module execution will be blocked"

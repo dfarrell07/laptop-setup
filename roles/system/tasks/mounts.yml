@@ -25,6 +25,8 @@
   ansible.builtin.systemd:
     daemon_reload: true
   changed_when: false
+  failed_when: false
+  when: not system_is_container
 
 - name: Check /tmp current mount options
   ansible.builtin.command:
@@ -42,6 +44,7 @@
   register: _tmp_remount_result
   changed_when: _tmp_remount_result.rc == 0
   when:
+    - not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
     - >-
       'nosuid' not in (system_tmp_opts.stdout | default('')) or
       'nodev' not in (system_tmp_opts.stdout | default('')) or
@@ -64,7 +67,7 @@
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
-    line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,usrquota 0 0'
+    line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,x-systemd.graceful-option=usrquota 0 0'
     create: true   # must be true on Fedora 44 — /dev/shm has no fstab line by default
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
@@ -293,6 +296,18 @@
     - not csb_rhel
   failed_when: false
 
+- name: Warn if /boot has no fstab entry — fstab hardening cannot persist
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /boot is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/nodev/noexec
+      is applied for this session but will not survive a reboot. Add /boot to /etc/fstab
+      to make hardening persistent.
+  when:
+    - system_boot_mountpoint.rc == 0
+    - not csb_rhel
+    - system_boot_fstab_opts.rc | default(-1) != 0
+
 - name: Add nosuid to /boot fstab entry
   ansible.builtin.lineinfile:
     path: /etc/fstab
@@ -435,6 +450,18 @@
     - system_boot_efi_mountpoint.rc == 0
     - not csb_rhel
   failed_when: false
+
+- name: Warn if /boot/efi has no fstab entry — fstab hardening cannot persist
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /boot/efi is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/noexec
+      is applied for this session but will not survive a reboot. Add /boot/efi to /etc/fstab
+      to make hardening persistent.
+  when:
+    - system_boot_efi_mountpoint.rc == 0
+    - not csb_rhel
+    - system_boot_efi_fstab_opts.rc | default(-1) != 0
 
 - name: Add nosuid to /boot/efi fstab entry
   ansible.builtin.lineinfile:
@@ -615,4 +642,7 @@
     - name: Reload systemd after removing var-tmp.mount  # noqa: no-handler
       ansible.builtin.systemd:
         daemon_reload: true
-      when: system_var_tmp_unit_removal.changed
+      when:
+        - system_var_tmp_unit_removal.changed
+        - not system_is_container
+      failed_when: false

@@ -59,6 +59,11 @@
   failed_when: false
   notify: Restart NetworkManager
 
+# On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
+- name: Set WiFi power save effective flag
+  ansible.builtin.set_fact:
+    _system_wifi_powersave: "{{ system_wifi_powersave | default(not csb_rhel) | bool }}"
+
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:
     content: |
@@ -67,7 +72,15 @@
       wifi.powersave=2
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
+  when: _system_wifi_powersave
   failed_when: false
+  notify: Restart NetworkManager
+
+- name: Remove WiFi power saving config when disabled
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    state: absent
+  when: not _system_wifi_powersave
   notify: Restart NetworkManager
 
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)

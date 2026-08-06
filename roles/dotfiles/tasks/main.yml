@@ -2,6 +2,30 @@
 # roles/dotfiles/tasks/main.yml
 # Deploy configuration files (copy + template), OS-conditional.
 
+- name: Ensure user config directories exist (mode 0700)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ ansible_facts['user_dir'] }}/.config/claude"
+    - "{{ ansible_facts['user_dir'] }}/.local/state/zsh"
+    - "{{ ansible_facts['user_dir'] }}/tmp"
+    - "{{ ansible_facts['user_dir'] }}/.config/gh"
+    - "{{ ansible_facts['user_dir'] }}/.ssh"
+
+- name: Ensure user config directories exist (mode 0755)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks"
+    - "{{ ansible_facts['user_dir'] }}/.config/ripgrep"
+    - "{{ ansible_facts['user_dir'] }}/.config/tmux"
+    - "{{ ansible_facts['user_dir'] }}/.config/nvim"
+    - "{{ ansible_facts['user_dir'] }}/.config/direnv"
+
 - name: Stat oh-my-zsh dest directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
@@ -69,24 +93,6 @@
     mode: "0700"
   when: is_macos
 
-- name: Ensure Claude config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
-    state: directory
-    mode: "0700"
-
-- name: Ensure zsh XDG state directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.local/state/zsh"
-    state: directory
-    mode: "0700"
-
-- name: Ensure ~/tmp exists for GOTMPDIR (go test exec path must not be noexec)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/tmp"
-    state: directory
-    mode: "0700"
-
 - name: Deploy zshrc
   ansible.builtin.template:
     src: zshrc.j2
@@ -122,12 +128,6 @@
     src: gitconfig.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/config"
     mode: "0644"
-- name: Ensure git global hook template directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks"
-    state: directory
-    mode: "0755"
-
 - name: Deploy gitleaks pre-commit hook
   ansible.builtin.copy:
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-commit"
@@ -241,12 +241,6 @@
         exec "$_repo_hook" "$@"
       fi
 
-- name: Ensure gh config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/gh"
-    state: directory
-    mode: "0700"
-
 - name: Deploy gh CLI config
   ansible.builtin.copy:
     content: |
@@ -273,23 +267,11 @@
     src: gitignore_global.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/ignore"
     mode: "0644"
-- name: Ensure ripgrep config directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/ripgrep"
-    state: directory
-    mode: "0755"
-
 - name: Deploy ripgreprc
   ansible.builtin.template:
     src: ripgreprc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
-- name: Ensure tmux config directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/tmux"
-    state: directory
-    mode: "0755"
-
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2
@@ -306,12 +288,6 @@
     src: vimrc
     dest: "{{ ansible_facts['user_dir'] }}/.vimrc"
     mode: "0644"
-- name: Ensure nvim config directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/nvim"
-    state: directory
-    mode: "0755"
-
 - name: Deploy nvim init.vim (sources ~/.vimrc)
   ansible.builtin.copy:
     content: |
@@ -463,12 +439,6 @@
   ansible.builtin.set_fact:
     dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in dotfiles_ssh_kex_check.stdout }}"
 
-- name: Ensure ~/.ssh directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.ssh"
-    state: directory
-    mode: "0700"
-
 - name: Assert real_user_id matches valid Linux username character set
   ansible.builtin.assert:
     that:
@@ -500,12 +470,15 @@
     mode: "0644"
   when: is_linux
 
+# /run/user/$UID is a tmpfs cleared on reboot; the user-tmpfiles.d configs deployed
+# above recreate these dirs on every login via systemd-tmpfiles. These tasks only
+# ensure the dirs exist immediately during the current Ansible session (before reboot).
+# The file module truthfully reports changed when the dir is absent and must be created.
 - name: Create SSH socket directory in XDG runtime dir
   ansible.builtin.file:
     path: "/run/user/{{ ansible_facts['user_uid'] }}/ssh"
     state: directory
     mode: "0700"
-  changed_when: false
   when: is_linux
 
 - name: Create tmux socket directory in XDG runtime dir
@@ -513,14 +486,7 @@
     path: "/run/user/{{ ansible_facts['user_uid'] }}/tmux"
     state: directory
     mode: "0700"
-  changed_when: false
   when: is_linux
-
-- name: Ensure direnv config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/direnv"
-    state: directory
-    mode: "0755"
 
 - name: Deploy safe direnv config
   ansible.builtin.copy:

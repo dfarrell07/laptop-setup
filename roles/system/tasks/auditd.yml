@@ -1,10 +1,16 @@
 ---
 # --- Auditd (audit daemon + rules) ---
+# CI gap: auditd install, config, and rules are NOT exercised in Podman-based molecule CI.
+# audit post-install scripts attempt to start auditd; the kernel audit subsystem is disabled
+# in privileged containers and auditd cannot set its priority (EPERM), causing cascading
+# systemd restart failures that crash PID 1. make test-vm provides full auditd coverage.
 - name: Install audit package
   ansible.builtin.dnf:
     name: audit
     state: present
-  when: is_dnf
+  when:
+    - is_dnf
+    - not system_is_container
   register: _audit_pkg_install
   failed_when: false
 
@@ -20,7 +26,9 @@
   ansible.builtin.apt:
     name: auditd
     state: present
-  when: is_apt
+  when:
+    - is_apt
+    - not system_is_container
 
 - name: Assert real_user_home is a valid absolute path before deploying auditd rules
   ansible.builtin.assert:
@@ -41,6 +49,7 @@
   notify: Restart auditd
   when:
     - not csb_rhel  # no SIEM at home
+    - not system_is_container  # audit package not installed in container CI (see comment above)
     - _audit_pkg_install.rc | default(0) == 0
 
 - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
@@ -53,6 +62,7 @@
   notify: Restart auditd
   when:
     - not csb_rhel  # no audisp-remote at home
+    - not system_is_container  # audit package not installed in container CI (see comment above)
     - _audit_pkg_install.rc | default(0) == 0
 
 - name: Ensure auditd is enabled and started

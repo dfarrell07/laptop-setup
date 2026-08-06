@@ -15,8 +15,14 @@ blacklist hfs
 install hfs /bin/false
 blacklist hfsplus
 install hfsplus /bin/false
+{% if system_disable_udf | bool %}
+# UDF filesystem disabled — system_disable_udf=true in config.yml.
+# UDF (Universal Disk Format) is used on USB drives, DVDs, and Blu-rays; pairs with
+# system_disable_usb_storage to block both the transport layer and the filesystem layer.
+# Default is true (disabled) — set false in config.yml if UDF media is required.
 blacklist udf
 install udf /bin/false
+{% endif %}
 
 # Unused network protocols — CVE-validated attack surface
 # Note: sctp is NOT blacklisted — OVN-Kubernetes kind cluster tests and

@@ -17,7 +17,7 @@ module.exports = {
       'common', 'repos-dnf', 'packages', 'dotfiles', 'ssh', 'git-repos',
       'notes', 'redhat', 'containers', 'desktop', 'system', 'distrobox',
       'claude', 'ci', 'docs', 'chore', 'smoke', 'molecule', 'multi',
-      'sshd', 'nm', 'auditd', 'backup', 'handlers', 'security', 'deps',
+      'sshd', 'nm', 'auditd', 'backup', 'handlers', 'security',
       'vault', 'preflight',
     ]],
   },

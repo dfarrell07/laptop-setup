@@ -233,6 +233,17 @@
         that: not (verify_fw_drop_ifaces.stdout | regex_search('tun[0-9]+'))
         fail_msg: "tun* interface found in drop zone — VPN tunnel traffic will be silently dropped"
 
+    - name: Check port 722/tcp is open in drop zone
+      ansible.builtin.command: firewall-cmd --zone=drop --query-port={{ ssh_port }}/tcp
+      register: verify_fw_port
+      changed_when: false
+      become: true
+
+    - name: Assert port 722/tcp is open in drop zone
+      ansible.builtin.assert:
+        that: verify_fw_port.rc == 0
+        fail_msg: "Port {{ ssh_port }}/tcp not open in drop zone"
+
     - name: Check sysctl net.core.bpf_jit_harden
       ansible.builtin.command: sysctl -n net.core.bpf_jit_harden
       register: verify_bpf

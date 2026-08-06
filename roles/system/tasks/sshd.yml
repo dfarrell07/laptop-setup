@@ -8,6 +8,7 @@
   failed_when: false
   when:
     - ansible_facts.services['sshd.service'] is defined
+    - not system_is_container  # starting sshd triggers daemon-reload, crashes privileged Podman containers
 
 - name: SSHD pre-deployment checks
   when:

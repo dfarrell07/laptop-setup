@@ -1,12 +1,16 @@
 ---
-# Prepare: wait for systemd to finish initializing before converge.
+# Prepare: wait for systemd to finish initializing before converge, then stabilize.
 # Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
 # before all late-init units have activated, which can disrupt
 # /root/.ansible/tmp or the connection itself and cause non-deterministic
 # UNREACHABLE failures at different task offsets.
-- name: Prepare (wait for systemd)
+# auditd fails at container startup (kernel audit disabled + EPERM from setpriority).
+# The repeated restart attempts stress systemd PID 1. Masking auditd here prevents
+# further restart loops from interfering with converge tasks.
+- name: Prepare (wait for systemd, then stabilize)
   hosts: all
   gather_facts: false
+  become: true
 
   tasks:
     - name: Wait for systemd to reach running or degraded state
@@ -14,5 +18,15 @@
       register: systemd_state
       retries: 30
       delay: 2
-      until: systemd_state.rc == 0 and systemd_state.stdout in ['running', 'degraded']
+      until: systemd_state.stdout in ['running', 'degraded']
+      failed_when: false
       changed_when: false
+
+    - name: Mask auditd to stop restart cascade (kernel audit disabled in containers)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: true
+      loop:
+        - auditd.service
+        - audit-rules.service
+      failed_when: false

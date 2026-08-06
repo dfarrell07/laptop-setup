@@ -251,6 +251,7 @@
     msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
   when: >-
     system_lockdown_result is changed or
+    system_lockdown_stale_remove_result is changed or
     system_lockdown_remove_result is changed or
     system_iommu_amd_result is changed or
     system_iommu_intel_result is changed or

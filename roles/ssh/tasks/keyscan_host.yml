@@ -7,6 +7,7 @@
       ansible.builtin.command:
         cmd: ssh-keyscan -T 10 {{ _keyscan_host }}
       register: ssh_keyscan_result
+      timeout: 15
       changed_when: false
       failed_when: >-
         ssh_keyscan_result.rc != 0 or

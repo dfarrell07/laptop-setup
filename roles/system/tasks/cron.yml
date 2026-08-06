@@ -11,7 +11,9 @@
     file_type: file
   register: system_existing_crontabs
   failed_when: false
-  when: not csb_rhel
+  when:
+    - not system_is_container
+    - not csb_rhel
 
 - name: Alert operator about user crontabs that will be silently blocked
   ansible.builtin.debug:
@@ -20,6 +22,7 @@
       {{ system_existing_crontabs.files | map(attribute='path') | list }}.
       Review these jobs before proceeding.
   when:
+    - not system_is_container
     - (system_existing_crontabs.files | default([])) | length > 0
     - not csb_rhel
 
@@ -31,7 +34,9 @@
   loop:
     - /etc/cron.allow
     - /etc/at.allow
-  when: not csb_rhel
+  when:
+    - not system_is_container
+    - not csb_rhel
 
 - name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
   ansible.builtin.file:
@@ -40,7 +45,9 @@
   loop:
     - /etc/cron.deny
     - /etc/at.deny
-  when: not csb_rhel
+  when:
+    - not system_is_container
+    - not csb_rhel
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
   ansible.builtin.file:
@@ -63,5 +70,7 @@
       mode: "0700"
   loop_control:
     label: "{{ item.path }}"
-  when: not csb_rhel
+  when:
+    - not system_is_container
+    - not csb_rhel
   failed_when: false

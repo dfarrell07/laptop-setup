@@ -19,6 +19,10 @@
         name: openssh-server
         state: present
         update_cache: true
+      # policy-rc.d (exit 101) is pre-installed in the geerlingguy image and prevents
+      # postinst from auto-starting sshd.service/ssh.socket — no policy-rc.d setup needed.
+      # sshd is intentionally left stopped after install; sshd.service is still DEFINED
+      # (so the sshd.yml hardening block runs), but starting sshd would crash the container.
 
   roles:
     - role: system
