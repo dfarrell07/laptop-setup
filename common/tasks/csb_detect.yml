@@ -4,21 +4,14 @@
 # Sets facts consumed by later roles to adapt behavior.
 
 # ---------------------------------------------------------------------------
-# 1. OS family detection
+# 1. OS family and hostname detection
 # ---------------------------------------------------------------------------
-- name: Detect OS family
+- name: Detect OS family and CSB hostname suffix
   ansible.builtin.set_fact:
     is_rhel: "{{ ansible_facts['distribution'] == 'RedHat' }}"
     is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
     is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
-  become: false
-
-# ---------------------------------------------------------------------------
-# 1b. CSB hostname detection
-# ---------------------------------------------------------------------------
-- name: Detect CSB hostname suffix
-  ansible.builtin.set_fact:
     _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
 

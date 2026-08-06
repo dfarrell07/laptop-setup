@@ -71,6 +71,8 @@
 - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
   ansible.builtin.set_fact:
     vault_stub_warned: true
-  when: vault_ssh_auth_key | default('') | length == 0
+  when:
+    - vault_ssh_auth_key | default('') | length == 0
+    - vault_stub_warned is not defined
   become: false
   tags: [always]
