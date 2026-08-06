@@ -48,6 +48,7 @@
     - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel
+    - not system_is_container
   failed_when: false
 
 - name: Deploy AIDE update hook for dnf-automatic
@@ -65,5 +66,6 @@
     - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # dnf-automatic not installed on CSB
+    - not system_is_container
   notify: Restart dnf-automatic timer
   failed_when: false

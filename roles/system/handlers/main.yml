@@ -121,9 +121,7 @@
     cmd: dconf update
   become: true
   changed_when: true
-  # No failed_when: false — handler is only notified from dconf.yml which is
-  # guarded by '"gdm.service" in ansible_facts.services', so dconf is always
-  # present when this runs. Surface real failures.
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart dnf-automatic timer
   ansible.builtin.systemd:
