@@ -22,24 +22,23 @@
         dest: /etc/systemd/coredump.conf.d/coredump.conf
         mode: "0644"
 
-- name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      # CIS 1.5.1: restrict core dump acquisition to root-controlled processes.
-      # Hard limit prevents users from overriding the soft limit.
-      *    hard    core    0
-      root hard    core    0
-    dest: /etc/security/limits.d/90-coredump.conf
-    mode: "0644"
-  when:
-    - system_coredump_storage == 'none'
-    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
+- name: Manage RLIMIT_CORE limits
+  when: not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
+  block:
+    - name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          # CIS 1.5.1: restrict core dump acquisition to root-controlled processes.
+          # Hard limit prevents users from overriding the soft limit.
+          *    hard    core    0
+          root hard    core    0
+        dest: /etc/security/limits.d/90-coredump.conf
+        mode: "0644"
+      when: system_coredump_storage == 'none'
 
-- name: Remove RLIMIT_CORE limits when coredump storage is active
-  ansible.builtin.file:
-    path: /etc/security/limits.d/90-coredump.conf
-    state: absent
-  when:
-    - system_coredump_storage != 'none'
-    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
+    - name: Remove RLIMIT_CORE limits when coredump storage is active
+      ansible.builtin.file:
+        path: /etc/security/limits.d/90-coredump.conf
+        state: absent
+      when: system_coredump_storage != 'none'
