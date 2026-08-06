@@ -7,11 +7,12 @@
 # sshd block is NOT skipped (unlike the genuinely container-incompatible behaviors below).
 - name: Compute OS detection facts (mirrors csb_detect.yml for system role pre-context)
   # In site.yml, csb_detect.yml runs in Play 1 pre_tasks before the system role, setting
-  # is_dnf/is_rhel/is_fedora/is_linux via set_fact (p19) which overrides vars.yml (p18).
+  # is_dnf/is_apt/is_rhel/is_fedora/is_linux via set_fact (p19) which overrides vars.yml (p18).
   # In molecule converge.yml, csb_detect.yml runs later (common role, Play 3). This task
-  # replicates the same detection so system role tasks that guard on is_dnf see the right value.
+  # replicates the same detection so system role tasks that guard on is_dnf/is_apt see the right value.
   ansible.builtin.set_fact:
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+    is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
     is_rhel: "{{ ansible_facts['distribution'] == 'RedHat' }}"
     is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"

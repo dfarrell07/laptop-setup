@@ -393,7 +393,7 @@
   ansible.builtin.assert:
     that: >-
       verify_safe_directory_common.stdout_lines | default([])
-      | select('match', r'^\*{1,2}$|^/$') | list | length == 0
+      | select('match', '^\*{1,2}$|^/$') | list | length == 0
     fail_msg: >-
       safe.directory contains a wildcard entry — claude role cleanup task regression?
       (shell task requires executable: /bin/bash for set -o pipefail + [[ ]] on Debian/dash)
@@ -501,12 +501,12 @@
   ansible.builtin.command:
     cmd: >-
       python3 -c "
-      import json, sys
-      d = json.load(open('{{ ansible_user_dir }}/.claude/settings.local.json'))
-      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
-      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)'
-      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false'
-      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+      import json, sys;
+      d = json.load(open('{{ ansible_user_dir }}/.claude/settings.local.json'));
+      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
+      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
+      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
+      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
       "
   changed_when: false
@@ -528,12 +528,12 @@
   ansible.builtin.command:
     cmd: >-
       python3 -c "
-      import json, sys
-      d = json.load(open('{{ ansible_user_dir }}/.claude-personal/settings.local.json'))
-      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
-      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)'
-      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false'
-      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+      import json, sys;
+      d = json.load(open('{{ ansible_user_dir }}/.claude-personal/settings.local.json'));
+      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
+      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
+      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
+      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
       "
   changed_when: false

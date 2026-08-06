@@ -116,8 +116,8 @@ make repos-downstream # downstream repos only
 - **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks),
   backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
 - **molecule/** — Test scenarios (fedora, rocky, container, container-offline, container-offline-distrobox, distrobox-role, debian, vm, macos, packages-binaries); `shared/` holds reusable task includes (ci-pre-tasks.yml, capture-user-identity.yml, gather-minimal-facts.yml, verify-* checks, etc.) imported by multiple scenario converge/verify playbooks
-- **System role task split**: `roles/system/tasks/main.yml` (orchestrator) delegates to `mounts.yml` (filesystem/tmpfs hardening) and `kernel_lockdown.yml` (grubby kernel cmdline lockdown); edit the sub-file, not main.yml, when touching those subsystems
-- **Packages role task split**: `roles/packages/tasks/main.yml` delegates binary installs to `install_binary.yml` (single-file curl+install) and `install_tarball.yml` (tar.gz extract + copy); add new binaries in the appropriate extractor file
+- **System role task split**: `roles/system/tasks/main.yml` (orchestrator) delegates to `mounts.yml` (filesystem/tmpfs hardening), `kernel_lockdown.yml` (grubby kernel cmdline lockdown), `pam.yml` (PAM stack authselect/faillock), and `account_hardening.yml` (account lockout/password policy); edit the sub-file, not main.yml, when touching those subsystems
+- **Packages role task split**: `roles/packages/tasks/main.yml` delegates binary installs to `install_binary.yml` (single-file curl+install), `install_tarball.yml` (tar.gz extract + copy), and `install_subctl_versions.yml` (multi-version subctl fetcher for work profile); add new binaries in the appropriate extractor file
 
 ## Key Patterns
 
