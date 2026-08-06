@@ -765,7 +765,7 @@
     state: enabled
   vars:
     _drop_exclude_re: '^(lo|tailscale\d*|tun\d*|virbr.*|podman.*|br-.*|veth.*|docker.*|kind.*)$'
-  loop: "{{ ansible_facts['interfaces'] | reject('match', _drop_exclude_re) | list }}"
+  loop: "{{ ansible_facts['interfaces'] | default([]) | reject('match', _drop_exclude_re) | list }}"
   register: _system_iface_drop_zone
   when:
     - system_firewalld_running | bool
@@ -1438,19 +1438,13 @@
   notify: Restart bluetooth
 
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
-- name: Mask thermald on non-Intel hardware
+- name: Mask/unmask thermald (Intel-only daemon)
+  vars:
+    _intel: "{{ 'Intel' in (ansible_facts['processor'] | join(' ')) }}"
   ansible.builtin.systemd:
     name: thermald
-    masked: true
-    state: stopped
-  when: "'Intel' not in (ansible_facts['processor'] | join(' '))"
-  failed_when: false
-
-- name: Unmask thermald on Intel hardware
-  ansible.builtin.systemd:
-    name: thermald
-    masked: false
-  when: "'Intel' in (ansible_facts['processor'] | join(' '))"
+    masked: "{{ not _intel }}"
+    state: "{{ 'stopped' if not _intel else omit }}"
   failed_when: false
 
 # --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
@@ -2771,17 +2765,10 @@
   notify: Restart systemd-journald
 
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
-- name: Install logrotate (Debian/Ubuntu)
-  ansible.builtin.apt:
+- name: Install logrotate
+  ansible.builtin.package:
     name: logrotate
     state: present
-  when: ansible_facts['pkg_mgr'] == 'apt'
-
-- name: Install logrotate (Fedora/RHEL)
-  ansible.builtin.dnf:
-    name: logrotate
-    state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
 - name: Deploy logrotate config for sudo.log
   ansible.builtin.copy:
@@ -2824,30 +2811,23 @@
     - (system_existing_crontabs.files | default([])) | length > 0
     - not csb_rhel
 
-- name: Restrict cron access to root only
+- name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
   ansible.builtin.copy:
     content: "root\n"
-    dest: /etc/cron.allow
+    dest: "{{ item }}"
     mode: "0600"
+  loop:
+    - /etc/cron.allow
+    - /etc/at.allow
   when: not csb_rhel
 
-- name: Restrict at access to root only
-  ansible.builtin.copy:
-    content: "root\n"
-    dest: /etc/at.allow
-    mode: "0600"
-  when: not csb_rhel
-
-- name: Remove cron.deny (CIS 5.1.8 — cron.allow is authoritative)
+- name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
   ansible.builtin.file:
-    path: /etc/cron.deny
+    path: "{{ item }}"
     state: absent
-  when: not csb_rhel
-
-- name: Remove at.deny (CIS 5.1.9 — at.allow is authoritative)
-  ansible.builtin.file:
-    path: /etc/at.deny
-    state: absent
+  loop:
+    - /etc/cron.deny
+    - /etc/at.deny
   when: not csb_rhel
 
 - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
