@@ -40,7 +40,7 @@ packages_security:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
   - libfido2  # Fedora 44: libssh dep pulls it in; needed explicitly on RHEL/Rocky
-  - openssl
+  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets

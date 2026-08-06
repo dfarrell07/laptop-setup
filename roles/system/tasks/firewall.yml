@@ -102,6 +102,7 @@
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
+    - is_fedora
   failed_when: false
 
 - name: Remove broad port rules from FedoraWorkstation zone
@@ -117,6 +118,7 @@
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
+    - is_fedora
   failed_when: false
 
 - name: Enable ICMP block inversion on drop zone
