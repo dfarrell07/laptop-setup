@@ -454,6 +454,8 @@ elif [[ "$homedir_perms" =~ ^[0-9]?7[0145]0$ ]]; then record "home-dir-perms" "P
 elif [[ -f /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
      && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
   record "home-dir-perms" "WARN" "RHEL CSB: IPA/oddjob-mkhomedir manages home perms ($homedir_perms); 0750 not enforced by Ansible (not csb_rhel guard)"
+elif $USER_ONLY && grep -qiE '^ID(_LIKE)?=.*rhel' /etc/os-release 2>/dev/null; then
+  record "home-dir-perms" "WARN" "RHEL-compatible in user-only mode: home perms ($homedir_perms) may be managed by csb_rhel path; system role skips chmod when csb_rhel=true"
 else record "home-dir-perms" "FAIL" "permissions $homedir_perms, expected ≤750 (CIS — owner full, group no-write, others none)"; fi
 
 # --- Git security checks ---
