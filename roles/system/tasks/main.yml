@@ -742,7 +742,9 @@
     permanent: true
     immediate: true
     state: enabled
-  loop: "{{ ansible_facts['interfaces'] | reject('match', '^(lo|tailscale\\d*|tun\\d*|virbr.*|podman.*|br-.*|veth.*|docker.*)$') | list }}"
+  vars:
+    _drop_exclude_re: '^(lo|tailscale\d*|tun\d*|virbr.*|podman.*|br-.*|veth.*|docker.*|kind.*)$'
+  loop: "{{ ansible_facts['interfaces'] | reject('match', _drop_exclude_re) | list }}"
   register: _system_iface_drop_zone
   when:
     - system_firewalld_running | bool
@@ -767,7 +769,9 @@
     - cockpit
   when:
     - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
+  # No interface is ever assigned to the public zone on hardened hosts; cleaning
+  # its default services is safe on all tiers (including CSB where IT manages
+  # zone assignments but leaves default services in place).
   failed_when: false
 
 - name: Remove default services from FedoraWorkstation zone
@@ -1704,6 +1708,20 @@
   # On first provision this task runs in Play 1 before the packages exist — usermod
   # fails with "group does not exist". failed_when: false prevents play abort;
   # the packages role re-runs this after installing libvirt, completing membership.
+
+- name: Start virtnetworkd service to initialize libvirt firewall zone
+  ansible.builtin.systemd:
+    name: virtnetworkd.service
+    state: started
+  when:
+    - system_enable_libvirtd | bool
+    - system_firewalld_running | bool
+    - (system_virtqemud_check.rc | default(-1)) == 0
+  failed_when: false
+  # Starting the service (not just the socket) ensures virtnetworkd creates the
+  # libvirt firewall zone in firewalld before the ssh removal task below runs.
+  # Socket-based activation is lazy; the zone may not exist until a client connects.
+  # No-op on first provision when libvirt is not yet installed.
 
 - name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
   ansible.posix.firewalld:

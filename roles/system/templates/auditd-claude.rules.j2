@@ -18,6 +18,16 @@
 # so those paths cannot be excluded by exe= without per-toolchain entries.
 -a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/compile -k exclude-go-build
 -a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/link -k exclude-go-build
+# Build tools generate thousands of delete/rename events during normal operation
+# (cargo clean, npm install, git checkout). Exclude only those specific syscalls;
+# -w watch rules use the inode-hash path and are unaffected by these exclusions,
+# and other syscall rules (privilege-escalation, bpf, perm_mod) remain active.
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/git -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F exe=/usr/bin/git -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/npm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F exe=/usr/bin/npm -k exclude-build-deletes
 
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
@@ -165,7 +175,7 @@
 
 # File deletion by users (CIS 4.1.x)
 -a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F auid>=1000 -F auid!=-1 -k delete
--a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -F auid>=1000 -F auid!=-1 -k delete
+-a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F auid>=1000 -F auid!=-1 -k delete
 
 # Filesystem mounts (CIS 4.1.x)
 -a always,exit -F arch=b64 -S mount -F auid>=1000 -F auid!=-1 -k mounts

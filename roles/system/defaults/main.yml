@@ -93,6 +93,9 @@ system_usbguard_whitelist:
   - "allow id 3297:1969 name \"Moonlander*\" with-interface one-of { 03:*:* }"
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   # Interface class restriction excludes mass storage (08) and unexpected classes.
+  # NOTE: AMD machines (ThinkPad P16v Gen 1) report internal ports as 'not used',
+  # not 'hardwired'; this rule is a no-op on those hosts. Add per-device VID:PID
+  # rules via system_usbguard_extra_rules in config.yml for AMD internal devices.
   - "allow with-connect-type \"hardwired\" with-interface one-of { 03:*:* 09:*:* 0E:*:* 01:*:* E0:01:01 FF:*:* }"
   # STM32 DFU bootloader — Moonlander firmware flashing (Wally/qmk flash).
   # Re-enumerates as VID 0483:df11 when reset button pressed or QK_BOOT keycode used.
