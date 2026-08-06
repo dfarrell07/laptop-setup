@@ -1,9 +1,8 @@
 .PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
-       dotfiles packages repos notes repos-ovnk repos-konflux repos-personal \
-       repos-bpfman repos-downstream \
+       dotfiles packages repos notes repos-% \
        ssh desktop system repos-dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
-       smoke-test-container \
+       smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role \
        preflight guard-not-root \
@@ -110,20 +109,8 @@ repos: guard-not-root
 notes: guard-not-root
 	ansible-playbook site.yml --tags common,notes
 
-repos-ovnk: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=ovnk
-
-repos-konflux: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=konflux
-
-repos-personal: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=personal
-
-repos-bpfman: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=bpfman
-
-repos-downstream: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=downstream
+repos-%: guard-not-root
+	ansible-playbook site.yml --tags common,repos -e repo_category=$*
 
 ssh: guard-not-root
 	ansible-playbook site.yml --tags common,ssh
@@ -259,6 +246,9 @@ smoke-test:
 
 smoke-test-container:
 	scripts/smoke-test.sh --container $(CONTAINER)
+
+smoke-test-user:
+	scripts/smoke-test.sh --user-only
 
 # --- Vault ---
 

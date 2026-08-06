@@ -170,7 +170,7 @@ if [ -d "$_claude_projects_dir" ]; then
       cp -p "$proj_file" "$dest"
     fi
     count=$((count + 1))
-  done < <(find "$_claude_projects_dir" -type f -print0)
+  done < <(find "$_claude_projects_dir" -maxdepth 3 -type f -print0)
 fi
 
 # ~/.gnupg/private-keys-v1.d/ (directory of subkeys — copy all files)
