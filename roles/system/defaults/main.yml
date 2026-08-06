@@ -179,8 +179,10 @@ system_ipv6_accept_ra: 0
 system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 # Unprivileged BPF: 1=block unprivileged users but root can re-enable at runtime (default here;
 # needed for bpfman/bpftrace debugging). Value 2=write-once locked (root cannot re-enable).
-# Value 0=allow all (insecure). Override in config.yml if needed.
-system_unprivileged_bpf_disabled: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+# Value 0=allow all (insecure). Value 2=write-once Fedora 44 default (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
+# value 1 is not achievable on stock Fedora 44 — requires custom kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF=n).
+# Override in config.yml if needed.
+system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
 system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
                           # to add machine-specific sysctls without replacing the entire hardening dict.

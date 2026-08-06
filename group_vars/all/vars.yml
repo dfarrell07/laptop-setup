@@ -98,7 +98,7 @@ system_kexec_load_disabled: 0      # kdump requires kexec; CIS default is 1 (blo
 system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
 system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
 system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
-system_unprivileged_bpf_disabled: 1  # restrict unprivileged BPF (kernel.unprivileged_bpf_disabled)
+system_unprivileged_bpf_disabled: 2  # write-once on Fedora 44 (BPF_UNPRIV_DEFAULT_OFF); value 1 requires custom kernel
 system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
 ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]

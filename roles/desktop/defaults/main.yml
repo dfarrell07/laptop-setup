@@ -207,10 +207,10 @@ desktop_gnome_hardening_dconf:
     value: "false"
   # keyboard repeat delay — match Sway/i3 200ms
   - key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
-    value: "uint32 200"
+    value: "uint32 {{ desktop_wm_repeat_delay }}"
   # keyboard repeat interval — match Sway/i3 50 rep/s → 20ms
   - key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
-    value: "uint32 20"
+    value: "uint32 {{ (1000 / desktop_wm_repeat_rate) | int }}"
 
 desktop_macos_defaults:
   - domain: NSGlobalDomain
