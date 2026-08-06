@@ -18,9 +18,11 @@ runs:
 
     - name: Install Ansible collections (with retry)
       run: |
+        installed=false
         for attempt in 1 2 3; do
-          ansible-galaxy collection install -r requirements.yml && break
+          ansible-galaxy collection install -r requirements.yml && installed=true && break
           echo "Attempt $attempt failed, retrying in 15s..."
           sleep 15
         done
+        $installed || { echo 'All 3 collection install attempts failed'; exit 1; }
       shell: bash
