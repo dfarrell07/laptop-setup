@@ -45,9 +45,12 @@ packages_security:
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
-  - buildah
   - skopeo
   - distrobox
+
+# Work-profile-only container tools (OCI image builds — not needed for personal distrobox/podman-run usage)
+packages_containers_work:
+  - buildah
 
 # kubectl via dnf only when the OCP tarball download is skipped (personal profile,
 # non-x86_64, or packages_install_binaries=false). On work+x86_64 with

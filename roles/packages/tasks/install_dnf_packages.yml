@@ -13,6 +13,7 @@
              + packages_languages
              + packages_security
              + packages_containers
+             + (packages_containers_work if profile == 'work' else [])
              + (packages_containers_kubectl
                 if (profile != 'work'
                     or ansible_facts['architecture'] != 'x86_64'
@@ -40,6 +41,7 @@
              + packages_languages
              + packages_security
              + packages_containers
+             + (packages_containers_work if profile == 'work' else [])
              + (packages_containers_kubectl
                 if (profile != 'work'
                     or ansible_facts['architecture'] != 'x86_64'

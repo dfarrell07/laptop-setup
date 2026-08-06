@@ -300,6 +300,13 @@
     - is_linux
     - not system_is_container | default(false)  # files do not exist in containers (deploy was skipped)
 
+- name: Remove task queue poller script (when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
+    state: absent
+  when:
+    - not (claude_queue_enabled | bool)
+
 - name: Reload systemd user daemon after removing task queue unit files  # noqa: no-handler
   ansible.builtin.systemd:
     scope: user
@@ -310,6 +317,16 @@
     - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
     - _claude_queue_unit_removal.changed
   failed_when: false
+
+- name: Remove logrotate config for claude-queue-poller.log (when disabled)
+  ansible.builtin.file:
+    path: /etc/logrotate.d/claude-queue-poller
+    state: absent
+  become: true
+  tags: [become]
+  when:
+    - not (claude_queue_enabled | bool)
+    - is_linux
 
 # --- macOS: launchd cleanup when disabled ---
 - name: Unload task queue launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
