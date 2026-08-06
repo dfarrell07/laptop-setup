@@ -94,11 +94,13 @@ OPTIONAL_FILES=(
   .boto
   .claude.json
   .config/gcloud/application_default_credentials.json
+  .config/gcloud/credentials.db
   .kube/config
   .aws/credentials
   .aws/config
   .config/containers/auth.json
   .claude/.credentials.json
+  .claude/history.jsonl
   .claude-work/.credentials.json
   .claude-personal/.credentials.json
   .gnupg/trustdb.gpg
@@ -154,6 +156,22 @@ for key in "${HOME}/.ssh"/id_*; do
   fi
   count=$((count + 1))
 done
+
+# ~/.claude/projects/ (per-project Claude memories and history — recurse subdirs)
+_claude_projects_dir="${HOME}/.claude/projects"
+if [ -d "$_claude_projects_dir" ]; then
+  while IFS= read -r -d '' proj_file; do
+    rel="${proj_file#"${HOME}/"}"
+    dest="${BACKUP_DIR}/${rel}"
+    if [ "$DRY_RUN" = true ]; then
+      echo "[dry-run] would copy $proj_file -> $dest"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp -p "$proj_file" "$dest"
+    fi
+    count=$((count + 1))
+  done < <(find "$_claude_projects_dir" -type f -print0)
+fi
 
 # ~/.gnupg/private-keys-v1.d/ (directory of subkeys — copy all files)
 _gpg_dir="${HOME}/.gnupg/private-keys-v1.d"

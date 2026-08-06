@@ -17,9 +17,6 @@ ssh_git_signing_pubkey: "{{ vault_ssh_signing_key_pub | default('') }}"
 # Red Hat internal git key
 rh_git_key: "{{ vault_rh_git_key | default('') }}"
 
-# Internal hostnames (override in config.yml per-environment)
-dotfiles_internal_git_host: ""
-
 # Notes repo transcrypt password
 notes_transcrypt_password: "{{ vault_notes_transcrypt_password | default('') }}"
 
@@ -41,7 +38,7 @@ needs_container_tier: "host-only"
 # Cross-role variable baselines — allow standalone invocation of roles that consume
 # variables defined in other roles' defaults or default.config.yml (which only loads
 # during full playbook runs via pre_flight_checks.yml include_vars).
-packages_install_binaries: true  # roles/packages/defaults/main.yml:239; consumed by packages, claude
+packages_install_binaries: true  # roles/packages/defaults/main.yml:264; consumed by packages, claude
 
 # Feature toggle baselines (single source of truth) — eliminates | default(X) in role tasks.
 # Users override these in config.yml (higher precedence via include_vars). These are NOT
