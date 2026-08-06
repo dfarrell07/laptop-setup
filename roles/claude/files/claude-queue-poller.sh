@@ -9,6 +9,7 @@ LOG_DIR="${HOME}/.local/share/claude-queue/logs"
 LOCKFILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-queue.lock"
 MAX_TURNS="${CLAUDE_QUEUE_MAX_TURNS:-50}"
 TIMEOUT_SECONDS="${CLAUDE_QUEUE_TIMEOUT:-1800}"
+HOST_LABEL="${CLAUDE_QUEUE_HOST_LABEL:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
 
 # --- Repo maps (loaded from config file) ---
@@ -140,7 +141,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     --remove-label queued --add-label processing \
     || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping"; continue; }
   gh issue comment "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
-    --body "Processing started at $(date -Iseconds) on $(hostname)" || true
+    --body "Processing started at $(date -Iseconds)${HOST_LABEL:+ on ${HOST_LABEL}}" || true
 
   BRANCH_NAME="claude/${ISSUE_NUM}-$(slugify "$ISSUE_TITLE")"
   START_TIME=$(date +%s)
