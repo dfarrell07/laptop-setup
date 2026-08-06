@@ -17,6 +17,16 @@
         notes_enabled: true
         packages_go_install: []  # Go tools use changed_when: true — skip in CI to avoid idempotence failures
 
+    - name: Compute OS detection facts (mirrors csb_detect.yml — not called in macOS converge)
+      # group_vars/all/vars.yml sets is_macos: false / is_linux: true as static defaults.
+      # csb_detect.yml (which overrides these via set_fact) is only called from site.yml Play 1
+      # pre_tasks; the common role does not include it. Without this block every when: is_macos
+      # guard in packages/dotfiles/desktop/claude is skipped and every when: is_linux guard
+      # runs on macOS incorrectly. Pattern mirrors system-container-overrides.yml lines 18-19.
+      ansible.builtin.set_fact:
+        is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+        is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+
     - name: Create mock notes repo structure for CI
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"
 

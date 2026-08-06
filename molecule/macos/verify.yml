@@ -10,6 +10,7 @@
     - name: Set dotfiles_github_user for verify context
       ansible.builtin.set_fact:
         dotfiles_github_user: 'dfarrell07'
+        is_macos: true
 
   tasks:
     # --- Shared assertions (all platforms) ---
@@ -145,3 +146,16 @@
     - name: Check ansible-lint installed via pipx
       ansible.builtin.command: ansible-lint --version
       changed_when: false
+
+    # --- macOS application firewall ---
+    - name: Check macOS application firewall is enabled
+      ansible.builtin.command:
+        cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+      register: verify_fw
+      changed_when: false
+      failed_when: false
+
+    - name: Assert macOS firewall is enabled (State = 1)
+      ansible.builtin.assert:
+        that: "'State = 1' in verify_fw.stdout"
+        fail_msg: "macOS application firewall not enabled — desktop role firewall task regression"

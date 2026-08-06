@@ -141,11 +141,52 @@
   ansible.builtin.stat:
     path: /etc/yum.repos.d/tailscale-stable.repo
   register: verify_tailscale_repo
+  when: repo_tailscale
 
 - name: Assert tailscale-stable.repo was deployed by repos_dnf
   ansible.builtin.assert:
     that: verify_tailscale_repo.stat.exists
     fail_msg: "tailscale-stable.repo missing — repos_dnf role not exercised or template broken"
+  when: repo_tailscale
+
+- name: Verify mullvad.repo exists
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/mullvad.repo
+  register: verify_mullvad_repo
+  become: true
+  when: repo_mullvad | default(true) and is_dnf
+
+- name: Assert mullvad repo configured
+  ansible.builtin.assert:
+    that: verify_mullvad_repo.stat.exists
+    fail_msg: "mullvad repo not configured"
+  when: repo_mullvad | default(true) and is_dnf
+
+- name: Verify rpmfusion-free repo configured
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/rpmfusion-free.repo
+  register: verify_rpmfusion_free_repo
+  become: true
+  when: repo_rpmfusion_free and ansible_distribution == 'Fedora'
+
+- name: Assert rpmfusion-free repo exists
+  ansible.builtin.assert:
+    that: verify_rpmfusion_free_repo.stat.exists
+    fail_msg: "rpmfusion-free repo not configured"
+  when: repo_rpmfusion_free and ansible_distribution == 'Fedora'
+
+- name: Verify rpmfusion-nonfree repo configured
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/rpmfusion-nonfree.repo
+  register: verify_rpmfusion_nonfree_repo
+  become: true
+  when: repo_rpmfusion_nonfree and ansible_distribution == 'Fedora'
+
+- name: Assert rpmfusion-nonfree repo exists
+  ansible.builtin.assert:
+    that: verify_rpmfusion_nonfree_repo.stat.exists
+    fail_msg: "rpmfusion-nonfree repo not configured"
+  when: repo_rpmfusion_nonfree and ansible_distribution == 'Fedora'
 
 - name: Include containers.conf assertions
   ansible.builtin.import_tasks: verify-containers.yml

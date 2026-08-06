@@ -1,73 +1,53 @@
 ---
-# Prepare: wait for systemd to stabilize before converge.
-# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
-# before all late-init units have activated, which can disrupt
-# /root/.ansible/tmp or the connection itself and cause non-deterministic
-# UNREACHABLE failures at different task offsets.
+# Prepare: stabilize systemd, install pre-requisites, then re-stabilize.
+# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1.
 #
-# Key fix: systemctl is-system-running returns rc=1 for "degraded" state,
-# so the until condition must NOT require rc==0. Use stdout-only match.
+# Problem: openssh-server and policycoreutils-python-utils RPM post-install
+# scripts call %systemd_post → systemctl daemon-reload, which crashes a
+# fully-initialized systemd container.  Installing them during converge
+# pre_tasks hits a fully-loaded systemd and reliably crashes it.
 #
-# NOTE: do NOT modify /etc/systemd/system/ here — it triggers an inotify
-# daemon-reload during systemd init that can crash the container.
-- name: Prepare (wait for systemd, install openssh before converge)
+# Solution: install here during prepare, after an initial systemd-running wait.
+# After install, wait again so systemd can process the daemon-reload and
+# re-stabilize before the converge begins.
+#
+# NOTE: do NOT write to /etc/systemd/system/ here — inotify on that path
+# triggers a daemon-reload during systemd init that crashes the container.
+- name: Prepare (stabilize systemd, install prereqs, re-stabilize)
   hosts: all
   gather_facts: false
   become: true
-  ignore_unreachable: true  # allow retries when container is briefly unreachable during systemd startup
 
   tasks:
-    - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module
+    - name: Wait for container connection to be available
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+        delay: 2
+        sleep: 2
+
+    - name: Wait for systemd to reach running or degraded state (pre-install)
       ansible.builtin.command: systemctl is-system-running
-      register: systemd_state
+      register: systemd_state_pre
       retries: 30
       delay: 2
-      until: systemd_state.stdout in ['running', 'degraded']
+      until: systemd_state_pre.stdout in ['running', 'degraded']
       failed_when: false
       changed_when: false
 
-    - name: Check if openssh-server is already installed  # noqa: command-instead-of-module
-      ansible.builtin.command: rpm -q openssh-server
-      register: _openssh_present
-      changed_when: false
+    - name: Install packages whose RPM post-install calls systemctl daemon-reload
+      # tsflags=noscripts skips %systemd_post → systemctl daemon-reload.
+      # daemon-reload in a fully-initialized systemd container crashes it.
+      # openssh-server: sshd.yml generates SSH host keys in containers separately.
+      # policycoreutils-python-utils: only provides Python bindings; no service needed.
+      ansible.builtin.raw: dnf install -y --setopt=tsflags=noscripts openssh-server policycoreutils-python-utils
+      changed_when: true
       failed_when: false
 
-    - name: Install openssh-server before converge  # noqa: command-instead-of-module
-      # Install during prepare so any inotify daemon-reload from the new unit files
-      # in /usr/lib/systemd/system/ completes before converge starts.
-      # --noscripts prevents the %post scriptlet from running systemd-update-helper.
-      ansible.builtin.command:
-        cmd: dnf install -y --setopt=rpm_opts=--noscripts openssh-server
-      register: _openssh_install
-      retries: 3
-      delay: 10
-      until: _openssh_install.rc == 0
-      changed_when: "'Nothing to do' not in _openssh_install.stdout"
-      failed_when: false
-      when: _openssh_present.rc != 0
-
-    - name: Remove openssh systemd unit files to stop inotify daemon-reload crash  # noqa: command-instead-of-module
-      # The openssh-server package installs sshd.service/sshd.socket to
-      # /usr/lib/systemd/system/. systemd's inotify watcher sees new unit files and
-      # triggers a daemon-reload, which can crash the container. Removing the unit
-      # files immediately after install (before systemd processes the inotify event)
-      # prevents this crash. The sshd binary is still available for sshd -t tests.
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /usr/lib/systemd/system/sshd.service
-        - /usr/lib/systemd/system/sshd.socket
-        - /usr/lib/systemd/system/sshd@.service
-      when: _openssh_install.changed | default(false)
-      failed_when: false
-
-    - name: Wait for systemd to stabilize after openssh install  # noqa: command-instead-of-module
+    - name: Wait for systemd to remain stable after package installs
       ansible.builtin.command: systemctl is-system-running
-      register: systemd_state2
-      retries: 20
+      register: systemd_state_post
+      retries: 15
       delay: 2
-      until: systemd_state2.stdout in ['running', 'degraded']
+      until: systemd_state_post.stdout in ['running', 'degraded']
       failed_when: false
       changed_when: false
-      when: _openssh_install.changed | default(false)

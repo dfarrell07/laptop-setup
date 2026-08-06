@@ -29,10 +29,30 @@
       changed_when: false
       failed_when: false
 
-    - name: Wait for kernel-filesystem unit restart loops to permanently exhaust
-      # binfmt_misc/configfs/debugfs/tracefs fail in containers; systemd retries
-      # each unit up to StartLimitBurst=5 before permanently failing (~30s total).
-      # Converge must not start until ALL loops exhaust — do NOT use reset-failed
-      # which resets the counter and allows additional retry crashes.
-      ansible.builtin.pause:
-        seconds: 45
+    - name: Mask kernel-filesystem units that loop and destabilize systemd PID 1 in containers
+      # binfmt_misc/configfs/debugfs/tracefs mounts and kernel module loader fail in
+      # privileged Podman containers (restricted kernel namespaces). Without masking,
+      # systemd retries these in activate/fail loops that eventually crash PID 1.
+      # Masking with --now stops any in-flight activation and prevents further retries.
+      # Uses podman exec (delegate_to: localhost) to avoid Ansible connection dependency
+      # during the unstable early-boot window.
+      ansible.builtin.command: >-
+        podman exec {{ inventory_hostname }} systemctl mask --now
+        proc-sys-fs-binfmt_misc.automount
+        sys-kernel-config.mount
+        sys-kernel-debug.mount
+        sys-kernel-tracing.mount
+        systemd-modules-load.service
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for systemd to settle after masking failed units
+      ansible.builtin.command: podman exec {{ inventory_hostname }} systemctl is-system-running
+      delegate_to: localhost
+      register: _boot2
+      until: "'running' in _boot2.stdout | default('') or 'degraded' in _boot2.stdout | default('')"
+      retries: 20
+      delay: 2
+      changed_when: false
+      failed_when: false
