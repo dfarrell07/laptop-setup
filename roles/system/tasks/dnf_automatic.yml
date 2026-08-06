@@ -1,0 +1,68 @@
+---
+# roles/system/tasks/dnf_automatic.yml
+# --- dnf-automatic ---
+# CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
+# maintenance windows. Running dnf-automatic in parallel could install packages
+# ahead of IT's approval cycle or outside maintenance windows.
+- name: Install dnf-automatic
+  ansible.builtin.dnf:
+    name: "{{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}"
+    state: present
+  register: system_dnf_automatic_installed
+  when:
+    - is_dnf
+    - not csb_rhel
+  failed_when: false
+
+- name: Deploy dnf-automatic config
+  ansible.builtin.template:
+    src: dnf-automatic.conf.j2
+    dest: /etc/dnf/automatic.conf
+    mode: "0644"
+  notify: Restart dnf-automatic timer
+  when:
+    - is_dnf
+    - not csb_rhel
+    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
+
+- name: Enable dnf-automatic timer
+  ansible.builtin.systemd:
+    name: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
+    state: started
+    enabled: true
+  when:
+    - is_dnf
+    - not csb_rhel
+    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
+    - not system_is_container
+  failed_when: false
+
+# --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
+- name: Ensure dnf-automatic service drop-in directory exists
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d"
+    state: directory
+    mode: "0755"
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+  failed_when: false
+
+- name: Deploy AIDE update hook for dnf-automatic
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # Run aide --update after dnf-automatic applies security updates.
+      # Without this, every update causes AIDE false-positive alerts that
+      # train operators to ignore them, defeating the purpose of AIDE.
+      [Service]
+      ExecStartPost=/usr/bin/bash -c '/usr/bin/aide --update; mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz || true'
+    dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
+    mode: "0644"
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel  # dnf-automatic not installed on CSB
+  notify: Restart dnf-automatic timer
+  failed_when: false

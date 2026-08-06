@@ -1,0 +1,57 @@
+---
+# roles/system/tasks/firmware.yml
+# --- Firmware updates (LVFS/fwupd) ---
+- name: Install fwupd
+  ansible.builtin.dnf:
+    name: fwupd
+    state: present
+  register: system_fwupd_install_result
+  when:
+    - is_dnf
+    - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
+  failed_when: false
+
+- name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
+  ansible.builtin.systemd:
+    name: fwupd-refresh.timer
+    state: started
+    enabled: true
+  when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
+    - not system_is_container
+  changed_when: false
+  failed_when: false
+
+- name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
+  ansible.builtin.command:
+    cmd: fwupdmgr refresh
+  when: system_fwupd_install_result is changed
+  changed_when: false
+  failed_when: false
+
+- name: Mask passim (fwupd P2P caching dependency — unauthenticated HTTP on 0.0.0.0:27500)
+  ansible.builtin.systemd:
+    name: passim
+    masked: true
+    state: stopped
+    daemon_reload: true
+  when: not csb_rhel  # passim is only installed alongside fwupd; skip if fwupd was not installed
+  failed_when: false
+  # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
+  # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
+  # Masking does not affect fwupd firmware update functionality.
+
+- name: Check for firmware updates
+  ansible.builtin.command:
+    cmd: fwupdmgr get-updates --no-device-prompt
+  register: system_fwupd_check_result
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+
+- name: Report available firmware updates
+  ansible.builtin.debug:
+    msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
+  when:
+    - system_fwupd_check_result.rc == 0
+    - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"

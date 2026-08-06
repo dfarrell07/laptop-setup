@@ -1,0 +1,43 @@
+---
+# roles/system/tasks/kernel_modules_kind.yml
+# --- Kernel modules for kind ---
+- name: Load iptables kernel modules for kind
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  register: system_modprobe_results
+  loop:
+    - ip6_tables
+    - ip6table_nat
+    - ip_tables
+    - iptable_nat
+    - br_netfilter
+    - nf_conntrack  # explicit load so nf_conntrack_max sysctl applies even if firewalld fails to start
+    - overlay
+  when:
+    - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
+    - not system_is_container
+    # Loading iptables modules in a Podman container disrupts host iptables/networking
+    # and kills the container connection; modules are managed by the host on container hosts.
+  failed_when: false
+
+- name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: sysctl --system
+  changed_when: false
+  failed_when: false
+  when: not system_is_container
+
+- name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: br_netfilter module failed to load. net.bridge.bridge-nf-call-iptables
+      will not be applied — Kubernetes/kind networking (NetworkPolicy) may be broken.
+  when: >-
+    not csb_rhel and
+    (system_modprobe_results.results | default([])
+    | selectattr('item', 'equalto', 'br_netfilter')
+    | selectattr('rc', 'defined')
+    | selectattr('rc', 'ne', 0)
+    | list | length > 0)

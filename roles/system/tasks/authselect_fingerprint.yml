@@ -1,0 +1,83 @@
+---
+# roles/system/tasks/authselect_fingerprint.yml
+# --- Authselect profile baseline ---
+# authselect enable-feature requires the 'sssd' profile to be active; 'minimal' and
+# 'local' (used by some Vagrant boxes and minimal installs) don't have with-faillock
+# or with-pwhistory feature snippets and silently fail. Also required for Anaconda-
+# installed systems where PAM files may have been edited outside authselect (dirty state).
+- name: Check authselect binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/authselect
+  register: system_authselect_bin
+
+- name: Check current authselect profile
+  ansible.builtin.command:
+    cmd: authselect current --raw
+  register: system_authselect_current
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_authselect_bin.stat.exists
+    - not csb_rhel
+
+- name: Select authselect sssd profile and clear PAM drift
+  ansible.builtin.command:
+    cmd: authselect select sssd --force
+  register: system_authselect_select_result
+  when:
+    - system_authselect_bin.stat.exists
+    - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
+    - system_authselect_current.stdout | default('') is not search('^sssd( |$)')
+    - not csb_rhel
+  changed_when: system_authselect_select_result.rc | default(1) == 0
+  failed_when: false
+
+- name: Warn if authselect sssd profile selection failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
+      enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
+      password reuse prevention will be unconfigured. Check authselect status manually.
+  when:
+    - system_authselect_select_result.rc | default(0) != 0
+
+# --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
+- name: Probe authselect with-fingerprint feature state
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-fingerprint
+  register: system_authselect_fingerprint_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: system_authselect_bin.stat.exists
+
+- name: Disable authselect with-fingerprint feature
+  ansible.builtin.command:
+    cmd: authselect disable-feature with-fingerprint
+  when:
+    - system_disable_fingerprint | bool
+    - system_authselect_bin.stat.exists
+    - system_authselect_fingerprint_check.rc == 0
+    - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
+  changed_when: true
+  failed_when: false
+
+- name: Configure fprintd.service mask (fingerprint auth control)
+  ansible.builtin.systemd:
+    name: fprintd.service
+    masked: "{{ system_disable_fingerprint | bool }}"
+    state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
+  when: not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
+  failed_when: false
+
+- name: Enable authselect with-fingerprint feature
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-fingerprint
+  when:
+    - not (system_disable_fingerprint | bool)
+    - system_authselect_bin.stat.exists
+    - system_authselect_fingerprint_check.rc != 0
+    - not csb_rhel  # CSB: IT manages authselect; all authselect action tasks carry this guard
+  changed_when: true
+  failed_when: false

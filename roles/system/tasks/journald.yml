@@ -1,0 +1,41 @@
+---
+# roles/system/tasks/journald.yml
+# --- Journald persistent logging and retention ---
+# The drop-in directory and /var/log/journal are created unconditionally (no CSB guard).
+# Rationale: Storage=auto (journald's default) writes to /var/log/journal only when that
+# directory exists; creating it is additive. If CSB IT has set Storage=volatile in their
+# own drop-in, it wins and this directory has no effect. If they use Storage=auto, switching
+# to persistent logging is a security benefit (logs survive reboots for incident response),
+# not a conflict. journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM
+# pipeline uses audisp-remote (auditd), a completely separate subsystem.
+# The opinionated config below (rate limits, disk quota) IS CSB-guarded because those
+# specific numbers may conflict with IT's journald tuning or centralized log management.
+- name: Ensure journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Ensure /var/log/journal exists for persistent storage
+  ansible.builtin.file:
+    path: /var/log/journal
+    state: directory
+    owner: root
+    group: systemd-journal
+    mode: "2755"
+
+- name: Deploy journald hardening config
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=4G
+      MaxRetentionSec=6month
+      SystemKeepFree=1G
+      RateLimitIntervalSec=30s
+      RateLimitBurst=20000
+    dest: /etc/systemd/journald.conf.d/99-hardening.conf
+    mode: "0644"
+  when: not csb_rhel
+  notify: Restart systemd-journald

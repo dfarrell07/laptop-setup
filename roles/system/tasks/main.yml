@@ -52,54 +52,8 @@
     dest: /etc/modprobe.d/hardening.conf
     mode: "0644"
 
-# --- Sysctl hardening ---
-# Merge system_sysrq into the dict so config.yml can override without replacing
-# the entire system_sysctl_hardening dict. Default is 0 (CIS); set 176 in
-# config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
-- name: Merge configurable sysctl values into hardening dict
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
-        'kernel.sysrq': system_sysrq | int,
-        'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int,
-        'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int,
-        'net.core.bpf_jit_harden': system_bpf_jit_harden | int,
-        'kernel.unprivileged_bpf_disabled': system_unprivileged_bpf_disabled | int,
-        'kernel.panic': system_kernel_panic | int,
-        'kernel.panic_on_oops': system_kernel_panic_on_oops | int,
-        'kernel.core_pattern': system_core_pattern,
-        'kernel.yama.ptrace_scope': system_ptrace_scope | int,
-        'kernel.kexec_load_disabled': system_kexec_load_disabled | int,
-        'kernel.io_uring_disabled': system_io_uring_disabled | int
-      }) | combine(system_sysctl_extra) }}" # noqa: jinja[spacing]
-
-- name: Merge ip_forward sysctls when system_enable_ip_forward
-  ansible.builtin.set_fact:
-    system_sysctl_hardening: "{{ system_sysctl_hardening | combine({'net.ipv4.ip_forward': 1, 'net.ipv6.conf.all.forwarding': 1}) }}"
-  when: system_enable_ip_forward | bool
-
-# net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
-# recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
-# (OVN-K, Submariner). No conditional override is applied.
-- name: Ensure /etc/sysctl.d exists
-  ansible.builtin.file:
-    path: /etc/sysctl.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Deploy sysctl hardening config
-  ansible.builtin.template:
-    src: sysctl-hardening.conf.j2
-    dest: /etc/sysctl.d/90-hardening.conf
-    mode: "0644"
-
-- name: Apply sysctl hardening values immediately  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: sysctl --system
-  changed_when: false
-  failed_when: false  # bridge/conntrack keys absent if br_netfilter/nf_conntrack not yet loaded
-  when: not system_is_container
+- name: Sysctl hardening
+  ansible.builtin.include_tasks: sysctl.yml
 
 - name: Firewall configuration
   ansible.builtin.include_tasks: firewall.yml
@@ -159,87 +113,8 @@
     - not system_is_container  # D-Bus activation crashes Podman containers
   failed_when: false
 
-# --- Authselect profile baseline ---
-# authselect enable-feature requires the 'sssd' profile to be active; 'minimal' and
-# 'local' (used by some Vagrant boxes and minimal installs) don't have with-faillock
-# or with-pwhistory feature snippets and silently fail. Also required for Anaconda-
-# installed systems where PAM files may have been edited outside authselect (dirty state).
-- name: Check authselect binary exists
-  ansible.builtin.stat:
-    path: /usr/bin/authselect
-  register: system_authselect_bin
-
-- name: Check current authselect profile
-  ansible.builtin.command:
-    cmd: authselect current --raw
-  register: system_authselect_current
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when:
-    - system_authselect_bin.stat.exists
-    - not csb_rhel
-
-- name: Select authselect sssd profile and clear PAM drift
-  ansible.builtin.command:
-    cmd: authselect select sssd --force
-  register: system_authselect_select_result
-  when:
-    - system_authselect_bin.stat.exists
-    - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
-    - system_authselect_current.stdout | default('') is not search('^sssd( |$)')
-    - not csb_rhel
-  changed_when: system_authselect_select_result.rc | default(1) == 0
-  failed_when: false
-
-- name: Warn if authselect sssd profile selection failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
-      enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
-      password reuse prevention will be unconfigured. Check authselect status manually.
-  when:
-    - system_authselect_select_result.rc | default(0) != 0
-
-# --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
-- name: Probe authselect with-fingerprint feature state
-  ansible.builtin.command:
-    cmd: authselect is-feature-enabled with-fingerprint
-  register: system_authselect_fingerprint_check
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when: system_authselect_bin.stat.exists
-
-- name: Disable authselect with-fingerprint feature
-  ansible.builtin.command:
-    cmd: authselect disable-feature with-fingerprint
-  when:
-    - system_disable_fingerprint | bool
-    - system_authselect_bin.stat.exists
-    - system_authselect_fingerprint_check.rc == 0
-    - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
-  changed_when: true
-  failed_when: false
-
-- name: Configure fprintd.service mask (fingerprint auth control)
-  ansible.builtin.systemd:
-    name: fprintd.service
-    masked: "{{ system_disable_fingerprint | bool }}"
-    state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
-  when: not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
-  failed_when: false
-
-- name: Enable authselect with-fingerprint feature
-  ansible.builtin.command:
-    cmd: authselect enable-feature with-fingerprint
-  when:
-    - not (system_disable_fingerprint | bool)
-    - system_authselect_bin.stat.exists
-    - system_authselect_fingerprint_check.rc != 0
-    - not csb_rhel  # CSB: IT manages authselect; all authselect action tasks carry this guard
-  changed_when: true
-  failed_when: false
+- name: Authselect and fingerprint auth
+  ansible.builtin.include_tasks: authselect_fingerprint.yml
 
 - ansible.builtin.include_tasks: service_masking.yml
 
@@ -247,61 +122,8 @@
 
 - ansible.builtin.include_tasks: services.yml
 
-# --- Firmware updates (LVFS/fwupd) ---
-- name: Install fwupd
-  ansible.builtin.dnf:
-    name: fwupd
-    state: present
-  register: system_fwupd_install_result
-  when:
-    - is_dnf
-    - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
-  failed_when: false
-
-- name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
-  ansible.builtin.systemd:
-    name: fwupd-refresh.timer
-    state: started
-    enabled: true
-  when:
-    - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
-    - not system_is_container
-  changed_when: false
-  failed_when: false
-
-- name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
-  ansible.builtin.command:
-    cmd: fwupdmgr refresh
-  when: system_fwupd_install_result is changed
-  changed_when: false
-  failed_when: false
-
-- name: Mask passim (fwupd P2P caching dependency — unauthenticated HTTP on 0.0.0.0:27500)
-  ansible.builtin.systemd:
-    name: passim
-    masked: true
-    state: stopped
-    daemon_reload: true
-  when: not csb_rhel  # passim is only installed alongside fwupd; skip if fwupd was not installed
-  failed_when: false
-  # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
-  # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
-  # Masking does not affect fwupd firmware update functionality.
-
-- name: Check for firmware updates
-  ansible.builtin.command:
-    cmd: fwupdmgr get-updates --no-device-prompt
-  register: system_fwupd_check_result
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-
-- name: Report available firmware updates
-  ansible.builtin.debug:
-    msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
-  when:
-    - system_fwupd_check_result.rc == 0
-    - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"
+- name: Firmware updates
+  ansible.builtin.include_tasks: firmware.yml
 
 - name: SSHD hardening, SELinux port label, and crypto policy
   ansible.builtin.include_tasks: sshd.yml

@@ -1,0 +1,56 @@
+---
+# roles/system/tasks/dns_over_tls.yml
+# --- DNS-over-TLS ---
+- name: Enable systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: started
+    enabled: true
+  when: not system_is_container  # starting resolved triggers systemd re-exec, crashes privileged Podman containers
+  failed_when: false
+
+- name: Ensure resolved drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Disable LLMNR and mDNS via resolved drop-in
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Resolve]
+      LLMNR=no
+      MulticastDNS=no
+    dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
+    mode: "0644"
+  notify: Restart systemd-resolved
+
+# yamllint disable rule:line-length
+- name: Deploy DNS-over-TLS resolved config
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Resolve]
+      DNS={{ system_dns_primary }}
+      Domains={{ system_dns_domains }}
+      DNSOverTLS={{ system_dot_mode }}
+      DNSSEC=allow-downgrade
+      FallbackDNS={{ system_dns_fallback }}
+    dest: /etc/systemd/resolved.conf.d/99-dot.conf
+    mode: "0644"
+  when:
+    - not csb_rhel  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
+  notify: Restart systemd-resolved
+# yamllint enable rule:line-length
+
+# --- Verify resolv.conf symlink for split DNS ---
+- name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
+  ansible.builtin.file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
+  when:
+    - not csb_rhel
+  failed_when: false
