@@ -228,7 +228,6 @@
     - claude_queue_enabled | bool
     - is_linux
     - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   register: _timer_enable
 
 - name: Warn if timer enable failed (container — no systemd user session)

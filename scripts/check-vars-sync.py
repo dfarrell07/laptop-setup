@@ -57,6 +57,7 @@ REQUIRED_KEYS = {
     "system_auditd_max_log_file": int,
     "system_auditd_num_logs": int,
     "system_umask": str,
+    "system_bolt_enabled": str,
     "system_disable_avahi": bool,
     "system_mask_nfs_server": bool,
     "system_init_on_free": bool,
