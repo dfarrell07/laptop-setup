@@ -457,6 +457,7 @@
     state: started
     enabled: true
   failed_when: false
+  when: not system_is_container
 
 # --- dnf-automatic ---
 # CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
@@ -492,6 +493,7 @@
     - is_dnf
     - not csb_rhel
     - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
+    - not system_is_container
   failed_when: false
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
