@@ -130,23 +130,12 @@
 - name: sshd hardening assertions (Linux only)
   when: ansible_system == 'Linux'
   block:
-    - name: Stat /etc/ssh/sshd_config.d/00-hardening.conf (shared)
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/00-hardening.conf
-      register: sshd_conf_stat
-      become: true
-
-    - name: Assert /etc/ssh/sshd_config.d/00-hardening.conf exists with mode 0600
-      ansible.builtin.assert:
-        that: sshd_conf_stat.stat.exists and sshd_conf_stat.stat.mode == '0600'
-        fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions (expected 0600)"
-
     - name: Check AllowAgentForwarding no in 00-hardening.conf (shared)
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: grep -qF 'AllowAgentForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
-      when: sshd_conf_stat.stat.exists
+      when: verify_sshd_dropin.stat.exists
 
     - name: Check AllowTcpForwarding set to valid value (shared)
       ansible.builtin.command: >-
@@ -154,7 +143,7 @@
         /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
       changed_when: false
       become: true
-      when: sshd_conf_stat.stat.exists
+      when: verify_sshd_dropin.stat.exists
 
     - name: Check sshd algorithm hardening directives present in 00-hardening.conf (shared)
       ansible.builtin.command: grep -qE '^{{ item }} ' /etc/ssh/sshd_config.d/00-hardening.conf  # noqa: command-instead-of-module
@@ -164,7 +153,7 @@
         - 'KexAlgorithms'
       changed_when: false
       become: true
-      when: sshd_conf_stat.stat.exists
+      when: verify_sshd_dropin.stat.exists
 
     - name: Check UnusedConnectionTimeout on its own line (trim_blocks regression guard)
       ansible.builtin.command: >-
@@ -175,7 +164,7 @@
       register: verify_sshd_unused_timeout
       failed_when: false
       when:
-        - sshd_conf_stat.stat.exists
+        - verify_sshd_dropin.stat.exists
         - system_ssh_unused_connection_timeout | default('') | string != ''
 
     - name: Assert UnusedConnectionTimeout is not concatenated with next directive
@@ -185,7 +174,7 @@
           UnusedConnectionTimeout not found as a standalone line in 00-hardening.conf —
           possible Jinja2 trim_blocks newline-eating regression (two directives on one line)
       when:
-        - sshd_conf_stat.stat.exists
+        - verify_sshd_dropin.stat.exists
         - system_ssh_unused_connection_timeout | default('') | string != ''
         - verify_sshd_unused_timeout is defined
 

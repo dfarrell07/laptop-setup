@@ -810,10 +810,10 @@
   become: true
   when: ansible_system == 'Linux'
 
-- name: Assert sshd hardening drop-in deployed
+- name: Assert sshd hardening drop-in deployed with mode 0600
   ansible.builtin.assert:
-    that: verify_sshd_dropin.stat.exists
-    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf not deployed — system role did not run"
+    that: verify_sshd_dropin.stat.exists and verify_sshd_dropin.stat.mode == '0600'
+    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions (expected 0600)"
   when: ansible_system == 'Linux'
 
 - name: Check sshd hardening drop-in contains critical directives

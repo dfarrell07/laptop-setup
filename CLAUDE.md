@@ -100,7 +100,7 @@ make containers       # containers role only (sudo)
 make claude           # claude role only (no sudo)
 make distrobox        # alias for make container (backwards compatibility)
 # Per repo-group subsets of `make repos` — pattern rule: make repos-<group>
-# runs git_repos role with git_repos_group=<group>; any group name is valid
+# runs git_repos role with repo_category=<group>; any category name is valid
 make repos-ovnk       # OVN-Kubernetes repos only
 make repos-konflux    # Konflux repos only
 make repos-personal   # personal repos only
@@ -123,7 +123,7 @@ make repos-downstream # downstream repos only
 
 - **Profile system**: `profile: work` (default) or `profile: personal` via `-e profile=personal` or `config.yml`
 - **become convention**: Play 1 has play-level `become: true`. Play 2 tasks that need root use `become: true` + `tags: [become]`
-- **is_dnf / is_apt**: Computed booleans in `group_vars/all/vars.yml` (set false there, overridden by `common/tasks/gather-minimal-facts.yml` at runtime). Use `when: is_dnf` / `when: is_apt` instead of `ansible_pkg_mgr` comparisons for package-manager branching across Fedora/RHEL (dnf) and Debian (apt) targets.
+- **is_dnf / is_apt**: Computed booleans in `group_vars/all/vars.yml` (set false there, overridden by `common/tasks/csb_detect.yml` at runtime). Use `when: is_dnf` / `when: is_apt` instead of `ansible_pkg_mgr` comparisons for package-manager branching across Fedora/RHEL (dnf) and Debian (apt) targets.
 - **CSB detection**: `common/tasks/csb_detect.yml` sets `csb_detected` via two paths — RHEL (fapolicyd + internal CA present)
   or Fedora (FQDN ends in `.csb` + internal CA present). Determines `needs_container_tier`: `host-only`
   (standard Fedora/macOS — everything on host), `hybrid` (RHEL or CSB-detected Fedora — basics on host +

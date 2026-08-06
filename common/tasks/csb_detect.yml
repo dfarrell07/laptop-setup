@@ -13,6 +13,7 @@
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
     is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+    is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
     is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
     _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
@@ -187,6 +188,7 @@
       Is Fedora          : {{ is_fedora }}
       Is macOS           : {{ is_macos }}
       Is DNF             : {{ is_dnf }}
+      Is DNF5            : {{ is_dnf5 }}
       Is APT             : {{ is_apt }}
       ---
       fapolicyd installed: {{ fapolicyd_installed }}
