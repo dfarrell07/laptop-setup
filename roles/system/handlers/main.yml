@@ -20,28 +20,28 @@
     name: firewalld
     state: reloaded
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart tlp
   ansible.builtin.systemd:
     name: tlp
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager
     state: reloaded
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart bluetooth
   ansible.builtin.systemd:
     name: bluetooth
     state: restarted
   become: true
-  ignore_errors: true
+  ignore_errors: true  # noqa: ignore-errors
 
 # Always co-notified with 'Apply firewall rules' (tailscale0 firewalld zone task).
 # Tailscaled has no config files managed by this role; zone-change is the only
@@ -51,7 +51,7 @@
     name: tailscaled
     state: restarted
   become: true
-  ignore_errors: true
+  ignore_errors: true  # noqa: ignore-errors
 
 # Must use SysV wrapper, not 'systemctl restart auditd': the SysV script calls
 # auditctl to reload rules into the kernel; systemctl sends SIGTERM and skips
@@ -61,42 +61,42 @@
     cmd: service auditd restart
   become: true
   changed_when: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart usbguard
   ansible.builtin.systemd:
     name: usbguard
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart sshd
   ansible.builtin.systemd:
     name: sshd
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Reload logind  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: systemctl kill --signal=HUP systemd-logind
   become: true
   changed_when: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart chronyd
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -104,7 +104,7 @@
     state: restarted
     daemon_reload: true
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
   when: system_aide_enabled | bool
 
 - name: Restart systemd-journald
@@ -112,7 +112,7 @@
     name: systemd-journald
     state: restarted
   become: true
-  ignore_errors: "{{ system_is_container }}"
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Apply dconf schema database  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -127,4 +127,4 @@
     state: restarted
     daemon_reload: true
   become: true
-  ignore_errors: true
+  ignore_errors: true  # noqa: ignore-errors

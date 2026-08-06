@@ -7,7 +7,7 @@
   # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
   when:
     - repo_gh_cli
-    - ansible_facts['distribution'] != 'Fedora'
+    - not is_fedora
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
@@ -358,7 +358,7 @@
     - name: Add Tailscale stable repo
       vars:
         _ts_path: >-
-          {{ 'rhel/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] != 'Fedora' else 'fedora' }}
+          {{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}
       ansible.builtin.yum_repository:
         name: tailscale-stable
         description: Tailscale stable

@@ -1356,7 +1356,7 @@
     create: true
     mode: "0644"
   when:
-    - ansible_facts['os_family'] != 'Debian'
+    - not is_apt
     - system_tmout | int > 0
 
 - name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
@@ -1367,7 +1367,7 @@
     create: true
     mode: "0644"
   when:
-    - ansible_facts['os_family'] == 'Debian'
+    - is_apt
     - system_tmout | int > 0
 
 # Cleanup: remove TMOUT artifacts when system_tmout=0 (operator disables timeout).
@@ -1385,7 +1385,7 @@
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
-    - ansible_facts['os_family'] != 'Debian'
+    - not is_apt
     - system_tmout | int == 0
 
 - name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)
@@ -1394,7 +1394,7 @@
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     state: absent
   when:
-    - ansible_facts['os_family'] == 'Debian'
+    - is_apt
     - system_tmout | int == 0
 
 # --- Timezone and locale ---

@@ -1,0 +1,70 @@
+---
+# Install Go tools via `go install` (extracted from main.yml)
+
+- name: Install Go tools
+  # No 'creates:' guard — version bumps in packages_go_install would be silently
+  # ignored if the binary already exists. 'go install' with a pinned version is
+  # fast when the module cache is warm (skips recompile). 'changed_when: true'
+  # reports every run as changed; all entries in packages_go_install are pinned
+  # versions so this is an accepted false positive on every run — do NOT add
+  # @latest entries; they are not specially handled and would make the list
+  # permanently non-idempotent with no additional benefit.
+  # See packages_go_install in defaults/main.yml for rationale and pinning guidance.
+  ansible.builtin.command:
+    cmd: "go install {{ item }}"
+  timeout: 300
+  changed_when: true
+  environment:
+    GOPATH: "{{ ansible_facts['user_dir'] }}/go"
+    GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
+    GOTOOLCHAIN: auto  # gofumpt/govulncheck need Go 1.25+, gopls needs 1.26+; auto downloads on demand
+    HTTPS_PROXY: "{{ proxy_url | default(omit) }}"
+    HTTP_PROXY: "{{ proxy_url | default(omit) }}"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+  loop_control:
+    label: "{{ item | regex_replace('@.*', '') | basename }}"
+  register: packages_go_results
+  failed_when: false
+  retries: 3
+  delay: 5
+  until: packages_go_results.rc == 0
+
+- name: Report failed Go tool installs
+  ansible.builtin.debug:
+    msg: "Failed to install {{ item.item }}: {{ item.stderr | default('unknown error') | trim }}"
+  loop: "{{ packages_go_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+  when:
+    - item.rc | default(0) != 0
+
+- name: Collect failed Go tool names
+  ansible.builtin.set_fact:
+    _packages_go_failed: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | map(attribute='item')
+        | list
+      }}
+
+- name: Record Go tool install failures (CSB)
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+  vars:
+    _csb_role: packages
+    _csb_task_name: "Go tools (go install)"
+    _csb_error: "Failed tools: {{ _packages_go_failed | join(', ') }}"
+    _csb_action: >-
+      Install Go tools manually or configure GOPROXY/GONOSUMDB/GOPRIVATE
+      to allow access via the corporate proxy.
+    _csb_ticket_summary: "Cannot install Go tools on CSB (network/proxy restriction)"
+    _csb_ticket_body: >-
+      'go install' failed for: {{ _packages_go_failed | join(', ') }}.
+      The corporate network may block go.googlesource.com or Go module proxies.
+      Configure GOPROXY, GONOSUMDB, and GOPRIVATE, or install tools manually.
+  when:
+    - csb_rhel | bool
+    - _packages_go_failed | length > 0
