@@ -122,6 +122,12 @@
     - verify_kernel_cmdline.stat.exists
     - system_init_on_free | bool
 
+- name: Assert /etc/kernel/cmdline contains page_alloc.shuffle=1
+  ansible.builtin.command:
+    cmd: grep -q 'page_alloc.shuffle=1' /etc/kernel/cmdline
+  changed_when: false
+  when: verify_kernel_cmdline.stat.exists
+
 - name: Include containers.conf assertions
   ansible.builtin.import_tasks: verify-containers.yml
 

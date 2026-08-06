@@ -50,11 +50,13 @@ Running `make smoke-test` immediately after `make all` on a first provision prod
 - `git-commit.gpgsign`, `git-tag.gpgsign`, `git-gpg.format`, `git-gpg.ssh.allowedSignersFile`, `git-user.signingkey` — downgraded to WARN while signing pub key is absent
 - `git-allowed-signers` — file not generated until signing key is deployed from vault
 - `yubikey`, `ssh-agent-key`, `github-ssh-auth` — YubiKey not plugged in or not yet enrolled
+- `vault-pass-stub` — `scripts/vault-pass.sh` is still the CI dummy stub created by `make bootstrap`; clears after replacing it with a real YubiKey HMAC-SHA1 implementation (see `SECURITY.md` "Setting Up vault-pass.sh")
 
 **Interactive steps required** (clear by following the Post-Provisioning Checklist above):
 - `tailscale` — `tailscale up` not yet run
 - `gh-auth` — `gh auth login` not yet run
 - `ssh-auth-sock` — logout/login required to activate `environment.d` SSH_AUTH_SOCK change
+- `registry-redhat-auth` — not authenticated to registry.redhat.io; clears after `podman login registry.redhat.io` (work profile with `oc` installed; required for RH subctl `oc image extract`)
 
 **Pre-packages** (clear by running `make packages` or `make all`):
 - `vim-binary`, `pipx-yamllint`, `pipx-ansible-lint` — packages role not yet run (or `make minimal` used)

@@ -1,0 +1,153 @@
+---
+# --- AIDE file integrity monitoring ---
+# Block-level guard: AIDE is DNF/RPM-only (aide package from Fedora/RHEL repos).
+# On non-DNF systems (Debian, macOS) this entire section skips cleanly.
+# Individual tasks drop their redundant 'when: system_aide_enabled | bool' —
+# the block-level condition covers both the pkg_mgr and enabled checks.
+- name: AIDE file integrity monitoring
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
+  block:
+    - name: Install AIDE
+      ansible.builtin.dnf:
+        name: aide
+        state: present
+
+    - name: Ensure AIDE monitors /usr/local/bin
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/usr/local/bin'
+        line: '/usr/local/bin NORMAL'
+        state: present
+      register: _aide_conf_r1
+
+    - name: Add /etc paths to AIDE monitoring
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: "^{{ item | replace('.', '\\.') }}[$]?\\s"  # [$]? matches AIDE $ suffix; \s prevents matching /path.bak
+        line: "{{ item }} NORMAL"
+        insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (longest-match-wins)
+        state: present
+      loop: "{{ system_aide_monitoring_etc_paths }}"
+      loop_control:
+        label: "{{ item }}"
+      register: _aide_conf_r2
+
+    - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.d'
+        line: '/etc/tlp.d NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: system_tlp_enabled | bool
+      register: _aide_conf_r3
+
+    - name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.conf\s'  # whitespace-anchor prevents matching /etc/tlp.conf.bak etc.
+        line: '/etc/tlp.conf NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: system_tlp_enabled | bool
+      register: _aide_conf_r4
+
+    - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/usbguard'
+        line: '/etc/usbguard NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      register: _aide_conf_r5
+      when: system_install_usbguard | bool
+
+    - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/boot'
+        line: '/boot NORMAL'
+        state: present
+      register: _aide_conf_r6
+      # grubby modifies /boot/loader/entries/ directly; auditd watches /boot for writes
+      # but AIDE provides the content integrity baseline to detect unauthorized changes.
+
+    - name: Reinitialize AIDE database when conf changed
+      ansible.builtin.shell:  # noqa: command-instead-of-module
+        cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      changed_when: true
+      register: system_aide_reinit_result
+      failed_when:
+        - system_aide_reinit_result.rc != 0
+        - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+      when:
+        - _aide_conf_r1 is changed
+          or _aide_conf_r2 is changed
+          or _aide_conf_r3 is changed
+          or _aide_conf_r4 is changed
+          or _aide_conf_r5 is changed
+          or _aide_conf_r6 is changed
+
+    - name: Check if AIDE database exists
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: system_aide_db
+
+    - name: Check if partial AIDE new database exists
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.new.gz
+      register: system_aide_db_new
+
+    - name: Initialize AIDE database (first run only)
+      when:
+        - not (system_aide_db.stat.exists | default(false))
+        - not (system_aide_db_new.stat.exists | default(false))
+      block:
+        - name: Warn that AIDE initialization takes 5-10 minutes
+          ansible.builtin.debug:
+            msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+
+        - name: Initialize AIDE database and promote to active baseline
+          ansible.builtin.command:
+            cmd: bash -c "aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"
+          changed_when: true
+
+    - name: Deploy AIDE failure notification unit
+      ansible.builtin.copy:
+        src: aide-notify@.service
+        dest: /etc/systemd/system/aide-notify@.service
+        mode: "0644"
+      notify: Restart aide-check timer
+
+    - name: Deploy AIDE check service
+      ansible.builtin.copy:
+        src: aide-check.service
+        dest: /etc/systemd/system/aide-check.service
+        mode: "0644"
+      notify: Restart aide-check timer
+
+    - name: Deploy AIDE check timer
+      ansible.builtin.template:
+        src: aide-check.timer.j2
+        dest: /etc/systemd/system/aide-check.timer
+        mode: "0644"
+      notify: Restart aide-check timer
+
+    - name: Enable AIDE check timer
+      ansible.builtin.systemd:
+        name: aide-check.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+  rescue:
+    - name: Warn on AIDE initialization failure
+      ansible.builtin.debug:
+        msg: >-
+          AIDE initialization failed (disk exhaustion, OOM, or signal interruption).
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          To recover: free disk space, remove any partial /var/lib/aide/aide.db.new.gz,
+          then run 'sudo aide --init && sudo cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'.
+          Re-run this playbook once space is available to complete AIDE setup.
