@@ -20,6 +20,7 @@
 
 - name: Override for container testing (system role)
   ansible.builtin.set_fact:
+    system_is_container: true             # explicit guard — auto-detect via virtualization_type may miss some images
     system_disable_usb_storage: false    # USB modprobe blacklisting is meaningless in containers
     system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
     system_aide_enabled: false            # AIDE DB init takes 5-10 min; useless in CI
@@ -47,5 +48,7 @@
     system_selinux_enforcing_required: false  # geerlingguy images report SELinux disabled regardless of host policy
     # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required
     system_timezone: UTC                  # CHANGE_ME sentinel from default.config.yml is invalid; use UTC in CI
+    system_tmp_noexec: false              # /tmp noexec breaks Ansible remote_tmp=/tmp (Rocky molecule.yml);
+                                          # mounts.yml still deploys the drop-in and nosuid/nodev, but skips noexec
     csb_detected: false                   # molecule temp inventory baseline
     needs_container_tier: "host-only"     # molecule temp inventory baseline
