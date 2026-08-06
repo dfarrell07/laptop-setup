@@ -4,6 +4,9 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Load configuration defaults (provides ssh_port, system_* defaults)
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
     - name: Load group_vars baselines for verify context
       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
 
