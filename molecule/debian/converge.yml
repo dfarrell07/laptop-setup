@@ -58,12 +58,15 @@
     # Desktop role called via include_role so vars: are at role-params precedence (p20),
     # overriding include_vars desktop_environment: auto (p18) from default.config.yml.
     # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
-    - name: Converge desktop role (sway)
+    - name: Converge desktop role (unknown — sway not installed on Debian CI)
       ansible.builtin.include_role:
         name: desktop
       vars:
-        desktop_environment: sway
+        desktop_environment: unknown
         desktop_deploy_chrome_policies: true
+        desktop_common_packages: []
+        desktop_sway_packages: []
+        desktop_i3_packages: []
         is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
 
     - name: Generate CSB compatibility report
