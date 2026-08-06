@@ -2132,6 +2132,9 @@
     - overlay
   when:
     - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+    # Loading iptables modules in a Podman container disrupts host iptables/networking
+    # and kills the container connection; modules are managed by the host on container hosts.
   failed_when: false
 
 - name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
