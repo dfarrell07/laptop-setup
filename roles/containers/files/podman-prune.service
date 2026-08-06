@@ -1,0 +1,9 @@
+[Unit]
+Description=Prune stopped containers and dangling images
+
+[Service]
+Type=oneshot
+# label filter protects stopped distrobox containers; distrobox images are safe
+# because they are tagged (not dangling) — podman system prune without --all
+# skips non-dangling images regardless of the label filter
+ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox

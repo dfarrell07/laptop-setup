@@ -72,10 +72,17 @@ system_firewall_icmp_types:
   - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed
   - packet-too-big
   - time-exceeded
-  - echo-request  # Required for ping — OVN-K/kind pod-to-host-gw connectivity testing
   - parameter-problem
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
   - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
+
+# Additional ICMP types merged with system_firewall_icmp_types at apply time.
+# With icmp-block-inversion enabled, adding an icmp-block ALLOWS that type through drop zone.
+# echo-request (ping) is NOT in the default list — it allows global pingability from the drop
+# zone which is overly permissive for most hosts. Add it here only on machines where OVN-K/kind
+# pod-to-host-gw connectivity testing requires ping reachability.
+# Example: system_firewall_icmp_extra_types: [echo-request]
+system_firewall_icmp_extra_types: []
 
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
