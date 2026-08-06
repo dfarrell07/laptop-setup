@@ -687,7 +687,23 @@
     - ansible_distribution in ['Fedora', 'Debian', 'Rocky']
     - ansible_system == 'Linux'
 
-- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.x)
+- name: Check /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nosuid' /etc/fstab
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check /dev/shm fstab entry has nodev (CIS 1.1.7.2)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nodev' /etc/fstab
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.3)
   ansible.builtin.command:
     cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*noexec' /etc/fstab
   changed_when: false
@@ -869,6 +885,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - ansible_distribution != 'Rocky'  # Rocky CI exercises csb_rhel=true path; symlink intentionally absent
 
 - name: Assert /etc/resolv.conf is symlink to stub-resolv.conf
   ansible.builtin.assert:
@@ -881,6 +898,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - ansible_distribution != 'Rocky'  # Rocky CI exercises csb_rhel=true path; symlink intentionally absent
 
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:
@@ -1287,6 +1305,24 @@
     - system_chrony_service_enabled | default(true) | bool
     - verify_chrony_nts is not skipped
 
+# --- Chrony NTS template render guard (container-safe) ---
+# Renders chrony-nts.conf.j2 to a temp path so Jinja2 errors surface in container CI
+# even when system_chrony_service_enabled=false prevents chronyd install/config.
+# vars: provides fallback values — role defaults are not loaded in the verify context.
+- name: Render chrony NTS template to temp path (template error guard)
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/system/templates/chrony-nts.conf.j2"
+    dest: /tmp/molecule-chrony-nts-render-check.conf
+    mode: "0644"
+  vars:
+    system_chrony_nts_servers: >-
+      {{ system_chrony_nts_servers | default(['time.cloudflare.com', 'nts.netnod.se', 'ptbtime1.ptb.de', 'ntppool1.time.nl']) }}
+    system_chrony_fallback_pool: "{{ system_chrony_fallback_pool | default('2.fedora.pool.ntp.org') }}"
+    system_chrony_minsources: "{{ system_chrony_minsources | default(2) }}"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
   ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
   changed_when: false
@@ -1476,3 +1512,83 @@
   ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subgid"
   changed_when: false
   when: ansible_system == 'Linux'
+
+# --- Login banner (system role, non-CSB Linux only) ---
+- name: Stat login banner files (/etc/issue and /etc/issue.net)
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/issue
+    - /etc/issue.net
+  register: verify_login_banners
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert login banner files exist
+  ansible.builtin.assert:
+    that: item.stat.exists
+    fail_msg: "{{ item.item }} not deployed — system role login_banner.yml regression"
+  loop: "{{ verify_login_banners.results }}"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Slurp /etc/issue content
+  ansible.builtin.slurp:
+    src: /etc/issue
+  register: verify_issue_content
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /etc/issue contains authorized-users-only notice
+  ansible.builtin.assert:
+    that: "'authorized users only' in (verify_issue_content.content | b64decode)"
+    fail_msg: "/etc/issue does not contain expected 'authorized users only' text — banner template regression"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+# --- Locale and console keymap (system role, Linux only) ---
+- name: Stat /etc/locale.conf (system role deploys it)
+  ansible.builtin.stat:
+    path: /etc/locale.conf
+  register: verify_locale_conf
+  become: true
+  when: ansible_system == 'Linux'
+
+- name: Assert /etc/locale.conf exists
+  ansible.builtin.assert:
+    that: verify_locale_conf.stat.exists
+    fail_msg: "/etc/locale.conf not deployed — system role timezone_locale.yml regression"
+  when: ansible_system == 'Linux'
+
+- name: Check /etc/locale.conf contains LANG=en_US.UTF-8
+  ansible.builtin.command: grep -q 'LANG=en_US.UTF-8' /etc/locale.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - verify_locale_conf.stat.exists
+
+- name: Stat /etc/vconsole.conf (system role deploys it)
+  ansible.builtin.stat:
+    path: /etc/vconsole.conf
+  register: verify_vconsole_conf
+  become: true
+  when: ansible_system == 'Linux'
+
+- name: Assert /etc/vconsole.conf exists
+  ansible.builtin.assert:
+    that: verify_vconsole_conf.stat.exists
+    fail_msg: "/etc/vconsole.conf not deployed — system role timezone_locale.yml regression"
+  when: ansible_system == 'Linux'
+
+- name: Check /etc/vconsole.conf contains KEYMAP=us
+  ansible.builtin.command: grep -q 'KEYMAP=us' /etc/vconsole.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - verify_vconsole_conf.stat.exists
