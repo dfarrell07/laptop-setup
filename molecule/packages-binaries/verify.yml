@@ -290,6 +290,7 @@
           - verify_subctl18.stat.exists
           - verify_subctl18.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
+      when: verify_subctl18.stat.exists
 
     # --- Version-pin assertions: each binary must report the pinned version ---
 
