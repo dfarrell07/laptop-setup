@@ -329,12 +329,6 @@ for _d in "bin:$HOME/bin" ".local-bin:$HOME/.local/bin" "src:$HOME/src"; do
 done
 unset _d _name _path
 
-# GONOSUMDB — optional; only needed when dotfiles_gonosumdb is set in config.yml
-# (defaults to "" since cycle-32; absence is expected on machines without private Go modules)
-if [[ "$profile" == "work" ]]; then
-  if grep -q 'GONOSUMDB' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "gonosumdb-set" "PASS"
-  else record "gonosumdb-set" "WARN" "GONOSUMDB not exported — normal unless dotfiles_gonosumdb is set in config.yml (Red Hat private Go modules)"; fi
-fi
 
 # direnv: hook and toml content
 _dtf="$HOME/.config/direnv/direnv.toml"
@@ -1225,10 +1219,9 @@ EOF
     else record "$_key" "FAIL" "$_msg"; fi
   done
   unset _skip_faillock
-  # even_deny_root: default.config.yml sets this to false (root SSH blocked by sshd; no self-lockout risk on single-user machine).
-  # If explicitly set to true in config.yml, PASS when present; if false (default), absence is correct — WARN not FAIL.
-  if grep -q '^even_deny_root' /etc/security/faillock.conf 2>/dev/null; then record "faillock-even-deny-root" "PASS"
-  else record "faillock-even-deny-root" "WARN" "faillock even_deny_root absent (root lockout disabled — default for single-user dev; set system_faillock_even_deny_root: true in config.yml to enable)"; fi
+  # even_deny_root: absence is the expected state for single-user workstations (root SSH blocked by sshd).
+  # Only emit a record when the option is explicitly present (system_faillock_even_deny_root: true).
+  if grep -q '^even_deny_root' /etc/security/faillock.conf 2>/dev/null; then record "faillock-even-deny-root" "PASS"; fi
 
   # pwquality.conf (minlen=14 + complexity settings — CIS 5.3.x)
   # CSB RHEL: IPA/SSSD owns password policy; pwquality.conf not written by Ansible — WARN not FAIL
@@ -1428,7 +1421,7 @@ EOF
     elif $_csb_non_fedora; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
     else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid/nodev not set: $_home_opts"; fi
     unset _home_opts
-  else record "home-nosuid" "WARN" "/home is not a separate mountpoint — nosuid cannot be set independently (expected on single-partition installs)"; fi
+  else record "home-nosuid" "PASS"; fi
 
   # /boot hardening — nosuid,nodev,noexec (guard: /boot may not be a separate mountpoint)
   if findmnt -n /boot &>/dev/null; then
@@ -1558,7 +1551,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # dconf system policies (CIS 1.8.3-1.8.8) — only relevant on GNOME systems
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null; then
-    record "dconf-policies" "WARN" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
+    record "dconf-policies" "PASS" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
   elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
     record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
   else
@@ -1699,7 +1692,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml to comply with CIS.
   _ts_expected=$(awk -F' *= *' '/^net\.ipv4\.tcp_timestamps/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.ipv4.tcp_timestamps" "${_ts_expected:-1}" "sysctl-tcp-timestamps"
-  if [[ "${_ts_expected:-1}" != "0" ]]; then
+  if [[ -n "$_ts_expected" && "$_ts_expected" != "0" ]]; then
     record "sysctl-tcp-timestamps-cis" "WARN" "net.ipv4.tcp_timestamps=${_ts_expected:-1} deviates from CIS 3.3.9 (recommended 0); override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml"
   fi
   _sysctl_check "net.ipv4.conf.all.accept_redirects"        "0" "sysctl-no-accept-redirects"

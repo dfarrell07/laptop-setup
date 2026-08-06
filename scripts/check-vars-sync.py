@@ -59,6 +59,7 @@ REQUIRED_KEYS = {
     "system_mask_nfs_server": bool,
     "system_init_on_free": bool,
     "system_faillock_even_deny_root": bool,
+    "system_disable_sctp": bool,
     "system_kernel_panic": int,
     "system_kernel_panic_on_oops": int,
     "system_kexec_load_disabled": int,
@@ -230,22 +231,29 @@ def main():
     for key in REQUIRED_KEYS:
         if key not in defaults_data:
             defaults_errors.append(f"  MISSING: {key} not found in roles/system/defaults/main.yml")
+    for key in REQUIRED_KEYS:
+        if key in defaults_data and defaults_data[key] != vars_data[key]:
+            defaults_errors.append(
+                f"  MISMATCH: {key}: vars.yml={vars_data[key]!r}"
+                f" != roles/system/defaults/main.yml={defaults_data[key]!r}"
+            )
+
     if defaults_errors:
         print(
-            "ERROR: roles/system/defaults/main.yml missing security vars"
+            "ERROR: roles/system/defaults/main.yml missing or mismatched security vars"
             " (required mirror for standalone molecule runs):",
             file=sys.stderr,
         )
         for line in defaults_errors:
             print(line, file=sys.stderr)
         print(
-            "Add missing keys to roles/system/defaults/main.yml to match vars.yml.",
+            "Update roles/system/defaults/main.yml to match vars.yml.",
             file=sys.stderr,
         )
         sys.exit(1)
 
     print(
-        f"OK: {len(REQUIRED_KEYS)} security hardening keys present in"
+        f"OK: {len(REQUIRED_KEYS)} security hardening keys present and matching in"
         " roles/system/defaults/main.yml (molecule mirror)"
     )
 
