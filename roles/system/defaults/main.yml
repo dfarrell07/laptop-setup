@@ -278,7 +278,8 @@ system_chrony_nts_servers:
   - ntppool1.time.nl
 system_chrony_fallback_pool: 2.fedora.pool.ntp.org
 system_chrony_minsources: 2
-system_chrony_service_enabled: "{{ ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman'] }}"
+system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
+system_chrony_service_enabled: "{{ not system_is_container }}"
 
 # Security hardening defaults — authoritative values live in group_vars/all/vars.yml
 # (which overrides these at precedence 5 when running via the project inventory).

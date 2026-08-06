@@ -15,8 +15,7 @@
     - _tmp_remount_handler_result is defined
     - _tmp_remount_handler_result.rc | default(0) != 0
 
-- name: Reload firewalld
-  listen: Apply firewall rules
+- name: Apply firewall rules
   ansible.builtin.systemd:
     name: firewalld
     state: reloaded
