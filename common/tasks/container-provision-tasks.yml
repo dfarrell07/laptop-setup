@@ -119,6 +119,7 @@
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto
   register: container_golangci_lint_result
+  changed_when: container_golangci_lint_result.rc == 0
   timeout: 300
   failed_when: false
   when: >-
@@ -142,6 +143,7 @@
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto
   register: container_subctl_result
+  changed_when: container_subctl_result.rc == 0
   timeout: 600
   failed_when: false
   when: >-
