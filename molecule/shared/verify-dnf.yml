@@ -128,6 +128,17 @@
   changed_when: false
   when: verify_kernel_cmdline.stat.exists
 
+# --- repos_dnf role: third-party repo files ---
+- name: Verify tailscale-stable.repo exists
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/tailscale-stable.repo
+  register: verify_tailscale_repo
+
+- name: Assert tailscale-stable.repo was deployed by repos_dnf
+  ansible.builtin.assert:
+    that: verify_tailscale_repo.stat.exists
+    fail_msg: "tailscale-stable.repo missing — repos_dnf role not exercised or template broken"
+
 - name: Include containers.conf assertions
   ansible.builtin.import_tasks: verify-containers.yml
 

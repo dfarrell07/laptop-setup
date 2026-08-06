@@ -16,36 +16,36 @@
     - is_dnf
     - not csb_rhel
 
-- ansible.builtin.include_tasks: selinux.yml
+- ansible.builtin.import_tasks: selinux.yml
 
 # --- Auditd ---
 - name: Auditd tasks
-  ansible.builtin.include_tasks: auditd.yml
+  ansible.builtin.import_tasks: auditd.yml
 
-- ansible.builtin.include_tasks: bolt.yml
+- ansible.builtin.import_tasks: bolt.yml
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
-- ansible.builtin.include_tasks: session_timeout.yml
+- ansible.builtin.import_tasks: session_timeout.yml
 
 - name: Timezone and locale
-  ansible.builtin.include_tasks: timezone_locale.yml
+  ansible.builtin.import_tasks: timezone_locale.yml
 
 - name: Chrony NTS
-  ansible.builtin.include_tasks: chrony.yml
+  ansible.builtin.import_tasks: chrony.yml
 
 - name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
-  ansible.builtin.include_tasks: pam.yml
+  ansible.builtin.import_tasks: pam.yml
 
 - name: Journald persistent logging
-  ansible.builtin.include_tasks: journald.yml
+  ansible.builtin.import_tasks: journald.yml
 
 - name: Logrotate for sudo.log
-  ansible.builtin.include_tasks: logrotate_sudo.yml
+  ansible.builtin.import_tasks: logrotate_sudo.yml
 
-- ansible.builtin.include_tasks: cron.yml
+- ansible.builtin.import_tasks: cron.yml
 
 - name: Login banner
-  ansible.builtin.include_tasks: login_banner.yml
+  ansible.builtin.import_tasks: login_banner.yml
 
 - name: Account hardening
   ansible.builtin.import_tasks: account_hardening.yml
@@ -57,7 +57,7 @@
     - '"gdm.service" in ansible_facts.services'
     - not csb_rhel
 
-- ansible.builtin.include_tasks: aide_cleanup.yml
+- ansible.builtin.import_tasks: aide_cleanup.yml
 
 - name: AIDE configuration
-  ansible.builtin.include_tasks: aide.yml
+  ansible.builtin.import_tasks: aide.yml

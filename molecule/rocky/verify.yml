@@ -33,17 +33,6 @@
 
     # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
-    # --- repos_dnf role: third-party repo files ---
-    - name: Verify tailscale-stable.repo exists (repos_dnf)
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/tailscale-stable.repo
-      register: verify_tailscale_repo
-
-    - name: Assert tailscale-stable.repo was deployed by repos_dnf
-      ansible.builtin.assert:
-        that: verify_tailscale_repo.stat.exists
-        fail_msg: "tailscale-stable.repo missing — repos_dnf role not exercised or template broken"
-
     - name: Verify gh-cli.repo exists (repos_dnf, RHEL/Rocky only)
       ansible.builtin.stat:
         path: /etc/yum.repos.d/gh-cli.repo
@@ -55,43 +44,8 @@
         fail_msg: "gh-cli.repo missing — repos_dnf role not exercised or template broken"
 
     # --- Work profile checks ---
-    - name: Verify Claude work config directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-work"
-      register: verify_claude_work
-
-    - name: Assert Claude work config directory exists
-      ansible.builtin.assert:
-        that:
-          - verify_claude_work.stat.exists
-          - verify_claude_work.stat.isdir
-          - verify_claude_work.stat.mode == '0700'
-        fail_msg: "Claude work config dir missing or wrong permissions"
-
-    - name: Verify Claude work settings.local.json exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
-      register: verify_claude_work_settings
-
-    - name: Assert Claude work settings.local.json exists with 0600
-      ansible.builtin.assert:
-        that:
-          - verify_claude_work_settings.stat.exists
-          - verify_claude_work_settings.stat.mode == '0600'
-        fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
-
-    - name: Validate Claude work settings.local.json sandbox and deny config
-      ansible.builtin.command:
-        cmd: >-
-          python3 -c "import json, sys;
-          d = json.load(open('{{ ansible_user_dir }}/.claude-work/settings.local.json'));
-          assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
-          assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true';
-          assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
-          assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
-          assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
-      changed_when: false
-      when: verify_claude_work_settings.stat.exists
+    - name: Include Claude work instance directory and settings assertions
+      ansible.builtin.import_tasks: ../shared/verify-claude-work.yml
 
     - name: Check git user.email is work email
       ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
@@ -102,16 +56,6 @@
       ansible.builtin.assert:
         that: "dotfiles_user_email_work in verify_git_email.stdout"
         fail_msg: "git user.email is not set to a Red Hat work address"
-
-    - name: Verify Claude CLAUDE.md exists (work)
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.claude-work/CLAUDE.md"
-      register: verify_claude_md_work
-
-    - name: Assert Claude CLAUDE.md exists (work)
-      ansible.builtin.assert:
-        that: verify_claude_md_work.stat.exists
-        fail_msg: "Claude CLAUDE.md not deployed (work profile)"
 
     # --- Notes role ---
     - name: Verify notes role
