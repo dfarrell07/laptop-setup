@@ -107,7 +107,9 @@
     daemon_reload: true
   become: true
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
-  when: system_aide_enabled | bool
+  when:
+    - system_aide_enabled | bool
+    - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1; ignore_errors cannot catch a process death
 
 - name: Restart systemd-journald
   ansible.builtin.systemd:
