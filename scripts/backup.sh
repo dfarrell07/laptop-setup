@@ -101,6 +101,7 @@ OPTIONAL_FILES=(
   .config/containers/auth.json
   .claude/.credentials.json
   .claude/history.jsonl
+  .claude-work/.claude.json
   .claude-work/.credentials.json
   .claude-personal/.credentials.json
   .gnupg/trustdb.gpg
