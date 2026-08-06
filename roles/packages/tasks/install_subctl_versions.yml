@@ -1,4 +1,7 @@
 ---
+# roles/packages/tasks/install_subctl_versions.yml
+# Multi-version subctl installation for Submariner management (work profile only).
+# Installs subctl18, subctl19, etc. alongside the current version.
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
   when: _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
   block:
