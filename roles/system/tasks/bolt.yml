@@ -1,0 +1,46 @@
+---
+# roles/system/tasks/bolt.yml
+# Bolt daemon. Included from main.yml.
+# --- Bolt (Thunderbolt device authorization daemon) ---
+- name: Install bolt for Thunderbolt device authorization
+  ansible.builtin.dnf:
+    name: bolt
+    state: present
+  when: is_dnf
+  failed_when: false
+
+- name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
+  ansible.builtin.systemd:
+    name: bolt
+    state: started
+  when:
+    - is_dnf
+    - not system_is_container  # D-Bus activation crashes Podman containers
+  failed_when: false
+
+- name: Authselect and fingerprint auth
+  ansible.builtin.include_tasks: authselect_fingerprint.yml
+
+- ansible.builtin.include_tasks: service_masking.yml
+
+- ansible.builtin.include_tasks: logind.yml
+
+- ansible.builtin.include_tasks: services.yml
+
+- name: Firmware updates
+  ansible.builtin.include_tasks: firmware.yml
+
+- name: SSHD hardening, SELinux port label, and crypto policy
+  ansible.builtin.include_tasks: sshd.yml
+
+- name: Kernel modules for kind
+  ansible.builtin.include_tasks: kernel_modules_kind.yml
+
+- name: NetworkManager configuration
+  ansible.builtin.include_tasks: nm.yml
+
+- name: dnf-automatic
+  ansible.builtin.include_tasks: dnf_automatic.yml
+
+- name: DNS-over-TLS
+  ansible.builtin.include_tasks: dns_over_tls.yml

@@ -1,0 +1,38 @@
+---
+# roles/system/tasks/selinux.yml
+# SELinux enforcement. Included from main.yml.
+# --- SELinux enforcement check ---
+- name: Verify SELinux is enforcing
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['selinux'].status == 'enabled'
+      - ansible_facts['selinux'].mode == 'enforcing'
+      - ansible_facts['selinux'].type == 'targeted'
+    fail_msg: >-
+      SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
+      (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
+      Fix: sudo setenforce 1 && sudo sed -i
+      's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+  when:
+    - ansible_facts['selinux'] is defined
+    - ansible_facts['selinux'] is mapping
+    - is_dnf
+    - system_selinux_enforcing_required | bool
+
+- name: Mount hardening
+  ansible.builtin.include_tasks: mounts.yml
+
+- name: Kernel module blacklist
+  ansible.builtin.include_tasks: kernel_modules_blacklist.yml
+
+- name: Sysctl hardening
+  ansible.builtin.include_tasks: sysctl.yml
+
+- name: Firewall configuration
+  ansible.builtin.include_tasks: firewall.yml
+
+- name: Kernel lockdown
+  ansible.builtin.include_tasks: kernel_lockdown.yml
+
+- name: Core dumps
+  ansible.builtin.include_tasks: coredumps.yml

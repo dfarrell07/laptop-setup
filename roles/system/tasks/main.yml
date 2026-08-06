@@ -16,89 +16,13 @@
     - is_dnf
     - not csb_rhel
 
-# --- SELinux enforcement check ---
-- name: Verify SELinux is enforcing
-  ansible.builtin.assert:
-    that:
-      - ansible_facts['selinux'].status == 'enabled'
-      - ansible_facts['selinux'].mode == 'enforcing'
-      - ansible_facts['selinux'].type == 'targeted'
-    fail_msg: >-
-      SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
-      (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
-      Fix: sudo setenforce 1 && sudo sed -i
-      's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-  when:
-    - ansible_facts['selinux'] is defined
-    - ansible_facts['selinux'] is mapping
-    - is_dnf
-    - system_selinux_enforcing_required | bool
-
-- name: Mount hardening
-  ansible.builtin.include_tasks: mounts.yml
-
-- name: Kernel module blacklist
-  ansible.builtin.include_tasks: kernel_modules_blacklist.yml
-
-- name: Sysctl hardening
-  ansible.builtin.include_tasks: sysctl.yml
-
-- name: Firewall configuration
-  ansible.builtin.include_tasks: firewall.yml
-
-- name: Kernel lockdown
-  ansible.builtin.include_tasks: kernel_lockdown.yml
-
-- name: Core dumps
-  ansible.builtin.include_tasks: coredumps.yml
+- ansible.builtin.include_tasks: selinux.yml
 
 # --- Auditd ---
 - name: Auditd tasks
   ansible.builtin.include_tasks: auditd.yml
 
-# --- Bolt (Thunderbolt device authorization daemon) ---
-- name: Install bolt for Thunderbolt device authorization
-  ansible.builtin.dnf:
-    name: bolt
-    state: present
-  when: is_dnf
-  failed_when: false
-
-- name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
-  ansible.builtin.systemd:
-    name: bolt
-    state: started
-  when:
-    - is_dnf
-    - not system_is_container  # D-Bus activation crashes Podman containers
-  failed_when: false
-
-- name: Authselect and fingerprint auth
-  ansible.builtin.include_tasks: authselect_fingerprint.yml
-
-- ansible.builtin.include_tasks: service_masking.yml
-
-- ansible.builtin.include_tasks: logind.yml
-
-- ansible.builtin.include_tasks: services.yml
-
-- name: Firmware updates
-  ansible.builtin.include_tasks: firmware.yml
-
-- name: SSHD hardening, SELinux port label, and crypto policy
-  ansible.builtin.include_tasks: sshd.yml
-
-- name: Kernel modules for kind
-  ansible.builtin.include_tasks: kernel_modules_kind.yml
-
-- name: NetworkManager configuration
-  ansible.builtin.include_tasks: nm.yml
-
-- name: dnf-automatic
-  ansible.builtin.include_tasks: dnf_automatic.yml
-
-- name: DNS-over-TLS
-  ansible.builtin.include_tasks: dns_over_tls.yml
+- ansible.builtin.include_tasks: bolt.yml
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - ansible.builtin.include_tasks: session_timeout.yml
