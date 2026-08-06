@@ -17,6 +17,10 @@
     - name: Refresh DNF cache so system role sees current mirror metadata
       ansible.builtin.dnf:
         update_cache: true
+      register: _dnf_cache_refresh
+      retries: 3
+      delay: 5
+      until: _dnf_cache_refresh is succeeded
 
     - name: Check if openssh-server is already installed
       ansible.builtin.command: rpm -q openssh-server
