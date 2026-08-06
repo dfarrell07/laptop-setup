@@ -37,6 +37,7 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel
+    - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
     - system_bluetooth_conf_stat.stat.exists
   notify: Restart bluetooth
 
@@ -50,6 +51,7 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel
+    - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
     - system_bluetooth_conf_stat.stat.exists
     - system_bluetooth_name | length > 0
   notify: Restart bluetooth
