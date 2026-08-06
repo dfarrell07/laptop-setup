@@ -27,8 +27,8 @@
     ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
     ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
     csb_rhel: false                       # test-isolation baseline; per-scenario converge plays override for CSB/RHEL scenarios
-                                          # CI gap: redhat role cert-package install block (when: csb_rhel) is NOT
-                                          # exercised by any Podman-based scenario — requires a real RHEL CSB host
+                                          # Rocky scenario sets csb_rhel: true + csb_detected: true in play 2 (converge.yml
+                                          # lines 49-50), exercising the redhat role cert-install block (when: csb_rhel)
     system_selinux_enforcing_required: false  # geerlingguy images report SELinux disabled regardless of host policy
     # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required
     system_timezone: UTC                  # CHANGE_ME sentinel from default.config.yml is invalid; use UTC in CI
