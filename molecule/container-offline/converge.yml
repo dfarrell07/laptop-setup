@@ -15,6 +15,12 @@
   become: false
   gather_facts: false
 
+  vars:
+    # dnf post-install scriptlets call systemctl daemon-reload → D-Bus → crashes PID 1 in
+    # the privileged systemd container; guard is `when: not system_is_container` on the
+    # dnf task. Package installation is tested by fedora/rocky/debian molecule scenarios.
+    system_is_container: true
+
   pre_tasks:
     - name: Gather minimal facts
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/gather-minimal-facts.yml"

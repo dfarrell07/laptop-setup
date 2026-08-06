@@ -10,7 +10,9 @@
     state: present
   become: true  # distrobox containers have passwordless sudo; without this dnf5 refuses non-root install
   failed_when: false
-  when: distrobox_packages | length > 0
+  when:
+    - distrobox_packages | length > 0
+    - not (system_is_container | default(false))  # dnf scriptlets → daemon-reload → D-Bus → crashes PID 1 in privileged containers
   register: container_dnf_result
 
 # --- Binary downloads ---
