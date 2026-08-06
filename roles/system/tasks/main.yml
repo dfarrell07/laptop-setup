@@ -57,45 +57,7 @@
     - '"gdm.service" in ansible_facts.services'
     - not csb_rhel
 
-# --- AIDE cleanup when disabled (prevents one-way ratchet) ---
-# When system_aide_enabled is toggled false, stop and remove the AIDE infrastructure
-# so aide-check.timer doesn't keep running on an unmanaged installation.
-- name: Remove AIDE infrastructure when disabled
-  when:
-    - is_dnf
-    - not (system_aide_enabled | bool)
-    - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
-  block:
-    - name: Disable and stop aide-check.timer when AIDE disabled
-      ansible.builtin.systemd:
-        name: aide-check.timer
-        state: stopped
-        enabled: false
-        daemon_reload: true
-      failed_when: false
-
-    - name: Remove AIDE systemd unit files when disabled
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/systemd/system/aide-check.service
-        - /etc/systemd/system/aide-check.timer
-        - /etc/systemd/system/aide-notify@.service
-        - "/etc/systemd/system/{{ 'dnf5-automatic' if is_dnf5 else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
-      loop_control:
-        label: "{{ item }}"
-      register: system_aide_unit_removal
-
-    - name: Reload systemd after removing AIDE units  # noqa: no-handler
-      ansible.builtin.systemd:
-        daemon_reload: true
-      when: system_aide_unit_removal.changed
-
-    - name: Remove aide package when AIDE disabled
-      ansible.builtin.dnf:
-        name: aide
-        state: absent
+- ansible.builtin.include_tasks: aide_cleanup.yml
 
 - name: AIDE configuration
   ansible.builtin.include_tasks: aide.yml
