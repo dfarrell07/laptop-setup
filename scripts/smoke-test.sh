@@ -1312,6 +1312,14 @@ EOF
   elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
   else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
+  # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
+  if $CSB_HOST && _splunk_entry=$(getent passwd splunk 2>/dev/null) && [[ -n "$_splunk_entry" ]]; then
+    _splunk_shell=$(echo "$_splunk_entry" | cut -d: -f7)
+    if [[ "$_splunk_shell" == "/sbin/nologin" ]]; then record "splunk-shell" "PASS"
+    else record "splunk-shell" "FAIL" "splunk shell='$_splunk_shell', expected /sbin/nologin (CIS 5.6) — run: make redhat"; fi
+    unset _splunk_shell _splunk_entry
+  fi
+
   # Login banner deployed to /etc/issue (CIS 1.7.1)
   # Skipped on RHEL CSB only — IT deploys a mandated corporate legal banner; Ansible does not
   # write /etc/issue on RHEL CSB (csb_rhel guard). On Fedora hybrid CSB, Ansible does deploy
