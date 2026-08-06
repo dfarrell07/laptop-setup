@@ -35,9 +35,11 @@
     state: directory
     mode: "0755"
 
+- name: Set /tmp noexec mount option string
+  ansible.builtin.set_fact:
+    _system_noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
+
 - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
-  vars:
-    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -45,7 +47,7 @@
       # Must include all options from tmp.mount base unit.
       # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
       [Mount]
-      Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+      Options=mode=1777,strictatime,nosuid,nodev{{ _system_noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
     dest: /etc/systemd/system/tmp.mount.d/hardening.conf
     mode: "0644"
   notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
