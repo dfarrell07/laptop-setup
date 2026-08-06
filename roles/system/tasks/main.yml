@@ -259,7 +259,10 @@
     name: fwupd-refresh.timer
     state: started
     enabled: true
-  when: not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
+  when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+  changed_when: false
   failed_when: false
 
 - name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end

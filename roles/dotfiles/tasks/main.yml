@@ -502,6 +502,7 @@
     path: "/run/user/{{ ansible_facts['user_uid'] }}/ssh"
     state: directory
     mode: "0700"
+  changed_when: false
   when: is_linux
 
 - name: Create tmux socket directory in XDG runtime dir
@@ -509,6 +510,7 @@
     path: "/run/user/{{ ansible_facts['user_uid'] }}/tmux"
     state: directory
     mode: "0700"
+  changed_when: false
   when: is_linux
 
 - name: Ensure direnv config directory

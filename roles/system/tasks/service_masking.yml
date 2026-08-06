@@ -19,7 +19,7 @@
   when:
     - not (system_disable_bluetooth | bool)
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
-    - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 - name: Stat /etc/bluetooth/main.conf

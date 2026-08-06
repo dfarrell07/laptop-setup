@@ -1,4 +1,7 @@
 ---
+# molecule/shared/gather-minimal-facts.yml
+# Gather only the minimal fact subsets needed for verify assertions.
+# Include from scenario verify.yml pre_tasks when full gather_facts is off.
 - name: Gather minimal facts
   ansible.builtin.setup:
     gather_subset:

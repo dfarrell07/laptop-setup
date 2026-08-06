@@ -205,4 +205,4 @@
       register: system_usbguard_enable_result
       failed_when:
         - system_usbguard_enable_result.failed
-        - ansible_facts['virtualization_type'] not in ['container', 'docker', 'podman']
+        - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
