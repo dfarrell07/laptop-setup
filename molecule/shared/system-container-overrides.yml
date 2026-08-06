@@ -29,6 +29,7 @@
     csb_rhel: false                       # molecule temp inventory does not load project group_vars; set baseline here
     system_selinux_enforcing_required: false  # geerlingguy images report SELinux disabled regardless of host policy
     # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required
+    system_timezone: UTC                  # CHANGE_ME sentinel from default.config.yml is invalid; use UTC in CI
     csb_detected: false                   # molecule temp inventory baseline
     needs_container_tier: "host-only"     # molecule temp inventory baseline
     ansible_managed: "Ansible managed — do not edit"  # group_vars/all/vars.yml not loaded by molecule temp inventory

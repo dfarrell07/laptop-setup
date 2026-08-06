@@ -1458,7 +1458,7 @@
     masked: true
     state: stopped
   when:
-    - ansible_facts['interfaces'] | select('match', '^wwan') | list | length == 0
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
   failed_when: false
 
 - name: Unmask ModemManager (WWAN interface detected)
@@ -1466,7 +1466,7 @@
     name: ModemManager.service
     masked: false
   when:
-    - ansible_facts['interfaces'] | select('match', '^wwan') | list | length > 0
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length > 0
   failed_when: false
 
 # --- TLP battery charge management (ThinkPad) ---
