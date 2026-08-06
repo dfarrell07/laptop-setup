@@ -2,9 +2,9 @@
 """Verify security hardening variables are present and have expected types in
 group_vars/all/vars.yml, which is the single source of truth for these values.
 
-These vars were previously duplicated in roles/system/defaults/main.yml but that
-copy was removed (cycle 1 refactor); vars.yml is now authoritative for both
-full-playbook and standalone molecule verify invocations (group_vars, precedence 5).
+group_vars/all/vars.yml is authoritative for full-playbook runs (precedence 5).
+roles/system/defaults/main.yml duplicates them so the system role is standalone-invocable
+in molecule (which generates a temp inventory that does not load project group_vars).
 
 Also verifies that pipx version pins in roles/packages/defaults/main.yml satisfy
 the specifier ranges in requirements-test.txt, keeping the two files in sync.
@@ -50,6 +50,10 @@ REQUIRED_KEYS = {
     "system_mask_nfs_server": bool,
     "system_init_on_free": bool,
     "system_faillock_even_deny_root": bool,
+    "system_kernel_panic": int,
+    "system_kernel_panic_on_oops": int,
+    "system_kexec_load_disabled": int,
+    "system_ptrace_scope": int,
 }
 
 
