@@ -53,7 +53,9 @@
       value: "{{ system_inactive_days }}"
   loop_control:
     label: "{{ item.name }}"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not (is_apt and system_is_container)  # logind inotify on login.defs crashes PID 1 in Debian 13 privileged Podman containers
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -61,7 +63,9 @@
     regexp: '^ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not (is_apt and system_is_container)  # same inotify/logind crash guard as Configure password aging task above
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -69,7 +73,9 @@
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not (is_apt and system_is_container)  # same inotify/logind crash guard as Configure password aging task above
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
