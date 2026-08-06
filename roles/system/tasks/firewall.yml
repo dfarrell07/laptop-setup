@@ -10,6 +10,7 @@
 
 - name: Re-gather service facts after firewalld start
   ansible.builtin.service_facts:
+  when: not system_is_container  # systemctl list-units --all crashes PID 1 in Debian 13 privileged Podman containers
 
 - name: Set firewalld running fact
   ansible.builtin.set_fact:

@@ -1,15 +1,8 @@
 ---
 # roles/packages/tasks/install_binary_downloads.yml
 # Binary download tasks (SHA256-verified, pinned versions) for work-profile binaries.
-# Sets _packages_linux_x86_work fact used by later task files.
+# _packages_linux_x86_work is set in main.yml before this file is imported.
 # --- Binary downloads (SHA256-verified, pinned versions) ---
-
-- name: Set Linux x86 work binary install fact
-  ansible.builtin.set_fact:
-    _packages_linux_x86_work: "{{ packages_install_binaries | bool
-      and is_linux
-      and ansible_facts['architecture'] == 'x86_64'
-      and profile == 'work' }}"
 
 - name: Install oc, kubectl, and opm
   when: _packages_linux_x86_work

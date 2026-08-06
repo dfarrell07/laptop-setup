@@ -58,6 +58,13 @@
   ansible.builtin.include_tasks: install_brew.yml
   when: is_macos
 
+- name: Set Linux x86 work binary install fact
+  ansible.builtin.set_fact:
+    _packages_linux_x86_work: "{{ packages_install_binaries | bool
+      and is_linux
+      and ansible_facts['architecture'] == 'x86_64'
+      and profile == 'work' }}"
+
 - ansible.builtin.import_tasks: install_binary_downloads.yml
 
 # --- Go install tools ---

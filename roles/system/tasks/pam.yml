@@ -19,7 +19,9 @@
       value: "{{ system_faillock_unlock_time }}"
   loop_control:
     label: "{{ item.key }}"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 
 - name: Configure pam_faillock boolean flags
   community.general.ini_file:
@@ -31,7 +33,9 @@
   loop:
     - audit
     - local_users_only  # prevent double-lockout with SSSD/IPA domain users
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 - name: Configure pam_faillock even_deny_root flag
   community.general.ini_file:
@@ -43,6 +47,7 @@
   when:
     - system_faillock_even_deny_root | bool
     - not csb_rhel
+    - not system_is_container
 
 - name: Remove pam_faillock even_deny_root flag (when disabled)
   community.general.ini_file:
@@ -54,6 +59,7 @@
   when:
     - not (system_faillock_even_deny_root | bool)
     - not csb_rhel
+    - not system_is_container
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -171,7 +177,9 @@
     option: remember
     value: "{{ system_pwhistory_remember }}"
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -180,7 +188,9 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements
@@ -207,7 +217,9 @@
       value: "{{ system_pwquality_maxrepeat }}"
   loop_control:
     label: "{{ item.key }}"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -216,7 +228,9 @@
     option: enforce_for_root
     allow_no_value: true
     mode: "0644"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su

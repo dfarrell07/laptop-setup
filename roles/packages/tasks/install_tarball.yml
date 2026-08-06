@@ -16,15 +16,16 @@
 #   csb_ticket_body    — CSB ticket detail
 #
 # Optional vars:
-#   strip_components   — integer; adds --strip-components=N to tar (default: omit)
-#   binary_in_archive  — path inside the tarball to extract (default: extract all)
-#   download_timeout   — get_url timeout in seconds (default: 120)
+#   strip_components      — integer; adds --strip-components=N to tar (default: omit)
+#   binary_in_archive     — path inside the tarball to extract (default: extract all)
+#   download_timeout      — get_url timeout in seconds (default: 120)
+#   version_check_timeout — version check shell timeout in seconds (default: 10)
 
 - name: "Download and install {{ binary_name }}"
   block:
     - name: "Version check: {{ binary_name }}"
       ansible.builtin.command:
-        cmd: "{{ version_check_cmd }}"
+        cmd: "timeout {{ version_check_timeout | default(10) }} {{ version_check_cmd }}"
       register: _install_tarball_check
       changed_when: false
       failed_when: false

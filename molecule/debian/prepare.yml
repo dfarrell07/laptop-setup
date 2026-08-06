@@ -29,17 +29,10 @@
       changed_when: false
       failed_when: false
 
-    - name: Wait for kernel-filesystem unit restart loops to exhaust
+    - name: Wait for kernel-filesystem unit restart loops to permanently exhaust
       # binfmt_misc/configfs/debugfs/tracefs fail in containers; systemd retries
-      # them for ~15-30s before marking permanently failed. Converge must not start
-      # while these loops run — they steal CPU and can destabilize PID 1.
+      # each unit up to StartLimitBurst=5 before permanently failing (~30s total).
+      # Converge must not start until ALL loops exhaust — do NOT use reset-failed
+      # which resets the counter and allows additional retry crashes.
       ansible.builtin.pause:
-        seconds: 30
-
-    - name: Clear failed unit state so systemd considers itself stable
-      # After the retry loops exhaust, reset-failed clears the failed counters.
-      # This prevents further retry attempts and improves overall systemd stability.
-      ansible.builtin.command: podman exec {{ inventory_hostname }} systemctl reset-failed
-      delegate_to: localhost
-      changed_when: false
-      failed_when: false
+        seconds: 45

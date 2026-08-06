@@ -10,6 +10,7 @@
     - is_dnf
     - not (system_aide_enabled | bool)
     - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
+    - not system_is_container  # daemon_reload: true always runs systemctl daemon-reload, crashing privileged Podman container PID 1
   block:
     - name: Disable and stop aide-check.timer when AIDE disabled
       ansible.builtin.systemd:

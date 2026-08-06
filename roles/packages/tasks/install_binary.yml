@@ -14,13 +14,14 @@
 #   csb_ticket_body    — CSB ticket detail
 #
 # Optional vars:
-#   download_timeout   — get_url timeout in seconds (default: 120)
+#   download_timeout        — get_url timeout in seconds (default: 120)
+#   version_check_timeout   — version check shell timeout in seconds (default: 10)
 
 - name: "Download and install {{ binary_name }}"
   block:
     - name: "Version check: {{ binary_name }}"
       ansible.builtin.command:
-        cmd: "{{ version_check_cmd }}"
+        cmd: "timeout {{ version_check_timeout | default(10) }} {{ version_check_cmd }}"
       register: _install_binary_check
       changed_when: false
       failed_when: false
