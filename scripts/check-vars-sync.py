@@ -17,6 +17,7 @@ from packaging.specifiers import SpecifierSet
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
+SYSTEM_DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
 PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
 
@@ -130,13 +131,37 @@ def main():
         for line in errors:
             print(line, file=sys.stderr)
         print(
-            "vars.yml is the single source of truth for these values "
-            "(roles/system/defaults/main.yml no longer carries them).",
+            "vars.yml is the single source of truth for security hardening values "
+            "(roles/system/defaults/main.yml mirrors them for standalone molecule use).",
             file=sys.stderr,
         )
         sys.exit(1)
 
     print(f"OK: {len(REQUIRED_KEYS)} security hardening keys present and correctly typed in vars.yml")
+
+    defaults_data = load_yaml(SYSTEM_DEFAULTS_FILE)
+    defaults_errors = []
+    for key in REQUIRED_KEYS:
+        if key not in defaults_data:
+            defaults_errors.append(f"  MISSING: {key} not found in roles/system/defaults/main.yml")
+    if defaults_errors:
+        print(
+            "ERROR: roles/system/defaults/main.yml missing security vars"
+            " (required mirror for standalone molecule runs):",
+            file=sys.stderr,
+        )
+        for line in defaults_errors:
+            print(line, file=sys.stderr)
+        print(
+            "Add missing keys to roles/system/defaults/main.yml to match vars.yml.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(
+        f"OK: {len(REQUIRED_KEYS)} security hardening keys present in"
+        " roles/system/defaults/main.yml (molecule mirror)"
+    )
 
     pipx_errors = check_pipx_version_sync()
     if pipx_errors:
