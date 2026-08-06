@@ -1020,6 +1020,38 @@
     - not csb_rhel
     - verify_journald_conf.stat.exists
 
+- name: Check journald drop-in has MaxRetentionSec=6month
+  ansible.builtin.command: grep -q '^MaxRetentionSec=6month' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_journald_conf.stat.exists
+
+- name: Check journald drop-in has SystemKeepFree=1G
+  ansible.builtin.command: grep -q '^SystemKeepFree=1G' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_journald_conf.stat.exists
+
+- name: Check journald drop-in has RateLimitIntervalSec=30s
+  ansible.builtin.command: grep -q '^RateLimitIntervalSec=30s' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_journald_conf.stat.exists
+
+- name: Check journald drop-in has RateLimitBurst=20000
+  ansible.builtin.command: grep -q '^RateLimitBurst=20000' /etc/systemd/journald.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_journald_conf.stat.exists
+
 - name: Check sudoers drop-in has logfile directive
   ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening
   changed_when: false
