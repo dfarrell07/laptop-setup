@@ -601,7 +601,10 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   # so the FAIL is reachable from SSH/TTY — the recommended smoke-test environment per CLAUDE.md.
   if command -v sway &>/dev/null; then
     if [[ -f "$HOME/.config/sway/config" ]]; then
-      if grep -q 'Ansible managed' "$HOME/.config/sway/config"; then record "sway-config" "PASS"
+      if grep -q 'Ansible managed' "$HOME/.config/sway/config"; then
+        record "sway-config" "PASS"
+        if grep -q 'swayidle' "$HOME/.config/sway/config"; then record "sway-idle-lock" "PASS"
+        else record "sway-idle-lock" "FAIL" "swayidle not configured in sway config — screen will not lock; run: make desktop"; fi
       else record "sway-config" "WARN" "present but not Ansible-managed"; fi
     else
       record "sway-config" "FAIL" "~/.config/sway/config not deployed — run: make desktop"
@@ -625,11 +628,10 @@ if [[ -f /etc/kernel/cmdline ]]; then
   echo "$_kcmd" | grep -q "init_on_free=1"       || _kcmd_ok=false
   if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
     echo "$_kcmd" | grep -q "amd_iommu=on"       || _kcmd_ok=false
-    grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
   elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
     echo "$_kcmd" | grep -q "intel_iommu=on"     || _kcmd_ok=false
-    grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
   fi
+  grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
   if $_kcmd_ok; then record "kernel-cmdline" "PASS"
   else record "kernel-cmdline" "FAIL" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
   unset _kcmd _kcmd_ok
@@ -1086,7 +1088,7 @@ EOF
     for _abrt_svc in abrtd.service abrt-journal-core.service abrt-oops.service abrt-vmcore.service abrt-xorg.service; do
       _abrt_state=$(systemctl show -p UnitFileState --value "$_abrt_svc" 2>/dev/null)
       [[ -z "$_abrt_state" || "$_abrt_state" == "not-found" ]] && continue
-      _abrt_key="abrt-${_abrt_svc%.service}-masked"
+      _abrt_base="${_abrt_svc%.service}"; _abrt_base="${_abrt_base#abrt-}"; _abrt_key="abrt-${_abrt_base}-masked"
       if [[ "$_abrt_state" == "masked" ]]; then record "$_abrt_key" "PASS"
       else record "$_abrt_key" "FAIL" "$_abrt_svc not masked (state: $_abrt_state) — ABRT should be masked in favour of systemd-coredump"; fi
     done

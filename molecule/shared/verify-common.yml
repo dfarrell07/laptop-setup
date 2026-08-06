@@ -722,9 +722,7 @@
     - kernel.kptr_restrict = 1
     - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(1) }}
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
-    - net.ipv4.ip_forward
     - net.bridge.bridge-nf-call-iptables
-    - net.ipv6.conf.all.forwarding
     - net.ipv6.conf.all.use_tempaddr
     - net.ipv4.conf.all.rp_filter
     - net.ipv4.conf.default.rp_filter
@@ -733,6 +731,17 @@
   when:
     - ansible_system == 'Linux'
     - verify_sysctl_file.stat.exists
+
+- name: Check sysctl hardening config contains ip_forward keys
+  ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_sysctl_file.stat.exists
+    - system_enable_ip_forward | default(true) | bool
 
 - name: Stat /etc/systemd/system/tmp.mount.d/hardening.conf
   ansible.builtin.stat:
