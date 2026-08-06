@@ -173,7 +173,9 @@
     state: link
     force: true
   loop: "{{ distrobox_host_exec_commands }}"
-  when: container_host_exec.stat.exists
+  when:
+    - container_host_exec.stat.exists
+    - not (system_is_container | default(false))  # become:true sudo → pam_systemd.so D-Bus crashes PID 1 in privileged containers
   become: true
 
 - name: Deploy flatpak-spawn wrapper scripts (Toolbx fallback)

@@ -7,6 +7,10 @@
 # expose those kernel subsystems. Without waiting, converge tasks race against
 # systemd's restart loops on these failed units, causing PID 1 crashes.
 #
+# KEY CONSTRAINT: Do NOT use systemctl mask/disable or any operation that writes
+# to /etc/systemd/ during prepare — even 'mask' without --now creates symlinks
+# that trigger systemd inotify → daemon-reload → container PID 1 crash.
+#
 # NOTE: openssh-server is NOT pre-installed here — apt postinst triggers
 # pam-auth-update which restarts systemd-logind, which crashes PID 1 in
 # privileged Podman containers. The converge skips the openssh-server apt
@@ -29,32 +33,12 @@
       changed_when: false
       failed_when: false
 
-    - name: Mask kernel-filesystem units that loop and destabilize systemd PID 1 in containers
-      # binfmt_misc/configfs/debugfs/tracefs mounts and kernel module loader fail in
-      # privileged Podman containers (restricted kernel namespaces). Without masking,
-      # systemd retries these in activate/fail loops that eventually crash PID 1.
-      # Mask WITHOUT --now: stopping units mid-restart triggers daemon-reload which
-      # itself can crash the container. Masking alone prevents further activation
-      # attempts after the current restart cycle exhausts naturally.
-      # Uses podman exec (delegate_to: localhost) to avoid Ansible connection dependency
-      # during the unstable early-boot window.
-      ansible.builtin.command: >-
-        podman exec {{ inventory_hostname }} systemctl mask
-        proc-sys-fs-binfmt_misc.automount
-        sys-kernel-config.mount
-        sys-kernel-debug.mount
-        sys-kernel-tracing.mount
-        systemd-modules-load.service
-      delegate_to: localhost
-      changed_when: false
-      failed_when: false
-
-    - name: Wait for systemd to settle after masking failed units
-      ansible.builtin.command: podman exec {{ inventory_hostname }} systemctl is-system-running
-      delegate_to: localhost
-      register: _boot2
-      until: "'running' in _boot2.stdout | default('') or 'degraded' in _boot2.stdout | default('')"
-      retries: 20
-      delay: 2
-      changed_when: false
-      failed_when: false
+    - name: Wait for kernel-filesystem unit restart loops to permanently exhaust
+      # binfmt_misc/configfs/debugfs/tracefs fail in containers; systemd retries
+      # each unit up to StartLimitBurst=5 within StartLimitIntervalSec (~10s per cycle).
+      # All 5 units cycle independently, total exhaustion takes ~45-60s.
+      # Do NOT use systemctl mask (creates /etc/systemd/ symlinks → inotify → daemon-reload → crash).
+      # Do NOT use reset-failed (resets retry counter, allowing more crash cycles).
+      # Just wait: after loops exhaust, units are permanently failed, container is stable.
+      ansible.builtin.pause:
+        seconds: 50

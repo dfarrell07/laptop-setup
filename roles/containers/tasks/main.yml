@@ -201,7 +201,9 @@
       # because they are tagged (not dangling) — podman system prune without --all
       # skips non-dangling images regardless of the label filter
       ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
-  when: is_linux
+  when:
+    - is_linux
+    - not system_is_container | default(false)  # user inotify triggers daemon-reload, crashes container PID 1
   register: containers_prune_service
 
 - name: Deploy podman-prune.timer
@@ -218,7 +220,9 @@
 
       [Install]
       WantedBy=timers.target
-  when: is_linux
+  when:
+    - is_linux
+    - not system_is_container | default(false)  # user inotify triggers daemon-reload, crashes container PID 1
   register: containers_prune_timer
 
 - name: Reload systemd user daemon after deploying prune units
@@ -227,6 +231,7 @@
     daemon_reload: true
   when:
     - is_linux
+    - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
     - containers_prune_service.changed or containers_prune_timer.changed
   failed_when: false
 
@@ -236,7 +241,9 @@
     state: started
     enabled: true
     scope: user
-  when: is_linux
+  when:
+    - is_linux
+    - not system_is_container | default(false)  # scope:user systemd start crashes Podman container PID 1
   failed_when: false
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---

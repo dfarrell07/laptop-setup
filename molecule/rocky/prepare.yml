@@ -7,20 +7,18 @@
 #
 # Key fix: systemctl is-system-running returns rc=1 for "degraded" state,
 # so the until condition must NOT require rc==0. Use stdout-only match.
+# ignore_unreachable: true allows retries when the container is briefly
+# unreachable during early systemd startup (Podman connection plugin does not
+# support wait_for_connection, which times out on this image).
 #
 # NOTE: do NOT install packages here and do NOT modify /etc/systemd/ —
-# both trigger inotify daemon-reload events that can crash the container.
+# both trigger inotify daemon-reload events that crash the container.
 - name: Prepare (wait for systemd)
   hosts: all
   gather_facts: false
+  ignore_unreachable: true  # allow systemctl retry loop to handle brief unreachability
 
   tasks:
-    - name: Wait for container connection to be available
-      ansible.builtin.wait_for_connection:
-        timeout: 120
-        delay: 15
-        sleep: 5
-
     - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module
       ansible.builtin.command: systemctl is-system-running
       register: systemd_state

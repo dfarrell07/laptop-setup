@@ -11,6 +11,7 @@
     mode: "0644"
   when:
     - system_tmout | int > 0
+    - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
 
 - name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
   ansible.builtin.lineinfile:
