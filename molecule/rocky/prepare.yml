@@ -13,6 +13,7 @@
 - name: Prepare (wait for systemd)
   hosts: all
   gather_facts: false
+  ignore_unreachable: true  # allow retries when container is briefly unreachable during systemd startup
 
   tasks:
     - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module

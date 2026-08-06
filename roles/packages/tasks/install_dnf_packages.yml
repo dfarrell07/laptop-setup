@@ -24,6 +24,32 @@
         state: present
       become: true
       tags: [become]
+      when: not system_is_container
+
+    - name: Install dnf packages (container — skip scriptlets to prevent systemd daemon-reload crash)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        # --setopt=rpm_opts=--noscripts: RPM scriptlets (systemd-update-helper, etc.) trigger
+        # daemon-reload in privileged containers, crashing systemd PID 1. Scriptlets are
+        # skipped safely in containers (services aren't started; /etc/shells not needed for CI).
+        cmd: >-
+          dnf install -y --setopt=rpm_opts=--noscripts
+          {{ (packages_cli
+             + packages_languages
+             + packages_security
+             + packages_containers
+             + (packages_containers_kubectl
+                if (profile != 'work'
+                    or ansible_facts['architecture'] != 'x86_64'
+                    or not (packages_install_binaries | bool))
+                else [])
+             + (packages_networking | reject('equalto', 'tailscale') | list
+                if not repo_tailscale else packages_networking)
+             + (packages_networking_work if profile == 'work' else [])) | join(' ') }}
+      become: true
+      register: _packages_dnf_container_result
+      changed_when: "'Nothing to do' not in _packages_dnf_container_result.stdout"
+      failed_when: _packages_dnf_container_result.rc != 0
+      when: system_is_container
   rescue:
     - name: Record dnf package install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

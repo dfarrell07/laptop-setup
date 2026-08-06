@@ -48,6 +48,7 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # fwupdmgr activates fwupd D-Bus service, crashing privileged Podman container systemd
 
 - name: Report available firmware updates
   ansible.builtin.debug:

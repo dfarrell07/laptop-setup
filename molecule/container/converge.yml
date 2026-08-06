@@ -22,6 +22,9 @@
     # privileged systemd container, crashing PID 1 before the symlink task runs.
     # Package installation is tested by the fedora/rocky/debian molecule scenarios.
     distrobox_packages: []
+    # True so become:true tasks that write to system paths (e.g. /usr/local/bin)
+    # are skipped; those same paths already exist in the Fedora container image.
+    system_is_container: true
     # Single command to exercise the flatpak-spawn wrapper creation path.
     distrobox_host_exec_commands:
       - podman
