@@ -29,7 +29,9 @@
   check_mode: false  # read-only probe — must run in check mode
 
 - name: Download and install oc + kubectl
-  when: container_oc_check.rc != 0
+  when: >-
+    container_oc_check.rc != 0 or
+    (container_oc_check.stdout | regex_search('Client Version: (\S+)', '\1') | default([]) | first | default('')) != distrobox_oc_version
   become: true
   block:
     - name: Fetch OpenShift client SHA256 checksums

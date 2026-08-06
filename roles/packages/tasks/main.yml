@@ -996,6 +996,7 @@
         cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }} version"
       changed_when: false
       failed_when: false
+      check_mode: false
       register: packages_subctl_version_check
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
@@ -1013,8 +1014,8 @@
         HTTP_PROXY: "{{ proxy_url | default(omit) }}"
       vars:
         _subctl_installed: >-
-          {{ (packages_subctl_version_check.results[loop_idx].stdout ~
-              packages_subctl_version_check.results[loop_idx].stderr)
+          {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~
+              (packages_subctl_version_check.results[loop_idx].stderr | default('')))
              | regex_search('subctl v?(\S+)', '\\1') | default([]) | first | default('') }}
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
@@ -1075,6 +1076,7 @@
         cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }} version"
       changed_when: false
       failed_when: false
+      check_mode: false
       register: packages_subctl_rh_version_check
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:

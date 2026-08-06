@@ -307,6 +307,32 @@
     - not (csb_rhel | default(false))
     - verify_dnf_auto.status.UnitFileState | default('') != ''
 
+- name: Gather ABRT service unit state
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+  register: verify_abrt_units
+  failed_when: false
+  become: true
+  loop:
+    - abrtd
+    - abrt-journal-core
+    - abrt-oops
+    - abrt-vmcore
+    - abrt-xorg
+  when:
+    - not (csb_rhel | default(false))
+    - system_mask_abrt | default(true) | bool
+
+- name: Assert ABRT services are masked
+  ansible.builtin.assert:
+    that: item.status.UnitFileState == 'masked'
+    fail_msg: "{{ item.item }} UnitFileState is '{{ item.status.UnitFileState | default('') }}', expected masked"
+  loop: "{{ verify_abrt_units.results | default([]) }}"
+  when:
+    - not (csb_rhel | default(false))
+    - system_mask_abrt | default(true) | bool
+    - item.status.UnitFileState | default('') not in ['', 'not-found']
+
 - name: Verify crypto-policy
   ansible.builtin.command: update-crypto-policies --show
   register: verify_crypto
