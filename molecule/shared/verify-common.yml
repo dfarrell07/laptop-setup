@@ -1135,6 +1135,60 @@
     - ansible_system == 'Linux'
     - not csb_rhel
 
+# --- dconf hardening (CIS 1.8.x — GNOME/GDM only, stat-gated) ---
+# Only fires when the system role's dconf.yml ran (gdm.service present on target).
+# Skips cleanly on Sway/i3 and all Podman container CI scenarios where GDM is absent.
+- name: Stat /etc/dconf/db/local.d/50-hardening (dconf media-handling CIS 1.8.6-1.8.8)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local.d/50-hardening
+  register: verify_dconf_50_hardening
+  when: ansible_system == 'Linux'
+
+- name: Stat /etc/dconf/db/local (compiled dconf database)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local
+  register: verify_dconf_db_local
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Assert /etc/dconf/db/local compiled database exists
+  ansible.builtin.assert:
+    that: verify_dconf_db_local.stat.exists
+    fail_msg: >-
+      /etc/dconf/db/local compiled database missing — 'Apply dconf schema database'
+      handler did not run dconf update after deploying /etc/dconf/db/local.d/50-hardening
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Check dconf 50-hardening has automount=false (CIS 1.8.6)
+  ansible.builtin.command: grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Check dconf 50-hardening has autorun-never=true (CIS 1.8.8)
+  ansible.builtin.command: grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Stat /etc/dconf/db/local.d/51-screensaver (dconf screensaver CIS 1.8.4/1.8.5)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local.d/51-screensaver
+  register: verify_dconf_51_screensaver
+  when: ansible_system == 'Linux'
+
+- name: Check dconf 51-screensaver has lock-enabled=true (CIS 1.8.5)
+  ansible.builtin.command: grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_51_screensaver.stat.exists
+
 - name: Check chrony/chronyd service is enabled (NTP hardening)
   ansible.builtin.systemd:
     name: "{{ 'chrony' if ansible_pkg_mgr == 'apt' else 'chronyd' }}"
