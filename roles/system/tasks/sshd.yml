@@ -133,7 +133,9 @@
   register: _sshd_socket_exists
   changed_when: false
   failed_when: false
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not system_is_container  # systemctl D-Bus call crashes Debian 13 privileged Podman container PID 1
 
 - name: Mask sshd.socket to prevent port-22 socket activation
   ansible.builtin.systemd:

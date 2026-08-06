@@ -9,6 +9,7 @@
   when:
     - is_dnf
     - system_bolt_enabled
+    - not system_is_container  # DNF RPM post-install calls systemctl daemon-reload, crashes container PID 1
   failed_when: false
 
 - name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
