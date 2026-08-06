@@ -1301,12 +1301,14 @@
     - profile | default('personal') == 'work'
 
 # --- subuid/subgid (rootless Podman) ---
-- name: Check /etc/subuid has entry for ansible_user_id
-  ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subuid
+# Use real_user_id (the provisioned user) rather than ansible_user_id (connection user).
+# In container CI, ansible_user_id=root but subuid is provisioned for real_user_id=molecule.
+- name: Check /etc/subuid has entry for real_user_id
+  ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subuid"
   changed_when: false
   when: ansible_system == 'Linux'
 
-- name: Check /etc/subgid has entry for ansible_user_id
-  ansible.builtin.command: grep -q '^{{ ansible_user_id }}:' /etc/subgid
+- name: Check /etc/subgid has entry for real_user_id
+  ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subgid"
   changed_when: false
   when: ansible_system == 'Linux'

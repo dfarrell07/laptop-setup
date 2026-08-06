@@ -17,6 +17,7 @@
         dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         system_disable_usb_storage: false  # system-container-overrides disables this; verify must match converge context
+        real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:
     # --- Shared assertions (all platforms) ---
