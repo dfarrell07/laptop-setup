@@ -1,0 +1,262 @@
+---
+# --- Kernel lockdown ---
+- name: Check current kernel cmdline
+  ansible.builtin.command:
+    cmd: grubby --info=DEFAULT
+  register: system_grubby_info
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode to enable kernel-cmdline task conditionals
+
+# On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
+# /etc/kernel/cmdline edits are skipped. Fedora hybrid CSB runs its own kernel — lockdown applies.
+- name: Skip grubby kernel param tasks on CSB (IT manages boot config)
+  ansible.builtin.debug:
+    verbosity: 1
+    msg: "RHEL CSB detected — skipping grubby/kernel-cmdline hardening (IT manages RHEL boot config)"
+  when: csb_rhel
+
+- name: Kernel cmdline hardening block (skipped on RHEL CSB)
+  when: not csb_rhel
+  block:
+    - name: Remove stale kernel lockdown parameter before mode change
+      ansible.builtin.command:
+        cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grubby_info.rc == 0
+        - "'lockdown=' in (system_grubby_info.stdout)"
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
+      changed_when: true
+      failed_when: false
+
+    - name: Enable kernel lockdown (integrity mode)
+      ansible.builtin.command:
+        cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
+      register: system_lockdown_result
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grubby_info.rc == 0
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
+      changed_when: system_lockdown_result.rc == 0
+      failed_when: false
+
+    - name: Remove kernel lockdown grub parameter (lockdown disabled)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      register: system_lockdown_remove_result
+      when:
+        - system_kernel_lockdown | length == 0
+        - system_grubby_info.rc == 0
+        - "'lockdown=' in (system_grubby_info.stdout)"
+      changed_when: system_lockdown_remove_result.rc == 0
+      failed_when: false
+
+    - name: Enable IOMMU for DMA protection (AMD)
+      ansible.builtin.command:
+        cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
+      register: system_iommu_amd_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'amd_iommu=on' not in (system_grubby_info.stdout)"
+        - ansible_facts['processor'] | join(' ') | lower is search('amd')
+      changed_when: system_iommu_amd_result.rc == 0
+      failed_when: false
+
+    - name: Enable IOMMU for DMA protection (Intel)
+      ansible.builtin.command:
+        cmd: grubby --args="intel_iommu=on" --update-kernel=ALL
+      register: system_iommu_intel_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'intel_iommu=on' not in (system_grubby_info.stdout)"
+        - ansible_facts['processor'] | join(' ') | lower is search('intel')
+      changed_when: system_iommu_intel_result.rc == 0
+      failed_when: false
+
+    - name: Enable iommu=pt passthrough mode for VFIO/libvirt PCI passthrough
+      ansible.builtin.command:
+        cmd: grubby --args="iommu=pt" --update-kernel=ALL
+      register: system_iommu_pt_result
+      # iommu=pt switches the IOMMU from Translated (full DMA isolation per device) to
+      # Passthrough mode, bypassing DMA remapping for devices not assigned to a VM.
+      # This improves performance for VFIO PCI passthrough but degrades DMA protection
+      # for all other devices. Leave false unless actively using PCI passthrough to VMs.
+      when:
+        - system_iommu_passthrough | bool
+        - system_grubby_info.rc == 0
+        - "'iommu=pt' not in (system_grubby_info.stdout)"
+        - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
+          (ansible_facts['processor'] | join(' ') | lower is search('intel'))
+      changed_when: system_iommu_pt_result.rc == 0
+      failed_when: false
+
+    - name: Remove iommu=pt grub parameter (system_iommu_passthrough false)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="iommu=pt" --update-kernel=ALL
+      register: system_iommu_pt_remove_result
+      when:
+        - not (system_iommu_passthrough | bool)
+        - system_grubby_info.rc == 0
+        - "'iommu=pt' in (system_grubby_info.stdout)"
+      changed_when: system_iommu_pt_remove_result.rc == 0
+      failed_when: false
+
+    - name: Disable legacy vsyscall page (exploit gadget source)
+      ansible.builtin.command:
+        cmd: grubby --args="vsyscall=none" --update-kernel=ALL
+      register: system_vsyscall_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'vsyscall=none' not in (system_grubby_info.stdout)"
+      changed_when: system_vsyscall_result.rc == 0
+      failed_when: false
+
+    - name: Zero-fill freed memory pages (init_on_free — not a Fedora default)
+      ansible.builtin.command:
+        cmd: grubby --args="init_on_free=1" --update-kernel=ALL
+      register: system_init_on_free_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'init_on_free=1' not in (system_grubby_info.stdout)"
+        - system_init_on_free | bool
+      changed_when: system_init_on_free_result.rc == 0
+      failed_when: false
+
+    - name: Remove init_on_free grub parameter (system_init_on_free false — removes performance/security tradeoff param)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
+      register: system_init_on_free_remove_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'init_on_free=1' in (system_grubby_info.stdout)"
+        - not (system_init_on_free | bool)
+      changed_when: system_init_on_free_remove_result.rc == 0
+      failed_when: false
+
+    - name: Randomize page allocator free-list order (heap-spray defense)
+      ansible.builtin.command:
+        cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
+      register: system_page_shuffle_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout)"
+      changed_when: system_page_shuffle_result.rc == 0
+      failed_when: false
+
+    - name: Remove rd.luks.key grub parameter (leaks LUKS UUID; dracut falls back to passphrase)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
+      register: system_luks_key_cleanup
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.key' in (system_grubby_info.stdout)"
+        - system_remove_luks_key | bool
+      changed_when: system_luks_key_cleanup.rc == 0
+      failed_when: false
+      # WARNING: set system_remove_luks_key: true in config.yml only if this machine does NOT
+      # use a LUKS keyfile for auto-unlock at boot. Removing rd.luks.key from the cmdline means
+      # LUKS will require manual passphrase entry on every reboot. Default: false (preserve keyfile auth).
+
+    - name: Remove rd.luks.key from /etc/default/grub (prevents grub2-mkconfig re-introducing it)
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '\s*rd\.luks\.key=\S+'
+        replace: ''
+      when:
+        - system_grubby_info.rc == 0
+        - system_remove_luks_key | bool
+      failed_when: false
+
+    # Merge security hardening params into /etc/kernel/cmdline so new kernel installs
+    # via 'dnf update kernel' include them automatically. Uses append-only logic to
+    # PRESERVE existing essential boot params (root=UUID, rd.luks.uuid, rootflags, etc.)
+    # that would be lost if the file were replaced with only the hardening params.
+    - name: Merge security hardening params into /etc/kernel/cmdline  # noqa: command-instead-of-module
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          # Seed from existing file; fall back to current cmdline (strip BOOT_IMAGE= entry)
+          if [[ -f /etc/kernel/cmdline ]]; then
+            current=$(cat /etc/kernel/cmdline)
+          else
+            current=$(sed 's|BOOT_IMAGE=[^ ]* ||g' /proc/cmdline)
+          fi
+          {% if system_remove_luks_key | bool %}
+          current=$(echo "$current" | sed 's| *rd\.luks\.key=[^ ]*||g')
+          {% endif %}
+          {% if system_kernel_lockdown | length == 0 %}
+          current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
+          {% endif %}
+          {% if not (system_init_on_free | bool) %}
+          current=$(echo "$current" | sed 's| *init_on_free=1||g')
+          {% endif %}
+          {% if not (system_iommu_passthrough | bool) %}
+          current=$(echo "$current" | sed 's| *iommu=pt||g')
+          {% endif %}
+          {% if system_kernel_lockdown | length > 0 %}
+          current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
+          {% endif %}
+          new="$current"
+          # Append each missing hardening param (check by key prefix only)
+          _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
+          {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | length > 0 else '' }}
+          _add "vsyscall=none"
+          {{ '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
+          _add "page_alloc.shuffle=1"
+          {% set is_amd = ansible_facts['processor'] | join(' ') | lower is search('amd') %}
+          {% set is_intel = ansible_facts['processor'] | join(' ') | lower is search('intel') %}
+          {{ '_add "amd_iommu=on"' if is_amd else '' }}
+          {{ '_add "iommu=pt"' if system_iommu_passthrough | bool and (is_amd or is_intel) else '' }}
+          {{ '_add "intel_iommu=on"' if is_intel else '' }}
+          new=$(echo "$new" | tr -s ' ' | sed 's/^ //;s/ $//')
+          if [[ "$new" != "$current" ]]; then
+            echo "$new" > /etc/kernel/cmdline
+            echo changed
+          fi
+        executable: /bin/bash
+      register: system_kernel_cmdline_result
+      changed_when: "'changed' in (system_kernel_cmdline_result.stdout | default(''))"
+      when:
+        - is_dnf
+      failed_when: false
+
+    - name: Log grubby stderr for any non-zero return code
+      ansible.builtin.debug:
+        msg: "grubby failed ({{ item.key }}): rc={{ item.value.rc }} stderr={{ item.value.stderr | default('') }}"
+      loop: "{{ _grubby_results | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value.rc | default(0) | int != 0
+      vars:
+        _grubby_results:
+          lockdown: "{{ system_lockdown_result | default({}) }}"
+          lockdown_remove: "{{ system_lockdown_remove_result | default({}) }}"
+          iommu_amd: "{{ system_iommu_amd_result | default({}) }}"
+          iommu_intel: "{{ system_iommu_intel_result | default({}) }}"
+          iommu_pt: "{{ system_iommu_pt_result | default({}) }}"
+          iommu_pt_remove: "{{ system_iommu_pt_remove_result | default({}) }}"
+          vsyscall: "{{ system_vsyscall_result | default({}) }}"
+          init_on_free: "{{ system_init_on_free_result | default({}) }}"
+          init_on_free_remove: "{{ system_init_on_free_remove_result | default({}) }}"
+          page_shuffle: "{{ system_page_shuffle_result | default({}) }}"
+          luks_key_cleanup: "{{ system_luks_key_cleanup | default({}) }}"
+          kernel_cmdline: "{{ system_kernel_cmdline_result | default({}) }}"
+
+
+- name: Notify that reboot is required for kernel parameters
+  ansible.builtin.debug:
+    msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
+  when: >-
+    system_lockdown_result is changed or
+    system_lockdown_remove_result is changed or
+    system_iommu_amd_result is changed or
+    system_iommu_intel_result is changed or
+    system_iommu_pt_result is changed or
+    system_iommu_pt_remove_result is changed or
+    system_vsyscall_result is changed or
+    system_init_on_free_result is changed or
+    system_init_on_free_remove_result is changed or
+    system_page_shuffle_result is changed or
+    system_luks_key_cleanup is changed or
+    system_kernel_cmdline_result is changed
