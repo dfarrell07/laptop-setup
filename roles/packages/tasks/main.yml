@@ -235,12 +235,13 @@
       register: packages_oc_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install oc + kubectl
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_search('Client Version: (\S+)', '\1') | default([]) | first | default('')) != packages_oc_version
+        (packages_oc_check.stdout | regex_search('Client Version: (\S+)', '\\1') | default([]) | first | default('')) != packages_oc_version
       block:
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
@@ -259,7 +260,7 @@
             packages_oc_sha256: >-
               {{ packages_oc_sha256sums.content
                  | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-                                '\1', multiline=True)
+                                '\\1', multiline=True)
                  | default([]) | first | default('') }}
           when: packages_oc_version == 'stable'
 
@@ -350,6 +351,7 @@
       register: packages_opm_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Read opm OCP version marker
       ansible.builtin.slurp:
@@ -368,7 +370,7 @@
             packages_opm_sha256: >-
               {{ packages_oc_sha256sums.content
                  | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
-                                '\1', multiline=True)
+                                '\\1', multiline=True)
                  | default([]) | first | default('') }}
           when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
 
@@ -467,6 +469,7 @@
       register: packages_kind_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download kind binary
       when: "packages_kind_version not in (packages_kind_check.stdout + packages_kind_check.stderr)"
@@ -519,6 +522,7 @@
       register: packages_helm_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and extract helm
       when: "packages_helm_version not in (packages_helm_check.stdout + packages_helm_check.stderr)"
@@ -596,6 +600,7 @@
       register: packages_kustomize_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and extract kustomize
       when: "packages_kustomize_version not in (packages_kustomize_check.stdout + packages_kustomize_check.stderr)"
@@ -672,6 +677,7 @@
       register: packages_transcrypt_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download transcrypt script
       when: packages_transcrypt_version not in (packages_transcrypt_check.stdout + packages_transcrypt_check.stderr)
@@ -723,6 +729,7 @@
       register: packages_sops_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download SOPS binary
       when: packages_sops_version not in (packages_sops_check.stdout + packages_sops_check.stderr)
@@ -777,6 +784,7 @@
       register: packages_gitleaks_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install gitleaks
       when: packages_gitleaks_version not in (packages_gitleaks_check.stdout + packages_gitleaks_check.stderr)
@@ -851,6 +859,7 @@
       register: packages_actionlint_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install actionlint
       when: packages_actionlint_version not in (packages_actionlint_check.stdout + packages_actionlint_check.stderr)
@@ -924,6 +933,7 @@
       register: packages_zizmor_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install zizmor
       when: packages_zizmor_version not in (packages_zizmor_check.stdout + packages_zizmor_check.stderr)
@@ -1003,6 +1013,7 @@
       register: packages_operator_sdk_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download operator-sdk binary
       when: packages_operator_sdk_version not in (packages_operator_sdk_check.stdout + packages_operator_sdk_check.stderr)
@@ -1060,6 +1071,7 @@
       register: packages_cosign_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download cosign binary
       when: packages_cosign_version not in (packages_cosign_check.stdout + packages_cosign_check.stderr)
@@ -1113,6 +1125,7 @@
       register: packages_tkn_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install tkn
       when: packages_tkn_version not in (packages_tkn_check.stdout + packages_tkn_check.stderr)
@@ -1192,6 +1205,7 @@
       register: packages_ec_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download ec binary
       when: packages_ec_version not in (packages_ec_check.stdout + packages_ec_check.stderr)
@@ -1242,6 +1256,7 @@
       register: packages_k9s_check
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Download and install k9s
       when: packages_k9s_version not in (packages_k9s_check.stdout + packages_k9s_check.stderr)
@@ -1539,7 +1554,7 @@
         _subctl_installed: >-
           {{ (packages_subctl_version_check.results[loop_idx].stdout ~
               packages_subctl_version_check.results[loop_idx].stderr)
-             | regex_search('subctl v?(\S+)', '\1') | default([]) | first | default('') }}
+             | regex_search('subctl v?(\S+)', '\\1') | default([]) | first | default('') }}
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
         _subctl_installed != item.version
