@@ -22,6 +22,7 @@ SYSTEM_DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
 PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
 MOLECULE_DIR = REPO_ROOT / "molecule"
+LINTING_CI_FILE = REPO_ROOT / ".github/workflows/linting.yml"
 
 # molecule files intentionally set distrobox_oc_version to a non-release value
 # (e.g. "0.0.0-offline-test") to exercise rescue/degradation paths — skip them.
@@ -199,6 +200,93 @@ def check_distrobox_version_sync():
     return errors
 
 
+def check_linting_ci_sync():
+    """Verify binary versions and SHA256s in linting.yml match packages defaults.
+
+    Extracts hardcoded version strings from tarball filenames (e.g.
+    gitleaks_8.30.1_linux_x64.tar.gz) and SHA256 env var values
+    (GITLEAKS_SHA256, ACTIONLINT_SHA256, ZIZMOR_SHA256) via regex, then
+    asserts they match packages_gitleaks_version / packages_gitleaks_sha256,
+    packages_actionlint_version / packages_actionlint_sha256, and
+    packages_zizmor_version / packages_zizmor_sha256 in
+    roles/packages/defaults/main.yml.
+    """
+    content = LINTING_CI_FILE.read_text()
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+
+    checks = [
+        {
+            "tool": "gitleaks",
+            "version_pattern": r"gitleaks_(\d+\.\d+\.\d+)_linux_x64\.tar\.gz",
+            "sha256_pattern": r"GITLEAKS_SHA256:\s*(\S+)",
+            "packages_version_var": "packages_gitleaks_version",
+            "packages_sha256_var": "packages_gitleaks_sha256",
+        },
+        {
+            "tool": "actionlint",
+            "version_pattern": r"actionlint_(\d+\.\d+\.\d+)_linux_amd64\.tar\.gz",
+            "sha256_pattern": r"ACTIONLINT_SHA256:\s*(\S+)",
+            "packages_version_var": "packages_actionlint_version",
+            "packages_sha256_var": "packages_actionlint_sha256",
+        },
+        {
+            "tool": "zizmor",
+            "version_pattern": r"zizmor/releases/download/v(\d+\.\d+\.\d+)/",
+            "sha256_pattern": r"ZIZMOR_SHA256:\s*(\S+)",
+            "packages_version_var": "packages_zizmor_version",
+            "packages_sha256_var": "packages_zizmor_sha256",
+        },
+    ]
+
+    ci_rel = LINTING_CI_FILE.relative_to(REPO_ROOT)
+    errors = []
+    for check in checks:
+        tool = check["tool"]
+
+        ver_match = re.search(check["version_pattern"], content)
+        if not ver_match:
+            errors.append(
+                f"  MISSING: could not find {tool} version in {ci_rel}"
+            )
+            continue
+        ci_version = ver_match.group(1)
+
+        sha_match = re.search(check["sha256_pattern"], content)
+        if not sha_match:
+            errors.append(
+                f"  MISSING: could not find {tool} SHA256 in {ci_rel}"
+            )
+            continue
+        ci_sha256 = sha_match.group(1)
+
+        pkg_version = str(packages_data.get(check["packages_version_var"], ""))
+        pkg_sha256 = str(packages_data.get(check["packages_sha256_var"], ""))
+
+        if not pkg_version:
+            errors.append(
+                f"  MISSING: {check['packages_version_var']} not found in"
+                " roles/packages/defaults/main.yml"
+            )
+        elif ci_version != pkg_version:
+            errors.append(
+                f"  MISMATCH: {tool} version: {ci_rel}={ci_version!r}"
+                f" != {check['packages_version_var']}={pkg_version!r}"
+            )
+
+        if not pkg_sha256:
+            errors.append(
+                f"  MISSING: {check['packages_sha256_var']} not found in"
+                " roles/packages/defaults/main.yml"
+            )
+        elif ci_sha256 != pkg_sha256:
+            errors.append(
+                f"  MISMATCH: {tool} SHA256: {ci_rel}={ci_sha256!r}"
+                f" != {check['packages_sha256_var']}={pkg_sha256!r}"
+            )
+
+    return errors
+
+
 def main():
     vars_data = load_yaml(VARS_FILE)
 
@@ -320,6 +408,32 @@ def main():
         f" molecule files match packages defaults"
         f" (golangci-lint={packages_data.get('packages_golangci_lint_version')!r},"
         f" subctl={packages_data.get('packages_subctl_version')!r})"
+    )
+
+    linting_ci_errors = check_linting_ci_sync()
+    if linting_ci_errors:
+        print(
+            "ERROR: binary versions/SHA256s in .github/workflows/linting.yml"
+            " do not match roles/packages/defaults/main.yml:",
+            file=sys.stderr,
+        )
+        for line in linting_ci_errors:
+            print(line, file=sys.stderr)
+        print(
+            "Update packages_gitleaks_version/sha256, packages_actionlint_version/sha256,"
+            " or packages_zizmor_version/sha256 in roles/packages/defaults/main.yml to match"
+            " linting.yml, or bump linting.yml to match.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
+    print(
+        f"OK: gitleaks, actionlint, zizmor versions and SHA256s match between"
+        f" linting.yml and packages defaults"
+        f" (gitleaks={packages_data.get('packages_gitleaks_version')!r},"
+        f" actionlint={packages_data.get('packages_actionlint_version')!r},"
+        f" zizmor={packages_data.get('packages_zizmor_version')!r})"
     )
 
 
