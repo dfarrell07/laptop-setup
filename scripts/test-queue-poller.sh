@@ -396,6 +396,132 @@ rm -f "$_FLOCK_PATCHED"
 assert_eq       "flock: second instance exits 0"      "0"                        "$_flock_exit"
 assert_contains "flock: logs 'Another instance'"       "Another instance running" "$_flock_out"
 
+# --- Integration: HOST_LABEL set → 'on myhost' appears in Processing started comment ---
+_HL_SET_TMPBIN=$(mktemp -d)
+_HL_SET_TMPHOME=$(mktemp -d)
+_HL_SET_TMPLOCKDIR=$(mktemp -d)
+_HL_SET_TMPREPO=$(mktemp -d)
+_HL_SET_GH_LOG=$(mktemp)
+
+cat > "$_HL_SET_TMPBIN/gh" << 'GHEOF'
+#!/bin/bash
+echo "$*" >> "$GH_LOG_FILE"
+case "$1 $2" in
+  "issue list") echo '{"number":7,"title":"Fix the thing","body":"repo: testrepo\n\nDo something useful"}' ;;
+  "pr create")  echo "https://github.com/owner/testrepo/pull/99" ;;
+esac
+exit 0
+GHEOF
+chmod +x "$_HL_SET_TMPBIN/gh"
+
+cat > "$_HL_SET_TMPBIN/git" << 'GITEOF'
+#!/bin/bash
+echo "git $*" >> "$GH_LOG_FILE"
+[[ "$1 $2" == "diff --quiet" ]] && exit 1
+exit 0
+GITEOF
+chmod +x "$_HL_SET_TMPBIN/git"
+
+cat > "$_HL_SET_TMPBIN/claude-stub" << 'CLAUDEOF'
+#!/bin/bash
+cat > /dev/null
+exit 0
+CLAUDEOF
+chmod +x "$_HL_SET_TMPBIN/claude-stub"
+
+mkdir -p "$_HL_SET_TMPHOME/.config/claude" "$_HL_SET_TMPHOME/.local/share/claude-queue/logs"
+printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
+  "$_HL_SET_TMPREPO" > "$_HL_SET_TMPHOME/.config/claude/queue-repos.conf"
+
+_HL_SET_PATCHED=$(mktemp)
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_HL_SET_TMPLOCKDIR/test.lock"'"|' \
+  "$POLLER" > "$_HL_SET_PATCHED"
+
+set +e
+_hl_set_out=$(
+  GH_LOG_FILE="$_HL_SET_GH_LOG" \
+  CLAUDE_QUEUE_REPO="test/q" \
+  CLAUDE_BIN="$_HL_SET_TMPBIN/claude-stub" \
+  CLAUDE_QUEUE_TIMEOUT=10 \
+  CLAUDE_QUEUE_HOST_LABEL=myhost \
+  HOME="$_HL_SET_TMPHOME" \
+  PATH="$_HL_SET_TMPBIN:$PATH" \
+  bash "$_HL_SET_PATCHED" 2>&1
+)
+_hl_set_exit=$?
+set -e
+rm -f "$_HL_SET_PATCHED"
+
+_hl_set_gh=$(cat "$_HL_SET_GH_LOG")
+rm -rf "$_HL_SET_TMPBIN" "$_HL_SET_TMPHOME" "$_HL_SET_TMPLOCKDIR" "$_HL_SET_TMPREPO"
+rm -f "$_HL_SET_GH_LOG"
+
+assert_eq       "host-label-set: exit 0"              "0"        "$_hl_set_exit"
+assert_contains "host-label-set: 'on myhost' in comment" "on myhost" "$_hl_set_gh"
+
+# --- Integration: HOST_LABEL unset → no 'on' token in Processing started comment ---
+_HL_UNSET_TMPBIN=$(mktemp -d)
+_HL_UNSET_TMPHOME=$(mktemp -d)
+_HL_UNSET_TMPLOCKDIR=$(mktemp -d)
+_HL_UNSET_TMPREPO=$(mktemp -d)
+_HL_UNSET_GH_LOG=$(mktemp)
+
+cat > "$_HL_UNSET_TMPBIN/gh" << 'GHEOF'
+#!/bin/bash
+echo "$*" >> "$GH_LOG_FILE"
+case "$1 $2" in
+  "issue list") echo '{"number":7,"title":"Fix the thing","body":"repo: testrepo\n\nDo something useful"}' ;;
+  "pr create")  echo "https://github.com/owner/testrepo/pull/99" ;;
+esac
+exit 0
+GHEOF
+chmod +x "$_HL_UNSET_TMPBIN/gh"
+
+cat > "$_HL_UNSET_TMPBIN/git" << 'GITEOF'
+#!/bin/bash
+echo "git $*" >> "$GH_LOG_FILE"
+[[ "$1 $2" == "diff --quiet" ]] && exit 1
+exit 0
+GITEOF
+chmod +x "$_HL_UNSET_TMPBIN/git"
+
+cat > "$_HL_UNSET_TMPBIN/claude-stub" << 'CLAUDEOF'
+#!/bin/bash
+cat > /dev/null
+exit 0
+CLAUDEOF
+chmod +x "$_HL_UNSET_TMPBIN/claude-stub"
+
+mkdir -p "$_HL_UNSET_TMPHOME/.config/claude" "$_HL_UNSET_TMPHOME/.local/share/claude-queue/logs"
+printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
+  "$_HL_UNSET_TMPREPO" > "$_HL_UNSET_TMPHOME/.config/claude/queue-repos.conf"
+
+_HL_UNSET_PATCHED=$(mktemp)
+sed 's|LOCKFILE=.*|LOCKFILE="'"$_HL_UNSET_TMPLOCKDIR/test.lock"'"|' \
+  "$POLLER" > "$_HL_UNSET_PATCHED"
+
+set +e
+_hl_unset_out=$(
+  env -u CLAUDE_QUEUE_HOST_LABEL \
+  GH_LOG_FILE="$_HL_UNSET_GH_LOG" \
+  CLAUDE_QUEUE_REPO="test/q" \
+  CLAUDE_BIN="$_HL_UNSET_TMPBIN/claude-stub" \
+  CLAUDE_QUEUE_TIMEOUT=10 \
+  HOME="$_HL_UNSET_TMPHOME" \
+  PATH="$_HL_UNSET_TMPBIN:$PATH" \
+  bash "$_HL_UNSET_PATCHED" 2>&1
+)
+_hl_unset_exit=$?
+set -e
+rm -f "$_HL_UNSET_PATCHED"
+
+_hl_unset_gh=$(cat "$_HL_UNSET_GH_LOG")
+rm -rf "$_HL_UNSET_TMPBIN" "$_HL_UNSET_TMPHOME" "$_HL_UNSET_TMPLOCKDIR" "$_HL_UNSET_TMPREPO"
+rm -f "$_HL_UNSET_GH_LOG"
+
+assert_eq           "host-label-unset: exit 0"             "0"    "$_hl_unset_exit"
+assert_not_contains "host-label-unset: no 'on' in comment" " on " "$_hl_unset_gh"
+
 # --- Results ---
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
