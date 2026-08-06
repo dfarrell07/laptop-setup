@@ -186,18 +186,13 @@
           {% if system_remove_luks_key | bool %}
           current=$(echo "$current" | sed 's| *rd\.luks\.key=[^ ]*||g')
           {% endif %}
-          {% if system_kernel_lockdown | length == 0 %}
-          current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
-          {% endif %}
           {% if not (system_init_on_free | bool) %}
           current=$(echo "$current" | sed 's| *init_on_free=1||g')
           {% endif %}
           {% if not (system_iommu_passthrough | bool) %}
           current=$(echo "$current" | sed 's| *iommu=pt||g')
           {% endif %}
-          {% if system_kernel_lockdown | length > 0 %}
           current=$(echo "$current" | sed 's| *lockdown=[^ ]*||g')
-          {% endif %}
           new="$current"
           # Append each missing hardening param (check by key prefix only)
           _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
