@@ -118,3 +118,9 @@
 {% endfor %}
 [includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
 	path = ~/.config/git/config-personal
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
