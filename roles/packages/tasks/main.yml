@@ -241,7 +241,7 @@
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_search('Client Version: (\S+)', '\\1') | default([]) | first | default('')) != packages_oc_version
+        (packages_oc_check.stdout | regex_findall('Client Version: (\S+)') | first | default('')) != packages_oc_version
       block:
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
@@ -259,9 +259,9 @@
           ansible.builtin.set_fact:
             packages_oc_sha256: >-
               {{ packages_oc_sha256sums.content
-                 | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-                                '\\1', multiline=True)
-                 | default([]) | first | default('') }}
+                 | regex_findall('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
+                                 multiline=True)
+                 | first | default('') }}
           when: packages_oc_version == 'stable'
 
         - name: Assert oc SHA256 was found
@@ -369,9 +369,9 @@
           ansible.builtin.set_fact:
             packages_opm_sha256: >-
               {{ packages_oc_sha256sums.content
-                 | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
-                                '\\1', multiline=True)
-                 | default([]) | first | default('') }}
+                 | regex_findall('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
+                                 multiline=True)
+                 | first | default('') }}
           when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
 
         - name: Assert opm SHA256 was found
@@ -1016,7 +1016,7 @@
         _subctl_installed: >-
           {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~
               (packages_subctl_version_check.results[loop_idx].stderr | default('')))
-             | regex_search('subctl v?(\S+)', '\\1') | default([]) | first | default('') }}
+             | regex_findall('subctl v?(\S+)') | first | default('') }}
       when: >-
         packages_subctl_version_check.results[loop_idx].rc != 0 or
         _subctl_installed != item.version
