@@ -42,3 +42,18 @@
       # Just wait: after loops exhaust, units are permanently failed, container is stable.
       ansible.builtin.pause:
         seconds: 50
+
+    - name: Stop apt-daily timers to prevent in-test apt-get from crashing container
+      # apt-daily.timer and apt-daily-upgrade.timer fire at random boot offsets.
+      # If they fire during converge, apt-get triggers pam-auth-update → daemon-reload
+      # → PID 1 crash. systemctl stop (via podman exec) does NOT write to /etc/systemd/
+      # (it sends a transient D-Bus message only) — safe under the KEY CONSTRAINT above.
+      ansible.builtin.command: >-
+        podman exec {{ inventory_hostname }} systemctl stop
+        apt-daily.timer
+        apt-daily-upgrade.timer
+        dpkg-db-backup.timer
+        systemd-tmpfiles-clean.timer
+      delegate_to: localhost
+      changed_when: false
+      failed_when: false

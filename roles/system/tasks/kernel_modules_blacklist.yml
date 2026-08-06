@@ -8,6 +8,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: not system_is_container
 
 - name: Deploy kernel module blacklist
   ansible.builtin.template:

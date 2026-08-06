@@ -138,6 +138,8 @@
         dest: /etc/systemd/system/aide-notify@.service
         mode: "0644"
       notify: Restart aide-check timer
+      when:
+        - not system_is_container
 
     - name: Deploy AIDE check service
       ansible.builtin.copy:
@@ -145,6 +147,8 @@
         dest: /etc/systemd/system/aide-check.service
         mode: "0644"
       notify: Restart aide-check timer
+      when:
+        - not system_is_container
 
     - name: Deploy AIDE check timer
       ansible.builtin.template:
@@ -152,6 +156,8 @@
         dest: /etc/systemd/system/aide-check.timer
         mode: "0644"
       notify: Restart aide-check timer
+      when:
+        - not system_is_container
 
     - name: Enable AIDE check timer
       ansible.builtin.systemd:

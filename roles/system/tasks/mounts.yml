@@ -430,6 +430,7 @@
   when:
     - system_boot_mountpoint.rc | default(-1) == 0
     - csb_rhel
+    - not system_is_container
 
 - name: Enable boot-harden.service (CSB)
   ansible.builtin.systemd:
@@ -574,6 +575,7 @@
   when:
     - system_boot_efi_mountpoint.rc | default(-1) == 0
     - csb_rhel
+    - not system_is_container
 
 - name: Enable boot-efi-harden.service (CSB)
   ansible.builtin.systemd:
