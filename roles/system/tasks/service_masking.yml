@@ -59,6 +59,7 @@
     name: thermald
     masked: "{{ not _intel }}"
     state: "{{ 'stopped' if not _intel else omit }}"
+  when: not system_is_container  # thermald not present in containers; mask/stop crash container systemd
   failed_when: false
 
 # --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
@@ -68,6 +69,7 @@
     masked: true
     state: stopped
   when:
+    - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
     - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
   failed_when: false
 
@@ -76,6 +78,7 @@
     name: ModemManager.service
     masked: false
   when:
+    - not system_is_container  # no WWAN interfaces in containers
     - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length > 0
   failed_when: false
 
@@ -287,6 +290,7 @@
     - nfs-server.service
     - rpcbind.service
     - rpcbind.socket
+  when: not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
   failed_when: false
 
 # --- Cockpit (web console — port 9090; disabled by default) ---
@@ -299,6 +303,7 @@
   loop:
     - cockpit.service
     - cockpit.socket
+  when: not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
   failed_when: false
 
 # --- Disable Ctrl+Alt+Delete reboot ---
@@ -306,4 +311,5 @@
   ansible.builtin.systemd:
     name: ctrl-alt-del.target
     masked: true
+  when: not system_is_container  # target masking can trigger daemon-reload in privileged containers
   failed_when: false

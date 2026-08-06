@@ -19,7 +19,6 @@
   when:
     - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
     - not system_is_container
-  changed_when: false
   failed_when: false
 
 - name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
@@ -35,7 +34,7 @@
     masked: true
     state: stopped
     daemon_reload: true
-  when: not csb_rhel  # passim is only installed alongside fwupd; skip if fwupd was not installed
+  when: not csb_rhel and not system_is_container  # daemon_reload crashes container systemd; passim only installed alongside fwupd
   failed_when: false
   # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
   # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
