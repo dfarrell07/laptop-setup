@@ -1,10 +1,10 @@
 .PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes repos-% \
-       ssh desktop system repos-dnf redhat containers claude distrobox container \
+       ssh desktop system repos_dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
-       test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role \
+       test-scripts test-poller test-% \
        preflight guard-not-root \
        pip-lock pip-sync
 
@@ -19,7 +19,7 @@ export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 
 help:
 	@echo "Primary:    all minimal offline container container-rebuild update"
-	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos-dnf"
+	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
 	@echo "            redhat containers claude distrobox"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container check"
@@ -121,7 +121,7 @@ desktop: guard-not-root
 system: guard-not-root
 	ansible-playbook site.yml --tags common,system --ask-become-pass
 
-repos-dnf: guard-not-root
+repos_dnf: guard-not-root
 	ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
 
 redhat: guard-not-root
@@ -205,41 +205,8 @@ test-scripts:
 test-poller:
 	bash scripts/test-queue-poller.sh
 
-test-fedora: .venv
-	.venv/bin/molecule test -s fedora
-
-test-rocky: .venv
-	.venv/bin/molecule test -s rocky
-
-test-debian: .venv
-	.venv/bin/molecule test -s debian
-
-test-macos: .venv
-	.venv/bin/molecule test -s macos
-
-test-container: .venv
-	.venv/bin/molecule test -s container
-
-# Rescue/degradation path test: no stubs, invalid oc version forces 404 → rescue.
-# Confirms graceful degradation when the mirror is unreachable.
-# Idempotence skipped (download always fails, rescue debug fires every run).
-test-container-offline: .venv
-	.venv/bin/molecule test -s container-offline
-
-# Rescue/degradation path test in a distrobox environment (distrobox-host-exec present).
-# Confirms container_oc_installed=false blocks the export tasks and symlink path is taken.
-# Idempotence skipped (download always fails, rescue debug fires every run).
-test-container-offline-distrobox: .venv
-	.venv/bin/molecule test -s container-offline-distrobox
-
-test-distrobox-role: .venv
-	.venv/bin/molecule test -s distrobox-role
-
-test-packages-binaries: .venv
-	.venv/bin/molecule test -s packages-binaries
-
-test-vm: .venv
-	.venv/bin/molecule test -s vm
+test-%: .venv
+	.venv/bin/molecule test -s $*
 
 smoke-test:
 	scripts/smoke-test.sh
