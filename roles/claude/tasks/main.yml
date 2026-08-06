@@ -130,7 +130,7 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.claude"
     mode: "0700"
-  when: is_macos | bool
+  when: is_macos
   failed_when: false
 
 # --- Git safety (defense-in-depth) ---
@@ -166,7 +166,7 @@
     state: present
   when:
     - claude_queue_enabled | bool
-    - is_macos | bool
+    - is_macos
 
 - name: Ensure ~/.config/claude directory exists (queue config)
   ansible.builtin.file:
@@ -305,7 +305,7 @@
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
   register: _claude_queue_bootout_result
   when:
-    - is_macos | bool
+    - is_macos
     - not (claude_queue_enabled | bool)
   changed_when: _claude_queue_bootout_result.rc == 0
   failed_when: false
@@ -315,7 +315,7 @@
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     state: absent
   when:
-    - is_macos | bool
+    - is_macos
     - not (claude_queue_enabled | bool)
 
 - name: Warn claude_remote_control_enabled has no effect on Linux
@@ -334,7 +334,7 @@
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
   register: _claude_rc_bootout_result
   when:
-    - is_macos | bool
+    - is_macos
     - not (claude_remote_control_enabled | bool)
   changed_when: _claude_rc_bootout_result.rc == 0
   failed_when: false
@@ -344,7 +344,7 @@
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     state: absent
   when:
-    - is_macos | bool
+    - is_macos
     - not (claude_remote_control_enabled | bool)
 
 # --- macOS: launchd services ---
@@ -354,7 +354,7 @@
     state: directory
     mode: "0755"
   when:
-    - is_macos | bool
+    - is_macos
     - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
 - name: Deploy task queue launchd plist (macOS)
@@ -363,7 +363,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
     mode: "0644"
   when:
-    - is_macos | bool
+    - is_macos
     - claude_queue_enabled | bool
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
@@ -373,7 +373,7 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
   when:
-    - is_macos | bool
+    - is_macos
     - claude_queue_enabled | bool
   register: _claude_queue_bootstrap_result
   changed_when: _claude_queue_bootstrap_result.rc == 0
@@ -385,7 +385,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
     mode: "0644"
   when:
-    - is_macos | bool
+    - is_macos
     - claude_remote_control_enabled | bool
 
 - name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
@@ -395,7 +395,7 @@
   ansible.builtin.command:
     cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
   when:
-    - is_macos | bool
+    - is_macos
     - claude_remote_control_enabled | bool
   register: _claude_rc_bootstrap_result
   changed_when: _claude_rc_bootstrap_result.rc == 0

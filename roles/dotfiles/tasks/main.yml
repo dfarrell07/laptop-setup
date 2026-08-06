@@ -67,7 +67,7 @@
     path: "{{ ansible_facts['user_dir'] }}/.ssh/sockets"
     state: directory
     mode: "0700"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Ensure Claude config directory
   ansible.builtin.file:
@@ -411,28 +411,28 @@
     cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
   changed_when: false
   failed_when: false
-  when: is_macos | bool
+  when: is_macos
 
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
     state: directory
     mode: "0755"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Ensure LaunchAgents directory exists (macOS)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
     state: directory
     mode: "0755"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Deploy SSH agent launchd plist (macOS)
   ansible.builtin.template:
     src: ssh-agent.plist.j2
     dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
     mode: "0644"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
   # 'launchctl bootstrap' is the modern replacement for the deprecated
@@ -443,7 +443,7 @@
     cmd: >-
       launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
-  when: is_macos | bool
+  when: is_macos
   register: _dotfiles_ssh_agent_bootstrap_result
   changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
   failed_when: false

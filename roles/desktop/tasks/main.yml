@@ -345,14 +345,14 @@
     path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
     state: directory
     mode: "0755"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Deploy AeroSpace config (macOS)
   ansible.builtin.copy:
     src: aerospace.toml
     dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
     mode: "0644"
-  when: is_macos | bool
+  when: is_macos
 
 # --- macOS: defaults ---
 - name: Set macOS defaults
@@ -364,7 +364,7 @@
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
-  when: is_macos | bool
+  when: is_macos
 
 # --- macOS: firewall ---
 - name: Check macOS firewall state
@@ -375,7 +375,7 @@
   check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
-  when: is_macos | bool
+  when: is_macos
   failed_when: false
 
 - name: Enable macOS firewall
@@ -386,7 +386,7 @@
   become: true
   tags: [become]
   when:
-    - is_macos | bool
+    - is_macos
     - "'State = 1' not in (_fw_state.stdout | default(''))"
   failed_when: false
 
@@ -394,7 +394,7 @@
   ansible.builtin.debug:
     msg: "WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc }} — application firewall may still be off"
   when:
-    - is_macos | bool
+    - is_macos
     - _fw_enable_result.rc | default(0) != 0
 
 - name: Check macOS firewall stealth mode state
@@ -405,7 +405,7 @@
   check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
-  when: is_macos | bool
+  when: is_macos
   failed_when: false
 
 - name: Enable macOS firewall stealth mode
@@ -416,7 +416,7 @@
   become: true
   tags: [become]
   when:
-    - is_macos | bool
+    - is_macos
     - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
   failed_when: false
 
@@ -424,7 +424,7 @@
   ansible.builtin.debug:
     msg: "WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc }} — firewall stealth mode may still be off"
   when:
-    - is_macos | bool
+    - is_macos
     - _fw_stealth_enable_result.rc | default(0) != 0
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---

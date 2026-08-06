@@ -171,10 +171,10 @@
     name: "{{ item }}"
     state: present
   loop: "{{ packages_brew_taps }}"
-  when: is_macos | bool
+  when: is_macos
 
 - name: Install Homebrew packages (macOS)
-  when: is_macos | bool
+  when: is_macos
   block:
     - name: Install Homebrew packages (macOS)
       community.general.homebrew:
@@ -191,7 +191,7 @@
           Continuing playbook execution.
 
 - name: Install Homebrew cask packages (macOS)
-  when: is_macos | bool
+  when: is_macos
   block:
     - name: Install Homebrew cask packages (macOS)
       community.general.homebrew_cask:
@@ -210,12 +210,12 @@
   community.general.homebrew:
     name: theseal/ssh-askpass/ssh-askpass
     state: present
-  when: is_macos | bool
+  when: is_macos
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: brew autoupdate start 43200 --upgrade --cleanup
-  when: is_macos | bool
+  when: is_macos
   changed_when: false
   failed_when: false
   register: _packages_brew_autoupdate
@@ -226,7 +226,7 @@
       brew autoupdate start failed (rc={{ _packages_brew_autoupdate.rc }}).
       Run 'brew autoupdate' interactively to complete trust if this is the first run.
   when:
-    - is_macos | bool
+    - is_macos
     - _packages_brew_autoupdate.rc | default(0) != 0
 
 # --- Binary downloads (SHA256-verified, pinned versions) ---
@@ -568,13 +568,13 @@
   ansible.builtin.include_tasks: install_go_tools.yml
   when:
     - packages_install_binaries | bool
-    - is_linux or is_macos | bool
+    - is_linux or is_macos
 
 # --- pip/pipx installs ---
 
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
-    - is_dnf or is_apt or is_macos | bool
+    - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
   block:
     - name: Install yamllint (pipx, version-pinned)
