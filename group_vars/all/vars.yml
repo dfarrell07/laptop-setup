@@ -94,4 +94,4 @@ ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and
 csb_rhel: "{{ csb_detected and ansible_facts['distribution'] != 'Fedora' }}"
 
 containers_registries: >-
-  {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}
+  {{ ['quay.io'] + (['registry.redhat.io'] if (profile | default('work')) == 'work' else []) }}
