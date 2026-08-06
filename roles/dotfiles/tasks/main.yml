@@ -364,7 +364,9 @@
     content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
     mode: "0644"
-  when: is_linux
+  when:
+    - is_linux
+    - not (system_is_container | default(false))
 
 - name: Deploy XDG base directory environment.d config
   ansible.builtin.copy:
@@ -375,14 +377,18 @@
       XDG_CACHE_HOME=$HOME/.cache
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/xdg.conf"
     mode: "0644"
-  when: is_linux
+  when:
+    - is_linux
+    - not (system_is_container | default(false))
 
 - name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
   ansible.builtin.copy:
     content: "GOTMPDIR=$HOME/tmp\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
     mode: "0644"
-  when: is_linux
+  when:
+    - is_linux
+    - not (system_is_container | default(false))
 
 # --- macOS: SSH agent via launchd ---
 - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
