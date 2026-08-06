@@ -431,6 +431,8 @@ if [[ -f "$_kh" ]]; then
   _kh_perms=$(stat -c '%a' "$_kh" 2>/dev/null || stat -f '%Lp' "$_kh" 2>/dev/null || echo "?")
   if [[ "$_kh_perms" == "600" ]]; then record "known-hosts-perms" "PASS"
   else record "known-hosts-perms" "FAIL" "permissions $_kh_perms, expected 600 (HashKnownHosts hashes leak if world-readable)"; fi
+  if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record 'known-hosts-github' 'PASS'
+  else record 'known-hosts-github' 'WARN' 'github.com not in known_hosts — run: make ssh'; fi
 fi
 unset _kh _kh_perms
 
@@ -474,7 +476,13 @@ if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E
   record "git-safe-directory" "FAIL" "unsafe wildcard entries: $dirs"
 else record "git-safe-directory" "PASS"; fi
 
-# git hooksPath configured to correct path (git returns tilde-literal, not expanded $HOME)
+# git alias.revert-s must equal 'revert -s' (alias.revert shadows the git built-in)
+_rev=$(run git config --global alias.revert-s 2>/dev/null || echo "")
+if [[ "$_rev" == "revert -s" ]]; then record "git-alias-revert-s" "PASS"
+else record "git-alias-revert-s" "FAIL" "alias.revert-s='${_rev:-<unset>}' expected 'revert -s' — run: make dotfiles"; fi
+unset _rev
+
+# git hooksPath and excludesfile configured to correct paths (git returns tilde-literal, not expanded $HOME)
 _expected_hooks="~/.config/git/template/hooks"
 hp=$(run git config --global core.hooksPath 2>/dev/null || echo "")
 if [[ "$hp" == "$_expected_hooks" ]]; then
@@ -483,6 +491,12 @@ else
   record "git-hooks-path" "FAIL" "core.hooksPath='${hp:-<unset>}' expected '$_expected_hooks' — run: make dotfiles"
 fi
 unset _expected_hooks
+
+_expected_excl="~/.config/git/ignore"
+excl=$(run git config --global core.excludesfile 2>/dev/null || echo "")
+if [[ "$excl" == "$_expected_excl" ]]; then record "git-excludesfile" "PASS"
+else record "git-excludesfile" "FAIL" "core.excludesfile='${excl:-<unset>}' expected '$_expected_excl' — run: make dotfiles"; fi
+unset _expected_excl excl
 
 for _hook in pre-commit commit-msg prepare-commit-msg pre-push; do
   if [[ -x "$HOME/.config/git/template/hooks/$_hook" ]]; then
@@ -534,6 +548,12 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
   if [[ "$perms" == "700" ]]; then record "perms(${d##*/})" "PASS"
   else record "perms(${d##*/})" "FAIL" "permissions $perms, expected 700"; fi
 done
+_ctf="$HOME/.config/user-tmpfiles.d/claude-privacy.conf"
+if [[ "$(uname -s)" == "Linux" ]]; then
+  if [[ -f "$_ctf" ]]; then record "claude-privacy-tmpfiles" "PASS"
+  else record "claude-privacy-tmpfiles" "FAIL" "claude-privacy.conf tmpfiles not deployed — run: make claude"; fi
+fi
+unset _ctf
 
 # Config file validation
 if [[ -f /etc/opt/chrome/policies/managed/security.json ]]; then
