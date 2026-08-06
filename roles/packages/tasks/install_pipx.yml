@@ -12,11 +12,13 @@
       community.general.pipx:
         name: "yamllint=={{ packages_yamllint_version }}"
         state: install
+      timeout: 300
 
     - name: Install ansible-lint (pipx, version-pinned)
       community.general.pipx:
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install
+      timeout: 300
   rescue:
     - name: Record pipx install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
