@@ -228,31 +228,20 @@
           org.freedesktop.impl.portal.ScreenCast=wlr
 
     # GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly)
-    - name: Ensure GTK 3.0 config directory (Sway)
+    - name: Ensure GTK config directories (Sway)
       ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0"
+        path: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}"
         state: directory
         mode: "0755"
+      loop: [gtk-3.0, gtk-4.0]
 
-    - name: Deploy GTK 3.0 settings (Sway)
+    - name: Deploy GTK settings (Sway)
       ansible.builtin.template:
         src: gtk-settings.ini.j2
-        dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-3.0/settings.ini"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}/settings.ini"
         mode: "0644"
         force: false
-
-    - name: Ensure GTK 4.0 config directory (Sway)
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0"
-        state: directory
-        mode: "0755"
-
-    - name: Deploy GTK 4.0 settings (Sway)
-      ansible.builtin.template:
-        src: gtk-settings.ini.j2
-        dest: "{{ ansible_facts['user_dir'] }}/.config/gtk-4.0/settings.ini"
-        mode: "0644"
-        force: false
+      loop: [gtk-3.0, gtk-4.0]
 
 - name: Deploy TERMINAL environment.d config (Sway)
   ansible.builtin.copy:
@@ -454,62 +443,11 @@
     - desktop_effective == 'gnome'
     - desktop_gnome_check.rc == 0
   block:
-    - name: Disable notifications on lock screen
+    - name: Apply GNOME hardening dconf settings
       community.general.dconf:
-        key: /org/gnome/desktop/notifications/show-in-lock-screen
-        value: "false"
-      failed_when: false
-
-    - name: Ensure screen lock is enabled
-      community.general.dconf:
-        key: /org/gnome/desktop/screensaver/lock-enabled
-        value: "true"
-      failed_when: false
-
-    - name: Set screen idle timeout (CIS requires ≤900s; set to 300s)
-      community.general.dconf:
-        key: /org/gnome/desktop/session/idle-delay
-        value: "uint32 300"
-      failed_when: false
-
-    - name: Set screen lock delay after idle
-      community.general.dconf:
-        key: /org/gnome/desktop/screensaver/lock-delay
-        value: "uint32 0"
-      failed_when: false
-
-    - name: Disable location services
-      community.general.dconf:
-        key: /org/gnome/system/location/enabled
-        value: "false"
-      failed_when: false
-
-    - name: Disable recent files tracking
-      community.general.dconf:
-        key: /org/gnome/desktop/privacy/remember-recent-files
-        value: "false"
-      failed_when: false
-
-    - name: Disable GNOME RDP
-      community.general.dconf:
-        key: /org/gnome/desktop/remote-desktop/rdp/enable
-        value: "false"
-      failed_when: false
-
-    - name: Disable GNOME VNC
-      community.general.dconf:
-        key: /org/gnome/desktop/remote-desktop/vnc/enable
-        value: "false"
-      failed_when: false
-
-    - name: Set keyboard repeat delay (match Sway/i3 200ms)
-      community.general.dconf:
-        key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
-        value: "uint32 200"
-      failed_when: false
-
-    - name: Set keyboard repeat interval (match Sway/i3 50 rep/s → 20ms)
-      community.general.dconf:
-        key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
-        value: "uint32 20"
+        key: "{{ item.key }}"
+        value: "{{ item.value }}"
+      loop: "{{ desktop_gnome_hardening_dconf }}"
+      loop_control:
+        label: "{{ item.key }}"
       failed_when: false

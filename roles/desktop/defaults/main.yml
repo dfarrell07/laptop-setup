@@ -179,6 +179,38 @@ desktop_bar_urgent_ws_text: "#1e1e2e"
 desktop_bar_binding_mode_bg: "#cba6f7"
 desktop_bar_binding_mode_text: "#1e1e2e"
 
+desktop_gnome_hardening_dconf:
+  # CIS: disable lock-screen notifications (avoids info leak on locked display)
+  - key: /org/gnome/desktop/notifications/show-in-lock-screen
+    value: "false"
+  # CIS: screen lock must be enabled
+  - key: /org/gnome/desktop/screensaver/lock-enabled
+    value: "true"
+  # CIS: idle timeout ≤900s; 300s satisfies requirement
+  - key: /org/gnome/desktop/session/idle-delay
+    value: "uint32 300"
+  # lock immediately on idle (no grace period)
+  - key: /org/gnome/desktop/screensaver/lock-delay
+    value: "uint32 0"
+  # disable location services (privacy)
+  - key: /org/gnome/system/location/enabled
+    value: "false"
+  # disable recent-files tracking (privacy)
+  - key: /org/gnome/desktop/privacy/remember-recent-files
+    value: "false"
+  # disable GNOME RDP (attack surface reduction)
+  - key: /org/gnome/desktop/remote-desktop/rdp/enable
+    value: "false"
+  # disable GNOME VNC (attack surface reduction)
+  - key: /org/gnome/desktop/remote-desktop/vnc/enable
+    value: "false"
+  # keyboard repeat delay — match Sway/i3 200ms
+  - key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
+    value: "uint32 200"
+  # keyboard repeat interval — match Sway/i3 50 rep/s → 20ms
+  - key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
+    value: "uint32 20"
+
 desktop_macos_defaults:
   - domain: NSGlobalDomain
     key: KeyRepeat
