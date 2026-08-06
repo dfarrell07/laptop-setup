@@ -280,6 +280,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   dotfiles_internal_ca_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem  — CA cert for internal HTTPS hosts
 #     (override with a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem, to pin to one CA)
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
+#   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
+#     set in config.yml, e.g. [gitlab.example.com, code.example.com]; empty = no work host keyscan
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
