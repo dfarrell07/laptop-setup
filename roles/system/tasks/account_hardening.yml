@@ -105,7 +105,7 @@
   # Read /etc/shadow field 7 (inactive-days integer) directly; chage -l prints
   # a human-readable calendar date, not the raw integer, so regex_search('30') never matches.
   ansible.builtin.command:
-    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print $7}' /etc/shadow"
+    argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print $7} END{if (!found) exit 1}", /etc/shadow]
   register: system_chage_inactive_days
   changed_when: false
   failed_when: false
@@ -120,13 +120,14 @@
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
+    - system_chage_inactive_days.rc | default(1) == 0
     - system_chage_inactive_days.stdout | default('') | trim != system_inactive_days | string
   changed_when: true
   failed_when: false
 
 - name: Check current password aging fields for existing user account
   ansible.builtin.command:
-    cmd: "awk -F: -v u={{ real_user_id }} '$1==u{print ${{ item.field }}}' /etc/shadow"
+    argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print ${{ item.field }}} END{if (!found) exit 1}", /etc/shadow]
   register: system_chage_fields
   changed_when: false
   failed_when: false
@@ -147,12 +148,22 @@
   when:
     - not csb_rhel
     - real_user_id | length > 0
+    - item.rc | default(1) == 0
     - item.stdout | default('') | trim != vars[item.item.var] | string
   changed_when: true
   failed_when: false
   loop: "{{ system_chage_fields.results }}"
   loop_control:
     label: "{{ item.item.cis }}"
+
+- name: Check if real user account exists in system passwd database
+  ansible.builtin.command:
+    argv: [getent, passwd, "{{ real_user_id }}"]
+  register: system_real_user_exists
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: real_user_id | length > 0
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
@@ -179,6 +190,7 @@
         cmd: loginctl enable-linger {{ real_user_id }}
         creates: /var/lib/systemd/linger/{{ real_user_id }}
       failed_when: false
+      when: system_real_user_exists.rc | default(1) == 0
       # Without linger, systemd kills the user session (and podman.socket) when the
       # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 
