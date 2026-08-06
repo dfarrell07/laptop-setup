@@ -32,10 +32,10 @@
       changed_when: false
       failed_when: false
 
-    - name: Install openssh-server before converge (--noscripts prevents systemd-update-helper crash)  # noqa: command-instead-of-module
-      # Install during prepare so any systemd inotify daemon-reload from the new service
-      # files in /usr/lib/systemd/system/ completes before converge starts, avoiding
-      # mid-converge container crashes.
+    - name: Install openssh-server before converge  # noqa: command-instead-of-module
+      # Install during prepare so any inotify daemon-reload from the new unit files
+      # in /usr/lib/systemd/system/ completes before converge starts.
+      # --noscripts prevents the %post scriptlet from running systemd-update-helper.
       ansible.builtin.command:
         cmd: dnf install -y --setopt=rpm_opts=--noscripts openssh-server
       register: _openssh_install
@@ -46,9 +46,23 @@
       failed_when: false
       when: _openssh_present.rc != 0
 
+    - name: Remove openssh systemd unit files to stop inotify daemon-reload crash  # noqa: command-instead-of-module
+      # The openssh-server package installs sshd.service/sshd.socket to
+      # /usr/lib/systemd/system/. systemd's inotify watcher sees new unit files and
+      # triggers a daemon-reload, which can crash the container. Removing the unit
+      # files immediately after install (before systemd processes the inotify event)
+      # prevents this crash. The sshd binary is still available for sshd -t tests.
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/lib/systemd/system/sshd.service
+        - /usr/lib/systemd/system/sshd.socket
+        - /usr/lib/systemd/system/sshd@.service
+      when: _openssh_install.changed | default(false)
+      failed_when: false
+
     - name: Wait for systemd to stabilize after openssh install  # noqa: command-instead-of-module
-      # Any inotify-triggered daemon-reload from the openssh service files must
-      # complete before converge starts to avoid mid-converge container crashes.
       ansible.builtin.command: systemctl is-system-running
       register: systemd_state2
       retries: 20
