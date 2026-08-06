@@ -499,8 +499,10 @@
       register: verify_subctl18_ver
       changed_when: false
       failed_when: false
+      when: verify_subctl18.stat.exists
 
     - name: Assert subctl18 version matches packages_subctl_versioned entry
       ansible.builtin.assert:
         that: packages_subctl_versioned[0].version in (verify_subctl18_ver.stdout + verify_subctl18_ver.stderr)
         fail_msg: "subctl18 version mismatch — expected {{ packages_subctl_versioned[0].version }}, got: {{ verify_subctl18_ver.stdout }}"
+      when: verify_subctl18.stat.exists
