@@ -131,6 +131,7 @@
   changed_when: false
   failed_when: verify_faillock_authselect.rc != 0
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check authselect with-pwhistory is active
   ansible.builtin.command: authselect is-feature-enabled with-pwhistory
@@ -138,31 +139,37 @@
   changed_when: false
   failed_when: verify_pwhistory_authselect.rc != 0
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Run authselect check to verify PAM files match profile
   ansible.builtin.command: authselect check
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check faillock deny={{ system_faillock_deny }}
   ansible.builtin.command: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check faillock local_users_only (prevent SSSD double-lockout)
   ansible.builtin.command: grep -q '^local_users_only' /etc/security/faillock.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check faillock audit flag is set (CIS 5.4.2)
   ansible.builtin.command: grep -q '^audit' /etc/security/faillock.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check faillock unlock_time={{ system_faillock_unlock_time }}
   ansible.builtin.command: grep -q '^unlock_time = {{ system_faillock_unlock_time }}' /etc/security/faillock.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check faillock even_deny_root is absent (default config)
   ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
@@ -170,13 +177,16 @@
   changed_when: false
   failed_when: verify_even_deny_root.rc == 0
   become: true
-  when: not (system_faillock_even_deny_root | bool)
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_faillock_even_deny_root | bool)
 
 - name: Check pwquality minlen={{ system_pwquality_minlen }}
   ansible.builtin.command: >-
     grep -q '^minlen = {{ system_pwquality_minlen }}' /etc/security/pwquality.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check pwquality credit and complexity parameters (CIS 5.3.3)
   ansible.builtin.command: grep -q '{{ item }}' /etc/security/pwquality.conf
@@ -190,17 +200,20 @@
     - "^difok = {{ system_pwquality_difok }}"
     - "^maxrepeat = {{ system_pwquality_maxrepeat }}"
     - '^enforce_for_root'
+  when: not (csb_rhel | default(false))
 
 - name: Check pwhistory remember={{ system_pwhistory_remember }}
   ansible.builtin.command: >-
     grep -q '^remember = {{ system_pwhistory_remember }}' /etc/security/pwhistory.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check pwhistory enforce_for_root is set (CIS 5.3.5)
   ansible.builtin.command: grep -q '^enforce_for_root' /etc/security/pwhistory.conf
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check authselect current profile is sssd
   ansible.builtin.command:
@@ -208,52 +221,62 @@
   register: verify_authselect_current
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Assert authselect profile is sssd
   ansible.builtin.assert:
     that: verify_authselect_current.stdout is search('^sssd\b')
     fail_msg: "authselect profile is not sssd — faillock/pwhistory features will not wire into PAM"
+  when: not (csb_rhel | default(false))
 
 # --- login.defs policy assertions ---
 - name: Check login.defs PASS_MAX_DAYS={{ system_pass_max_days }}
   ansible.builtin.command: grep -q '^PASS_MAX_DAYS\s\+{{ system_pass_max_days }}' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs INACTIVE={{ system_inactive_days }}
   ansible.builtin.command: grep -q '^INACTIVE\s\+{{ system_inactive_days }}' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs UMASK={{ system_umask }}
   ansible.builtin.command: grep -q '^UMASK\s\+{{ system_umask }}' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs PASS_MIN_DAYS={{ system_pass_min_days }}
   ansible.builtin.command: grep -q '^PASS_MIN_DAYS\s\+{{ system_pass_min_days }}' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs PASS_WARN_AGE={{ system_pass_warn_age }}
   ansible.builtin.command: grep -q '^PASS_WARN_AGE\s\+{{ system_pass_warn_age }}' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs HOME_MODE=0750 (CIS 5.4.2)
   ansible.builtin.command: grep -q '^HOME_MODE\s\+0750' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs ENCRYPT_METHOD=YESCRYPT (CIS 5.3.6)
   ansible.builtin.command: grep -q '^ENCRYPT_METHOD YESCRYPT' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 - name: Check login.defs YESCRYPT_COST_FACTOR=5 (CIS 5.4.1)
   ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs
   changed_when: false
   become: true
+  when: not (csb_rhel | default(false))
 
 # --- auditd.conf coverage (deployed by system role on non-CSB Fedora/Rocky) ---
 - name: Stat /etc/audit/auditd.conf

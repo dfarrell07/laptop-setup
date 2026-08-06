@@ -1126,7 +1126,7 @@
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
 - name: Check chrony NTS config in /etc/chrony.conf
-  ansible.builtin.command: grep -q nts /etc/chrony.conf
+  ansible.builtin.command: grep -qE '^server.*[[:space:]]nts' /etc/chrony.conf
   changed_when: false
   failed_when: false
   register: verify_chrony_nts
@@ -1134,6 +1134,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
 
 - name: Assert chrony NTS config is present
   ansible.builtin.assert:
@@ -1142,6 +1143,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
     - verify_chrony_nts is not skipped
 
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)

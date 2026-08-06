@@ -222,12 +222,15 @@
 
 # --- Binary downloads (SHA256-verified, pinned versions) ---
 
+- name: Set Linux x86 work binary install fact
+  ansible.builtin.set_fact:
+    _packages_linux_x86_work: "{{ packages_install_binaries | bool
+      and ansible_facts['system'] == 'Linux'
+      and ansible_facts['architecture'] == 'x86_64'
+      and profile == 'work' }}"
+
 - name: Install oc and kubectl
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work
   block:
     - name: Check if oc is installed
       ansible.builtin.command:
@@ -339,11 +342,7 @@
       when: not csb_rhel
 
 - name: Install opm (Operator Package Manager)
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work
   block:
     - name: Check if opm binary exists
       ansible.builtin.command:
@@ -754,11 +753,7 @@
       Install manually from https://github.com/conforma/cli/releases
 
 - name: Install k9s (Kubernetes TUI)
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
     binary_name: k9s
@@ -892,11 +887,7 @@
       when: not csb_rhel
 
 - name: Install krew
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work
   block:
     - name: Check if krew is installed at target version
       ansible.builtin.command:
@@ -984,12 +975,7 @@
         - "{{ ansible_facts['user_dir'] }}/.local/bin/LICENSE"
 
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
-    - packages_subctl_versioned | default([]) | length > 0
+  when: _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
   block:
     - name: Check installed version of versioned subctl binaries
       ansible.builtin.command:
@@ -1064,12 +1050,7 @@
         label: "subctl{{ item.suffix }}"
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
-    - packages_subctl_rh_versions | default([]) | length > 0
+  when: _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
   block:
     - name: Check installed version of downstream RH subctl binaries
       ansible.builtin.command:
@@ -1168,11 +1149,7 @@
   timeout: 60
   changed_when: false
   failed_when: false
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
@@ -1182,8 +1159,4 @@
   register: packages_krew_plugins_result
   changed_when: '"Installed plugin" in packages_krew_plugins_result.stdout'
   failed_when: false
-  when:
-    - packages_install_binaries | bool
-    - ansible_facts['system'] == 'Linux'
-    - ansible_facts['architecture'] == 'x86_64'
-    - profile == 'work'
+  when: _packages_linux_x86_work

@@ -2036,6 +2036,7 @@
   when:
     - not csb_rhel
     - _sshd_socket_exists.rc | default(1) == 0
+  failed_when: false
 
 # --- SELinux SSH port label ---
 - name: Label non-default SSH port for SELinux
