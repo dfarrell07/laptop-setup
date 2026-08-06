@@ -266,12 +266,14 @@ unset _alc
 
 # i3-specific tool checks (only on i3 desktop machines)
 if command -v i3 &>/dev/null; then
-  if command -v playerctl &>/dev/null; then record "i3-playerctl" "PASS"
-  else record "i3-playerctl" "FAIL" "playerctl not installed — XF86Audio media keys non-functional in i3 (run: make desktop)"; fi
-  if command -v clipit &>/dev/null; then record "i3-clipit" "PASS"
-  else record "i3-clipit" "FAIL" "clipit not installed — clipboard contents lost on app close in i3 (run: make desktop)"; fi
-  if command -v wpctl &>/dev/null; then record "i3-wpctl" "PASS"
-  else record "i3-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make desktop)"; fi
+  for _i3t in \
+    'playerctl:playerctl not installed — XF86Audio media keys non-functional in i3 (run: make desktop)' \
+    'clipit:clipit not installed — clipboard contents lost on app close in i3 (run: make desktop)' \
+    'wpctl:wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional (run: make desktop)'; do
+    _i3t_name="${_i3t%%:*}"; _i3t_msg="${_i3t#*:}"
+    if command -v "$_i3t_name" &>/dev/null; then record "i3-${_i3t_name}" 'PASS'
+    else record "i3-${_i3t_name}" 'FAIL' "$_i3t_msg"; fi
+  done
 fi
 if command -v sway &>/dev/null || command -v i3 &>/dev/null; then
   if command -v meld &>/dev/null; then record "meld" "PASS"
@@ -1087,12 +1089,15 @@ EOF
   unset _passim_state
 
   # NFS server and rpcbind masked (CIS 2.2.7 — workstation must not run an NFS server)
-  if [[ "$(systemctl show -p UnitFileState --value nfs-server.service 2>/dev/null)" == "masked" ]]; then record "nfs-server-masked" "PASS"
-  else record "nfs-server-masked" "FAIL" "nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)"; fi
-  if [[ "$(systemctl show -p UnitFileState --value rpcbind.service 2>/dev/null)" == "masked" ]]; then record "rpcbind-masked" "PASS"
-  else record "rpcbind-masked" "FAIL" "rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)"; fi
-  if [[ "$(systemctl show -p UnitFileState --value rpcbind.socket 2>/dev/null)" == "masked" ]]; then record "rpcbind-socket-masked" "PASS"
-  else record "rpcbind-socket-masked" "FAIL" "rpcbind.socket not masked — socket activation can start rpcbind despite service being masked (CIS 2.2.7)"; fi
+  for _unit in \
+    'nfs-server.service:nfs-server-masked:nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)' \
+    'rpcbind.service:rpcbind-masked:rpcbind.service not masked (required by nfs-server; mask both per CIS 2.2.7)' \
+    'rpcbind.socket:rpcbind-socket-masked:rpcbind.socket not masked — socket activation can start rpcbind (CIS 2.2.7)'; do
+    _u_svc="${_unit%%:*}"; _rest="${_unit#*:}"; _u_key="${_rest%%:*}"; _u_msg="${_rest#*:}"
+    if [[ "$(systemctl show -p UnitFileState --value "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
+    else record "$_u_key" 'FAIL' "$_u_msg"; fi
+  done
+  unset _unit _u_svc _rest _u_key _u_msg
   # Cockpit web console masked (or intentionally enabled via system_enable_cockpit: true)
   _ck_svc=$(systemctl show -p UnitFileState --value cockpit.service 2>/dev/null)
   if [[ "$_ck_svc" == "masked" ]]; then record "cockpit-service-masked" "PASS"
@@ -1255,16 +1260,18 @@ EOF
     else record "sudoers-hardening" "FAIL" "sudoers hardening drop-in missing or incomplete"; fi
   else record "sudoers-hardening" "WARN" "skipped — /etc/sudoers.d/ is mode 0440 (run with sudo for full check)"; fi
 
-  # pwhistory remember=24 (CIS 5.3.5) — skipped on RHEL CSB (IPA/SSSD owns PAM policy; pwhistory.conf not written)
-  if grep -q '^remember = 24' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-remember" "PASS"
-  elif $_csb_non_fedora; then
-    record "pwhistory-remember" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
-  else record "pwhistory-remember" "FAIL" "pwhistory remember not set to 24"; fi
-
-  if grep -q '^enforce_for_root' /etc/security/pwhistory.conf 2>/dev/null; then record "pwhistory-enforce-root" "PASS"
-  elif $_csb_non_fedora; then
-    record "pwhistory-enforce-root" "WARN" "skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible"
-  else record "pwhistory-enforce-root" "FAIL" "pwhistory enforce_for_root not set — root can reuse passwords despite remember=24 (CIS 5.3.5)"; fi
+  # pwhistory remember=24 + enforce_for_root (CIS 5.3.5) — skipped on RHEL CSB (IPA/SSSD owns PAM policy; pwhistory.conf not written)
+  _skip_pwhistory=false
+  $_csb_non_fedora && _skip_pwhistory=true
+  for _pwh in \
+    '^remember = 24:pwhistory-remember:pwhistory remember not set to 24' \
+    '^enforce_for_root:pwhistory-enforce-root:pwhistory enforce_for_root not set — root can reuse passwords despite remember=24 (CIS 5.3.5)'; do
+    _pat="${_pwh%%:*}"; _rest="${_pwh#*:}"; _key="${_rest%%:*}"; _msg="${_rest#*:}"
+    if grep -q "$_pat" /etc/security/pwhistory.conf 2>/dev/null; then record "$_key" 'PASS'
+    elif $_skip_pwhistory; then record "$_key" 'WARN' 'skipped on RHEL CSB — IPA/SSSD owns PAM policy; pwhistory.conf not written by Ansible'
+    else record "$_key" 'FAIL' "$_msg"; fi
+  done
+  unset _skip_pwhistory
 
   # yescrypt password hashing (CIS 5.3.6)
   # Skipped on CSB — login.defs not modified; IPA/SSSD + IT group policy governs password hashing
@@ -1708,28 +1715,21 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.all.secure_redirects"        "0" "sysctl-no-secure-redirects"
   _sysctl_check "net.ipv4.conf.default.secure_redirects"    "0" "sysctl-no-secure-redirects-default"
   # bridge-nf: WARN if br_netfilter module not loaded (reboot activates only when persistence file exists)
-  _bridge_nf=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null) || true
-  if [[ "$_bridge_nf" == "1" ]]; then record "sysctl-bridge-nf-iptables" "PASS"
-  elif [[ -z "$_bridge_nf" ]]; then
-    if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
-      record "sysctl-bridge-nf-iptables" "WARN" \
-        "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make system"
-    else
-      record "sysctl-bridge-nf-iptables" "WARN" \
-        "br_netfilter not loaded — reboot or: modprobe br_netfilter && sysctl --system"
-    fi
-  else record "sysctl-bridge-nf-iptables" "FAIL" "net.bridge.bridge-nf-call-iptables=$_bridge_nf expected 1"; fi
-  _bridge_nf6=$(sysctl -n net.bridge.bridge-nf-call-ip6tables 2>/dev/null) || true
-  if [[ "$_bridge_nf6" == "1" ]]; then record "sysctl-bridge-nf-ip6tables" "PASS"
-  elif [[ -z "$_bridge_nf6" ]]; then
-    if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
-      record "sysctl-bridge-nf-ip6tables" "WARN" \
-        "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make system"
-    else
-      record "sysctl-bridge-nf-ip6tables" "WARN" \
-        "br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"
-    fi
-  else record "sysctl-bridge-nf-ip6tables" "FAIL" "net.bridge.bridge-nf-call-ip6tables=$_bridge_nf6 expected 1"; fi
+  for _item in \
+    "net.bridge.bridge-nf-call-iptables|sysctl-bridge-nf-iptables|reboot or: modprobe br_netfilter && sysctl --system" \
+    "net.bridge.bridge-nf-call-ip6tables|sysctl-bridge-nf-ip6tables|br_netfilter not loaded — IPv6 NetworkPolicy enforcement broken for OVN-K"; do
+    _key="${_item%%|*}"; _rest="${_item#*|}"; _label="${_rest%%|*}"; _loaded_warn="${_rest#*|}"
+    _val=$(sysctl -n "$_key" 2>/dev/null) || true
+    if [[ "$_val" == "1" ]]; then record "$_label" "PASS"
+    elif [[ -z "$_val" ]]; then
+      if [[ ! -f /etc/modules-load.d/br_netfilter.conf ]]; then
+        record "$_label" "WARN" \
+          "br_netfilter not loaded AND persistence file missing — reboot will NOT fix this; run: make system"
+      else
+        record "$_label" "WARN" "$_loaded_warn"
+      fi
+    else record "$_label" "FAIL" "$_key=$_val expected 1"; fi
+  done
   _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
