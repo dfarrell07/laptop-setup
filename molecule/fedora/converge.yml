@@ -14,6 +14,10 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Refresh DNF cache so system role sees current mirror metadata
+      ansible.builtin.dnf:
+        update_cache: true
+
     - name: Check if openssh-server is already installed
       ansible.builtin.command: rpm -q openssh-server
       register: _openssh_present

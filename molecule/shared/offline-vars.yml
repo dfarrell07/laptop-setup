@@ -11,8 +11,12 @@ distrobox_host_exec_commands:
 distrobox_oc_version: "0.0.0-offline-test"
 distrobox_golangci_lint_version: "v2.12.2"
 distrobox_subctl_version: "v0.24.0"
-# Override retry knobs so the 404/timeout fails in ≤5 s (one attempt).
-distrobox_oc_fetch_retries: 0
+# Override retry knobs so the 404/timeout fails fast (two attempts max, 0 s delay).
+# retries: 1 (not 0) ensures ansible-core's until: loop fires: with retries=0 the
+# internal retry count is 1, the `if retries > 1` guard skips until evaluation, and
+# the rescue block may not see an explicit failed=True if the module raises an
+# exception rather than returning a non-zero rc — aborting the converge.
+distrobox_oc_fetch_retries: 1
 distrobox_oc_fetch_delay: 0
 distrobox_oc_fetch_timeout: 5
 distrobox_oc_mirror_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp"

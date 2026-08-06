@@ -3,8 +3,8 @@
 # inside a realistic distrobox environment (/usr/bin/distrobox-host-exec present).
 # No oc stub is placed, so the download block executes for real.
 # distrobox_oc_version is set to an invalid value that produces a 404 on
-# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 0
-# and distrobox_oc_fetch_timeout: 5 make the failure fast (one attempt, 5 s cap).
+# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 1
+# and distrobox_oc_fetch_timeout: 5 make the failure fast (two attempts, 5 s cap each).
 # With distrobox-host-exec present and container_oc_installed=false after the rescue,
 # the export tasks (oc/kubectl) must skip, proving the guard works correctly.
 - name: Converge (container provisioning — offline rescue path, distrobox environment)

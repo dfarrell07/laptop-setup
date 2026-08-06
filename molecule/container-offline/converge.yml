@@ -2,8 +2,8 @@
 # Converge: exercise the rescue/degradation path in container-provision-tasks.yml.
 # No stubs are placed (no prepare.yml), so the oc download block executes for real.
 # distrobox_oc_version is set to an invalid value that produces a 404 on
-# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 0
-# and distrobox_oc_fetch_timeout: 5 make the failure fast (one attempt, 5 s cap).
+# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 1
+# and distrobox_oc_fetch_timeout: 5 make the failure fast (two attempts, 5 s cap each).
 # The golangci-lint go install also runs (creates: guard not satisfied) and fails
 # gracefully via failed_when: false — failure mode is go binary absent (command not
 # found), not network unavailability.
