@@ -85,7 +85,7 @@
 - name: Deploy SSH auth key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key }}"
-    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_hardware_key_basename }}"
     mode: "0600"
   no_log: true
   when: ssh_auth_key | length > 0
@@ -93,7 +93,7 @@
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key_pub }}"
-    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_ed25519_sk.pub"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_hardware_key_basename }}.pub"
     mode: "0644"
   when: ssh_auth_key_pub | trim | length > 0
 
@@ -123,7 +123,7 @@
 - name: Deploy Red Hat internal git key
   ansible.builtin.copy:
     content: "{{ rh_git_key }}"
-    dest: "{{ ansible_facts['user_dir'] }}/.ssh/id_rsa_redhat"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
     mode: "0600"
   no_log: true
   when:
