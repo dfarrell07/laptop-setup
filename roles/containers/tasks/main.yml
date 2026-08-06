@@ -50,7 +50,7 @@
     label: "{{ item.item.registry }}"
   no_log: true
   register: containers_vault_login_result
-  changed_when: containers_vault_login_result.rc == 0
+  changed_when: true  # task only runs when pre-auth check shows login is needed; any run is a change attempt
   failed_when: false
   when:
     - is_linux
@@ -153,6 +153,7 @@
   when:
     - is_linux
     - not (install_docker)
+    - not system_is_container | default(false)  # masked: true → inotify → daemon-reload → container crash
   failed_when: false
 
 # --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---
@@ -258,7 +259,11 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/containers.conf"
     mode: "0644"
     backup: true
-  when: is_linux
+  when:
+    - is_linux
+    # ~/.config/environment.d not created in containers (common task guards it);
+    # systemd-environment-d-generator not active inside containers
+    - not (system_is_container | default(false))
   # environment.d is processed by systemd-environment-d-generator at user session start,
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or

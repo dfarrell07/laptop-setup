@@ -250,6 +250,7 @@
   when:
     - is_linux
     - desktop_effective == 'sway'
+    - not (system_is_container | default(false))  # ~/.config/environment.d not created in containers (common task guards it)
 
 - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
   community.general.dconf:

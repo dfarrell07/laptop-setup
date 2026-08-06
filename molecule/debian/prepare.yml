@@ -39,8 +39,9 @@
     - name: Wait for kernel-filesystem unit restart loops to permanently exhaust
       # binfmt_misc/configfs/debugfs/tracefs fail in containers (restricted kernel namespaces).
       # Each unit retries up to StartLimitBurst=5 times, cycling independently.
-      # After ~40-50s all loops exhaust permanently — no more retries, container stable.
+      # After ~45-60s all loops exhaust permanently — no more retries, container stable.
+      # 60s provides a 15s safety margin over the worst-case exhaustion window.
       # No systemctl operations during this wait: any systemd interaction (mask, stop, reset-failed)
       # in a fragile post-boot degraded state can trigger daemon-reload → PID 1 crash.
       ansible.builtin.pause:
-        seconds: 50
+        seconds: 60

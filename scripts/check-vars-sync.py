@@ -326,8 +326,7 @@ def main():
     for key in REQUIRED_KEYS:
         if key not in defaults_data:
             defaults_errors.append(f"  MISSING: {key} not found in roles/system/defaults/main.yml")
-    for key in REQUIRED_KEYS:
-        if key in defaults_data and defaults_data[key] != vars_data[key]:
+        elif defaults_data[key] != vars_data[key]:
             defaults_errors.append(
                 f"  MISMATCH: {key}: vars.yml={vars_data[key]!r}"
                 f" != roles/system/defaults/main.yml={defaults_data[key]!r}"

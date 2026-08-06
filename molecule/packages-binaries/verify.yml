@@ -295,6 +295,7 @@
           - verify_gopls.stat.exists
           - verify_gopls.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
+      when: verify_gopls.stat.exists
 
     - name: Stat subctl18 binary
       ansible.builtin.stat:

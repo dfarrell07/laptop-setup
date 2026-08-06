@@ -14,7 +14,7 @@
   when:
     - is_rhel or csb_detected
   block:
-    - name: Deploy Red Hat CA certificates
+    - name: Copy CA cert files to anchors directory
       ansible.builtin.copy:
         src: "{{ item.item }}"
         dest: "{{ redhat_ca_dest }}/{{ item.item }}"
@@ -53,7 +53,7 @@
     - is_dnf
     - csb_rhel
   block:
-    - name: Install Red Hat cert packages
+    - name: Install cert packages via dnf
       ansible.builtin.dnf:
         name: "{{ redhat_cert_packages }}"
         state: present
@@ -89,7 +89,7 @@
     - install_vpn
     - is_rhel or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
   block:
-    - name: Install VPN packages
+    - name: Install VPN packages via dnf
       ansible.builtin.dnf:
         name: "{{ redhat_vpn_packages }}"
         state: present
