@@ -21,7 +21,9 @@
     msg: >-
       desktop_environment is set to 'unknown' — no WM packages will be installed.
       Set desktop_environment: sway, i3, or gnome in config.yml if a WM is needed.
-  when: desktop_effective == 'unknown' and desktop_environment != 'auto'
+  when:
+    - desktop_effective == 'unknown'
+    - desktop_environment != 'auto'
 
 - name: Fail when auto-detection falls through to unknown on Linux
   ansible.builtin.fail:
@@ -278,7 +280,7 @@
   when: desktop_effective in ['i3', 'sway']
 
 # --- Chrome managed policies ---
-- name: Check for CSB-managed Chrome policies
+- name: Stat CSB Chrome managed policy file
   ansible.builtin.stat:
     path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
   register: desktop_csb_chrome

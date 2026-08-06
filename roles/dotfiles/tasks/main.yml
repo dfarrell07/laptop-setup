@@ -450,13 +450,15 @@
 - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
   # 'launchctl bootstrap' is the modern replacement for the deprecated
   # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+  # rc==0 means newly bootstrapped (changed); rc!=0 means already running (no change).
   # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
   ansible.builtin.command:
     cmd: >-
       launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
   when: ansible_facts['os_family'] == 'Darwin'
-  changed_when: false
+  register: _dotfiles_ssh_agent_bootstrap_result
+  changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
   failed_when: false
 
 - name: Check if SSH supports post-quantum KEX

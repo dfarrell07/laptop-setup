@@ -2,7 +2,7 @@
 # roles/redhat/tasks/main.yml
 # Red Hat-specific: CA certs, VPN. Work profile only.
 
-- name: Check for Red Hat CA certificate files
+- name: Stat Red Hat CA certificate files in role
   ansible.builtin.stat:
     path: "{{ role_path }}/files/{{ item }}"
   loop: "{{ redhat_ca_certs }}"

@@ -34,6 +34,7 @@
         system_coredump_process_size_max: 0  # VM verify asserts ProcessSizeMax=0; disable coredumps in hardened CI
         # Exercise even_deny_root=true path (default.config.yml sets false; no other scenario tests true)
         system_faillock_even_deny_root: true
+        system_disable_bluetooth: true       # VM scenario exercises BT masking + module blacklist path
 
     # Vagrant boxes ship sshd_config with '#Port 22' (commented-out, implicit default).
     # The system role deploys Port 722 in a drop-in and restarts sshd.  If no explicit

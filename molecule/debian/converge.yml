@@ -72,15 +72,21 @@
       vars:
         notes_transcrypt_password: ""
     - role: containers
-    - role: desktop
-      vars:
-        desktop_environment: 'sway'
-        desktop_deploy_chrome_policies: true
     - role: claude
       vars:
         claude_install_method: skip
 
   post_tasks:
+    # Desktop role called via include_role so vars: are at role-params precedence (p20),
+    # overriding include_vars desktop_environment: auto (p18) from default.config.yml.
+    # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
+    - name: Converge desktop role (sway)
+      ansible.builtin.include_role:
+        name: desktop
+      vars:
+        desktop_environment: sway
+        desktop_deploy_chrome_policies: true
+
     - name: Generate CSB compatibility report
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
       tags: [always]

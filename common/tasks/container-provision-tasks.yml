@@ -54,7 +54,7 @@
     - name: Assert oc SHA256 was found
       ansible.builtin.assert:
         that: container_oc_sha256 | length == 64
-        fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file"
+        fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ distrobox_oc_version }})"
 
     - name: Download OpenShift client tarball
       ansible.builtin.get_url:

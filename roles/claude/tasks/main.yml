@@ -93,7 +93,7 @@
   loop_control:
     label: "{{ item | basename }}"
 
-- name: "Deploy instance CLAUDE.md (force: false — preserve local edits)"
+- name: Deploy instance CLAUDE.md (preserve local edits, force false)
   ansible.builtin.template:
     src: CLAUDE.md.j2
     dest: "{{ item }}/CLAUDE.md"
@@ -303,10 +303,11 @@
     cmd: >-  # yamllint disable-line rule:line-length
       launchctl bootout gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
+  register: _claude_queue_bootout_result
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - not (claude_queue_enabled | bool)
-  changed_when: false
+  changed_when: _claude_queue_bootout_result.rc == 0
   failed_when: false
 
 - name: Remove task queue launchd plist (macOS, when disabled)
@@ -331,10 +332,11 @@
     cmd: >-  # yamllint disable-line rule:line-length
       launchctl bootout gui/{{ ansible_facts['user_uid'] }}
       {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
+  register: _claude_rc_bootout_result
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - not (claude_remote_control_enabled | bool)
-  changed_when: false
+  changed_when: _claude_rc_bootout_result.rc == 0
   failed_when: false
 
 - name: Remove Remote Control launchd plist (macOS, when disabled)
@@ -373,7 +375,8 @@
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_queue_enabled | bool
-  changed_when: false
+  register: _claude_queue_bootstrap_result
+  changed_when: _claude_queue_bootstrap_result.rc == 0
   failed_when: false
 
 - name: Deploy Remote Control launchd plist (macOS)
@@ -394,7 +397,8 @@
   when:
     - ansible_facts['os_family'] == 'Darwin'
     - claude_remote_control_enabled | bool
-  changed_when: false
+  register: _claude_rc_bootstrap_result
+  changed_when: _claude_rc_bootstrap_result.rc == 0
   failed_when: false
 
 # brew autoupdate moved to roles/packages/tasks/main.yml — it manages all Homebrew

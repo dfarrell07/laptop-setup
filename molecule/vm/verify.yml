@@ -15,6 +15,7 @@
         usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
+        system_disable_bluetooth: true       # converge.yml sets this; enables BT masking + blacklist assertions
         go_tools_installed: false            # converge.yml sets packages_go_install: []; skip golangci-lint verify
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
@@ -304,13 +305,29 @@
       register: verify_bridge_nf
       changed_when: false
       become: true
-      failed_when: false  # key absent if br_netfilter not loaded
 
     - name: Assert bridge-nf-call-iptables is 1 (required for OVN-K NetworkPolicy)
       ansible.builtin.assert:
         that: verify_bridge_nf.stdout == '1'
         fail_msg: "net.bridge.bridge-nf-call-iptables is not 1 — Kubernetes NetworkPolicy will not be enforced"
-      when: verify_bridge_nf.rc == 0
+
+    - name: Verify ip_tables, br_netfilter, overlay modules loaded at runtime
+      ansible.builtin.command: sh -c "lsmod | grep -qE 'ip_tables|br_netfilter|overlay'"
+      changed_when: false
+      become: true
+
+    - name: Verify all 7 kind kernel modules are marked persistent in /etc/modules-load.d
+      ansible.builtin.command: grep -rqE '^{{ item }}$' /etc/modules-load.d/
+      loop:
+        - ip6_tables
+        - ip6table_nat
+        - ip_tables
+        - iptable_nat
+        - br_netfilter
+        - nf_conntrack
+        - overlay
+      changed_when: false
+      become: true
 
     # auditd: stat + mode 0640 + -e 2 immutability covered by verify-common.yml (not csb_detected)
 
@@ -513,6 +530,29 @@
       ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
       changed_when: false
       become: true
+
+    # --- Bluetooth disable path (system_disable_bluetooth: true) ---
+    - name: Query bluetooth.service UnitFileState
+      ansible.builtin.systemd:
+        name: bluetooth.service
+      register: verify_bluetooth_service
+      become: true
+      failed_when: false
+      when: system_disable_bluetooth | bool
+
+    - name: Assert bluetooth.service is masked
+      ansible.builtin.assert:
+        that: verify_bluetooth_service.status.UnitFileState == 'masked'
+        fail_msg: "bluetooth.service is not masked — system_disable_bluetooth: true did not take effect"
+      when:
+        - system_disable_bluetooth | bool
+        - verify_bluetooth_service.status.UnitFileState | default('') != ''
+
+    - name: Check modprobe blacklists bluetooth
+      ansible.builtin.command: grep -q 'blacklist bluetooth' /etc/modprobe.d/hardening.conf
+      changed_when: false
+      become: true
+      when: system_disable_bluetooth | bool
 
     - name: Check SELinux enforcing mode
       ansible.builtin.command: getenforce

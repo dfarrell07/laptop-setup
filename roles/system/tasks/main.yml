@@ -12,7 +12,9 @@
   ansible.builtin.dnf:
     name: policycoreutils-python-utils
     state: present
-  when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] and not csb_rhel
+  when:
+    - ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    - not csb_rhel
 
 # --- SELinux enforcement check ---
 - name: Verify SELinux is enforcing
@@ -1489,7 +1491,9 @@
   loop:
     - power-profiles-daemon
     - tuned-ppd
-  when: not (system_tlp_enabled | bool) and not csb_rhel
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel
   failed_when: false
 
 - name: Deploy TLP ThinkPad charge threshold config
@@ -2531,7 +2535,9 @@
     option: even_deny_root
     allow_no_value: true
     mode: "0644"
-  when: system_faillock_even_deny_root | bool and not csb_rhel
+  when:
+    - system_faillock_even_deny_root | bool
+    - not csb_rhel
 
 - name: Remove pam_faillock even_deny_root flag (when disabled)
   community.general.ini_file:
@@ -2540,7 +2546,9 @@
     option: even_deny_root
     state: absent
     mode: "0644"
-  when: not (system_faillock_even_deny_root | bool) and not csb_rhel
+  when:
+    - not (system_faillock_even_deny_root | bool)
+    - not csb_rhel
 
 - name: Check if authselect with-faillock feature is already enabled
   ansible.builtin.command:
@@ -3173,7 +3181,7 @@
           automount-open=false
         dest: /etc/dconf/db/local.d/50-hardening
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Deploy dconf locks for media-handling (CIS 1.8.6-1.8.8)
       ansible.builtin.copy:
@@ -3183,7 +3191,7 @@
           /org/gnome/desktop/media-handling/automount-open
         dest: /etc/dconf/db/local.d/locks/50-hardening
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Ensure gdm.d locks directory exists (CIS 1.8.3)
       ansible.builtin.file:
@@ -3203,7 +3211,7 @@
           disable-user-list=true
         dest: /etc/dconf/db/gdm.d/03-hardening
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Lock GDM login-screen keys (CIS 1.8.2/1.8.3)
       ansible.builtin.copy:
@@ -3213,7 +3221,7 @@
           /org/gnome/login-screen/disable-user-list
         dest: /etc/dconf/db/gdm.d/locks/03-hardening
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Deploy screensaver/idle lock policy (CIS 1.8.4/1.8.5)
       ansible.builtin.copy:
@@ -3228,7 +3236,7 @@
           lock-delay=uint32 0
         dest: /etc/dconf/db/local.d/51-screensaver
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Lock screensaver/idle settings (CIS 1.8.5)
       ansible.builtin.copy:
@@ -3238,7 +3246,7 @@
           /org/gnome/desktop/screensaver/lock-delay
         dest: /etc/dconf/db/local.d/locks/51-screensaver
         mode: "0644"
-      notify: Run dconf update
+      notify: Apply dconf schema database
 
     - name: Disable XDCMP in GDM (CIS 1.8.10)
       community.general.ini_file:

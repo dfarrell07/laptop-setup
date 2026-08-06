@@ -112,7 +112,7 @@
   become: true
   ignore_errors: "{{ ansible_facts['virtualization_type'] in ['container', 'docker', 'podman'] }}"
 
-- name: Run dconf update  # noqa: command-instead-of-module
+- name: Apply dconf schema database  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: dconf update
   become: true
