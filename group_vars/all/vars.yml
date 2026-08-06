@@ -71,9 +71,9 @@ system_disable_udf: true
 # install/start bolt; false on VMs and containers
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
 
-# Security hardening parameter baselines. Defined here (group_vars, precedence 4-5) rather than in
-# roles/system/defaults/main.yml because molecule verify plays run as standalone invocations where
-# role defaults are not loaded. vars.yml is the single source of truth for these values.
+# Security hardening parameter baselines. Authoritative values defined here (group_vars, precedence 5);
+# mirrored verbatim in roles/system/defaults/main.yml for standalone molecule invocability.
+# check-vars-sync.py enforces the two files stay in sync.
 system_tmout: 600                  # session inactivity timeout in seconds (CIS 5.5.5; must be <= 900)
 system_faillock_deny: 5            # PAM lockout: failed attempts before account lock
 system_faillock_unlock_time: 900   # seconds before auto-unlock after failed attempts
