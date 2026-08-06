@@ -10,7 +10,7 @@
 - name: Warn if /tmp remount failed (handler)
   ansible.builtin.debug:
     msg: "WARNING: remount of /tmp failed (rc={{ _tmp_remount_handler_result.rc }}); live nosuid/nodev options may not be active"
-  listen: Remount /tmp  # noqa: command-instead-of-module
+  listen: Remount /tmp
   when:
     - _tmp_remount_handler_result is defined
     - _tmp_remount_handler_result.rc | default(0) != 0

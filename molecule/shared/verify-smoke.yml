@@ -325,6 +325,11 @@
         # ctrl-alt-del.target; service_masking.yml uses failed_when: false so it silently
         # passes. The VM scenario (make test-vm) exercises the full masking path.
         - verify_cad_shared.status.UnitFileState != 'enabled'
+        # 'disabled'/'static' on Rocky 10 minimal Podman container CI gap: systemd reports
+        # UnitFileState as disabled or static rather than masked when masking fails inside
+        # a rootless/minimal container. The VM scenario exercises the full masking path.
+        - verify_cad_shared.status.UnitFileState != 'disabled'
+        - verify_cad_shared.status.UnitFileState != 'static'
 
     - name: Check passim service state (shared)
       ansible.builtin.systemd:
