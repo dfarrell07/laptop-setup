@@ -14,10 +14,17 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Check if openssh-server is already installed
+      ansible.builtin.command: rpm -q openssh-server
+      register: _openssh_present
+      changed_when: false
+      failed_when: false
+
     - name: Install openssh-server so sshd hardening block is exercised in container CI
       ansible.builtin.dnf:
         name: openssh-server
         state: present
+      when: _openssh_present.rc != 0
 
   roles:
     - role: system
