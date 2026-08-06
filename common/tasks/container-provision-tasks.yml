@@ -31,7 +31,7 @@
 - name: Download and install oc + kubectl
   when: >-
     container_oc_check.rc != 0 or
-    (container_oc_check.stdout | regex_search('Client Version: (\S+)', '\1') | default([]) | first | default('')) != distrobox_oc_version
+    (container_oc_check.stdout | regex_findall('Client Version: (\S+)') | first | default('')) != distrobox_oc_version
   become: true
   block:
     - name: Fetch OpenShift client SHA256 checksums
@@ -48,8 +48,8 @@
       ansible.builtin.set_fact:
         container_oc_sha256: >-
           {{ container_oc_checksums.content |
-             regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-             '\1', multiline=True) | default([]) | first | default('') }}
+             regex_findall('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
+             multiline=True) | first | default('') }}
 
     - name: Assert oc SHA256 was found
       ansible.builtin.assert:
