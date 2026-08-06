@@ -8,6 +8,7 @@
   when:
     - system_disable_bluetooth | bool
     - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+    - not system_is_container  # bluetooth not present in containers; mask+stop crash container systemd
   failed_when: false
 
 - name: Bluetooth service enable and configure (system_disable_bluetooth disabled)

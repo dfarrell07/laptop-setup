@@ -134,6 +134,7 @@
     group: root
   when:
     - csb_rhel
+    - not system_is_container
 
 - name: Enable dev-shm-harden.service (CSB)
   ansible.builtin.systemd:
@@ -142,6 +143,7 @@
     daemon_reload: true
   when:
     - csb_rhel
+    - not system_is_container
   # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
   # failed_when: false would set .failed=False and silently suppress the downstream warning.
   ignore_errors: true
@@ -622,11 +624,13 @@
   when:
     - system_var_tmp_noexec | bool
     - not csb_rhel
+    - not system_is_container
 
 - name: Enable and start var-tmp.mount
   when:
     - system_var_tmp_noexec | bool
     - not csb_rhel
+    - not system_is_container
   block:
     - name: Enable and start var-tmp.mount
       ansible.builtin.systemd:
@@ -667,6 +671,7 @@
         path: /etc/systemd/system/var-tmp.mount
         state: absent
       register: system_var_tmp_unit_removal
+      when: not system_is_container
 
     - name: Reload systemd after removing var-tmp.mount  # noqa: no-handler
       ansible.builtin.systemd:

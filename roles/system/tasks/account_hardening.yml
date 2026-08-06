@@ -59,7 +59,7 @@
     label: "{{ item.name }}"
   when:
     - not csb_rhel
-    - not (is_apt and system_is_container)  # logind inotify on login.defs crashes PID 1 in Debian 13 privileged Podman containers
+    - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
@@ -69,7 +69,7 @@
     mode: "0644"
   when:
     - not csb_rhel
-    - not (is_apt and system_is_container)  # same inotify/logind crash guard as Configure password aging task above
+    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -79,7 +79,7 @@
     mode: "0644"
   when:
     - not csb_rhel
-    - not (is_apt and system_is_container)  # same inotify/logind crash guard as Configure password aging task above
+    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
@@ -187,7 +187,9 @@
 
 # --- Rootless container prerequisites (subuid/subgid for podman) ---
 - name: Ensure rootless podman prerequisites for user
-  when: real_user_id | length > 0
+  when:
+    - real_user_id | length > 0
+    - not system_is_container  # subuid/subgid writes + loginctl enable-linger crash Debian 13 container PID 1
   block:
     - name: Ensure subuid entry exists for user
       ansible.builtin.lineinfile:
