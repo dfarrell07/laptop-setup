@@ -10,9 +10,10 @@
 #
 # NOTE: do NOT modify /etc/systemd/system/ here — it triggers an inotify
 # daemon-reload during systemd init that can crash the container.
-- name: Prepare (wait for systemd)
+- name: Prepare (wait for systemd, install openssh before converge)
   hosts: all
   gather_facts: false
+  become: true
   ignore_unreachable: true  # allow retries when container is briefly unreachable during systemd startup
 
   tasks:
@@ -24,3 +25,35 @@
       until: systemd_state.stdout in ['running', 'degraded']
       failed_when: false
       changed_when: false
+
+    - name: Check if openssh-server is already installed  # noqa: command-instead-of-module
+      ansible.builtin.command: rpm -q openssh-server
+      register: _openssh_present
+      changed_when: false
+      failed_when: false
+
+    - name: Install openssh-server before converge (--noscripts prevents systemd-update-helper crash)  # noqa: command-instead-of-module
+      # Install during prepare so any systemd inotify daemon-reload from the new service
+      # files in /usr/lib/systemd/system/ completes before converge starts, avoiding
+      # mid-converge container crashes.
+      ansible.builtin.command:
+        cmd: dnf install -y --setopt=rpm_opts=--noscripts openssh-server
+      register: _openssh_install
+      retries: 3
+      delay: 10
+      until: _openssh_install.rc == 0
+      changed_when: "'Nothing to do' not in _openssh_install.stdout"
+      failed_when: false
+      when: _openssh_present.rc != 0
+
+    - name: Wait for systemd to stabilize after openssh install  # noqa: command-instead-of-module
+      # Any inotify-triggered daemon-reload from the openssh service files must
+      # complete before converge starts to avoid mid-converge container crashes.
+      ansible.builtin.command: systemctl is-system-running
+      register: systemd_state2
+      retries: 20
+      delay: 2
+      until: systemd_state2.stdout in ['running', 'degraded']
+      failed_when: false
+      changed_when: false
+      when: _openssh_install.changed | default(false)

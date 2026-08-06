@@ -54,5 +54,6 @@
   ansible.builtin.debug:
     msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
+    - not system_is_container
     - system_fwupd_check_result.rc == 0
     - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"

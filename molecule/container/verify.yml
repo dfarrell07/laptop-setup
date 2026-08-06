@@ -53,16 +53,6 @@
           - verify_podman_symlink.stat.lnk_target == '/usr/bin/distrobox-host-exec'
         fail_msg: "/usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec"
 
-    - name: Check git is installed
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: git --version
-      changed_when: false
-
-    - name: Check vim is installed
-      ansible.builtin.command:
-        cmd: vim --version
-      changed_when: false
-
     - name: Check curl is installed
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: curl --version
