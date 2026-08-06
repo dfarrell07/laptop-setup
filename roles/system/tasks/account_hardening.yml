@@ -116,13 +116,14 @@
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
     cmd: chage -I {{ system_inactive_days }} {{ real_user_id }}
+  register: _chage_inactive_result
   when:
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
     - system_chage_inactive_days.rc | default(1) == 0
     - system_chage_inactive_days.stdout | default('') | trim != system_inactive_days | string
-  changed_when: true
+  changed_when: _chage_inactive_result.rc == 0
   failed_when: false
 
 - name: Check current password aging fields for existing user account
@@ -145,12 +146,13 @@
 - name: Set password aging fields for existing user account
   ansible.builtin.command:
     cmd: chage {{ item.item.flag }} {{ vars[item.item.var] }} {{ real_user_id }}
+  register: _chage_set_result
   when:
     - not csb_rhel
     - real_user_id | length > 0
     - item.rc | default(1) == 0
     - item.stdout | default('') | trim != vars[item.item.var] | string
-  changed_when: true
+  changed_when: _chage_set_result.rc == 0
   failed_when: false
   loop: "{{ system_chage_fields.results }}"
   loop_control:

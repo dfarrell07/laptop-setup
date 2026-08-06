@@ -528,6 +528,7 @@
     name: systemd-resolved
     state: started
     enabled: true
+  when: not system_is_container  # starting resolved triggers systemd re-exec, crashes privileged Podman containers
   failed_when: false
 
 - name: Ensure resolved drop-in directory

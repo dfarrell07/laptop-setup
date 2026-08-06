@@ -117,6 +117,7 @@
     - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
     - is_dnf
     - _system_tlp_install.rc | default(0) == 0
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 - name: Unmask power management daemons when TLP disabled
@@ -155,6 +156,7 @@
     - system_tlp_enabled | bool
     - not csb_rhel
     - _system_tlp_install.rc | default(0) == 0
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 # --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
@@ -172,22 +174,47 @@
     state: stopped
   failed_when: false
 
-- name: Configure cups.service (disable when system_disable_printing)
+- name: Disable cups.service when system_disable_printing
   ansible.builtin.systemd:
     name: cups
-    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
-    enabled: "{{ not (system_disable_printing | bool) }}"
+    state: stopped
+    enabled: false
+  when: system_disable_printing | bool
   failed_when: false
 
-- name: Configure cups.socket and cups.path masking
+- name: Enable and start cups.service when printing enabled
+  ansible.builtin.systemd:
+    name: cups
+    state: started
+    enabled: true
+  when:
+    - not (system_disable_printing | bool)
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+  failed_when: false
+
+- name: Mask cups.socket and cups.path when system_disable_printing
   ansible.builtin.systemd:
     name: "{{ item }}"
-    masked: "{{ system_disable_printing | bool }}"
-    state: "{{ 'stopped' if system_disable_printing else 'started' }}"
-    enabled: "{{ not (system_disable_printing | bool) }}"
+    masked: true
+    state: stopped
   loop:
     - cups.socket
     - cups.path
+  when: system_disable_printing | bool
+  failed_when: false
+
+- name: Unmask and start cups.socket and cups.path when printing enabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    state: started
+    enabled: true
+  loop:
+    - cups.socket
+    - cups.path
+  when:
+    - not (system_disable_printing | bool)
+    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
   failed_when: false
 
 # --- Mask ABRT crash reporter (redundant with systemd-coredump; skip on RHEL CSB where IT manages it via Satellite) ---
