@@ -187,7 +187,7 @@
     - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
     - system_authselect_current.stdout | default('') is not search('^sssd( |$)')
     - not csb_rhel
-  changed_when: true
+  changed_when: system_authselect_select_result.rc | default(1) == 0
   failed_when: false
 
 - name: Warn if authselect sssd profile selection failed

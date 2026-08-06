@@ -73,7 +73,7 @@
     - system_authselect_bin.stat.exists
     - not csb_rhel
     - system_authselect_faillock_check.rc | default(0) != 0
-  changed_when: true
+  changed_when: system_authselect_faillock_enable.rc | default(1) == 0
   failed_when: false
 
 - name: Warn if authselect enable-feature with-faillock failed
@@ -150,7 +150,7 @@
     - system_authselect_bin.stat.exists
     - not csb_rhel
     - system_authselect_pwhistory_check.rc | default(0) != 0
-  changed_when: true
+  changed_when: system_authselect_pwhistory_enable.rc | default(1) == 0
   failed_when: false
 
 - name: Warn if authselect enable-feature with-pwhistory failed
