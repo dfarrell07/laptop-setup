@@ -23,6 +23,7 @@
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
   vars:
     binary_name: sops
