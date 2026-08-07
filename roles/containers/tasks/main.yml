@@ -151,6 +151,7 @@
       WARNING: podman.socket failed to start ({{ containers_podman_socket.msg | default('unknown') }}).
       kind and docker-compatible CLIs will not work. Fix: systemctl --user enable --now podman.socket.
       If that fails: systemctl --user status podman.socket; journalctl --user -u podman.socket
+      On a fresh provision without an active user session, this is expected — the socket will enable at first login.
   when:
     - is_linux
     - not (system_is_container | default(false))  # scope:user systemd crashes Podman container PID 1
