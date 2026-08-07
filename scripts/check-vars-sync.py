@@ -27,6 +27,46 @@ LINTING_CI_FILE = REPO_ROOT / ".github/workflows/linting.yml"
 DEFAULT_CONFIG_FILE = REPO_ROOT / "default.config.yml"
 DOTFILES_DEFAULTS_FILE = REPO_ROOT / "roles/dotfiles/defaults/main.yml"
 
+# Cross-role mirror: vars.yml is authoritative; these role defaults must match.
+# Checked so standalone molecule invocations use the same defaults as full playbook runs.
+CROSS_ROLE_MIRROR_KEYS = {
+    "profile": [
+        REPO_ROOT / "roles/claude/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+        REPO_ROOT / "roles/git_repos/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+        REPO_ROOT / "roles/ssh/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
+    "packages_install_binaries": [
+        REPO_ROOT / "roles/claude/defaults/main.yml",
+        REPO_ROOT / "roles/distrobox/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "install_virtualization": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
+    "install_vpn": [
+        REPO_ROOT / "roles/redhat/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
+    "is_linux": [
+        REPO_ROOT / "roles/claude/defaults/main.yml",
+        REPO_ROOT / "roles/containers/defaults/main.yml",
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "is_macos": [
+        REPO_ROOT / "roles/claude/defaults/main.yml",
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+}
+
 # molecule files intentionally set distrobox_oc_version to a non-release value
 # (e.g. "0.0.0-offline-test") to exercise rescue/degradation paths — skip them.
 _OC_VERSION_SKIP = {
@@ -315,6 +355,30 @@ def check_linting_ci_sync(packages_data):
     return errors
 
 
+def check_cross_role_mirror_keys(vars_data):
+    """Verify cross-role mirror vars match vars.yml in all listed role defaults files."""
+    errors = []
+    for var_name, role_files in CROSS_ROLE_MIRROR_KEYS.items():
+        expected = vars_data.get(var_name)
+        if expected is None:
+            errors.append(f"  MISSING: {var_name} not found in vars.yml")
+            continue
+        for role_file in role_files:
+            role_data = load_yaml(role_file)
+            if var_name not in role_data:
+                errors.append(
+                    f"  MISSING: {var_name} not found in"
+                    f" {role_file.relative_to(REPO_ROOT)}"
+                )
+            elif role_data[var_name] != expected:
+                errors.append(
+                    f"  MISMATCH: {var_name}:"
+                    f" vars.yml={expected!r}"
+                    f" != {role_file.relative_to(REPO_ROOT)}={role_data[var_name]!r}"
+                )
+    return errors
+
+
 def main():
     vars_data = load_yaml(VARS_FILE)
     packages_data = load_yaml(PACKAGES_DEFAULTS_FILE)
@@ -417,6 +481,17 @@ def main():
     print(
         f"OK: ssh_port={default_config_data.get(_SSH_PORT_KEY)!r} matches in"
         " default.config.yml, roles/system/defaults/main.yml, and roles/dotfiles/defaults/main.yml"
+    )
+
+    _fail_on_errors(
+        check_cross_role_mirror_keys(vars_data),
+        "cross-role mirror vars in role defaults do not match vars.yml:",
+        "Update the listed role defaults files to match group_vars/all/vars.yml.",
+    )
+    total_cross = sum(len(files) for files in CROSS_ROLE_MIRROR_KEYS.values())
+    print(
+        f"OK: {len(CROSS_ROLE_MIRROR_KEYS)} cross-role vars verified across"
+        f" {total_cross} role defaults files"
     )
 
     _fail_on_errors(
