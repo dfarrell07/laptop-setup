@@ -76,6 +76,7 @@ REQUIRED_KEYS = {
     "is_dnf5": bool,
     "csb_rhel": bool,
     "is_fedora": bool,
+    "ssh_pubkey_accepted_algorithms": list,
 }
 
 

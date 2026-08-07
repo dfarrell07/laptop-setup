@@ -232,17 +232,14 @@
     - is_linux
     - not (system_is_container | default(false))
   block:
-    - name: Deploy SSH agent environment.d config
+    - name: Deploy environment.d configs
       ansible.builtin.copy:
-        content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
-        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
+        content: "{{ item.content }}\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/{{ item.name }}"
         mode: "0644"
-
-    - name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
-      ansible.builtin.copy:
-        content: "GOTMPDIR=$HOME/tmp\n"
-        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
-        mode: "0644"
+      loop:
+        - {name: ssh-agent.conf, content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket"}
+        - {name: gotmpdir.conf, content: "GOTMPDIR=$HOME/tmp"}
 
 # --- macOS: SSH agent via launchd ---
 - name: SSH agent launchd setup (macOS)
