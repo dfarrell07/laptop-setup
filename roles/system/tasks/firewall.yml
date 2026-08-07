@@ -108,6 +108,25 @@
     (_system_fw_zone_svc_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_fw_zone_svc_remove.msg | default(''))
 
+- name: Remove broad port rules from FedoraWorkstation zone
+  ansible.posix.firewalld:
+    zone: FedoraWorkstation
+    port: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - 1025-65535/tcp
+    - 1025-65535/udp
+  register: _system_fw_zone_port_remove
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - is_fedora
+  failed_when: >-
+    (_system_fw_zone_port_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_fw_zone_port_remove.msg | default(''))
+
 - name: Enable ICMP block inversion on drop zone
   ansible.posix.firewalld:
     zone: drop
