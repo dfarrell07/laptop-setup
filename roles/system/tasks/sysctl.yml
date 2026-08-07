@@ -21,7 +21,8 @@
       CONFIG_BPF_UNPRIV_DEFAULT_OFF=y; EPERM on write is tolerated.
       {% else %}
       system_unprivileged_bpf_disabled={{ system_unprivileged_bpf_disabled }}
-      has no effect on stock Fedora 44 (write-once to 2 at boot).
+      cannot be applied on stock Fedora 44 (write-once locked to 2 at boot via
+      CONFIG_BPF_UNPRIV_DEFAULT_OFF=y; EPERM on any write).
       {% endif %}
 
 - name: Merge configurable sysctl values into hardening dict

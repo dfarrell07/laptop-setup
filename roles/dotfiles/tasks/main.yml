@@ -92,11 +92,6 @@
     _legacy_path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
     _backup_path: "{{ ansible_facts['user_dir'] }}/.gitconfig.pre-xdg-migration"
 
-- name: Override internal CA path on Debian (Fedora/RHEL bundle path does not exist on apt-based systems)
-  ansible.builtin.set_fact:
-    dotfiles_internal_ca_path: /etc/ssl/certs/ca-certificates.crt
-  when: is_apt
-
 - name: Deploy gitconfig
   ansible.builtin.template:
     src: gitconfig.j2

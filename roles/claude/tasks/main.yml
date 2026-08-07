@@ -338,7 +338,7 @@
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
+    path: "{{ claude_queue_log_dir_macos }}"
     state: directory
     mode: "0755"
   when:

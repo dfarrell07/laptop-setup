@@ -30,6 +30,7 @@ claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-lo
 
 claude_queue_enabled: false
 claude_queue_log_dir: "{{ ansible_facts['user_dir'] }}/.local/share/claude-queue/logs"
+claude_queue_log_dir_macos: "{{ ansible_facts['user_dir'] }}/.local/state/log"
 claude_queue_repo: ""
 claude_queue_poll_interval_sec: 120
 claude_queue_boot_delay_sec: 60
@@ -61,6 +62,7 @@ claude_deny_sensitive:
   - "~/.claude/sessions/**"
   - "~/.claude/tasks/**"
   - "~/.claude/plans/**"
+  - "~/.claude/projects/**"
   - "~/.config/helm/**"
   - "~/.azure/**"
   - "~/.gitconfig"
@@ -92,7 +94,6 @@ claude_deny_sensitive:
 
 claude_deny_write_only:
   - "~/.claude/CLAUDE.md"
-  - "~/.claude/projects/**"
   - "~/.claude/settings.json"
   - "~/.claude/settings.local.json"
   - "~/.config/claude/**"
