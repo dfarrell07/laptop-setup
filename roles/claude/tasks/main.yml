@@ -322,8 +322,8 @@
 - name: Warn that Remote Control is not implemented on Linux
   ansible.builtin.debug:
     msg: >-
-      claude_remote_control_enabled is true but Remote Control is macOS-only (launchd);
-      no systemd unit exists — ignoring.
+      claude_remote_control_enabled is true but no systemd unit is configured for Linux
+      — launchd autostart is macOS-only. Run `claude --remote-control` manually on Linux if needed.
   when: claude_remote_control_enabled | bool and is_linux
 
 # --- macOS: launchd services ---

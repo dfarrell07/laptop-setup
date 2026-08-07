@@ -35,7 +35,7 @@ desktop_i3status_cpu_temp_path: ""  # set correct hwmon sysfs path in config.yml
 desktop_sway_output: "*"  # find output names with: swaymsg -t get_outputs
 desktop_sway_adaptive_sync: "disabled"  # VRR/FreeSync; enable per-output in config.yml with a specific output name for VRR-capable displays
 desktop_sway_xwayland: ''  # set "disable" for pure-Wayland sessions (breaks XWayland-only apps); empty = sway default (enabled)
-desktop_sway_polkit_agent: "/usr/libexec/lxqt-policykit-agent"  # Fedora path; Debian: /usr/bin/lxqt-policykit-agent
+desktop_sway_polkit_agent: "{{ '/usr/bin/lxqt-policykit-agent' if is_apt else '/usr/libexec/lxqt-policykit-agent' }}"
 desktop_i3_polkit_agent: "/usr/bin/lxpolkit"  # Fedora/Debian path for lxpolkit
 # Workspace-to-output assignments for multi-monitor setups; empty = no assignments written.
 # Example (config.yml):
