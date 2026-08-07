@@ -78,6 +78,8 @@ REQUIRED_KEYS = {
     "is_dnf5": bool,
     "csb_rhel": bool,
     "is_fedora": bool,
+    "install_vpn": bool,
+    "install_virtualization": bool,
     "ssh_pubkey_accepted_algorithms": list,
 }
 
@@ -351,24 +353,25 @@ def main():
 
     ssh_defaults_data = load_yaml(SSH_DEFAULTS_FILE)
     ssh_defaults_errors = []
-    _SSH_MIRROR_KEY = "ssh_pubkey_accepted_algorithms"
-    if _SSH_MIRROR_KEY not in ssh_defaults_data:
-        ssh_defaults_errors.append(
-            f"  MISSING: {_SSH_MIRROR_KEY} not found in roles/ssh/defaults/main.yml"
-        )
-    elif ssh_defaults_data[_SSH_MIRROR_KEY] != vars_data[_SSH_MIRROR_KEY]:
-        ssh_defaults_errors.append(
-            f"  MISMATCH: {_SSH_MIRROR_KEY}: vars.yml={vars_data[_SSH_MIRROR_KEY]!r}"
-            f" != roles/ssh/defaults/main.yml={ssh_defaults_data[_SSH_MIRROR_KEY]!r}"
-        )
+    _SSH_MIRROR_KEYS = ["ssh_pubkey_accepted_algorithms", "ssh_signing_key_basename"]
+    for _SSH_MIRROR_KEY in _SSH_MIRROR_KEYS:
+        if _SSH_MIRROR_KEY not in ssh_defaults_data:
+            ssh_defaults_errors.append(
+                f"  MISSING: {_SSH_MIRROR_KEY} not found in roles/ssh/defaults/main.yml"
+            )
+        elif ssh_defaults_data[_SSH_MIRROR_KEY] != vars_data[_SSH_MIRROR_KEY]:
+            ssh_defaults_errors.append(
+                f"  MISMATCH: {_SSH_MIRROR_KEY}: vars.yml={vars_data[_SSH_MIRROR_KEY]!r}"
+                f" != roles/ssh/defaults/main.yml={ssh_defaults_data[_SSH_MIRROR_KEY]!r}"
+            )
     _fail_on_errors(
         ssh_defaults_errors,
-        "roles/ssh/defaults/main.yml missing or mismatched ssh_pubkey_accepted_algorithms"
+        "roles/ssh/defaults/main.yml missing or mismatched ssh mirror keys"
         " (required mirror for standalone ssh role invocation):",
         "Update roles/ssh/defaults/main.yml to match vars.yml.",
     )
     print(
-        "OK: ssh_pubkey_accepted_algorithms present and matching in"
+        "OK: ssh_pubkey_accepted_algorithms and ssh_signing_key_basename present and matching in"
         " roles/ssh/defaults/main.yml (standalone ssh role mirror)"
     )
 
