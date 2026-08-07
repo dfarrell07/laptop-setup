@@ -9,6 +9,7 @@ containers_config_dir: "{{ ansible_facts['user_dir'] }}/.config/containers"
 containers_log_driver: "k8s-file"
 containers_pids_limit: 65536
 containers_nofile_limit: 65536
+# 8x soft limit; headroom for kind multi-cluster testing (multiple nodes each consuming up to containers_nofile_limit fds)
 containers_nofile_hard_limit: 524288
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
