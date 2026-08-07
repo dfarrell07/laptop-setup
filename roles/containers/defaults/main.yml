@@ -3,11 +3,11 @@ containers_auth_file: "{{ containers_config_dir }}/auth.json"
 
 containers_config_dir: "{{ ansible_facts['user_dir'] }}/.config/containers"
 
-# kind host prerequisites (OVN-K/Submariner testing)
+# kind host prerequisites (OVN-K/Submariner testing); settings apply globally to all Podman containers
 containers_kind_log_driver: "k8s-file"
-containers_kind_pids_limit: 65536
-containers_kind_nofile_limit: 65536
-containers_kind_nofile_hard_limit: 524288
+containers_pids_limit: 65536
+containers_nofile_limit: 65536
+containers_nofile_hard_limit: 524288
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
 

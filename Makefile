@@ -180,7 +180,7 @@ syntax-check:
 	ansible-playbook site.yml --syntax-check
 
 shellcheck:
-	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg roles/dotfiles/files/git-template-pre-commit roles/dotfiles/files/git-template-commit-msg
 
 markdownlint:
 	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm install --ignore-scripts"; exit 0; }

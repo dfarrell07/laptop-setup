@@ -55,7 +55,8 @@
   become: false
   tags: [always]
 
-- block:
+- name: Assert required config vars are not placeholders
+  block:
     - name: Assert system_timezone is not the CHANGE_ME placeholder
       ansible.builtin.assert:
         that:
@@ -85,7 +86,8 @@
       tags: [always]
   when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
 
-- block:
+- name: Warn when vault stub not populated
+  block:
     - name: Warn when vault.yml has not been populated with real secrets
       ansible.builtin.debug:
         msg: >-

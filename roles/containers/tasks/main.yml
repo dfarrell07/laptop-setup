@@ -175,22 +175,22 @@
     create: true
   when: is_linux
 
-- name: Set containers.conf pids_limit for kind (kind nodes spawn many processes)
+- name: Set containers.conf pids_limit (global; required by kind nodes)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
     option: pids_limit
-    value: "{{ containers_kind_pids_limit }}"
+    value: "{{ containers_pids_limit }}"
     mode: "0644"
     create: true
   when: is_linux
 
-- name: Set containers.conf default_ulimits nofile for kind (socket-activated podman.service inherits low NOFILE)
+- name: Set containers.conf default_ulimits nofile (global; required by kind nodes)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
     option: default_ulimits
-    value: '["nofile={{ containers_kind_nofile_limit }}:{{ containers_kind_nofile_hard_limit }}"]'
+    value: '["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]'
     mode: "0644"
     create: true
   when: is_linux

@@ -323,6 +323,14 @@
     - is_linux
 
 # --- macOS: launchd cleanup when disabled ---
+- name: Check if task queue launchd plist exists (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+  register: _claude_queue_plist_stat
+  when:
+    - is_macos
+    - not (claude_queue_enabled | bool)
+
 - name: Unload task queue launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-  # yamllint disable-line rule:line-length
@@ -332,6 +340,7 @@
   when:
     - is_macos
     - not (claude_queue_enabled | bool)
+    - _claude_queue_plist_stat.stat.exists
   changed_when: _claude_queue_bootout_result.rc == 0
   failed_when: false
 
@@ -342,6 +351,7 @@
   when:
     - is_macos
     - not (claude_queue_enabled | bool)
+    - _claude_queue_plist_stat.stat.exists
 
 - name: Warn claude_remote_control_enabled has no effect on Linux
   ansible.builtin.debug:
@@ -352,6 +362,14 @@
     - claude_remote_control_enabled | bool
     - is_linux
 
+- name: Check if Remote Control launchd plist exists (macOS)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+  register: _claude_rc_plist_stat
+  when:
+    - is_macos
+    - not (claude_remote_control_enabled | bool)
+
 - name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-  # yamllint disable-line rule:line-length
@@ -361,6 +379,7 @@
   when:
     - is_macos
     - not (claude_remote_control_enabled | bool)
+    - _claude_rc_plist_stat.stat.exists
   changed_when: _claude_rc_bootout_result.rc == 0
   failed_when: false
 
@@ -371,6 +390,7 @@
   when:
     - is_macos
     - not (claude_remote_control_enabled | bool)
+    - _claude_rc_plist_stat.stat.exists
 
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
