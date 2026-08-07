@@ -78,11 +78,15 @@ REQUIRED_KEYS = {
     "system_unprivileged_bpf_disabled": int,
     "system_io_uring_disabled": int,
     "is_dnf5": bool,
+    "is_dnf": bool,
+    "is_apt": bool,
     "csb_rhel": bool,
     "csb_detected": bool,
     "is_fedora": bool,
     "install_vpn": bool,
     "install_virtualization": bool,
+    "network_proxied": bool,
+    "proxy_url": str,
     "ssh_pubkey_accepted_algorithms": list,
 }
 
