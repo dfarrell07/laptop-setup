@@ -42,21 +42,6 @@
   # fails with "group does not exist". failed_when: false prevents play abort;
   # the packages role re-runs this after installing libvirt, completing membership.
 
-- name: Start virtnetworkd service to initialize libvirt firewall zone
-  ansible.builtin.systemd:
-    name: virtnetworkd.service
-    state: started
-  when:
-    - install_virtualization | bool
-    - system_firewalld_running | bool
-    - (system_virtqemud_check.rc | default(-1)) == 0
-    - "'libvirt' not in (system_firewall_info.firewalld_info.zones | default({}))"
-  failed_when: false
-  # Starting the service (not just the socket) ensures virtnetworkd creates the
-  # libvirt firewall zone in firewalld before the ssh removal task below runs.
-  # Socket-based activation is lazy; the zone may not exist until a client connects.
-  # No-op on first provision when libvirt is not yet installed.
-
 - name: Remove stale port-22 allow-rule from libvirt zone (sshd on 722; zone catch-all reject covers it)
   ansible.posix.firewalld:
     zone: libvirt

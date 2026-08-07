@@ -250,17 +250,14 @@
       changed_when: false
       failed_when: false
 
-    - name: Ensure log directory exists (macOS)
+    - name: Ensure SSH agent support directories exist (macOS)
       ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
+        path: "{{ item }}"
         state: directory
         mode: "0755"
-
-    - name: Ensure LaunchAgents directory exists (macOS)
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
-        state: directory
-        mode: "0755"
+      loop:
+        - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+        - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
 
     - name: Deploy SSH agent launchd plist (macOS)
       ansible.builtin.template:

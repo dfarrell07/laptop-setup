@@ -44,7 +44,7 @@ system_sysctl_hardening:
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
   # Fedora 44 kernel compile-time default; pinned here to prevent /etc/sysctl.d override
-  net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — SYN flood protection
+  net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — pinned to kernel default (1); guards against third-party sysctl.d override
   # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
