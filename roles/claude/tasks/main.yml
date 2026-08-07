@@ -68,7 +68,7 @@
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:
     _claude_instances: >-
-      {{ [ansible_facts['user_dir'] + '/.claude', claude_personal_config_dir]
+      {{ [claude_default_config_dir, claude_personal_config_dir]
          + ([claude_work_config_dir] if (profile == 'work' or claude_queue_enabled | bool) else []) }}
 
 - name: Create Claude instance config directories
@@ -117,7 +117,7 @@
 
 - name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.claude"
+    path: "{{ claude_default_config_dir }}"
     mode: "0700"
   when: is_macos
   failed_when: false

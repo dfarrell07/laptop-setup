@@ -6,6 +6,7 @@ claude_install_method: native  # native (recommended) or skip (CI/testing — by
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 claude_pinned_version: ""  # pin to a specific version (e.g. "1.0.3"); empty = latest
 
+claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
 claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 

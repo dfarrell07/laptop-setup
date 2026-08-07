@@ -98,7 +98,7 @@
 - name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
   when:
     - is_linux
-    - ansible_facts['architecture'] == 'x86_64'
+    - ansible_facts['architecture'] == 'x86_64'  # no arm64 release; x86_64-only CI pin
     - profile == 'work'
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
