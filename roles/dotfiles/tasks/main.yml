@@ -21,6 +21,11 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/autostart", mode: "0755"}
 
+- name: Stat oh-my-zsh directory
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
+  register: _dotfiles_ohmyzsh_dir
+
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
@@ -30,7 +35,7 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
     state: absent
-  when: not _dotfiles_ohmyzsh_git.stat.exists
+  when: _dotfiles_ohmyzsh_dir.stat.exists and not _dotfiles_ohmyzsh_git.stat.exists
 
 - name: Install oh-my-zsh
   ansible.builtin.git:
@@ -332,16 +337,8 @@
   when: is_linux
 
 - name: Deploy safe direnv config
-  ansible.builtin.copy:
-    content: |
-      # strict_env enables set -euo pipefail during .envrc evaluation:
-      # unset variables become errors and pipeline failures propagate.
-      # The outer shell environment (PATH, GOPATH, KUBECONFIG, etc.) is still inherited.
-      # Example minimal .envrc: PATH_add bin
-      [global]
-      strict_env = true
-      disable_stdin = true
-      warn_timeout = "{{ dotfiles_direnv_warn_timeout }}"
+  ansible.builtin.template:
+    src: direnv.toml.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnv.toml"
     mode: "0644"
 - name: Deploy direnv user stdlib (direnvrc with layout_go)

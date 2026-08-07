@@ -1,0 +1,8 @@
+# strict_env enables set -euo pipefail during .envrc evaluation:
+# unset variables become errors and pipeline failures propagate.
+# The outer shell environment (PATH, GOPATH, KUBECONFIG, etc.) is still inherited.
+# Example minimal .envrc: PATH_add bin
+[global]
+strict_env = true
+disable_stdin = true
+warn_timeout = "{{ dotfiles_direnv_warn_timeout }}"

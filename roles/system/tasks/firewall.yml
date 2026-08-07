@@ -167,6 +167,18 @@
     - system_ipv6_accept_ra | int >= 2
   notify: Apply firewall rules
 
+- name: Remove ICMPv6 router-advertisement from drop zone (SLAAC disabled)
+  ansible.posix.firewalld:
+    zone: drop
+    icmp_block: router-advertisement
+    permanent: true
+    immediate: true
+    state: disabled
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - system_ipv6_accept_ra | int < 2
+
 # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
 # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
 # Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
