@@ -176,7 +176,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
 - name: GNOME Keyring SSH agent autostart disable (Linux, non-container)
-  when: is_linux and not (system_is_container | default(false))
+  when: is_linux and not (csb_restricted) and not (system_is_container | default(false))
   block:
     - name: Ensure autostart directory exists
       ansible.builtin.file:

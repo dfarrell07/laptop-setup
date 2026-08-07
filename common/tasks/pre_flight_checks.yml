@@ -59,6 +59,7 @@
   ansible.builtin.assert:
     that:
       - system_timezone != 'CHANGE_ME'
+      - system_timezone | length > 0
     fail_msg: >-
       Set system_timezone in config.yml before running make all.
       The default 'CHANGE_ME' sentinel is invalid — timedatectl will
