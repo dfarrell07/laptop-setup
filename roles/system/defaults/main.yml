@@ -19,6 +19,8 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_redirects: 0
   net.ipv6.conf.all.accept_redirects: 0
   net.ipv6.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0   # CIS — IPv4 source routing off; pinned to block sysctl.d override
+  net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; pinned to block sysctl.d override
   net.ipv6.conf.default.accept_source_route: 0
   # `all.rp_filter` reset to 0 by Fedora 50-default.conf (line 27: `-net.ipv4.conf.all.rp_filter`
