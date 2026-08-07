@@ -62,9 +62,6 @@
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above
-  failed_when: false
-  # ZONE_ALREADY_SET handled transparently by ansible.posix.firewalld — interface
-  # already in drop zone is detected by get_enabled_immediate() before any firewall-cmd call.
 
 - name: Remove default services from public zone
   ansible.posix.firewalld:
