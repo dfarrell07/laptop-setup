@@ -55,6 +55,9 @@ system_sysctl_hardening:
   net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
   net.ipv4.icmp_ignore_bogus_error_responses: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only; Fedora default)
+  fs.protected_hardlinks: 1  # Fedora 44 default via 50-default.conf; pinned to block sysctl.d override
+  fs.protected_symlinks: 1  # same
+  fs.protected_fifos: 1  # same
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
   # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
