@@ -10,7 +10,7 @@ containers_log_driver: "k8s-file"
 containers_pids_limit: 65536
 containers_nofile_limit: 65536
 # headroom for kind multi-cluster testing (multiple nodes each consuming up to containers_nofile_limit fds)
-containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"
+containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"  # 8x = max kind nodes per cluster × per-node fd budget
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml

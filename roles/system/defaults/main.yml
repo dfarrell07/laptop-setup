@@ -195,7 +195,8 @@ system_disable_sctp: false  # authoritative value in group_vars/all/vars.yml; ke
 system_bluetooth_privacy: device   # BlueZ Privacy= in /etc/bluetooth/main.conf; 'off' to disable
 system_bluetooth_name: "Bluetooth"  # BlueZ Name= in /etc/bluetooth/main.conf; shown to Bluetooth scanners
 system_disable_fingerprint: true  # mask fprintd — set false in config.yml to enable fingerprint auth
-system_mask_abrt: true  # mask ABRT crash reporter daemons — redundant with systemd-coredump; set false on RHEL CSB (guard in task)
+system_mask_abrt: true  # mask ABRT to prevent automatic upstream crash reporting and reduce daemon surface area;
+# local core capture is handled by systemd-coredump; set false on RHEL CSB (guard in task)
 # SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
 # Dangerous bits omitted from 176: raw-console(4), process-signalling(64), crash/dump(8).
 # Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
