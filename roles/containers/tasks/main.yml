@@ -151,6 +151,18 @@
     - not (system_is_container | default(false))  # scope:user systemd crashes Podman container PID 1
     - containers_podman_socket.status.ActiveState | default('') not in ['active', 'activating']
 
+- name: Unmask Docker socket when Docker is enabled
+  ansible.builtin.systemd:
+    name: docker.socket
+    masked: false
+  become: true
+  tags: [become]
+  when:
+    - is_linux
+    - install_docker
+    - not (system_is_container | default(false))
+  failed_when: false
+
 - name: Disable Docker socket by default
   ansible.builtin.systemd:
     name: docker.socket
