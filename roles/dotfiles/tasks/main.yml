@@ -26,16 +26,11 @@
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
   register: _dotfiles_ohmyzsh_git
 
-- name: Stat oh-my-zsh directory
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
-  register: _dotfiles_ohmyzsh_dir
-
 - name: Remove oh-my-zsh directory if present without .git (corrupted or incomplete)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
     state: absent
-  when: not _dotfiles_ohmyzsh_git.stat.exists and _dotfiles_ohmyzsh_dir.stat.exists
+  when: not _dotfiles_ohmyzsh_git.stat.exists
 
 - name: Install oh-my-zsh
   ansible.builtin.git:
@@ -64,14 +59,14 @@
     depth: 1
     update: false
   register: dotfiles_forgit_result
-  failed_when: false
+  ignore_errors: true
   timeout: 60
   when: not dotfiles_ohmyzsh_result.failed
 
 - name: Warn if forgit clone failed
   ansible.builtin.debug:
     msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
-  when: dotfiles_forgit_result.rc | default(0) != 0
+  when: dotfiles_forgit_result.failed | default(false)
 
 - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
   ansible.builtin.file:

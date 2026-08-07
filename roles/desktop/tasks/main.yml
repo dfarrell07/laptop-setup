@@ -73,7 +73,7 @@
     - is_dnf
     - desktop_effective == 'gnome'
 
-- name: Install apt desktop packages (with rescue)
+- name: Install apt desktop packages
   when: is_apt
   block:
     - name: Install desktop packages (apt)
@@ -84,7 +84,7 @@
       become: true
       tags: [become]
 
-- name: Install apt Sway packages (with rescue)
+- name: Install apt Sway packages
   when:
     - is_apt
     - desktop_effective == 'sway'
