@@ -131,9 +131,6 @@ CROSS_ROLE_MIRROR_KEYS = {
     "proxy_url": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
-    "csb_restricted": [
-        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
-    ],
 }
 
 # molecule files intentionally set distrobox_oc_version to a non-release value
