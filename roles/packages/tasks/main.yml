@@ -44,7 +44,7 @@
   block:
     - name: Install apt packages (Debian/Ubuntu)
       ansible.builtin.apt:
-        name: "{{ packages_apt + (packages_apt_work | default([]) if profile == 'work' else []) }}"
+        name: "{{ packages_apt }}"
         state: present
         update_cache: true
       become: true
