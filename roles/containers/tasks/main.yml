@@ -185,8 +185,8 @@
     - not (system_is_container | default(false))  # masked: true → inotify → daemon-reload → container crash
   failed_when: false
 
-# --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---
-- name: Set containers.conf log_driver to k8s-file (user-scope; elevated limits for kind compatibility)
+# --- workstation-wide rootless Podman settings (also required for kind nodes) ---
+- name: Set containers.conf log_driver to k8s-file (user-scope; file-based logging, avoids journald issues; also required for kind nodes)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
