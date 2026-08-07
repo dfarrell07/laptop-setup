@@ -83,14 +83,6 @@
         update_cache: true
       become: true
       tags: [become]
-  rescue:
-    - name: Warn apt desktop package install failed
-      ansible.builtin.debug:
-        msg: >-
-          PACKAGE INSTALL FAILED: Install desktop packages in role desktop.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This may be a transient network error or missing repo access.
-          Continuing playbook execution.
 
 - name: Install apt Sway packages (with rescue)
   when:
@@ -103,14 +95,6 @@
         state: present
       become: true
       tags: [become]
-  rescue:
-    - name: Warn apt Sway package install failed
-      ansible.builtin.debug:
-        msg: >-
-          PACKAGE INSTALL FAILED: Install Sway packages in role desktop.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This may be a transient network error or missing repo access.
-          Continuing playbook execution.
 
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory
@@ -124,7 +108,6 @@
     src: alacritty.toml.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
     mode: "0644"
-    force: false
 
 # --- i3 config ---
 - name: Deploy i3 configuration

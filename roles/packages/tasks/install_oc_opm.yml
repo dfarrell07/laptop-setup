@@ -175,18 +175,8 @@
           tags: [become]
 
         - name: Rename opm-rhel8 to opm
-          ansible.builtin.copy:
-            src: /usr/local/bin/opm-rhel8
-            dest: /usr/local/bin/opm
-            remote_src: true
-            mode: "0755"
-          become: true
-          tags: [become]
-
-        - name: Remove opm-rhel8 source after rename
-          ansible.builtin.file:
-            path: /usr/local/bin/opm-rhel8
-            state: absent
+          ansible.builtin.command:
+            cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm
           become: true
           tags: [become]
 

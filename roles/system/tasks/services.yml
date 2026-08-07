@@ -63,6 +63,7 @@
     - system_firewalld_running | bool
     - (system_virtqemud_check.rc | default(-1)) == 0
   failed_when: false
+  changed_when: false
   # Starting the service (not just the socket) ensures virtnetworkd creates the
   # libvirt firewall zone in firewalld before the ssh removal task below runs.
   # Socket-based activation is lazy; the zone may not exist until a client connects.

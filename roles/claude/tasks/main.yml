@@ -221,7 +221,6 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - _timer_enable is defined
     - _timer_enable.failed | default(false)
 
 - name: Deploy logrotate config for claude-queue-poller.log
