@@ -108,17 +108,8 @@
 # Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time
 # chmod.  Use systemd-tmpfiles to re-apply 0700 at each boot instead.
 - name: Deploy claude-privacy tmpfiles config
-  ansible.builtin.copy:
-    content: |
-      # Create ~/.claude at 0700 before first launch; restores 0700 at each boot.
-      # Claude Code resets to 0755 on launch — 'd' creates, 'Z' fixes recursively.
-      # 'z' (non-recursive) leaves subdirs at 0755; 'Z' protects session-env,
-      # shell-snapshots, cache, etc.  No symlinks exist under ~/.claude.
-      d %h/.claude 0700 - - -
-      Z %h/.claude 0700 - - -
-      z %h/.claude/settings.local.json 0600 - - -
-      z {{ claude_personal_config_dir }}/settings.local.json 0600 - - -
-      {% if profile == 'work' or claude_queue_enabled | bool %}z {{ claude_work_config_dir }}/settings.local.json 0600 - - -{% endif %}
+  ansible.builtin.template:
+    src: claude-privacy.conf.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
   when: is_linux

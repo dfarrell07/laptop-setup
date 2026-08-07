@@ -108,4 +108,4 @@ ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert
 csb_rhel: false
 
 containers_registries: >-
-  {{ ['quay.io'] + (['registry.redhat.io'] if (profile | default('work')) == 'work' else []) }}
+  {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}
