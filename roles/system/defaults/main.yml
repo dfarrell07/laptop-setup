@@ -197,6 +197,7 @@ system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept
 # Value 0=allow all (insecure). Value 2=write-once Fedora 44 default (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y);
 # value 1 is not achievable on stock Fedora 44 — requires custom kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF=n).
 # Override in config.yml if needed.
+# Fedora 44 stock: boot-time default already 2 (write-once); this entry is a no-op on stock kernels, retained for custom-kernel portability.
 system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
 # OVN-K/Submariner performance tuning (profile: work only); not security hardening.
@@ -349,7 +350,11 @@ system_pass_warn_age: 7            # days of warning before password expires (lo
 system_auditd_max_log_file: 8      # MB per audit log file (auditd.conf max_log_file)
 system_auditd_num_logs: 5          # rotated files to keep (auditd.conf num_logs)
 system_umask: "027"                # default umask for login shells (login.defs UMASK)
+# With these values, a kernel panic does not reboot and a kernel oops does not halt — the system
+# continues running in an undefined state. Set panic=10 and panic_on_oops=1 in config.yml for
+# unattended or production hosts.
 system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel: 0; pinned vs sysctl.d
 system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel: 0; pinned vs sysctl.d
-system_kexec_load_disabled: 0      # lockdown=integrity blocks kexec_load() not kexec_file_load(); signed kdump ok. No-kdump: set 1; CIS: 1
+system_kexec_load_disabled: 0      # kdump uses kexec_file_load() (unaffected by this sysctl);
+                                   # lockdown=integrity also blocks kexec_load() — set 1 (CIS) for independent protection
 system_ptrace_scope: 0             # Fedora 44 default; pinned in 90-hardening.conf vs sysctl.d; CIS 1.6.3=1 (parent; breaks gdb/strace)

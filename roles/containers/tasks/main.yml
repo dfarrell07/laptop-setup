@@ -58,7 +58,6 @@
   failed_when: false
   when:
     - is_linux
-    - registry_tokens | length > 0
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Check registry auth status after vault login
@@ -88,7 +87,6 @@
     label: "{{ item.item.registry | default('unknown') }}"
   when:
     - is_linux
-    - registry_tokens | length > 0
     - item.rc is defined
     - item.rc != 0
 
@@ -186,34 +184,21 @@
   failed_when: false
 
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
-- name: Set containers.conf log_driver to k8s-file (user-scope; file-based logging, avoids journald issues; also required for kind nodes)
+- name: Set containers.conf workstation options (user-scope; logging and kind compatibility)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
-    option: log_driver
-    value: '"{{ containers_log_driver }}"'
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
     mode: "0644"
     create: true
-  when: is_linux
-
-- name: Set containers.conf pids_limit (user-scope; elevated limits for kind compatibility)
-  community.general.ini_file:
-    path: "{{ containers_config_dir }}/containers.conf"
-    section: containers
-    option: pids_limit
-    value: "{{ containers_pids_limit }}"
-    mode: "0644"
-    create: true
-  when: is_linux
-
-- name: Set containers.conf default_ulimits nofile (user-scope; elevated limits for kind compatibility)
-  community.general.ini_file:
-    path: "{{ containers_config_dir }}/containers.conf"
-    section: containers
-    option: default_ulimits
-    value: '["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]'
-    mode: "0644"
-    create: true
+  loop:
+    - option: log_driver
+      value: '"{{ containers_log_driver }}"'
+    - option: pids_limit
+      value: "{{ containers_pids_limit }}"
+    - option: default_ulimits
+      value: '["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]'
   when: is_linux
 
 # --- periodic container storage cleanup ---
