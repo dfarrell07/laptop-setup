@@ -46,7 +46,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
 #   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (roles/system/defaults)
-#   system_bolt_enabled: true/false    (group_vars/all/vars.yml) — install/start bolt; set false on VMs or containers
+#   system_bolt_enabled: true/false    (group_vars/all/vars.yml) — auto-detected on VMs/containers; override only if misidentified
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
 #   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; machines with a dedicated /var/log/audit partition
 #                                        or high-volume workloads (kind clusters, bpfman eBPF load tests) may want 32–64 MB

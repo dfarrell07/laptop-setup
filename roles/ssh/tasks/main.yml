@@ -8,6 +8,14 @@
     state: directory
     mode: "0700"
 
+- name: Restrict known_hosts to owner-only
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+    state: touch
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
 - name: Fetch GitHub SSH host keys from API
   ansible.builtin.uri:
     url: "{{ ssh_github_known_hosts_url }}"
@@ -54,14 +62,6 @@
       (status: {{ ssh_github_meta.status | default('no response') }}).
       Seeded github.com known_hosts from pinned fallback keys instead.
   when: not ssh_github_ok
-
-- name: Restrict known_hosts to owner-only
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
-    state: touch
-    mode: "0600"
-    modification_time: preserve
-    access_time: preserve
 
 - name: Pre-seed work git host known_hosts
   ansible.builtin.include_tasks: keyscan_host.yml

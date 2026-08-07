@@ -319,25 +319,26 @@
     src: ssh_config.j2
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
     mode: "0600"
-- name: Deploy socket tmpfiles configs (ssh, tmux)
-  ansible.builtin.copy:
-    content: "d %t/{{ item }} 0700 - - -\n"
-    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/{{ item }}-sockets.conf"
-    mode: "0644"
-  loop: [ssh, tmux]
-  when: is_linux
+- name: Deploy socket tmpfiles configs and runtime dirs
+  when: is_linux and not (system_is_container | default(false))  # tmpfiles/session-runtime not available in containers
+  block:
+    - name: Deploy socket tmpfiles configs (ssh, tmux)
+      ansible.builtin.copy:
+        content: "d %t/{{ item }} 0700 - - -\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/{{ item }}-sockets.conf"
+        mode: "0644"
+      loop: [ssh, tmux]
 
-# /run/user/$UID is a tmpfs cleared on reboot; the user-tmpfiles.d configs deployed
-# above recreate these dirs on every login via systemd-tmpfiles. These tasks only
-# ensure the dirs exist immediately during the current Ansible session (before reboot).
-# The file module truthfully reports changed when the dir is absent and must be created.
-- name: Create socket directories in XDG runtime dir
-  ansible.builtin.file:
-    path: "/run/user/{{ ansible_facts['user_uid'] }}/{{ item }}"
-    state: directory
-    mode: "0700"
-  loop: [ssh, tmux]
-  when: is_linux
+    # /run/user/$UID is a tmpfs cleared on reboot; the user-tmpfiles.d configs deployed
+    # above recreate these dirs on every login via systemd-tmpfiles. These tasks only
+    # ensure the dirs exist immediately during the current Ansible session (before reboot).
+    # The file module truthfully reports changed when the dir is absent and must be created.
+    - name: Create socket directories in XDG runtime dir
+      ansible.builtin.file:
+        path: "/run/user/{{ ansible_facts['user_uid'] }}/{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: [ssh, tmux]
 
 - name: Deploy safe direnv config
   ansible.builtin.template:
