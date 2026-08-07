@@ -65,6 +65,43 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
+    "repo_gh_cli": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_google_chrome": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_google_cloud_sdk": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_slack": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_mullvad": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_docker_ce": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_redhat": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_rpmfusion_free": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_rpmfusion_nonfree": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "repo_tailscale": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "install_docker": [
+        REPO_ROOT / "roles/containers/defaults/main.yml",
+    ],
+    "ssh_signing_key_basename": [
+        REPO_ROOT / "roles/ssh/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+    ],
 }
 
 # molecule files intentionally set distrobox_oc_version to a non-release value
