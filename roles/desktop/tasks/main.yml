@@ -229,10 +229,18 @@
   community.general.dconf:
     key: /org/gnome/desktop/interface/color-scheme
     value: "'prefer-dark'"
-  failed_when: false
+  register: _desktop_dconf_dark
+  ignore_errors: true
   when:
     - is_linux
     - desktop_effective == 'sway'
+
+- name: Warn if GTK dark color-scheme dconf write failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: dconf write for color-scheme failed (dbus/dconf unavailable?).
+      GTK3/4 direct reads use settings.ini; portal-querying GTK4 apps may not see dark theme.
+  when: _desktop_dconf_dark.failed | default(false)
 
 # --- i3status config (shared by i3 and Sway) ---
 - name: Deploy i3status config (shared by i3 and Sway)
