@@ -55,41 +55,42 @@
   become: false
   tags: [always]
 
-- name: Assert system_timezone is not the CHANGE_ME placeholder
-  ansible.builtin.assert:
-    that:
-      - system_timezone != 'CHANGE_ME'
-      - system_timezone | length > 0
-    fail_msg: >-
-      Set system_timezone in config.yml before running make all.
-      The default 'CHANGE_ME' sentinel is invalid — timedatectl will
-      reject it. Run 'timedatectl list-timezones' to find yours,
-      then add system_timezone: <zone> to config.yml.
-  become: false
-  tags: [always]
+- name: Non-molecule pre-flight assertions
   when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+  block:
+    - name: Assert system_timezone is not the CHANGE_ME placeholder
+      ansible.builtin.assert:
+        that:
+          - system_timezone != 'CHANGE_ME'
+          - system_timezone | length > 0
+        fail_msg: >-
+          Set system_timezone in config.yml before running make all.
+          The default 'CHANGE_ME' sentinel is invalid — timedatectl will
+          reject it. Run 'timedatectl list-timezones' to find yours,
+          then add system_timezone: <zone> to config.yml.
+      become: false
+      tags: [always]
 
-- name: Assert identity vars are not CHANGE_ME placeholders
-  ansible.builtin.assert:
-    that:
-      - dotfiles_github_user != 'CHANGE_ME'
-      - dotfiles_user_name != 'CHANGE_ME'
-      - dotfiles_user_email_work != 'CHANGE_ME'
-      - dotfiles_user_email_personal != 'CHANGE_ME'
-    fail_msg: >-
-      Set identity vars in config.yml before running make all.
-      The following still have the 'CHANGE_ME' placeholder:
-      {{ [('dotfiles_github_user', dotfiles_github_user | default('CHANGE_ME')),
-      ('dotfiles_user_name', dotfiles_user_name | default('CHANGE_ME')),
-      ('dotfiles_user_email_work', dotfiles_user_email_work | default('CHANGE_ME')),
-      ('dotfiles_user_email_personal',
-      dotfiles_user_email_personal | default('CHANGE_ME'))]
-      | selectattr(1, 'equalto', 'CHANGE_ME') | map(attribute=0) | list }}.
-      Without these, git commits are attributed
-      to 'CHANGE_ME', LaunchAgent plists are misnamed, and the notes clone fails.
-  become: false
-  tags: [always]
-  when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+    - name: Assert identity vars are not CHANGE_ME placeholders
+      ansible.builtin.assert:
+        that:
+          - dotfiles_github_user != 'CHANGE_ME'
+          - dotfiles_user_name != 'CHANGE_ME'
+          - dotfiles_user_email_work != 'CHANGE_ME'
+          - dotfiles_user_email_personal != 'CHANGE_ME'
+        fail_msg: >-
+          Set identity vars in config.yml before running make all.
+          The following still have the 'CHANGE_ME' placeholder:
+          {{ [('dotfiles_github_user', dotfiles_github_user | default('CHANGE_ME')),
+          ('dotfiles_user_name', dotfiles_user_name | default('CHANGE_ME')),
+          ('dotfiles_user_email_work', dotfiles_user_email_work | default('CHANGE_ME')),
+          ('dotfiles_user_email_personal',
+          dotfiles_user_email_personal | default('CHANGE_ME'))]
+          | selectattr(1, 'equalto', 'CHANGE_ME') | map(attribute=0) | list }}.
+          Without these, git commits are attributed
+          to 'CHANGE_ME', LaunchAgent plists are misnamed, and the notes clone fails.
+      become: false
+      tags: [always]
 
 - name: Warn and flag when vault stub is not populated
   block:

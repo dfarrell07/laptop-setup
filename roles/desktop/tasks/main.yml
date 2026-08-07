@@ -192,6 +192,23 @@
         mode: "0644"
       loop: [gtk-3.0, gtk-4.0]
 
+    - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
+      community.general.dconf:
+        key: /org/gnome/desktop/interface/color-scheme
+        value: "'prefer-dark'"
+      register: _desktop_dconf_dark
+      ignore_errors: true
+      when:
+        - is_linux
+        - desktop_effective == 'sway'
+
+    - name: Warn if GTK dark color-scheme dconf write failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: dconf write for color-scheme failed (dbus/dconf unavailable?).
+          GTK3/4 direct reads use settings.ini; portal-querying GTK4 apps may not see dark theme.
+      when: _desktop_dconf_dark.failed | default(false)
+
 - name: Deploy TERMINAL environment.d config (Sway/i3)
   ansible.builtin.copy:
     content: "TERMINAL={{ desktop_terminal }}\n"
@@ -201,23 +218,6 @@
     - is_linux
     - desktop_effective in ['sway', 'i3']
     - not (system_is_container | default(false))  # ~/.config/environment.d not created in containers (common task guards it)
-
-- name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
-  community.general.dconf:
-    key: /org/gnome/desktop/interface/color-scheme
-    value: "'prefer-dark'"
-  register: _desktop_dconf_dark
-  ignore_errors: true
-  when:
-    - is_linux
-    - desktop_effective == 'sway'
-
-- name: Warn if GTK dark color-scheme dconf write failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: dconf write for color-scheme failed (dbus/dconf unavailable?).
-      GTK3/4 direct reads use settings.ini; portal-querying GTK4 apps may not see dark theme.
-  when: _desktop_dconf_dark.failed | default(false)
 
 # --- i3status config (shared by i3 and Sway) ---
 - name: Deploy i3status config (shared by i3 and Sway)

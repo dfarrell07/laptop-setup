@@ -232,7 +232,7 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      {{ ansible_facts['user_dir'] }}/.local/share/claude-queue/logs/poller.log {
+      {{ claude_queue_log_dir }}/poller.log {
           su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
           daily
           rotate 14
