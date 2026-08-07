@@ -4,6 +4,7 @@
 - name: Install transcrypt
   when:
     - is_linux
+    - profile == 'work'
   ansible.builtin.include_tasks: install_binary.yml
   vars:
     binary_name: transcrypt
