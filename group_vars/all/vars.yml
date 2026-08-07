@@ -89,7 +89,7 @@ system_umask: "027"                # default umask for login shells (login.defs 
 # unattended or production hosts.
 system_kernel_panic: 0             # dev workstation: preserve panic state for kdump/KASAN/UBSAN; CIS default is 10 (auto-reboot)
 system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (CIS 1.5.3 default is 1 = halt)
-system_kexec_load_disabled: 0      # kdump uses kexec_file_load() (unaffected by this sysctl); 0 = no independent protection;
+system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl); CIS defense-in-depth;
                                    # set 1 (CIS) to block legacy kexec_load() even when lockdown is disabled
 system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
 system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
