@@ -54,9 +54,6 @@ system_sysctl_hardening:
   # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
   net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
   net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
-  net.netfilter.nf_conntrack_max: 524288  # prevent 'table full, dropping packet' under OVN-K/Submariner load
-  net.core.rmem_max: 16777216  # 16 MiB socket receive buffer ceiling for OVN-K/Submariner throughput tests
-  net.core.wmem_max: 16777216  # 16 MiB socket send buffer ceiling
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
@@ -197,10 +194,17 @@ system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept
 # Override in config.yml if needed.
 system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
-system_sysctl_extra: {}  # additional sysctl key=value pairs merged into system_sysctl_hardening; override in config.yml
-                          # to add machine-specific sysctls without replacing the entire hardening dict.
-                          # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
-                          # Example: system_sysctl_extra: { "vm.swappiness": 10, "net.core.somaxconn": 4096 }
+# OVN-K/Submariner performance tuning (profile: work only); not security hardening.
+# nf_conntrack_max: 4x kernel default (131072); rmem_max/wmem_max: 16 MiB (~80x kernel default 212992 bytes).
+# Override in config.yml: providing any value replaces this default entirely, so include these keys
+# explicitly when adding machine-specific sysctls on a work-profile host that needs OVN-K tuning.
+# Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
+# Example: system_sysctl_extra: { "net.netfilter.nf_conntrack_max": 524288, "vm.swappiness": 10 }
+_system_sysctl_work_defaults:
+  net.netfilter.nf_conntrack_max: 524288
+  net.core.rmem_max: 16777216
+  net.core.wmem_max: 16777216
+system_sysctl_extra: "{{ _system_sysctl_work_defaults if profile == 'work' else {} }}"
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas; set false if USB drives needed; authoritative in group_vars/all/vars.yml
 system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump

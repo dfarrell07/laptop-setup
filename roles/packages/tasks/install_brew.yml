@@ -26,7 +26,7 @@
   block:
     - name: Install Homebrew packages (macOS)
       community.general.homebrew:
-        name: "{{ packages_brew }}"
+        name: "{{ packages_brew + (packages_brew_work | default([]) if profile == 'work' else []) }}"
         state: present
         update_homebrew: "{{ packages_brew_update }}"
       async: 600

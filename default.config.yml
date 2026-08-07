@@ -166,6 +166,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
 #   system_wifi_mac_rand: <unset>      (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
 #                                        on hybrid Fedora CSB machines to opt in to stable-ssid MAC randomization
+#   system_wifi_powersave: <unset>     (roles/system/defaults) — defaults true (powersave=2) on non-CSB-RHEL, false on csb_rhel;
+#                                        set false in config.yml to disable on power-critical machines
 #   system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
 #                                        external access
 #   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
@@ -227,8 +229,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   desktop_sway_workspace_outputs: []     (roles/desktop/defaults) — multi-monitor
 #     workspace-to-output assignments; empty = no assignments written;
 #     example: [{workspace: 1, output: eDP-1}, {workspace: 2, output: HDMI-A-1}]
-#   desktop_sway_trackpoint_id: <unset>   (roles/desktop/defaults) — intentionally undefined; no TrackPoint config unless set.
-#     Find yours with: swaymsg -t get_inputs | grep -A2 TrackPoint. Example: "2:10:TPPS/2_IBM_TrackPoint"
+#   desktop_sway_trackpoint_id: ''        (roles/desktop/defaults) — empty disables TrackPoint config; set to device id found via:
+#     swaymsg -t get_inputs | grep -A2 TrackPoint
 #   desktop_i3_trackpoint_id: ""   (roles/desktop/defaults) — empty disables TrackPoint config;
 #     set to e.g. "TPPS/2 Elan TrackPoint" (find with: xinput list | grep -i track)
 #   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)

@@ -27,11 +27,6 @@
     - "{{ ansible_facts['user_dir'] }}/.config/direnv"
     - "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d"
 
-- name: Stat oh-my-zsh directory
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
-  register: _dotfiles_ohmyzsh_dir
-
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
@@ -41,9 +36,7 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
     state: absent
-  when:
-    - _dotfiles_ohmyzsh_dir.stat.exists
-    - not _dotfiles_ohmyzsh_git.stat.exists
+  when: not _dotfiles_ohmyzsh_git.stat.exists
 
 - name: Install oh-my-zsh
   ansible.builtin.git:
@@ -55,7 +48,7 @@
   register: dotfiles_ohmyzsh_result
   timeout: 120
   # ignore_errors (not failed_when: false): .failed must remain True on clone failure —
-  # it guards the warning below (line 18) and the legacy ~/.oh-my-zsh removal (line 39).
+  # it guards the warning below and the legacy ~/.oh-my-zsh removal.
   # failed_when: false would always set .failed=False, silently breaking that guard.
   ignore_errors: true
 
