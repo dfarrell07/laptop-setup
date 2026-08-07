@@ -177,6 +177,7 @@
   ansible.builtin.systemd:
     name: cups-browsed
     masked: false
+    # intentionally not started: CVE-2024-47176 RCE risk; start manually if network discovery required
   when:
     - not (system_disable_printing | bool)
     - not system_is_container

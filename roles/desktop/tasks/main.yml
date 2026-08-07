@@ -190,14 +190,14 @@
         mode: "0644"
       loop: [gtk-3.0, gtk-4.0]
 
-- name: Deploy TERMINAL environment.d config (Sway)
+- name: Deploy TERMINAL environment.d config (Sway/i3)
   ansible.builtin.copy:
     content: "TERMINAL={{ desktop_terminal }}\n"
     dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/terminal.conf"
     mode: "0644"
   when:
     - is_linux
-    - desktop_effective == 'sway'
+    - desktop_effective in ['sway', 'i3']
     - not (system_is_container | default(false))  # ~/.config/environment.d not created in containers (common task guards it)
 
 - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
