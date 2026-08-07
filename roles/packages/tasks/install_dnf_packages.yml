@@ -6,9 +6,9 @@
 - name: Install dnf packages
   when: is_dnf
   block:
-    - name: Install dnf packages
-      ansible.builtin.dnf:
-        name: >-
+    - name: Build combined dnf package list
+      ansible.builtin.set_fact:
+        _packages_dnf_all: >-
           {{ packages_cli
              + packages_languages
              + (packages_languages_work if profile == 'work' else [])
@@ -24,6 +24,10 @@
              + (packages_networking | reject('equalto', 'tailscale') | list
                 if not repo_tailscale else packages_networking)
              + (packages_networking_work if profile == 'work' else []) }}
+
+    - name: Install dnf packages
+      ansible.builtin.dnf:
+        name: "{{ _packages_dnf_all }}"
         state: present
       become: true
       tags: [become]
@@ -39,21 +43,7 @@
         # Skipped safely in containers (services aren't started; /etc/shells not needed for CI).
         cmd: >-
           dnf install -y --setopt=tsflags=noscripts,notriggers
-          {{ (packages_cli
-             + packages_languages
-             + (packages_languages_work if profile == 'work' else [])
-             + packages_security
-             + (packages_security_work if profile == 'work' else [])
-             + packages_containers
-             + (packages_containers_work if profile == 'work' else [])
-             + (packages_containers_kubectl
-                if (profile != 'work'
-                    or ansible_facts['architecture'] != 'x86_64'
-                    or not (packages_install_binaries | bool))
-                else [])
-             + (packages_networking | reject('equalto', 'tailscale') | list
-                if not repo_tailscale else packages_networking)
-             + (packages_networking_work if profile == 'work' else [])) | join(' ') }}
+          {{ _packages_dnf_all | join(' ') }}
       become: true
       register: _packages_dnf_container_result
       changed_when: "'Nothing to do' not in _packages_dnf_container_result.stdout"

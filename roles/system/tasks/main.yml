@@ -54,7 +54,8 @@
   ansible.builtin.import_tasks: sshd.yml
 
 - name: Kernel modules for kind
-  ansible.builtin.import_tasks: kernel_modules_kind.yml
+  ansible.builtin.include_tasks: kernel_modules_kind.yml
+  when: profile == 'work' or install_virtualization | bool
 
 - name: NetworkManager configuration
   ansible.builtin.import_tasks: nm.yml

@@ -357,4 +357,6 @@ system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; 
 system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel: 0; pinned vs sysctl.d
 system_kexec_load_disabled: 0      # kdump uses kexec_file_load() (unaffected by this sysctl);
                                    # lockdown=integrity also blocks kexec_load() — set 1 (CIS) for independent protection
-system_ptrace_scope: 0             # Fedora 44 default; pinned in 90-hardening.conf vs sysctl.d; CIS 1.6.3=1 (parent; breaks gdb/strace)
+system_ptrace_scope: 0             # Fedora 44 default; pinned in 90-hardening.conf vs sysctl.d;
+                                   # CIS 1.6.3=1 (parent-only; only blocks gdb -p on unrelated pids —
+                                   # normal debugging of child processes unaffected)
