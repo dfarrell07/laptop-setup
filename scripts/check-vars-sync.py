@@ -111,8 +111,15 @@ CROSS_ROLE_MIRROR_KEYS = {
     "needs_container_tier": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
+    "is_fedora": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
+    "csb_detected": [
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+    ],
     "csb_rhel": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
     "network_proxied": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
