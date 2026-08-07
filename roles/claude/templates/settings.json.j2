@@ -18,10 +18,12 @@
 {% set _ = deny_entries.append("Write(" + _work_path + ")") %}
 {% set _ = deny_entries.append("Edit(" + _personal_path + ")") %}
 {% set _ = deny_entries.append("Write(" + _personal_path + ")") %}
-{% for path in claude_deny_read %}
+{% for path in claude_deny_sensitive %}
 {% set _ = deny_entries.append("Read(" + path + ")") %}
+{% set _ = deny_entries.append("Edit(" + path + ")") %}
+{% set _ = deny_entries.append("Write(" + path + ")") %}
 {% endfor %}
-{% for path in claude_deny_write %}
+{% for path in claude_deny_write_only %}
 {% set _ = deny_entries.append("Edit(" + path + ")") %}
 {% set _ = deny_entries.append("Write(" + path + ")") %}
 {% endfor %}

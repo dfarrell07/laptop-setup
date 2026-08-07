@@ -31,7 +31,14 @@
   # kernel for the first time (br_netfilter was not loaded when hardening_core.yml ran sysctl),
   # but "ok" vs "changed" is indistinguishable from the command's output alone.
   changed_when: false
-  failed_when: false
+  register: sysctl_kind_result
+  # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
+  # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
+  failed_when: >
+    sysctl_kind_result.rc != 0 and
+    'No such file or directory' not in sysctl_kind_result.stderr and
+    'invalid argument' not in sysctl_kind_result.stderr | lower and
+    'permission denied' not in sysctl_kind_result.stderr | lower
   when: not system_is_container
 
 - name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
