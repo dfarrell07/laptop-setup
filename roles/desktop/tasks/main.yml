@@ -198,9 +198,7 @@
         value: "'prefer-dark'"
       register: _desktop_dconf_dark
       ignore_errors: true
-      when:
-        - is_linux
-        - desktop_effective == 'sway'
+      when: is_linux
 
     - name: Warn if GTK dark color-scheme dconf write failed
       ansible.builtin.debug:

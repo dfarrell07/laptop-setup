@@ -37,26 +37,6 @@
   # fails with "group does not exist". failed_when: false prevents play abort;
   # the packages role re-runs this after installing libvirt, completing membership.
 
-- name: Remove stale port-22 allow-rule from libvirt zone (sshd on 722; zone catch-all reject covers it)
-  ansible.posix.firewalld:
-    zone: libvirt
-    service: ssh
-    permanent: true
-    immediate: true
-    state: disabled
-  register: _system_libvirt_ssh_remove
-  when:
-    - system_firewalld_running | default(false) | bool
-    - install_virtualization | bool
-    - system_firewall_manage_zone | bool
-  failed_when: >-
-    (_system_libvirt_ssh_remove.failed | default(false)) and
-    'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
-  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is created by
-  # the libvirt daemon on first start, which may not have run yet on first provision
-  # before the packages role installs and starts libvirt. All other failures surface.
-  notify: Apply firewall rules
-
 - name: Install Mullvad VPN
   ansible.builtin.dnf:
     name: mullvad-vpn
