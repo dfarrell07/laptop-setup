@@ -1,0 +1,35 @@
+---
+# roles/claude/tasks/launchd_load.yml
+# Deploy, reload, and bootstrap a launchd agent when enabled (macOS only).
+# Vars: _launchd_label, _launchd_plist_path, _launchd_enabled
+- name: Deploy {{ _launchd_label }} launchd plist (macOS)
+  ansible.builtin.template:
+    src: claude-{{ _launchd_label }}.plist.j2
+    dest: "{{ _launchd_plist_path }}"
+    mode: "0644"
+  when: _launchd_enabled | bool
+  register: _launchd_plist_result
+
+- name: Bootout {{ _launchd_label }} launchd agent when plist changed (macOS)  # noqa: command-instead-of-module
+  # Bootout the running agent so the subsequent bootstrap picks up the new plist.
+  # failed_when: false — agent may not be running on first deploy; bootout exits non-zero in that case.
+  ansible.builtin.command:
+    cmd: >-  # yamllint disable-line rule:line-length
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
+      {{ _launchd_plist_path }}
+  when:
+    - _launchd_enabled | bool
+    - _launchd_plist_result.changed
+  changed_when: false
+  failed_when: false
+
+- name: Load {{ _launchd_label }} launchd plist (macOS)  # noqa: command-instead-of-module
+  # 'launchctl bootstrap' is the modern replacement for the deprecated
+  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
+  ansible.builtin.command:
+    cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ _launchd_plist_path }}"  # yamllint disable-line rule:line-length
+  when: _launchd_enabled | bool
+  register: _launchd_bootstrap_result
+  changed_when: _launchd_bootstrap_result.rc == 0
+  failed_when: false

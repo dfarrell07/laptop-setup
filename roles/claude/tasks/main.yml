@@ -302,65 +302,22 @@
     - not (system_is_container | default(false))
 
 # --- macOS: launchd cleanup when disabled ---
-- name: Check if task queue launchd plist exists (macOS)
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
-  register: _claude_queue_plist_stat
-  when:
-    - is_macos
-    - not (claude_queue_enabled | bool)
-
-- name: Unload task queue launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
-  register: _claude_queue_bootout_result
-  when:
-    - is_macos
-    - not (claude_queue_enabled | bool)
-    - _claude_queue_plist_stat.stat.exists
-  changed_when: _claude_queue_bootout_result.rc == 0
-  failed_when: false
-
-- name: Remove task queue launchd plist (macOS, when disabled)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
-    state: absent
-  when:
-    - is_macos
-    - not (claude_queue_enabled | bool)
-    - _claude_queue_plist_stat.stat.exists
-
-- name: Check if Remote Control launchd plist exists (macOS)
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
-  register: _claude_rc_plist_stat
-  when:
-    - is_macos
-    - not (claude_remote_control_enabled | bool)
-
-- name: Unload Remote Control launchd agent (macOS, when disabled)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
-  register: _claude_rc_bootout_result
-  when:
-    - is_macos
-    - not (claude_remote_control_enabled | bool)
-    - _claude_rc_plist_stat.stat.exists
-  changed_when: _claude_rc_bootout_result.rc == 0
-  failed_when: false
-
-- name: Remove Remote Control launchd plist (macOS, when disabled)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
-    state: absent
-  when:
-    - is_macos
-    - not (claude_remote_control_enabled | bool)
-    - _claude_rc_plist_stat.stat.exists
+- name: Cleanup disabled launchd agents (macOS)
+  ansible.builtin.include_tasks: launchd_cleanup.yml
+  vars:
+    _launchd_label: "{{ item.label }}"
+    _launchd_plist_path: "{{ item.plist_path }}"
+    _launchd_enabled: "{{ item.enabled }}"
+  loop:
+    - label: queue
+      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+      enabled: "{{ claude_queue_enabled | bool }}"
+    - label: remote-control
+      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+      enabled: "{{ claude_remote_control_enabled | bool }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: is_macos
 
 - name: Warn that Remote Control is not implemented on Linux
   ansible.builtin.debug:
@@ -379,76 +336,19 @@
     - is_macos
     - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
-- name: Deploy task queue launchd plist (macOS)
-  ansible.builtin.template:
-    src: claude-queue.plist.j2
-    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
-    mode: "0644"
-  when:
-    - is_macos
-    - claude_queue_enabled | bool
-  register: _claude_queue_plist_result
-
-- name: Bootout task queue launchd agent when plist changed (macOS)  # noqa: command-instead-of-module
-  # Bootout the running agent so the subsequent bootstrap picks up the new plist.
-  # failed_when: false — agent may not be running on first deploy; bootout exits non-zero in that case.
-  ansible.builtin.command:
-    cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
-  when:
-    - is_macos
-    - claude_queue_enabled | bool
-    - _claude_queue_plist_result.changed
-  changed_when: false
-  failed_when: false
-
-- name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
-  # 'launchctl bootstrap' is the modern replacement for the deprecated
-  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
-  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
-  ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"  # yamllint disable-line rule:line-length
-  when:
-    - is_macos
-    - claude_queue_enabled | bool
-  register: _claude_queue_bootstrap_result
-  changed_when: _claude_queue_bootstrap_result.rc == 0
-  failed_when: false
-
-- name: Deploy Remote Control launchd plist (macOS)
-  ansible.builtin.template:
-    src: claude-remote-control.plist.j2
-    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
-    mode: "0644"
-  when:
-    - is_macos
-    - claude_remote_control_enabled | bool
-  register: _claude_rc_plist_result
-
-- name: Bootout Remote Control launchd agent when plist changed (macOS)  # noqa: command-instead-of-module
-  # Bootout the running agent so the subsequent bootstrap picks up the new plist.
-  # failed_when: false — agent may not be running on first deploy; bootout exits non-zero in that case.
-  ansible.builtin.command:
-    cmd: >-  # yamllint disable-line rule:line-length
-      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist
-  when:
-    - is_macos
-    - claude_remote_control_enabled | bool
-    - _claude_rc_plist_result.changed
-  changed_when: false
-  failed_when: false
-
-- name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
-  # 'launchctl bootstrap' is the modern replacement for the deprecated
-  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
-  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
-  ansible.builtin.command:
-    cmd: "launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"  # yamllint disable-line rule:line-length
-  when:
-    - is_macos
-    - claude_remote_control_enabled | bool
-  register: _claude_rc_bootstrap_result
-  changed_when: _claude_rc_bootstrap_result.rc == 0
-  failed_when: false
+- name: Manage enabled launchd agents (macOS)
+  ansible.builtin.include_tasks: launchd_load.yml
+  vars:
+    _launchd_label: "{{ item.label }}"
+    _launchd_plist_path: "{{ item.plist_path }}"
+    _launchd_enabled: "{{ item.enabled }}"
+  loop:
+    - label: queue
+      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+      enabled: "{{ claude_queue_enabled | bool }}"
+    - label: remote-control
+      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+      enabled: "{{ claude_remote_control_enabled | bool }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: is_macos
