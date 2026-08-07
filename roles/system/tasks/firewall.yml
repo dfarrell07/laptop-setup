@@ -56,7 +56,7 @@
     immediate: true
     state: enabled
   vars:
-    _drop_exclude_re: '^(lo|tailscale\d*|tun\d*|wg.*|virbr.*|podman.*|br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system)$'
+    _drop_exclude_re: '^(lo|tailscale\d*|tun.*|wg.*|virbr.*|podman.*|br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system)$'
   loop: "{{ ansible_facts['interfaces'] | default([]) | reject('match', _drop_exclude_re) | list }}"
   register: _system_iface_drop_zone
   when:
