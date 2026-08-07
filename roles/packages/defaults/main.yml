@@ -44,10 +44,6 @@ packages_security:
   - libfido2  # explicit for RHEL/Rocky (not a transitive dep there); Fedora 44 gets it via libssh
   - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
 
-# Work-profile-only security tools (CSB/RHEL support tooling — not needed on personal workstations)
-packages_security_work:
-  - sos      # Red Hat support diagnostic bundle tool (sosreport); used for CSB/RHEL support cases
-
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
   - skopeo
@@ -96,6 +92,7 @@ packages_networking_work:
   - iperf3         # network bandwidth measurement; work profile only
   - socat          # socket relay utility; work profile only (moved from packages_networking)
   - nmap           # network scanner; work profile only (OVN-K/Kubernetes debugging)
+  - sos            # Red Hat support diagnostic bundle tool (sosreport); used for CSB/RHEL support cases
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
@@ -160,10 +157,9 @@ packages_gitleaks_version: "8.30.1"
 packages_gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 packages_gitleaks_sha256_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
 
-# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64/arm64 tarballs
+# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; x86_64 only (no arm64 CI pin)
 packages_actionlint_version: "1.7.12"
 packages_actionlint_sha256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-packages_actionlint_sha256_arm64: "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
 
 # zizmor version pinned to match CI (linting.yml); SHA256 of x86_64-unknown-linux-gnu tarball; x86_64 only (no arm64 CI pin)
 packages_zizmor_version: "1.29.0"
@@ -260,8 +256,7 @@ packages_subctl_rh_versions: []
 #     suffix: "RH22"
 
 packages_k9s_version: "0.51.0"
-packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
-packages_k9s_sha256_arm64: "3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c"
+packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
 
 packages_krew_bootstrap_version: "0.5.0"
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
