@@ -200,6 +200,9 @@ desktop_gnome_hardening_dconf:
   # disable recent-files tracking (privacy)
   - key: /org/gnome/desktop/privacy/remember-recent-files
     value: "false"
+
+# GNOME UI consistency settings (non-hardening) — keyboard feel to match Sway/i3
+desktop_gnome_ui_dconf:
   # keyboard repeat delay — match Sway/i3 200ms
   - key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
     value: "uint32 {{ desktop_wm_repeat_delay }}"

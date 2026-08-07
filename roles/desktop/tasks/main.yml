@@ -372,3 +372,12 @@
       loop_control:
         label: "{{ item.key }}"
       failed_when: false
+
+    - name: Apply GNOME UI dconf settings
+      community.general.dconf:
+        key: "{{ item.key }}"
+        value: "{{ item.value }}"
+      loop: "{{ desktop_gnome_ui_dconf }}"
+      loop_control:
+        label: "{{ item.key }}"
+      failed_when: false

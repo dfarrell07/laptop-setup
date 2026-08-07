@@ -12,6 +12,14 @@
       system_ipv6_accept_ra: 1 is silently suppressed by the kernel when ip_forward=1.
       Use system_ipv6_accept_ra: 2 to enable SLAAC.
 
+- name: Warn if unprivileged_bpf_disabled override is unreachable on stock Fedora 44
+  when: system_unprivileged_bpf_disabled | int != 2 and is_fedora | bool
+  ansible.builtin.debug:
+    msg: >-
+      system_unprivileged_bpf_disabled={{ system_unprivileged_bpf_disabled }} has no effect on
+      Fedora 44 (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y locks this write-once to 2 at boot; EPERM
+      suppressed in sysctl apply). A custom kernel is required.
+
 - name: Merge configurable sysctl values into hardening dict
   ansible.builtin.set_fact:
     system_sysctl_hardening: "{{ system_sysctl_hardening | combine({

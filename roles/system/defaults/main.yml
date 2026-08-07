@@ -38,7 +38,11 @@ system_sysctl_hardening:
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
-  fs.suid_dumpable: 0           # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks)
+  # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
+  # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash
+  # capture even when system_coredump_storage: external. To re-enable SUID dumps: add
+  # fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
+  fs.suid_dumpable: 0
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
   # Fedora 44 kernel compile-time defaults; pinned here to prevent /etc/sysctl.d override
   net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS
