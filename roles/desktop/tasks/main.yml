@@ -93,19 +93,19 @@
     - desktop_effective == 'sway'
 
 # --- Alacritty config ---
-- name: Ensure Alacritty config directory
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/alacritty"
-    state: directory
-    mode: "0755"
-  when: desktop_terminal == 'alacritty'
+- when: desktop_terminal == 'alacritty'
+  block:
+    - name: Ensure Alacritty config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/alacritty"
+        state: directory
+        mode: "0755"
 
-- name: Deploy Alacritty config
-  ansible.builtin.template:
-    src: alacritty.toml.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
-    mode: "0644"
-  when: desktop_terminal == 'alacritty'
+    - name: Deploy Alacritty config
+      ansible.builtin.template:
+        src: alacritty.toml.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
+        mode: "0644"
 
 # --- i3 config ---
 - name: Deploy i3 configuration

@@ -138,7 +138,6 @@
       Use rootless Podman or rootless Docker instead.
   when:
     - is_linux
-    - not install_docker
     - "'docker' in containers_user_groups.stdout.split()"
 
 - name: Enable podman user socket (needed for kind, docker-compatible CLIs, devcontainers)
