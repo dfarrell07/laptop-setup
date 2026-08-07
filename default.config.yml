@@ -137,8 +137,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set 2 in config.yml to fully disable for all users
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
-#   system_ptrace_scope: 0             (group_vars/all/vars.yml) — Fedora workstation default; CIS target is 1 (parent-only YAMA);
-#                                        set 1 in config.yml for CIS compliance (disables gdb -p / strace -p on unrelated processes)
+#   system_ptrace_scope: 1             (group_vars/all/vars.yml) — CIS-compliant default (parent-only YAMA);
+#                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
 #   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
 #   system_enable_ip_forward: true      (roles/system/defaults) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
