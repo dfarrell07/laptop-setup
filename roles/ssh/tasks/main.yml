@@ -39,21 +39,9 @@
     key: "github.com {{ item }}"
     state: present
     hash_host: true
-  loop: "{{ ssh_github_meta.json.ssh_keys | default([]) }}"
+  loop: "{{ ssh_github_meta.json.ssh_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
   loop_control:
     label: "{{ item.split()[0] }}"
-  when: ssh_github_ok
-
-- name: Pre-seed GitHub known_hosts from fallback keys
-  ansible.builtin.known_hosts:
-    name: github.com
-    key: "github.com {{ item }}"
-    state: present
-    hash_host: true
-  loop: "{{ ssh_github_known_hosts_fallback }}"
-  loop_control:
-    label: "{{ item.split()[0] }}"
-  when: not ssh_github_ok
 
 - name: Warn if GitHub SSH key fetch failed (used pinned fallback)
   ansible.builtin.debug:
