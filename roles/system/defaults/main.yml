@@ -77,7 +77,7 @@ system_firewall_manage_zone: "{{ not csb_rhel }}"
 system_firewall_csb_zone: "redhat"  # CSB-provisioned firewalld zone for hybrid Fedora CSB; VPN tun0 uses this zone
 
 system_firewall_icmp_types:
-  - destination-unreachable  # covers fragmentation-needed (IPv4 subset); no separate entry needed
+  - fragmentation-needed  # IPv4 PMTUd (type 3 code 4 only); packet-too-big covers IPv6
   - packet-too-big
   - parameter-problem
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
