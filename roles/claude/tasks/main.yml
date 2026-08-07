@@ -179,39 +179,33 @@
     mode: "0700"
   when: claude_queue_enabled | bool
 
-- name: Deploy task queue systemd service
-  ansible.builtin.template:
-    src: claude-queue.service.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.service"
-    mode: "0644"
+- name: Deploy and enable task queue systemd units
   when:
     - claude_queue_enabled | bool
     - is_linux
     - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
+  block:
+    - name: Deploy task queue systemd service
+      ansible.builtin.template:
+        src: claude-queue.service.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.service"
+        mode: "0644"
 
-- name: Deploy task queue systemd timer
-  ansible.builtin.template:
-    src: claude-queue.timer.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
-    mode: "0644"
-  when:
-    - claude_queue_enabled | bool
-    - is_linux
-    - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
+    - name: Deploy task queue systemd timer
+      ansible.builtin.template:
+        src: claude-queue.timer.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
+        mode: "0644"
 
-- name: Enable task queue timer
-  ansible.builtin.systemd:
-    name: claude-queue.timer
-    scope: user
-    state: started
-    enabled: true
-    daemon_reload: true
-  when:
-    - claude_queue_enabled | bool
-    - is_linux
-    - not (system_is_container | default(false))  # scope:user daemon-reload crashes Podman container PID 1
-  register: _timer_enable
-  ignore_errors: true
+    - name: Enable task queue timer
+      ansible.builtin.systemd:
+        name: claude-queue.timer
+        scope: user
+        state: started
+        enabled: true
+        daemon_reload: true
+      register: _timer_enable
+      ignore_errors: true
 
 - name: Warn if timer enable failed (no active user systemd session)
   ansible.builtin.debug:

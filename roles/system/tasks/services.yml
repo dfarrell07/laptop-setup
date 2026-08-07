@@ -54,7 +54,7 @@
     state: disabled
   register: _system_libvirt_ssh_remove
   when:
-    - system_firewalld_running | bool
+    - system_firewalld_running | default(false) | bool
     - install_virtualization | bool
   failed_when: >-
     (_system_libvirt_ssh_remove.failed | default(false)) and

@@ -118,7 +118,7 @@
     permanent: true
     immediate: true
     state: enabled
-  when: system_firewalld_running | bool
+  when: system_firewalld_running | default(false) | bool
   failed_when: false  # tailscale0 doesn't exist on first provision; permanent config succeeds, immediate fails
   notify:
     - Apply firewall rules
