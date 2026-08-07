@@ -192,20 +192,10 @@
 
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
 - name: Set containers.conf workstation options (user-scope; logging and kind compatibility)
-  community.general.ini_file:
-    path: "{{ containers_config_dir }}/containers.conf"
-    section: containers
-    option: "{{ item.option }}"
-    value: "{{ item.value }}"
+  ansible.builtin.template:
+    src: containers.conf.j2
+    dest: "{{ containers_config_dir }}/containers.conf"
     mode: "0644"
-    create: true
-  loop:
-    - option: log_driver
-      value: '"{{ containers_log_driver }}"'
-    - option: pids_limit
-      value: "{{ containers_pids_limit }}"
-    - option: default_ulimits
-      value: '["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]'
   when: is_linux
 
 # --- periodic container storage cleanup ---

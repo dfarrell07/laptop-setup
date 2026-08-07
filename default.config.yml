@@ -226,7 +226,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
 #                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
 #                                           if they legitimately use GID 0
-#   system_logind_idle_sec: 300           (roles/system/defaults) — seconds idle before logind locks screen
+#   system_logind_idle_sec: 600           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit; raise both limits together
@@ -273,7 +273,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   desktop_sway_gaps_outer: 4                    (roles/desktop/defaults) — outer gap between windows and screen edge
 #   desktop_wm_border_width: 1                  (roles/desktop/defaults) — window border width (pixels)
 #   desktop_wm_floating_border_width: 1         (roles/desktop/defaults) — floating window border width (pixels)
-#   desktop_sway_focus_follows_mouse: "no"        (roles/desktop/defaults) — focus on hover; "yes" enables sloppy focus
+#   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/workspace to override
 #   desktop_terminal: alacritty          (roles/desktop/defaults) — terminal emulator (alacritty/kitty/etc)
 #   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
 #   desktop_gtk_icon_theme: Adwaita    (roles/desktop/defaults) — GTK icon theme

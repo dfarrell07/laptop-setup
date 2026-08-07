@@ -35,43 +35,18 @@
     - desktop_environment == 'auto'
     - is_linux
 
-- name: Install common desktop packages
+- name: Install desktop packages (dnf)
+  vars:
+    _wm_pkgs: >-
+      {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
+         + (desktop_i3_packages if desktop_effective == 'i3' else [])
+         + (desktop_gnome_packages if desktop_effective == 'gnome' else []) }}
   ansible.builtin.dnf:
-    name: "{{ desktop_common_packages }}"
+    name: "{{ desktop_common_packages + _wm_pkgs }}"
     state: present
   become: true
   tags: [become]
   when: is_dnf
-
-- name: Install Sway packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_sway_packages }}"
-    state: present
-  become: true
-  tags: [become]
-  when:
-    - is_dnf
-    - desktop_effective == 'sway'
-
-- name: Install i3 packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_i3_packages }}"
-    state: present
-  become: true
-  tags: [become]
-  when:
-    - is_dnf
-    - desktop_effective == 'i3'
-
-- name: Install GNOME packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_gnome_packages }}"
-    state: present
-  become: true
-  tags: [become]
-  when:
-    - is_dnf
-    - desktop_effective == 'gnome'
 
 - name: Install desktop packages (apt)
   ansible.builtin.apt:
@@ -362,20 +337,11 @@
     - is_linux
     - desktop_effective == 'gnome'
   block:
-    - name: Apply GNOME hardening dconf settings
+    - name: Apply GNOME dconf settings
       community.general.dconf:
         key: "{{ item.key }}"
         value: "{{ item.value }}"
-      loop: "{{ desktop_gnome_hardening_dconf }}"
-      loop_control:
-        label: "{{ item.key }}"
-      failed_when: false
-
-    - name: Apply GNOME UI dconf settings
-      community.general.dconf:
-        key: "{{ item.key }}"
-        value: "{{ item.value }}"
-      loop: "{{ desktop_gnome_ui_dconf }}"
+      loop: "{{ desktop_gnome_hardening_dconf + desktop_gnome_ui_dconf }}"
       loop_control:
         label: "{{ item.key }}"
       failed_when: false
