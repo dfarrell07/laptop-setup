@@ -227,13 +227,13 @@
     state: disabled
   register: _system_libvirt_ssh_remove
   when:
-    - system_firewalld_running | default(false) | bool
+    - system_firewalld_running | bool
     - install_virtualization | bool
     - system_firewall_manage_zone | bool
   failed_when: >-
     (_system_libvirt_ssh_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
-  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is created by
-  # the libvirt daemon on first start, which may not have run yet on first provision
-  # before the packages role installs and starts libvirt. All other failures surface.
+  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is shipped by
+  # libvirt-daemon-driver-network, which is installed in Play 2 by the packages role;
+  # on first provision (before packages run) the zone file is absent. All other failures surface.
   notify: Apply firewall rules
