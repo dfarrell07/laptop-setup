@@ -291,7 +291,9 @@
     - nfs-server.service
     - rpcbind.service
     - rpcbind.socket
-  when: not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
+  when:
+    - not csb_rhel
+    - not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
   failed_when: false
 
 # --- Cockpit (web console — port 9090; disabled by default) ---

@@ -387,6 +387,21 @@
   when:
     - is_macos
     - claude_queue_enabled | bool
+  register: _claude_queue_plist_result
+
+- name: Bootout task queue launchd agent when plist changed (macOS)  # noqa: command-instead-of-module
+  # Bootout the running agent so the subsequent bootstrap picks up the new plist.
+  # failed_when: false — agent may not be running on first deploy; bootout exits non-zero in that case.
+  ansible.builtin.command:
+    cmd: >-  # yamllint disable-line rule:line-length
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist
+  when:
+    - is_macos
+    - claude_queue_enabled | bool
+    - _claude_queue_plist_result.changed
+  changed_when: false
+  failed_when: false
 
 - name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
   # 'launchctl bootstrap' is the modern replacement for the deprecated

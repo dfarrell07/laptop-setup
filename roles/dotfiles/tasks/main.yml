@@ -148,6 +148,7 @@
     src: ripgreprc
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
+    force: false
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2
