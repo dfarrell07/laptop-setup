@@ -98,6 +98,9 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - is_fedora
+  failed_when: >-
+    (_system_fw_zone_svc_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_fw_zone_svc_remove.msg | default(''))
 
 - name: Remove broad port rules from FedoraWorkstation zone
   ansible.posix.firewalld:
