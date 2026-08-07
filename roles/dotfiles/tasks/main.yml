@@ -180,7 +180,7 @@
     src: bashrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
-- name: GNOME Keyring SSH agent autostart disable (Linux, non-container)
+- name: Disable GNOME Keyring SSH agent (legacy autostart + GNOME 50+ systemd)
   when: is_linux and not (csb_restricted) and not (system_is_container | default(false))
   block:
     - name: Ensure autostart directory exists
@@ -197,20 +197,16 @@
         dest: "{{ ansible_facts['user_dir'] }}/.config/autostart/gnome-keyring-ssh.desktop"
         mode: "0644"
 
-- name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    scope: user
-    state: stopped
-    masked: true
-  loop:
-    - gcr-ssh-agent.socket
-    - gcr-ssh-agent.service
-  when:
-    - is_linux
-    - not (csb_restricted)  # Only skip on fapolicyd-enforcing CSB (smart-card/PIV auth via gcr)
-    - not (system_is_container | default(false))  # scope:user systemd crashes containers; virtualization_type unreliable in nested-VM CI
-  failed_when: false
+    - name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        scope: user
+        state: stopped
+        masked: true
+      loop:
+        - gcr-ssh-agent.socket
+        - gcr-ssh-agent.service
+      failed_when: false
 
 - name: SSH agent systemd user service
   when: is_linux and not (system_is_container | default(false))  # containers lack ~/.config/systemd/user; user systemd scope unused

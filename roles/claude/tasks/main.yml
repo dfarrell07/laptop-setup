@@ -217,12 +217,23 @@
     - is_linux
     - _timer_enable.failed | default(false)
 
+- name: Get primary group name for logrotate su directive
+  ansible.builtin.command:
+    cmd: id -gn
+  register: _primary_group_name
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - claude_queue_enabled | bool
+    - is_linux
+    - not (system_is_container | default(false))
+
 - name: Deploy logrotate config for claude-queue-poller.log
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       {{ ansible_facts['user_dir'] }}/.local/share/claude-queue/logs/poller.log {
-          su {{ ansible_facts['user_id'] }} {{ ansible_facts['user_id'] }}
+          su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
           daily
           rotate 14
           compress
