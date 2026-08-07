@@ -2,19 +2,15 @@
 # roles/desktop/tasks/main.yml
 # Desktop environment: Sway/GNOME/i3 (Linux), AeroSpace (macOS), Alacritty, fonts.
 
-- name: Detect desktop environment
-  ansible.builtin.set_fact:
-    desktop_detected: >-
-      {{ 'sway' if (ansible_facts['env']['XDG_SESSION_TYPE'] | default('') == 'wayland' and
-                    ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'sway')
-         else ('gnome' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') is search('GNOME'))
-         else ('i3' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'i3')
-         else 'unknown')) }}
-  when: desktop_environment == 'auto'
-
 - name: Set effective desktop
   ansible.builtin.set_fact:
-    desktop_effective: "{{ desktop_environment if desktop_environment != 'auto' else desktop_detected | default('unknown') }}"
+    desktop_effective: >-
+      {{ desktop_environment if desktop_environment != 'auto'
+         else ('sway' if (ansible_facts['env']['XDG_SESSION_TYPE'] | default('') == 'wayland' and
+                          ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'sway')
+               else ('gnome' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') is search('GNOME'))
+               else ('i3' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'i3')
+               else 'unknown'))) }}
 
 - name: Warn when desktop_environment explicitly set to unknown
   ansible.builtin.debug:

@@ -370,6 +370,13 @@
     - not (claude_remote_control_enabled | bool)
     - _claude_rc_plist_stat.stat.exists
 
+- name: Warn that Remote Control is not implemented on Linux
+  ansible.builtin.debug:
+    msg: >-
+      claude_remote_control_enabled is true but Remote Control is macOS-only (launchd);
+      no systemd unit exists — ignoring.
+  when: claude_remote_control_enabled | bool and is_linux
+
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:

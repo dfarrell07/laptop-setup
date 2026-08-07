@@ -58,9 +58,10 @@
 - name: Restrict known_hosts to owner-only
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
-    state: file
+    state: touch
     mode: "0600"
-  failed_when: false
+    modification_time: preserve
+    access_time: preserve
 
 - name: Pre-seed work git host known_hosts
   ansible.builtin.include_tasks: keyscan_host.yml
