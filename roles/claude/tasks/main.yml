@@ -215,6 +215,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
+    - not (system_is_container | default(false))
     - _timer_enable.failed | default(false)
 
 - name: Get primary group name for logrotate su directive
@@ -306,6 +307,17 @@
     - is_linux
     - not (system_is_container | default(false))
 
+# --- macOS: launchd agent list (single source of truth for cleanup and load loops) ---
+- name: Set macOS launchd agent list
+  ansible.builtin.set_fact:
+    _claude_launchd_agents:
+      - label: queue
+        plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
+        enabled: "{{ claude_queue_enabled | bool }}"
+      - label: remote-control
+        plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
+        enabled: "{{ claude_remote_control_enabled | bool }}"
+
 # --- macOS: launchd cleanup when disabled ---
 - name: Cleanup disabled launchd agents (macOS)
   ansible.builtin.include_tasks: launchd_cleanup.yml
@@ -313,13 +325,7 @@
     _launchd_label: "{{ item.label }}"
     _launchd_plist_path: "{{ item.plist_path }}"
     _launchd_enabled: "{{ item.enabled }}"
-  loop:
-    - label: queue
-      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
-      enabled: "{{ claude_queue_enabled | bool }}"
-    - label: remote-control
-      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
-      enabled: "{{ claude_remote_control_enabled | bool }}"
+  loop: "{{ _claude_launchd_agents }}"
   loop_control:
     label: "{{ item.label }}"
   when: is_macos
@@ -347,13 +353,7 @@
     _launchd_label: "{{ item.label }}"
     _launchd_plist_path: "{{ item.plist_path }}"
     _launchd_enabled: "{{ item.enabled }}"
-  loop:
-    - label: queue
-      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-queue.plist"
-      enabled: "{{ claude_queue_enabled | bool }}"
-    - label: remote-control
-      plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
-      enabled: "{{ claude_remote_control_enabled | bool }}"
+  loop: "{{ _claude_launchd_agents }}"
   loop_control:
     label: "{{ item.label }}"
   when: is_macos
