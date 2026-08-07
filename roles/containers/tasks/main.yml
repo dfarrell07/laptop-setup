@@ -101,7 +101,7 @@
 - name: Check registry auth status
   ansible.builtin.command:
     cmd: "podman login --get-login {{ item }}"
-  loop: "{{ containers_registries }}"
+  loop: "{{ containers_registries + containers_registries_extra }}"
   loop_control:
     label: "{{ item }}"
   register: containers_auth_status

@@ -16,4 +16,11 @@ is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 
 containers_registries: []  # authoritative value in group_vars/all/vars.yml; empty here for standalone role invocation
 
+# Extra registries appended to containers_registries without replacing the computed default list.
+# Set in config.yml to add registries beyond quay.io (and registry.redhat.io for work profile).
+# Example:
+#   containers_registries_extra:
+#     - docker.io
+containers_registries_extra: []
+
 registry_tokens: []  # fallback; authoritative in group_vars/all/vars.yml
