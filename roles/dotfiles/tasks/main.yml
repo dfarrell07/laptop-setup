@@ -231,7 +231,7 @@
     - is_linux
     - not (system_is_container | default(false))
   block:
-    - name: Deploy environment.d configs
+    - name: Deploy environment.d conf files
       ansible.builtin.copy:
         content: "{{ item.content }}\n"
         dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/{{ item.name }}"
