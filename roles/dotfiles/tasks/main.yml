@@ -116,29 +116,15 @@
 
 - name: Deploy prepare-commit-msg chain-stub hook
   ansible.builtin.copy:
+    src: git-template-prepare-commit-msg
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/prepare-commit-msg"
     mode: "0755"
-    content: |
-      #!/bin/sh
-      # Chain to per-repo prepare-commit-msg hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
-      _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/prepare-commit-msg"
-      if [ -f "$_repo_hook" ]; then
-        exec "$_repo_hook" "$@"
-      fi
 
 - name: Deploy pre-push chain-stub hook
   ansible.builtin.copy:
+    src: git-template-pre-push
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-push"
     mode: "0755"
-    content: |
-      #!/bin/sh
-      # Chain to per-repo pre-push hook if one exists (core.hooksPath replaces .git/hooks/ lookup).
-      # $1=remote name, $2=remote URL; refs being pushed arrive on stdin.
-      # exec forwards positional args and inherits stdin from the caller.
-      _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/pre-push"
-      if [ -f "$_repo_hook" ]; then
-        exec "$_repo_hook" "$@"
-      fi
 
 - name: Deploy gh CLI config
   ansible.builtin.copy:
@@ -262,23 +248,22 @@
       SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
   when: _dotfiles_ssh_agent_enable.rc | default(0) != 0
 
-- name: Deploy SSH agent environment.d config
-  ansible.builtin.copy:
-    content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
-    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
-    mode: "0644"
+- name: Deploy environment.d configs
   when:
     - is_linux
     - not (system_is_container | default(false))
+  block:
+    - name: Deploy SSH agent environment.d config
+      ansible.builtin.copy:
+        content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
+        mode: "0644"
 
-- name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
-  ansible.builtin.copy:
-    content: "GOTMPDIR=$HOME/tmp\n"
-    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
-    mode: "0644"
-  when:
-    - is_linux
-    - not (system_is_container | default(false))
+    - name: Deploy GOTMPDIR environment.d config (go test under sudo and non-interactive make)
+      ansible.builtin.copy:
+        content: "GOTMPDIR=$HOME/tmp\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
+        mode: "0644"
 
 # --- macOS: SSH agent via launchd ---
 - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
