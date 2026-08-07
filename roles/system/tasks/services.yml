@@ -68,7 +68,7 @@
   # Socket-based activation is lazy; the zone may not exist until a client connects.
   # No-op on first provision when libvirt is not yet installed.
 
-- name: Remove ssh from libvirt firewall zone (VMs must not reach host sshd)
+- name: Remove stale port-22 allow-rule from libvirt zone (sshd on 722; zone catch-all reject covers it)
   ansible.posix.firewalld:
     zone: libvirt
     service: ssh

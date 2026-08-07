@@ -340,15 +340,6 @@
     - not (claude_queue_enabled | bool)
     - _claude_queue_plist_stat.stat.exists
 
-- name: Warn claude_remote_control_enabled has no effect on Linux
-  ansible.builtin.debug:
-    msg: >-
-      claude_remote_control_enabled=true has no effect on Linux — remote control is macOS-only
-      (launchd plist). No Linux systemd unit is implemented yet.
-  when:
-    - claude_remote_control_enabled | bool
-    - is_linux
-
 - name: Check if Remote Control launchd plist exists (macOS)
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
