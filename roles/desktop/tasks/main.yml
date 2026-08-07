@@ -149,7 +149,6 @@
 - name: TrackPoint config for i3 (X11, xorg.conf.d)
   when:
     - desktop_effective == 'i3'
-    - desktop_i3_trackpoint_id is defined
     - desktop_i3_trackpoint_id | length > 0
   become: true
   tags: [become]

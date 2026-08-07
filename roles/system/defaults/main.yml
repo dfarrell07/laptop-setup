@@ -243,6 +243,8 @@ system_ssh_channel_timeout: ""  # disabled: sshd 10.2p1 (Fedora 44) has bz3827 â
 system_ssh_unused_connection_timeout: 600  # seconds before idle connection with no channels is closed (0 to disable)
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
 system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
+# authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
+ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default â€” safe on restricted networks)

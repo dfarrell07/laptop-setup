@@ -28,7 +28,7 @@
 - name: Check vault registry pre-auth status
   ansible.builtin.command:
     cmd: "podman login --get-login {{ item.registry }}"
-  loop: "{{ registry_tokens | default([]) }}"
+  loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"
   no_log: true
@@ -38,7 +38,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when:
     - is_linux
-    - registry_tokens | default([]) | length > 0
+    - registry_tokens | length > 0
 
 - name: Authenticate to container registries from vault
   ansible.builtin.command:
@@ -59,7 +59,7 @@
 - name: Check registry auth status after vault login
   ansible.builtin.command:
     cmd: "podman login --get-login {{ item.registry }}"
-  loop: "{{ registry_tokens | default([]) }}"
+  loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"
   no_log: true
@@ -69,7 +69,7 @@
   check_mode: false
   when:
     - is_linux
-    - registry_tokens | default([]) | length > 0
+    - registry_tokens | length > 0
 
 - name: Warn if vault registry login did not persist credentials
   ansible.builtin.debug:

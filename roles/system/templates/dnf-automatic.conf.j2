@@ -30,7 +30,7 @@ emit_no_updates = no
 # setting enabled=0 in their .repo files. The repos_dnf role creates
 # them with enabled=true; disable individually if auto-update is risky.
 
-{% if network_proxied | default(false) %}
+{% if network_proxied %}
 [main]
 proxy = {{ proxy_url }}
 {% endif %}
