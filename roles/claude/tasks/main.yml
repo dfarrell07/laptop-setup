@@ -120,12 +120,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
   when: is_linux
-
-- name: Apply claude-privacy tmpfiles now
-  ansible.builtin.command:
-    cmd: systemd-tmpfiles --user --create
-  changed_when: false
-  when: is_linux
+  notify: Apply claude-privacy tmpfiles
 
 - name: Set ~/.claude directory permissions (macOS fallback)
   ansible.builtin.file:
