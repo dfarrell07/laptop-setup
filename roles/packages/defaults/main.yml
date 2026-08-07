@@ -115,8 +115,6 @@ packages_apt:
                     # needed by ansible.builtin.known_hosts hash_host:true in ssh role
   # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
-  - nmap           # network scanner; all profiles on Debian (no packages_apt profile filter); work-only on Fedora
-  - socat          # socket relay; all profiles on Debian (no packages_apt profile filter); work-only on Fedora/macOS
   - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - pipx
   - shellcheck
@@ -124,12 +122,18 @@ packages_apt:
   - fd-find
   - bat
   - shfmt
-  # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
-  # GOTOOLCHAIN=auto (set in packages tasks) downloads the toolchain on demand.
-  - golang  # work-only on Fedora (packages_languages_work); packages_apt has no profile filter — installed universally on Debian
   # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
+
+# Work-profile-only apt packages (Debian/Ubuntu).
+# Mirrors packages_brew_work — installed only when profile == 'work'.
+packages_apt_work:
+  # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
+  # GOTOOLCHAIN=auto (set in packages tasks) downloads the toolchain on demand.
+  - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
+  - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
+  - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
 
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
@@ -270,6 +274,8 @@ needs_container_tier: "host-only"  # fallback; authoritative value in group_vars
 csb_rhel: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
 
 packages_brew_taps:
   - nikitabobko/tap
