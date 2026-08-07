@@ -13,17 +13,21 @@
     path: "{{ containers_config_dir }}"
     state: directory
     mode: "0700"
+  when: is_linux
 
 - name: Stat auth.json
   ansible.builtin.stat:
     path: "{{ containers_auth_file }}"
   register: containers_auth_stat
+  when: is_linux
 
 - name: Set auth.json permissions if exists
   ansible.builtin.file:
     path: "{{ containers_auth_file }}"
     mode: "0600"
-  when: containers_auth_stat.stat.exists
+  when:
+    - is_linux
+    - containers_auth_stat.stat.exists
 
 - name: Check vault registry pre-auth status
   ansible.builtin.command:

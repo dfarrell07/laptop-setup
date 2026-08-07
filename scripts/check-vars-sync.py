@@ -74,6 +74,8 @@ REQUIRED_KEYS = {
     "system_unprivileged_bpf_disabled": int,
     "system_io_uring_disabled": int,
     "is_dnf5": bool,
+    "csb_rhel": bool,
+    "is_fedora": bool,
 }
 
 

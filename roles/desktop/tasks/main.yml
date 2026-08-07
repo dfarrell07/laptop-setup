@@ -354,10 +354,10 @@
   when: is_macos
 
 # --- macOS: firewall ---
-- name: Check macOS firewall state
+- name: Check macOS firewall settings
   ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
-  register: _fw_state
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw {{ item.check_cmd }}
+  register: _fw_check_results
   changed_when: false
   check_mode: false  # read-only probe — must run in check mode
   become: true
@@ -365,62 +365,45 @@
   when: is_macos
   failed_when: false
   timeout: 30
+  loop:
+    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
+    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Enable macOS firewall
+- name: Enable macOS firewall settings
   ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-  register: _fw_enable_result
-  changed_when: _fw_enable_result.rc == 0
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw {{ item.set_cmd }}
+  register: _fw_enable_results
+  changed_when: _fw_enable_results.rc == 0
   become: true
   tags: [become]
   when:
     - is_macos
-    - "'State = 1' not in (_fw_state.stdout | default(''))"
+    - item.match_str not in (_fw_check_results.results[ansible_loop.index0].stdout | default(''))
   failed_when: false
   timeout: 30
+  loop:
+    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
+    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
 
-- name: Warn if macOS firewall enable failed
+- name: Warn if macOS firewall settings enable failed
   ansible.builtin.debug:
     msg: >-
-      WARNING: socketfilterfw --setglobalstate on exited {{ _fw_enable_result.rc | default(0) }}
-      — application firewall may still be off
+      WARNING: socketfilterfw {{ item.set_cmd }} exited {{ _fw_enable_results.results[ansible_loop.index0].rc | default(0) }}
+      — {{ item.name }} firewall setting may still be off
   when:
     - is_macos
-    - _fw_enable_result.rc | default(0) != 0
-
-- name: Check macOS firewall stealth mode state
-  ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
-  register: _fw_stealth
-  changed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  become: true
-  tags: [become]
-  when: is_macos
-  failed_when: false
-  timeout: 30
-
-- name: Enable macOS firewall stealth mode
-  ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
-  register: _fw_stealth_enable_result
-  changed_when: _fw_stealth_enable_result.rc == 0
-  become: true
-  tags: [become]
-  when:
-    - is_macos
-    - "'Stealth Mode = 1' not in (_fw_stealth.stdout | default(''))"
-  failed_when: false
-  timeout: 30
-
-- name: Warn if macOS firewall stealth mode enable failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: socketfilterfw --setstealthmode on exited {{ _fw_stealth_enable_result.rc | default(0) }}
-      — firewall stealth mode may still be off
-  when:
-    - is_macos
-    - _fw_stealth_enable_result.rc | default(0) != 0
+    - _fw_enable_results.results[ansible_loop.index0].rc | default(0) != 0
+  loop:
+    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
+    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
 - name: Check if GNOME is installed
