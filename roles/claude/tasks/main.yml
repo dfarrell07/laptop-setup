@@ -315,6 +315,7 @@
       - label: remote-control
         plist_path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.claude-remote-control.plist"
         enabled: "{{ claude_remote_control_enabled | bool }}"
+  when: is_macos
 
 # --- macOS: launchd cleanup when disabled ---
 - name: Cleanup disabled launchd agents (macOS)

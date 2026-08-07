@@ -49,23 +49,15 @@
   when: is_dnf
 
 - name: Install desktop packages (apt)
+  vars:
+    _apt_wm_pkgs: "{{ desktop_sway_apt_packages if desktop_effective == 'sway' else [] }}"
   ansible.builtin.apt:
-    name: "{{ desktop_apt_packages }}"
+    name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
     state: present
     update_cache: true
   become: true
   tags: [become]
   when: is_apt
-
-- name: Install Sway packages (apt)
-  ansible.builtin.apt:
-    name: "{{ desktop_sway_apt_packages }}"
-    state: present
-  become: true
-  tags: [become]
-  when:
-    - is_apt
-    - desktop_effective == 'sway'
 
 # --- Alacritty config ---
 - when: desktop_terminal == 'alacritty'
