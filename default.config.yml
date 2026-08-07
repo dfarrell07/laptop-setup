@@ -131,8 +131,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set 10 in config.yml for CIS compliance
 #   system_kernel_panic_on_oops: 0     (group_vars/all/vars.yml) — dev workstation default; CIS 1.5.3 target is 1 (halt on oops);
 #                                        set 1 in config.yml for CIS compliance
-#   system_kexec_load_disabled: 0      (group_vars/all/vars.yml) — kdump/dev workstation default; CIS target is 1 (blocks kexec);
-#                                        set 1 in config.yml for strict CIS compliance
+#   system_kexec_load_disabled: 1      (group_vars/all/vars.yml) — default 1 blocks legacy kexec_load() (CIS defense-in-depth);
+#                                        set 0 in config.yml only when kdump requires kexec_load() and lockdown is also disabled
 #   system_io_uring_disabled: 1        (group_vars/all/vars.yml) — value=1 restricts to CAP_SYS_ADMIN;
 #                                        set 2 in config.yml to fully disable for all users
 #   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
