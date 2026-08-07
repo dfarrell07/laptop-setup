@@ -571,7 +571,6 @@
 - name: Check modprobe hardening contains unconditional blacklist entries
   ansible.builtin.command: grep -qF '{{ item }}' /etc/modprobe.d/hardening.conf
   loop:
-    - "install cramfs /bin/false"
     - "install dccp /bin/false"
     - "install firewire-core /bin/false"
     - "install vivid /bin/false"

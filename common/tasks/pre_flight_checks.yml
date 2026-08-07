@@ -43,14 +43,14 @@
       _user_config is not defined or
       (_user_config.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
        'ssh_signing_key', 'ssh_signing_key_pub', 'rh_git_key',
-       'notes_transcrypt_password']) | list | length == 0)
+       'notes_transcrypt_password', 'registry_tokens']) | list | length == 0)
     fail_msg: >-
       config.yml must not define these indirection-layer keys — include_vars
       outranks group_vars/all/vars.yml (precedence 17 vs 4-5), silently
       bypassing vault for: {{ (_user_config | default({})).keys()
       | select('in', ['ssh_auth_key', 'ssh_auth_key_pub', 'ssh_signing_key',
-      'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password'])
-      | list }}. Use group_vars/all/vault.yml for these secrets instead.
+      'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
+      'registry_tokens']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
       (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
   become: false
   tags: [always]
