@@ -178,7 +178,7 @@
   failed_when: false
 
 # --- kind host prerequisites (runs regardless of distrobox/toolbox installation) ---
-- name: Set containers.conf log_driver to k8s-file (global; avoids journald issues in kind nodes, applies to all containers)
+- name: Set containers.conf log_driver to k8s-file (global; elevated for kind compatibility)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
@@ -188,7 +188,7 @@
     create: true
   when: is_linux
 
-- name: Set containers.conf pids_limit (global; required by kind nodes)
+- name: Set containers.conf pids_limit (global; elevated for kind compatibility)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
@@ -198,7 +198,7 @@
     create: true
   when: is_linux
 
-- name: Set containers.conf default_ulimits nofile (global; required by kind nodes)
+- name: Set containers.conf default_ulimits nofile (global; elevated for kind compatibility)
   community.general.ini_file:
     path: "{{ containers_config_dir }}/containers.conf"
     section: containers
