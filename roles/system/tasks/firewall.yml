@@ -63,25 +63,6 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above
 
-- name: Remove default services from public zone
-  ansible.posix.firewalld:
-    zone: public
-    service: "{{ item }}"
-    permanent: true
-    immediate: true
-    state: disabled
-  loop:
-    - ssh
-    - dhcpv6-client
-    - mdns
-  register: _system_public_zone_svc_remove
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-  # No interface is ever assigned to the public zone on hardened hosts; cleaning
-  # its default services is safe on tiers where zone management is enabled
-  # (RHEL CSB: skipped because IT manages zone policy; hybrid Fedora CSB: runs normally).
-
 - name: Remove default services from FedoraWorkstation zone
   ansible.posix.firewalld:
     zone: FedoraWorkstation

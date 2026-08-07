@@ -123,7 +123,7 @@ default_floating_border pixel {{ desktop_wm_floating_border_width }}
 hide_edge_borders {{ desktop_wm_hide_edge_borders }}
 gaps inner {{ desktop_sway_gaps_inner }}
 gaps outer {{ desktop_sway_gaps_outer }}
-{% if desktop_sway_focus_follows_mouse != 'no' %}
+{% if desktop_sway_focus_follows_mouse | length > 0 %}
 focus_follows_mouse {{ desktop_sway_focus_follows_mouse }}
 {% endif %}
 
