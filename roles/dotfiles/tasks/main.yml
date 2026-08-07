@@ -351,13 +351,6 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
     force: false
-- name: Set .npmrc permissions if exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.npmrc"
-    mode: "0600"
-    state: file
-  failed_when: false
-
 
 - name: Deploy Claude work-env file
   ansible.builtin.copy:

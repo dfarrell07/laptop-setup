@@ -159,11 +159,12 @@
 - name: Deploy Sway configuration and GTK settings
   when: desktop_effective == 'sway'
   block:
-    - name: Ensure Sway config directory
+    - name: Ensure Sway config directories
       ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/sway"
+        path: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}"
         state: directory
         mode: "0755"
+      loop: [sway, swaylock, xdg-desktop-portal, gtk-3.0, gtk-4.0]
 
     - name: Deploy Sway config
       ansible.builtin.template:
@@ -171,23 +172,11 @@
         dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
         mode: "0644"
 
-    - name: Ensure swaylock config directory
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/swaylock"
-        state: directory
-        mode: "0755"
-
     - name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
       ansible.builtin.template:
         src: swaylock.config.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
         mode: "0644"
-
-    - name: Ensure xdg-desktop-portal config directory (Sway)
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal"
-        state: directory
-        mode: "0755"
 
     - name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
       ansible.builtin.copy:
@@ -201,13 +190,6 @@
           org.freedesktop.impl.portal.ScreenCast=wlr
 
     # GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly)
-    - name: Ensure GTK config directories (Sway)
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}"
-        state: directory
-        mode: "0755"
-      loop: [gtk-3.0, gtk-4.0]
-
     - name: Deploy GTK settings (Sway)
       ansible.builtin.template:
         src: gtk-settings.ini.j2
