@@ -350,4 +350,4 @@ system_umask: "027"                # default umask for login shells (login.defs 
 system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel: 0; pinned vs sysctl.d
 system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel: 0; pinned vs sysctl.d
 system_kexec_load_disabled: 0      # lockdown=integrity blocks kexec_load() not kexec_file_load(); signed kdump ok. No-kdump: set 1; CIS: 1
-system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
+system_ptrace_scope: 0             # Fedora 44 default; pinned in 90-hardening.conf vs sysctl.d; CIS 1.6.3=1 (parent; breaks gdb/strace)

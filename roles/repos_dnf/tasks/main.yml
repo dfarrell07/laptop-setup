@@ -238,6 +238,8 @@
       when: not csb_rhel
 
 - name: Add acli repo
+  # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
+  # (not a repo_X boolean, because the URL is an internal secret)
   when:
     - profile == 'work'
     - repos_dnf_acli_baseurl is defined
