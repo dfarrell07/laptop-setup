@@ -58,6 +58,7 @@
   failed_when: false
   when:
     - is_linux
+    - registry_tokens | length > 0
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Check registry auth status after vault login

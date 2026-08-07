@@ -256,15 +256,6 @@
     - is_linux
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
-- name: Check if task queue timer unit exists
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
-  register: _claude_timer_stat
-  when:
-    - not (claude_queue_enabled | bool)
-    - is_linux
-    - not (system_is_container | default(false))  # file does not exist in containers (deploy was skipped)
-
 - name: Stop and disable task queue timer (when disabled)
   ansible.builtin.systemd:
     name: claude-queue.timer
@@ -275,7 +266,6 @@
     - not (claude_queue_enabled | bool)
     - is_linux
     - not (system_is_container | default(false))  # scope:user systemd stop crashes Podman container PID 1
-    - _claude_timer_stat.stat.exists
   failed_when: false
 
 - name: Remove task queue systemd unit files (when disabled)
