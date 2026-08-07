@@ -57,6 +57,12 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        prefer system_usbguard_extra_rules to append
 #   packages_install_binaries: true    (group_vars/all/vars.yml)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
+#   packages_brew: [ansible, git, tmux, mosh, jq, yq, fzf, zoxide, gh, tailscale, nmap, ripgrep, ...]  (roles/packages/defaults) —
+#     universal Homebrew packages (all profiles on macOS); override in config.yml to add/remove packages
+#   packages_brew_cask: [alacritty, google-chrome, bitwarden, keepassxc, slack, lulu, nikitabobko/tap/aerospace] (roles/packages/defaults) —
+#     GUI Homebrew Cask apps (all profiles on macOS); override in config.yml to add/remove
+#   packages_brew_taps: [nikitabobko/tap, theseal/ssh-askpass, domt4/autoupdate]  (roles/packages/defaults) —
+#     Homebrew third-party taps (required by aerospace and autoupdate casks); override in config.yml to add/remove
 #   packages_brew_work: [kubectl, kind, helm, kustomize, socat, transcrypt, sops]  (roles/packages/defaults) — work Homebrew pkgs;
 #     add k9s/krew for work macOS
 #   packages_containers_work: [buildah]  (roles/packages/defaults) — work-profile-only OCI build tools;

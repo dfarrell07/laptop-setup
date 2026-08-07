@@ -31,7 +31,8 @@ system_sysctl_hardening:
   # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
   # (CIS recommends 1 on non-Kubernetes hosts); pinned in 90-hardening.conf to
   # prevent third-party /etc/sysctl.d override of 50-default.conf setting
-  net.ipv4.conf.default.rp_filter: 2
+  net.ipv4.conf.default.rp_filter: 2  # vendor 50-default.conf sets 2; pinned so
+  # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
   net.ipv4.conf.all.secure_redirects: 0
@@ -358,8 +359,8 @@ system_umask: "027"                # default umask for login shells (login.defs 
 # With these values, a kernel panic does not reboot and a kernel oops does not halt — the system
 # continues running in an undefined state. Set panic=10 and panic_on_oops=1 in config.yml for
 # unattended or production hosts.
-system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel: 0; pinned vs sysctl.d
-system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel: 0; pinned vs sysctl.d
+system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel default=0
+system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel default=0
 system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl);
                                    # CIS defense-in-depth independent of lockdown; set 0 in config.yml
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
