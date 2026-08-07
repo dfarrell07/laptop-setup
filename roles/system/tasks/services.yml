@@ -9,18 +9,6 @@
   check_mode: false  # read-only probe — must run in check mode
   when: install_virtualization | bool
 
-- name: Enable modular libvirt sockets (Fedora 35+)
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: started
-    enabled: true
-  loop:
-    - virtqemud.socket
-    - virtnetworkd.socket
-  when:
-    - install_virtualization | bool
-    - (system_virtqemud_check.rc | default(-1)) == 0
-
 - name: Detect bpfman.socket (may not be installed yet on first provision)
   ansible.builtin.command: # noqa: command-instead-of-module
     cmd: systemctl cat bpfman.socket

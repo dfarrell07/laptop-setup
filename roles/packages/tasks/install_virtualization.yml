@@ -39,15 +39,18 @@
           Continuing playbook execution.
       when: not csb_rhel
 
-# Enable virtqemud.socket here (Play 2) in addition to system role (Play 1).
+# Enable virtqemud.socket and virtnetworkd.socket here (Play 2) after package install.
 # On first provision, libvirt isn't installed when Play 1 runs, so the system role's
-# enable attempt silently fails (failed_when: false). This task enables the socket
-# after the package is present. Mirrors the bpfman.socket pattern above.
-- name: Enable virtqemud.socket after libvirt package install
+# enable attempt is skipped (when condition false). This task enables the sockets
+# after the packages are present.
+- name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
   ansible.builtin.systemd:
-    name: virtqemud.socket
+    name: "{{ item }}"
     state: started
     enabled: true
+  loop:
+    - virtqemud.socket
+    - virtnetworkd.socket
   become: true
   tags: [become]
   when:
