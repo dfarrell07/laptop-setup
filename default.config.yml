@@ -42,10 +42,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
 #   repo_slack: false                  (group_vars/all/vars.yml) — packagecloud RPM has gpgcheck=false; opt in or use Flatpak
-#   repo_tailscale: true               (group_vars/all/vars.yml)
+#   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
 #   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer rootless Podman; Docker CE conflicts with Podman
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
-#   repo_redhat: true                  (group_vars/all/vars.yml)
+#   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (roles/system/defaults)
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
 #   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; machines with a dedicated /var/log/audit partition
