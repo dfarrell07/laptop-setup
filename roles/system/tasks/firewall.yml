@@ -63,11 +63,9 @@
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above
-  failed_when: >-
-    _system_iface_drop_zone.failed | default(false) and
-    'ZONE_ALREADY_SET' not in (_system_iface_drop_zone.msg | default(''))
-  # ZONE_ALREADY_SET is tolerated: interface already in drop zone is idempotency, not a failure.
-  # All other failures (NM conflict, zone not found, permission denied) are surfaced.
+  failed_when: false
+  # ZONE_ALREADY_SET handled transparently by ansible.posix.firewalld — interface
+  # already in drop zone is detected by get_enabled_immediate() before any firewall-cmd call.
 
 - name: Remove default services from public zone
   ansible.posix.firewalld:

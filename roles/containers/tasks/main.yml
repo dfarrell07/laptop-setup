@@ -45,11 +45,12 @@
     cmd: "podman login --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
     stdin: "{{ item.item.token }}"
   timeout: 60
+  register: _vault_login_result
   loop: "{{ containers_vault_pre_auth.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry }}"
   no_log: true
-  changed_when: true  # task only runs when pre-auth check shows login is needed; any run is a change attempt
+  changed_when: _vault_login_result.rc == 0
   failed_when: false
   when:
     - is_linux

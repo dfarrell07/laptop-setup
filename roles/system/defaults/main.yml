@@ -335,7 +335,7 @@ system_pass_warn_age: 7            # days of warning before password expires (lo
 system_auditd_max_log_file: 8      # MB per audit log file (auditd.conf max_log_file)
 system_auditd_num_logs: 5          # rotated files to keep (auditd.conf num_logs)
 system_umask: "027"                # default umask for login shells (login.defs UMASK)
-system_kernel_panic: 0             # dev workstation: preserve panic state for kdump/KASAN/UBSAN; CIS default is 10 (auto-reboot); kernel default 0; pinned to prevent future sysctl.d override
-system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (CIS 1.5.3 default is 1 = halt); kernel default 0; pinned to prevent future sysctl.d override
-system_kexec_load_disabled: 0      # lockdown=integrity blocks unsigned kexec_load() but not kexec_file_load(); Fedora kdump (signed kernels) works under lockdown=integrity. Set 1 only on hosts without kdump; CIS: 1
+system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel: 0; pinned vs sysctl.d
+system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel: 0; pinned vs sysctl.d
+system_kexec_load_disabled: 0      # lockdown=integrity blocks kexec_load() not kexec_file_load(); signed kdump ok. No-kdump: set 1; CIS: 1
 system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS

@@ -1,6 +1,6 @@
 ---
 profile: work  # fallback for standalone invocation (--tags claude)
-packages_install_binaries: true  # roles/packages/defaults/main.yml:264; consumed by packages, claude
+packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
 dotfiles_github_user: "CHANGE_ME"  # shared cross-role variable, intentionally unprefixed
 claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
