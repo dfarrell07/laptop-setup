@@ -157,7 +157,7 @@
 
 - name: Ensure ~/.config/claude directory exists (queue config)
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
+    path: "{{ claude_queue_runtime_config_dir }}"
     state: directory
     mode: "0700"
   when: claude_queue_enabled | bool
@@ -165,7 +165,7 @@
 - name: Deploy queue-repos.conf stub (first run only — edit to add repos)
   ansible.builtin.template:
     src: queue-repos.conf.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/claude/queue-repos.conf"
+    dest: "{{ claude_queue_runtime_config_dir }}/queue-repos.conf"
     mode: "0600"
     force: false
   when: claude_queue_enabled | bool
