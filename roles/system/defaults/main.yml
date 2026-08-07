@@ -48,9 +48,12 @@ system_sysctl_hardening:
   # fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
   fs.suid_dumpable: 0
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
+  # Duplicates 50-coredump.conf intentionally — anchors kernel.core_pipe_limit in 90-hardening.conf
+  # against third-party drop-ins (same rationale as kernel.core_pattern anchoring).
+  kernel.core_pipe_limit: 16
   # Fedora 44 kernel runtime defaults; pinned here to prevent /etc/sysctl.d override
-  net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS
-  net.ipv4.icmp_ignore_bogus_error_responses: 1  # CIS
+  net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
+  net.ipv4.icmp_ignore_bogus_error_responses: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
   fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only; Fedora default)
   # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
   # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml

@@ -174,7 +174,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
 - name: Disable GNOME Keyring SSH agent (legacy autostart + GNOME 50+ systemd)
-  when: is_linux and not (csb_restricted) and not (system_is_container | default(false))
+  when: is_linux and not (csb_restricted) and not system_is_container
   block:
     - name: Ensure autostart directory exists
       ansible.builtin.file:
@@ -202,7 +202,7 @@
       failed_when: false
 
 - name: SSH agent systemd user service
-  when: is_linux and not (system_is_container | default(false))  # containers lack ~/.config/systemd/user; user systemd scope unused
+  when: is_linux and not system_is_container  # containers lack ~/.config/systemd/user; user systemd scope unused
   block:
     - name: Deploy SSH agent systemd user service
       ansible.builtin.template:
@@ -306,7 +306,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
     mode: "0600"
 - name: Deploy socket tmpfiles configs and runtime dirs
-  when: is_linux and not (system_is_container | default(false))  # tmpfiles/session-runtime not available in containers
+  when: is_linux and not system_is_container  # tmpfiles/session-runtime not available in containers
   block:
     - name: Deploy socket tmpfiles configs (ssh, tmux)
       ansible.builtin.copy:

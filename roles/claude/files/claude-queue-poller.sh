@@ -5,7 +5,7 @@ set -euo pipefail
 
 # --- Configuration (override via environment) ---
 TASK_QUEUE_REPO="${CLAUDE_QUEUE_REPO:?CLAUDE_QUEUE_REPO must be set}"
-LOG_DIR="${HOME}/.local/share/claude-queue/logs"
+LOG_DIR="${CLAUDE_QUEUE_LOG_DIR:-${HOME}/.local/state/claude-queue/logs}"
 LOCKFILE="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/claude-queue.lock"
 MAX_TURNS="${CLAUDE_QUEUE_MAX_TURNS:-50}"
 TIMEOUT_SECONDS="${CLAUDE_QUEUE_TIMEOUT:-1800}"

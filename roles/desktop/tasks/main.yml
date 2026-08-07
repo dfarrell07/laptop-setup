@@ -192,7 +192,7 @@
   when:
     - is_linux
     - desktop_effective in ['sway', 'i3']
-    - not (system_is_container | default(false))  # ~/.config/environment.d not created in containers (common task guards it)
+    - not system_is_container  # ~/.config/environment.d not created in containers (common task guards it)
 
 # --- i3status config (shared by i3 and Sway) ---
 - name: Deploy i3status config (shared by i3 and Sway)
@@ -218,14 +218,14 @@
   when:
     - desktop_deploy_chrome_policies
     - is_linux
-    - not (system_is_container | default(false))
+    - not system_is_container
 
 - name: Chrome and Chromium managed policies
   when:
     - desktop_deploy_chrome_policies
     - is_linux
     - not (desktop_csb_chrome.stat.exists | default(false))
-    - not (system_is_container | default(false))
+    - not system_is_container
   block:
     - name: Create managed policies directory
       ansible.builtin.file:
