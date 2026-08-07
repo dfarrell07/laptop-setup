@@ -18,6 +18,14 @@
          (claude_pinned_version | length > 0 and
           (claude_pinned_version + ' ') not in ((claude_version_check.stdout | default('')) + ' ')) }}
 
+- name: Fail when install method is unrecognized
+  ansible.builtin.fail:
+    msg: >-
+      claude_install_method '{{ claude_install_method }}' is unrecognized;
+      Claude was not installed. Valid values: 'native', 'skip'.
+      Note: 'npm' was never implemented (supply chain risk — see troubleshooting.md).
+  when: claude_install_method not in ['native', 'skip']
+
 - name: Install Claude Code via native binary
   when:
     - _claude_needs_install
@@ -54,14 +62,6 @@
           Claude Code install failed ({{ claude_install_url }} may be blocked).
           Install manually: curl -fsSL {{ claude_install_url }} | bash
       when: not csb_rhel
-
-- name: Fail when install method is unrecognized
-  ansible.builtin.fail:
-    msg: >-
-      claude_install_method '{{ claude_install_method }}' is unrecognized;
-      Claude was not installed. Valid values: 'native', 'skip'.
-      Note: 'npm' was never implemented (supply chain risk — see troubleshooting.md).
-  when: claude_install_method not in ['native', 'skip']
 
 # --- Instance isolation directories and settings ---
 # Build the active instance list: default + personal always present; work added when profile=work or queue enabled.
