@@ -238,3 +238,7 @@ desktop_macos_defaults:
     key: _FXShowPosixPathInTitle
     type: bool
     value: true
+
+desktop_macos_firewall_settings:
+  - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
+  - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}

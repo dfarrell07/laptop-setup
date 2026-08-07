@@ -19,6 +19,7 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/nvim", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/autostart", mode: "0755"}
 
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
@@ -175,13 +176,6 @@
     src: bashrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
-- name: Ensure autostart config directory exists
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
-    state: directory
-    mode: "0755"
-  when: is_linux
-
 - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
   ansible.builtin.copy:
     content: |

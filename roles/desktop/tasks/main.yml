@@ -365,9 +365,7 @@
   when: is_macos
   failed_when: false
   timeout: 30
-  loop:
-    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
-    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop: "{{ desktop_macos_firewall_settings }}"
   loop_control:
     label: "{{ item.name }}"
 
@@ -383,9 +381,7 @@
     - item.match_str not in (_fw_check_results.results[ansible_loop.index0].stdout | default(''))
   failed_when: false
   timeout: 30
-  loop:
-    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
-    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop: "{{ desktop_macos_firewall_settings }}"
   loop_control:
     label: "{{ item.name }}"
     extended: true
@@ -398,9 +394,7 @@
   when:
     - is_macos
     - _fw_enable_results.results[ansible_loop.index0].rc | default(0) != 0
-  loop:
-    - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
-    - {name: stealth, check_cmd: --getstealthmode, set_cmd: --setstealthmode on, match_str: 'Stealth Mode = 1'}
+  loop: "{{ desktop_macos_firewall_settings }}"
   loop_control:
     label: "{{ item.name }}"
     extended: true
