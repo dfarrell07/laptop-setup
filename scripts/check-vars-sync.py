@@ -19,6 +19,7 @@ from packaging.specifiers import SpecifierSet
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 VARS_FILE = REPO_ROOT / "group_vars/all/vars.yml"
 SYSTEM_DEFAULTS_FILE = REPO_ROOT / "roles/system/defaults/main.yml"
+SSH_DEFAULTS_FILE = REPO_ROOT / "roles/ssh/defaults/main.yml"
 PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
 MOLECULE_DIR = REPO_ROOT / "molecule"
@@ -345,6 +346,29 @@ def main():
     print(
         f"OK: {len(REQUIRED_KEYS)} security hardening keys present and matching in"
         " roles/system/defaults/main.yml (molecule mirror)"
+    )
+
+    ssh_defaults_data = load_yaml(SSH_DEFAULTS_FILE)
+    ssh_defaults_errors = []
+    _SSH_MIRROR_KEY = "ssh_pubkey_accepted_algorithms"
+    if _SSH_MIRROR_KEY not in ssh_defaults_data:
+        ssh_defaults_errors.append(
+            f"  MISSING: {_SSH_MIRROR_KEY} not found in roles/ssh/defaults/main.yml"
+        )
+    elif ssh_defaults_data[_SSH_MIRROR_KEY] != vars_data[_SSH_MIRROR_KEY]:
+        ssh_defaults_errors.append(
+            f"  MISMATCH: {_SSH_MIRROR_KEY}: vars.yml={vars_data[_SSH_MIRROR_KEY]!r}"
+            f" != roles/ssh/defaults/main.yml={ssh_defaults_data[_SSH_MIRROR_KEY]!r}"
+        )
+    _fail_on_errors(
+        ssh_defaults_errors,
+        "roles/ssh/defaults/main.yml missing or mismatched ssh_pubkey_accepted_algorithms"
+        " (required mirror for standalone ssh role invocation):",
+        "Update roles/ssh/defaults/main.yml to match vars.yml.",
+    )
+    print(
+        "OK: ssh_pubkey_accepted_algorithms present and matching in"
+        " roles/ssh/defaults/main.yml (standalone ssh role mirror)"
     )
 
     _fail_on_errors(

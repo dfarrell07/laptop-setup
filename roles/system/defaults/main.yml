@@ -54,6 +54,8 @@ system_sysctl_hardening:
   fs.inotify.max_user_instances: 8192
   # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
   # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
+  # br_netfilter may not be loaded on a fresh install; sysctl.yml allows ENOENT on apply,
+  # and kernel_modules_kind.yml loads br_netfilter then re-runs sysctl --system to complete activation.
   net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
   net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.

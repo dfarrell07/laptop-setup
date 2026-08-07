@@ -2,6 +2,7 @@
 # roles/system/tasks/coredumps.yml
 # --- Core dumps ---
 # inotify on /etc/systemd/coredump.conf.d triggers coredump service reload, crashes containers
+# /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 - name: Configure coredumps (skip in containers)
   when: not system_is_container
   block:
@@ -22,9 +23,6 @@
         dest: /etc/systemd/coredump.conf.d/coredump.conf
         mode: "0644"
 
-- name: Manage RLIMIT_CORE limits
-  when: not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
-  block:
     - name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
       ansible.builtin.copy:
         content: |
