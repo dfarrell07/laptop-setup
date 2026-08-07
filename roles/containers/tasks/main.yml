@@ -87,6 +87,7 @@
   loop_control:
     label: "{{ item.item.registry | default('unknown') }}"
   when:
+    - is_linux
     - registry_tokens | length > 0
     - item.rc is defined
     - item.rc != 0
@@ -113,6 +114,7 @@
   loop_control:
     label: "{{ item.item | default('unknown') }}"
   when:
+    - is_linux
     - item.rc is defined
     - item.rc != 0
 
