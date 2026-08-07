@@ -1,13 +1,5 @@
 ---
 # --- Services ---
-- name: Detect libvirt daemon architecture (modular vs monolithic)
-  ansible.builtin.command: # noqa: command-instead-of-module
-    cmd: systemctl cat virtqemud.socket
-  register: system_virtqemud_check
-  failed_when: false
-  changed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  when: install_virtualization | bool
 
 - name: Detect bpfman.socket (may not be installed yet on first provision)
   ansible.builtin.command: # noqa: command-instead-of-module

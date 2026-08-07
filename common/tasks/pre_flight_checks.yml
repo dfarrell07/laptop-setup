@@ -91,24 +91,21 @@
   tags: [always]
   when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
 
-- name: Warn when vault.yml has not been populated with real secrets
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: vault.yml has not been populated with real secrets
-      (vault_ssh_auth_key is missing). Secret-backed features
-      will silently skip: SSH key deployment, transcrypt, and
-      rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
-  become: false
-  tags: [always]
-  when:
-    - vault_ssh_auth_key | default('') | length == 0
-    - vault_stub_warned is not defined
+- name: Warn and flag when vault stub is not populated
+  block:
+    - name: Warn when vault.yml has not been populated with real secrets
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: vault.yml has not been populated with real secrets
+          (vault_ssh_auth_key is missing). Secret-backed features
+          will silently skip: SSH key deployment, transcrypt, and
+          rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+      become: false
+      tags: [always]
 
-- name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
-  ansible.builtin.set_fact:
-    vault_stub_warned: true
-  become: false
-  tags: [always]
-  when:
-    - vault_ssh_auth_key | default('') | length == 0
-    - vault_stub_warned is not defined
+    - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
+      ansible.builtin.set_fact:
+        vault_stub_warned: true
+      become: false
+      tags: [always]
+  when: vault_ssh_auth_key | default('') | length == 0 and vault_stub_warned is not defined
