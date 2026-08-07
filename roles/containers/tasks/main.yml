@@ -222,7 +222,7 @@
     - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
   register: containers_prune_timer
 
-- name: Reload systemd user daemon after deploying prune units
+- name: Reload systemd user daemon after deploying prune units  # noqa: no-handler
   ansible.builtin.systemd:
     scope: user
     daemon_reload: true
