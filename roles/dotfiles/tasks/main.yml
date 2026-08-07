@@ -149,6 +149,7 @@
     src: tmux.conf.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
+    force: false
 
 - name: Migrate legacy ~/.tmux.conf to XDG path
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/xdg_migrate.yml"

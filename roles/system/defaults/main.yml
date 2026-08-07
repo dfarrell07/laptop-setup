@@ -7,6 +7,10 @@ system_sysctl_hardening:
   kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
   # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
+  # MAINTENANCE: Values below that match Fedora defaults are pinned intentionally
+  # (90-hardening.conf wins lexicographically over third-party drop-ins). Review vs
+  # /usr/lib/sysctl.d/*.conf on each Fedora major upgrade — if Fedora strengthens a
+  # default value, update here to match.
   # Fedora 44 kernel compile-time default; pinned here to prevent /etc/sysctl.d override
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   kernel.perf_event_paranoid: 2    # Fedora 44 default; all perf_event_open requires CAP_PERFMON
@@ -129,7 +133,7 @@ system_usbguard_extra_rules: []
 # Locale, timezone, keymap
 system_locale: en_US.UTF-8
 system_keymap: us
-system_logind_idle_sec: 300   # seconds of inactivity before logind locks the session
+system_logind_idle_sec: 600   # seconds of inactivity before logind locks the session (CIS max 900)
 
 # AIDE file integrity monitoring
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results

@@ -21,9 +21,7 @@
 - name: Fail when install method is unrecognized
   ansible.builtin.fail:
     msg: >-
-      claude_install_method '{{ claude_install_method }}' is unrecognized;
-      Claude was not installed. Valid values: 'native', 'skip'.
-      Note: 'npm' was never implemented (supply chain risk — see troubleshooting.md).
+      claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
   when: claude_install_method not in ['native', 'skip']
 
 - name: Install Claude Code via native binary
