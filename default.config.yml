@@ -243,7 +243,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle before screen lock; swaylock (Sway)/i3lock (i3); 0 to disable
 #   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
 #   desktop_wm_lock_color: "000000"  (roles/desktop/defaults) — screen lock background hex color (no #) — swaylock (Sway) and i3lock (i3)
-#   desktop_sway_keyboard_layout: us   (roles/desktop/defaults) — XKB keyboard layout
+#   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = inherit system locale (e.g. us, de, fr)
 #   desktop_sway_keyboard_variant: ''   (roles/desktop/defaults) — XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
 #   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
 #   desktop_wm_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
@@ -322,7 +322,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
 #   dotfiles_internal_ca_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem  — CA cert for internal HTTPS hosts
-#     (override with a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem, to pin to one CA)
+#     (RPM default; Debian default is /etc/ssl/certs/ca-certificates.crt; override with a specific anchor,
+#     e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem, to pin to one CA)
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml, e.g. [gitlab.example.com, code.example.com]; empty = no work host keyscan

@@ -15,7 +15,7 @@ claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
 claude_telemetry_env:
   DISABLE_ERROR_REPORTING: "1"
   DISABLE_FEEDBACK_COMMAND: "1"
-  # Do NOT set DISABLE_TELEMETRY — breaks feature flags (Opus 1M context)
+  # Do NOT set DISABLE_TELEMETRY — breaks feature flags (extended context window models)
   # Do NOT set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC — same + disables updater
 
 # Keys must match Claude settings.json camelCase format — do NOT convert to snake_case
@@ -55,6 +55,8 @@ claude_deny_sensitive:
   - "~/.docker/config.json"
   - "~/.local/share/keyrings/**"
   - "~/.claude/.credentials.json"
+  - "~/.claude-work/.credentials.json"
+  - "~/.claude-personal/.credentials.json"
   - "~/.claude/history.jsonl"
   - "~/.claude/shell-snapshots/**"
   - "~/.claude/file-history/**"
