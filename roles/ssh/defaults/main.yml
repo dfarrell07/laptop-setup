@@ -8,18 +8,13 @@ ssh_github_known_hosts_url: "https://api.github.com/meta"
 ssh_github_known_hosts_fallback:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
 
-ssh_signing_key_basename: id_ed25519_sk_signing  # fallback for standalone invocation; authoritative definition in group_vars/all/vars.yml
-
 # Fallback for standalone invocation without the dotfiles role in the play.
-dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; dotfiles role sets the canonical value
+dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative definition in roles/dotfiles/defaults/main.yml
 profile: work  # fallback for standalone invocation
-dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; dotfiles role sets the canonical value
-ssh_pubkey_accepted_algorithms:  # fallback; authoritative definition in group_vars/all/vars.yml
-  - sk-ssh-ed25519@openssh.com
-  - sk-ssh-ed25519-cert-v01@openssh.com
-  - ssh-ed25519
+dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; authoritative definition in roles/dotfiles/defaults/main.yml
+# ssh_pubkey_accepted_algorithms and ssh_signing_key_basename: authoritative values in group_vars/all/vars.yml
+# ssh_git_signing_pubkey: provided via vault alias in group_vars/all/vars.yml
 dotfiles_user_email_work: 'CHANGE_ME'
 dotfiles_user_email_personal: 'CHANGE_ME'
 # Set in config.yml: ssh_work_keyscan_hosts: [gitlab.example.com, ...]
 ssh_work_keyscan_hosts: []
-ssh_git_signing_pubkey: ""  # fallback; authoritative definition in group_vars/all/vars.yml
