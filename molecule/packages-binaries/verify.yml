@@ -242,7 +242,7 @@
         that:
           - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install regression"
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
       when: verify_gofumpt.stat.exists
 
     - name: Stat golangci-lint binary
@@ -255,7 +255,7 @@
         that:
           - verify_golangci_lint.stat.exists
           - verify_golangci_lint.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/golangci-lint missing — packages_go_install v2 module path regression"
+        fail_msg: "{{ ansible_user_dir }}/go/bin/golangci-lint missing — packages_go_install_work v2 module path regression"
       when: verify_golangci_lint.stat.exists
 
     - name: Stat govulncheck binary
@@ -268,7 +268,7 @@
         that:
           - verify_govulncheck.stat.exists
           - verify_govulncheck.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install regression"
+        fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
       when: verify_govulncheck.stat.exists
 
     - name: Stat gci binary
@@ -281,7 +281,7 @@
         that:
           - verify_gci.stat.exists
           - verify_gci.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install regression"
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
       when: verify_gci.stat.exists
 
     - name: Stat gopls binary
@@ -294,7 +294,7 @@
         that:
           - verify_gopls.stat.exists
           - verify_gopls.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
       when: verify_gopls.stat.exists
 
     - name: Stat subctl18 binary
