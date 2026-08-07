@@ -287,9 +287,7 @@
     shell: /bin/zsh
   become: true
   tags: [become]
-  when:
-    - is_linux
-    - ansible_facts['user_shell'] != '/bin/zsh'
+  when: is_linux
 
 # --- macOS: AeroSpace config ---
 - name: Ensure AeroSpace config directory (macOS)
