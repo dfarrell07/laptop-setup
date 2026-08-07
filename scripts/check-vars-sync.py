@@ -77,6 +77,7 @@ REQUIRED_KEYS = {
     "system_io_uring_disabled": int,
     "is_dnf5": bool,
     "csb_rhel": bool,
+    "csb_detected": bool,
     "is_fedora": bool,
     "install_vpn": bool,
     "install_virtualization": bool,
