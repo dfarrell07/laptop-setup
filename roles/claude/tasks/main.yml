@@ -211,7 +211,7 @@
     - is_linux
     - not (system_is_container | default(false))  # scope:user daemon-reload crashes Podman container PID 1
   register: _timer_enable
-  failed_when: false
+  ignore_errors: true
 
 - name: Warn if timer enable failed (no active user systemd session)
   ansible.builtin.debug:
