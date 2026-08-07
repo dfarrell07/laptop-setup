@@ -376,23 +376,10 @@
     extended: true
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
-- name: Check if GNOME is installed
-  ansible.builtin.command:
-    cmd: gnome-shell --version
-  register: desktop_gnome_check
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
-  timeout: 30
-  when:
-    - is_linux
-    - desktop_effective == 'gnome'
-
 - name: GNOME hardening dconf settings
   when:
     - is_linux
     - desktop_effective == 'gnome'
-    - desktop_gnome_check.rc == 0
   block:
     - name: Apply GNOME hardening dconf settings
       community.general.dconf:
