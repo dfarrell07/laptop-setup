@@ -329,8 +329,8 @@
     label: "{{ item.label }}"
   when: is_macos
 
-- name: Warn that Remote Control is not implemented on Linux
-  ansible.builtin.debug:
+- name: Fail when Remote Control is enabled on Linux (macOS-only feature)
+  ansible.builtin.fail:
     msg: >-
       claude_remote_control_enabled is true but no systemd unit is configured for Linux
       — launchd autostart is macOS-only. Run `claude --remote-control` manually on Linux if needed.

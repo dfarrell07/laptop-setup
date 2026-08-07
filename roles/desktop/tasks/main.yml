@@ -35,6 +35,16 @@
     - desktop_environment == 'auto'
     - is_linux
 
+- name: Assert display timeout is greater than lock timeout
+  ansible.builtin.assert:
+    that: desktop_wm_idle_display_timeout | int > desktop_wm_idle_lock_timeout | int
+    fail_msg: >-
+      desktop_wm_idle_display_timeout ({{ desktop_wm_idle_display_timeout }}s) must be greater
+      than desktop_wm_idle_lock_timeout ({{ desktop_wm_idle_lock_timeout }}s). If the display
+      powers off before the screen locks, the resume handler will wake the display and expose
+      an unlocked desktop. Set display_timeout > lock_timeout in config.yml.
+  when: desktop_effective in ['sway', 'i3']
+
 - name: Install desktop packages (dnf)
   vars:
     _wm_pkgs: >-

@@ -146,6 +146,7 @@ REQUIRED_KEYS = {
     "system_disable_sctp": bool,
     "system_disable_usb_storage": bool,
     "system_disable_udf": bool,
+    "system_install_usbguard": bool,
     "system_kernel_panic": int,
     "system_kernel_panic_on_oops": int,
     "system_kexec_load_disabled": int,

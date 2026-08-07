@@ -107,7 +107,7 @@ system_coredump_storage: external  # external=compressed files in /var/lib/syste
 system_coredump_process_size_max: 2G  # max core dump size; 0 disables collection; 2G matches systemd upstream default
 
 # USBGuard
-system_install_usbguard: true
+system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
 system_usbguard_whitelist:
   - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
   - "allow id 3297:1969 name \"Moonlander*\" with-interface one-of { 03:*:* }"
@@ -175,8 +175,8 @@ system_lid_switch: suspend
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
 # CUPS socket activation: mask cups.socket and cups.path so socket activation cannot
-# restart the CUPS daemon even when cups.service is disabled. Set false only if a
-# Flatpak print dialog is required on this machine.
+# restart the CUPS daemon even when cups.service is disabled. Set false if any
+# printing is needed — cups.socket is required for all print dialogs (native apps, browsers, GNOME, Flatpak).
 system_disable_printing: true
 # CIS 2.1.5: disable BT on machines with no BT peripherals. Default false (enabled) —
 # required for ThinkPad P16v AMD Bluetooth mouse. Set true in config.yml to blacklist BT.

@@ -105,6 +105,7 @@ system_faillock_even_deny_root: false  # lock root on failed auth; set false on 
 system_disable_sctp: false
 system_disable_usb_storage: true
 system_disable_udf: true
+system_install_usbguard: true
 # install/start bolt; false on VMs and containers
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
