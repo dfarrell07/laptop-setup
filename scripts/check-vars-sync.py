@@ -102,6 +102,27 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/ssh/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
     ],
+    "is_rhel": [
+        REPO_ROOT / "roles/redhat/defaults/main.yml",
+    ],
+    "fapolicyd_enforcing": [
+        REPO_ROOT / "roles/distrobox/defaults/main.yml",
+    ],
+    "needs_container_tier": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "csb_rhel": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "network_proxied": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "proxy_url": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+    ],
+    "csb_restricted": [
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+    ],
 }
 
 # molecule files intentionally set distrobox_oc_version to a non-release value
