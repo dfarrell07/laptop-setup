@@ -231,18 +231,13 @@
       register: _dotfiles_ssh_agent_enable
       failed_when: false
 
-- name: Warn if SSH agent enable failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: SSH agent user service could not be enabled (no systemd --user?).
-      SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
-  when: _dotfiles_ssh_agent_enable.failed | default(false)
+    - name: Warn if SSH agent enable failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: SSH agent user service could not be enabled (no systemd --user?).
+          SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
+      when: _dotfiles_ssh_agent_enable.failed | default(false)
 
-- name: Deploy environment.d configs
-  when:
-    - is_linux
-    - not (system_is_container | default(false))
-  block:
     - name: Deploy environment.d conf files
       ansible.builtin.copy:
         content: "{{ item.content }}\n"
