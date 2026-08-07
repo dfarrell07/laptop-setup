@@ -210,12 +210,15 @@
     permanent: true
     immediate: true
     state: enabled
+  register: _system_redhat_ssh_open
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - csb_detected
     - is_fedora
-  failed_when: false
+  failed_when: >-
+    (_system_redhat_ssh_open.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_redhat_ssh_open.msg | default(''))
   notify: Apply firewall rules
 
 - name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
@@ -225,11 +228,14 @@
     permanent: true
     immediate: true
     state: disabled
+  register: _system_redhat_ssh_remove
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - csb_detected
     - is_fedora
     - ssh_port | int != 22
-  failed_when: false
+  failed_when: >-
+    (_system_redhat_ssh_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_redhat_ssh_remove.msg | default(''))
   notify: Apply firewall rules
