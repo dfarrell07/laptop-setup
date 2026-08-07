@@ -151,30 +151,17 @@
     - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op
   notify: Apply firewall rules
 
-- name: Allow ICMPv6 router-advertisement through drop zone (SLAAC enabled)
+- name: ICMPv6 router-advertisement in drop zone (enabled when system_ipv6_accept_ra >= 2)
   ansible.posix.firewalld:
     zone: drop
     icmp_block: router-advertisement
     permanent: true
     immediate: true
-    state: enabled
+    state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
-    - system_ipv6_accept_ra | int >= 2
   notify: Apply firewall rules
-
-- name: Remove ICMPv6 router-advertisement from drop zone (SLAAC disabled)
-  ansible.posix.firewalld:
-    zone: drop
-    icmp_block: router-advertisement
-    permanent: true
-    immediate: true
-    state: disabled
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-    - system_ipv6_accept_ra | int < 2
 
 # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
 # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the

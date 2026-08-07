@@ -3,6 +3,6 @@
 # The outer shell environment (PATH, GOPATH, KUBECONFIG, etc.) is still inherited.
 # Example minimal .envrc: PATH_add bin
 [global]
-strict_env = true
-disable_stdin = true
+strict_env = {{ dotfiles_direnv_strict_env | lower }}
+disable_stdin = {{ dotfiles_direnv_disable_stdin | lower }}
 warn_timeout = "{{ dotfiles_direnv_warn_timeout }}"
