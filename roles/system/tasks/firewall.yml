@@ -192,12 +192,15 @@
     permanent: true
     immediate: true
     state: enabled
+  register: _result
   when:
     - system_firewalld_running | bool
     - csb_detected
     - not (system_firewall_manage_zone | bool)
     - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', '']
-  failed_when: false
+  failed_when: >-
+    (_result.failed | default(false)) and
+    'INVALID_ZONE' not in (_result.msg | default(''))
   notify: Apply firewall rules
 
 - name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
