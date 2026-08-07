@@ -31,7 +31,7 @@
     key: "github.com {{ item }}"
     state: present
     hash_host: true
-  loop: "{{ (ssh_github_meta.json.ssh_keys | default([])) }}"
+  loop: "{{ ssh_github_meta.json.ssh_keys | default([]) }}"
   loop_control:
     label: "{{ item.split()[0] }}"
   when: ssh_github_ok

@@ -19,7 +19,6 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/nvim", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
-    - {path: "{{ ansible_facts['user_dir'] }}/.config/autostart", mode: "0755"}
 
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
@@ -68,11 +67,16 @@
     msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
   when: dotfiles_forgit_result.failed | default(false)
 
+- name: Stat legacy ~/.oh-my-zsh directory
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh"
+  register: _dotfiles_legacy_ohmyzsh
+
 - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh"
     state: absent
-  when: not (dotfiles_ohmyzsh_result.failed)
+  when: not dotfiles_ohmyzsh_result.failed and _dotfiles_legacy_ohmyzsh.stat.exists
 
 - name: Ensure macOS SSH sockets directory exists
   ansible.builtin.file:
@@ -175,6 +179,13 @@
     src: bashrc.j2
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
+- name: Ensure autostart directory exists (Linux only)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
+    state: directory
+    mode: "0755"
+  when: is_linux
+
 - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
   ansible.builtin.copy:
     content: |
