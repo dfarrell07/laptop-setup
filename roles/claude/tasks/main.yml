@@ -199,7 +199,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not system_is_container | default(false)  # user inotify triggers daemon-reload, crashes container PID 1
+    - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
 
 - name: Deploy task queue systemd timer
   ansible.builtin.template:
@@ -209,7 +209,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not system_is_container | default(false)  # user inotify triggers daemon-reload, crashes container PID 1
+    - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
 
 - name: Enable task queue timer
   ansible.builtin.systemd:
@@ -221,7 +221,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
+    - not (system_is_container | default(false))  # scope:user daemon-reload crashes Podman container PID 1
   register: _timer_enable
   failed_when: false
 
@@ -266,7 +266,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not system_is_container | default(false)  # file does not exist in containers (deploy was skipped)
+    - not (system_is_container | default(false))  # file does not exist in containers (deploy was skipped)
 
 - name: Stop and disable task queue timer (when disabled)
   ansible.builtin.systemd:
@@ -277,7 +277,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not system_is_container | default(false)  # scope:user systemd stop crashes Podman container PID 1
+    - not (system_is_container | default(false))  # scope:user systemd stop crashes Podman container PID 1
     - _claude_timer_stat.stat.exists
   failed_when: false
 
@@ -292,7 +292,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not system_is_container | default(false)  # files do not exist in containers (deploy was skipped)
+    - not (system_is_container | default(false))  # files do not exist in containers (deploy was skipped)
 
 - name: Remove task queue poller script (when disabled)
   ansible.builtin.file:
@@ -308,7 +308,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not system_is_container | default(false)  # scope:user daemon-reload crashes Podman container PID 1
+    - not (system_is_container | default(false))  # scope:user daemon-reload crashes Podman container PID 1
     - _claude_queue_unit_removal.changed
   failed_when: false
 
