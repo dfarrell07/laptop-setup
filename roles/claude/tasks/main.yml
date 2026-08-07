@@ -48,12 +48,6 @@
           by fapolicyd). Install manually after provisioning:
           curl -fsSL {{ claude_install_url }} | bash
       when: csb_rhel
-    - name: Warn if Claude install failed (non-CSB)
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: Claude Code install failed ({{ claude_install_url }} may be blocked).
-          Install manually: curl -fsSL {{ claude_install_url }} | bash
-      when: not csb_rhel
     - name: Fail — Claude Code install failed on non-CSB machine
       ansible.builtin.fail:
         msg: >-

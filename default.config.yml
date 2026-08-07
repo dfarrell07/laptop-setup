@@ -193,6 +193,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
 #   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (login.defs INACTIVE,
 #                                           useradd -D -f, chage -I); CIS 5.5.1.5
+#   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
+#                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
+#                                           if they legitimately use GID 0
 #   system_logind_idle_sec: 300           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_kind_log_driver: k8s-file  (roles/containers/defaults) — kind log driver
 #   containers_kind_pids_limit: 65536  (roles/containers/defaults) — kind node pids limit

@@ -473,11 +473,16 @@
     src: direnvrc
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
+- name: Stat .npmrc
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.npmrc"
+  register: _dotfiles_npmrc
+
 - name: Set .npmrc permissions if exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.npmrc"
     mode: "0600"
-  failed_when: false
+  when: _dotfiles_npmrc.stat.exists
 
 - name: Harden credential directory permissions
   ansible.builtin.file:
