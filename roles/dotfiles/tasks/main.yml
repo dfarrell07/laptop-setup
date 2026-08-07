@@ -102,29 +102,16 @@
     src: gitconfig.j2
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/config"
     mode: "0644"
-- name: Deploy gitleaks pre-commit hook
+- name: Deploy git template hooks
   ansible.builtin.copy:
-    src: git-template-pre-commit
-    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-commit"
+    src: "{{ item }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/{{ item | replace('git-template-', '') }}"
     mode: "0755"
-
-- name: Deploy commit-msg hook
-  ansible.builtin.copy:
-    src: git-template-commit-msg
-    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/commit-msg"
-    mode: "0755"
-
-- name: Deploy prepare-commit-msg chain-stub hook
-  ansible.builtin.copy:
-    src: git-template-prepare-commit-msg
-    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/prepare-commit-msg"
-    mode: "0755"
-
-- name: Deploy pre-push chain-stub hook
-  ansible.builtin.copy:
-    src: git-template-pre-push
-    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/pre-push"
-    mode: "0755"
+  loop:
+    - git-template-pre-commit
+    - git-template-commit-msg
+    - git-template-prepare-commit-msg
+    - git-template-pre-push
 
 - name: Deploy gh CLI config
   ansible.builtin.copy:
@@ -264,48 +251,46 @@
         mode: "0644"
 
 # --- macOS: SSH agent via launchd ---
-- name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
-  changed_when: false
-  failed_when: false
+- name: SSH agent launchd setup (macOS)
   when: is_macos
+  block:
+    - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
+      changed_when: false
+      failed_when: false
 
-- name: Ensure log directory exists (macOS)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
-    state: directory
-    mode: "0755"
-  when: is_macos
+    - name: Ensure log directory exists (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.local/state/log"
+        state: directory
+        mode: "0755"
 
-- name: Ensure LaunchAgents directory exists (macOS)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
-    state: directory
-    mode: "0755"
-  when: is_macos
+    - name: Ensure LaunchAgents directory exists (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
+        state: directory
+        mode: "0755"
 
-- name: Deploy SSH agent launchd plist (macOS)
-  ansible.builtin.template:
-    src: ssh-agent.plist.j2
-    dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
-    mode: "0644"
-  when: is_macos
-  notify: Reload ssh-agent launchd (macOS)
+    - name: Deploy SSH agent launchd plist (macOS)
+      ansible.builtin.template:
+        src: ssh-agent.plist.j2
+        dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
+        mode: "0644"
+      notify: Reload ssh-agent launchd (macOS)
 
-- name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
-  # 'launchctl bootstrap' is the modern replacement for the deprecated
-  # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
-  # rc==0 means newly bootstrapped (changed); rc!=0 means already running (no change).
-  # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
-  ansible.builtin.command:
-    cmd: >-
-      launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
-  when: is_macos
-  register: _dotfiles_ssh_agent_bootstrap_result
-  changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
-  failed_when: false
+    - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
+      # 'launchctl bootstrap' is the modern replacement for the deprecated
+      # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+      # rc==0 means newly bootstrapped (changed); rc!=0 means already running (no change).
+      # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
+      ansible.builtin.command:
+        cmd: >-
+          launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
+          {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
+      register: _dotfiles_ssh_agent_bootstrap_result
+      changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
+      failed_when: false
 
 - name: Check if SSH supports post-quantum KEX
   ansible.builtin.command:
