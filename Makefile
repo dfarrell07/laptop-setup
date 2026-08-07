@@ -131,7 +131,7 @@ containers: guard-not-root
 	ansible-playbook site.yml --tags common,containers --ask-become-pass
 
 claude: guard-not-root
-	ansible-playbook site.yml --tags common,claude
+	ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 distrobox: container  # alias for backwards compatibility
 

@@ -20,7 +20,6 @@
   when:
     - install_virtualization | bool
     - (system_virtqemud_check.rc | default(-1)) == 0
-  failed_when: false
 
 - name: Detect bpfman.socket (may not be installed yet on first provision)
   ansible.builtin.command: # noqa: command-instead-of-module
