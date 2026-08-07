@@ -93,7 +93,7 @@ system_kernel_panic: 0             # dev workstation: preserve panic state for k
 system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (CIS 1.5.3 default is 1 = halt)
 system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl); CIS defense-in-depth;
                                    # set 1 (CIS) to block legacy kexec_load() even when lockdown is disabled
-system_ptrace_scope: 0             # Fedora workstation default; CIS default is 1 (parent-only); set 1 in config.yml for CIS
+system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev workstations needing unrestricted ptrace
 system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
 system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
 system_unprivileged_bpf_disabled: 2  # write-once on Fedora 44 (BPF_UNPRIV_DEFAULT_OFF); value 1 requires custom kernel
