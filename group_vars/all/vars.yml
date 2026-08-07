@@ -24,14 +24,16 @@ notes_transcrypt_password: "{{ vault_notes_transcrypt_password | default('') }}"
 
 registry_tokens: "{{ vault_registry_tokens | default([]) }}"
 
-# CSB / OS detection baselines — csb_detect.yml always overrides via set_fact at runtime.
+# CSB / OS detection baselines — csb_detect.yml overrides on Linux via set_fact at runtime;
+# macOS values depend on a separate fact-computation step in site.yml
+# (see molecule/macos/converge.yml for the pattern).
 # Defining here removes the need for | default(X) guards in conditionals.
 csb_detected: false
 csb_restricted: false
 is_rhel: false
 is_fedora: false
 is_macos: false
-is_linux: true
+is_linux: false
 is_dnf: false
 is_dnf5: false
 is_apt: false

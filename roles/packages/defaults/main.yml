@@ -134,6 +134,10 @@ packages_apt:
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
 
+# Work-profile-only apt packages (Debian work profile — mirrors packages_networking_work additions)
+packages_apt_work:
+  - socat          # socket relay utility; work profile only
+
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
 packages_kind_version: "0.32.0"
