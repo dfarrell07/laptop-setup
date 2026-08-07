@@ -28,8 +28,10 @@ system_sysctl_hardening:
   # max(all=2, per-iface) ensures no interface drops below loose mode even if sysctl_extra
   # sets a per-iface value to 0.
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
-  # loose mode; duplicates 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
-  net.ipv4.conf.default.rp_filter: 2  # applies to newly created interfaces
+  # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
+  # (CIS recommends 1 on non-Kubernetes hosts); pinned in 90-hardening.conf to
+  # prevent third-party /etc/sysctl.d override of 50-default.conf setting
+  net.ipv4.conf.default.rp_filter: 2
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
   net.ipv4.conf.all.secure_redirects: 0
@@ -361,6 +363,8 @@ system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1
 system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl);
                                    # CIS defense-in-depth independent of lockdown; set 0 in config.yml
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
+                                   # NOTE: lockdown=integrity (system_kernel_lockdown default) also blocks kexec_load();
+                                   # this sysctl is defense-in-depth for configs where lockdown is disabled.
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1

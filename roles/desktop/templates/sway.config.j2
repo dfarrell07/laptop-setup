@@ -129,7 +129,9 @@ focus_follows_mouse {{ desktop_sway_focus_follows_mouse }}
 
 # Input
 input "type:keyboard" {
+{% if desktop_sway_keyboard_layout %}
     xkb_layout {{ desktop_sway_keyboard_layout }}
+{% endif %}
 {% if desktop_sway_keyboard_variant %}
     xkb_variant {{ desktop_sway_keyboard_variant }}
 {% endif %}
