@@ -49,10 +49,10 @@
     msg: "Neither distrobox nor toolbox found — skipping container setup"
   when: distrobox_tool == 'none'
 
-# Re-check subuid/subgid at task-time: podman_rootless_ready is set in Play 1
-# pre_tasks (csb_detect.yml) before the system role writes /etc/subuid and
-# /etc/subgid. On first provision the cached fact is stale (false), so we
-# stat the files directly here rather than trusting the Play 1 fact.
+# Re-check subuid/subgid at task-time: the system role may write /etc/subuid
+# and /etc/subgid after Play 1 completes, so any fact gathered before the
+# system role ran is stale on first provision. Grep the files directly here
+# rather than relying on any cached Play 1 fact.
 - name: Re-check subuid entry for current user
   ansible.builtin.command:
     cmd: "grep -q ^{{ ansible_facts['user_id'] }}: /etc/subuid"
