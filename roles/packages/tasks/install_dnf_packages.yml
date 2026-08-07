@@ -25,7 +25,7 @@
         state: present
       become: true
       tags: [become]
-      when: not system_is_container
+      when: not (system_is_container | default(false))
 
     - name: Install dnf packages (container — skip scriptlets to prevent systemd daemon-reload crash)  # noqa: command-instead-of-module
       ansible.builtin.command:
@@ -54,7 +54,7 @@
       register: _packages_dnf_container_result
       changed_when: "'Nothing to do' not in _packages_dnf_container_result.stdout"
       failed_when: _packages_dnf_container_result.rc != 0
-      when: system_is_container
+      when: system_is_container | default(false)
   rescue:
     - name: Record dnf package install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

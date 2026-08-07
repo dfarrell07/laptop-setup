@@ -1,0 +1,24 @@
+---
+# common/tasks/xdg_migrate.yml
+# Back up and remove a legacy dotfile to allow XDG migration.
+# Called via include_tasks; expects vars: _legacy_path, _backup_path
+
+- name: "Stat legacy {{ _legacy_path }}"
+  ansible.builtin.stat:
+    path: "{{ _legacy_path }}"
+  register: _xdg_migrate_stat
+
+- name: "Back up legacy {{ _legacy_path }} before XDG migration"
+  ansible.builtin.copy:
+    src: "{{ _legacy_path }}"
+    dest: "{{ _backup_path }}"
+    remote_src: true
+    mode: "0644"
+    force: false
+  when: _xdg_migrate_stat.stat.exists
+
+- name: "Remove legacy {{ _legacy_path }} (migrated to XDG path)"
+  ansible.builtin.file:
+    path: "{{ _legacy_path }}"
+    state: absent
+  when: _xdg_migrate_stat.stat.exists

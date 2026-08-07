@@ -27,16 +27,22 @@
     - "{{ ansible_facts['user_dir'] }}/.config/direnv"
     - "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d"
 
+- name: Stat oh-my-zsh directory
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
+  register: _dotfiles_ohmyzsh_dir
+
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
   register: _dotfiles_ohmyzsh_git
 
-- name: Remove corrupted oh-my-zsh directory (non-git dest) to allow clean clone
+- name: Remove oh-my-zsh directory if present without .git (corrupted or incomplete)
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
     state: absent
   when:
+    - _dotfiles_ohmyzsh_dir.stat.exists
     - not _dotfiles_ohmyzsh_git.stat.exists
 
 - name: Install oh-my-zsh
@@ -94,25 +100,11 @@
     dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
     mode: "0644"
 
-- name: Check if legacy ~/.gitconfig exists
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
-  register: dotfiles_legacy_gitconfig
-
-- name: Back up legacy ~/.gitconfig before XDG migration
-  ansible.builtin.copy:
-    src: "{{ ansible_facts['user_dir'] }}/.gitconfig"
-    dest: "{{ ansible_facts['user_dir'] }}/.gitconfig.pre-xdg-migration"
-    remote_src: true
-    mode: "0644"
-    force: false
-  when: dotfiles_legacy_gitconfig.stat.exists
-
-- name: Remove legacy ~/.gitconfig when migrating to XDG path
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
-    state: absent
-  when: dotfiles_legacy_gitconfig.stat.exists
+- name: Migrate legacy ~/.gitconfig to XDG path
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/xdg_migrate.yml"
+  vars:
+    _legacy_path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
+    _backup_path: "{{ ansible_facts['user_dir'] }}/.gitconfig.pre-xdg-migration"
 
 - name: Deploy gitconfig
   ansible.builtin.template:
@@ -268,25 +260,11 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
 
-- name: Check if legacy ~/.tmux.conf exists
-  ansible.builtin.stat:
-    path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
-  register: _dotfiles_legacy_tmux
-
-- name: Back up legacy ~/.tmux.conf before XDG migration
-  ansible.builtin.copy:
-    src: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
-    dest: "{{ ansible_facts['user_dir'] }}/.tmux.conf.pre-xdg-migration"
-    remote_src: true
-    mode: "0644"
-    force: false
-  when: _dotfiles_legacy_tmux.stat.exists
-
-- name: Remove legacy ~/.tmux.conf (migrated to XDG path)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
-    state: absent
-  when: _dotfiles_legacy_tmux.stat.exists
+- name: Migrate legacy ~/.tmux.conf to XDG path
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/xdg_migrate.yml"
+  vars:
+    _legacy_path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
+    _backup_path: "{{ ansible_facts['user_dir'] }}/.tmux.conf.pre-xdg-migration"
 
 - name: Deploy vimrc
   ansible.builtin.copy:

@@ -37,17 +37,8 @@
         mode: "0644"
       when: system_coredump_storage == 'none'
 
-    - name: Stat RLIMIT_CORE limits file before removal
-      ansible.builtin.stat:
-        path: /etc/security/limits.d/90-coredump.conf
-      register: _coredump_limits_file
-      when: system_coredump_storage != 'none'
-
     - name: Remove RLIMIT_CORE limits when coredump storage is active
       ansible.builtin.file:
         path: /etc/security/limits.d/90-coredump.conf
         state: absent
-      when:
-        - system_coredump_storage != 'none'
-        - _coredump_limits_file.stat is defined
-        - _coredump_limits_file.stat.exists
+      when: system_coredump_storage != 'none'

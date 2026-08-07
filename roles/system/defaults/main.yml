@@ -21,7 +21,10 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; pinned to block sysctl.d override
   net.ipv6.conf.default.accept_source_route: 0
-  # all.rp_filter NOT in 50-default.conf (defaults to 0); floor so sysctl_extra per-iface values stay >= loose-mode
+  # `all.rp_filter` reset to 0 by Fedora 50-default.conf (line 27: `-net.ipv4.conf.all.rp_filter`
+  # clears after `*.rp_filter=2` wildcard). Setting 2 here makes all.rp_filter a floor:
+  # max(all=2, per-iface) ensures no interface drops below loose mode even if sysctl_extra
+  # sets a per-iface value to 0.
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
   # loose mode; duplicates 50-default.conf but pinned in 90-hardening.conf to prevent third-party /etc/sysctl.d override
   net.ipv4.conf.default.rp_filter: 2  # applies to newly created interfaces

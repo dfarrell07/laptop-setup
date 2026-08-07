@@ -39,7 +39,8 @@
 - name: Install apt packages (Debian/Ubuntu)
   when:
     - is_apt
-    - not system_is_container  # apt postinst scripts trigger pam-auth-update/daemon-reload; crashes Debian 13 container PID 1
+    # apt postinst scripts trigger pam-auth-update/daemon-reload; crashes Debian 13 container PID 1
+    - not (system_is_container | default(false))
   block:
     - name: Install apt packages (Debian/Ubuntu)
       ansible.builtin.apt:
