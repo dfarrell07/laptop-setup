@@ -33,6 +33,9 @@ packages_cli:
 packages_languages:
   - golang
   - python3-pip  # python3 is a dnf dependency of python3-pip
+
+# Work-profile-only language tools (CGO builds — OVN-K, Submariner; not needed for pure-Go personal builds)
+packages_languages_work:
   - gcc           # needed for Go CGO builds
 
 packages_security:
@@ -72,6 +75,7 @@ packages_networking:
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
+  - nmap            # network scanner; universal (matches apt/brew behavior)
 
 # Work-profile-only networking tools (OVN-K/bpfman development at Red Hat)
 packages_networking_work:
@@ -89,7 +93,6 @@ packages_networking_work:
   - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
   - iperf3         # network bandwidth measurement; work profile only
   - socat          # socket relay utility; work profile only (moved from packages_networking)
-  - nmap           # network scanner; work profile only (moved from packages_networking)
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)

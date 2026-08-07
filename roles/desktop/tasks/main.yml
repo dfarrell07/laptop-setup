@@ -73,28 +73,24 @@
     - is_dnf
     - desktop_effective == 'gnome'
 
-- name: Install apt desktop packages
+- name: Install desktop packages (apt)
+  ansible.builtin.apt:
+    name: "{{ desktop_apt_packages }}"
+    state: present
+    update_cache: true
+  become: true
+  tags: [become]
   when: is_apt
-  block:
-    - name: Install desktop packages (apt)
-      ansible.builtin.apt:
-        name: "{{ desktop_apt_packages }}"
-        state: present
-        update_cache: true
-      become: true
-      tags: [become]
 
-- name: Install apt Sway packages
+- name: Install Sway packages (apt)
+  ansible.builtin.apt:
+    name: "{{ desktop_sway_apt_packages }}"
+    state: present
+  become: true
+  tags: [become]
   when:
     - is_apt
     - desktop_effective == 'sway'
-  block:
-    - name: Install Sway packages (apt)
-      ansible.builtin.apt:
-        name: "{{ desktop_sway_apt_packages }}"
-        state: present
-      become: true
-      tags: [become]
 
 # --- Alacritty config ---
 - name: Ensure Alacritty config directory

@@ -314,6 +314,7 @@ system_chrony_service_enabled: "{{ not system_is_container }}"
 # where the molecule temp inventory does not load the project's group_vars directory.
 is_dnf5: false             # OS-detection baseline; csb_detect.yml overrides at runtime; kept here for standalone molecule invocability
 csb_rhel: false            # authoritative in group_vars/all/vars.yml; here for standalone invocability
+csb_detected: false        # authoritative in group_vars/all/vars.yml; here for standalone invocability
 is_fedora: false           # authoritative in group_vars/all/vars.yml; here for standalone invocability
 system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
 system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS

@@ -11,6 +11,7 @@
         name: >-
           {{ packages_cli
              + packages_languages
+             + (packages_languages_work if profile == 'work' else [])
              + packages_security
              + packages_containers
              + (packages_containers_work if profile == 'work' else [])
@@ -39,6 +40,7 @@
           dnf install -y --setopt=tsflags=noscripts,notriggers
           {{ (packages_cli
              + packages_languages
+             + (packages_languages_work if profile == 'work' else [])
              + packages_security
              + packages_containers
              + (packages_containers_work if profile == 'work' else [])
