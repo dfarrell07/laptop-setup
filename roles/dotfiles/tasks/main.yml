@@ -144,8 +144,8 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/ignore"
     mode: "0644"
 - name: Deploy ripgreprc
-  ansible.builtin.template:
-    src: ripgreprc.j2
+  ansible.builtin.copy:
+    src: ripgreprc
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
 - name: Deploy tmux.conf

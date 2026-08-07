@@ -59,16 +59,19 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        prefer system_usbguard_extra_rules to append
 #   packages_install_binaries: true    (group_vars/all/vars.yml)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
-#   packages_brew_work: [kubectl, kind, helm, kustomize, socat]  (roles/packages/defaults) — work Homebrew pkgs; add k9s/krew for work macOS
+#   packages_brew_work: [kubectl, kind, helm, kustomize, socat, transcrypt, sops]  (roles/packages/defaults) — work Homebrew pkgs;
+#     add k9s/krew for work macOS
 #   packages_containers_work: [buildah]  (roles/packages/defaults) — work-profile-only OCI build tools;
 #     personal profile gets podman/skopeo/distrobox only
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, openvswitch, bpfman, bpftool, iproute-tc, strace, gdb, perf, bpftrace,
-#     sos, wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
+#     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
 #   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
 #     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
+#   packages_security_work: [sos]  (roles/packages/defaults) — work-profile-only support tools
+#     (sosreport for RHEL/CSB support cases); override in config.yml
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
 #     all role-default tools are in packages_go_install_work (work-profile only); add cross-profile tools here
 #   packages_go_install_work: [gofumpt@v..., govulncheck@v..., golangci-lint@v..., controller-gen@v..., ...]  (roles/packages/defaults) —
