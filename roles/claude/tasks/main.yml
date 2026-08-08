@@ -184,7 +184,7 @@
 - name: Deploy task queue poller script
   ansible.builtin.copy:
     src: claude-queue-poller.sh
-    dest: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
+    dest: "{{ claude_queue_poller_path }}"
     mode: "0700"
   when: claude_queue_enabled | bool
 
@@ -286,7 +286,7 @@
 
 - name: Remove task queue poller script (when disabled)
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
+    path: "{{ claude_queue_poller_path }}"
     state: absent
   when:
     - not (claude_queue_enabled | bool)

@@ -88,8 +88,8 @@ system_firewall_icmp_types:
   - fragmentation-needed  # IPv4 PMTUd (type 3 code 4 only); packet-too-big covers IPv6
   - packet-too-big
   - parameter-problem  # IPv4 type 12 + IPv6 type 4; needed for IPv6 ext-header error signalling
-  - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
-  - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
+  - neighbour-solicitation  # IPv6 NDP — required for link-local even when SLAAC disabled (accept_ra=0); conntrack does not track NS/NA
+  - neighbour-advertisement  # same — link-local MAC resolution fails without NA
 
 # Additional ICMP types merged with system_firewall_icmp_types at apply time.
 # With icmp-block-inversion enabled, adding an icmp-block ALLOWS that type through drop zone.

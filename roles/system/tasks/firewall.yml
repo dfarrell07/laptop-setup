@@ -62,6 +62,8 @@
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above
 
+# Defense-in-depth: NM may assign new connections to FedoraWorkstation zone by default;
+# strip its open services/ports even though physical ifaces are already in drop zone.
 - name: Remove default services from FedoraWorkstation zone
   ansible.posix.firewalld:
     zone: FedoraWorkstation
