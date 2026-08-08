@@ -93,8 +93,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_disable_bluetooth: false    (roles/system/defaults) — true to blacklist BT modules
 #   system_disable_thunderbolt: false  (roles/system/defaults) — true to blacklist thunderbolt/thunderbolt_net;
 #                                        mitigates Thunderspy DMA attacks; only set on machines with no Thunderbolt peripherals
-#   system_disable_sctp: false         (group_vars/all/vars.yml) — true to blacklist sctp kernel module (CIS 3.4.1);
-#                                        set false if SCTP is required (e.g. telecom/SIGTRAN workloads)
+#   system_disable_sctp: false         (group_vars/all/vars.yml) — default false (OVN-K/Submariner use SCTP);
+#                                        set true for strict CIS 3.4.1 on hosts that do not need SCTP
 #   system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
 #                                        on machines with a fingerprint reader if fingerprint auth is desired
 #   system_disable_avahi: true         (group_vars/all/vars.yml) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
