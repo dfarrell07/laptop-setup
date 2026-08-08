@@ -81,7 +81,7 @@
     - is_fedora
   failed_when: >-
     _system_fw_zone_svc_remove.results | selectattr('failed', 'equalto', true)
-    | map(attribute='msg') | select | reject('search', 'INVALID_ZONE') | list | length > 0
+    | rejectattr('msg', 'search', 'INVALID_ZONE') | list | length > 0
 
 - name: Remove broad port rules from FedoraWorkstation zone
   ansible.posix.firewalld:
@@ -100,7 +100,7 @@
     - is_fedora
   failed_when: >-
     _system_fw_zone_port_remove.results | selectattr('failed', 'equalto', true)
-    | map(attribute='msg') | select | reject('search', 'INVALID_ZONE') | list | length > 0
+    | rejectattr('msg', 'search', 'INVALID_ZONE') | list | length > 0
 
 - name: Enable ICMP block inversion on drop zone
   ansible.posix.firewalld:
