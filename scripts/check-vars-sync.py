@@ -137,6 +137,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
     "csb_detected": [
+        REPO_ROOT / "roles/redhat/defaults/main.yml",
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
     "csb_rhel": [
