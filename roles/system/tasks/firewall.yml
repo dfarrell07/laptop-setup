@@ -57,7 +57,6 @@
     # wg=WireGuard; wt=wg-quick wt0 alias (Mullvad/custom WireGuard profiles)
     _drop_exclude_re: '^(lo|tailscale\d*|tun.*|w[gt].*|virbr.*|podman.*|br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system)$'
   loop: "{{ ansible_facts['interfaces'] | default([]) | reject('match', _drop_exclude_re) | list }}"
-  register: _system_iface_drop_zone
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # paired with zone guard above

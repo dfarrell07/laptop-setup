@@ -27,6 +27,7 @@
       {% endif %}
 
 - name: Merge configurable sysctl values into hardening dict
+  when: not system_is_container
   ansible.builtin.set_fact:
     system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
         'kernel.sysrq': system_sysrq | int,

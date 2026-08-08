@@ -130,6 +130,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/distrobox/defaults/main.yml",
     ],
     "needs_container_tier": [
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "is_fedora": [
