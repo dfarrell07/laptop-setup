@@ -181,7 +181,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not (system_is_container | default(false))  # user inotify triggers daemon-reload, crashes container PID 1
+    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
   block:
     - name: Deploy task queue systemd service
       ansible.builtin.template:
@@ -213,7 +213,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not (system_is_container | default(false))
+    - not (system_is_container)
     - _timer_enable.failed | default(false)
 
 - name: Get primary group name for logrotate su directive
@@ -225,7 +225,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not (system_is_container | default(false))
+    - not (system_is_container)
 
 - name: Deploy logrotate config for claude-queue-poller.log
   ansible.builtin.copy:
@@ -248,7 +248,7 @@
   when:
     - claude_queue_enabled | bool
     - is_linux
-    - not (system_is_container | default(false))
+    - not (system_is_container)
 
 # --- Disable task queue when not enabled (cleanup if previously enabled) ---
 - name: Stop and disable task queue timer (when disabled)
@@ -260,7 +260,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not (system_is_container | default(false))  # scope:user systemd stop crashes Podman container PID 1
+    - not (system_is_container)  # scope:user systemd stop crashes Podman container PID 1
   failed_when: false
 
 - name: Remove task queue systemd unit files (when disabled)
@@ -274,7 +274,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not (system_is_container | default(false))  # files do not exist in containers (deploy was skipped)
+    - not (system_is_container)  # files do not exist in containers (deploy was skipped)
 
 - name: Remove task queue poller script (when disabled)
   ansible.builtin.file:
@@ -290,7 +290,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not (system_is_container | default(false))  # scope:user daemon-reload crashes Podman container PID 1
+    - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - _claude_queue_unit_removal.changed
   failed_when: false
 
@@ -303,7 +303,7 @@
   when:
     - not (claude_queue_enabled | bool)
     - is_linux
-    - not (system_is_container | default(false))
+    - not (system_is_container)
 
 # --- macOS: launchd agent list (single source of truth for cleanup and load loops) ---
 - name: Set macOS launchd agent list
