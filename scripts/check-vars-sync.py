@@ -76,6 +76,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "repo_gh_cli": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "repo_google_chrome": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
