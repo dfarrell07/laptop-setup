@@ -34,6 +34,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE
 #   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
+#   packages_yubikey_enabled: true     (group_vars/all/vars.yml) — yubikey-manager + ykpers; set false on machines without a YubiKey
 #   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on all Fedora (gh in standard repos); activates on RHEL/Rocky
 #   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
 #   repos_dnf_google_chrome_repo: <see roles/repos_dnf/defaults/main.yml>  (repos_dnf/defaults) — corporate mirror override
@@ -71,7 +72,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   packages_apt_work: [golang, gcc, nmap, socat, tshark, buildah, skopeo]
 #     (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
 #   packages_languages_work: [golang, gcc]  (roles/packages/defaults) — work-profile-only compiler toolchain (CGO builds);
-#     personal profile gets python3-pip only
+#     personal profile installs no additional language runtimes (packages_languages: [] for all profiles; python3-pip is in packages_cli)
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, bpfman, iproute-tc,

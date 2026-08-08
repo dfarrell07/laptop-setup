@@ -39,10 +39,16 @@ packages_languages_work:
   - golang
   - gcc           # needed for Go CGO builds
 
+packages_yubikey_enabled: true  # set false on machines without a YubiKey to skip yubikey-manager and ykpers
+
 packages_security:
+  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
+
+# YubiKey packages — conditionally included when packages_yubikey_enabled: true (default).
+# Users without a YubiKey can set packages_yubikey_enabled: false in config.yml to skip these.
+packages_security_yubikey:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
-  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
@@ -292,7 +298,7 @@ is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
-system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in roles/system/defaults/main.yml
 
 packages_brew_taps:
   - nikitabobko/tap
