@@ -41,8 +41,13 @@ packages_languages_work:
 packages_security:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
-  - libfido2  # no-op on Fedora 44 (libssh pulls libfido2.so.1 cap dep); explicit on RHEL/Rocky where libssh lacks FIDO2
   - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
+
+# RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
+# capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
+# Merged into _packages_dnf_all only when ansible_distribution != 'Fedora'.
+packages_security_rhel:
+  - libfido2
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
@@ -163,9 +168,10 @@ packages_gitleaks_version: "8.30.1"
 packages_gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 packages_gitleaks_sha256_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
 
-# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; x86_64 only (no arm64 CI pin)
+# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; arm64 supported but not CI-tested
 packages_actionlint_version: "1.7.12"
 packages_actionlint_sha256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+packages_actionlint_sha256_arm64: "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
 
 # zizmor version pinned to match CI (linting.yml); SHA256 of x86_64-unknown-linux-gnu tarball; x86_64 only (no arm64 CI pin)
 packages_zizmor_version: "1.29.0"
@@ -262,7 +268,8 @@ packages_subctl_rh_versions: []
 #     suffix: "RH22"
 
 packages_k9s_version: "0.51.0"
-packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
+packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
+packages_k9s_sha256_arm64: "3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c"
 
 packages_krew_bootstrap_version: "0.5.0"  # Initial tarball only; upgrades self-manage to krew latest
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"

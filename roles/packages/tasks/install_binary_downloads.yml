@@ -94,16 +94,16 @@
     - profile == 'work'
     - packages_install_binaries | bool
     - is_linux
-    - ansible_facts['architecture'] == 'x86_64'  # x86_64 only (no arm64 CI pin)
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
   ansible.builtin.include_tasks: install_tarball.yml
   vars:
     binary_name: k9s
     url: >-
       https://github.com/derailed/k9s/releases/download/v{{ packages_k9s_version
-      }}/k9s_Linux_amd64.tar.gz
+      }}/k9s_Linux_{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
     tarball: /tmp/k9s.tar.gz
     dest: /usr/local/bin/k9s
-    checksum: "sha256:{{ packages_k9s_sha256 }}"
+    checksum: "sha256:{{ packages_k9s_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_k9s_sha256 }}"
     version_check_cmd: /usr/local/bin/k9s version
     version_string: "{{ packages_k9s_version }}"
     binary_in_archive: k9s

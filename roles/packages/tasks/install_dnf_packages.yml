@@ -13,6 +13,7 @@
              + packages_languages
              + (packages_languages_work if profile == 'work' else [])
              + packages_security
+             + (packages_security_rhel if ansible_distribution != 'Fedora' else [])
              + packages_containers
              + (packages_containers_work if profile == 'work' else [])
              + (packages_containers_kubectl

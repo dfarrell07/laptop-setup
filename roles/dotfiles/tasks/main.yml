@@ -162,20 +162,20 @@
 - name: Disable GNOME Keyring SSH agent (legacy autostart + GNOME 50+ systemd)
   when: is_linux and needs_container_tier != 'container' and not system_is_container
   block:
-    - block:
-        - name: Ensure autostart directory exists
-          ansible.builtin.file:
-            path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
-            state: directory
-            mode: "0755"
+    - name: Ensure autostart directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
+        state: directory
+        mode: "0755"
+      when: desktop_environment not in ['sway', 'i3']
 
-        - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
-          ansible.builtin.copy:
-            content: |
-              [Desktop Entry]
-              Hidden=true
-            dest: "{{ ansible_facts['user_dir'] }}/.config/autostart/gnome-keyring-ssh.desktop"
-            mode: "0644"
+    - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
+      ansible.builtin.copy:
+        content: |
+          [Desktop Entry]
+          Hidden=true
+        dest: "{{ ansible_facts['user_dir'] }}/.config/autostart/gnome-keyring-ssh.desktop"
+        mode: "0644"
       when: desktop_environment not in ['sway', 'i3']
 
     - name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
