@@ -23,6 +23,7 @@
         usbguard_expected: true
         system_aide_enabled: true        # VM scenario exercises AIDE (full kernel access, real timer)
         system_tlp_enabled: true         # VM scenario exercises TLP/ppd masking path (laptop form_factor not auto-detected in VMs)
+        system_timezone: UTC             # CHANGE_ME sentinel invalid here; VM has no system-container-overrides.yml
         system_coredump_storage: none    # VM verify asserts Storage=none; match defaults that ship None for hardened CI
         system_coredump_process_size_max: 0  # VM verify asserts ProcessSizeMax=0; disable coredumps in hardened CI
         # Exercise even_deny_root=true path (default.config.yml sets false; no other scenario tests true)

@@ -241,8 +241,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit; raise both limits together
-#   containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"  (roles/containers/defaults)
-#     — 8x nofile_limit (524288 at default 65536); global open-file hard limit; ceiling for nofile_limit
+#   containers_kind_max_nodes: 8  (roles/containers/defaults) — nofile_hard_limit multiplier; raise for >8-node clusters
+#   containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * containers_kind_max_nodes }}"  (roles/containers/defaults)
+#     — containers_kind_max_nodes x nofile_limit (524288 at default 65536); global open-file hard limit; ceiling for nofile_limit
 #   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries for podman login; work auto-adds registry.redhat.io
 #                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io
 #                                        (and registry.redhat.io for work profile) explicitly, or use containers_registries_extra to append

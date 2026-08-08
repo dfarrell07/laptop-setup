@@ -67,12 +67,6 @@
 #   +work:           profile=work adds claude_work_config_dir
 #   +queue:          claude_queue_enabled adds work + claude_queue_config_dir (deduped when equal)
 #   +remote-control: is_macos + claude_remote_control_enabled adds claude_remote_control_config_dir
-- name: Set base Claude instance directories (always present)
-  ansible.builtin.set_fact:
-    _claude_base_dirs:
-      - "{{ claude_default_config_dir }}"
-      - "{{ claude_personal_config_dir }}"
-
 - name: Set optional Claude instance directories (conditional)
   ansible.builtin.set_fact:
     _claude_optional_dirs: >-
@@ -82,7 +76,7 @@
 
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:
-    _claude_instances: "{{ (_claude_base_dirs + _claude_optional_dirs) | unique }}"
+    _claude_instances: "{{ ([claude_default_config_dir, claude_personal_config_dir] + _claude_optional_dirs) | unique }}"
 
 - name: Create Claude instance config directories
   ansible.builtin.file:
