@@ -161,6 +161,15 @@
     - not (system_is_container)  # scope:user systemd crashes Podman container PID 1
     - (containers_podman_socket.status | default({})).ActiveState | default('') not in ['active', 'activating']
 
+- name: Check if docker.socket unit file exists  # noqa: command-instead-of-module
+  ansible.builtin.command: systemctl cat docker.socket
+  register: _docker_socket_exists
+  changed_when: false
+  failed_when: false
+  when:
+    - is_linux
+    - not (system_is_container)
+
 - name: Unmask Docker socket when Docker is enabled
   ansible.builtin.systemd:
     name: docker.socket
@@ -174,6 +183,7 @@
     - is_linux
     - install_docker
     - not (system_is_container)
+    - _docker_socket_exists.rc | default(1) == 0
   ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if Docker socket enable failed
@@ -202,6 +212,7 @@
     - is_linux
     - not install_docker
     - not (system_is_container)  # masked: true → inotify → daemon-reload → container crash
+    - _docker_socket_exists.rc | default(1) == 0
   ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if Docker socket disable failed
