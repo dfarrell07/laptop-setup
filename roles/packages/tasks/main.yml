@@ -40,7 +40,7 @@
   when:
     - is_apt
     # apt postinst scripts trigger pam-auth-update/daemon-reload; crashes Debian 13 container PID 1
-    - not (system_is_container | default(false))
+    - not system_is_container
   block:
     - name: Install apt packages (Debian/Ubuntu)
       ansible.builtin.apt:
@@ -62,7 +62,7 @@
   when:
     - is_apt
     - profile == 'work'
-    - not (system_is_container | default(false))
+    - not system_is_container
   block:
     - name: Install apt work-profile packages (Debian/Ubuntu)
       ansible.builtin.apt:
