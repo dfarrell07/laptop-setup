@@ -216,6 +216,14 @@
     - containers_docker_mask.failed | default(false)
 
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
+- name: Assert nofile hard limit is not below soft limit
+  ansible.builtin.assert:
+    that:
+      - containers_nofile_hard_limit | int >= containers_nofile_limit | int
+    fail_msg: >
+      containers_nofile_hard_limit ({{ containers_nofile_hard_limit }}) must be >=
+      containers_nofile_limit ({{ containers_nofile_limit }}) or Podman will reject the config.
+
 - name: Set containers.conf workstation options (user-scope; logging and kind compatibility)
   ansible.builtin.template:
     src: containers.conf.j2

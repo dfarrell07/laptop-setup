@@ -236,3 +236,18 @@
   # libvirt-daemon-driver-network, which is installed in Play 2 by the packages role;
   # on first provision (before packages run) the zone file is absent. All other failures surface.
   notify: Apply firewall rules
+
+- name: Open SSH port in libvirt zone
+  ansible.posix.firewalld:
+    zone: libvirt
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  register: _result_lv_ssh
+  when:
+    - system_firewalld_running | bool
+    - install_virtualization | bool
+    - system_firewall_manage_zone | bool
+  failed_when: (_result_lv_ssh.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh.msg | default(''))
+  notify: Apply firewall rules
