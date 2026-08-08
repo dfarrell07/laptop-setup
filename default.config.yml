@@ -13,7 +13,7 @@
 # appears in config.yml.
 
 ssh_port: 722  # mirrored in roles/system/defaults/main.yml and roles/dotfiles/defaults/main.yml; update all three on port change
-desktop_environment: auto  # CHANGE TO: sway, i3, or gnome on first provision; auto fails before any WM is installed
+# desktop_environment: auto  # CHANGE TO: sway, i3, or gnome on first provision; auto fails before any WM is installed
 
 # ============================================================
 # USER IDENTITY — override ALL of these in config.yml
@@ -218,6 +218,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_coredump_storage: external  (roles/system/defaults) — where systemd-coredump stores cores; 'external' writes
 #                                        compressed files to /var/lib/systemd/coredump/ (Fedora default, pass directly to
 #                                        gdb/dlv or use coredumpctl debug); 'none' disables; 'journal' embeds in journald
+#                                        NOTE: SUID process crashes are always suppressed by fs.suid_dumpable=0 (set in
+#                                        system_sysctl_hardening). To capture SUID crashes, add fs.suid_dumpable: 2 to
+#                                        system_sysctl_extra in config.yml.
 #   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
 #                                           2G matches systemd upstream default
 #   system_core_pattern: "|/usr/lib/systemd/systemd-coredump ..."  (roles/system/defaults) — kernel core_pattern sysctl;
