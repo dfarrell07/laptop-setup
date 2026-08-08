@@ -15,15 +15,15 @@
 - name: Note unprivileged_bpf_disabled status on Fedora
   when: not system_is_container and (is_fedora | default(false) | bool)
   ansible.builtin.debug:
-    verbosity: 0
+    verbosity: 1
     msg: >-
       {% if system_unprivileged_bpf_disabled | int == 2 %}
       kernel.unprivileged_bpf_disabled=2 is already boot-locked by
       CONFIG_BPF_UNPRIV_DEFAULT_OFF=y; EPERM on write is tolerated.
       {% else %}
       system_unprivileged_bpf_disabled={{ system_unprivileged_bpf_disabled }}
-      cannot be applied on stock Fedora 44 (write-once locked to 2 at boot via
-      CONFIG_BPF_UNPRIV_DEFAULT_OFF=y; EPERM on any write).
+      takes effect on custom kernels without CONFIG_BPF_UNPRIV_DEFAULT_OFF=y;
+      stock Fedora 44 locks this to 2 at boot (EPERM on any write).
       {% endif %}
 
 - name: Merge configurable sysctl values into hardening dict
