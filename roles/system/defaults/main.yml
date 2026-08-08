@@ -331,8 +331,8 @@ system_remove_luks_key: false
 # assigning PCI devices to VMs. Enabling iommu=pt bypasses DMA remapping for all devices
 # not assigned to a VM, trading full DMA isolation for passthrough performance.
 system_iommu_passthrough: false
-# system_wifi_mac_rand: not set — defaults true on non-CSB, false on CSB; override in config.yml
-# system_wifi_powersave: not set — defaults true (powersave=2) on non-CSB-RHEL, false on csb_rhel; override in config.yml
+system_wifi_mac_rand: "{{ not csb_detected }}"
+system_wifi_powersave: "{{ not csb_rhel }}"
 system_enable_cockpit: false  # set true to unmask cockpit web console (port 9090); drop zone still blocks external access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block

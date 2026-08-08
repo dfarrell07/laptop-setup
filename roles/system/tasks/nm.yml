@@ -13,7 +13,7 @@
 # break corporate WiFi auth. Skip on CSB (default) and rely on IT's NM configuration.
 - name: Set WiFi MAC randomization effective flag
   ansible.builtin.set_fact:
-    _system_wifi_mac_rand: "{{ system_wifi_mac_rand | default(not csb_detected) | bool }}"
+    _system_wifi_mac_rand: "{{ system_wifi_mac_rand | bool }}"
 
 - name: Configure WiFi MAC address randomization
   ansible.builtin.copy:
@@ -67,7 +67,7 @@
 # On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
 - name: Set WiFi power save effective flag
   ansible.builtin.set_fact:
-    _system_wifi_powersave: "{{ system_wifi_powersave | default(not csb_rhel) | bool }}"
+    _system_wifi_powersave: "{{ system_wifi_powersave | bool }}"
 
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:
