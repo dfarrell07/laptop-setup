@@ -41,7 +41,7 @@ packages_languages_work:
 packages_security:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
-  - libfido2  # explicit for RHEL/Rocky (not a transitive dep there); Fedora 44 gets it via libssh
+  - libfido2  # required for RHEL/Rocky (no libssh transitive pull); no-op on Fedora 44 where libssh already provides it
   - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
   - sos      # Red Hat support diagnostic bundle tool (sosreport); all profiles
 

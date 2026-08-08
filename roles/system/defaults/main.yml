@@ -207,6 +207,7 @@ system_ipv6_accept_ra: 0
 # value 2=blind all callers including root — breaks bpftool prog dump jited).
 # Set 2 in config.yml for strict CIS/STIG compliance if you don't need JIT inspection.
 system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+
 # NOTE: On stock Fedora 44 this sysctl is write-once locked to 2 at boot; any write returns EPERM.
 # Overriding to 1 requires a custom kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF=n). EPERM is tolerated
 # in failed_when; this value (2) is retained for custom-kernel portability.
@@ -221,6 +222,9 @@ system_enable_ip_forward: true  # set false on terminal-only hosts without Kuber
 # explicitly when adding machine-specific sysctls on a work-profile host that needs OVN-K tuning.
 # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
 # Example: system_sysctl_extra: { "net.netfilter.nf_conntrack_max": 524288, "vm.swappiness": 10 }
+# WARNING: system_sysctl_extra is applied last (combine() in sysctl.yml) and silently overrides any
+# matching key in system_sysctl_hardening. Do not set these security-critical keys here without intent:
+# kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, net.ipv4.conf.all.rp_filter, fs.suid_dumpable.
 _system_sysctl_work_defaults:
   net.netfilter.nf_conntrack_max: 524288
   net.core.rmem_max: 16777216
