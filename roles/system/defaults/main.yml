@@ -17,9 +17,7 @@ system_sysctl_hardening:
   # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   # source: kernel compile-time default, not a Fedora sysctl.d file; Fedora has changed this in the past
-  kernel.perf_event_paranoid: 2    # Fedora 44 default; all perf_event_open requires CAP_PERFMON
-  # set 1 in config.yml via system_sysctl_extra for host-side profiling (user-space perf without CAP_PERFMON)
-  # value 3 = requires CAP_SYS_ADMIN (strictest)
+  kernel.perf_event_paranoid: 3    # value 3 = requires CAP_SYS_ADMIN; set 2 in system_sysctl_extra for perf (Fedora 44 default)
   kernel.randomize_va_space: 2  # CIS 1.5.2 — full ASLR (stack, heap, mmap); explicit to survive conflicting sysctl.d drop-ins
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
