@@ -5,7 +5,7 @@
     name: firewalld
     state: started
     enabled: true
-  when: not system_is_container  # enabling+starting firewalld triggers daemon-reload, crashes privileged Podman containers
+  when: not system_is_container and is_dnf  # enabling+starting firewalld triggers daemon-reload, crashes privileged Podman containers
 
 - name: Re-gather service facts after firewalld start
   ansible.builtin.service_facts:

@@ -344,4 +344,12 @@
       loop: "{{ desktop_gnome_hardening_dconf + desktop_gnome_ui_dconf }}"
       loop_control:
         label: "{{ item.key }}"
-      failed_when: false
+      ignore_errors: true
+      register: _desktop_gnome_dconf_results
+
+    - name: Warn if GNOME dconf hardening writes failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: some GNOME dconf hardening writes failed (dbus/dconf unavailable?).
+          Failed keys: {{ _desktop_gnome_dconf_results.results | selectattr('failed') | map(attribute='item.key') | list | join(', ') }}
+      when: _desktop_gnome_dconf_results.results | selectattr('failed') | list | length > 0

@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+{{ claude_log_dir }}/poller.log {
+    su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

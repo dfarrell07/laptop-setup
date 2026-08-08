@@ -87,7 +87,7 @@ system_firewall_manage_zone: "{{ not csb_rhel }}"
 system_firewall_icmp_types:
   - fragmentation-needed  # IPv4 PMTUd (type 3 code 4 only); packet-too-big covers IPv6
   - packet-too-big
-  - parameter-problem
+  - parameter-problem  # IPv4 type 12 + IPv6 type 4; needed for IPv6 ext-header error signalling
   - neighbour-solicitation  # Required for IPv6 NDP — conntrack does not track NS/NA
   - neighbour-advertisement  # Required for IPv6 NDP — without this, MAC resolution fails
 

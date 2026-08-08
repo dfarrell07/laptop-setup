@@ -243,19 +243,8 @@
     - not (system_is_container)
 
 - name: Deploy logrotate config for claude-queue-poller.log
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      {{ claude_log_dir }}/poller.log {
-          su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
-          daily
-          rotate 14
-          compress
-          delaycompress
-          missingok
-          notifempty
-          copytruncate
-      }
+  ansible.builtin.template:
+    src: claude-queue-poller-logrotate.j2
     dest: /etc/logrotate.d/claude-queue-poller
     mode: "0644"
   become: true
