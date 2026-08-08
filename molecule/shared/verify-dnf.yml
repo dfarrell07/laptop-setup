@@ -95,8 +95,8 @@
   ansible.builtin.stat:
     path: /usr/bin/ykman
   register: verify_ykman_bin
-  # ykman is from packages_security (a dnf package), not a binary download;
-  # packages_security is set to [] in Podman CI converge, so absence is intentional.
+  # ykman is from packages_security_yubikey (a dnf package), not a binary download;
+  # packages_security_yubikey is set to [] in Podman CI converge, so absence is intentional.
 
 - name: Check ykman version when installed
   ansible.builtin.command: ykman --version

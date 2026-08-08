@@ -73,6 +73,8 @@ system_sysctl_hardening:
   # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
   # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
+  # NOTE: No IPv6 privacy protection is active in the default config (system_ipv6_accept_ra=0 disables SLAAC).
+  # Set system_ipv6_accept_ra: 2 to enable SLAAC with EUI-64 leakage prevention.
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
@@ -399,7 +401,9 @@ system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
                                    # NOTE: lockdown=integrity (system_kernel_lockdown default) blocks kexec_load() at
                                    # the kernel level, making this sysctl security-redundant after the first reboot
-                                   # (still applied; sole guard pre-reboot and when system_kernel_lockdown is empty).
+                                   # (still applied; sole guard pre-reboot and when system_kernel_lockdown is empty
+                                   # AND Secure Boot is not active (Secure Boot enforces lockdown=integrity at boot,
+                                   # making this sysctl a no-op on Secure Boot machines immediately)).
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1

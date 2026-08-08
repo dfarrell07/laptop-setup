@@ -300,16 +300,32 @@
   failed_when: false
 
 # --- Cockpit (web console — port 9090; disabled by default) ---
+- name: Stat cockpit unit file to detect installation
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/cockpit.socket
+  register: _cockpit_stat
+
 - name: Configure cockpit masking (mask when not system_enable_cockpit)
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: "{{ not (system_enable_cockpit | bool) }}"
+  loop:
+    - cockpit.service
+    - cockpit.socket
+  when: not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
+  failed_when: false
+
+- name: Configure cockpit state and enablement (installed units only)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
     state: "{{ 'started' if system_enable_cockpit else 'stopped' }}"
     enabled: "{{ system_enable_cockpit | bool }}"
   loop:
     - cockpit.service
     - cockpit.socket
-  when: not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
+  when:
+    - not system_is_container
+    - _cockpit_stat.stat.exists
   failed_when: false
 
 # --- Disable Ctrl+Alt+Delete reboot ---
