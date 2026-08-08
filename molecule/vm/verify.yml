@@ -810,7 +810,7 @@
     - name: Check sos is installed (sosreport diagnostic bundle tool)
       ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
       changed_when: false
-      when: profile | default('work') == 'work'  # sos is in packages_networking_work (work-profile only)
+      when: profile | default('work') == 'work'  # sos is in packages_diagnostics_work (work-profile only)
 
     # --- distrobox role ---
     - name: Check for distrobox binary
