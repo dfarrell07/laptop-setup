@@ -16,7 +16,7 @@
     _claude_needs_install: >-
       {{ claude_version_check.rc != 0 or (claude_pinned_version | length > 0
       and (claude_pinned_version + ' ') not in
-      ((claude_version_check.stdout | default('')) + ' ')) }}
+      ((claude_version_check.stdout | default('') | trim) + ' ')) }}
 
 - name: Fail when install method is unrecognized
   ansible.builtin.assert:
