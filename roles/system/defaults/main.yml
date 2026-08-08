@@ -76,8 +76,8 @@ system_sysctl_hardening:
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
-  net.ipv6.conf.all.use_tempaddr: 2  # no-op when system_ipv6_accept_ra=0 (SLAAC off; no temp addresses assigned)
-  net.ipv6.conf.default.use_tempaddr: 2  # no-op when system_ipv6_accept_ra=0; required when SLAAC enabled to prevent EUI-64 leakage
+  net.ipv6.conf.all.use_tempaddr: 2  # pre-deployed so tempaddr is active if accept_ra later set to 2; no-op when SLAAC disabled
+  net.ipv6.conf.default.use_tempaddr: 2  # pre-deployed so tempaddr is active if accept_ra later set to 2; no-op when SLAAC disabled
 
 # Firewall
 # True on standard Fedora and Fedora hybrid (csb_detected, not RHEL). False on RHEL CSB (csb_rhel) where IT manages zone policy.
