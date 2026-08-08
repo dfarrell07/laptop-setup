@@ -142,6 +142,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        echo-request (ping) is intentionally excluded from the default list; add it here on
 #                                        OVN-K/kind machines where pod-to-host-gw connectivity testing requires ping reachability.
 #                                        Example: system_firewall_icmp_extra_types: [echo-request]
+#   system_firewall_manage_zone: "{{ not csb_rhel }}"  (roles/system/defaults) — true manages drop zone and SSH port in
+#                                        firewalld; set false on hybrid Fedora CSB where IT manages firewall zone policy
 #   system_kernel_panic: 0            (group_vars/all/vars.yml) — dev workstation default; CIS target is 10 (auto-reboot after panic);
 #                                        set 10 in config.yml for CIS compliance
 #   system_kernel_panic_on_oops: 0     (group_vars/all/vars.yml) — dev workstation default; CIS 1.5.3 target is 1 (halt on oops);

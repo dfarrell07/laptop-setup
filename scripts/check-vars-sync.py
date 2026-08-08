@@ -49,6 +49,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "install_vpn": [
         REPO_ROOT / "roles/redhat/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
     ],
     "is_linux": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
