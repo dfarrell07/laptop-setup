@@ -17,9 +17,11 @@
     name: bpfman.socket
     state: started
     enabled: true
+  failed_when: false
   when:
     - profile == 'work'
     - is_dnf
+    - not system_is_container
     - (system_bpfman_check.rc | default(-1)) == 0
 
 - name: Add user to libvirt and kvm groups
