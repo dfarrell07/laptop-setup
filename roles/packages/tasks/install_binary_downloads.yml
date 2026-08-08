@@ -8,6 +8,7 @@
   when: _packages_linux_x86_work
   ansible.builtin.include_tasks: install_oc_opm.yml
 
+# Binary download (not dnf) required: Fedora 44 ships 0.31.0; packages_kind_version pins 0.32.0 to match OVN-K cluster compatibility.
 - name: Install kind
   when:
     - profile == 'work'

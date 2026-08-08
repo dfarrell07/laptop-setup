@@ -802,7 +802,7 @@
       become: true
       when: verify_logind_conf.stat.exists
 
-    # --- packages_security (ykpers / YubiKey challenge-response) ---
+    # --- packages_security_yubikey (ykpers / YubiKey challenge-response) ---
     - name: Check ykpers is installed (provides ykchalresp for vault HMAC-SHA1)
       ansible.builtin.command: rpm -q ykpers  # noqa: command-instead-of-module
       changed_when: false
