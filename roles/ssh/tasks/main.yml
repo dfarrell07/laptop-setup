@@ -34,7 +34,7 @@
     ssh_github_ok: >-
       {{ ssh_github_meta.status | default(0) == 200 and
          (ssh_github_meta.json.ssh_keys | default([])
-          | select('match', '^ssh-ed25519 ') | list | length > 0) }}
+          | select('match', 'ssh-ed25519 ') | list | length > 0) }}
 
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
@@ -43,7 +43,7 @@
     state: present
     hash_host: true
   vars:
-    _ssh_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | select('match', '^ssh-ed25519 ') | list }}"
+    _ssh_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | select('match', 'ssh-ed25519 ') | list }}"
   loop: "{{ _ssh_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
   loop_control:
     label: "{{ item.split()[0] }}"

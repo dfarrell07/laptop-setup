@@ -5,7 +5,7 @@
   block:
     - name: Fetch SSH host keys for {{ _keyscan_host }}
       ansible.builtin.command:
-        cmd: ssh-keyscan -T 10 {{ _keyscan_host }}
+        cmd: ssh-keyscan -t ed25519,ecdsa -T 10 {{ _keyscan_host }}
       register: ssh_keyscan_result
       timeout: 15
       changed_when: false
