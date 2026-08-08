@@ -25,6 +25,11 @@
       failed_when: false
       tags: [always]
 
+    - name: Set molecule context flag
+      ansible.builtin.set_fact:
+        _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
+      tags: [always]
+
     - name: Assert config.yml contains no vault_* keys
       ansible.builtin.assert:
         that: >-
@@ -54,7 +59,7 @@
       tags: [always]
 
     - name: Non-molecule pre-flight assertions
-      when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+      when: not _pf_is_molecule
       block:
         - name: Assert system_timezone is not the CHANGE_ME placeholder
           ansible.builtin.assert:
@@ -106,4 +111,4 @@
       when:
         - vault_ssh_auth_key | default('') | length == 0
         - vault_stub_warned is not defined
-        - lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+        - not _pf_is_molecule

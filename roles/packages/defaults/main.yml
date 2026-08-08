@@ -83,7 +83,8 @@ packages_virtualization:
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
-  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults (always installed)
+  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults
+  # (always installed on Fedora; on RHEL/Rocky these are absent from the host and instead in the distrobox container)
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
