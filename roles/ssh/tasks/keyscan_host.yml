@@ -12,6 +12,9 @@
       failed_when: >-
         ssh_keyscan_result.rc != 0 or
         ssh_keyscan_result.stdout | length == 0
+      retries: 3
+      delay: 5
+      until: ssh_keyscan_result.rc == 0 and ssh_keyscan_result.stdout | length > 0
 
     - name: Seed known_hosts entries for {{ _keyscan_host }}
       ansible.builtin.known_hosts:
