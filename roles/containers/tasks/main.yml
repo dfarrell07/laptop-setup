@@ -8,6 +8,8 @@
 - name: Flush handlers before container registry auth
   ansible.builtin.meta: flush_handlers
 
+# This assertion catches manual overrides of containers_nofile_hard_limit only;
+# with the default formula (limit * 8) it is always satisfied.
 - name: Assert nofile soft limit does not exceed hard limit
   ansible.builtin.assert:
     that: containers_nofile_limit | int <= containers_nofile_hard_limit | int

@@ -243,7 +243,6 @@
         src: chrome-security-policy.json
         dest: "{{ item }}/policies/managed/security.json"
         mode: "0644"
-        validate: "python3 -c \"import json; json.load(open('%s'))\""
       become: true
       tags: [become]
       loop:

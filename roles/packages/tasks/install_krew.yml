@@ -5,7 +5,7 @@
 
 - name: Install krew
   block:
-    - name: Check if krew is installed at target version
+    - name: Check if krew is installed
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
       register: packages_krew_check
