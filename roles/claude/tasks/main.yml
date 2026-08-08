@@ -121,13 +121,6 @@
   when: is_linux
   notify: Apply claude-privacy tmpfiles
 
-- name: Set ~/.claude directory permissions (macOS fallback)
-  ansible.builtin.file:
-    path: "{{ claude_default_config_dir }}"
-    mode: "0700"
-  when: is_macos
-  failed_when: false
-
 # --- Git safety (defense-in-depth) ---
 # core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
 - name: Remove unsafe safe.directory wildcard entries  # noqa: command-instead-of-module risky-shell-pipe
