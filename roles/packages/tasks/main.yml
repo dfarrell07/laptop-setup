@@ -93,6 +93,10 @@
 - name: Install binary downloads
   ansible.builtin.import_tasks: install_binary_downloads.yml
 
+- name: Install standalone binaries
+  ansible.builtin.include_tasks: install_standalone_binaries.yml
+  when: packages_install_binaries | bool
+
 # --- Go install tools ---
 
 - name: Install Go tools

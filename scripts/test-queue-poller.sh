@@ -81,7 +81,7 @@ trap 'rm -rf "$_TMPBIN" "$_TMPHOME" "$_TMPLOCKDIR"' EXIT
 printf '#!/bin/bash\nexit 0\n' > "$_TMPBIN/gh"
 chmod +x "$_TMPBIN/gh"
 
-mkdir -p "$_TMPHOME/.config/claude" "$_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_TMPHOME/.config/claude"
 printf 'REPO_PATH[test]="/tmp/stub"\nREPO_REMOTE[test]="a/b"\n' \
   > "$_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -196,7 +196,7 @@ exit 0
 CLAUDEOF
 chmod +x "$_INT_TMPBIN/claude-stub"
 
-mkdir -p "$_INT_TMPHOME/.config/claude" "$_INT_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_INT_TMPHOME/.config/claude"
 printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_INT_TMPREPO" > "$_INT_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -262,7 +262,7 @@ exit 0
 CLAUDEOF
 chmod +x "$_NC_TMPBIN/claude-stub"
 
-mkdir -p "$_NC_TMPHOME/.config/claude" "$_NC_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_NC_TMPHOME/.config/claude"
 printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_NC_TMPREPO" > "$_NC_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -328,7 +328,7 @@ exit 1
 CLAUDEOF
 chmod +x "$_CE_TMPBIN/claude-stub"
 
-mkdir -p "$_CE_TMPHOME/.config/claude" "$_CE_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_CE_TMPHOME/.config/claude"
 printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_CE_TMPREPO" > "$_CE_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -369,7 +369,7 @@ trap 'rm -rf "$_TMPBIN" "$_TMPHOME" "$_TMPLOCKDIR" "$_ERRBIN" "$_FLOCK_TMPLOCKDI
 
 printf '#!/bin/bash\nexit 0\n' > "$_FLOCK_TMPBIN/gh"
 chmod +x "$_FLOCK_TMPBIN/gh"
-mkdir -p "$_FLOCK_TMPHOME/.config/claude" "$_FLOCK_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_FLOCK_TMPHOME/.config/claude"
 printf 'REPO_PATH[test]="/tmp/stub"\nREPO_REMOTE[test]="a/b"\n' \
   > "$_FLOCK_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -429,7 +429,7 @@ exit 0
 CLAUDEOF
 chmod +x "$_HL_SET_TMPBIN/claude-stub"
 
-mkdir -p "$_HL_SET_TMPHOME/.config/claude" "$_HL_SET_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_HL_SET_TMPHOME/.config/claude"
 printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_HL_SET_TMPREPO" > "$_HL_SET_TMPHOME/.config/claude/queue-repos.conf"
 
@@ -492,7 +492,7 @@ exit 0
 CLAUDEOF
 chmod +x "$_HL_UNSET_TMPBIN/claude-stub"
 
-mkdir -p "$_HL_UNSET_TMPHOME/.config/claude" "$_HL_UNSET_TMPHOME/.local/share/claude-queue/logs"
+mkdir -p "$_HL_UNSET_TMPHOME/.config/claude"
 printf 'REPO_PATH[testrepo]="%s"\nREPO_REMOTE[testrepo]="owner/testrepo"\n' \
   "$_HL_UNSET_TMPREPO" > "$_HL_UNSET_TMPHOME/.config/claude/queue-repos.conf"
 
