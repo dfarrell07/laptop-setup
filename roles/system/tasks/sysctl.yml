@@ -26,6 +26,13 @@
       because the key is write-once locked at boot on stock Fedora 44 via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y.
       {% endif %}
 
+- name: Warn if unprivileged_bpf_disabled override cannot apply on stock Fedora
+  when: not system_is_container and (is_fedora | bool) and (system_unprivileged_bpf_disabled | int != 2)
+  ansible.builtin.debug:
+    msg: >-
+      system_unprivileged_bpf_disabled={{ system_unprivileged_bpf_disabled }} will fail with EPERM on
+      stock Fedora 44 (write-once boot lock). Requires custom kernel without CONFIG_BPF_UNPRIV_DEFAULT_OFF=y.
+
 # net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
 # recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
 # (OVN-K, Submariner). No conditional override is applied.
