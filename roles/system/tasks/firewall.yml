@@ -170,6 +170,18 @@
     - system_firewall_manage_zone | bool
   notify: Apply firewall rules
 
+- name: Open/close Cockpit port in drop zone (9090/tcp — enabled when system_enable_cockpit is true)
+  ansible.posix.firewalld:
+    zone: drop
+    port: "9090/tcp"
+    permanent: true
+    immediate: true
+    state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  notify: Apply firewall rules
+
 # Fallback for RHEL CSB machines where IT manages firewall zone policy
 # (system_firewall_manage_zone=false) and the primary interface stays in whatever
 # the default zone is. On Fedora hybrid, system_firewall_manage_zone=true so the
