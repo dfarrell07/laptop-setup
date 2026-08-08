@@ -242,6 +242,7 @@
   when:
     - is_linux
     - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+    - containers_prune_enabled | bool
   register: containers_prune_service
 
 - name: Deploy podman-prune.timer
@@ -252,6 +253,7 @@
   when:
     - is_linux
     - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+    - containers_prune_enabled | bool
   register: containers_prune_timer
 
 - name: Reload systemd user daemon after deploying prune units  # noqa: no-handler
@@ -261,6 +263,7 @@
   when:
     - is_linux
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
+    - containers_prune_enabled | bool
     - containers_prune_service.changed or containers_prune_timer.changed
   failed_when: false
 
@@ -273,6 +276,7 @@
   when:
     - is_linux
     - not (system_is_container)  # scope:user systemd start crashes Podman container PID 1
+    - containers_prune_enabled | bool
   failed_when: false
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
