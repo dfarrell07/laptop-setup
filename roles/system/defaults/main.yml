@@ -303,8 +303,10 @@ system_dns_domains: "~."
 system_crypto_policy_target: DEFAULT:NO-SHA1
 
 # /tmp mount hardening (CIS 1.1.2.x): noexec,nosuid,nodev via systemd drop-in.
-# Set false if non-Go dev tools (pip, cargo, etc.) need to exec from /tmp; nosuid/nodev are preserved.
-system_tmp_noexec: true
+# Default false: Fedora mounts /tmp with nosuid,nodev but not noexec; setting noexec breaks pip,
+# cargo, rustup, npm (native addons), and any tool that compiles and execs a binary from /tmp.
+# Set true in config.yml for stricter postures (CIS 1.1.2.x compliance); nosuid/nodev are always applied.
+system_tmp_noexec: false
 # /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
 # Default false: the bind-mount makes /var/tmp a tmpfs alias of /tmp — all contents are silently
 # lost on reboot, breaking dracut on kernel updates (FHS requires /var/tmp to persist across boots).

@@ -32,7 +32,7 @@ packages_cli:
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
-packages_languages: []  # intentionally empty; override in config.yml or molecule to add language runtimes
+packages_languages: []  # intentionally empty by default; override in config.yml to add language runtimes (e.g. - python3 - rust)
 
 # Work-profile-only language tools (OVN-K/Submariner host builds; personal profile does no host Go
 # development — gcc is CGO-only, but golang is needed for any Go build)

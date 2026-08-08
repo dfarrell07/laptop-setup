@@ -11,7 +11,7 @@ containers_pids_limit: 65536  # sized for kind node process density; Podman defa
 containers_nofile_limit: 65536
 # hard limit for all Podman containers; 8× nofile_limit; per-container burst ceiling
 # If overriding this, ensure it is >= containers_nofile_limit or Podman will reject the config.
-containers_nofile_hard_limit: "{{ containers_nofile_limit * 8 }}"
+containers_nofile_hard_limit: "{{ containers_nofile_limit | int * 8 }}"
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
