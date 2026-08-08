@@ -43,7 +43,7 @@ packages_security:
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
   - libfido2  # explicit for RHEL/Rocky (not a transitive dep there); Fedora 44 gets it via libssh
   - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
-  - sos      # Red Hat support diagnostic bundle tool (sosreport); work profile only
+  - sos      # Red Hat support diagnostic bundle tool (sosreport); all profiles
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
@@ -127,7 +127,8 @@ packages_apt:
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
 
 # Work-profile-only apt packages (Debian/Ubuntu).
-# Mirrors packages_brew_work — installed only when profile == 'work'.
+# Work-profile apt extras — installed only when profile == 'work'.
+# Kubernetes CLIs (kubectl/kind/helm/kustomize) come from binary downloads, not apt.
 packages_apt_work:
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
   # GOTOOLCHAIN=auto (set in packages tasks) downloads the toolchain on demand.
