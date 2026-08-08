@@ -244,9 +244,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_logind_idle_sec: 600           (roles/system/defaults) — seconds idle before logind locks screen
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
-#   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit; raise both limits together
-#   containers_nofile_hard_limit: 524288  (roles/containers/defaults) — per-container FD burst ceiling (8× nofile_limit);
-#     global open-file hard limit; must be >= containers_nofile_limit or Podman will reject the config
+#   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
+#   containers_nofile_hard_limit: 524288  (roles/containers/defaults) — auto-scales to 8× containers_nofile_limit;
+#                                        override only when a different ratio is needed
 #   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries for podman login; work auto-adds registry.redhat.io
 #                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io
 #                                        (and registry.redhat.io for work profile) explicitly, or use containers_registries_extra to append
