@@ -184,7 +184,7 @@
 - name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
-    zone: "{{ system_firewall_csb_zone }}"
+    zone: "redhat"
     permanent: true
     immediate: true
     state: enabled
@@ -201,7 +201,7 @@
 
 - name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
   ansible.posix.firewalld:
-    zone: "{{ system_firewall_csb_zone }}"
+    zone: "redhat"
     service: ssh
     permanent: true
     immediate: true

@@ -131,12 +131,12 @@
         for pat in '^\*$' '^\*\*$' '^/$'; do
           git config --global --unset-all safe.directory "$pat" 2>/dev/null || true
         done
-        exit 0
+        echo CHANGED; exit 0
       fi
-      exit 1
+      exit 0
     executable: /bin/bash
   register: claude_safe_dir
-  changed_when: claude_safe_dir.rc == 0
+  changed_when: "'CHANGED' in claude_safe_dir.stdout"
   failed_when: false
 
 # --- Task queue (systemd timer + poller script) ---
