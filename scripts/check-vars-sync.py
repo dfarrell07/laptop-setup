@@ -103,6 +103,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "repo_tailscale": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "install_docker": [
         REPO_ROOT / "roles/containers/defaults/main.yml",

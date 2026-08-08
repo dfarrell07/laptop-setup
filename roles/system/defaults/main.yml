@@ -11,6 +11,7 @@ system_sysctl_hardening:
   # (90-hardening.conf wins lexicographically over third-party drop-ins). Review vs
   # /usr/lib/sysctl.d/*.conf on each Fedora major upgrade — if Fedora strengthens a
   # default value, update here to match.
+  # Highest-risk duplicate to drift on upgrade: kernel.perf_event_paranoid (2 on F44; Fedora has used 3 previously).
   # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   kernel.perf_event_paranoid: 2    # Fedora 44 default; all perf_event_open requires CAP_PERFMON
@@ -385,8 +386,9 @@ system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1
 system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl);
                                    # CIS defense-in-depth independent of lockdown; set 0 in config.yml
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
-                                   # NOTE: lockdown=integrity (system_kernel_lockdown default) also blocks kexec_load();
-                                   # this sysctl is defense-in-depth for configs where lockdown is disabled.
+                                   # NOTE: lockdown=integrity (system_kernel_lockdown default) blocks kexec_load() at
+                                   # the kernel level, making this sysctl a no-op at runtime in the default config.
+                                   # This sysctl is the sole guard when system_kernel_lockdown is empty.
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1
