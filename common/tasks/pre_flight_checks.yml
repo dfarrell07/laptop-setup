@@ -103,4 +103,7 @@
           ansible.builtin.set_fact:
             vault_stub_warned: true
           tags: [always]
-      when: vault_ssh_auth_key | default('') | length == 0 and vault_stub_warned is not defined
+      when:
+        - vault_ssh_auth_key | default('') | length == 0
+        - vault_stub_warned is not defined
+        - lookup('env', 'MOLECULE_SCENARIO_NAME') == ''

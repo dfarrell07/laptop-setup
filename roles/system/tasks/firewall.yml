@@ -41,7 +41,7 @@
   changed_when: "'success' in _zone_result.stdout"
   when:
     - system_firewalld_running | bool
-    - system_firewall_info.firewalld_info.default_zone | default('drop') != 'drop'
+    - system_firewall_info.firewalld_info.default_zone | default('unknown') != 'drop'
     - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Apply firewall rules

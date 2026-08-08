@@ -346,6 +346,15 @@
     - is_macos
     - claude_queue_enabled | bool or claude_remote_control_enabled | bool
 
+- name: Ensure log directory exists (Linux)
+  ansible.builtin.file:
+    path: "{{ claude_log_dir }}"
+    state: directory
+    mode: "0755"
+  when:
+    - is_linux
+    - claude_queue_enabled | bool
+
 - name: Manage enabled launchd agents (macOS)
   ansible.builtin.include_tasks: launchd_load.yml
   vars:
