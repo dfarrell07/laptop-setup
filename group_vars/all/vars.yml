@@ -97,6 +97,7 @@ system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OV
 system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
 system_unprivileged_bpf_disabled: 2  # write-once on Fedora 44 (BPF_UNPRIV_DEFAULT_OFF); value 1 requires custom kernel
 system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
+system_enable_ip_forward: true     # net.ipv4.ip_forward + net.ipv6.conf.all.forwarding; false on terminal-only hosts
 system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
 system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS
 system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)

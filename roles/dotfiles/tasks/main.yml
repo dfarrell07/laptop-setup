@@ -83,11 +83,14 @@
     dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
     mode: "0644"
 
-- name: Migrate legacy ~/.gitconfig to XDG path
-  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/xdg_migrate.yml"
+- name: Migrate legacy dotfiles to XDG paths
+  ansible.builtin.include_tasks: '{{ common_project_root }}/common/tasks/xdg_migrate.yml'
   vars:
-    _legacy_path: "{{ ansible_facts['user_dir'] }}/.gitconfig"
-    _backup_path: "{{ ansible_facts['user_dir'] }}/.gitconfig.pre-xdg-migration"
+    _legacy_path: '{{ item.legacy }}'
+    _backup_path: '{{ item.backup }}'
+  loop:
+    - {legacy: '~/.gitconfig', backup: '~/.gitconfig.pre-xdg-migration'}
+    - {legacy: '~/.tmux.conf', backup: '~/.tmux.conf.pre-xdg-migration'}
 
 - name: Deploy gitconfig
   ansible.builtin.template:
@@ -143,12 +146,6 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
     force: false
-- name: Migrate legacy ~/.tmux.conf to XDG path
-  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/xdg_migrate.yml"
-  vars:
-    _legacy_path: "{{ ansible_facts['user_dir'] }}/.tmux.conf"
-    _backup_path: "{{ ansible_facts['user_dir'] }}/.tmux.conf.pre-xdg-migration"
-
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2
