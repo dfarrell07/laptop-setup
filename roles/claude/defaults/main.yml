@@ -8,6 +8,7 @@ dotfiles_github_user: "CHANGE_ME"  # shared cross-role variable, intentionally u
 claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 claude_pinned_version: ""  # pin to a specific version (e.g. "1.0.3"); empty = latest
+claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
@@ -30,7 +31,8 @@ claude_cleanup_period_days: 7
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
-claude_queue_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude-queue/logs"
+claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
+claude_queue_log_dir: "{{ claude_log_dir }}"  # backward-compat alias; use claude_log_dir in new references
 claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_queue_repo: ""
 claude_queue_poll_interval_sec: 120

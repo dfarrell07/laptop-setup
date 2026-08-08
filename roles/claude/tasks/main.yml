@@ -231,7 +231,7 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      {{ claude_queue_log_dir }}/poller.log {
+      {{ claude_log_dir }}/poller.log {
           su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
           daily
           rotate 14
@@ -339,7 +339,7 @@
 # --- macOS: launchd services ---
 - name: Ensure log directory exists (macOS)
   ansible.builtin.file:
-    path: "{{ claude_queue_log_dir }}"
+    path: "{{ claude_log_dir }}"
     state: directory
     mode: "0755"
   when:

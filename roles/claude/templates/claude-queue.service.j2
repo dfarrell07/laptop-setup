@@ -9,12 +9,12 @@ Type=oneshot
 TimeoutStopSec={{ claude_queue_timeout | int + 300 }}
 ExecStart={{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh
 Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo }}
-Environment=CLAUDE_BIN={{ ansible_facts['user_dir'] }}/.local/bin/claude
+Environment=CLAUDE_BIN={{ claude_bin_path }}
 Environment=CLAUDE_QUEUE_MAX_TURNS={{ claude_queue_max_turns }}
 Environment=CLAUDE_QUEUE_TIMEOUT={{ claude_queue_timeout }}
 Environment=CLAUDE_QUEUE_HOST_LABEL={{ claude_queue_host_label }}
 Environment=CLAUDE_CONFIG_DIR={{ claude_queue_config_dir }}
-Environment=CLAUDE_QUEUE_LOG_DIR={{ claude_queue_log_dir }}
+Environment=CLAUDE_QUEUE_LOG_DIR={{ claude_log_dir }}
 UnsetEnvironment=ANTHROPIC_BASE_URL HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 MemoryMax={{ claude_queue_memory_max }}
 CPUQuota={{ claude_queue_cpu_quota }}
