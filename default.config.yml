@@ -193,8 +193,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
 #   system_chrony_service_enabled: "{{ not system_is_container }}"
 #                                        (roles/system/defaults) — auto-disabled in containers; set true to force-enable
-#   system_tmp_noexec: true            (roles/system/defaults) — noexec on /tmp (CIS 1.1.2.x); set false if non-Go dev tools need to exec
-#                                        from /tmp (nosuid/nodev preserved)
+#   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
+#                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
 #   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
 #                                        (data lost on reboot); default false — set true only on hardened non-dev hosts where
 #                                        /var/tmp persistence is not needed and dracut kernel updates are not a concern
