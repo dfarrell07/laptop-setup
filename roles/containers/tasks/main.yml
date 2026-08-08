@@ -279,6 +279,43 @@
     - containers_prune_enabled | bool
   failed_when: false
 
+# --- Disable podman-prune when not enabled (cleanup if previously enabled) ---
+- name: Stop and disable podman-prune.timer (when disabled)
+  ansible.builtin.systemd:
+    name: podman-prune.timer
+    scope: user
+    state: stopped
+    enabled: false
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user systemd stop crashes Podman container PID 1
+  failed_when: false
+
+- name: Remove podman-prune systemd unit files (when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/{{ item }}"
+    state: absent
+  loop:
+    - podman-prune.service
+    - podman-prune.timer
+  register: _prune_unit_removal
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # files do not exist in containers (deploy was skipped)
+
+- name: Reload systemd user daemon after removing podman-prune unit files  # noqa: no-handler
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
+    - _prune_unit_removal.changed
+  failed_when: false
+
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
 - name: Deploy containers environment.d config (KIND and Podman socket)
   ansible.builtin.copy:
