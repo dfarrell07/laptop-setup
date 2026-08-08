@@ -33,10 +33,9 @@
   # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
   # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
   failed_when: >
-    sysctl_system_result.rc != 0 and
-    'No such file or directory' not in sysctl_system_result.stderr and
-    'invalid argument' not in sysctl_system_result.stderr | lower and
-    'permission denied' not in sysctl_system_result.stderr | lower
+    sysctl_system_result.stderr_lines |
+    reject('search', 'No such file or directory|invalid argument|permission denied', 'i') |
+    list | length > 0 and sysctl_system_result.rc != 0
   when: not system_is_container
 
 - name: Restart tlp
