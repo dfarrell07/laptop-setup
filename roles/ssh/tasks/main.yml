@@ -123,12 +123,6 @@
 
 - name: Ensure git allowed signers files are in place
   block:
-    - name: Ensure git config directory exists for allowed signers
-      ansible.builtin.file:
-        path: "{{ ansible_facts['user_dir'] }}/.config/git"
-        state: directory
-        mode: "0755"
-
     - name: Deploy allowed signers file
       ansible.builtin.template:
         src: allowed_signers.j2
