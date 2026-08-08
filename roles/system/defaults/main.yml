@@ -242,7 +242,8 @@ _system_sysctl_performance_defaults:
   # Pinned here so 90-hardening.conf wins lexicographically and continuity is preserved if 10-map-count.conf changes.
   vm.max_map_count: 1048576
 system_sysctl_extra: "{{ (_system_sysctl_work_defaults if profile == 'work' else {}) | combine(_system_sysctl_performance_defaults) }}"
-system_sysctl_extra_additional: {}  # safe per-machine append; avoids replacing system_sysctl_extra defaults
+# WARNING: highest combine() precedence — silently overrides any matching key in system_sysctl_hardening or system_sysctl_extra
+system_sysctl_extra_additional: {}
 system_disable_usb_storage: true  # kernel-blocks usb_storage/uas; set false if USB drives needed; authoritative in group_vars/all/vars.yml
 system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
 # Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
