@@ -222,7 +222,7 @@
         state: started
         enabled: true
       register: _timer_enable
-      ignore_errors: true
+      ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if timer enable failed (no active user systemd session)
   ansible.builtin.debug:
