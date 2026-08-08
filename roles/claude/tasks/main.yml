@@ -126,7 +126,7 @@
   ansible.builtin.shell:
     cmd: |
       set -o pipefail
-      found=$(git config --global --get-all safe.directory 2>/dev/null | grep -cE '^\*{1,2}$|^/$' || echo 0)
+      found=$(git config --global --get-all safe.directory 2>/dev/null | grep -cE '^\*{1,2}$|^/$' || true)
       if [[ "$found" -gt 0 ]]; then
         for pat in '^\*$' '^\*\*$' '^/$'; do
           git config --global --unset-all safe.directory "$pat" 2>/dev/null || true
