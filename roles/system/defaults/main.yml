@@ -394,8 +394,8 @@ system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by
                                    # CIS defense-in-depth independent of lockdown; set 0 in config.yml
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
                                    # NOTE: lockdown=integrity (system_kernel_lockdown default) blocks kexec_load() at
-                                   # the kernel level, making this sysctl a no-op at runtime in the default config.
-                                   # This sysctl is the sole guard when system_kernel_lockdown is empty.
+                                   # the kernel level, making this sysctl security-redundant after the first reboot
+                                   # (still applied; sole guard pre-reboot and when system_kernel_lockdown is empty).
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1
