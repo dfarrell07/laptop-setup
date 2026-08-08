@@ -32,7 +32,8 @@
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}
-          # CIS 1.5.1: restrict core dumps for PAM-managed sessions (interactive shells, su, sshd). Systemd service daemons are covered by Storage=none in coredump.conf.j2.
+          # CIS 1.5.1: restrict core dumps for PAM-managed sessions (interactive shells, su, sshd).
+          # Systemd service daemons are covered by Storage=none in coredump.conf.j2.
           # Hard limit prevents users from overriding the soft limit.
           *    hard    core    0
           root hard    core    0
