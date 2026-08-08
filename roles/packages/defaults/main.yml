@@ -16,7 +16,8 @@ packages_cli:
   - direnv
   - vim-enhanced  # provides /usr/bin/vim binary; neovim does not symlink vim on Fedora (smoke-test checks command -v vim)
   - neovim
-  - zsh-autosuggestions  # depends on zsh (pulled in automatically)
+  - zsh  # login shell (set by desktop role); explicit to prevent autoremovable-orphan if plugins drop
+  - zsh-autosuggestions  # zsh-autosuggestions plugin for explicit-zsh install above
   - zsh-syntax-highlighting
   - fzf
   - pipx
@@ -87,7 +88,7 @@ packages_networking:
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
 
-# Work-profile-only networking tools (OVN-K/bpfman development at Red Hat)
+# Work-profile-only networking tools (OVN-K development at Red Hat)
 packages_networking_work:
   - ovn            # Open Virtual Network (OVN-K dep; pulls in openvswitch automatically)
   - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K)

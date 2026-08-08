@@ -41,8 +41,8 @@ system_sysctl_hardening:
   # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
-  net.ipv4.conf.all.secure_redirects: 0  # no-op when accept_redirects=0 (above); retained as defense-in-depth if accept_redirects is re-enabled via system_sysctl_extra
-  net.ipv4.conf.default.secure_redirects: 0  # no-op when accept_redirects=0 (above); retained as defense-in-depth if accept_redirects is re-enabled via system_sysctl_extra
+  net.ipv4.conf.all.secure_redirects: 0  # no-op when accept_redirects=0; defense-in-depth if re-enabled
+  net.ipv4.conf.default.secure_redirects: 0  # no-op when accept_redirects=0; defense-in-depth if re-enabled
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
   # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
   # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash
@@ -361,7 +361,7 @@ csb_detected: false        # authoritative in group_vars/all/vars.yml; here for 
 is_fedora: false           # authoritative in group_vars/all/vars.yml; here for standalone invocability
 system_disable_avahi: true        # mask avahi-daemon; false enables .local; authoritative in group_vars/all/vars.yml
 system_mask_nfs_server: true      # NFS mask (CIS 2.2.7); false: unmasks but NOT auto-started, enable manually; group_vars authoritative
-                                  # nfs-server off by Fedora Workstation vendor preset; mask enforces CIS 2.2.7, prevents accidental enable
+                                  # nfs-server disabled by vendor preset; mask enforces CIS 2.2.7, prevents accidental enable
 system_init_on_free: true         # zero freed memory pages (init_on_free=1); authoritative in group_vars/all/vars.yml
 system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative
 install_vpn: true           # fallback; authoritative value in group_vars/all/vars.yml
