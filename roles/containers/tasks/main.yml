@@ -173,7 +173,7 @@
     - is_linux
     - install_docker
     - not (system_is_container)
-  failed_when: false
+  ignore_errors: true
 
 - name: Warn if Docker socket enable failed
   ansible.builtin.debug:
@@ -201,7 +201,7 @@
     - is_linux
     - not install_docker
     - not (system_is_container)  # masked: true → inotify → daemon-reload → container crash
-  failed_when: false
+  ignore_errors: true
 
 - name: Warn if Docker socket disable failed
   ansible.builtin.debug:
