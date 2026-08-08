@@ -58,7 +58,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        prefer system_usbguard_extra_rules to append
 #   packages_install_binaries: true    (group_vars/all/vars.yml)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
-#   packages_brew: [ansible, git, git-lfs, openssh, libfido2, ykman, ykpers, tmux, mosh, jq, yq, fzf, ...]  (roles/packages/defaults) —
+#   packages_brew: [ansible, git, git-lfs, openssh, tmux, mosh, jq, yq, direnv, fzf, zoxide, ...]  (roles/packages/defaults) —
 #     universal Homebrew packages (all profiles on macOS); override in config.yml to add/remove packages
 #   packages_brew_cask: [alacritty, google-chrome, bitwarden, keepassxc, slack, lulu, nikitabobko/tap/aerospace] (roles/packages/defaults) —
 #     GUI Homebrew Cask apps (all profiles on macOS); override in config.yml to add/remove
@@ -68,7 +68,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     (roles/packages/defaults) — work Homebrew pkgs; add k9s/krew for work macOS
 #   packages_containers_work: [buildah, skopeo]  (roles/packages/defaults) — work-profile-only OCI build tools;
 #     personal profile gets podman/distrobox only
-#   packages_apt_work: [golang, gcc, nmap, socat]  (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
+#   packages_apt_work: [golang, gcc, nmap, socat, skopeo]  (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
 #   packages_languages_work: [golang, gcc]  (roles/packages/defaults) — work-profile-only compiler toolchain (CGO builds);
 #     personal profile gets python3-pip only
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
