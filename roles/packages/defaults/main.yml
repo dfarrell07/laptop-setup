@@ -33,7 +33,8 @@ packages_cli:
 
 packages_languages: []  # intentionally empty; override in config.yml or molecule to add language runtimes
 
-# Work-profile-only language tools (CGO builds — OVN-K, Submariner; not needed for pure-Go personal builds)
+# Work-profile-only language tools (OVN-K/Submariner host builds; personal profile does no host Go
+# development — gcc is CGO-only, but golang is needed for any Go build)
 packages_languages_work:
   - golang
   - gcc           # needed for Go CGO builds

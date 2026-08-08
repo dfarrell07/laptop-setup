@@ -13,13 +13,13 @@
       Use system_ipv6_accept_ra: 2 to enable SLAAC.
 
 - name: Warn if unprivileged_bpf_disabled override cannot apply on stock Fedora
-  when: not system_is_container and (is_fedora | bool)
+  when: not system_is_container and (is_fedora | bool) and (system_unprivileged_bpf_disabled | int != 2)
   ansible.builtin.debug:
     msg: >-
       kernel.unprivileged_bpf_disabled={{ system_unprivileged_bpf_disabled }} written to 90-hardening.conf;
       the key is boot-locked to 2 by CONFIG_BPF_UNPRIV_DEFAULT_OFF=y on stock Fedora 44 so EPERM from
-      the sysctl apply handler is expected and harmless.{% if system_unprivileged_bpf_disabled | int != 2 %}
-      Overriding to {{ system_unprivileged_bpf_disabled }} requires a custom kernel without CONFIG_BPF_UNPRIV_DEFAULT_OFF=y.{% endif %}
+      the sysctl apply handler is expected and harmless.
+      Overriding to {{ system_unprivileged_bpf_disabled }} requires a custom kernel without CONFIG_BPF_UNPRIV_DEFAULT_OFF=y.
 
 # net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
 # recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
