@@ -9,10 +9,9 @@ containers_config_dir: "{{ ansible_facts['user_dir'] }}/.config/containers"
 containers_log_driver: "k8s-file"
 containers_pids_limit: 65536  # sized for kind node process density; Podman default is 2048
 containers_nofile_limit: 65536
-# hard limit for all Podman containers; sized for multi-cluster kind (8 nodes × nofile_limit)
+# hard limit for all Podman containers; 8× nofile_limit; per-container burst ceiling
 # If overriding this, ensure it is >= containers_nofile_limit or Podman will reject the config.
-containers_kind_max_nodes: 8
-containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * containers_kind_max_nodes }}"
+containers_nofile_hard_limit: 524288  # 8× nofile_limit; per-container burst ceiling
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
