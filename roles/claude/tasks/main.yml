@@ -306,6 +306,11 @@
     - not (system_is_container)
 
 # --- macOS: launchd agent list (single source of truth for cleanup and load loops) ---
+- name: Initialize launchd agent list (non-macOS default)
+  ansible.builtin.set_fact:
+    _claude_launchd_agents: []
+  when: not is_macos
+
 - name: Set macOS launchd agent list
   ansible.builtin.set_fact:
     _claude_launchd_agents:
