@@ -40,7 +40,7 @@ claude_queue_max_turns: 50    # --max-turns passed to claude; limits runaway ses
 claude_queue_timeout: 1800    # seconds before SIGTERM is sent to claude process
 claude_queue_host_label: ""   # optional human-readable label posted in issue comments; leave empty to omit host identity
 claude_queue_config_dir: "{{ claude_work_config_dir }}"  # config dir for queue daemon; override to use a different instance
-claude_remote_control_enabled: false  # macOS-only (launchd); setting true on Linux aborts provisioning with fail (no systemd unit)
+claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warning only, no unit; run claude --remote-control manually
 claude_remote_control_config_dir: "{{ claude_personal_config_dir }}"  # config dir for remote-control; override to use a different instance
 
 claude_deny_sensitive:

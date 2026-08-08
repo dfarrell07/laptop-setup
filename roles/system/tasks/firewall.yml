@@ -38,9 +38,7 @@
   ansible.builtin.command:  # noqa: command-instead-of-module
     cmd: firewall-cmd --set-default-zone=drop
   register: _zone_result
-  changed_when: >-
-    _zone_result.rc == 0 and
-    system_firewall_info.firewalld_info.default_zone | default('') != 'drop'
+  changed_when: _zone_result.rc == 0
   when:
     - system_firewalld_running | bool
     - system_firewall_info.firewalld_info.default_zone | default('') != 'drop'

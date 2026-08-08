@@ -339,7 +339,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   ssh_ciphers: 'aes256-gcm@openssh.com,...'  (group_vars/all/vars.yml) — cipher list for both ssh client and sshd
 #   ssh_macs: 'hmac-sha2-512-etm@openssh.com,...'  (group_vars/all/vars.yml) — MAC list for both ssh client and sshd
 #   ssh_kex_algorithms: 'mlkem768x25519-sha256,...'  (group_vars/all/vars.yml) — KexAlgorithms for sshd
-#     only; ssh client uses a separate hardcoded list in ssh_config.j2
+#     only; ssh client uses a capability-detected list in ssh_config.j2 (dotfiles_ssh_kex_pq_enabled)
 #   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)

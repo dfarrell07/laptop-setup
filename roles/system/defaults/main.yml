@@ -74,7 +74,7 @@ system_sysctl_hardening:
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
   net.ipv6.conf.all.use_tempaddr: 2  # no-op when system_ipv6_accept_ra=0 (SLAAC off; no temp addresses assigned)
-  net.ipv6.conf.default.use_tempaddr: 2
+  net.ipv6.conf.default.use_tempaddr: 2  # no-op when system_ipv6_accept_ra=0; required when SLAAC enabled to prevent EUI-64 leakage
   # Fedora 41+ default (IncreaseVmMaxMapCount); duplicates /usr/lib/sysctl.d/10-map-count.conf exactly.
   # Pinned here so 90-hardening.conf wins lexicographically and continuity is preserved if 10-map-count.conf changes.
   vm.max_map_count: 1048576
