@@ -8,12 +8,15 @@ system_sysctl_hardening:
   # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
   # MAINTENANCE: Values below that match Fedora defaults are pinned intentionally
-  # (90-hardening.conf wins lexicographically over third-party drop-ins). Review vs
-  # /usr/lib/sysctl.d/*.conf on each Fedora major upgrade — if Fedora strengthens a
-  # default value, update here to match.
+  # (90-hardening.conf wins lexicographically over third-party drop-ins). On each Fedora
+  # major upgrade, review against TWO sources: (1) /usr/lib/sysctl.d/*.conf for vendor
+  # sysctl.d keys (e.g. fs.protected_hardlinks from 50-default.conf); (2) kernel
+  # compile-time config and Documentation/admin-guide/sysctl/ for keys not present in
+  # any vendor sysctl.d file (e.g. dmesg_restrict, perf_event_paranoid below).
   # Highest-risk duplicate to drift on upgrade: kernel.perf_event_paranoid (2 on F44; Fedora has used 3 previously).
-  # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
+  # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
+  # source: kernel compile-time default, not a Fedora sysctl.d file; Fedora has changed this in the past
   kernel.perf_event_paranoid: 2    # Fedora 44 default; all perf_event_open requires CAP_PERFMON
   # set 1 in config.yml via system_sysctl_extra for host-side profiling (user-space perf without CAP_PERFMON)
   # value 3 = requires CAP_SYS_ADMIN (strictest)
