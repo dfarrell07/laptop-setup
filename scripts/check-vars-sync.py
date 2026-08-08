@@ -155,9 +155,6 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",
     ],
-    "packages_yubikey_enabled": [
-        REPO_ROOT / "roles/packages/defaults/main.yml",
-    ],
 }
 
 # molecule files intentionally set distrobox_oc_version to a non-release value

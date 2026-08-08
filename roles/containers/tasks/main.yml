@@ -167,6 +167,7 @@
   register: _docker_socket_exists
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - is_linux
     - not (system_is_container)
