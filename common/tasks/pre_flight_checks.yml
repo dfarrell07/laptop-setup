@@ -43,6 +43,7 @@
 
     - name: Assert config.yml contains no indirection-layer secret keys
       ansible.builtin.assert:
+        # Update this list when new direct-secret keys are added to group_vars/all/vault.yml
         that: >-
           _user_config is not defined or
           (_user_config.keys() | select('in', ['ssh_auth_key', 'ssh_auth_key_pub',
