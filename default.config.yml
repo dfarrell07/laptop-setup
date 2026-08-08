@@ -68,12 +68,13 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     (roles/packages/defaults) — work Homebrew pkgs; add k9s/krew for work macOS
 #   packages_containers_work: [buildah, skopeo]  (roles/packages/defaults) — work-profile-only OCI build tools;
 #     personal profile gets podman/distrobox only
-#   packages_apt_work: [golang, gcc, nmap, socat, skopeo]  (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
+#   packages_apt_work: [golang, gcc, nmap, socat, tshark, buildah, skopeo]
+#     (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
 #   packages_languages_work: [golang, gcc]  (roles/packages/defaults) — work-profile-only compiler toolchain (CGO builds);
 #     personal profile gets python3-pip only
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
-#   packages_networking_work: [ovn, openvswitch, bpfman, bpftool, iproute-tc,
+#   packages_networking_work: [ovn, bpfman, bpftool, iproute-tc,
 #     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
 #   packages_support_work: [sos, strace, gdb, perf, bpftrace]  (roles/packages/defaults) — work-profile-only diagnostic/debugging tools;
@@ -338,9 +339,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
-#   dotfiles_internal_ca_path: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem  — CA cert for internal HTTPS hosts
-#     (RPM default; Debian default is /etc/ssl/certs/ca-certificates.crt; override with a specific anchor,
-#     e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem, to pin to one CA)
+#   dotfiles_internal_ca_path: auto  — CA cert for internal HTTPS hosts; role default is conditional:
+#     /etc/ssl/certs/ca-certificates.crt (apt) or /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem (rpm);
+#     no override needed for the standard system CA bundle; override only to pin a specific anchor,
+#     e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml, e.g. [gitlab.example.com, code.example.com]; empty = no work host keyscan

@@ -221,29 +221,27 @@
         path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
       register: desktop_csb_chrome
 
-    - name: Create managed policies directory
-      ansible.builtin.file:
-        path: "{{ item }}/policies/managed"
-        state: directory
-        mode: "0755"
+    - when: not desktop_csb_chrome.stat.exists
       become: true
       tags: [become]
-      loop:
-        - /etc/opt/chrome
-        - /etc/chromium
-      when: not (desktop_csb_chrome.stat.exists)
+      block:
+        - name: Create managed policies directory
+          ansible.builtin.file:
+            path: "{{ item }}/policies/managed"
+            state: directory
+            mode: "0755"
+          loop:
+            - /etc/opt/chrome
+            - /etc/chromium
 
-    - name: Deploy security policy
-      ansible.builtin.copy:
-        src: chrome-security-policy.json
-        dest: "{{ item }}/policies/managed/security.json"
-        mode: "0644"
-      become: true
-      tags: [become]
-      loop:
-        - /etc/opt/chrome
-        - /etc/chromium
-      when: not (desktop_csb_chrome.stat.exists)
+        - name: Deploy security policy
+          ansible.builtin.copy:
+            src: chrome-security-policy.json
+            dest: "{{ item }}/policies/managed/security.json"
+            mode: "0644"
+          loop:
+            - /etc/opt/chrome
+            - /etc/chromium
 
 # --- Shell ---
 - name: Set zsh as default shell

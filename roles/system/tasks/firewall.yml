@@ -93,6 +93,7 @@
   loop:
     - 1025-65535/tcp
     - 1025-65535/udp
+  # Both ranges confirmed present in firewalld 2.4.4 / Fedora 44 FedoraWorkstation.xml
   register: _system_fw_zone_port_remove
   when:
     - system_firewalld_running | bool
@@ -133,6 +134,18 @@
   ansible.posix.firewalld:
     zone: drop
     icmp_block: router-advertisement
+    permanent: true
+    immediate: true
+    state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+  notify: Apply firewall rules
+
+- name: Allow DHCPv6-client in drop zone (enabled when system_ipv6_accept_ra >= 2)
+  ansible.posix.firewalld:
+    zone: drop
+    service: dhcpv6-client
     permanent: true
     immediate: true
     state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
