@@ -9,8 +9,8 @@ containers_config_dir: "{{ ansible_facts['user_dir'] }}/.config/containers"
 containers_log_driver: "k8s-file"
 containers_pids_limit: 65536
 containers_nofile_limit: 65536
-# headroom for kind multi-cluster testing (multiple nodes each consuming up to containers_nofile_limit fds)
-containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"  # 8x = 8 kind nodes each consuming containers_nofile_limit fds
+# hard limit for all Podman containers; sized for multi-cluster kind (8 nodes × nofile_limit)
+containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"
 
 install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml

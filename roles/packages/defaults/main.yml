@@ -43,6 +43,7 @@ packages_security:
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
   - libfido2  # explicit for RHEL/Rocky (not a transitive dep there); Fedora 44 gets it via libssh
   - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
+  - sos      # Red Hat support diagnostic bundle tool (sosreport); work profile only
 
 packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
@@ -92,7 +93,6 @@ packages_networking_work:
   - iperf3         # network bandwidth measurement; work profile only
   - socat          # socket relay utility; work profile only (moved from packages_networking)
   - nmap           # network scanner; work profile only (OVN-K/Kubernetes debugging)
-  - sos            # Red Hat support diagnostic bundle tool (sosreport); used for CSB/RHEL support cases
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
