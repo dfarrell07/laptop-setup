@@ -66,13 +66,13 @@
 # Build the active instance list. Four cases:
 #   default only:    default + personal (always present)
 #   +work:           profile=work adds claude_work_config_dir
-#   +queue:          claude_queue_enabled adds work + claude_queue_config_dir (deduped when equal)
+#   +queue:          claude_queue_enabled adds claude_queue_config_dir (deduped when equal to work dir)
 #   +remote-control: is_macos + claude_remote_control_enabled adds claude_remote_control_config_dir
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:
     _claude_instances: >-
       {{ ([claude_default_config_dir, claude_personal_config_dir]
-          + ([claude_work_config_dir] if (profile == 'work' or claude_queue_enabled | bool) else [])
+          + ([claude_work_config_dir] if (profile == 'work') else [])
           + ([claude_queue_config_dir] if (claude_queue_enabled | bool) else [])
           + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
          | unique }}

@@ -68,6 +68,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     "is_dnf": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",
+        REPO_ROOT / "roles/desktop/defaults/main.yml",
     ],
     "is_apt": [
         REPO_ROOT / "roles/desktop/defaults/main.yml",
@@ -142,6 +143,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
     "csb_rhel": [
+        REPO_ROOT / "roles/claude/defaults/main.yml",
         REPO_ROOT / "roles/distrobox/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/redhat/defaults/main.yml",
