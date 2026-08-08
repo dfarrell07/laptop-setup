@@ -342,6 +342,12 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; routes those dirs to work git identity
 #     (gitconfig.j2 includeIf) and Claude personal guard (zshrc.j2);
 #     add new orgs here instead of editing templates
+#   dotfiles_direnv_warn_timeout: "10s"  (roles/dotfiles/defaults) — how long
+#     direnv waits before warning on slow .envrc; upstream default 5s
+#   dotfiles_direnv_strict_env: true   (roles/dotfiles/defaults) — set -euo pipefail
+#     in .envrc; upstream default false; set false if .envrc uses unset vars
+#   dotfiles_direnv_disable_stdin: true  (roles/dotfiles/defaults) — block stdin
+#     in .envrc; upstream default false; set false if .envrc needs stdin
 #   ssh_git_signing_pubkey: ""            (group_vars/all/vars.yml) — SSH public key for
 #     git commit signing; set in config.yml to the literal pubkey or
 #     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
