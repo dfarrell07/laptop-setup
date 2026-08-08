@@ -20,12 +20,12 @@
   ansible.builtin.uri:
     url: "{{ ssh_github_known_hosts_url }}"
     return_content: true
-    timeout: 30
+    timeout: 10
   register: ssh_github_meta
   changed_when: false
   check_mode: false
   failed_when: false
-  retries: 3
+  retries: 1
   delay: 10
   until: ssh_github_meta.status | default(0) == 200
 
