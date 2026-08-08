@@ -102,6 +102,7 @@
       ansible.builtin.stat:
         path: /etc/usbguard/rules.conf
       register: system_usbguard_rules_stat
+      when: not ansible_check_mode
 
     - name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
       ansible.builtin.assert:
@@ -111,6 +112,7 @@
         fail_msg: >-
           /etc/usbguard/rules.conf is missing or empty. Starting USBGuard now would block
           ALL USB devices including the keyboard. Fix the template and re-run before enabling.
+      when: not ansible_check_mode
 
     - name: Enforce ImplicitPolicyTarget=block in usbguard-daemon.conf
       ansible.builtin.lineinfile:
