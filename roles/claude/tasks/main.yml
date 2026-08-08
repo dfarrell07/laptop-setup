@@ -199,12 +199,21 @@
         src: claude-queue.service.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.service"
         mode: "0644"
+      register: _queue_service
 
     - name: Deploy task queue systemd timer
       ansible.builtin.template:
         src: claude-queue.timer.j2
         dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
         mode: "0644"
+      register: _queue_timer
+
+    - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler
+      ansible.builtin.systemd:
+        scope: user
+        daemon_reload: true
+      when: _queue_service.changed or _queue_timer.changed
+      failed_when: false
 
     - name: Enable task queue timer
       ansible.builtin.systemd:
@@ -212,7 +221,6 @@
         scope: user
         state: started
         enabled: true
-        daemon_reload: true
       register: _timer_enable
       ignore_errors: true
 
