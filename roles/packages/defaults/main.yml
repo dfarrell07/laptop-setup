@@ -53,7 +53,7 @@ packages_containers:
   - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
   - distrobox
 
-# Work-profile-only container tools (OCI image builds — not needed for personal distrobox/podman-run usage)
+# Work-profile-only container tools (OCI image builder — not needed for personal distrobox/podman-run usage)
 packages_containers_work:
   - buildah
   - skopeo
@@ -97,8 +97,11 @@ packages_networking_work:
   - iperf3         # network bandwidth measurement; work profile only
   - socat          # socket relay utility; work profile only
   - nmap           # network scanner; work profile only (OVN-K/Kubernetes debugging)
-  - sos            # general RH support diagnostic bundle tool (sosreport); work profile only
-                   # (no RH support contract on personal); co-located here for convenience — not a networking tool
+
+# Work-profile-only support tools (Red Hat diagnostic utilities — not networking tools)
+packages_support_work:
+  - sos  # general RH support diagnostic bundle tool (sosreport); work profile only
+         # (no RH support contract on personal)
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)
@@ -128,6 +131,7 @@ packages_apt:
   - fd-find
   - bat
   - shfmt
+  - skopeo  # container image inspection/copy; mirrors packages_containers universal coverage on dnf targets
   # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here

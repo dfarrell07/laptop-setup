@@ -5,5 +5,6 @@
 d %h/.claude 0700 - - -
 Z %h/.claude 0700 - - -
 z %h/.claude/settings.local.json 0600 - - -
-z {{ claude_personal_config_dir }}/settings.local.json 0600 - - -
-{% if profile == 'work' or claude_queue_enabled | bool %}z {{ claude_work_config_dir }}/settings.local.json 0600 - - -{% endif %}
+{% for inst in _claude_instances if inst != claude_default_config_dir %}
+z {{ inst }}/settings.local.json 0600 - - -
+{% endfor %}
