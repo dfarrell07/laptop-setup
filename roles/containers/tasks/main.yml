@@ -179,11 +179,25 @@
     enabled: true
   become: true
   tags: [become]
+  register: containers_docker_unmask
   when:
     - is_linux
     - install_docker
     - not (system_is_container | default(false))
   failed_when: false
+
+- name: Warn if Docker socket enable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: docker.socket failed to start (unmask/enable failed).
+      Docker CLI will not work correctly.
+      Fix: systemctl unmask docker.socket; systemctl enable --now docker.socket.
+      Check: systemctl status docker.socket; journalctl -u docker.socket
+  when:
+    - is_linux
+    - install_docker
+    - not (system_is_container | default(false))
+    - containers_docker_unmask.failed | default(false)
 
 - name: Disable Docker socket by default
   ansible.builtin.systemd:
@@ -193,11 +207,24 @@
     masked: true
   become: true
   tags: [become]
+  register: containers_docker_mask
   when:
     - is_linux
     - not install_docker
     - not (system_is_container | default(false))  # masked: true → inotify → daemon-reload → container crash
   failed_when: false
+
+- name: Warn if Docker socket disable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: docker.socket masking failed. The socket may be left in an unexpected state.
+      Fix: systemctl mask docker.socket; systemctl stop docker.socket.
+      Check: systemctl status docker.socket; journalctl -u docker.socket
+  when:
+    - is_linux
+    - not install_docker
+    - not (system_is_container | default(false))
+    - containers_docker_mask.failed | default(false)
 
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
 - name: Set containers.conf workstation options (user-scope; logging and kind compatibility)

@@ -36,13 +36,13 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
 #   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on Fedora F43+ (gh in standard repos); activates on RHEL/Rocky
 #   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
-#   repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"  (repos_dnf/defaults) — corporate mirror override
+#   repos_dnf_google_chrome_repo: <see roles/repos_dnf/defaults/main.yml>  (repos_dnf/defaults) — corporate mirror override
 #   repo_google_cloud_sdk: false       (group_vars/all/vars.yml) — opt in when gcloud needed; GCP repo adds dnf metadata overhead
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
 #   repo_slack: false                  (group_vars/all/vars.yml) — packagecloud RPM has gpgcheck=false; opt in or use Flatpak
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
-#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer rootless Podman; Docker CE conflicts with Podman
+#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true to unmask docker.socket
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
 #   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
 #   system_install_usbguard: true      (group_vars/all/vars.yml)

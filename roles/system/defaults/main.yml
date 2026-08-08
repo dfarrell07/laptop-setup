@@ -105,6 +105,7 @@ system_firewall_icmp_extra_types: []
 
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
+# NOTE: fs.suid_dumpable=0 suppresses SUID crashes regardless of this setting (CIS 1.5.1 req a).
 # 'none' disables collection entirely; 'journal' embeds core in journald (adds size pressure, requires extra extraction step)
 system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 disables
 
