@@ -324,7 +324,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   git_repos_pull: false              (roles/git_repos/defaults) — clone-once by default;
 #     set true to fetch upstream with --ff-only (done automatically by `make update`)
 #   git_repos_work_categories: [personal, bpfman, ...]     (roles/git_repos/defaults) — repo categories cloned on work profile
-#   git_repos_personal_categories: [personal, ...]         (roles/git_repos/defaults) — repo categories cloned on personal profile
+#   git_repos_personal_categories: [personal, ovnk]        (roles/git_repos/defaults) — repo categories cloned on personal profile;
+#     this list replaces (not appends to) the default — dropping ovnk here removes OVN-K repo clones on personal profile
 #   notes_enabled: false               (roles/notes/defaults) — opt-in: set true in config.yml
 #     only for the dfarrell07 account with access to the private notes repo
 #   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
@@ -354,10 +355,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
 #     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
 #     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
-#   dotfiles_internal_ca_path: auto  — CA cert for internal HTTPS hosts; role default is conditional:
-#     /etc/ssl/certs/ca-certificates.crt (apt) or /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem (rpm);
-#     no override needed for the standard system CA bundle; override only to pin a specific anchor,
-#     e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
+#   dotfiles_internal_ca_path: (conditional: /etc/ssl/certs/ca-certificates.crt on apt,
+#     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem on rpm)  — CA cert for internal HTTPS hosts;
+#     do not set this in config.yml to restore the default — simply remove any override;
+#     override only to pin a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
 #     set in config.yml, e.g. [gitlab.example.com, code.example.com]; empty = no work host keyscan
