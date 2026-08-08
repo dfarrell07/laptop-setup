@@ -132,6 +132,7 @@ packages_apt_work:
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
   # GOTOOLCHAIN=auto (set in packages tasks) downloads the toolchain on demand.
   - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
+  - gcc     # CGO builds — mirrors packages_languages_work on Fedora
   - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
   - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
 
