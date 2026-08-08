@@ -28,8 +28,8 @@ blacklist sctp
 install sctp /bin/false
 {% endif %}
 # dccp was removed from Fedora kernels starting around Fedora 40 (CONFIG_IP_DCCP not set);
-# both directives are forward-looking defense if the module is re-introduced in a kernel update.
-blacklist dccp
+# the install directive is the effective forward-defense if the module is re-introduced in a kernel update;
+# blacklist is a no-op when the module is absent.
 install dccp /bin/false
 blacklist rds
 install rds /bin/false
