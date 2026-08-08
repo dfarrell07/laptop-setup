@@ -28,9 +28,9 @@ blacklist sctp
 install sctp /bin/false
 {% endif %}
 # dccp was removed from Fedora kernels starting around Fedora 40 (CONFIG_IP_DCCP not set);
-# the install directive is the effective forward-defense if the module is re-introduced in a kernel update.
-# blacklist dccp  # no-op: no .ko file on F40+ (CONFIG_IP_DCCP not set); modprobe accepts the directive but it has no effect without a loadable module. install /bin/false below acts as forward defense if dccp is re-introduced.
-# The install directive below IS effective: modprobe checks it before looking up module files.
+# blacklist intentionally omitted — no .ko file to blacklist; modprobe ignores blacklist for absent modules.
+# The install directive IS the effective mechanism: modprobe checks it before looking up module files,
+# acting as forward defense if dccp is re-introduced in a kernel update.
 install dccp /bin/false
 blacklist rds
 install rds /bin/false

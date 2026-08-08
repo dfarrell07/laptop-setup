@@ -335,7 +335,7 @@ system_remove_luks_key: false
 system_iommu_passthrough: false
 system_wifi_mac_rand: "{{ not csb_detected }}"
 system_wifi_powersave: "{{ not csb_rhel }}"
-system_enable_cockpit: false  # set true to unmask cockpit web console (port 9090); drop zone still blocks external access
+system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-accessible; use Tailscale for VPN-only access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block
 # outbound NTP or require regional servers.
