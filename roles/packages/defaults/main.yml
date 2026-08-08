@@ -27,7 +27,7 @@ packages_cli:
   - ripgrep
   - fd-find
   - bat
-  - tree  # Fedora Workstation group default; explicit for RHEL/Rocky/Debian non-Workstation targets
+  - tree  # Fedora Workstation group default; explicit for RHEL/Rocky non-Workstation targets
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
 
 packages_languages:
@@ -144,6 +144,7 @@ packages_apt_work:
   - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
   - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
   - tshark  # tshark — scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
+  - buildah  # OCI image builder — mirrors packages_containers_work (work-only on dnf)
   - skopeo  # OCI image inspection/copy — mirrors packages_containers_work (work-only on dnf)
 
 # Binary downloads — pinned versions with SHA256 verification.

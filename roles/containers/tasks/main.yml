@@ -223,6 +223,7 @@
     fail_msg: >
       containers_nofile_hard_limit ({{ containers_nofile_hard_limit }}) must be >=
       containers_nofile_limit ({{ containers_nofile_limit }}) or Podman will reject the config.
+  when: is_linux
 
 - name: Set containers.conf workstation options (user-scope; logging and kind compatibility)
   ansible.builtin.template:
