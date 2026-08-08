@@ -65,9 +65,14 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
+    "is_dnf": [
+        REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
     "is_apt": [
         REPO_ROOT / "roles/desktop/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+        REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "repo_gh_cli": [
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",

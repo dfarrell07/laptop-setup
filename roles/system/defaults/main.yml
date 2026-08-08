@@ -110,7 +110,7 @@ system_firewall_icmp_extra_types: []
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
 # 'none' disables collection entirely; 'journal' embeds core in journald (adds size pressure, requires extra extraction step)
-system_coredump_process_size_max: 2G  # max core dump size; 0 disables collection; 2G matches systemd upstream default
+system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 disables
 
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
