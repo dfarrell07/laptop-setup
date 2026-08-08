@@ -75,6 +75,7 @@
     - ssh
     - dhcpv6-client
     - samba-client
+  # mdns is NOT in the Fedora 44 FedoraWorkstation zone (removed by Red Hat); no removal needed.
   register: _system_fw_zone_svc_remove
   when:
     - system_firewalld_running | bool
@@ -219,7 +220,7 @@
     'INVALID_ZONE' not in (_system_redhat_ssh_remove.msg | default(''))
   notify: Apply firewall rules
 
-- name: Remove stale port-22 allow-rule from libvirt zone (sshd on 722; zone catch-all reject covers it)
+- name: Remove ssh service from libvirt zone (upstream default opens port 22; sshd is on {{ ssh_port }})
   ansible.posix.firewalld:
     zone: libvirt
     service: ssh
