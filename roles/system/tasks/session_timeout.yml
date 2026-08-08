@@ -73,7 +73,7 @@
     state: absent
   when:
     - is_apt
-    - system_tmout | int == 0
+    - system_tmout | int <= 0
 
 - name: Remove TMOUT export from /etc/bash.bashrc when disabled (Debian)
   ansible.builtin.lineinfile:
@@ -82,7 +82,7 @@
     state: absent
   when:
     - is_apt
-    - system_tmout | int == 0
+    - system_tmout | int <= 0
 
 - name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL)
   ansible.builtin.lineinfile:

@@ -507,9 +507,9 @@
     - kernel.yama.ptrace_scope = {{ system_ptrace_scope }}
     - kernel.dmesg_restrict = 1
     - kernel.kptr_restrict = 1
-    - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(1) }}
+    - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(2) }}
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
-    - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(0) }}
+    - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}
     - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
     - net.bridge.bridge-nf-call-iptables
     - net.ipv6.conf.all.use_tempaddr
@@ -1160,7 +1160,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - system_install_usbguard | default(false) | bool
+    - system_install_usbguard | default(true) | bool
     - ansible_os_family != 'Debian'
 
 - name: Assert USBGuard rules.conf deployed (mode 0600, non-empty)
@@ -1172,7 +1172,7 @@
     fail_msg: "/etc/usbguard/rules.conf missing, wrong mode, or empty — system role USBGuard template regression"
   when:
     - ansible_system == 'Linux'
-    - system_install_usbguard | default(false) | bool
+    - system_install_usbguard | default(true) | bool
     - ansible_os_family != 'Debian'
 
 - name: Check USBGuard rules.conf contains hardwired-device allow rule
@@ -1181,7 +1181,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - system_install_usbguard | default(false) | bool
+    - system_install_usbguard | default(true) | bool
     - ansible_os_family != 'Debian'
     - verify_usbguard_rules.stat.exists
 
@@ -1191,7 +1191,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - system_install_usbguard | default(false) | bool
+    - system_install_usbguard | default(true) | bool
     - ansible_os_family != 'Debian'
 
 - name: Check usbguard-daemon.conf has AuditBackend=LinuxAudit
@@ -1200,7 +1200,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - system_install_usbguard | default(false) | bool
+    - system_install_usbguard | default(true) | bool
     - ansible_os_family != 'Debian'
 
 - name: Check git-lfs is installed (packages role)

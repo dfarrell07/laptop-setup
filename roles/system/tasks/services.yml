@@ -141,6 +141,4 @@
         state: started
         enabled: true
       register: system_usbguard_enable_result
-      failed_when:
-        - system_usbguard_enable_result.failed
-        - not system_is_container
+      failed_when: system_usbguard_enable_result.failed
