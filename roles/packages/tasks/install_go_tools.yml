@@ -3,14 +3,14 @@
 # Install Go tools via `go install` (extracted from main.yml)
 
 - name: Install Go tools
-  # No 'creates:' guard — version bumps in packages_go_install would be silently
+  # No 'creates:' guard — version bumps in packages_go_install_work would be silently
   # ignored if the binary already exists. 'go install' with a pinned version is
   # fast when the module cache is warm (skips recompile). 'changed_when: true'
-  # reports every run as changed; all entries in packages_go_install are pinned
+  # reports every run as changed; all entries in packages_go_install_work are pinned
   # versions so this is an accepted false positive on every run — do NOT add
   # @latest entries; they are not specially handled and would make the list
   # permanently non-idempotent with no additional benefit.
-  # See packages_go_install in defaults/main.yml for rationale and pinning guidance.
+  # See packages_go_install_work in defaults/main.yml for rationale and pinning guidance.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
   timeout: 300

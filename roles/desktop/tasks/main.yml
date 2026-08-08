@@ -52,7 +52,7 @@
          + (desktop_i3_packages if desktop_effective == 'i3' else [])
          + (desktop_gnome_packages if desktop_effective == 'gnome' else []) }}
   ansible.builtin.dnf:
-    name: "{{ desktop_common_packages + _wm_pkgs }}"
+    name: "{{ desktop_dnf_packages + _wm_pkgs }}"
     state: present
   become: true
   tags: [become]

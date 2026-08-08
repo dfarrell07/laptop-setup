@@ -198,8 +198,8 @@ _zsh_cached_completion oc completion zsh
 _zsh_cached_completion helm completion zsh
 _zsh_cached_completion kind completion zsh
 _zsh_cached_completion kustomize completion zsh
-_zsh_cached_completion golangci-lint completion zsh
 {% if profile == 'work' %}
+_zsh_cached_completion golangci-lint completion zsh
 _zsh_cached_completion tkn completion zsh
 if command -v bpfman &>/dev/null; then
   _bpf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/bpfman.zsh"
@@ -281,7 +281,7 @@ alias kovnkwatch='kubectl get pods -n ovn-kubernetes -w'
 
 # stern: concurrent log streaming across all matching pods — the right way to watch OVN-K logs.
 # '.' matches every pod in the namespace; narrower patterns isolate a single component.
-# stern is installed via packages_go_install (github.com/stern/stern).
+# stern is installed via packages_go_install_work (github.com/stern/stern) — work profile only.
 command -v stern &>/dev/null && {
   alias skovnk='stern -n ovn-kubernetes .'          # all OVN-K pods at once, color-coded by pod
   alias sknode='stern -n ovn-kubernetes ovnkube-node'
