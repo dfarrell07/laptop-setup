@@ -3,15 +3,6 @@
 # --- Core dumps ---
 # inotify on /etc/systemd/coredump.conf.d triggers coredump service reload, crashes containers
 # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
-- name: Warn that fs.suid_dumpable=0 suppresses SUID crash capture when coredump storage is active
-  when: not system_is_container and system_coredump_storage != 'none'
-  ansible.builtin.debug:
-    msg: >-
-      system_coredump_storage={{ system_coredump_storage }} but fs.suid_dumpable=0 is set unconditionally
-      by system_sysctl_hardening (CIS 1.5.1). SUID process crashes (su, sudo, passwd, cron, newgrp) will
-      not reach systemd-coredump regardless of storage setting. To capture SUID crashes, add
-      fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
-
 - name: Configure coredumps (skip in containers)
   when: not system_is_container
   block:

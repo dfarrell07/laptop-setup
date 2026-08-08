@@ -12,12 +12,16 @@
 {% set deny_entries = [] %}
 {% set _work_path = (claude_work_config_dir | replace(ansible_facts['user_dir'], '~')) + '/**' %}
 {% set _personal_path = (claude_personal_config_dir | replace(ansible_facts['user_dir'], '~')) + '/**' %}
+{% set _default_path = (claude_default_config_dir | replace(ansible_facts['user_dir'], '~')) + '/**' %}
 {% set _ = deny_entries.append("Read(" + _work_path + ")") %}
 {% set _ = deny_entries.append("Read(" + _personal_path + ")") %}
+{% set _ = deny_entries.append("Read(" + _default_path + ")") %}
 {% set _ = deny_entries.append("Edit(" + _work_path + ")") %}
 {% set _ = deny_entries.append("Write(" + _work_path + ")") %}
 {% set _ = deny_entries.append("Edit(" + _personal_path + ")") %}
 {% set _ = deny_entries.append("Write(" + _personal_path + ")") %}
+{% set _ = deny_entries.append("Edit(" + _default_path + ")") %}
+{% set _ = deny_entries.append("Write(" + _default_path + ")") %}
 {% for path in claude_deny_sensitive %}
 {% set _ = deny_entries.append("Read(" + path + ")") %}
 {% set _ = deny_entries.append("Edit(" + path + ")") %}
