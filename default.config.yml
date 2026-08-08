@@ -34,7 +34,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE
 #   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
-#   packages_yubikey_enabled: true     (group_vars/all/vars.yml) — yubikey-manager + ykpers; set false on machines without a YubiKey
+#   packages_yubikey_enabled: true     (roles/packages/defaults) — yubikey-manager + ykpers; set false on machines without a YubiKey
 #   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on all Fedora (gh in standard repos); activates on RHEL/Rocky
 #   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
 #   repos_dnf_google_chrome_repo: <see roles/repos_dnf/defaults/main.yml>  (repos_dnf/defaults) — corporate mirror override
@@ -168,7 +168,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
 #   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
-#   system_enable_ip_forward: true      (roles/system/defaults) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
+#   system_enable_ip_forward: true      (group_vars/all/vars.yml) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
 #                                        for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts
 #   system_bluetooth_name: "Bluetooth"  (roles/system/defaults) — BlueZ Name= shown to Bluetooth scanners; set to hostname
 #                                        or team alias to avoid broadcasting the machine's FQDN
@@ -299,7 +299,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   desktop_sway_trackpoint_scroll_factor: 0.5    (roles/desktop/defaults) — TrackPoint scroll speed; lower = slower
 #   desktop_sway_touchpad_tap: enabled            (roles/desktop/defaults) — tap-to-click; set disabled to require physical click
 #   desktop_sway_touchpad_natural_scroll: enabled (roles/desktop/defaults) — natural (reverse) scroll direction
-#   desktop_sway_touchpad_dwt: enabled            (roles/desktop/defaults) — disable-while-typing
+#   desktop_sway_touchpad_dwt: ''  # empty = omit; libinput default is enabled  (roles/desktop/defaults) — disable-while-typing
 #   desktop_sway_touchpad_middle_emulation: enabled (roles/desktop/defaults) — three-finger tap as middle click
 #   desktop_sway_gaps_inner: 0                    (roles/desktop/defaults) — inner gap between windows (pixels)
 #   desktop_sway_gaps_outer: 0                    (roles/desktop/defaults) — outer gap between windows and screen edge
