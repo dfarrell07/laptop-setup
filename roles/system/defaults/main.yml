@@ -221,8 +221,9 @@ system_enable_ip_forward: true  # set false on terminal-only hosts without Kuber
 # explicitly when adding machine-specific sysctls on a work-profile host that needs OVN-K tuning.
 # Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
 # Example: system_sysctl_extra: { "net.netfilter.nf_conntrack_max": 524288, "vm.swappiness": 10 }
-# WARNING: system_sysctl_extra is applied last (combine() in sysctl.yml) and silently overrides any
-# matching key in system_sysctl_hardening. Do not set these security-critical keys here without intent:
+# WARNING: system_sysctl_extra is applied second-to-last; system_sysctl_extra_additional (below) has
+# higher precedence and silently overrides any matching key in system_sysctl_hardening. Do not set
+# these security-critical keys here without intent:
 # kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, net.ipv4.conf.all.rp_filter, fs.suid_dumpable.
 _system_sysctl_work_defaults:
   net.netfilter.nf_conntrack_max: 524288
