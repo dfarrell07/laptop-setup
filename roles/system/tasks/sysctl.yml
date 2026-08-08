@@ -13,7 +13,7 @@
       Use system_ipv6_accept_ra: 2 to enable SLAAC.
 
 - name: Note unprivileged_bpf_disabled status on Fedora
-  when: is_fedora | bool
+  when: not system_is_container
   ansible.builtin.debug:
     msg: >-
       {% if system_unprivileged_bpf_disabled | int == 2 %}
