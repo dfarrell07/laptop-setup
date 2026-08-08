@@ -28,7 +28,7 @@ packages_cli:
   - ripgrep
   - fd-find
   - bat
-  - tree  # Fedora Workstation group default; explicit for RHEL/Rocky non-Workstation targets
+  - tree  # not a Fedora Workstation default; required on all targets
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
 
 packages_languages: []  # intentionally empty; override in config.yml or molecule to add language runtimes
@@ -42,7 +42,7 @@ packages_languages_work:
 packages_security:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
-  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
+  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
