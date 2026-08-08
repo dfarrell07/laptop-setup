@@ -120,6 +120,9 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/system/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
     ],
+    "ssh_kex_algorithms": [
+        REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
     "is_rhel": [
         REPO_ROOT / "roles/redhat/defaults/main.yml",
     ],

@@ -228,7 +228,13 @@
         mode: "0644"
       loop:
         - {name: ssh-agent.conf, content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket"}
-        - {name: gotmpdir.conf, content: "GOTMPDIR=$HOME/tmp"}
+
+- name: Deploy Go environment.d conf (GOTMPDIR)
+  ansible.builtin.copy:
+    content: "GOTMPDIR=$HOME/tmp\n"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
+    mode: "0644"
+  when: is_linux and not system_is_container
 
 # --- macOS: SSH agent via launchd ---
 - name: SSH agent launchd setup (macOS)
