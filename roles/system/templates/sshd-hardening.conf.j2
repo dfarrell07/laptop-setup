@@ -62,6 +62,6 @@ PrintLastLog yes
 # takes precedence over the system crypto policy for SSH. This is intentional — the system
 # crypto policy is more permissive than this hardened list. update-crypto-policies
 # applies to other subsystems (OpenSSL, GnuTLS) but does NOT affect sshd algorithm selection.
-Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
-MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+Ciphers {{ ssh_ciphers }}
+MACs {{ ssh_macs }}
 KexAlgorithms mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,curve25519-sha256,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256

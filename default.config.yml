@@ -12,7 +12,7 @@
 # site.yml enforces this — it will fail the play if any vault_* key
 # appears in config.yml.
 
-ssh_port: 722  # mirrored in roles/system/defaults/main.yml as a defensive fallback for standalone role invocation
+ssh_port: 722  # mirrored in roles/system/defaults/main.yml and roles/dotfiles/defaults/main.yml; update all three on port change
 # desktop_environment: auto  # CHANGE TO: sway, i3, or gnome on first provision; auto fails before any WM is installed
 
 # ============================================================
@@ -63,8 +63,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     GUI Homebrew Cask apps (all profiles on macOS); override in config.yml to add/remove
 #   packages_brew_taps: [nikitabobko/tap, theseal/ssh-askpass, domt4/autoupdate]  (roles/packages/defaults) —
 #     Homebrew third-party taps (required by aerospace and autoupdate casks); override in config.yml to add/remove
-#   packages_brew_work: [golang, kubectl, kind, helm, kustomize, socat, transcrypt, sops]  (roles/packages/defaults) — work Homebrew pkgs;
-#     add k9s/krew for work macOS
+#   packages_brew_work: [golang, kubectl, kind, helm, kustomize, socat, nmap, transcrypt, sops]
+#     (roles/packages/defaults) — work Homebrew pkgs; add k9s/krew for work macOS
 #   packages_containers_work: [buildah]  (roles/packages/defaults) — work-profile-only OCI build tools;
 #     personal profile gets podman/skopeo/distrobox only
 #   packages_apt_work: [golang, nmap, socat]  (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
@@ -231,7 +231,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit; raise both limits together
-#   containers_nofile_hard_limit: 524288  (roles/containers/defaults) — global open-file hard limit; ceiling for nofile_limit
+#   containers_nofile_hard_limit: "{{ (containers_nofile_limit | int) * 8 }}"  (roles/containers/defaults)
+#     — 8x nofile_limit (524288 at default 65536); global open-file hard limit; ceiling for nofile_limit
 #   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries for podman login; work auto-adds registry.redhat.io
 #                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io
 #                                        (and registry.redhat.io for work profile) explicitly, or use containers_registries_extra to append
