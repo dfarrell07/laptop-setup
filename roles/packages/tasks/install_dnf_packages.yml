@@ -59,13 +59,15 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
           One or more packages in
-          packages_cli/languages/languages_work/security/containers/containers_work/networking/networking_work/support_work
+          packages_cli/languages/languages_work/security/containers/containers_work/networking/networking_work/support_work,
+          packages_security_rhel (non-Fedora only), packages_containers_kubectl (personal/non-x86_64/no-binaries)
           could not be installed; check repo access or install manually
         _csb_ticket_summary: "Cannot install core dnf packages on CSB"
         _csb_ticket_body: >-
           One or more packages from packages_cli, packages_languages, packages_languages_work,
-          packages_security, packages_containers, packages_containers_work,
-          packages_networking, packages_networking_work, or packages_support_work could not be installed.
+          packages_security, packages_security_rhel (non-Fedora only), packages_containers, packages_containers_work,
+          packages_containers_kubectl (personal/non-x86_64/no-binaries), packages_networking, packages_networking_work,
+          or packages_support_work could not be installed.
           This may be due to fapolicyd repo policy or a missing repository.
       when: csb_rhel
     - name: Warn dnf package install failed (non-CSB)

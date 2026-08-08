@@ -88,20 +88,20 @@ packages_networking_work:
   - bpfman         # bpfman daemon for eBPF program management; must run on host for kernel BPF access
   - bpftool        # eBPF program/map introspection
   - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
-  - strace         # system call tracer; needed on host for bpfman daemon debugging
-  - gdb            # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
-  - perf           # kernel performance profiling
-  - bpftrace       # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
   - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
   - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
   - iperf3         # network bandwidth measurement; work profile only
   - socat          # socket relay utility; work profile only
   - nmap           # network scanner; work profile only (OVN-K/Kubernetes debugging)
 
-# Work-profile-only support tools (Red Hat diagnostic utilities — not networking tools)
+# Work-profile-only support tools (Red Hat diagnostic utilities + debug/profiling tools)
 packages_support_work:
-  - sos  # general RH support diagnostic bundle tool (sosreport); work profile only
-         # (no RH support contract on personal)
+  - sos      # general RH support diagnostic bundle tool (sosreport); work profile only
+             # (no RH support contract on personal)
+  - strace   # system call tracer; needed on host for bpfman daemon debugging
+  - gdb      # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
+  - perf     # kernel performance profiling
+  - bpftrace # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
 
 packages_apt:
   - git-lfs  # depends on git (pulled in automatically)

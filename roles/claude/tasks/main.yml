@@ -19,10 +19,11 @@
       ((claude_version_check.stdout | default('')) + ' ')) }}
 
 - name: Fail when install method is unrecognized
-  ansible.builtin.fail:
-    msg: >-
+  ansible.builtin.assert:
+    that:
+      - claude_install_method in ['native', 'skip']
+    fail_msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
-  when: claude_install_method not in ['native', 'skip']
 
 - name: Install Claude Code via native binary
   when:

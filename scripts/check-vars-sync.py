@@ -46,6 +46,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "install_virtualization": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
     ],
     "install_vpn": [
         REPO_ROOT / "roles/redhat/defaults/main.yml",
@@ -145,9 +146,11 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "network_proxied": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
     ],
     "proxy_url": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
+        REPO_ROOT / "roles/system/defaults/main.yml",
     ],
 }
 
