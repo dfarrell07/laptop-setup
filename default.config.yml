@@ -132,7 +132,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_sysctl_extra_additional: {}   (roles/system/defaults) — safe per-machine append merged AFTER system_sysctl_extra;
 #                                        use this to add a single key without re-copying all work-profile defaults.
 #                                        Example: system_sysctl_extra_additional: {"vm.swappiness": 10}
-#   system_firewall_icmp_types: [destination-unreachable, ...]  (roles/system/defaults) — base ICMP allow-list merged with
+#   system_firewall_icmp_types: [fragmentation-needed, packet-too-big, parameter-problem,
+#                                        neighbour-solicitation, neighbour-advertisement]
+#                                        (roles/system/defaults) — base ICMP allow-list merged with
 #                                        system_firewall_icmp_extra_types; override the full list in config.yml to remove entries
 #                                        (e.g. drop neighbour-solicitation/advertisement when IPv6 is fully disabled)
 #   system_firewall_icmp_extra_types: [] (roles/system/defaults) — additional ICMP types merged with system_firewall_icmp_types;

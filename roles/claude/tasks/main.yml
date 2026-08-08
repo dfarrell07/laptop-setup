@@ -66,8 +66,10 @@
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:
     _claude_instances: >-
-      {{ [claude_default_config_dir, claude_personal_config_dir]
-         + ([claude_work_config_dir] if (profile == 'work' or claude_queue_enabled | bool) else []) }}
+      {{ ([claude_default_config_dir, claude_personal_config_dir]
+         + ([claude_work_config_dir] if (profile == 'work' or claude_queue_enabled | bool) else [])
+         + ([claude_queue_config_dir] if (claude_queue_enabled | bool) else [])
+         + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else [])) | unique }}
 
 - name: Create Claude instance config directories
   ansible.builtin.file:

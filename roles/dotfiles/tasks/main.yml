@@ -206,7 +206,7 @@
         enabled: true
         daemon_reload: true
       register: _dotfiles_ssh_agent_enable
-      failed_when: false
+      ignore_errors: true
 
     - name: Warn if SSH agent enable failed
       ansible.builtin.debug:
