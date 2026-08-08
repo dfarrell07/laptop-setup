@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
 {{ claude_log_dir }}/poller.log {
-    su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout }}
+    su {{ ansible_facts['user_id'] }} {{ _primary_group_name.stdout | trim }}
     daily
     rotate 14
     compress

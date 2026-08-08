@@ -78,9 +78,13 @@
           ansible.builtin.assert:
             that:
               - dotfiles_github_user != 'CHANGE_ME'
+              - dotfiles_github_user | length > 0
               - dotfiles_user_name != 'CHANGE_ME'
+              - dotfiles_user_name | length > 0
               - dotfiles_user_email_work != 'CHANGE_ME'
+              - dotfiles_user_email_work | length > 0
               - dotfiles_user_email_personal != 'CHANGE_ME'
+              - dotfiles_user_email_personal | length > 0
             fail_msg: >-
               Set identity vars in config.yml before running make all.
               The following still have the 'CHANGE_ME' placeholder:

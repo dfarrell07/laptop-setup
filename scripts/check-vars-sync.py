@@ -211,6 +211,7 @@ REQUIRED_KEYS = {
     "system_bpf_jit_harden": int,
     "system_unprivileged_bpf_disabled": int,
     "system_io_uring_disabled": int,
+    "system_enable_ip_forward": bool,
     "is_dnf5": bool,
     "is_dnf": bool,
     "is_apt": bool,
