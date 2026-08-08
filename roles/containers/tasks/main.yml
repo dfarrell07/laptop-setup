@@ -58,6 +58,7 @@
   failed_when: false
   when:
     - is_linux
+    - registry_tokens | length > 0
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Check registry auth status after vault login
@@ -173,7 +174,7 @@
     - is_linux
     - install_docker
     - not (system_is_container)
-  ignore_errors: true
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if Docker socket enable failed
   ansible.builtin.debug:
@@ -201,7 +202,7 @@
     - is_linux
     - not install_docker
     - not (system_is_container)  # masked: true → inotify → daemon-reload → container crash
-  ignore_errors: true
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if Docker socket disable failed
   ansible.builtin.debug:

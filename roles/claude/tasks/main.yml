@@ -155,6 +155,16 @@
     fail_msg: "claude_queue_repo must be set in config.yml when claude_queue_enabled=true"
   when: claude_queue_enabled | bool
 
+- name: Assert dotfiles_github_user is set for macOS launchd agent naming
+  ansible.builtin.assert:
+    that:
+      - dotfiles_github_user | length > 0
+      - dotfiles_github_user != 'CHANGE_ME'
+    fail_msg: "dotfiles_github_user must be set in config.yml (used in launchd reverse-DNS label)"
+  when:
+    - is_macos
+    - claude_queue_enabled | bool or claude_remote_control_enabled | bool
+
 - name: Install util-linux for flock (macOS, queue enabled)
   community.general.homebrew:
     name: util-linux

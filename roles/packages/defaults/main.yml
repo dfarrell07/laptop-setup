@@ -20,6 +20,7 @@ packages_cli:
   - zsh-syntax-highlighting
   - fzf
   - pipx
+  - python3-pip  # python3 is a dnf dependency; moved from packages_languages
   - zoxide
   - ShellCheck
   - shfmt
@@ -30,8 +31,7 @@ packages_cli:
   - tree  # Fedora Workstation group default; explicit for RHEL/Rocky non-Workstation targets
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
 
-packages_languages:
-  - python3-pip  # python3 is a dnf dependency of python3-pip
+packages_languages: []  # intentionally empty; override in config.yml or molecule to add language runtimes
 
 # Work-profile-only language tools (CGO builds — OVN-K, Submariner; not needed for pure-Go personal builds)
 packages_languages_work:
@@ -123,7 +123,7 @@ packages_apt:
                     # needed by ansible.builtin.known_hosts hash_host:true in ssh role
   # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
-  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
+  - python3-pip    # Fedora installs via packages_cli; Debian requires explicit install
   - pipx
   - shellcheck
   - ripgrep
