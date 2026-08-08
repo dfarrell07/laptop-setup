@@ -28,7 +28,7 @@ packages_cli:
   - ripgrep
   - fd-find
   - bat
-  - tree  # not a Fedora Workstation default; required on all targets
+  - tree  # workstation-product/standard comps group default on Fedora/Sway; explicit for RHEL/Rocky
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
 
 packages_languages: []  # intentionally empty; override in config.yml or molecule to add language runtimes
@@ -51,7 +51,7 @@ packages_security_rhel:
   - libfido2
 
 packages_containers:
-  - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
+  - podman  # GNOME default via container-management group; not default on Sway/non-GNOME DEs; explicit for non-GNOME Fedora and RHEL/Rocky
   - distrobox
 
 # Work-profile-only container tools (OCI image builder — not needed for personal distrobox/podman-run usage)
