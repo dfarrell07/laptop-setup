@@ -340,7 +340,7 @@
   ansible.builtin.file:
     path: "{{ claude_log_dir }}"
     state: directory
-    mode: "0755"
+    mode: "0750"
   when: claude_queue_enabled | bool or (is_macos and claude_remote_control_enabled | bool)
 
 - name: Manage enabled launchd agents (macOS)

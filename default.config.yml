@@ -73,9 +73,11 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     personal profile gets python3-pip only
 #   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
-#   packages_networking_work: [ovn, openvswitch, bpfman, bpftool, iproute-tc, strace, gdb, perf, bpftrace,
-#     wireshark-cli, conntrack-tools, iperf3, socat, nmap, sos]  (roles/packages/defaults) — work-profile-only networking tools
+#   packages_networking_work: [ovn, openvswitch, bpfman, bpftool, iproute-tc,
+#     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
 #     (OVN-K/bpfman dev); override in config.yml to add/remove packages for this profile
+#   packages_support_work: [sos, strace, gdb, perf, bpftrace]  (roles/packages/defaults) — work-profile-only diagnostic/debugging tools;
+#     override in config.yml to add/remove
 #   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
 #     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
 #   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
