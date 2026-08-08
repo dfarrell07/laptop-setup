@@ -240,7 +240,8 @@ packages_go_install_work:
   - "golang.org/x/tools/gopls@v{{ packages_gopls_version }}"
   - "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v{{ packages_golangci_lint_version }}"
   # Pin controller-gen to match OVN-K's update-codegen.sh (not go.mod — controller-tools is not a go.mod dep).
-  # Bump packages_code_generator_version together when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
+  # Bump both packages_controller_gen_version and packages_code_generator_version together
+  # when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
   - "sigs.k8s.io/controller-tools/cmd/controller-gen@v{{ packages_controller_gen_version }}"
   - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"

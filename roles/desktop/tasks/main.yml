@@ -300,7 +300,7 @@
   ansible.builtin.command:
     cmd: /usr/libexec/ApplicationFirewall/socketfilterfw {{ item.set_cmd }}
   register: _fw_enable_results
-  changed_when: true
+  changed_when: _fw_enable_results.rc == 0
   become: true
   tags: [become]
   when:
