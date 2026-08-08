@@ -76,6 +76,7 @@
   when:
     - system_install_usbguard | bool
     - is_dnf  # usbguard-selinux is Fedora/RHEL-only
+    - not system_is_container
   block:
     - name: Install USBGuard
       ansible.builtin.dnf:

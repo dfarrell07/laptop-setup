@@ -15,7 +15,6 @@
         ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"
         desktop_environment: aerospace
         notes_enabled: true
-        packages_go_install: []  # Go tools use changed_when: true — skip in CI to avoid idempotence failures
 
     - name: Compute OS detection facts (mirrors csb_detect.yml — not called in macOS converge)
       # group_vars/all/vars.yml sets is_macos: false / is_linux: true as static defaults.

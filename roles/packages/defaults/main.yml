@@ -2,9 +2,9 @@
 profile: work  # fallback for standalone invocation
 
 # Package lists by category. Override in config.yml or group_vars.
-# All lists below are work-profile-oriented. Personal users should override
-# heavy work-specific categories (e.g. packages_networking, packages_virtualization)
-# in config.yml to trim unneeded packages.
+# Base lists (packages_cli, packages_languages, packages_security, packages_containers)
+# are shared across all profiles. Lists with a _work suffix are work-profile-only
+# and guarded by 'when: profile == "work"' in the install tasks.
 
 packages_cli:
   - make
