@@ -509,7 +509,7 @@ def main():
 
     ssh_defaults_data = load_yaml(SSH_DEFAULTS_FILE)
     ssh_defaults_errors = []
-    _SSH_MIRROR_KEYS = ["ssh_pubkey_accepted_algorithms", "ssh_signing_key_basename"]
+    _SSH_MIRROR_KEYS = ["ssh_pubkey_accepted_algorithms"]
     for _SSH_MIRROR_KEY in _SSH_MIRROR_KEYS:
         if _SSH_MIRROR_KEY not in ssh_defaults_data:
             ssh_defaults_errors.append(
@@ -527,7 +527,7 @@ def main():
         "Update roles/ssh/defaults/main.yml to match vars.yml.",
     )
     print(
-        "OK: ssh_pubkey_accepted_algorithms and ssh_signing_key_basename present and matching in"
+        "OK: ssh_pubkey_accepted_algorithms present and matching in"
         " roles/ssh/defaults/main.yml (standalone ssh role mirror)"
     )
 
