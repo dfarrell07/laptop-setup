@@ -69,10 +69,6 @@ system_sysctl_hardening:
   # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
   # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
-  # br_netfilter may not be loaded on a fresh install; sysctl.yml allows ENOENT on apply,
-  # and kernel_modules_kind.yml loads br_netfilter then re-runs sysctl --system to complete activation.
-  net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
-  net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
@@ -230,6 +226,10 @@ _system_sysctl_work_defaults:
   net.netfilter.nf_conntrack_max: 524288
   net.core.rmem_max: 16777216
   net.core.wmem_max: 16777216
+  # br_netfilter may not be loaded on a fresh install; sysctl.yml allows ENOENT on apply,
+  # and kernel_modules_kind.yml loads br_netfilter then re-runs sysctl --system to complete activation.
+  net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
+  net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
 # inotify resource limits — performance/functionality tuning for inotify-heavy tools (VS Code Remote, etc.).
 # These are resource increases, not security restrictions; kept separate from system_sysctl_hardening.
 # Always applied (all profiles); not guarded by a profile condition.
