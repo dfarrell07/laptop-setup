@@ -59,6 +59,7 @@
   when:
     - is_linux
     - registry_tokens | length > 0
+    # re-login if: not currently authenticated (rc!=0) or logged in as wrong user (stdout != username)
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Check registry auth status after vault login
