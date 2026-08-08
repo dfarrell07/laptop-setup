@@ -99,13 +99,6 @@ claude_deny_sensitive:
   - "/etc/sudoers.d/**"
 
 claude_deny_write_only:
-  - "~/.claude/CLAUDE.md"
-  - "~/.claude/settings.json"
-  - "~/.claude/settings.local.json"
-  # Note: work/personal instance settings.local.json files are protected by the
-  # broad ~/.claude-work/** and ~/.claude-personal/** deny rules in settings.local.json.j2,
-  # not by explicit entries here.
-  - "~/.claude/plugins/**"
   - "~/.config/claude/**"  # Claude-the-agent only; Ansible still writes queue-repos.conf here
   - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
   - "~/.bashrc"
