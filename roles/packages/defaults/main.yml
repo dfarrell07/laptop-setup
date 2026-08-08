@@ -90,8 +90,7 @@ packages_networking:
 # Work-profile-only networking tools (OVN-K/bpfman development at Red Hat)
 packages_networking_work:
   - ovn            # Open Virtual Network (OVN-K dep; pulls in openvswitch automatically)
-  - bpfman         # bpfman daemon for eBPF program management; must run on host for kernel BPF access
-  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
+  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K)
   - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
   - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
   - iperf3         # network bandwidth measurement; work profile only
@@ -105,6 +104,7 @@ packages_support_work:
   - strace   # system call tracer; needed on host for bpfman daemon debugging
   - gdb      # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
   - perf     # kernel performance profiling
+  - bpfman   # eBPF program manager daemon; must run on host for kernel BPF access
   - bpftrace # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
   - bpftool  # eBPF program/map introspection
 
