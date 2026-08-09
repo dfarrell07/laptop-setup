@@ -17,6 +17,8 @@ install_docker: false  # fallback; authoritative value in group_vars/all/vars.ym
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 
+# WARNING: overriding this in config.yml REPLACES the full list (drops quay.io and registry.redhat.io).
+# Use containers_registries_extra to append instead.
 containers_registries: []  # authoritative value in group_vars/all/vars.yml; empty here for standalone role invocation
 
 # Extra registries appended to containers_registries without replacing the computed default list.
