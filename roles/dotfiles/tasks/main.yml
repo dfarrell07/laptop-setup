@@ -35,7 +35,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
     version: "{{ dotfiles_ohmyzsh_version }}"
     depth: 100
-    update: false
+    update: true
   register: dotfiles_ohmyzsh_result
   timeout: 120
   # ignore_errors (not failed_when: false): .failed must remain True on clone failure —
@@ -54,7 +54,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/custom/plugins/forgit"
     version: "{{ dotfiles_forgit_version }}"
     depth: 1
-    update: false
+    update: true
   register: dotfiles_forgit_result
   ignore_errors: true
   timeout: 60
