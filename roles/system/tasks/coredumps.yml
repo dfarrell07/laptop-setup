@@ -3,6 +3,10 @@
 # --- Core dumps ---
 # inotify on /etc/systemd/coredump.conf.d triggers coredump service reload, crashes containers
 # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
+# NOTE: The default config (system_coredump_storage: external) is intentionally non-compliant
+# with full CIS 1.5.1 — developer workstation trade-off. CIS 1.5.1 requires both (a) fs.suid_dumpable=0
+# and (b) RLIMIT_CORE=0 via limits.d. Req b (limits.d) is only applied when storage: none.
+# Full CIS 1.5.1 compliance requires setting system_coredump_storage: none in config.yml.
 - name: Configure coredumps (skip in containers)
   when: not system_is_container
   block:
@@ -28,7 +32,7 @@
         dest: /etc/systemd/coredump.conf.d/coredump.conf
         mode: "0644"
 
-    - name: Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 — prevent core dumps)
+    - name: "Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 req b — only when storage: none)"
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}

@@ -24,8 +24,6 @@ PACKAGES_DEFAULTS_FILE = REPO_ROOT / "roles/packages/defaults/main.yml"
 REQUIREMENTS_FILE = REPO_ROOT / "requirements-test.txt"
 MOLECULE_DIR = REPO_ROOT / "molecule"
 LINTING_CI_FILE = REPO_ROOT / ".github/workflows/linting.yml"
-DEFAULT_CONFIG_FILE = REPO_ROOT / "default.config.yml"
-DOTFILES_DEFAULTS_FILE = REPO_ROOT / "roles/dotfiles/defaults/main.yml"
 
 # Cross-role mirror: vars.yml is authoritative; these role defaults must match.
 # Checked so standalone molecule invocations use the same defaults as full playbook runs.
@@ -159,6 +157,10 @@ CROSS_ROLE_MIRROR_KEYS = {
     "proxy_url": [
         REPO_ROOT / "roles/packages/defaults/main.yml",
         REPO_ROOT / "roles/system/defaults/main.yml",
+    ],
+    "ssh_port": [
+        REPO_ROOT / "roles/system/defaults/main.yml",
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
     ],
 }
 
@@ -542,43 +544,6 @@ def main():
     print(
         "OK: ssh_pubkey_accepted_algorithms present and matching in"
         " roles/ssh/defaults/main.yml (standalone ssh role mirror)"
-    )
-
-    default_config_data = load_yaml(DEFAULT_CONFIG_FILE)
-    dotfiles_defaults_data = load_yaml(DOTFILES_DEFAULTS_FILE)
-    ssh_port_errors = []
-    _SSH_PORT_KEY = "ssh_port"
-    if _SSH_PORT_KEY not in default_config_data:
-        ssh_port_errors.append(
-            f"  MISSING: {_SSH_PORT_KEY} not found in default.config.yml"
-        )
-    elif _SSH_PORT_KEY not in defaults_data:
-        ssh_port_errors.append(
-            f"  MISSING: {_SSH_PORT_KEY} not found in roles/system/defaults/main.yml"
-        )
-    elif default_config_data[_SSH_PORT_KEY] != defaults_data[_SSH_PORT_KEY]:
-        ssh_port_errors.append(
-            f"  MISMATCH: {_SSH_PORT_KEY}: default.config.yml={default_config_data[_SSH_PORT_KEY]!r}"
-            f" != roles/system/defaults/main.yml={defaults_data[_SSH_PORT_KEY]!r}"
-        )
-    elif _SSH_PORT_KEY not in dotfiles_defaults_data:
-        ssh_port_errors.append(
-            f"  MISSING: {_SSH_PORT_KEY} not found in roles/dotfiles/defaults/main.yml"
-        )
-    elif default_config_data[_SSH_PORT_KEY] != dotfiles_defaults_data[_SSH_PORT_KEY]:
-        ssh_port_errors.append(
-            f"  MISMATCH: {_SSH_PORT_KEY}: default.config.yml={default_config_data[_SSH_PORT_KEY]!r}"
-            f" != roles/dotfiles/defaults/main.yml={dotfiles_defaults_data[_SSH_PORT_KEY]!r}"
-        )
-    _fail_on_errors(
-        ssh_port_errors,
-        "ssh_port mismatch between default.config.yml, roles/system/defaults/main.yml,"
-        " and roles/dotfiles/defaults/main.yml:",
-        "Update all three files to the same ssh_port value.",
-    )
-    print(
-        f"OK: ssh_port={default_config_data.get(_SSH_PORT_KEY)!r} matches in"
-        " default.config.yml, roles/system/defaults/main.yml, and roles/dotfiles/defaults/main.yml"
     )
 
     _fail_on_errors(

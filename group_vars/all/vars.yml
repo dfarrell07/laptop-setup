@@ -109,6 +109,7 @@ system_install_usbguard: true
 # install/start bolt; false on VMs and containers
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
+ssh_port: 722  # mirrors in roles/system/defaults/main.yml and roles/dotfiles/defaults/main.yml; override in config.yml
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
 ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
 ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
