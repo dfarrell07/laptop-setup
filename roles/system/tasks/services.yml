@@ -75,6 +75,19 @@
     - not system_is_container
     - _system_mullvad_install.rc | default(0) == 0
 
+- name: Detect mullvad-daemon (may not be installed)
+  ansible.builtin.command: # noqa: command-instead-of-module
+    cmd: systemctl cat mullvad-daemon
+  register: system_mullvad_check
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - not (install_vpn | bool)
+    - is_dnf
+    - is_fedora
+    - not system_is_container
+
 - name: Stop and disable Mullvad VPN service (install_vpn disabled)
   ansible.builtin.systemd:
     name: mullvad-daemon
@@ -85,9 +98,22 @@
     - is_dnf
     - is_fedora
     - not system_is_container
+    - (system_mullvad_check.rc | default(-1)) == 0
   failed_when: false
 
 # --- USBGuard ---
+- name: Detect usbguard (may not be installed)
+  ansible.builtin.command: # noqa: command-instead-of-module
+    cmd: systemctl cat usbguard
+  register: system_usbguard_check
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - not (system_install_usbguard | bool)
+    - is_dnf
+    - not system_is_container
+
 - name: Stop and disable USBGuard (system_install_usbguard disabled)
   ansible.builtin.systemd:
     name: usbguard
@@ -97,6 +123,7 @@
     - not (system_install_usbguard | bool)
     - is_dnf
     - not system_is_container
+    - (system_usbguard_check.rc | default(-1)) == 0
   failed_when: false
 
 - name: Configure USBGuard
