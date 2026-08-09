@@ -21,6 +21,7 @@ packages_cli:
   - zsh-syntax-highlighting
   - fzf
   - pipx
+  - python3-pip  # pipx runtime dep; Fedora/RHEL pipx RPM does not declare python3-pip as an RPM dependency
   - zoxide
   - ShellCheck
   - shfmt
@@ -31,9 +32,6 @@ packages_cli:
   - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
-
-packages_languages:
-  - python3-pip  # pipx runtime dep; Fedora/RHEL pipx RPM does not declare python3-pip as an RPM dependency
 
 # Work-profile-only language tools (OVN-K/Submariner host builds; personal profile does no host Go
 # development — gcc is CGO-only, but golang is needed for any Go build)
