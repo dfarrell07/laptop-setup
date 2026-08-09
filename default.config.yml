@@ -108,6 +108,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        with systemd-coredump); set false on RHEL CSB machines (IT manages via Satellite)
 #   system_mask_nfs_server: true     (group_vars/all/vars.yml) — masks nfs-server and rpcbind (CIS 2.2.7);
 #                                        set false if Vagrant NFS synced folders, NFS exports, or rpcbind are needed
+#   system_mask_iscsi: true          (group_vars/all/vars.yml) — mask iSCSI initiator units (CIS 2.3.x); set false on iSCSI storage machines
 #   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
@@ -260,6 +261,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        change only when the 8x ratio is wrong
 #   containers_prune_enabled: true  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
 #                                        set false to keep all cached layers
+#   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
+#                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
 #   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries checked for auth-status warnings;
 #                                        work auto-adds registry.redhat.io; actual credential injection uses registry_tokens (vault)
 #                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io

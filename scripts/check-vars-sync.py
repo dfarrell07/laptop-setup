@@ -196,6 +196,7 @@ REQUIRED_KEYS = {
     "system_is_container": str,
     "system_disable_avahi": bool,
     "system_mask_nfs_server": bool,
+    "system_mask_iscsi": bool,
     "system_init_on_free": bool,
     "system_faillock_even_deny_root": bool,
     "system_disable_sctp": bool,

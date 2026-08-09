@@ -99,6 +99,7 @@ system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 t
 system_enable_ip_forward: true     # net.ipv4.ip_forward + net.ipv6.conf.all.forwarding; false on terminal-only hosts
 system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
 system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS
+system_mask_iscsi: true           # mask iSCSI initiator units (CIS 2.3.x); set false on iSCSI storage machines
 system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)
 system_faillock_even_deny_root: false  # lock root on failed auth; set false on single-user workstations
 system_disable_sctp: false  # OVN-K kind/Submariner use SCTP; set true for strict CIS 3.4.1

@@ -1,8 +1,9 @@
+# {{ ansible_managed }}
 [Unit]
 Description=Weekly podman storage cleanup
 
 [Timer]
-OnCalendar=weekly
+OnCalendar={{ containers_prune_schedule }}
 Persistent=true
 
 [Install]
