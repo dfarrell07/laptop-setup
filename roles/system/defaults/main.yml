@@ -218,6 +218,9 @@ system_ipv6_accept_ra: 0
 system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 
 # NOTE: On stock Fedora 44 this sysctl is write-once locked to 2 at boot; any write returns EPERM.
+# The boot-time sysctl.d pass also always returns EPERM on Fedora 44 (kernel locks this during init
+# before sysctl.d runs); the entry in 90-hardening.conf is a no-op on stock Fedora 44 at all stages,
+# retained only for portability to kernels without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
 # Overriding to 1 requires a custom kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF=n). EPERM is tolerated
 # in failed_when; this value (2) is retained for custom-kernel portability.
 # Unprivileged BPF values: 0=allow all (insecure); 1=block unprivileged users (root can re-enable;

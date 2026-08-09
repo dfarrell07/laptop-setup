@@ -32,7 +32,7 @@
     - packages_install_binaries | bool
   block:
     - name: Run Claude Code install script
-      ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
+      ansible.builtin.shell:  # noqa: risky-shell-pipe command-instead-of-module no-changed-when
         cmd: >-
           set -o pipefail && curl --max-time 120 --connect-timeout 15 -fsSL
           {{ claude_install_url }} |

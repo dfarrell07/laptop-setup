@@ -46,10 +46,6 @@
     - is_dnf
     - not system_is_container
     - (system_bpfman_disable_check.rc | default(-1)) == 0
-  register: _system_bpfman_stop_result
-  failed_when: >-
-    _system_bpfman_stop_result is failed and
-    'Unit bpfman.socket not found' not in (_system_bpfman_stop_result.msg | default(''))
 
 - name: Add user to libvirt and kvm groups
   ansible.builtin.user:

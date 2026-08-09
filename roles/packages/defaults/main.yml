@@ -52,9 +52,6 @@ packages_security_yubikey:
 packages_fido2_rhel:
   - libfido2
 
-packages_security:
-  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
-
 packages_containers:
   - podman  # GNOME default via container-management group; not default on Sway/non-GNOME DEs; explicit for non-GNOME Fedora and RHEL/Rocky
   - distrobox
@@ -109,7 +106,7 @@ packages_support_work:
   - bpftool  # eBPF program/map introspection
 
 packages_apt:
-  # openssl: Debian 13 standard default — already present; Fedora installs explicitly via packages_cli (not a Fedora 44 default).
+  # openssl: Debian 13 standard default — already present; Fedora: arrives as a transitive dep of curl/openssh (not installed explicitly).
   - git-lfs  # depends on git (pulled in automatically)
   - make
   - curl
