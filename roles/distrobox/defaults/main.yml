@@ -4,8 +4,9 @@ fapolicyd_enforcing: false  # fallback; authoritative value in group_vars/all/va
 csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
 distrobox_enabled: true  # set false in config.yml to skip container creation and Play 3 entirely
 
+distrobox_fedora_release: '44'
 distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
-distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ (ansible_facts['distribution_major_version'] | default('44'))) }}"  # yamllint disable-line rule:line-length
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ (ansible_facts['distribution_major_version'] | default(distrobox_fedora_release))) }}"  # yamllint disable-line rule:line-length
 distrobox_container_replace: "{{ container_replace | default(false) }}"
 
 distrobox_ini_path: "{{ ansible_facts['user_dir'] }}/.config/distrobox/distrobox.ini"
