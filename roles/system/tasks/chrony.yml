@@ -24,6 +24,16 @@
     # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
     - system_chrony_service_enabled | bool
 
+- name: Mask systemd-timesyncd when chrony is active (Debian)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: true
+    state: stopped
+  when:
+    - is_apt
+    - system_chrony_service_enabled | bool
+  failed_when: false
+
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"

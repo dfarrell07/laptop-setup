@@ -43,3 +43,11 @@
       ansible.builtin.dnf:
         name: aide
         state: absent
+
+    - name: Remove AIDE database when AIDE disabled (force fresh init on re-enable)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/aide/aide.db.gz
+        - /var/lib/aide/aide.db.new.gz
