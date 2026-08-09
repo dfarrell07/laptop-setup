@@ -87,13 +87,13 @@
               - dotfiles_user_email_personal | length > 0
             fail_msg: >-
               Set identity vars in config.yml before running make all.
-              The following still have the 'CHANGE_ME' placeholder:
+              The following are empty or still have the 'CHANGE_ME' placeholder:
               {{ [('dotfiles_github_user', dotfiles_github_user | default('CHANGE_ME')),
               ('dotfiles_user_name', dotfiles_user_name | default('CHANGE_ME')),
               ('dotfiles_user_email_work', dotfiles_user_email_work | default('CHANGE_ME')),
               ('dotfiles_user_email_personal',
               dotfiles_user_email_personal | default('CHANGE_ME'))]
-              | selectattr(1, 'equalto', 'CHANGE_ME') | map(attribute=0) | list }}.
+              | selectattr(1, 'in', ['CHANGE_ME', '']) | map(attribute=0) | list }}.
               Without these, git commits are attributed
               to 'CHANGE_ME', LaunchAgent plists are misnamed, and the notes clone fails.
           tags: [always]

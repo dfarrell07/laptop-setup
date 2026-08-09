@@ -50,7 +50,8 @@
     _wm_pkgs: >-
       {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
          + (desktop_i3_packages if desktop_effective == 'i3' else [])
-         + (desktop_gnome_packages if desktop_effective == 'gnome' else []) }}
+         + (desktop_gnome_packages if desktop_effective == 'gnome' else [])
+         + (desktop_alacritty_dnf_packages if desktop_terminal == 'alacritty' else []) }}
   ansible.builtin.dnf:
     name: "{{ desktop_dnf_packages + _wm_pkgs }}"
     state: present
@@ -60,7 +61,9 @@
 
 - name: Install desktop packages (apt)
   vars:
-    _apt_wm_pkgs: "{{ desktop_sway_apt_packages if desktop_effective == 'sway' else [] }}"
+    _apt_wm_pkgs: >-
+      {{ (desktop_sway_apt_packages if desktop_effective == 'sway' else [])
+         + (desktop_alacritty_apt_packages if desktop_terminal == 'alacritty' else []) }}
   ansible.builtin.apt:
     name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
     state: present

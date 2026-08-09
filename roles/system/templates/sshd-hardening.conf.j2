@@ -17,7 +17,7 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 PermitEmptyPasswords no
-HostKeyAlgorithms ssh-ed25519
+HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}
 AuthorizedKeysFile .ssh/authorized_keys
 PubkeyAuthentication yes

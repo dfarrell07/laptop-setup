@@ -299,6 +299,7 @@ ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,ae
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256"
+ssh_host_key_algorithms: 'ssh-ed25519'
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)
@@ -375,7 +376,7 @@ is_fedora: false           # authoritative in group_vars/all/vars.yml; here for 
 system_disable_avahi: true        # mask avahi-daemon; false enables .local; authoritative in group_vars/all/vars.yml
 system_mask_nfs_server: true      # NFS mask (CIS 2.2.7); false: unmasks but NOT auto-started, enable manually; group_vars authoritative
                                   # nfs-server disabled by vendor preset; mask enforces CIS 2.2.7, prevents accidental enable
-system_mask_iscsi: true           # mask iSCSI initiator units (CIS 2.3.x); false: unmasks; set false on iSCSI storage machines
+system_mask_iscsi: true           # mask iSCSI initiator (CIS 2.3.x); set false on iSCSI storage; authoritative in group_vars/all/vars.yml
 system_init_on_free: true         # zero freed memory pages (init_on_free=1); authoritative in group_vars/all/vars.yml
 system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative
 install_vpn: true           # fallback; authoritative value in group_vars/all/vars.yml
