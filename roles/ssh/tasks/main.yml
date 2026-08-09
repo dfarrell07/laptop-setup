@@ -43,9 +43,7 @@
     key: "github.com {{ item }}"
     state: present
     hash_host: true
-  vars:
-    _ssh_ed25519_keys: "{{ ssh_github_ed25519_keys }}"
-  loop: "{{ _ssh_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
+  loop: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
   loop_control:
     label: "{{ item.split()[0] }}"
 
