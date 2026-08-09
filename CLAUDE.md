@@ -97,7 +97,7 @@ make system           # system role only (sudo)
 make repos_dnf        # repos_dnf role only (sudo)
 make redhat           # redhat role only (sudo)
 make containers       # containers role only (sudo)
-make claude           # claude role only (no sudo)
+make claude           # claude role only (sudo)
 make distrobox        # alias for make container (backwards compatibility)
 # Per repo-group subsets of `make repos` — pattern rule: make repos-<group>
 # runs git_repos role with repo_category=<group>; any category name is valid

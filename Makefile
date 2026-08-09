@@ -172,7 +172,7 @@ check-vars-sync: .venv
 pip-lock: .venv
 	.venv/bin/pip-compile --generate-hashes --output-file=requirements-test.lock requirements-test.txt
 
-# Create .venv from the exact lockfile for reproducible CI builds
+# Sync .venv to match the lockfile exactly (removes packages not pinned in requirements-test.lock)
 pip-sync: .venv
 	.venv/bin/pip-sync requirements-test.lock
 
