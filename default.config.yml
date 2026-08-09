@@ -334,6 +334,13 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   claude_pinned_version: ""           (roles/claude/defaults) — pin a specific Claude version (e.g. "1.0.3"); empty = latest
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (test-queue-poller.sh systemd user service)
+#   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
+#     GitHub repo to poll for task issues (e.g. "myuser/claude-tasks"); role asserts non-empty when enabled
+#   claude_queue_host_label: ""        (roles/claude/defaults) — optional label posted in issue comments to
+#     identify which host handled the task; empty = no label posted
+#   claude_queue_poll_interval_sec: 120  (roles/claude/defaults) — seconds between queue polls
+#   claude_queue_boot_delay_sec: 60    (roles/claude/defaults) — delay after boot before first poll
+#   claude_cleanup_period_days: 7      (roles/claude/defaults) — cleanupPeriodDays written to settings.local.json
 #   claude_queue_memory_max: '4G'      (roles/claude/defaults) — MemoryMax for queue poller unit; lower on 8 GiB machines
 #   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
 #   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions

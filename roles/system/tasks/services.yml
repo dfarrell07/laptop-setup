@@ -73,7 +73,30 @@
     - not system_is_container
     - _system_mullvad_install.rc | default(0) == 0
 
+- name: Stop and disable Mullvad VPN service (install_vpn disabled)
+  ansible.builtin.systemd:
+    name: mullvad-daemon
+    state: stopped
+    enabled: false
+  when:
+    - not (install_vpn | bool)
+    - is_dnf
+    - is_fedora
+    - not system_is_container
+  failed_when: false
+
 # --- USBGuard ---
+- name: Stop and disable USBGuard (system_install_usbguard disabled)
+  ansible.builtin.systemd:
+    name: usbguard
+    state: stopped
+    enabled: false
+  when:
+    - not (system_install_usbguard | bool)
+    - is_dnf
+    - not system_is_container
+  failed_when: false
+
 - name: Configure USBGuard
   when:
     - system_install_usbguard | bool
