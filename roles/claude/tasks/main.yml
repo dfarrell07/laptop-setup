@@ -63,10 +63,9 @@
       when: not csb_rhel
 
 # --- Instance isolation directories and settings ---
-# Build the active instance list. Four cases:
+# Build the active instance list. Three cases:
 #   default only:    default always present; personal when claude_personal_instance_enabled
 #   +work:           profile=work adds claude_work_config_dir
-#   +queue:          claude_queue_enabled adds claude_queue_config_dir (deduped when equal to work dir)
 #   +remote-control: is_macos + claude_remote_control_enabled adds claude_remote_control_config_dir
 - name: Set active Claude instance directories
   ansible.builtin.set_fact:
@@ -74,7 +73,6 @@
       {{ ([claude_default_config_dir]
           + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
           + ([claude_work_config_dir] if (profile == 'work') else [])
-          + ([claude_queue_config_dir] if (claude_queue_enabled | bool) else [])
           + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
          | unique }}
 
