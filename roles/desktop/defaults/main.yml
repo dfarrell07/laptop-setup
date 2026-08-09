@@ -206,6 +206,10 @@ desktop_gnome_ui_dconf:
 
 desktop_macos_key_repeat: 2          # macOS key repeat rate (lower = faster; macOS default 6)
 desktop_macos_initial_key_repeat: 15  # macOS delay before repeat starts (lower = shorter; macOS default 25)
+desktop_macos_auto_quote_substitution: false  # NSAutomaticQuoteSubstitutionEnabled — disable smart quotes
+desktop_macos_auto_dash_substitution: false   # NSAutomaticDashSubstitutionEnabled — disable smart dashes
+desktop_macos_finder_show_all_extensions: true  # AppleShowAllExtensions — show all file extensions in Finder
+desktop_macos_finder_show_posix_path: true      # _FXShowPosixPathInTitle — show full path in Finder title bar
 
 desktop_macos_defaults:
   - domain: NSGlobalDomain
@@ -219,19 +223,19 @@ desktop_macos_defaults:
   - domain: NSGlobalDomain
     key: NSAutomaticQuoteSubstitutionEnabled
     type: bool
-    value: false
+    value: "{{ desktop_macos_auto_quote_substitution }}"
   - domain: NSGlobalDomain
     key: NSAutomaticDashSubstitutionEnabled
     type: bool
-    value: false
+    value: "{{ desktop_macos_auto_dash_substitution }}"
   - domain: com.apple.finder
     key: AppleShowAllExtensions
     type: bool
-    value: true
+    value: "{{ desktop_macos_finder_show_all_extensions }}"
   - domain: com.apple.finder
     key: _FXShowPosixPathInTitle
     type: bool
-    value: true
+    value: "{{ desktop_macos_finder_show_posix_path }}"
 
 desktop_macos_firewall_settings:
   - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
