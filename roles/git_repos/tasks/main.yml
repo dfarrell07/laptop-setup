@@ -80,19 +80,19 @@
 # A functional end-to-end test would require VPN access unavailable in CI.
 - name: Check connectivity to VPN-gated repo hosts
   ansible.builtin.wait_for:
-    host: gitlab.cee.redhat.com
+    host: "{{ git_repos_vpn_check_host }}"
     port: 22
     timeout: 3
     state: started
-  when: git_repos_filtered | map(attribute='url') | select('search', 'gitlab\\.cee\\.redhat\\.com') | list | length > 0
+  when: git_repos_filtered | map(attribute='url') | select('search', git_repos_vpn_check_host) | list | length > 0
   register: git_repos_vpn_check
   ignore_errors: true
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
-      VPN-gated host gitlab.cee.redhat.com is unreachable (port 22).
-      Repos at gitlab.cee.redhat.com require Red Hat VPN — connect to VPN or expect clone failures.
+      VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port 22).
+      Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
   when: git_repos_vpn_check.failed | default(false)
 
 - name: Ensure base directory exists

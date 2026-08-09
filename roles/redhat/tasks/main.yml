@@ -33,7 +33,7 @@
         _csb_role: redhat
         _csb_task_name: "Deploy Red Hat CA certificates"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: "Red Hat internal CA certs may be missing; verify /etc/pki/ca-trust/source/anchors/ exists and is writable"
+        _csb_action: "Red Hat internal CA certs may be missing; verify {{ redhat_ca_dest }} exists and is writable"
         _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
         _csb_ticket_body: >-
           Red Hat CA certificate files could not be copied to
@@ -71,7 +71,7 @@
         _csb_ticket_body: >-
           The redhat-internal-cert-install package could not be installed.
           Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}
-          (deployed to /etc/pki/ca-trust/source/anchors/).
+          (deployed to {{ redhat_ca_dest }}).
           Without these certificates, internal HTTPS endpoints fail:
           Jira, Confluence, and internal container registries all require
           the Red Hat internal CA chain.
