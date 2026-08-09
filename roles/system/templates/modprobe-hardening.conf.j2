@@ -46,7 +46,8 @@ blacklist firewire-net
 install firewire-net /bin/false
 blacklist firewire-sbp2
 install firewire-sbp2 /bin/false
-# nosy removed from kernels starting Linux 5.17; install directive acts as forward defense only.
+# nosy: FireWire sniffer — CVE history; no workstation use. Still ships in Fedora 44 as nosy.ko.xz.
+blacklist nosy
 install nosy /bin/false
 
 {% if system_disable_thunderbolt | bool %}
