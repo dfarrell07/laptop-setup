@@ -62,7 +62,8 @@
       helm binary could not be downloaded from get.helm.sh.
       Install manually from https://helm.sh/docs/intro/install/
 
-# Binary download (not dnf): kustomize is not packaged in Fedora or EPEL repos.
+# Binary download (not dnf): pinned for OVN-K compatibility; Fedora 44 ships 5.8.1
+# (matches; re-evaluate switching to dnf when bumping version).
 - name: Install kustomize
   when:
     - profile == 'work'
