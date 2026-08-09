@@ -188,9 +188,6 @@ desktop_gnome_hardening_dconf:
   # CIS: idle timeout ≤900s; desktop_wm_idle_lock_timeout must satisfy requirement
   - key: /org/gnome/desktop/session/idle-delay
     value: "uint32 {{ desktop_wm_idle_lock_timeout }}"
-  # lock immediately on idle (no grace period)
-  - key: /org/gnome/desktop/screensaver/lock-delay
-    value: "uint32 0"
   # disable location services (privacy)
   - key: /org/gnome/system/location/enabled
     value: "false"
