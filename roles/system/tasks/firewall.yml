@@ -209,6 +209,20 @@
     'INVALID_ZONE' not in (_result.msg | default(''))
   notify: Apply firewall rules
 
+- name: Warn that SSH port {{ ssh_port }} not opened — RHEL CSB drop zone requires IT policy
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: csb_rhel=true and the default firewall zone is 'drop'.
+      The fallback SSH task was skipped (drop zone excluded) and the
+      redhat-zone task only runs on Fedora. Port {{ ssh_port }}/tcp is
+      not opened by this playbook on this host — IT's zone policy must
+      include port {{ ssh_port }}/tcp for SSH to be reachable.
+  when:
+    - system_firewalld_running | bool
+    - csb_rhel | bool
+    - not (system_firewall_manage_zone | bool)
+    - (system_firewall_info.firewalld_info.default_zone | default('')) == 'drop'
+
 - name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
