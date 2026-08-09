@@ -35,8 +35,8 @@ is_dnf5: false
 is_apt: false
 fapolicyd_enforcing: false
 needs_container_tier: "host-only"
-network_proxied: false  # csb_detect.yml overrides at runtime from proxy env vars
-proxy_url: ''           # csb_detect.yml overrides at runtime
+network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY/HTTP_PROXY env vars
+proxy_url: ''           # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY env var
 
 # Cross-role variable baselines — allow standalone invocation of roles that consume
 # variables defined in other roles' defaults or default.config.yml (which only loads

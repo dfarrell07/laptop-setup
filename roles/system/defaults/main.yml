@@ -43,8 +43,9 @@ system_sysctl_hardening:
   # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
-  # secure_redirects: redundant when accept_redirects=0; any accept_redirects override in
-  # system_sysctl_extra_additional would also accept non-gateway redirects without this
+  # CIS 3.3.4/3.3.5 require this independently. Note: if accept_redirects is overridden to 1 via
+  # system_sysctl_extra_additional, this setting (lower precedence) accepts redirects from any host
+  # rather than gateways only — which is expected CIS behavior since CIS mandates secure_redirects=0 regardless.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
@@ -54,9 +55,7 @@ system_sysctl_hardening:
   # fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
   fs.suid_dumpable: 0
   # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
-  # Duplicates 50-coredump.conf intentionally — anchors kernel.core_pipe_limit in 90-hardening.conf
-  # against third-party drop-ins (same rationale as kernel.core_pattern anchoring).
-  kernel.core_pipe_limit: 16
+  # kernel.core_pipe_limit omitted: no known third-party override risk; 50-coredump.conf already sets it correctly.
   # Fedora 44 kernel runtime defaults; pinned here to prevent /etc/sysctl.d override
   net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
   net.ipv4.icmp_ignore_bogus_error_responses: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
