@@ -74,7 +74,7 @@
     - install_vpn | bool
     - is_dnf
     - is_fedora
-  failed_when: false
+  failed_when: _system_mullvad_install.failed and 'No match for argument' not in (_system_mullvad_install.msg | default(''))
 
 - name: Warn if Mullvad VPN package install failed
   ansible.builtin.debug:

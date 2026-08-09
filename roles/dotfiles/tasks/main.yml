@@ -8,7 +8,6 @@
     state: directory
     mode: "{{ item.mode }}"
   loop:
-    - {path: "{{ ansible_facts['user_dir'] }}/.config/claude", mode: "0700"}
     - {path: "{{ ansible_facts['user_dir'] }}/.local/state/zsh", mode: "0700"}
     - {path: "{{ ansible_facts['user_dir'] }}/tmp", mode: "0700"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/gh", mode: "0700"}
@@ -17,6 +16,13 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/tmux", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
+
+- name: Ensure ~/.config/claude directory exists (work profile only)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
+    state: directory
+    mode: "0700"
+  when: profile == 'work'
 
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:

@@ -119,3 +119,9 @@
   when:
     - rh_git_key | trim | length > 0
     - profile == 'work'
+
+- name: Remove Red Hat internal git key when not work profile
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
+    state: absent
+  when: profile != 'work' or rh_git_key | trim | length == 0
