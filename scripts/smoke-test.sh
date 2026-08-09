@@ -15,10 +15,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if $JSON || [[ ! -t 1 ]]; then
-  P="" W="" F="" R=""
-else
+if [[ -t 1 ]] && ! $JSON; then
   P="\033[32m" W="\033[33m" F="\033[31m" R="\033[0m"
+else
+  P="" W="" F="" R=""
 fi
 
 declare -a RESULTS=()
@@ -1120,7 +1120,7 @@ EOF
     for _abrt_svc in abrtd.service abrt-journal-core.service abrt-oops.service abrt-vmcore.service abrt-xorg.service; do
       _abrt_state=$(systemctl show -p UnitFileState --value "$_abrt_svc" 2>/dev/null)
       [[ -z "$_abrt_state" || "$_abrt_state" == "not-found" ]] && continue
-      _abrt_base="${_abrt_svc%.service}"; _abrt_base="${_abrt_base#abrt-}"; _abrt_key="abrt-${_abrt_base}-masked"
+      _abrt_base="${_abrt_svc%.service}"; _abrt_key="${_abrt_base}-masked"
       if [[ "$_abrt_state" == "masked" ]]; then record "$_abrt_key" "PASS"
       else record "$_abrt_key" "FAIL" "$_abrt_svc not masked (state: $_abrt_state) — ABRT should be masked in favour of systemd-coredump"; fi
     done
