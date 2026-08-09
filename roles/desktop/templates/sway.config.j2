@@ -145,8 +145,8 @@ input "type:keyboard" {
 seat seat0 xcursor_theme {{ desktop_sway_cursor_theme }} {{ desktop_sway_cursor_size }}
 
 input "type:touchpad" {
-    tap {{ desktop_sway_touchpad_tap }}
-    natural_scroll {{ desktop_sway_touchpad_natural_scroll }}
+    {% if desktop_sway_touchpad_tap != '' %}tap {{ desktop_sway_touchpad_tap }}{% endif %}
+    {% if desktop_sway_touchpad_natural_scroll != '' %}natural_scroll {{ desktop_sway_touchpad_natural_scroll }}{% endif %}
     {% if desktop_sway_touchpad_dwt != '' %}dwt {{ desktop_sway_touchpad_dwt }}{% endif %}
     middle_emulation {{ desktop_sway_touchpad_middle_emulation }}
 }
