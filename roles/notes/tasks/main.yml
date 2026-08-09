@@ -71,7 +71,7 @@
           Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
       when: not notes_repo_available | bool
 
-    - name: Check if transcrypt is available
+    - name: Check if transcrypt is available  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: which transcrypt
       register: notes_transcrypt_bin
