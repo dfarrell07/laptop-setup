@@ -260,7 +260,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        override only when a different ratio is needed
 #   containers_prune_enabled: true  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
 #                                        set false to keep all cached layers
-#   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries for podman login; work auto-adds registry.redhat.io
+#   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries checked for auth-status warnings;
+#                                        work auto-adds registry.redhat.io; actual credential injection uses registry_tokens (vault)
 #                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io
 #                                        (and registry.redhat.io for work profile) explicitly, or use containers_registries_extra to append
 #   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
