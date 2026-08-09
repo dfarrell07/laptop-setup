@@ -31,6 +31,7 @@
 
 - name: Set GitHub API fetch success fact
   ansible.builtin.set_fact:
+    ssh_github_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | default([]) | select('match', 'ssh-ed25519 ') | list }}"
     ssh_github_ok: >-
       {{ ssh_github_meta.status | default(0) == 200 and
          (ssh_github_meta.json.ssh_keys | default([])
@@ -43,7 +44,7 @@
     state: present
     hash_host: true
   vars:
-    _ssh_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | select('match', 'ssh-ed25519 ') | list }}"
+    _ssh_ed25519_keys: "{{ ssh_github_ed25519_keys }}"
   loop: "{{ _ssh_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
   loop_control:
     label: "{{ item.split()[0] }}"

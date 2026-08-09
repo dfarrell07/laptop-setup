@@ -50,7 +50,7 @@
     stdin: "{{ item.item.token }}"
   timeout: 60
   register: _vault_login_result
-  loop: "{{ containers_vault_pre_auth.results | default([]) }}"
+  loop: "{{ containers_vault_pre_auth.results }}"
   loop_control:
     label: "{{ item.item.registry }}"
   no_log: true
@@ -112,7 +112,7 @@
     msg: >-
       Registry {{ item.item }} not authenticated.
       Run: podman login --authfile {{ containers_auth_file }} {{ item.item }}
-  loop: "{{ containers_auth_status.results | default([]) }}"
+  loop: "{{ containers_auth_status.results }}"
   loop_control:
     label: "{{ item.item | default('unknown') }}"
   when:
