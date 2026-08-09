@@ -171,8 +171,6 @@
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
         - notes_transcrypt_inited | bool
-        - notes_transcrypt_password | length > 0
-        - notes_transcrypt_password != 'REPLACE_ME'
 
 
     - name: Restrict notes repo directory permissions (transcrypt plaintext in working tree)
