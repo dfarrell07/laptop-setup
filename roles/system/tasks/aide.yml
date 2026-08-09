@@ -127,6 +127,7 @@
       when:
         - not (system_aide_db.stat.exists | default(false))
         - not (system_aide_db_new.stat.exists | default(false))
+        - system_aide_reinit_result is skipped
       block:
         - name: Warn that AIDE initialization takes 5-10 minutes
           ansible.builtin.debug:
