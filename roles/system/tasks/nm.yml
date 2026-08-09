@@ -19,8 +19,6 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      [device]
-      wifi.scan-rand-mac-address=yes
       [connection]
       wifi.cloned-mac-address=stable-ssid
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
@@ -35,7 +33,9 @@
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     state: absent
-  when: not _system_wifi_mac_rand
+  when:
+    - not _system_wifi_mac_rand
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces
