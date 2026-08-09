@@ -29,7 +29,9 @@
     name: "{{ real_user_id }}"
     groups: [libvirt, kvm]
     append: true
-  when: install_virtualization | bool
+  when:
+    - install_virtualization | bool
+    - not system_is_container
   register: _system_libvirt_group_result
   failed_when: >-
     _system_libvirt_group_result is failed and
