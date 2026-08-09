@@ -10,7 +10,7 @@ order += "cpu_usage"
 order += "memory"
 order += "disk /"
 order += "disk /home"
-{% if desktop_i3status_show_battery %}order += "battery {{ desktop_i3status_battery_num }}"{% endif %}
+{% if desktop_i3status_battery_num != '' %}order += "battery {{ desktop_i3status_battery_num }}"{% endif %}
 order += "volume master"
 order += "time"
 order += "tztime utc"
@@ -51,7 +51,7 @@ disk "/home" {
     prefix_type = si
 }
 
-{% if desktop_i3status_show_battery %}
+{% if desktop_i3status_battery_num != '' %}
 battery {{ desktop_i3status_battery_num }} {
     format = " %status %percentage %remaining"
     last_full_capacity = true
