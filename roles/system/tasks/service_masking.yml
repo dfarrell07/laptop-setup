@@ -260,9 +260,21 @@
     - abrtd.service
     - abrt-journal-core.service
     - abrt-oops.service
+    - abrt-xorg.service
+  when:
+    - not (system_mask_abrt | bool)
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
+- name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: true
+  loop:
     - abrt-vmcore.service
     - abrt-pstoreoops.service
-    - abrt-xorg.service
   when:
     - not (system_mask_abrt | bool)
     - not csb_rhel

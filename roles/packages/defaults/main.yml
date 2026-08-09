@@ -31,7 +31,6 @@ packages_cli:
   - bat
   - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
-  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
 # Work-profile-only language tools (OVN-K/Submariner host builds; personal profile does no host Go
 # development — gcc is CGO-only, but golang is needed for any Go build)
@@ -52,6 +51,9 @@ packages_security_yubikey:
 # Merged into _packages_dnf_all only when ansible_distribution != 'Fedora'.
 packages_fido2_rhel:
   - libfido2
+
+packages_security:
+  - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
 packages_containers:
   - podman  # GNOME default via container-management group; not default on Sway/non-GNOME DEs; explicit for non-GNOME Fedora and RHEL/Rocky

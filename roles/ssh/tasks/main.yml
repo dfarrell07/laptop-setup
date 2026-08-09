@@ -45,7 +45,7 @@
     hash_host: true
   loop: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
   loop_control:
-    label: "{{ item.split()[0] }}"
+    label: "{{ item.split() | last | truncate(20, True, '...') }}"
 
 - name: Warn if GitHub SSH key fetch failed (used pinned fallback)
   ansible.builtin.debug:
@@ -124,4 +124,4 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
     state: absent
-  when: profile != 'work' or rh_git_key | trim | length == 0
+  when: profile != 'work'
