@@ -141,6 +141,7 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],
     "is_fedora": [
+        REPO_ROOT / "roles/redhat/defaults/main.yml",
         REPO_ROOT / "roles/repos_dnf/defaults/main.yml",
     ],
     "csb_detected": [

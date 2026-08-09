@@ -84,6 +84,21 @@
       # grubby modifies /boot/loader/entries/ directly; auditd watches /boot for writes
       # but AIDE provides the content integrity baseline to detect unauthorized changes.
 
+    - name: Check if AIDE database exists
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: system_aide_db
+
+    - name: Check if AIDE new database exists (interrupted prior init)
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.new.gz
+      register: system_aide_db_new
+
+    - name: Warn that AIDE initialization takes 5-10 minutes
+      ansible.builtin.debug:
+        msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+      when: not (system_aide_db.stat.exists | default(false))
+
     - name: Reinitialize AIDE database when conf changed
       ansible.builtin.shell:  # noqa: command-instead-of-module
         cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
@@ -99,16 +114,6 @@
           or _aide_conf_r4 is changed
           or _aide_conf_r5 is changed
           or _aide_conf_r6 is changed
-
-    - name: Check if AIDE database exists
-      ansible.builtin.stat:
-        path: /var/lib/aide/aide.db.gz
-      register: system_aide_db
-
-    - name: Check if AIDE new database exists (interrupted prior init)
-      ansible.builtin.stat:
-        path: /var/lib/aide/aide.db.new.gz
-      register: system_aide_db_new
 
     - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
       ansible.builtin.command:
