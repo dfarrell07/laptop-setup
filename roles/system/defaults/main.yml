@@ -43,8 +43,10 @@ system_sysctl_hardening:
   # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
-  net.ipv4.conf.all.secure_redirects: 0  # no-op when accept_redirects=0; defense-in-depth if re-enabled
-  net.ipv4.conf.default.secure_redirects: 0  # no-op when accept_redirects=0; defense-in-depth if re-enabled
+  # secure_redirects: redundant when accept_redirects=0; any accept_redirects override in
+  # system_sysctl_extra_additional would also accept non-gateway redirects without this
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
   # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
   # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash

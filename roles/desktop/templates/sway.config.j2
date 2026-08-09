@@ -120,7 +120,7 @@ bindsym $mod+Shift+e exec swaymsg exit
 # Appearance
 default_border pixel {{ desktop_wm_border_width }}
 default_floating_border pixel {{ desktop_wm_floating_border_width }}
-hide_edge_borders {{ desktop_wm_hide_edge_borders }}
+{% if desktop_wm_hide_edge_borders != 'none' %}hide_edge_borders {{ desktop_wm_hide_edge_borders }}{% endif %}
 {% if desktop_sway_gaps_inner != 0 or desktop_sway_gaps_outer != 0 %}
 gaps inner {{ desktop_sway_gaps_inner }}
 gaps outer {{ desktop_sway_gaps_outer }}

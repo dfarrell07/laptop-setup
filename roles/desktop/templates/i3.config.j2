@@ -90,7 +90,7 @@ bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg e
 # Appearance
 default_border pixel {{ desktop_wm_border_width }}
 default_floating_border pixel {{ desktop_wm_floating_border_width }}
-hide_edge_borders {{ desktop_wm_hide_edge_borders }}
+{% if desktop_wm_hide_edge_borders != 'none' %}hide_edge_borders {{ desktop_wm_hide_edge_borders }}{% endif %}
 
 # Status bar
 {% include '_bar_colors.j2' %}
