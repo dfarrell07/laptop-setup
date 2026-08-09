@@ -77,7 +77,6 @@ bootstrap:
 	@echo "Bootstrap complete. Git hooks active."
 
 bootstrap-test: .venv
-	ansible-galaxy collection install -r requirements.yml -p ./collections
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
 	sudo systemctl enable --now libvirtd
 	vagrant box add githubixx/fedora-44 --provider libvirt

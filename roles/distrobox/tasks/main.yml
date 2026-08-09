@@ -3,7 +3,7 @@
 # Create Distrobox/Toolbx container + register for Play 3 provisioning.
 
 # --- Detect container tool ---
-- name: Probe distrobox binary availability
+- name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: which distrobox
   register: distrobox_check
@@ -11,7 +11,7 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
-- name: Probe toolbox binary availability
+- name: Probe toolbox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: which toolbox
   register: distrobox_toolbox_check
