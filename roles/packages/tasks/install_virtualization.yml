@@ -57,7 +57,7 @@
     - is_dnf
     - install_virtualization | bool
     - "'libvirt' in packages_virtualization"
-  failed_when: false
+    - not system_is_container
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
   ansible.builtin.getent:
