@@ -124,4 +124,4 @@
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
     state: absent
-  when: profile != 'work' and rh_git_key | trim | length > 0
+  when: profile != 'work'

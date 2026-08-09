@@ -95,7 +95,7 @@
 - name: Deploy Claude work-env file
   ansible.builtin.copy:
     content: |
-      export CLAUDE_CONFIG_DIR=~/.claude-work
+      export CLAUDE_CONFIG_DIR={{ claude_work_config_dir }}
       # Uncomment after adding companion vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION, GOOGLE_CLOUD_PROJECT):
       # export CLAUDE_CODE_USE_VERTEX=1
       # export ANTHROPIC_VERTEX_PROJECT_ID=...
