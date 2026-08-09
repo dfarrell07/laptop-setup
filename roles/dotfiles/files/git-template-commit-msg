@@ -15,14 +15,15 @@ if ! echo "$msg" | grep -qE '^[A-Z]'; then
 fi
 
 _bad_word() {
-  case "$1" in
-    Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|Fixed|\
-    Implemented|Improved|Merged|Moved|Refactored|Removed|Renamed|\
-    Replaced|Resolved|Reverted|Started|Stopped|Updated|Upgraded|\
-    Adding|Changing|Creating|Deleting|Enabling|Disabling|Expanding|\
-    Fixing|Implementing|Improving|Merging|Moving|Refactoring|Removing|\
-    Renaming|Replacing|Resolving|Reverting|Starting|Stopping|Updating|\
-    Upgrading) return 0 ;;
+  _w=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+  case "$_w" in
+    added|changed|created|deleted|enabled|disabled|expanded|fixed|\
+    implemented|improved|merged|moved|refactored|removed|renamed|\
+    replaced|resolved|reverted|started|stopped|updated|upgraded|\
+    adding|changing|creating|deleting|enabling|disabling|expanding|\
+    fixing|implementing|improving|merging|moving|refactoring|removing|\
+    renaming|replacing|resolving|reverting|starting|stopping|updating|\
+    upgrading) return 0 ;;
     *) return 1 ;;
   esac
 }

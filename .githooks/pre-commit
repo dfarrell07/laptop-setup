@@ -55,7 +55,7 @@ fi
 
 # JSON validation on staged files
 while IFS= read -r -d '' f; do
-  if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+  if ! git show ":$f" | python3 -m json.tool > /dev/null 2>&1; then
     echo "ERROR: $f is not valid JSON" >&2
     failed=1
   fi
@@ -76,9 +76,6 @@ for name, info in lock.get('packages', {}).items():
         sys.exit(1)
     if resolved and not resolved.startswith('https://registry.npmjs.org/'):
         print(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}', file=sys.stderr)
-        sys.exit(1)
-    if resolved.startswith(('git://', 'git+', 'ssh://')):
-        print(f'ERROR: Git protocol dep bypasses ignore-scripts: {name}', file=sys.stderr)
         sys.exit(1)
 " 2>&1; then
     failed=1

@@ -274,8 +274,7 @@ else
 fi
 
 # --- Sudo scope ---
-if sudo -n -l &>/dev/null; then
-  sudo_out=$(sudo -n -l 2>/dev/null) || true
+if sudo_out=$(sudo -n -l 2>/dev/null); then
   if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]+ALL'; then
     record "sudo" "pass" "full sudo available"
   else
