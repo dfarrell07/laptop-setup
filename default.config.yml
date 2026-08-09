@@ -256,8 +256,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
 #   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
-#   containers_nofile_hard_limit: 524288  (roles/containers/defaults) — auto-scales to 8× containers_nofile_limit;
-#                                        override only when a different ratio is needed
+#   containers_nofile_hard_limit: '{{ containers_nofile_limit | int * 8 }}'  (roles/containers/defaults) — hard-limit override;
+#                                        change only when the 8x ratio is wrong
 #   containers_prune_enabled: true  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
 #                                        set false to keep all cached layers
 #   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries checked for auth-status warnings;
