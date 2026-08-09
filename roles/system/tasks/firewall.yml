@@ -280,6 +280,23 @@
   # on first provision (before packages run) the zone file is absent. All other failures surface.
   notify: Apply firewall rules
 
+- name: Remove tftp service from libvirt zone (upstream default; not needed on this host)
+  ansible.posix.firewalld:
+    zone: libvirt
+    service: tftp
+    permanent: true
+    immediate: true
+    state: disabled
+  register: _system_libvirt_tftp_remove
+  when:
+    - system_firewalld_running | bool
+    - install_virtualization | bool
+    - system_firewall_manage_zone | bool
+  failed_when: >-
+    (_system_libvirt_tftp_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_libvirt_tftp_remove.msg | default(''))
+  notify: Apply firewall rules
+
 - name: Open SSH port in libvirt zone
   ansible.posix.firewalld:
     zone: libvirt

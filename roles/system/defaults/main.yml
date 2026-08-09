@@ -41,6 +41,9 @@ system_sysctl_hardening:
   # prevent third-party /etc/sysctl.d override of 50-default.conf setting
   net.ipv4.conf.default.rp_filter: 2  # vendor 50-default.conf sets 2; pinned so
   # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
+  # CIS 3.3.2/3.3.3 — log packets with impossible source addresses. Kernel default=0; set to 1 here.
+  # With ip_forward=1 (default) and transient routing gaps (e.g., kind CNI init), may generate
+  # brief kernel log noise from pods before routes are established.
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
   # CIS 3.3.4/3.3.5 require this independently. Note: if accept_redirects is overridden to 1 via
