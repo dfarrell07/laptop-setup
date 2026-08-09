@@ -29,7 +29,7 @@ packages_cli:
   - ripgrep
   - fd-find
   - bat
-  - tree  # directory listing utility; Fedora 44 Workstation default (no-op there); explicit install needed for RHEL/Rocky
+  - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssl  # openssl CLI not a Fedora 44/RHEL default; installed for ad-hoc TLS debugging (s_client) and key operations
 
@@ -82,7 +82,7 @@ packages_virtualization:
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
-  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables, tree are Fedora Workstation defaults
+  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults
   # (always installed on Fedora; on RHEL/Rocky these are absent from the host and instead in the distrobox container)
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
