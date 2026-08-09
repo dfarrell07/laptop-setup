@@ -123,5 +123,8 @@ ssh_host_key_algorithms: 'ssh-ed25519'
 # Used in rescue blocks to route IT ticket vs. generic warning.
 csb_rhel: false
 
+# WARNING: overriding containers_registries in config.yml REPLACES the full list,
+# dropping quay.io and (for work profile) registry.redhat.io. To append without
+# clobbering, use containers_registries_extra (roles/containers/defaults) instead.
 containers_registries: >-
   {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}

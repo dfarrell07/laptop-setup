@@ -263,10 +263,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set false to keep all cached layers
 #   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
 #                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
-#   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — registries checked for auth-status warnings;
-#                                        work auto-adds registry.redhat.io; actual credential injection uses registry_tokens (vault)
-#                                        WARNING: setting this in config.yml REPLACES the default list entirely — re-include quay.io
-#                                        (and registry.redhat.io for work profile) explicitly, or use containers_registries_extra to append
+#   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — WARNING: overriding this in config.yml REPLACES the full list.
+#                                        Use containers_registries_extra to append without clobbering.
+#                                        Work profile auto-adds registry.redhat.io; credential injection uses registry_tokens (vault)
 #   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
 #                                        list without replacing the default; safer than overriding
 #                                        containers_registries entirely
