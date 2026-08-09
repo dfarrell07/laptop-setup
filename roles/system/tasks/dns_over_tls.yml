@@ -39,7 +39,7 @@
       DNS={{ system_dns_primary }}
       Domains={{ system_dns_domains }}
       DNSOverTLS={{ system_dot_mode }}
-      DNSSEC=allow-downgrade
+      DNSSEC={{ system_dnssec_mode }}
       FallbackDNS={{ system_dns_fallback }}
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"

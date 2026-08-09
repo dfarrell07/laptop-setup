@@ -21,7 +21,6 @@
       failed_when: false
 
     - name: Remove AIDE systemd unit files when disabled
-      when: not system_is_container
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent

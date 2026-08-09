@@ -112,6 +112,9 @@ system_firewall_icmp_extra_types: []
 # Set false in config.yml to keep tftp in the libvirt zone (needed for PXE/network-boot VMs).
 # When true (default), tftp is removed from the libvirt zone because it is not needed for most hosts.
 system_libvirt_remove_tftp: true
+# Set false in config.yml to prevent VMs from reaching host on ssh_port.
+# Default true for dev workstations that use VM→host SSH.
+system_libvirt_open_ssh: true
 
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
@@ -314,6 +317,9 @@ ssh_host_key_algorithms: 'ssh-ed25519'
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)
 # yes: mandatory TLS — DNS fails completely on networks blocking port 853; only use on fully controlled networks
 system_dot_mode: opportunistic
+# allow-downgrade: try DNSSEC validation, accept downgrade if unavailable (default)
+# yes: strict DNSSEC — pairs with system_dot_mode: yes; set both for full DNSSEC enforcement
+system_dnssec_mode: allow-downgrade
 system_dns_primary: >-
   1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
   2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com

@@ -99,6 +99,17 @@
         msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
       when: not (system_aide_db.stat.exists | default(false))
 
+    - name: Warn that AIDE reinit takes 5-10 minutes
+      ansible.builtin.debug:
+        msg: "AIDE configuration changed — reinitializing database. This takes 5-10 minutes. Do not cancel."
+      when:
+        - _aide_conf_r1 is changed
+          or _aide_conf_r2 is changed
+          or _aide_conf_r3 is changed
+          or _aide_conf_r4 is changed
+          or _aide_conf_r5 is changed
+          or _aide_conf_r6 is changed
+
     - name: Reinitialize AIDE database when conf changed
       ansible.builtin.shell:  # noqa: command-instead-of-module
         cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
