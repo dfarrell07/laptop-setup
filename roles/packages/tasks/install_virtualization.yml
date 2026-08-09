@@ -24,10 +24,10 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
           Virtualization packages could not be installed; request repo access
-          or install libvirt/QEMU/virt-manager manually
+          or install libvirt, libvirt-client, qemu-kvm, virt-install manually
         _csb_ticket_summary: "Cannot install virtualization packages on CSB"
         _csb_ticket_body: >-
-          One or more virtualization packages (libvirt, QEMU, virt-manager, etc.)
+          One or more virtualization packages (libvirt, libvirt-client, qemu-kvm, virt-install)
           could not be installed. This may affect container and VM workflows.
       when: csb_rhel
     - name: Warn virtualization package install failed (non-CSB)
