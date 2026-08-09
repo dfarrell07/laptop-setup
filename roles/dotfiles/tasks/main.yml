@@ -17,13 +17,6 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
 
-- name: Ensure ~/.config/claude directory exists (work profile only)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
-    state: directory
-    mode: "0700"
-  when: profile == 'work'
-
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
@@ -340,6 +333,13 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
     force: false
+
+- name: Ensure ~/.config/claude directory exists (work profile only)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
+    state: directory
+    mode: "0700"
+  when: profile == 'work'
 
 - name: Deploy Claude work-env file
   ansible.builtin.copy:
