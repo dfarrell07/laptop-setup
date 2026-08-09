@@ -37,7 +37,7 @@
         _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
         _csb_ticket_body: >-
           Red Hat CA certificate files could not be copied to
-          /etc/pki/ca-trust/source/anchors/. Internal CA trust may be
+          {{ redhat_ca_dest }}/. Internal CA trust may be
           broken, affecting access to internal HTTPS services.
       when: csb_detected
     - name: Warn CA certificate deploy failed (non-CSB)
