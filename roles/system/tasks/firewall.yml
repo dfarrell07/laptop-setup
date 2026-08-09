@@ -41,7 +41,7 @@
   changed_when: ansible_check_mode or ('success' in (_zone_result.stdout | default('')))
   when:
     - system_firewalld_running | bool
-    - system_firewall_info.firewalld_info.default_zone | default('unknown') != 'drop'
+    - (system_firewall_info.firewalld_info.default_zone | default('unknown')) != 'drop' and system_firewall_info is not failed
     - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Apply firewall rules
