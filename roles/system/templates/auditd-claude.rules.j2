@@ -98,15 +98,21 @@
 -w /etc/aide.conf -p wa -k aide-integrity
 {% endif %}
 
+{% if system_tlp_enabled %}
 # TLP battery/power configuration changes
 -w /etc/tlp.d/ -p wa -k power-config
 -w /etc/tlp.conf -p wa -k power-config
+{% endif %}
 
+{% if system_install_usbguard %}
 # USBGuard device whitelist (allow new devices to avoid silent privilege escalation)
 -w /etc/usbguard/ -p wa -k device-policy
+{% endif %}
 
+{% if profile == 'work' %}
 # bpfman eBPF program manager configuration (trusted daemon with kernel-level access)
 -w /etc/bpfman/ -p wa -k bpfman-config
+{% endif %}
 
 # Kernel parameter and module configuration
 -w /etc/sysctl.conf -p wa -k kernel-params
@@ -187,8 +193,6 @@
 -w /var/log/wtmp -p wa -k logins
 -w /var/log/btmp -p wa -k logins
 
-# Session initiation (CIS 4.1.3.1) — utmp tracks currently-logged-in users
--w /var/run/utmp -p wa -k session
 
 # Network environment changes (CIS 4.1.3.5 / 4.1.3.12)
 -a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
