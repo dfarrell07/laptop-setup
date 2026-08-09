@@ -49,9 +49,7 @@
       when: not csb_detected
 
 - name: Install Red Hat cert packages
-  when:
-    - is_dnf
-    - csb_rhel
+  when: csb_rhel
   block:
     - name: Install cert packages via dnf
       ansible.builtin.dnf:
@@ -72,7 +70,7 @@
         _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
         _csb_ticket_body: >-
           The redhat-internal-cert-install package could not be installed.
-          Affected CA cert files: 2022-IT-Root-CA.pem and Eng-CA.crt
+          Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}
           (deployed to /etc/pki/ca-trust/source/anchors/).
           Without these certificates, internal HTTPS endpoints fail:
           Jira, Confluence, and internal container registries all require
