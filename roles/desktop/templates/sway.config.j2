@@ -148,7 +148,7 @@ input "type:touchpad" {
     {% if desktop_sway_touchpad_tap != '' %}tap {{ desktop_sway_touchpad_tap }}{% endif %}
     {% if desktop_sway_touchpad_natural_scroll != '' %}natural_scroll {{ desktop_sway_touchpad_natural_scroll }}{% endif %}
     {% if desktop_sway_touchpad_dwt != '' %}dwt {{ desktop_sway_touchpad_dwt }}{% endif %}
-    middle_emulation {{ desktop_sway_touchpad_middle_emulation }}
+    {% if desktop_sway_touchpad_middle_emulation != '' %}middle_emulation {{ desktop_sway_touchpad_middle_emulation }}{% endif %}
 }
 
 # TrackPoint scroll: on_button_down (hold middle button) must be scoped to the
