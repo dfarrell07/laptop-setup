@@ -46,7 +46,10 @@
     - is_dnf
     - not system_is_container
     - (system_bpfman_disable_check.rc | default(-1)) == 0
-  failed_when: false
+  register: _system_bpfman_stop_result
+  failed_when: >-
+    _system_bpfman_stop_result is failed and
+    'Unit bpfman.socket not found' not in (_system_bpfman_stop_result.msg | default(''))
 
 - name: Add user to libvirt and kvm groups
   ansible.builtin.user:
@@ -123,7 +126,10 @@
     - is_fedora
     - not system_is_container
     - (system_mullvad_check.rc | default(-1)) == 0
-  failed_when: false
+  register: _system_mullvad_stop_result
+  failed_when: >-
+    _system_mullvad_stop_result is failed and
+    'Unit mullvad-daemon not found' not in (_system_mullvad_stop_result.msg | default(''))
 
 # --- USBGuard ---
 - name: Detect usbguard (may not be installed)
@@ -148,7 +154,10 @@
     - is_dnf
     - not system_is_container
     - (system_usbguard_check.rc | default(-1)) == 0
-  failed_when: false
+  register: _system_usbguard_stop_result
+  failed_when: >-
+    _system_usbguard_stop_result is failed and
+    'Unit usbguard not found' not in (_system_usbguard_stop_result.msg | default(''))
 
 - name: Configure USBGuard
   when:

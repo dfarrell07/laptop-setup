@@ -292,6 +292,7 @@
     - system_firewalld_running | bool
     - install_virtualization | bool
     - system_firewall_manage_zone | bool
+    - system_libvirt_remove_tftp | bool  # set false in config.yml to keep tftp for PXE/network-boot VMs
   failed_when: >-
     (_system_libvirt_tftp_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_libvirt_tftp_remove.msg | default(''))

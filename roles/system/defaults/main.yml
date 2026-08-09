@@ -109,6 +109,10 @@ system_firewall_icmp_types:
 # Example: system_firewall_icmp_extra_types: [echo-request]
 system_firewall_icmp_extra_types: []
 
+# Set false in config.yml to keep tftp in the libvirt zone (needed for PXE/network-boot VMs).
+# When true (default), tftp is removed from the libvirt zone because it is not needed for most hosts.
+system_libvirt_remove_tftp: true
+
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
 # NOTE: fs.suid_dumpable=0 suppresses SUID crashes regardless of this setting (CIS 1.5.1 req a).
