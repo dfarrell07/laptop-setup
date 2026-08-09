@@ -85,6 +85,25 @@
   loop_control:
     label: "{{ item | basename }}"
 
+- name: Ensure ~/.config/claude directory exists (work-env, work profile only)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
+    state: directory
+    mode: "0700"
+  when: profile == 'work'
+
+- name: Deploy Claude work-env file
+  ansible.builtin.copy:
+    content: |
+      export CLAUDE_CONFIG_DIR=~/.claude-work
+      # Uncomment after adding companion vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION, GOOGLE_CLOUD_PROJECT):
+      # export CLAUDE_CODE_USE_VERTEX=1
+      # export ANTHROPIC_VERTEX_PROJECT_ID=...
+    dest: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
+    mode: "0600"
+    force: false
+  when: profile == 'work'
+
 # Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
 # to settings.local.json, not settings.json.  Claude Code's /config command
 # overwrites settings.json (theme, model, etc.) but does NOT touch
