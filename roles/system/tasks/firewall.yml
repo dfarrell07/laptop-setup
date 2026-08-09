@@ -310,5 +310,6 @@
     - system_firewalld_running | bool
     - install_virtualization | bool
     - system_firewall_manage_zone | bool
+    - system_libvirt_open_ssh | bool
   failed_when: (_result_lv_ssh.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh.msg | default(''))
   notify: Apply firewall rules
