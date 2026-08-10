@@ -42,6 +42,16 @@
     - system_chrony_service_enabled | bool
   failed_when: false
 
+- name: Unmask systemd-timesyncd when chrony is disabled (Debian)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: false
+    state: started
+  when:
+    - is_apt
+    - not (system_chrony_service_enabled | bool)
+  failed_when: false
+
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"

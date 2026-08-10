@@ -124,7 +124,6 @@
       ansible.builtin.command:
         cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       when:
-        - not (system_aide_db.stat.exists | default(false)) or system_aide_db_new.stat.exists | default(false)
         - system_aide_db_new.stat.exists | default(false)
         - system_aide_reinit_result is skipped  # reinit already promoted the db
       changed_when: true
@@ -140,8 +139,8 @@
             msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
 
         - name: Initialize AIDE database and promote to active baseline
-          ansible.builtin.command:
-            cmd: bash -c "aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz"
+          ansible.builtin.shell:  # noqa: command-instead-of-module
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
           changed_when: true
 
     - name: Deploy AIDE failure notification unit

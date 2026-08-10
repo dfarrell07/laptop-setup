@@ -107,11 +107,12 @@
 - name: Set default inactive days for new accounts to 30
   ansible.builtin.command:
     cmd: useradd -D -f {{ system_inactive_days }}
+  register: _useradd_inactive_result
   when:
     - "'INACTIVE=' ~ system_inactive_days not in (system_useradd_defaults.stdout | default(''))"
     - not csb_rhel  # same rationale as login.defs INACTIVE guard
     - not system_is_container
-  changed_when: true
+  changed_when: _useradd_inactive_result.rc == 0
 
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
 # inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
