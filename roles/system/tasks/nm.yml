@@ -6,7 +6,6 @@
     state: directory
     mode: "0755"
   when: not system_is_container  # NM watches conf.d via inotify; creating dir triggers NM reload, can crash container
-  failed_when: false
 
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
 # authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
@@ -26,7 +25,6 @@
   when:
     - _system_wifi_mac_rand
     - not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
-  failed_when: false
   notify: Restart NetworkManager
 
 - name: Remove WiFi MAC address randomization config when disabled
@@ -47,7 +45,6 @@
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   when: not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
-  failed_when: false
   notify: Restart NetworkManager
 
 - name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
@@ -61,7 +58,6 @@
   when:
     - not csb_rhel  # paired with resolv.conf
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
-  failed_when: false
   notify: Restart NetworkManager
 
 # On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
@@ -80,7 +76,6 @@
   when:
     - _system_wifi_powersave
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
-  failed_when: false
   notify: Restart NetworkManager
 
 - name: Remove WiFi power saving config when disabled
@@ -104,7 +99,6 @@
   when:
     - not csb_detected
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
-  failed_when: false
   notify: Restart NetworkManager
 
 # tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN

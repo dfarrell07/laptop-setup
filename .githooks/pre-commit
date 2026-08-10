@@ -3,7 +3,7 @@
 failed=0
 
 # Block unencrypted vault files
-for f in $(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml' | tr '\0' '\n'); do
+while IFS= read -r -d '' f; do
   if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     # Allow plaintext stub: vault_placeholder present and all other vault_* vars are empty stubs ([] only)
     if git show ":$f" | grep -q 'vault_placeholder' && \
@@ -14,7 +14,7 @@ for f in $(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml' | 
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
     failed=1
   fi
-done
+done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml')
 
 # Secret scanning
 if command -v gitleaks >/dev/null 2>&1; then
@@ -62,10 +62,10 @@ while IFS= read -r -d '' f; do
 done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v package-lock)
 
 # Lockfile integrity (only when package-lock.json is staged)
-if git diff --cached --name-only | grep -q 'package-lock.json'; then
-  if ! python3 -c "
+if git diff --cached --name-only --diff-filter=ACM | grep -q 'package-lock.json'; then
+  if ! git show :package-lock.json | python3 -c "
 import json, sys
-lock = json.load(open('package-lock.json'))
+lock = json.load(sys.stdin)
 for name, info in lock.get('packages', {}).items():
     if not name:
         continue
