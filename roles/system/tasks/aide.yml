@@ -124,7 +124,7 @@
       ansible.builtin.command:
         cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       when:
-        - not (system_aide_db.stat.exists | default(false))
+        - not (system_aide_db.stat.exists | default(false)) or system_aide_db_new.stat.exists | default(false)
         - system_aide_db_new.stat.exists | default(false)
         - system_aide_reinit_result is skipped  # reinit already promoted the db
       changed_when: true
