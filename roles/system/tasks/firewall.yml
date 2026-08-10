@@ -173,6 +173,10 @@
     - system_firewall_manage_zone | bool
   notify: Apply firewall rules
 
+# On fresh provisioning with system_enable_cockpit=false (the default), this task is a
+# no-op: state=disabled against a non-existent rule on the drop zone is always ok.
+# The task only has an effect when transitioning from system_enable_cockpit: true → false
+# (closing a previously opened port) or true → true (opening/ensuring the port is open).
 - name: Open/close Cockpit port in drop zone (9090/tcp — enabled when system_enable_cockpit is true)
   ansible.posix.firewalld:
     zone: drop
