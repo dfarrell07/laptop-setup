@@ -8,6 +8,8 @@ distrobox_fedora_release: '44'
 distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
 distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ (ansible_facts['distribution_major_version'] | default(distrobox_fedora_release))) }}"  # yamllint disable-line rule:line-length
 distrobox_container_replace: "{{ container_replace | default(false) }}"
+distrobox_container_distro: "{{ container_distro | default('fedora') }}"
+distrobox_container_release: "{{ container_release | default(ansible_facts['distribution_major_version'] | default(distrobox_fedora_release)) }}"  # yamllint disable-line rule:line-length
 
 distrobox_ini_path: "{{ ansible_facts['user_dir'] }}/.config/distrobox/distrobox.ini"
 

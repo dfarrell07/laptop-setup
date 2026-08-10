@@ -114,6 +114,15 @@
   check_mode: false  # read-only probe — must run in check mode
   when: distrobox_tool != 'none'
 
+- name: Mark container unavailable when offline and container does not exist
+  ansible.builtin.set_fact:
+    distrobox_tool: "none"
+  when:
+    - distrobox_tool != "none"
+    - not (fapolicyd_enforcing)
+    - not (packages_install_binaries | bool)
+    - distrobox_container_exists.rc != 0
+
 # --- Distrobox path ---
 - name: Ensure distrobox config directory
   ansible.builtin.file:
@@ -132,15 +141,6 @@
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
-
-- name: Mark container unavailable when offline and container does not exist (distrobox path)
-  ansible.builtin.set_fact:
-    distrobox_tool: "none"
-  when:
-    - distrobox_use_distrobox | bool
-    - not (fapolicyd_enforcing)
-    - not (packages_install_binaries | bool)
-    - distrobox_container_exists.rc != 0
 
 - name: Create container via Distrobox
   when:
@@ -189,15 +189,6 @@
         distrobox_tool: "none"
 
 # --- Toolbx path ---
-- name: Mark container unavailable when offline and container does not exist (toolbox path)
-  ansible.builtin.set_fact:
-    distrobox_tool: "none"
-  when:
-    - distrobox_use_toolbox | bool
-    - not (fapolicyd_enforcing)
-    - not (packages_install_binaries | bool)
-    - distrobox_container_exists.rc != 0
-
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool
@@ -217,8 +208,8 @@
       ansible.builtin.command:
         cmd: >-
           toolbox create
-          --distro {{ container_distro | default('fedora') }}
-          --release {{ container_release | default(ansible_facts['distribution_major_version']) }}
+          --distro {{ distrobox_container_distro }}
+          --release {{ distrobox_container_release }}
           {{ distrobox_container_name }}
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_toolbox_create
