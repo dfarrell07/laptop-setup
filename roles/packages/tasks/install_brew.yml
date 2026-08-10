@@ -64,10 +64,22 @@
           Continuing playbook execution.
 
 - name: Install ssh-askpass (macOS)
-  community.general.homebrew:
-    name: theseal/ssh-askpass/ssh-askpass
-    state: present
   when: is_macos
+  block:
+    - name: Install ssh-askpass (macOS)
+      community.general.homebrew:
+        name: theseal/ssh-askpass/ssh-askpass
+        state: present
+      async: 600
+      poll: 10
+  rescue:
+    - name: Warn ssh-askpass install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install ssh-askpass in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or the formula may be renamed.
+          Continuing playbook execution.
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
