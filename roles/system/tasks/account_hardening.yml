@@ -109,7 +109,7 @@
     cmd: useradd -D -f {{ system_inactive_days }}
   register: _useradd_inactive_result
   when:
-    - "'INACTIVE=' ~ system_inactive_days not in (system_useradd_defaults.stdout | default(''))"
+    - "system_useradd_defaults.stdout_lines | default([]) | select('match', '^INACTIVE=' ~ system_inactive_days ~ '$') | list | length == 0"
     - not csb_rhel  # same rationale as login.defs INACTIVE guard
     - not system_is_container
   changed_when: _useradd_inactive_result.rc == 0
