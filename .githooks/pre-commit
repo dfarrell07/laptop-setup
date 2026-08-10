@@ -4,10 +4,11 @@ failed=0
 
 # Block unencrypted vault files
 while IFS= read -r -d '' f; do
-  if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
+  _vault_content=$(git show ":$f")
+  if ! printf '%s' "$_vault_content" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     # Allow plaintext stub: vault_placeholder present and all other vault_* vars are empty stubs ([] only)
-    if git show ":$f" | grep -q 'vault_placeholder' && \
-       [ "$(git show ":$f" | grep -E '^vault_' | grep -Ev 'vault_placeholder|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
+    if printf '%s' "$_vault_content" | grep -q 'vault_placeholder' && \
+       [ "$(printf '%s' "$_vault_content" | grep -E '^vault_' | grep -Ev 'vault_placeholder|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
       echo "NOTE: $f is a plaintext stub (no real secrets) — OK" >&2
       continue
     fi
@@ -33,7 +34,7 @@ elif [ -x ".venv/bin/yamllint" ]; then
   YAMLLINT=".venv/bin/yamllint"
 fi
 if [ -n "$YAMLLINT" ]; then
-  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml' | grep -v node_modules | grep -v collections)
+  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml' | grep -v node_modules | grep -v '^collections/')
   if [ -n "$yaml_files" ]; then
     if ! echo "$yaml_files" | xargs "$YAMLLINT" --strict; then
       failed=1
@@ -62,7 +63,7 @@ while IFS= read -r -d '' f; do
 done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v package-lock)
 
 # Lockfile integrity (only when package-lock.json is staged)
-if git diff --cached --name-only --diff-filter=ACM | grep -q 'package-lock.json'; then
+if git diff --cached --name-only --diff-filter=ACM | grep -q '^package-lock.json$'; then
   if ! git show :package-lock.json | python3 -c "
 import json, sys
 lock = json.load(sys.stdin)

@@ -124,7 +124,7 @@
 # CIS 5.6 requires non-login system accounts use /sbin/nologin or be locked.
 - name: Check if splunk user exists
   ansible.builtin.command:
-    cmd: getent passwd splunk
+    cmd: getent passwd {{ redhat_splunk_service_account }}
   register: redhat_splunk_user_check
   changed_when: false
   failed_when: false
@@ -138,7 +138,7 @@
   block:
     - name: Set splunk account shell to nologin
       ansible.builtin.user:
-        name: splunk
+        name: "{{ redhat_splunk_service_account }}"
         shell: /sbin/nologin
       become: true
       tags: [become]

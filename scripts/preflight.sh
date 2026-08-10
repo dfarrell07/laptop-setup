@@ -116,10 +116,15 @@ fi
 
 # --- YubiKey presence ---
 yk_found=false
+yk_detect_possible=true
 if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -qi "yubico\|1050:"; then
   yk_found=true
 elif command -v ykman &>/dev/null && ykman info &>/dev/null; then
   yk_found=true
+else
+  if ! command -v lsusb &>/dev/null && ! command -v ykman &>/dev/null; then
+    yk_detect_possible=false
+  fi
 fi
 if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
@@ -134,7 +139,11 @@ if [[ "$yk_found" == true ]]; then
     record "yubikey_chalresp" "skip" "ykchalresp not installed (need ykpers)"
   fi
 else
-  record "yubikey_present" "warn" "no YubiKey detected — vault uses stub password until configured"
+  if [[ "$yk_detect_possible" == false ]]; then
+    record "yubikey_present" "skip" "lsusb/ykman not found — cannot detect YubiKey presence"
+  else
+    record "yubikey_present" "warn" "no YubiKey detected — vault uses stub password until configured"
+  fi
 fi
 
 # --- Vault password scripts ---
