@@ -16,6 +16,7 @@
         go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
         is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"  # set_fact from converge does not persist
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
+        system_disable_usb_storage: false  # converge sets this false; verify must match or usb_storage modprobe check fails
 
   tasks:
     # --- Shared assertions (all platforms) ---

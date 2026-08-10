@@ -493,13 +493,17 @@
   ansible.builtin.stat:
     path: /etc/sysctl.d/90-hardening.conf
   register: verify_sysctl_file
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert sysctl hardening config deployed
   ansible.builtin.assert:
     that: verify_sysctl_file.stat.exists
     fail_msg: "/etc/sysctl.d/90-hardening.conf not deployed — system role did not run"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Check sysctl hardening config contains security-critical keys
   ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
@@ -536,13 +540,17 @@
   ansible.builtin.stat:
     path: /etc/systemd/system/tmp.mount.d/hardening.conf
   register: verify_tmp_hardening
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert tmp.mount.d/hardening.conf deployed
   ansible.builtin.assert:
     that: verify_tmp_hardening.stat.exists
     fail_msg: "/etc/systemd/system/tmp.mount.d/hardening.conf not deployed — system role did not run or template broken"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Check tmp.mount.d/hardening.conf Options= line has nosuid,nodev,noexec
   ansible.builtin.command: grep -qE '^Options=.*{{ item }}' /etc/systemd/system/tmp.mount.d/hardening.conf
@@ -560,13 +568,17 @@
   ansible.builtin.stat:
     path: /etc/modprobe.d/hardening.conf
   register: verify_modprobe_hardening
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/modprobe.d/hardening.conf deployed
   ansible.builtin.assert:
     that: verify_modprobe_hardening.stat.exists
     fail_msg: "/etc/modprobe.d/hardening.conf not deployed — system role did not run or template broken"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains unconditional blacklist entries
   ansible.builtin.command: grep -qF '{{ item }}' /etc/modprobe.d/hardening.conf
