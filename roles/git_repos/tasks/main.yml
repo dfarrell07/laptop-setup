@@ -32,12 +32,7 @@
       {{
         git_repos_list
         | selectattr('category', 'in', git_repos_active_categories)
-        | selectattr('enabled', 'undefined') | list
-        +
-        git_repos_list
-        | selectattr('category', 'in', git_repos_active_categories)
-        | selectattr('enabled', 'defined')
-        | selectattr('enabled', 'equalto', true) | list
+        | rejectattr('enabled', 'equalto', false) | list
       }}
 
 - name: Fail when explicit category filter matches no enabled repos
@@ -81,7 +76,7 @@
 - name: Check connectivity to VPN-gated repo hosts
   ansible.builtin.wait_for:
     host: "{{ git_repos_vpn_check_host }}"
-    port: 22
+    port: "{{ git_repos_vpn_check_port }}"
     timeout: 3
     state: started
   when: git_repos_filtered | map(attribute='url') | select('search', git_repos_vpn_check_host) | list | length > 0

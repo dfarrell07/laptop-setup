@@ -24,14 +24,12 @@
     system_is_container: true             # explicit guard — auto-detect via virtualization_type may miss some images
     system_disable_usb_storage: false    # USB modprobe blacklisting is meaningless in containers
     system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
-    system_aide_enabled: false            # AIDE DB init takes 5-10 min; useless in CI
     system_install_usbguard: false        # no USB devices to guard in containers
                                           # CI gap: USBGuard install-configure-enable (package, rules.conf,
                                           # daemon.conf settings, service) is NOT exercised by any
                                           # Podman-based scenario — make test-vm is required for full USBGuard coverage
     install_virtualization: false         # libvirt not needed in CI container
     install_vpn: false                    # VPN packages not applicable in CI container
-    install_docker: false                 # docker socket not applicable in CI container
     system_disable_fingerprint: true      # authselect enable-feature with-fingerprint + fprintd unmask destabilize
                                           # systemd in privileged Podman containers (cascading PAM restarts crash init).
                                           # true skips the enable-feature call and keeps fprintd masked/stopped.
