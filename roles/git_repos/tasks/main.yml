@@ -129,7 +129,7 @@
   failed_when: false
   when:
     - git_repos_lfs_check.rc == 0
-    - git_repos_lfs_configured.rc != 0
+    - git_repos_lfs_configured.rc | default(0) != 0
 
 - name: Clone repositories  # noqa: latest[git]
   ansible.builtin.git:
