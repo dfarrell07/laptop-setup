@@ -40,9 +40,9 @@
       when: not csb_rhel
 
 # Enable virtqemud.socket and virtnetworkd.socket here (Play 2) after package install.
-# On first provision, libvirt isn't installed when Play 1 runs, so the system role's
-# enable attempt is skipped (when condition false). This task enables the sockets
-# after the packages are present.
+# Ensure sockets are enabled and started after package install; systemd socket units
+# are not guaranteed to be in started state on all configurations (e.g. re-runs after
+# a manual disable), and the system role has no logic to enable these socket units.
 - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
   ansible.builtin.systemd:
     name: "{{ item }}"
