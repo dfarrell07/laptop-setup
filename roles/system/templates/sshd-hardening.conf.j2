@@ -28,7 +28,7 @@ MaxAuthTries 3
 MaxSessions {{ system_ssh_max_sessions }}
 LoginGraceTime 30
 
-X11Forwarding no
+X11Forwarding no  # overrides 50-redhat.conf (sets yes)
 AllowAgentForwarding {{ system_ssh_allow_agent_forwarding }}
 AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}
 
@@ -50,7 +50,7 @@ LogLevel VERBOSE
 UsePAM yes
 MaxStartups 10:30:60
 RekeyLimit 1G 1h
-GSSAPIAuthentication no
+GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
 
 # CIS 4.2.12 — approved algorithms. NOTE: sshd processes drop-in files lexicographically;
 # 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list

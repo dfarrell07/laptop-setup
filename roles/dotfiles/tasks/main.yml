@@ -145,6 +145,7 @@
     src: ripgreprc
     dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
     mode: "0644"
+    # seed-only — user edits not overwritten
     force: false
 - name: Deploy tmux.conf
   ansible.builtin.template:
@@ -157,6 +158,7 @@
     src: vimrc
     dest: "{{ ansible_facts['user_dir'] }}/.vimrc"
     mode: "0644"
+    # seed-only — user edits not overwritten
     force: false
 - name: Deploy bashrc
   ansible.builtin.template:
@@ -332,4 +334,5 @@
     src: direnvrc
     dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
     mode: "0644"
+    # seed-only — user edits not overwritten
     force: false
