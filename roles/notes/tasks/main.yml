@@ -14,7 +14,6 @@
       changed_when: false
       failed_when: false
       check_mode: false  # read-only probe — must run in check mode
-      when: not notes_repo_stat.stat.exists
 
     - name: Check git-lfs availability  # noqa: command-instead-of-module
       ansible.builtin.command:
@@ -23,7 +22,6 @@
       changed_when: false
       failed_when: false
       check_mode: false
-      when: not notes_repo_stat.stat.exists
 
     - name: Warn if git-lfs is not installed
       ansible.builtin.debug:
@@ -32,7 +30,6 @@
           pointer text files instead of real content.
           Install git-lfs ('dnf install git-lfs') before cloning repos that track large files.
       when:
-        - not notes_repo_stat.stat.exists
         - notes_lfs_check.rc != 0
 
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
@@ -42,7 +39,6 @@
       changed_when: notes_lfs_install.rc == 0
       failed_when: false
       when:
-        - not notes_repo_stat.stat.exists
         - notes_lfs_configured.rc != 0
         - notes_lfs_check.rc == 0
 
@@ -191,6 +187,8 @@
           cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
+        - notes_repo_available | bool
+        - notes_transcrypt_available | bool
         - notes_transcrypt_inited | bool
 
 
