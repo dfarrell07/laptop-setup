@@ -125,7 +125,7 @@
         cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       when:
         - system_aide_db_new.stat.exists | default(false)
-        - system_aide_reinit_result is skipped  # reinit already promoted the db
+        - system_aide_reinit_result is skipped  # reinit was skipped — promote the DB from the previously interrupted init
       changed_when: true
 
     - name: Initialize AIDE database (first run only)
