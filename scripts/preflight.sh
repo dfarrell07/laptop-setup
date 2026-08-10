@@ -84,11 +84,21 @@ record "profile" "pass" "$PROFILE"
 # --- Required tools ---
 for tool in ansible-playbook ansible-vault git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
-    ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
+    if [[ "$tool" == "ssh" ]]; then
+      ver=$(ssh -V 2>&1 | head -1) || ver="installed"
+    else
+      ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
+    fi
     record "required_${tool}" "pass" "$ver"
   else
     if [[ "$tool" == "make" ]]; then
       record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
+    elif [[ "$tool" == "ssh" ]]; then
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install openssh-clients (Fedora/RHEL) | brew install openssh (macOS)"
+    elif [[ "$tool" == "curl" ]]; then
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install curl (Fedora/RHEL) | brew install curl (macOS)"
+    elif [[ "$tool" == "python3" ]]; then
+      record "required_${tool}" "fail" "not installed — run: sudo dnf install python3 (Fedora/RHEL) | brew install python3 (macOS)"
     elif command -v make &>/dev/null; then
       record "required_${tool}" "fail" "not installed — run: make bootstrap"
     else
@@ -230,7 +240,7 @@ net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if command -v curl &>/dev/null; then
-    if curl -sSL --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
+    if curl -sSLf --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
       record "net_${nlabel}" "pass" "$nurl reachable"
     else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
   else
