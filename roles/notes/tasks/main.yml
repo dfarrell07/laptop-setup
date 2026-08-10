@@ -28,14 +28,13 @@
         msg: >-
           git-lfs is not installed. Repos with LFS-tracked files will clone with
           pointer text files instead of real content.
-          Install git-lfs ('dnf install git-lfs') before cloning repos that track large files.
+          Install git-lfs ('{{ is_dnf | ternary('dnf', 'apt') }} install git-lfs') before cloning repos that track large files.
       when:
         - notes_lfs_check.rc != 0
 
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
       ansible.builtin.command:
         cmd: git lfs install --skip-repo
-      register: notes_lfs_install
       changed_when: true
       failed_when: false
       when:
