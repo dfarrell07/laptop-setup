@@ -55,6 +55,14 @@
       when: system_tlp_enabled | bool
       register: _aide_conf_r3
 
+    - name: Remove /etc/tlp.d from AIDE monitoring (TLP disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.d'
+        state: absent
+      when: not system_tlp_enabled | bool
+      register: _aide_conf_r3_remove
+
     - name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
@@ -65,6 +73,14 @@
       when: system_tlp_enabled | bool
       register: _aide_conf_r4
 
+    - name: Remove /etc/tlp.conf from AIDE monitoring (TLP disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.conf\s'
+        state: absent
+      when: not system_tlp_enabled | bool
+      register: _aide_conf_r4_remove
+
     - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
@@ -74,6 +90,14 @@
         state: present
       register: _aide_conf_r5
       when: system_install_usbguard | bool
+
+    - name: Remove /etc/usbguard from AIDE monitoring (USBGuard disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/usbguard'
+        state: absent
+      when: not system_install_usbguard | bool
+      register: _aide_conf_r5_remove
 
     - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
       ansible.builtin.lineinfile:
@@ -102,8 +126,11 @@
         - _aide_conf_r1 is changed
           or _aide_conf_r2 is changed
           or _aide_conf_r3 is changed
+          or _aide_conf_r3_remove is changed
           or _aide_conf_r4 is changed
+          or _aide_conf_r4_remove is changed
           or _aide_conf_r5 is changed
+          or _aide_conf_r5_remove is changed
           or _aide_conf_r6 is changed
 
     - name: Reinitialize AIDE database when conf changed
@@ -116,8 +143,11 @@
         - _aide_conf_r1 is changed
           or _aide_conf_r2 is changed
           or _aide_conf_r3 is changed
+          or _aide_conf_r3_remove is changed
           or _aide_conf_r4 is changed
+          or _aide_conf_r4_remove is changed
           or _aide_conf_r5 is changed
+          or _aide_conf_r5_remove is changed
           or _aide_conf_r6 is changed
 
     - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)

@@ -29,6 +29,15 @@
   notify: Restart systemd-resolved
   when: not system_is_container  # resolved restart crashes privileged Podman containers
 
+- name: Remove DNS-over-TLS config on RHEL CSB (IT manages DNS policy)
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/99-dot.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container
+  notify: Restart systemd-resolved
+
 # yamllint disable rule:line-length
 - name: Deploy DNS-over-TLS resolved config
   ansible.builtin.copy:
