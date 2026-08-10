@@ -36,7 +36,7 @@
       ansible.builtin.command:
         cmd: git lfs install --skip-repo
       register: notes_lfs_install
-      changed_when: notes_lfs_install.rc == 0
+      changed_when: true
       failed_when: false
       when:
         - notes_lfs_configured.rc != 0
@@ -125,14 +125,12 @@
       check_mode: false  # read-only probe — must run in check mode
       no_log: true
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
 
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
         notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
 
     - name: Initialize transcrypt
@@ -150,7 +148,6 @@
       changed_when: notes_transcrypt_init_result.rc == 0
       failed_when: false
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
         - not (notes_transcrypt_inited | bool)
         - notes_transcrypt_password | length > 0
@@ -162,7 +159,6 @@
           notes_transcrypt_password is still set to 'REPLACE_ME' — transcrypt not initialized.
           Replace vault_notes_transcrypt_password in vault.yml with the real password.
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
         - not (notes_transcrypt_inited | bool)
         - notes_transcrypt_password == 'REPLACE_ME'
@@ -173,7 +169,6 @@
           transcrypt initialization exited {{ notes_transcrypt_init_result.rc }} —
           notes may not be decrypted. Check the password in vault.yml.
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
         - notes_transcrypt_init_result is not skipped
         - notes_transcrypt_init_result.rc | default(0) != 0
@@ -187,7 +182,6 @@
           cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
         - notes_transcrypt_inited | bool
 
@@ -214,7 +208,6 @@
           notes_transcrypt_password is empty — transcrypt not initialized.
           Set vault_notes_transcrypt_password in vault.yml to enable.
       when:
-        - notes_repo_available | bool
         - notes_transcrypt_available | bool
         - not (notes_transcrypt_inited | bool)
         - notes_transcrypt_password | length == 0

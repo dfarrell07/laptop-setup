@@ -53,7 +53,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
   systemctl list-unit-files fapolicyd.service &>/dev/null && has_fapolicyd=true
-  if [[ "$OS_FAMILY" == "rhel" ]]; then
+  if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
   else
     # Fedora CSB: FQDN ends in .csb AND internal CA present (fapolicyd not required)

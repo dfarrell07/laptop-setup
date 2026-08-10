@@ -57,16 +57,20 @@ else
 fi
 
 # JSON validation on staged files
-while IFS= read -r -d '' f; do
-  if ! git show ":$f" | python3 -m json.tool > /dev/null 2>&1; then
-    echo "ERROR: $f is not valid JSON" >&2
-    failed=1
-  fi
-done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v '^package-lock\.json$')
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "WARNING: python3 not found — JSON/lockfile validation skipped" >&2
+fi
+if command -v python3 >/dev/null 2>&1; then
+  while IFS= read -r -d '' f; do
+    if ! git show ":$f" | python3 -m json.tool > /dev/null 2>&1; then
+      echo "ERROR: $f is not valid JSON" >&2
+      failed=1
+    fi
+  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v '^package-lock\.json$')
 
-# Lockfile integrity (only when package-lock.json is staged)
-if git diff --cached --name-only --diff-filter=ACM | grep -q '^package-lock\.json$'; then
-  if ! git show :package-lock.json | python3 -c "
+  # Lockfile integrity (only when package-lock.json is staged)
+  if git diff --cached --name-only --diff-filter=ACM | grep -q '^package-lock\.json$'; then
+    if ! git show :package-lock.json | python3 -c "
 import json, sys
 lock = json.load(sys.stdin)
 for name, info in lock.get('packages', {}).items():
@@ -81,7 +85,8 @@ for name, info in lock.get('packages', {}).items():
         print(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}', file=sys.stderr)
         sys.exit(1)
 " 2>&1; then
-    failed=1
+      failed=1
+    fi
   fi
 fi
 
