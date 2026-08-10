@@ -94,11 +94,6 @@
         path: /var/lib/aide/aide.db.new.gz
       register: system_aide_db_new
 
-    - name: Warn that AIDE initialization takes 5-10 minutes
-      ansible.builtin.debug:
-        msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
-      when: not (system_aide_db.stat.exists | default(false))
-
     - name: Warn that AIDE reinit takes 5-10 minutes
       ansible.builtin.debug:
         msg: "AIDE configuration changed — reinitializing database. This takes 5-10 minutes. Do not cancel."
