@@ -35,9 +35,8 @@
       (e.g. fedora-toolbox:{{ ansible_facts['distribution_major_version'] }}) which does not
       correspond to any Fedora toolbox image. Add the following to config.yml before
       running 'make container':
-        container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
-        container_release: '44'
-      Replace 44 with the current Fedora major version you want.
+        container_image: 'registry.fedoraproject.org/fedora-toolbox:{{ distrobox_fedora_release }}'
+        container_release: '{{ distrobox_fedora_release }}'
   when:
     - ansible_facts['os_family'] == 'RedHat'
     - ansible_facts['distribution'] != 'Fedora'
