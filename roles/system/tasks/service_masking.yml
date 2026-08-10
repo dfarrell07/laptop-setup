@@ -61,7 +61,7 @@
     masked: "{{ not _intel }}"
     enabled: "{{ _intel }}"
     state: "{{ 'stopped' if not _intel else 'started' }}"
-  when: not system_is_container  # thermald not present in containers; mask/stop crash container systemd
+  when: not system_is_container and is_dnf  # thermald not present in containers; mask/stop crash container systemd
   failed_when: false
 
 # --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---

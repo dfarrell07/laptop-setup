@@ -13,6 +13,7 @@
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 -a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
+-a never,exit -F exe=/usr/sbin/chronyd -k exclude-chronyd
 # Fedora packages Go at /usr/lib/golang (golang-bin RPM), not /usr/local/go (go.dev tarball convention).
 # GOTOOLCHAIN=auto downloads land at ~/go/pkg/mod/golang.org/toolchain@vX.Y.Z/ — version slug changes,
 # so those paths cannot be excluded by exe= without per-toolchain entries.

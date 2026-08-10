@@ -167,6 +167,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
 #   system_ptrace_scope: 1             (group_vars/all/vars.yml) — CIS-compliant default (parent-only YAMA);
 #                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
+#   system_perf_event_paranoid: 2      (roles/system/defaults) — CIS-compliant (>=2) and Fedora 44 default;
+#                                        value 3 requires CAP_SYS_ADMIN for all perf operations, breaking
+#                                        perf stat/top/record for non-root users; set 3 in config.yml for
+#                                        stricter posture on non-dev hosts
 #   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
 #                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
 #   system_enable_ip_forward: true      (group_vars/all/vars.yml) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
