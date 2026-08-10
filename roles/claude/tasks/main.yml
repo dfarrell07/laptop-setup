@@ -99,14 +99,14 @@
       # Uncomment after adding companion vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION, GOOGLE_CLOUD_PROJECT):
       # export CLAUDE_CODE_USE_VERTEX=1
       # export ANTHROPIC_VERTEX_PROJECT_ID=...
-    dest: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
+    dest: "{{ claude_queue_runtime_config_dir }}/work-env"
     mode: "0600"
     force: false
   when: profile == 'work'
 
 - name: Remove Claude work-env file when not work profile
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
+    path: "{{ claude_queue_runtime_config_dir }}/work-env"
     state: absent
   when: profile != 'work'
 
