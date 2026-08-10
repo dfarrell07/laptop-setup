@@ -227,7 +227,7 @@
     name: root
     password_lock: true
   failed_when: false
-  when: not system_is_container
+  when: not csb_rhel and not system_is_container
 
 # --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
 - name: Find non-root UID 0 accounts (CIS 6.2.9)
