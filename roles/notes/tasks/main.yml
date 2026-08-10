@@ -192,16 +192,13 @@
         - notes_transcrypt_inited | bool
 
 
-    - name: Restrict notes repo directory permissions (transcrypt plaintext in working tree)
+    - name: Restrict notes repo directory and .git/config permissions
       ansible.builtin.file:
-        path: "{{ notes_repo_path }}"
-        mode: "0700"
-      when: notes_repo_available | bool
-
-    - name: Restrict notes .git/config permissions (contains transcrypt password)
-      ansible.builtin.file:
-        path: "{{ notes_repo_path }}/.git/config"
-        mode: "0600"
+        path: "{{ item.path }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - {path: '{{ notes_repo_path }}', mode: '0700'}
+        - {path: '{{ notes_repo_path }}/.git/config', mode: '0600'}
       when: notes_repo_available | bool
 
     - name: Warn if transcrypt not available
