@@ -53,6 +53,7 @@
     - virtnetworkd.socket
   become: true
   tags: [become]
+  failed_when: false
   when:
     - is_dnf
     - install_virtualization | bool

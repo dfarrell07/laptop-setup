@@ -16,6 +16,25 @@
       check_mode: false  # read-only probe — must run in check mode
       when: not notes_repo_stat.stat.exists
 
+    - name: Check git-lfs availability  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: git lfs version
+      register: notes_lfs_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: not notes_repo_stat.stat.exists
+
+    - name: Warn if git-lfs is not installed
+      ansible.builtin.debug:
+        msg: >-
+          git-lfs is not installed. Repos with LFS-tracked files will clone with
+          pointer text files instead of real content.
+          Install git-lfs ('dnf install git-lfs') before cloning repos that track large files.
+      when:
+        - not notes_repo_stat.stat.exists
+        - notes_lfs_check.rc != 0
+
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
       ansible.builtin.command:
         cmd: git lfs install --skip-repo
@@ -25,6 +44,7 @@
       when:
         - not notes_repo_stat.stat.exists
         - notes_lfs_configured.rc != 0
+        - notes_lfs_check.rc == 0
 
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists
