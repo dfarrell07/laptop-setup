@@ -11,6 +11,14 @@
     # false) to prevent the daemon start from crashing the Podman container.
     - system_chrony_service_enabled | bool
 
+- name: Install chrony (Fedora/RHEL)
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+  when:
+    - is_dnf
+    - system_chrony_service_enabled | bool
+
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
     src: chrony-nts.conf.j2
