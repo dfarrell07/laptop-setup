@@ -192,7 +192,7 @@ if [[ -f "$VAULT_FILE" ]]; then
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted (note: encrypted stub without real secrets still warns at runtime)"
   else
-    if grep -q '^vault_ssh_auth_key:' "$VAULT_FILE" 2>/dev/null; then
+    if grep -qE '^vault_(ssh_auth_key|ssh_signing_key|rh_git_key|notes_transcrypt_password):' "$VAULT_FILE" 2>/dev/null; then
       record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"
     else
       record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
