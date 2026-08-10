@@ -13,7 +13,7 @@ while [[ $# -gt 0 ]]; do
         work|personal) PROFILE="$1"; shift ;;
         *) echo "Error: --profile must be 'work' or 'personal', got '$1'" >&2; exit 2 ;;
       esac ;;
-    -h|--help) echo "Usage: $0 [--json] [--profile work|personal]" >&2; exit 0 ;;
+    -h|--help) echo "Usage: $0 [--json] [--profile work|personal]"; exit 0 ;;
     *) echo "Unknown option: $1. Usage: $0 [--json] [--profile work|personal]" >&2; exit 2 ;;
   esac
 done

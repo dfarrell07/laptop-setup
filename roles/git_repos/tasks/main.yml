@@ -156,7 +156,7 @@
 - name: Report failed clones
   ansible.builtin.debug:
     msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.msg | default('unknown error') }}"
-  loop: "{{ git_repos_clone_results.results | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop: "{{ git_repos_clone_results.results | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
 
