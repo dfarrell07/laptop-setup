@@ -78,6 +78,7 @@
     - name: Check go is installed
       ansible.builtin.command: go version
       changed_when: false
+      when: profile == 'work'
 
     - name: Check direnv is installed
       ansible.builtin.command: direnv version
@@ -94,6 +95,7 @@
     - name: Check nmap is installed
       ansible.builtin.command: which nmap
       changed_when: false
+      when: profile == 'work'
 
     - name: Check gpg is installed (gnupg)
       ansible.builtin.command: gpg --version

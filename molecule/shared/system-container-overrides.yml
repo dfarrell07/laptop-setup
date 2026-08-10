@@ -41,14 +41,6 @@
     packages_install_binaries: false      # no binary downloads in container CI
     ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
     ssh_git_signing_pubkey: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI
-    csb_rhel: false                       # test-isolation baseline; per-scenario converge plays override for CSB/RHEL scenarios
-                                          # Rocky converge pre_tasks sets csb_rhel=true, but csb_detect.yml (common
-                                          # role, runs first) recomputes csb_rhel=false (distribution='Rocky'!='RedHat');
-                                          # redhat role is skipped on Rocky; verify.yml asserts RH CA cert is absent
     system_selinux_enforcing_required: false  # geerlingguy images report SELinux disabled regardless of host policy
     # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required
     system_timezone: UTC                  # CHANGE_ME sentinel from default.config.yml is invalid; use UTC in CI
-    system_tmp_noexec: false              # /tmp noexec breaks Ansible remote_tmp=/tmp (Rocky molecule.yml);
-                                          # mounts.yml still deploys the drop-in and nosuid/nodev, but skips noexec
-    csb_detected: false                   # molecule temp inventory baseline
-    needs_container_tier: "host-only"     # molecule temp inventory baseline

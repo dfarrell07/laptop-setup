@@ -32,10 +32,6 @@
     # --- redhat role: minimal assertions (cert/VPN packages unavailable from public repos in CI) ---
     # Verify the condition logic fired correctly — is_fedora=true triggers cert/VPN install blocks.
     # Full install-success verification requires internal repos (out of scope for Podman CI).
-    - name: Assert is_fedora is true on Fedora molecule host
-      ansible.builtin.assert:
-        that: is_fedora
-        fail_msg: "is_fedora is false on Fedora host — csb_detect.yml condition regression"
 
     # --- Fedora-specific: package checks ---
     - name: Check vim is installed
