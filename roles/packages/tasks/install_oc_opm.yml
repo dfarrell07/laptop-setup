@@ -203,6 +203,7 @@
           ansible.builtin.file:
             path: /tmp/opm-linux.tar.gz
             state: absent
+          when: packages_opm_download is defined and packages_opm_download is changed
 
   rescue:
     - name: Record opm download failure (CSB)
