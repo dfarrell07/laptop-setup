@@ -197,12 +197,19 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
 #   system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"  (roles/system/defaults) — fallback DoT (IP#hostname)
+#   system_resolved_llmnr: 'no'            (roles/system/defaults) — LLMNR= in 98-llmnr.conf; 'no' disables (default);
+#                                        'yes' or 'resolve' to enable (rarely needed — avahi-daemon handles .local on most hosts)
+#   system_resolved_multicast_dns: 'no'    (roles/system/defaults) — MulticastDNS= in 98-llmnr.conf; 'no' disables (default);
+#                                        set 'yes' or 'resolve' when system_disable_avahi: true and .local resolution via
+#                                        resolved is desired (lightweight avahi-daemon replacement without the daemon)
 #   system_chrony_nts_servers: [time.cloudflare.com, nts.netnod.se, ptbtime1.ptb.de, ntppool1.time.nl]
 #                                        (roles/system/defaults) — NTS-capable time sources; override for corporate NTP or regional servers
 #   system_chrony_fallback_pool: 2.fedora.pool.ntp.org  (roles/system/defaults) — plain NTP pool fallback when NTS sources unreachable
 #   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
 #   system_chrony_service_enabled: "{{ not system_is_container }}"
 #                                        (roles/system/defaults) — auto-disabled in containers; set true to force-enable
+#   system_chrony_authselectmode: prefer (roles/system/defaults) — NTS auth select mode; set 'require' for strict NTS
+#                                        (time sync fails completely on NTS-blocking networks when set to 'require')
 #   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
 #                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
 #   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile

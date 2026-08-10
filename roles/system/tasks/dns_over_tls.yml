@@ -22,8 +22,8 @@
     content: |
       # {{ ansible_managed }}
       [Resolve]
-      LLMNR=no
-      MulticastDNS=no
+      LLMNR={{ system_resolved_llmnr }}
+      MulticastDNS={{ system_resolved_multicast_dns }}
     dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
     mode: "0644"
   notify: Restart systemd-resolved

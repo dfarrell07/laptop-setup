@@ -325,6 +325,12 @@ system_dns_primary: >-
 system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"
 # ~. = catch-all required for Tailscale MagicDNS; VPN routing domains (redhat.com, ts.net) always win by specificity
 system_dns_domains: "~."
+# LLMNR and mDNS via systemd-resolved drop-in (98-llmnr.conf).
+# 'no' disables each protocol (default — reduces broadcast traffic and attack surface).
+# Set 'yes' or 'resolve' (listen-only) for mDNS if avahi-daemon is masked (system_disable_avahi: true)
+# and .local resolution via resolved is desired instead. Independent of system_disable_avahi.
+system_resolved_llmnr: 'no'
+system_resolved_multicast_dns: 'no'
 
 # Crypto policy target for update-crypto-policies (Fedora/RHEL non-CSB only).
 # Override in config.yml, e.g. system_crypto_policy_target: DEFAULT:NO-SHA1:NO-RSASSA-PSS
@@ -376,6 +382,7 @@ system_chrony_fallback_pool: "{{ '2.fedora.pool.ntp.org' if is_dnf else '2.debia
 system_chrony_minsources: 2
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
 system_chrony_service_enabled: "{{ not system_is_container }}"
+system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync fails on NTS-blocking networks)
 
 # Security hardening defaults — authoritative values live in group_vars/all/vars.yml
 # (which overrides these at precedence 5 when running via the project inventory).

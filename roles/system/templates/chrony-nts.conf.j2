@@ -8,7 +8,7 @@ server {{ server }} iburst nts
 pool {{ system_chrony_fallback_pool }} iburst
 
 # Prefer NTS; fall back to pool only when NTS unavailable
-authselectmode prefer
+authselectmode {{ system_chrony_authselectmode }}
 
 # Use NTP servers from DHCP
 sourcedir /run/chrony-dhcp
