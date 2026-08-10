@@ -180,8 +180,6 @@
         mode: "0644"
       register: _aide_conf_r7
       notify: Restart aide-check timer
-      when:
-        - not system_is_container
 
     - name: Deploy AIDE check service
       ansible.builtin.copy:
@@ -190,8 +188,6 @@
         mode: "0644"
       register: _aide_conf_r8
       notify: Restart aide-check timer
-      when:
-        - not system_is_container
 
     - name: Deploy AIDE check timer
       ansible.builtin.template:
@@ -200,8 +196,6 @@
         mode: "0644"
       register: _aide_conf_r9
       notify: Restart aide-check timer
-      when:
-        - not system_is_container
 
     - name: Enable AIDE check timer
       ansible.builtin.systemd:
