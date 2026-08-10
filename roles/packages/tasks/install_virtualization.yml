@@ -50,7 +50,7 @@
     - virtnetworkd.socket
   become: true
   tags: [become]
-  failed_when: false
+  ignore_errors: true
   register: _virt_socket_result
   when:
     - "'libvirt' in packages_virtualization"
