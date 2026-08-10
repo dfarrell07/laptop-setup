@@ -52,6 +52,8 @@ if command -v shellcheck >/dev/null 2>&1; then
       failed=1
     fi
   fi
+else
+  echo "WARNING: shellcheck not found — shell lint skipped (run 'make bootstrap' to install)" >&2
 fi
 
 # JSON validation on staged files

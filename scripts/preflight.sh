@@ -82,15 +82,13 @@ fi
 record "profile" "pass" "$PROFILE"
 
 # --- Required tools ---
-for tool in ansible-playbook ansible-vault git python3 curl make ssh shellcheck; do
+for tool in ansible-playbook ansible-vault git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     record "required_${tool}" "pass" "$ver"
   else
     if [[ "$tool" == "make" ]]; then
       record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
-    elif [[ "$tool" == "shellcheck" ]]; then
-      record "required_${tool}" "fail" "not installed — run: sudo dnf install ShellCheck (Fedora/RHEL) | brew install shellcheck (macOS), or: make bootstrap"
     elif command -v make &>/dev/null; then
       record "required_${tool}" "fail" "not installed — run: make bootstrap"
     else
@@ -98,12 +96,18 @@ for tool in ansible-playbook ansible-vault git python3 curl make ssh shellcheck;
     fi
   fi
 done
+if command -v shellcheck &>/dev/null; then
+  record "linttools_shellcheck" "pass" "$(shellcheck --version | head -1)"
+else
+  record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: sudo dnf install ShellCheck or: make bootstrap)"
+fi
 
 # --- Ansible collections ---
 if command -v ansible-galaxy &>/dev/null; then
   missing_cols=()
+  _galaxy_list=$(ansible-galaxy collection list 2>/dev/null)
   for col in community.general containers.podman ansible.posix; do
-    ansible-galaxy collection list "$col" 2>/dev/null | grep -q "^$col " || missing_cols+=("$col")
+    echo "$_galaxy_list" | grep -q "^$col " || missing_cols+=("$col")
   done
   if [[ ${#missing_cols[@]} -eq 0 ]]; then
     record "ansible_collections" "pass" "all required collections installed"
