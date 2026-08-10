@@ -22,7 +22,7 @@
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
     src: chrony-nts.conf.j2
-    dest: /etc/chrony.conf
+    dest: "{{ '/etc/chrony/chrony.conf' if is_apt else '/etc/chrony.conf' }}"
     mode: "0644"
   notify: Restart chronyd
   when:
