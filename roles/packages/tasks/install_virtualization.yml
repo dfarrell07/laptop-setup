@@ -4,9 +4,6 @@
 # Included from main.yml when is_dnf and install_virtualization | bool.
 
 - name: Install virtualization packages
-  when:
-    - is_dnf
-    - install_virtualization | bool
   block:
     - name: Install virtualization packages
       ansible.builtin.dnf:
@@ -54,20 +51,21 @@
   become: true
   tags: [become]
   failed_when: false
+  register: _virt_socket_result
   when:
-    - is_dnf
-    - install_virtualization | bool
     - "'libvirt' in packages_virtualization"
     - not system_is_container
+
+- name: Warn if virtqemud/virtnetworkd socket enable failed
+  ansible.builtin.debug:
+    msg: "WARNING: libvirt socket enable failed: {{ _virt_socket_result.msg | default('unknown') }}"
+  when: _virt_socket_result is failed
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
   ansible.builtin.getent:
     database: group
   become: true
   tags: [become]
-  when:
-    - is_dnf
-    - install_virtualization | bool
 
 - name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
   ansible.builtin.user:
@@ -77,8 +75,6 @@
   become: true
   tags: [become]
   when:
-    - is_dnf
-    - install_virtualization | bool
     - real_user_id | length > 0
     - "'libvirt' in ansible_etc_group"
     - "'kvm' in ansible_etc_group"
