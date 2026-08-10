@@ -104,6 +104,12 @@
     force: false
   when: profile == 'work'
 
+- name: Remove Claude work-env file when not work profile
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/claude/work-env"
+    state: absent
+  when: profile != 'work'
+
 # Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
 # to settings.local.json, not settings.json.  Claude Code's /config command
 # overwrites settings.json (theme, model, etc.) but does NOT touch
