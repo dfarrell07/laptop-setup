@@ -85,12 +85,12 @@
   loop_control:
     label: "{{ item | basename }}"
 
-- name: Ensure ~/.config/claude directory exists (work-env, work profile only)
+- name: Ensure ~/.config/claude directory exists
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/claude"
+    path: "{{ claude_queue_runtime_config_dir }}"
     state: directory
     mode: "0700"
-  when: profile == 'work'
+  when: profile == 'work' or claude_queue_enabled | bool
 
 - name: Deploy Claude work-env file
   ansible.builtin.copy:
@@ -189,13 +189,6 @@
   when:
     - claude_queue_enabled | bool
     - is_macos
-
-- name: Ensure ~/.config/claude directory exists (queue config)
-  ansible.builtin.file:
-    path: "{{ claude_queue_runtime_config_dir }}"
-    state: directory
-    mode: "0700"
-  when: claude_queue_enabled | bool
 
 - name: Deploy queue-repos.conf stub (first run only — edit to add repos)
   ansible.builtin.template:
