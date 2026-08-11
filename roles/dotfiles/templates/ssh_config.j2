@@ -26,9 +26,10 @@ Host gh gist github.com gist.github.com
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     HostKeyAlgorithms ssh-ed25519
-    # Intentionally narrower than ssh_pubkey_accepted_algorithms: omits ssh-ed25519
-    # (plain software key) to enforce hardware SK keys for GitHub. Not variable-driven.
-    PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com
+    # SK enforcement via IdentityFile+IdentitiesOnly rather than PubkeyAcceptedAlgorithms:
+    # On Fedora-patched OpenSSH 10.2+ the crypto-policies layer intersects PubkeyAcceptedAlgorithms
+    # with HostKeyAlgorithms; restricting to sk-ssh-ed25519 variants (which GitHub does not offer
+    # as host key algorithms) produces an empty intersection and breaks host key negotiation.
 
 {% if profile == 'work' %}
 Host code.engineering.redhat.com
