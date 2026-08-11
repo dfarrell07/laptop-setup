@@ -272,12 +272,14 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        set false to keep all cached layers
 #   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
 #                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
-#   containers_registries: [quay.io, ...]  (group_vars/all/vars.yml) — WARNING: overriding this in config.yml REPLACES the full list.
-#                                        Use containers_registries_extra to append without clobbering.
-#                                        Work profile auto-adds registry.redhat.io; credential injection uses registry_tokens (vault)
+#   DO NOT override containers_registries directly — use containers_registries_extra to append
+#                                        without replacing the computed default. Overriding
+#                                        containers_registries in config.yml (include_vars precedence 17)
+#                                        silently replaces the entire computed list, dropping the
+#                                        work-profile registry.redhat.io entry.
 #   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
-#                                        list without replacing the default; safer than overriding
-#                                        containers_registries entirely
+#                                        list without replacing the default; use this instead of
+#                                        overriding containers_registries
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
 #   desktop_sway_cursor_size: 24       (roles/desktop/defaults) — cursor size in physical pixels (HiDPI: try 36 for 1.5x scale)
 #   desktop_sway_cursor_theme: Adwaita (roles/desktop/defaults) — cursor theme name (propagated to seat config and XCURSOR_THEME)

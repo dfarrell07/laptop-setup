@@ -116,6 +116,10 @@ CROSS_ROLE_MIRROR_KEYS = {
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
         REPO_ROOT / "roles/ssh/defaults/main.yml",
     ],
+    "dotfiles_ssh_redhat_key_basename": [
+        REPO_ROOT / "roles/dotfiles/defaults/main.yml",
+        REPO_ROOT / "roles/ssh/defaults/main.yml",
+    ],
     "ssh_ciphers": [
         REPO_ROOT / "roles/system/defaults/main.yml",
         REPO_ROOT / "roles/dotfiles/defaults/main.yml",
