@@ -117,7 +117,7 @@ if command -v ansible-galaxy &>/dev/null; then
   missing_cols=()
   _galaxy_list=$(ansible-galaxy collection list 2>/dev/null)
   for col in community.general containers.podman ansible.posix; do
-    echo "$_galaxy_list" | grep -q "^$col " || missing_cols+=("$col")
+    echo "$_galaxy_list" | grep -qF "${col} " || missing_cols+=("$col")
   done
   if [[ ${#missing_cols[@]} -eq 0 ]]; then
     record "ansible_collections" "pass" "all required collections installed"
