@@ -216,6 +216,44 @@ not theoretical concerns.
   (like the Debian verify does), or replace the Jinja2 variable interpolation
   with hardcoded expected values matching role defaults.
 
+#### 63. VM verify.yml missing include_vars for group_vars/all/vars.yml
+
+- **Dimension**: jinja2-undefined-variable-risks
+- **File**: `molecule/vm/verify.yml:7-22`
+- **Problem**: VM verify pre_tasks set ~12 variables via `set_fact` but never
+  load `group_vars/all/vars.yml` or `default.config.yml`. The fedora, rocky,
+  and debian verify files all load `group_vars/all/vars.yml`; the VM verify
+  does not. Molecule does not auto-load project group_vars. Imported shared
+  verify files require variables defined exclusively in `group_vars/all/vars.yml`:
+  `system_ptrace_scope` (verify-common.yml:511, in a loop list with no
+  default), `system_auditd_max_log_file` (verify-common.yml:977),
+  `system_disable_avahi` (verify-smoke.yml:210), `repo_tailscale`
+  (verify-dnf.yml:144), `repo_google_chrome` (vm/verify.yml:49).
+- **Risk**: `make test-vm` verify phase crashes at the first unprotected
+  undefined variable — `system_ptrace_scope` at verify-common.yml:511.
+- **Fix**: Add `include_vars` for `group_vars/all/vars.yml` (and optionally
+  `default.config.yml`) to VM verify `pre_tasks`, matching the pattern used
+  by fedora, rocky, and debian verify files.
+
+#### 65. verify-claude-queue.yml unconditional systemd unit assertions fail in container CI
+
+- **Dimension**: molecule-converge-config
+- **File**: `molecule/shared/verify-claude-queue.yml:7-29`,
+  `roles/claude/tasks/main.yml:208-212`
+- **Problem**: `verify-claude-queue.yml` unconditionally asserts that
+  `claude-queue.service` and `claude-queue.timer` exist with mode 0644.
+  However, the claude role guards systemd unit deployment with
+  `not (system_is_container)`, and `system-container-overrides.yml` sets
+  `system_is_container: true` in all Podman CI scenarios. The service and
+  timer files are never deployed, so these assertions fail in both fedora
+  and rocky verify. The poller script and `queue-repos.conf` assertions
+  (lines 31-53) would pass since their deploy tasks lack the
+  `system_is_container` guard. File exists only on wip1 (commit `44ddd2a6`),
+  not yet CI-tested.
+- **Fix**: Gate the `.service`/`.timer` assertions with
+  `when: not (system_is_container | default(false))`, or split into separate
+  includes for container-safe and host-only assertions.
+
 ### P3 — Medium (day 1-3 friction)
 
 #### 9. Window borders invisible at HiDPI
@@ -590,6 +628,96 @@ not theoretical concerns.
   "authoritative in group_vars/all/vars.yml" comment, or add a CI check that
   warns on new overlapping keys absent from either dictionary.
 
+#### 64. `system_kernel_lockdown` undefined in verify-dnf.yml
+
+- **Dimension**: jinja2-undefined-variable-risks
+- **File**: `molecule/shared/verify-dnf.yml:131-137`,
+  `roles/system/defaults/main.yml:293`
+- **Problem**: `system_kernel_lockdown` is used in verify-dnf.yml lines
+  131-137 without a `| default()` filter. The variable is defined only in
+  `roles/system/defaults/main.yml` (line 293) — it is absent from
+  `group_vars/all/vars.yml` (appears only as a comment at line 92). Peer
+  variables like `system_init_on_free` (vars.yml line 103) and
+  `system_ptrace_scope` (vars.yml line 94) are properly defined there. In
+  container CI this is masked by when-list short-circuit:
+  `verify_kernel_cmdline.stat.exists` is false (no `/etc/kernel/cmdline` in
+  Podman containers), so `system_kernel_lockdown | length > 0` is never
+  evaluated. In the VM scenario where `/etc/kernel/cmdline` exists, both
+  conditions are evaluated and the undefined variable crashes the play.
+- **Fix**: Add `system_kernel_lockdown` to `group_vars/all/vars.yml`
+  alongside the other security hardening baselines, or add
+  `| default('integrity')` to verify-dnf.yml lines 132 and 137.
+
+#### 66. No molecule scenario exercises GNOME security-relevant dconf writes
+
+- **Dimension**: molecule-converge-config
+- **File**: `roles/desktop/tasks/main.yml:53,333-354`
+- **Problem**: No molecule scenario tests `desktop_environment: gnome`.
+  Fedora converge tests sway and i3; rocky/debian/vm use `unknown`; macOS
+  uses `aerospace`. Five security-relevant dconf writes in
+  `desktop_gnome_hardening_dconf` (lock-screen notifications, lock-enabled,
+  idle-delay, location services, recent-files) are never exercised. The
+  system role's `dconf.yml` provides overlapping system-level coverage for
+  2 of 5 (idle-delay and lock-enabled), but 3 security/privacy-relevant
+  user-level settings (lock-screen notifications, location services,
+  recent-files tracking) have no system-level equivalent and are only
+  present in the untested desktop GNOME path.
+- **Fix**: Add a third `include_role` call in fedora converge `post_tasks`
+  with `desktop_environment: gnome` and `desktop_gnome_packages: []` (to
+  skip package installs). Note: dconf writes may fail in container CI
+  without a dbus session, but `ignore_errors` is already present.
+
+#### 67. Debian apt task omits desktop_sway_packages (Sway uninstalled on Debian)
+
+- **Dimension**: desktop-package-lists
+- **File**: `roles/desktop/tasks/main.yml:62-73`,
+  `roles/desktop/defaults/main.yml:143-145`
+- **Problem**: The dnf task assembles `_wm_pkgs` from `desktop_sway_packages`
+  (22 packages including sway itself), but the apt task assembles
+  `_apt_wm_pkgs` from only `desktop_sway_apt_packages` (2 packages:
+  `lxqt-policykit`, `wl-clipboard`). Both packages in `desktop_sway_apt_packages`
+  are duplicates already present in `desktop_sway_packages`, confirming the apt
+  list was not designed as a complete replacement. On Debian with
+  `desktop_effective=sway`, 20 of 22 Sway packages are not installed — including
+  sway itself, swayidle, swaylock, swaybg, wofi, grim, slurp, mako, i3status,
+  brightnessctl, wireplumber, xdg-desktop-portal-wlr, and cliphist. The Debian
+  molecule test masks this by setting `desktop_environment=unknown` and
+  `desktop_sway_packages=[]`.
+- **Fix**: Include `desktop_sway_packages` in the apt `_apt_wm_pkgs` assembly
+  (most Sway packages have identical names on Debian), or merge
+  `desktop_sway_apt_packages` Debian-specific items into a conditional block
+  within the main list.
+
+#### 69. P3 bucket at 44% of findings spans code bugs to tooling wishes
+
+- **Dimension**: plan-structure
+- **Problem**: Priority distribution is P1=4, P2=8, P3=27, P4=23 (62 total).
+  The P3 bucket at 27 items contains 44% of all findings and spans everything
+  from real UX bugs (item 48, false FAIL in smoke-test) to test coverage gaps
+  (item 33, no GNOME scenario) to tooling alignment wishes (item 39, hadolint).
+  This makes it difficult to prioritize the fix backlog within P3.
+- **Fix**: Split P3 into actionable sub-tiers: `P3a: code bugs to fix` (~12
+  items like 42, 43, 48, 49, 50, 55, 56) and `P3b: coverage/hardening
+  improvements` (~15 items like 14, 33, 34, 38, 39, 44, 57). Or add a
+  `Quick wins` section to surface the easy-to-fix items currently buried
+  in the P3 mass.
+
+#### 70. Items 25 and 26 are confirmations, not deficiency findings
+
+- **Dimension**: plan-structure
+- **Problem**: Items 25 (ptrace_scope, P2) and 26 (ICMP redirects, P3) both
+  explicitly state "No code change needed" and "Automation handles this
+  correctly." These confirm that existing automation closes pre-provisioning
+  gaps — they are not deficiency findings. Having a "no code change needed"
+  item at P2 severity inflates the apparent critical-work count. The "What's
+  solid" section already contains structurally identical confirmatory content
+  (e.g., "Firewall-to-sshd ordering: port 722 opened before sshd restart, no
+  lockout").
+- **Fix**: Demote items 25 and 26 out of findings into the "What's solid"
+  section with a note like "sysctl hardening pipeline (ptrace_scope,
+  send_redirects) confirmed working — make all closes these pre-provisioning
+  gaps." Or demote both to P4-info.
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -891,6 +1019,38 @@ not theoretical concerns.
   defaults to an empty list.
 - **Fix**: Add a quay.io connectivity check and vault-provisioned registry
   token verification to the smoke-test work-profile section.
+
+#### 68. gitconfig template has no `[include]` directive for user-local customizations
+
+- **Dimension**: dotfiles-force-pattern
+- **File**: `roles/dotfiles/templates/gitconfig.j2`,
+  `roles/dotfiles/tasks/main.yml:95-99`
+- **Problem**: The gitconfig template (deployed with `force: true` default) has
+  `includeIf` directives for work/personal directory trees but no
+  general-purpose `[include] path = config-local` for arbitrary user additions
+  (custom aliases, diff/merge tools, credential helpers). Every `make all`
+  overwrites any direct edits to `~/.config/git/config`. The SSH config
+  template already has `Include ~/.ssh/config.local` (line 62) as an escape
+  hatch — the gitconfig lacks an equivalent.
+- **Fix**: Add `[include] path = config-local` at the end of `gitconfig.j2`
+  (after the filter/lfs block), following the established `ssh_config` pattern.
+
+#### 71. Plan would benefit from a `Quick wins` section
+
+- **Dimension**: plan-structure
+- **Problem**: At least 12 findings are fixable in 1-5 lines of code but are
+  distributed across P1-P4 with no way to identify them without reading each
+  description: item 36 (move comment outside quoted string), item 38 (add one
+  deny-list entry), item 48 (add two regex alternatives), item 55 (add one path
+  to regex), item 56 (delete 4 stale lines), item 59 (add one shellcheck glob),
+  item 22 (add suffix to one string), item 58 (add one auditd watch line),
+  item 17 (add one file-state task), item 31 (change one sway binding line),
+  item 4 (change WARN to FAIL in 5 preflight lines), item 15 (add existence
+  guard). Highlighting these would let someone knock out 12 items in a focused
+  session.
+- **Fix**: Add a "Quick wins (under 10 lines of code)" section after the
+  Approach section listing findings fixable in under 10 lines, with the
+  one-line fix description from each finding.
 
 ---
 
@@ -1242,6 +1402,66 @@ five low-severity findings cover an auditd template completeness gap (item
 robustness issues where `failed_when: false` masks container initialization
 failures (items 60-61), and a smoke-test registry auth coverage gap (item
 62).
+
+---
+
+## Iteration 10
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 63** (P2): `VM verify.yml missing include_vars for
+  group_vars/all/vars.yml` — VM verify pre_tasks never load
+  `group_vars/all/vars.yml`, unlike fedora/rocky/debian verify files.
+  Multiple variables from shared verify includes (`system_ptrace_scope`,
+  `system_auditd_max_log_file`, `repo_tailscale`) are undefined.
+  `make test-vm` verify phase crashes at `system_ptrace_scope`
+  (verify-common.yml:511).
+- **Item 64** (P3): `system_kernel_lockdown undefined in verify-dnf.yml` —
+  used without `| default()` at lines 131-137 but defined only in role
+  defaults, not `group_vars/all/vars.yml`. Masked in container CI by
+  when-list short-circuit (no `/etc/kernel/cmdline`); crashes in the VM
+  scenario.
+- **Item 65** (P2): `verify-claude-queue.yml unconditional systemd unit
+  assertions` — unconditionally asserts `.service`/`.timer` exist, but the
+  claude role guards deployment with `not system_is_container` and all
+  Podman CI sets `system_is_container: true`. Assertions fail in fedora and
+  rocky verify. File exists only on wip1, not yet CI-tested.
+- **Item 66** (P3): `No molecule scenario exercises GNOME security-relevant
+  dconf writes` — 3 of 5 security/privacy-relevant dconf writes
+  (lock-screen notifications, location services, recent-files) have no
+  system-level equivalent and are only present in the untested GNOME
+  desktop path.
+- **Item 67** (P3): `Debian apt task omits desktop_sway_packages` — on
+  Debian with `desktop_effective=sway`, 20 of 22 Sway packages are not
+  installed including sway itself. The apt task uses only the 2-package
+  `desktop_sway_apt_packages` supplemental list rather than the full
+  22-package `desktop_sway_packages` list.
+- **Item 68** (P4): `gitconfig template has no [include] for user-local
+  customizations` — deployed with `force: true`, overwrites on every
+  `make all`. The SSH config template has `Include config.local`; the
+  gitconfig lacks an equivalent escape hatch.
+- **Item 69** (P3): `P3 bucket at 44% of findings spans code bugs to
+  tooling wishes` — 27 of 62 findings are P3, spanning UX bugs, test
+  coverage gaps, and tooling alignment. Consider splitting into actionable
+  sub-tiers.
+- **Item 70** (P3): `Items 25 and 26 are confirmations, not deficiency
+  findings` — both state "No code change needed" and "Automation handles
+  this correctly." They belong in the "What's solid" section, not the
+  findings list.
+- **Item 71** (P4): `Plan would benefit from a Quick wins section` — at
+  least 12 findings are fixable in 1-5 lines of code (items 36, 38, 48,
+  55, 56, 59, 22, 58, 17, 31, 4, 15) but are distributed across P1-P4
+  with no way to identify them without reading each description.
+
+**Rationale**: Nine findings across six dimensions. Two P2 findings (items
+63, 65) are molecule verify correctness issues that would crash
+`make test-vm` and container CI respectively. Three P3 findings (items 64,
+66, 67) are undefined variable, test coverage, and package list gaps. Two
+P3 findings (items 69, 70) are plan-structure recommendations for improving
+triage prioritization. Two P4 findings (items 68, 71) are a dotfiles
+escape-hatch consistency improvement and a plan-organization suggestion.
 
 ---
 
