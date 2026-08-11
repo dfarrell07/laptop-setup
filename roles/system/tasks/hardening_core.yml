@@ -15,10 +15,12 @@
       ansible.posix.selinux:
         policy: targeted
         state: enforcing
+      register: system_selinux_enforce_result
 
     - name: Refresh SELinux facts after mode change
       ansible.builtin.setup:
         filter: ansible_selinux
+      when: system_selinux_enforce_result.changed
 
     - name: Verify SELinux is enforcing
       ansible.builtin.assert:
