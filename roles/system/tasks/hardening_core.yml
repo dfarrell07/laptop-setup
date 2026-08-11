@@ -16,6 +16,10 @@
         policy: targeted
         state: enforcing
 
+    - name: Refresh SELinux facts after mode change
+      ansible.builtin.setup:
+        filter: ansible_selinux
+
     - name: Verify SELinux is enforcing
       ansible.builtin.assert:
         that:
