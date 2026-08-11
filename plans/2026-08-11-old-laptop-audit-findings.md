@@ -1796,3 +1796,236 @@ automation's curated set.
 folds newlines to spaces and preserves `#` as a literal character, injecting it
 into the `{{ }}` Jinja2 expression. Since `#` is not a valid Jinja2 expression
 token, this causes `TemplateSyntaxError`. Retained at P1.
+
+---
+
+## Reproduction Results and Fix Drafts
+
+**Date**: 2026-08-11
+
+### Item 36 (P1): sysctl Jinja2 `#` comment -- REPRODUCED
+
+**Status**: CONFIRMED REPRODUCIBLE via three independent methods.
+
+**Exact error output from Ansible**:
+```
+Syntax error in template: unexpected char '#' at 661
+```
+
+**Reproduction details**:
+1. Standalone playbook with the exact `set_fact` expression containing `#`
+   --> FAILED with `Syntax error in template: unexpected char '#' at 661`
+2. Same playbook with the `#` comment removed --> SUCCEEDED (ok=1, all
+   sysctl values merged correctly)
+3. Minimal `ansible -m debug` test confirming `#` is invalid inside `{{ }}`
+   --> FAILED with same error class
+
+**Root cause**: Line 42 of `roles/system/tasks/sysctl.yml` has an inline `#`
+comment inside a double-quoted YAML string spanning lines 31-46. YAML preserves
+`#` as a literal character inside double quotes. When YAML folds the multiline
+string, the `#` text becomes part of the Jinja2 `{{ }}` expression. Jinja2 does
+not support `#` comments inside expression blocks (only `{# #}` at the template
+level). The Jinja2 lexer encounters `#` at character offset 661 and raises
+`TemplateSyntaxError`.
+
+**Why CI never caught it**: All molecule scenarios (fedora, rocky, debian)
+include `molecule/shared/system-container-overrides.yml` which sets
+`system_is_container: true`. The sysctl block is guarded by
+`when: not system_is_container` (line 19), so this task is always skipped in
+CI. The bug only fires on real host provisioning (`make all`) or
+`make test-vm`.
+
+**History**: Introduced in commit `211c5363`, modified in 6 subsequent commits,
+never caught because `ansible-playbook --syntax-check` does not evaluate Jinja2
+expressions and all molecule tests skip the code path.
+
+### Item 47 (P2): verify-sway.yml undefined variable abort -- CONFIRMED
+
+**Status**: CONFIRMED via variable loading chain analysis.
+
+**Two undefined variables identified**:
+
+1. `desktop_sway_adaptive_sync` (line 39) -- used in a grep command argument:
+   `cmd: grep -q 'output.*scale.*adaptive_sync {{ desktop_sway_adaptive_sync }}'`
+   Error: `'desktop_sway_adaptive_sync' is undefined`
+
+2. `desktop_sway_libva_driver` (line 46) -- used in a `when` conditional:
+   `when: desktop_sway_libva_driver | length > 0`
+   Error: `'desktop_sway_libva_driver' is undefined`
+
+**Variable loading chain analysis**:
+
+Both variables are defined ONLY in `roles/desktop/defaults/main.yml`:
+- `desktop_sway_adaptive_sync: "disabled"` (line 35)
+- `desktop_sway_libva_driver: ''` (line 14)
+
+They are NOT defined in any file loaded by `molecule/fedora/verify.yml`:
+- `group_vars/all/vars.yml` -- loaded via `include_vars` in pre_tasks
+  (does not contain either variable)
+- `molecule/shared/ci-default-vars.yml` -- not loaded by fedora verify
+- Role defaults -- not loaded (verify uses `import_tasks`, not
+  `include_role`)
+
+Molecule generates its own inventory in a temp directory, so the project's
+`group_vars/all/` is never auto-loaded; each verify playbook must explicitly
+`include_vars`. The fedora verify loads `group_vars/all/vars.yml` but never
+loads role defaults where these two variables live.
+
+**Rocky and Debian gap check**: Neither `molecule/rocky/verify.yml` nor
+`molecule/debian/verify.yml` imports `verify-sway.yml`, so they are not
+affected. Only `molecule/fedora/verify.yml` has this gap (line 53).
+
+### Quick Wins
+
+Findings fixable in 5 or fewer lines with exact diffs drafted.
+
+#### 1. Item 36 (P1): Remove inline `#` comment from sysctl.yml Jinja2 expression
+
+**File**: `roles/system/tasks/sysctl.yml`, line 42
+**Lines changed**: 1
+
+```diff
+-            'kernel.kexec_load_disabled': system_kexec_load_disabled | int,  # pre-reboot; lockdown=integrity makes it redundant post-reboot
++            'kernel.kexec_load_disabled': system_kexec_load_disabled | int,
+```
+
+Optionally preserve the comment as a standalone YAML comment above the
+`set_fact` task (outside the double-quoted string):
+
+```yaml
+    # kexec_load_disabled: pre-reboot only; lockdown=integrity makes it redundant post-reboot
+    - name: Merge configurable sysctl values into hardening dict
+```
+
+#### 2. Item 47 (P2): Load desktop role defaults in fedora verify pre_tasks
+
+**File**: `molecule/fedora/verify.yml`, after the existing `include_vars`
+(line 8)
+**Lines changed**: 2
+
+```diff
++    - name: Load desktop role defaults (desktop_sway_adaptive_sync, desktop_sway_libva_driver for verify-sway.yml)
++      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/desktop/defaults/main.yml"
+```
+
+Insert after the existing `include_vars` for `group_vars/all/vars.yml` and
+before the `set_fact` block.
+
+#### 3. Item 56 (P3): Remove stale cramfs assertion from VM verify
+
+**File**: `molecule/vm/verify.yml`, lines 535-538
+**Lines changed**: 4 (deletion)
+
+```diff
+-    - name: Check modprobe blacklists cramfs
+-      ansible.builtin.command:
+-        cmd: grep -q cramfs /etc/modprobe.d/hardening.conf
+-      changed_when: false
+```
+
+Commit `ab7c166d` removed `cramfs` from `modprobe-hardening.conf.j2` but
+did not update the VM verify playbook. Other modules still verified:
+`firewire-core`, `usb_storage`, `bluetooth`.
+
+#### 4. Item 2 (P1): Broaden SSH client KexAlgorithms
+
+**File**: `roles/dotfiles/templates/ssh_config.j2`, line 12
+**Lines changed**: 1
+
+```diff
+-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
++    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
+```
+
+Adds two fallback algorithms after the preferred `curve25519-sha256`.
+Order preserves preference: Curve25519 first (fastest), then NIST P-256
+ECDH (widely supported), then DH group-exchange SHA-256 (legacy but safe).
+PQ algorithms remain highest priority when enabled. Omits `ecdh-sha2-nistp521`
+and `ecdh-sha2-nistp384` (no meaningful security gain over P-256 for a client
+offer list).
+
+#### 5. Item 63 (P2): Add include_vars to VM verify pre_tasks
+
+**File**: `molecule/vm/verify.yml`, in `pre_tasks` section (before the
+existing `set_fact`)
+**Lines changed**: 2
+
+```diff
++    - name: Load group_vars (system_ptrace_scope, system_auditd_max_log_file, repo_tailscale for shared verify includes)
++      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+```
+
+Without this, `make test-vm` verify phase crashes at the first unprotected
+undefined variable -- `system_ptrace_scope` at verify-common.yml:511.
+Variables affected: `system_ptrace_scope`, `system_auditd_max_log_file`,
+`system_disable_avahi`, `repo_tailscale`, `repo_google_chrome`.
+
+#### 6. Item 38 (P3): Add git hooks directory to Claude deny list
+
+**File**: `roles/claude/defaults/main.yml`, in `claude_deny_write_only` list
+**Lines changed**: 1
+
+```diff
++  - "~/.config/git/template/hooks/**"
+```
+
+Add to the `claude_deny_write_only` list. Prevents overwriting deployed
+hooks (gitleaks pre-commit, commit-msg, prepare-commit-msg, pre-push) at
+the path pointed to by `core.hooksPath` in gitconfig.
+
+#### 7. Item 48 (P3): Fix AllowTcpForwarding smoke-test regex
+
+**File**: `scripts/smoke-test.sh`, line 924
+**Lines changed**: 1
+
+```diff
+-P:AllowTcpForwarding:(no|local|remote)
++P:AllowTcpForwarding:(no|local|remote|yes|all)
+```
+
+#### 8. Item 55 (P3): Add .github/actions/ to molecule path filter
+
+**File**: `.github/workflows/molecule.yml`, line 45
+**Lines changed**: 1 (regex modification)
+
+Add `\.github/actions/` to the existing path-filter regex so changes to
+the molecule-setup composite action trigger molecule tests.
+
+#### 9. Item 58 (P4): Add utmp audit watch
+
+**File**: `roles/system/templates/auditd-claude.rules.j2`, after line 198
+**Lines changed**: 1
+
+```diff
++-w /var/run/utmp -p wa -k session
+```
+
+#### 10. Item 17 (P3): Add systemd user directory creation
+
+**File**: `roles/claude/tasks/main.yml`, before the template deployments
+**Lines changed**: 3
+
+```diff
++- name: Ensure ~/.config/systemd/user/ directory exists
++  ansible.builtin.file:
++    path: "{{ ansible_env.HOME }}/.config/systemd/user"
++    state: directory
++    mode: "0755"
+```
+
+#### 11. Item 22 (P4): Fix sntrup761 suffix inconsistency
+
+**File**: `roles/dotfiles/templates/ssh_config.j2`, line 12
+**Lines changed**: 1 (combined with item 2 fix above)
+
+Change `sntrup761x25519-sha512` to `sntrup761x25519-sha512@openssh.com`
+to match the sshd server config at `vars.yml:119`.
+
+#### 12. Item 4 (P2): Change preflight WARN to FAIL for missing identity vars
+
+**File**: `scripts/preflight.sh`, lines 219-227
+**Lines changed**: 5
+
+Change the five missing-variable checks from `record WARN` to
+`record FAIL` so preflight exit status matches the `make all` assertion
+behavior for CHANGE_ME sentinel defaults.
