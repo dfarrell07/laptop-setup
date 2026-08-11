@@ -32,7 +32,12 @@
       {{
         git_repos_list
         | selectattr('category', 'in', git_repos_active_categories)
-        | rejectattr('enabled', 'equalto', false) | list
+        | selectattr('enabled', 'undefined') | list
+        +
+        git_repos_list
+        | selectattr('category', 'in', git_repos_active_categories)
+        | selectattr('enabled', 'defined')
+        | selectattr('enabled', 'equalto', true) | list
       }}
 
 - name: Fail when explicit category filter matches no enabled repos
@@ -86,7 +91,7 @@
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
-      VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port 22).
+      VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
       Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
   when: git_repos_vpn_check.failed | default(false)
 

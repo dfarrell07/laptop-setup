@@ -109,7 +109,7 @@
 
 - name: Set default inactive days for new accounts to 30
   ansible.builtin.command:
-    cmd: useradd -D -f {{ system_inactive_days }}
+    argv: [useradd, -D, -f, "{{ system_inactive_days }}"]
   register: _useradd_inactive_result
   when:
     - "system_useradd_defaults.stdout_lines | default([]) | select('match', '^INACTIVE=' ~ system_inactive_days ~ '$') | list | length == 0"
@@ -134,7 +134,7 @@
 
 - name: Set inactive lock for existing user account (CIS 5.5.1.5)
   ansible.builtin.command:
-    cmd: chage -I {{ system_inactive_days }} {{ real_user_id }}
+    argv: [chage, -I, "{{ system_inactive_days }}", "{{ real_user_id }}"]
   register: _chage_inactive_result
   when:
     # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
