@@ -45,6 +45,12 @@
             fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
           when: packages_oc_version == 'stable'
 
+        - name: Assert oc SHA256 is set for pinned version
+          ansible.builtin.assert:
+            that: packages_oc_sha256 | length == 64
+            fail_msg: "packages_oc_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+          when: packages_oc_version != 'stable'
+
         - name: Download OpenShift client tarball (SHA256-verified)
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
@@ -150,6 +156,12 @@
             that: packages_opm_sha256 | length == 64
             fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
           when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
+
+        - name: Assert opm SHA256 is set for pinned version
+          ansible.builtin.assert:
+            that: packages_opm_sha256 | length == 64
+            fail_msg: "packages_opm_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+          when: packages_oc_version != 'stable'
 
         - name: Download opm tarball (SHA256-verified)
           ansible.builtin.get_url:

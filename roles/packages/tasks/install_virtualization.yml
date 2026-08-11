@@ -58,7 +58,7 @@
 
 - name: Warn if virtqemud/virtnetworkd socket enable failed
   ansible.builtin.debug:
-    msg: "WARNING: libvirt socket enable failed: {{ _virt_socket_result.msg | default('unknown') }}"
+    msg: "WARNING: libvirt socket enable failed: {{ _virt_socket_result.results | selectattr('failed', 'equalto', true) | map(attribute='msg') | join(', ') | default('unknown') }}"
   when: _virt_socket_result is failed
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
