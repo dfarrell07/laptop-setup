@@ -414,6 +414,60 @@ not theoretical concerns.
   `install_standalone_binaries.yml` (work profile, Linux x86_64+arm64),
   following the existing pattern.
 
+#### 42. AIDE dnf-automatic update hook ignores common exit codes
+
+- **Dimension**: aide-file-integrity-monitoring
+- **File**: `roles/system/tasks/dnf_automatic.yml` (aide-update ExecStartPost)
+- **Problem**: The `aide --update` post-hook promotes the new database only on
+  exit codes 0 (no changes) and 7 (all three change types). AIDE uses a
+  bitmask: bit 0=new(1), bit 1=removed(2), bit 2=changed(4). A typical dnf
+  security update that only modifies existing binaries produces exit code 4
+  (changed) or 5 (new+changed), neither of which triggers the `mv` command.
+  The database is not promoted, so the next daily `aide --check` flags the
+  legitimate package changes as violations — exactly the false positives the
+  hook was designed to prevent.
+- **Fix**: Expand the case statement to accept all non-error AIDE exit codes
+  (0-7): `case $? in 0|[1-7]) mv ... ;; esac`. Codes >= 14 indicate AIDE
+  internal errors and should still skip promotion.
+
+#### 43. Smoke test chrony-nts config check hardcodes wrong path on Debian
+
+- **Dimension**: chrony-nts-dns-interaction
+- **File**: `scripts/smoke-test.sh:1163`,
+  `roles/system/tasks/chrony.yml:25`
+- **Problem**: The NTS config grep hardcodes `/etc/chrony.conf` but
+  `chrony.yml` deploys to `/etc/chrony/chrony.conf` on Debian (`is_apt`). On
+  Debian the grep silently fails (file does not exist at that path), emitting a
+  false WARN "NTS not configured in chrony.conf" even when NTS is correctly
+  deployed. The chronyd service name check at line 1170 handles Debian
+  correctly, demonstrating the config path check was simply missed. The same
+  inconsistency exists in `molecule/shared/verify-common.yml:1069` but is
+  masked in CI because `system_chrony_service_enabled` defaults to false in
+  containers.
+- **Fix**: Add a path variable before the NTS config grep:
+  `_chrony_conf=/etc/chrony.conf; grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _chrony_conf=/etc/chrony/chrony.conf`
+
+#### 44. Logind settings mostly unverified by smoke test and Molecule
+
+- **Dimension**: logind-lid-power-behavior
+- **File**: `scripts/smoke-test.sh:1657-1663`,
+  `molecule/shared/verify-common.yml:794`,
+  `molecule/vm/verify.yml:799`,
+  `roles/system/tasks/logind.yml`
+- **Problem**: `logind.yml` deploys 8 keys via a single `ini_file` loop, but
+  only 2 are verified anywhere: smoke-test checks `IdleAction=lock` and
+  `IdleActionSec=`; Molecule verify-common checks `IdleAction=lock`; VM verify
+  checks `IdleActionSec=`. The remaining 6 keys (`HandleLidSwitch`,
+  `HandleLidSwitchExternalPower`, `HandleLidSwitchDocked`,
+  `HandleHibernateKey`, `HandlePowerKey`, `KillUserProcesses`) are never
+  verified. A value regression (e.g., `HandlePowerKey` changed from `lock` to
+  `poweroff`, or `KillUserProcesses` from `no` to `yes`) would pass all tests
+  silently.
+- **Fix**: Add smoke-test checks and/or Molecule verify assertions for at
+  minimum `HandleLidSwitch`, `HandlePowerKey`, and `KillUserProcesses` — the
+  three most impactful settings (lid-close suspend, power-button lock, process
+  survival on logout).
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -538,6 +592,44 @@ not theoretical concerns.
 - **Fix**: Add grype as a SHA256-verified binary download in
   `install_standalone_binaries.yml` (work profile, Linux x86_64+arm64),
   following the gitleaks/actionlint/zizmor pattern.
+
+#### 45. No restore script or documented restore procedure
+
+- **Dimension**: backup-readiness
+- **File**: `scripts/backup.sh`, `Makefile`
+- **Problem**: The backup creates a timestamped directory
+  (`~/laptop-setup-backup-YYYYMMDD-HHMMSS/`) mirroring the source tree, but
+  there is no `make restore` target, no `restore.sh` script, and no
+  documentation explaining how to transfer the backup to a new machine and
+  place files back. For cross-machine migration (X1C7 to P16v), the user must
+  manually rsync/scp the backup and copy subtrees back. In practice the backup
+  directory mirrors `$HOME` paths exactly, making restore a one-liner
+  (`rsync -a $BACKUP_DIR/ ~/`), and `make all` regenerates all
+  template-managed files — the backup only matters for gitignored/unmanaged
+  content (SSH keys, vault.yml, config.yml, credentials).
+- **Fix**: Add a brief restore procedure to `references/troubleshooting.md`
+  covering: rsync backup to new machine, restore config.yml and vault-pass.sh
+  first, then `make all`. A `restore.sh` script is optional given the trivial
+  restore path.
+
+#### 46. uBlock Origin MV2 missing from Chrome ExtensionInstallAllowlist
+
+- **Dimension**: chrome-security-policy
+- **File**: `roles/desktop/files/chrome-security-policy.json:4-7`
+- **Problem**: uBlock Origin MV2 (`cjpalhdlnbpafiamejdnhcphjbkeiagm`) is
+  absent from the `ExtensionInstallAllowlist`. The research doc at
+  `notes-ai/laptop-setup/2026-05-29-chrome-security-hardening.md` recommends
+  both MV2 and MV3 in the allowlist (line 254). The wildcard blocklist (line 2)
+  blocks any extension not explicitly allowlisted. uBlock Origin Lite MV3 IS
+  force-installed via `ExtensionInstallForcelist`, so ad/tracker blocking is
+  present out of the box. The deployed policy was evolved well beyond the
+  research doc (adding 10+ additional policies), suggesting MV2 omission may
+  be an intentional forward-looking choice. The research doc itself labels
+  MV3 Lite as the MV2 replacement and notes MV2 "will eventually stop
+  working."
+- **Fix**: Add `cjpalhdlnbpafiamejdnhcphjbkeiagm` to
+  `ExtensionInstallAllowlist` if MV2's more capable dynamic filtering is
+  desired. Otherwise, document the intentional MV3-only decision.
 
 ---
 
@@ -725,3 +817,52 @@ network operations on proxied CSB hybrid machines. The Claude deny-list gap
 (item 38) is a defense-in-depth hardening miss. The remaining three (items
 39-41) are missing tool provisioning — two convenience improvements and one
 MCN tooling alignment.
+
+---
+
+## Iteration 7
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 42** (P3): `AIDE dnf-automatic update hook ignores common exit codes`
+  — the `aide --update` post-hook case statement only promotes the new database
+  on exit codes 0 and 7. AIDE uses a bitmask (1=new, 2=removed, 4=changed), so
+  a typical dnf update producing exit code 4 (changed files only) or 5
+  (new+changed) skips promotion. The next daily `aide --check` then flags
+  legitimate package changes as violations, producing false positives that
+  train operators to ignore real alerts.
+- **Item 43** (P3): `Smoke test chrony-nts config check hardcodes wrong path
+  on Debian` — smoke-test.sh line 1163 hardcodes `/etc/chrony.conf` but
+  `chrony.yml` deploys NTS config to `/etc/chrony/chrony.conf` on Debian
+  (`is_apt`). Produces a false WARN on Debian even when NTS is correctly
+  deployed. The service-name check at line 1170 handles Debian correctly,
+  demonstrating the config-path check was simply missed.
+- **Item 44** (P3): `Logind settings mostly unverified by smoke test and
+  Molecule` — `logind.yml` deploys 8 keys but only `IdleAction` and
+  `IdleActionSec` are verified anywhere. The remaining 6 keys
+  (`HandleLidSwitch`, `HandleLidSwitchExternalPower`, `HandleLidSwitchDocked`,
+  `HandleHibernateKey`, `HandlePowerKey`, `KillUserProcesses`) have zero test
+  coverage. A regression in `HandlePowerKey` or `KillUserProcesses` could
+  cause data loss and pass all tests silently.
+- **Item 45** (P4): `No restore script or documented restore procedure` — the
+  backup creates a timestamped directory mirroring `$HOME` paths but no
+  `make restore`, `restore.sh`, or documentation explains the restore path.
+  In practice the restore is a trivial `rsync -a` and `make all` regenerates
+  template-managed files, so this is a documentation convenience gap rather
+  than a functional risk.
+- **Item 46** (P4): `uBlock Origin MV2 missing from Chrome
+  ExtensionInstallAllowlist` — MV2 is absent from the allowlist despite the
+  research doc recommending both MV2 and MV3. MV3 Lite IS force-installed, so
+  ad blocking is present. The omission appears intentional given the policy was
+  evolved well beyond the research doc and MV2 is being deprecated.
+
+**Rationale**: Five findings across five dimensions. The AIDE exit code bug
+(item 42) degrades file integrity monitoring by producing false positives
+after routine updates. The chrony path mismatch (item 43) and logind test
+gap (item 44) are test coverage blind spots — one Debian-specific, one
+cross-platform. The backup restore gap (item 45) is a minor documentation
+miss given the trivial restore path. The Chrome extension finding (item 46)
+documents a likely-intentional policy decision that should be explicitly
+acknowledged.
