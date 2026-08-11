@@ -12,7 +12,7 @@ Banner /etc/issue.net
 #   cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
 # Alternatively, populate vault.yml with vault_ssh_auth_key_pub (ed25519).
 PasswordAuthentication no
-KbdInteractiveAuthentication no
+KbdInteractiveAuthentication no  # matches 50-redhat.conf; explicit to guard against upstream changes
 PermitRootLogin no
 PermitEmptyPasswords no
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
@@ -42,6 +42,7 @@ ClientAliveCountMax 2
 {% if system_ssh_channel_timeout | string != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
+# system_ssh_unused_connection_timeout: default 600; set '' in config.yml to omit this directive
 {% if system_ssh_unused_connection_timeout | string != '' %}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}

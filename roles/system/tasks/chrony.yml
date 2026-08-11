@@ -52,6 +52,14 @@
     - not (system_chrony_service_enabled | bool)
   failed_when: false
 
+- name: Stop and disable chrony when chrony is disabled
+  ansible.builtin.systemd:
+    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
+    state: stopped
+    enabled: false
+  when: not (system_chrony_service_enabled | bool)
+  failed_when: false
+
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
