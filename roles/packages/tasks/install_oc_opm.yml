@@ -139,6 +139,7 @@
     - name: Download and install opm
       when: >-
         packages_opm_check.rc != 0 or
+        packages_oc_version == 'stable' or
         'content' not in packages_opm_marker or
         packages_oc_version not in (packages_opm_marker.content | b64decode)
       block:
