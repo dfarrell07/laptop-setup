@@ -46,7 +46,7 @@ dotfiles_internal_ca_path: "{{ '/etc/ssl/certs/ca-certificates.crt' if is_apt el
 # Override in config.yml to add or remove work orgs without editing templates.
 dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]
 
-dotfiles_ssh_hardware_key_basename: id_ed25519_sk
+dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
 dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; authoritative in group_vars/all/vars.yml
 
 dotfiles_direnv_warn_timeout: "10s"  # upstream default 5s; 10s accommodates slow VPN/CSB shell init
