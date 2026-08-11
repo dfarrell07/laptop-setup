@@ -154,7 +154,6 @@
         cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       changed_when: true
       register: system_aide_reinit_result
-      failed_when: system_aide_reinit_result.rc != 0
       when:
         - _aide_conf_r1 is changed
           or _aide_conf_r2 is changed
