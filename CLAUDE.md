@@ -33,6 +33,8 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 6. Required manual actions after `make all`:
    - **Reboot** — kernel security params (lockdown, IOMMU, vsyscall, init_on_free) only
      take effect after a reboot. SSH will be on port 722 after reboot.
+     Pre-reboot window: kexec is only guarded by the `kexec_load_disabled` sysctl until
+     lockdown=integrity activates; do not defer this reboot on machines where kexec attacks are a concern.
    - `make smoke-test` — verify provisioning succeeded before proceeding (catches failures early)
    - `tailscale up` to authenticate (interactive browser step)
    - `gh auth login` — GitHub CLI authentication (required for HTTPS git credential helper, notes clone, and claude queue-poller workflows)
