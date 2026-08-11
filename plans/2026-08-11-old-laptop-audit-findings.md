@@ -1242,3 +1242,170 @@ five low-severity findings cover an auditd template completeness gap (item
 robustness issues where `failed_when: false` masks container initialization
 failures (items 60-61), and a smoke-test registry auth coverage gap (item
 62).
+
+---
+
+## Letter from the Old Laptop
+
+This section captures what the user ACTUALLY does on this machine — their
+habits, tool preferences, and workflow patterns. This is the context you
+need to make the P16v feel right, not just correct.
+
+### Who this person is (by the numbers)
+
+- **10,725 lines** of zsh history — heavy CLI user
+- **git push** is the #1 git subcommand (1,391 times) — push-intensive PR
+  iteration cycle, YubiKey touch per push is real daily friction
+- **gvim** (via `gv` alias) used 916 times — graphical vim with tab pages,
+  NOT terminal vim. The `gv` alias maps to `gvim -vp`
+- **make** used 428 times — build-system-driven workflow. Top target:
+  `make apply` (126 times, Konflux release), then `make test-remote` (34),
+  `make cve-fix` (30)
+- **5 concurrent Claude sessions** running right now via Vertex AI with
+  `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION=2000`
+- **No tmux sessions active** — works in terminal tabs despite the
+  automation's cw/ccp aliases expecting tmux. This is important: the tmux
+  workflow is aspirational, not current.
+
+### Custom aliases that must survive
+
+| Alias | Expansion | Usage | In automation? |
+|-------|-----------|-------|----------------|
+| `gv` | `gvim -vp` | 916 uses | Yes (conditional on gvim presence) |
+| `gi` | `grep -rniI --color=always --exclude-dir=vendor` | 976 uses | Renamed to `gri` (forgit claims `gi`) |
+| `ping` | `ping -i .2` | frequent | Yes |
+| `pingg` | `ping google.com` | frequent | Yes |
+| `ping8` | `ping 8.8.8.8` | frequent | Yes |
+| `keyb` | bluetooth keyboard connect | periodic | No — device-specific |
+| `mx` | bluetooth mouse connect | periodic | No — device-specific |
+| `fixd` | fix_displays.sh | periodic | No — X11/i3-specific, not needed on Sway |
+
+The `gi` → `gri` rename is a real muscle-memory break at 976 uses. Consider
+keeping `gi` as a secondary alias alongside `gri`.
+
+### Hardware context
+
+- **Dual monitors**: laptop eDP-1 + external HDMI-1 2560x1440 at desk
+- **Docking station**: 2x DisplayPort 1920x1200 (one rotated right) via
+  `fix_displays.sh` script
+- **Peripherals**: Keychron K2 (wireless mechanical), Logitech MX Master
+  (multiple generations), Bang & Olufsen Beoplay Portal headphones,
+  Sennheiser MOMENTUM 3
+- **YubiKey**: 5C Nano USB-C, firmware 5.2.3 (pre-5.7, EUCLEAK vulnerable)
+- USBGuard must whitelist: Keychron K2, MX Master (all variants), B&O
+  headphones, Sennheiser — in addition to the internal keyboard/touchpad
+
+### Editor preferences (will be lost on P16v without action)
+
+The user's vimrc is 77 lines of carefully tuned preferences. The automation
+deploys vimrc with `force: false` (seed-only), so it won't overwrite on
+THIS machine. But on the NEW machine, the automation's seed vimrc will be
+deployed instead. Key differences:
+
+| Setting | User's preference | Automation seed |
+|---------|-------------------|-----------------|
+| Tabs | `noexpandtab` (hard tabs) | `expandtab` (spaces) |
+| Leader key | `,` (comma) | Not set |
+| textwidth | 140 | Not set |
+| autochdir | yes | No |
+| backup dir | `~/.vimbackup//` | No (noswapfile) |
+| Folding | disabled | Not configured |
+| Buffer list | F5 shortcut | Not configured |
+| Spell toggle | `<leader>ss` | Not configured |
+
+**Action**: The user should either copy their vimrc to the P16v before
+`make all`, or add it to `scripts/backup.sh` and restore from backup.
+
+### Window manager transition (i3 → Sway)
+
+The user's current i3 config uses **Mod1 (Alt)** as the modifier. The
+automation switches to **Mod4 (Super/Windows)**. This affects EVERY
+keybinding and is the single biggest muscle-memory break.
+
+Additionally, i3's default focus keys are j/k/l/semicolon. The automation
+uses h/j/k/l (vim-style). Better ergonomically but different from what
+10,725 lines of history were built on.
+
+The user had almost no i3 customization — essentially the wizard default
+plus `nm-applet`, a few volume/brightness keys, and display fix scripts.
+The automation's Sway config is a major upgrade with clipboard history,
+screenshot tools, notifications, idle lock, etc.
+
+### Git config (security upgrade, some friction)
+
+The old gitconfig has two dangerous settings the automation correctly
+removes:
+
+- `sslVerify = false` — disables ALL HTTPS certificate verification
+- `safe.directory = *` — trusts every git repo on the filesystem
+
+Both are security risks. The user should be aware these are gone and that
+any workflow depending on them (e.g., internal repos with self-signed
+certs) needs proper CA cert configuration instead.
+
+### What's stale (safe to drop)
+
+These items exist on the old laptop but are unused/outdated:
+
+- Travis CI integration (`source ~/.travis/travis.sh`)
+- RVM (Ruby Version Manager) PATH
+- Packer PATH
+- VAGRANT_HOME with root/non-root split
+- `unset GREP_OPTIONS` (deprecated years ago)
+- Linuxbrew eval
+- gitreview.username (OpenStack-era)
+- `starwars` telnet alias
+
+### Repo layout migration
+
+The user has **106 repos (6.6 GB)** in `~/go/src/` using the pre-modules
+GOPATH layout:
+
+```
+~/go/src/github.com/openshift/ovn-kubernetes/
+~/go/src/submariner-io/submariner-operator/
+~/go/src/github.com/stolostron/submariner-addon/
+```
+
+The automation clones to `~/src/` with a flat layout:
+
+```
+~/src/openshift/ovn-kubernetes/
+~/src/submariner-io/submariner-operator/
+~/src/stolostron/submariner-addon/
+```
+
+Both will coexist on the P16v if the user copies ~/go/src/ from the old
+machine. The automation provides no migration path, cleanup task, or
+warning. Go modules (go.mod) don't care about filesystem location, so
+both layouts work — it's just confusing to have two copies.
+
+### What the user ACTUALLY needs on day 1
+
+Based on the shell history, these are the workflows the user will try
+first on the P16v:
+
+1. **Clone and push to Submariner repos** — needs SSH keys, gh auth,
+   fork remotes configured
+2. **Run `make apply` for Konflux releases** — needs oc login to
+   Konflux prod cluster, registry auth
+3. **Run 5+ concurrent Claude sessions** — needs Vertex AI env vars,
+   Claude Code installed, CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION set
+4. **Use gvim to edit code** — needs gvim installed (in vim-enhanced
+   package), user's vimrc deployed
+5. **Build OVN-K with kind** — needs kind, podman socket, environment.d,
+   kernel modules, sysctl tuning
+6. **Connect bluetooth peripherals** — needs bluetooth enabled,
+   USBGuard whitelist including Keychron/MX Master
+7. **Run CVE fixes** — needs grype (not automated, item 41), subctl
+   (automated), golangci-lint (automated)
+
+### VPN context
+
+The user has multiple VPN profiles:
+- Red Hat Global VPN (corporate, tun0) — currently active
+- Mullvad/NordVPN city endpoints (Amsterdam, Beijing, Brisbane,
+  Singapore, Tel Aviv, Tokyo) — personal privacy VPN
+
+On CSB hybrid, Mullvad repo is blocked (`not csb_detected`). The user may
+need to install Mullvad manually or override the guard.
