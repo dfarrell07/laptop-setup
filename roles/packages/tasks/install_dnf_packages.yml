@@ -12,9 +12,10 @@
           {{ (packages_cli | reject('equalto', 'gh') | list
              if not repo_gh_cli and ansible_distribution != 'Fedora'
              else packages_cli)
+             + packages_languages
              + (packages_languages_work if profile == 'work' else [])
              + (packages_security_yubikey if packages_yubikey_enabled | bool else [])
-             + (packages_fido2_rhel if ansible_distribution != 'Fedora' else [])
+             + (packages_security_rhel if ansible_distribution != 'Fedora' else [])
              + packages_containers
              + (packages_containers_work if profile == 'work' else [])
              + (packages_containers_kubectl
