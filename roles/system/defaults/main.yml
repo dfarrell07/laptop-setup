@@ -18,6 +18,8 @@ system_sysctl_hardening:
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   # kernel.perf_event_paranoid: merged via system_perf_event_paranoid combine() in sysctl.yml
   kernel.randomize_va_space: 2  # CIS 1.5.2 — full ASLR (stack, heap, mmap); explicit to survive conflicting sysctl.d drop-ins
+  # CIS 3.3.6/3.3.7 — disable ICMP redirects; router should not inform hosts
+  # of alternate routes (manual set; not auto-disabled by ip_forward=1)
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
   # kernel auto-disables accept_redirects when ip_forward=1 (same behavior as accept_ra=0 +

@@ -52,13 +52,14 @@
   tags: [become]
   ignore_errors: true
   register: _virt_socket_result
-  when:
-    - "'libvirt' in packages_virtualization"
-    - not system_is_container
+  when: not system_is_container
 
 - name: Warn if virtqemud/virtnetworkd socket enable failed
   ansible.builtin.debug:
-    msg: "WARNING: libvirt socket enable failed: {{ _virt_socket_result.results | selectattr('failed', 'equalto', true) | map(attribute='msg') | join(', ') | default('unknown') }}"
+    msg: >-
+      WARNING: libvirt socket enable failed:
+      {{ _virt_socket_result.results | selectattr('failed', 'equalto', true) |
+      map(attribute='msg') | join(', ') | default('unknown') }}
   when: _virt_socket_result is failed
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
