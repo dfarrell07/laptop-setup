@@ -1,40 +1,80 @@
 " Seeded by Ansible — safe to customize
 
+" --- Core compatibility and security ---
 set nocompatible
-set nomodeline
-set secure
-set noswapfile
+set nomodeline                " disable modeline parsing (security)
+set secure                    " restrict autocmds in project vimrcs (security)
+
+" --- History and undo ---
+set history=5000
+set undolevels=1000
+
+" --- Indentation: hard tabs, 2-wide (user preference) ---
+" Filetype overrides below handle Go (hard tab/4) and Python/Rust (spaces/4)
 set tabstop=2
 set shiftwidth=2
-set expandtab
+set noexpandtab               " hard tabs by default (user preference over seed expandtab)
+set smarttab
 set autoindent
+set breakindent               " preserve indentation on wrapped lines
+set showbreak=\ \\_           " visual marker for wrapped lines
+
+" --- Display ---
 set number
 set ruler
 set showcmd
-set incsearch
-set hlsearch
-set ignorecase
-set smartcase
-set history=5000
-set undolevels=1000
-set backspace=indent,eol,start
-if has('clipboard')
-  set clipboard=unnamedplus
-endif
-" 24-bit color and dark background for accurate terminal color rendering
+set belloff=all
+set nofoldenable              " start with folds open
+syntax on
+filetype plugin indent on
 if has('termguicolors')
   set termguicolors
 endif
 set background=dark
 colorscheme habamax
-syntax on
-filetype plugin indent on
 
-autocmd FileType go setlocal noexpandtab tabstop=4 shiftwidth=4
-autocmd FileType rust setlocal tabstop=4 shiftwidth=4 expandtab
-autocmd FileType python setlocal tabstop=4 shiftwidth=4 expandtab
+" --- Search ---
+set hlsearch
+set incsearch
+set ignorecase
+set smartcase
+
+" --- Editing ---
+set backspace=indent,eol,start
+set textwidth=140
+set formatoptions=n
+set autochdir                 " cwd follows the open file
+if has('clipboard')
+  set clipboard=unnamedplus
+endif
+
+" --- Backup and swap files (kept in ~/.vimbackup, not in-tree) ---
+set backupdir=~/.vimbackup//
+set directory=~/.vimbackup//
+
+" --- Leader and mappings ---
+let mapleader = ","
+
+" Remap 0 to first non-blank character
+map 0 ^
+
+" F5 — quick buffer switcher
+map <F5> :buffers<CR>:buffer<Space>
+
+" --- Spelling ---
+hi SpellBad cterm=underline,bold
+map <leader>ss :setlocal spell! spelllang=en_us<cr>
+
+" --- Tab label (GUI) ---
+set guitablabel=%t
+
+" --- Filetype-specific indentation ---
+autocmd FileType go       setlocal noexpandtab tabstop=4 shiftwidth=4
+autocmd FileType rust     setlocal expandtab   tabstop=4 shiftwidth=4
+autocmd FileType python   setlocal expandtab   tabstop=4 shiftwidth=4
 autocmd FileType markdown,text,gitcommit setlocal spell
 
+" --- Restore cursor to last edit position ---
 augroup vimrc_restore
   autocmd!
   autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif

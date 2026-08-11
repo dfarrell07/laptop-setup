@@ -2223,3 +2223,92 @@ The fix adds `yes` and `all` to align the smoke-test with the role.
 The molecule workflow uses `./.github/actions/molecule-setup` (line 77).
 Adding `\.github/actions/` to the alternation ensures composite action
 changes trigger molecule tests.
+
+---
+
+## P16v Artifacts
+
+Artifacts generated from the old laptop audit. Each file is a standalone
+reference for the P16v provisioning agent.
+
+### config-yml-template
+
+**File**: `/home/dfarrell07/laptop-setup/plans/p16v-config.yml`
+
+Template config.yml for the P16v with all audit-derived settings: explicit
+`desktop_environment: sway`, HiDPI scale 1.5 for the 2560x1600 panel,
+`desktop_sway_output: eDP-1` (fixes item 3 multi-monitor breakage), scaled
+border widths and cursor size for HiDPI, battery indicator enabled, and
+identity/timezone placeholders. Covers items 3, 9, 11, 16.
+
+### day1-runbook
+
+Step-by-step provisioning runbook for the P16v: pre-provision backup on the
+X1C7, bootstrap on fresh Fedora 44 (including the `sudo dnf install -y make`
+chicken-and-egg fix from item 27), `make bootstrap` through `make all`,
+post-provision manual steps (reboot, smoke-test, tailscale up, gh auth login),
+and day-1 workflow validation sequence based on actual shell history usage
+patterns.
+
+### vimrc-for-p16v
+
+**File**: `/home/dfarrell07/laptop-setup/roles/dotfiles/files/vimrc`
+
+Merged vimrc combining the user's 77-line preferences with automation security
+additions. Keeps hard tabs (`noexpandtab`), comma leader, textwidth 140,
+autochdir, and `~/.vimbackup//` backup dir. Adds `nomodeline`, `set secure`,
+`termguicolors`, `ignorecase`/`smartcase`, and `colorscheme habamax` from the
+automation seed.
+
+### usbguard-rules-p16v
+
+Discovery procedure and rule templates for USBGuard on AMD (item 1). Documents
+why `with-connect-type "hardwired"` is a no-op on AMD USB controllers (ports
+report `not used` instead of `hardwired`). Provides the `lsusb` and
+`usbguard generate-policy` commands to run before enabling USBGuard, plus
+`system_usbguard_extra_rules` config.yml format for per-device VID:PID rules.
+
+### bluetooth-aliases-sway
+
+Analysis confirming bluetooth aliases (`keyb`, `mx`) are WM-agnostic and need
+no Sway changes. Documents stale MAC addresses: old aliases reference unpaired
+devices, current paired devices are Keychron K2 (`DC:2C:26:F5:C9:6E`) and
+MX Master 3 (`D8:59:80:A1:F5:DE`). MAC addresses must be updated for the P16v.
+
+### git-includeif-paths
+
+Maps repo directories under `~/src/` to work vs personal email via gitconfig
+`includeIf` directives. Lists the `dotfiles_work_src_dirs` config.yml value
+needed: `submariner-io`, `stolostron`, `ds`, `bpfman`, `ovnk`, `konflux`.
+Personal repos under `~/src/dfarrell07/` get personal email automatically.
+
+### ssh-config-local
+
+Comparison of old `~/.ssh/config` against the automation template. All old host
+entries (gh, gist, code.engineering.redhat.com, gitlab.cee.redhat.com) are
+already covered by the template. Zero unique entries to migrate. The automation
+adds hardening directives absent from the old config.
+
+### migration-checklist
+
+Pre-migration checklist for X1C7 to P16v transfer. Covers transfer method
+selection (Tailscale scp recommended), `make backup` contents, files to
+transfer manually (vault.yml, vault-pass.sh, config.yml, SSH keys), YubiKey
+EUCLEAK replacement note, and post-migration verification steps including
+`make smoke-test`.
+
+### claude-settings-p16v
+
+Analysis of the two-file Claude Code settings split: `settings.local.json`
+(security policy, deployed by Ansible) vs `settings.json` (user preferences,
+manual). Documents the old laptop's current state (no `settings.local.json`,
+dangerous mode enabled, 4 plugin marketplaces, Atlassian MCP server, Vertex AI
+routing) and the delta the P16v agent must navigate.
+
+### env-vars-inventory
+
+Complete inventory of environment variables from the old laptop mapped to their
+automation destinations. Key entries: `EDITOR=vim` (hardcoded in zshrc.j2),
+`AWS_PROFILE` and `GONOSUMDB` (config.yml overrides), `CLAUDE_CODE_USE_VERTEX`
+(manual setup via work-env), `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER`
+(handled by both zshrc.j2 and environment.d).

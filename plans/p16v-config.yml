@@ -1,0 +1,168 @@
+---
+# config.yml -- ThinkPad P16v Gen 1 AMD (Fedora 44, Sway, HiDPI 2560x1600)
+#
+# Generated from old-laptop-audit-findings.md targeting CSB hybrid provisioning.
+# Copy this file to ~/laptop-setup/config.yml and fill in the TODO placeholders.
+
+# ============================================================
+# USER IDENTITY -- fill in ALL four before running make all
+# ============================================================
+# Without these, make all hard-fails on the CHANGE_ME sentinel assertions
+# in common/tasks/pre_flight_checks.yml. The preflight WARN vs make-all
+# FAIL mismatch (audit item 4) means preflight says "Ready" but make all
+# crashes on these same sentinels.
+
+dotfiles_github_user: 'TODO'        # e.g. dfarrell07
+dotfiles_user_name: 'TODO'          # e.g. Daniel Farrell (git commit attribution)
+dotfiles_user_email_work: 'TODO'    # e.g. dfarrell@redhat.com
+dotfiles_user_email_personal: 'TODO'  # e.g. dfarrell07@gmail.com
+
+# ============================================================
+# SYSTEM
+# ============================================================
+
+# Run: timedatectl list-timezones
+system_timezone: 'TODO'  # e.g. America/New_York, America/Chicago
+
+# ============================================================
+# DESKTOP -- Sway on HiDPI
+# ============================================================
+
+desktop_environment: sway
+
+# HiDPI: P16v has a 16-inch 2560x1600 (188 PPI) display.
+# Scale 1.5 gives effective 1707x1067 -- readable without squinting.
+desktop_sway_hidpi_scale: "1.5"
+
+# CRITICAL (audit item 3): Use eDP-1 (built-in display), NOT the default
+# "*" (all outputs). With "*", plugging in an external 1080p monitor
+# applies 1.5x to it too, rendering at effective 720p. Setting eDP-1
+# restricts the scale directive to the internal panel only.
+# External monitors get their native 1.0 scale by default.
+desktop_sway_output: "eDP-1"
+
+# Multi-monitor workspace assignments (audit item 3 follow-up).
+# Uncomment and adjust output names after connecting external displays.
+# Discover output names with: swaymsg -t get_outputs | grep name
+# desktop_sway_workspace_outputs:
+#   - { workspace: 1, output: eDP-1 }
+#   - { workspace: 2, output: HDMI-A-1 }
+#   - { workspace: 3, output: HDMI-A-1 }
+
+# Window borders: 1px at 1.5x HiDPI is ~0.13mm -- nearly invisible
+# (audit item 9). 2px gives a usable 0.27mm border for focus indication.
+desktop_wm_border_width: 2
+desktop_wm_floating_border_width: 2
+
+# HiDPI cursor: scale up from default 24 to 36 for 1.5x scale.
+desktop_sway_cursor_size: 36
+
+# ============================================================
+# STATUS BAR
+# ============================================================
+
+# Battery indicator (audit item 11): most laptops use BAT0 = battery
+# number 0. Without this, no battery percentage in the status bar.
+desktop_i3status_battery_num: "0"
+desktop_i3status_show_battery: true
+
+# CPU temperature: AMD k10temp sensor path varies by kernel/hwmon index.
+# TODO: Run this on the P16v to find the correct path:
+#   ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
+# Then set the full path below. Example:
+#   /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input
+desktop_i3status_cpu_temp_path: ""  # TODO: set after running the ls command above
+
+# ============================================================
+# TRACKPOINT
+# ============================================================
+
+# TrackPoint device ID for Sway input configuration.
+# TODO: After first boot into Sway, run:
+#   swaymsg -t get_inputs | grep -A2 TrackPoint
+# Then set the identifier string below. Example:
+#   "2:10:TPPS/2 Elan TrackPoint"
+desktop_sway_trackpoint_id: ''  # TODO: set after running the swaymsg command above
+
+# TrackPoint tuning (defaults are sensible, adjust after testing):
+# desktop_sway_trackpoint_accel_profile: flat
+# desktop_sway_trackpoint_pointer_accel: "-0.5"
+# desktop_sway_trackpoint_scroll_factor: 0.5
+
+# ============================================================
+# AMD GPU -- VA-API hardware video acceleration
+# ============================================================
+
+# AMD Radeon uses radeonsi for both VA-API and VDPAU.
+# Empty string means auto-detect, which usually works for AMD.
+# Uncomment if auto-detection fails:
+# desktop_sway_libva_driver: "radeonsi"
+# desktop_sway_vdpau_driver: "radeonsi"
+
+# ============================================================
+# NOTES -- private notes repo (dfarrell07 account only)
+# ============================================================
+
+# Enable only on the dfarrell07 account with access to the private notes
+# repo. Requires gh auth login to succeed for the clone.
+notes_enabled: true
+
+# ============================================================
+# USBGUARD -- AMD CRITICAL (audit item 1)
+# ============================================================
+# The default whitelist rule "allow with-connect-type hardwired" does NOT
+# work on AMD machines. AMD ACPI reports internal ports as "not used"
+# instead of "hardwired". Without per-device VID:PID rules, USBGuard
+# will BLOCK the internal keyboard, touchpad, webcam, and Bluetooth
+# at boot -- bricking input on the first reboot.
+#
+# TODO: After first boot (before enabling USBGuard), run:
+#   sudo usbguard generate-policy
+# Then add VID:PID rules for all internal devices plus peripherals below.
+#
+# Known peripherals from old laptop audit:
+#   - Keychron K2 (wireless mechanical keyboard)
+#   - Logitech MX Master (multiple generations)
+#   - Bang & Olufsen Beoplay Portal headphones
+#   - Sennheiser MOMENTUM 3
+#   - YubiKey 5C Nano (already in base whitelist)
+#
+# Example (fill in real VID:PID values from generate-policy output):
+# system_usbguard_extra_rules:
+#   - 'allow id XXXX:XXXX name "Internal Keyboard" with-interface ...'
+#   - 'allow id XXXX:XXXX name "Internal Touchpad" with-interface ...'
+#   - 'allow id XXXX:XXXX name "Internal Webcam" with-interface ...'
+#   - 'allow id XXXX:XXXX name "Internal Bluetooth" with-interface ...'
+#   - 'allow id 05AC:024F name "Keychron K2" with-interface ...'
+#   - 'allow id 046D:C52B name "Logitech MX Master" with-interface ...'
+
+# ============================================================
+# WORK-DIRECTORY GUARD -- Claude personal/work isolation
+# ============================================================
+# Routes these directories to the work git identity (gitconfig includeIf)
+# and enables the Claude personal-guard in zshrc.
+# TODO: Set to your work org directories under ~/src/
+# dotfiles_work_src_dirs:
+#   - openshift
+#   - submariner-io
+#   - stolostron
+#   - ovn-org
+
+# ============================================================
+# INTERNAL GIT / RED HAT REPOS (set if on Red Hat network)
+# ============================================================
+# dotfiles_internal_git_host: ''    # e.g. gitlab.cee.redhat.com
+# repos_dnf_acli_baseurl: ''       # internal acli/rosa CLI mirror URL
+# repos_dnf_redhat_baseurl: ''     # internal RPM repo URL
+# repos_dnf_redhat_gpgkey: ''      # GPG key URL for internal repo
+
+# ============================================================
+# GO PRIVATE MODULES (Red Hat internal)
+# ============================================================
+# dotfiles_gonosumdb: '*.redhat.com,*.engineering.redhat.com'
+# dotfiles_goprivate: 'gitlab.cee.redhat.com,pkgs.devel.redhat.com'
+
+# ============================================================
+# SSH KEYSCAN -- pre-seed known_hosts for internal git hosts
+# ============================================================
+# ssh_work_keyscan_hosts: []  # e.g. [gitlab.cee.redhat.com]
