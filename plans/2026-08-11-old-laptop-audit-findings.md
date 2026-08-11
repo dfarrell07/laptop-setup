@@ -1409,3 +1409,84 @@ The user has multiple VPN profiles:
 
 On CSB hybrid, Mullvad repo is blocked (`not csb_detected`). The user may
 need to install Mullvad manually or override the guard.
+
+### Claude Code reality vs automation
+
+The automation deploys a security-hardened multi-instance Claude Code setup.
+The user's ACTUAL setup on this old laptop is very different:
+
+**Instance isolation does NOT exist yet:**
+- `~/.claude-work/` and `~/.claude-personal/` do not exist
+- `~/.config/claude/work-env` does not exist
+- Single `~/.claude/` serves both work and personal
+- The P16v would be the FIRST machine with instance isolation
+- Expect friction: the user has never used `cw`/`ccp` aliases
+
+**Dangerous mode is the standard:**
+- User launches with `--dangerously-skip-permissions --plugin-dir .`
+- `skipDangerousModePermissionPrompt: true` in settings.json
+- The automation deploys `sandbox.enabled: true` and
+  `failIfUnavailable: true` — this is a significant behavior change
+- The deny list in settings.json blocks `rm -rf /*`, `sudo`, `su`, `dd`,
+  `curl`, `wget` — but these are bypassed by dangerous mode anyway
+
+**Scale of usage:**
+- 5 concurrent Claude sessions is normal (not exceptional)
+- `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION=2000` (40x default)
+- 98 project contexts in `~/.claude/projects/`
+- 6.8 GB in `~/.claude/jobs/` (788 jobs)
+- 29 MB in plugins (5 plugin caches)
+- 4 plugin marketplaces configured
+
+**Vertex AI routing (work):**
+- `CLAUDE_CODE_USE_VERTEX=1` currently in `.zshrc` directly
+- The automation moves Vertex vars to `work-env` sourced by `cw()` only
+- GCP project: `itpc-gcp-hcm-pe-eng-claude`, region: `us-east5`
+- Model pinned: `claude-opus-4-6[1m]` via `ANTHROPIC_DEFAULT_OPUS_MODEL`
+
+**Plugin ecosystem:**
+- 4 marketplaces: ai-helpers (openshift-eng), claude-skills (personal),
+  submariner-release (stolostron), submariner (shipyard)
+- Atlassian MCP server via SSE (`https://mcp.atlassian.com/v1/sse`)
+- Personal skills: career-advocate, cve-agent, cve-jira-triage, jira,
+  notes, work-summary
+- Co-authored-by DISABLED (`includeCoAuthoredBy: false`)
+
+**The delta the P16v agent must navigate:**
+The automation's security model (sandbox, instance isolation, no dangerous
+mode) is aspirational — the user's actual workflow is `--dangerously-skip-
+permissions` with 5 concurrent sessions. The P16v agent should deploy the
+security infrastructure but warn the user about the behavior change. The
+`cw`/`ccp` aliases will be new muscle memory to build.
+
+### Development environment baseline
+
+**Tool versions on this old laptop** (what the user is used to):
+
+| Tool | Version | Path | Automation version |
+|------|---------|------|--------------------|
+| Go | 1.25.10 | /usr/bin/go | system dnf |
+| kind | 0.31.0 | /usr/local/bin | 0.32.0 |
+| helm | 3.17.2 | /usr/local/bin | 4.2.3 |
+| kustomize | 5.6.0 | /usr/local/bin | 5.8.1 |
+| oc | 4.19.5 | /usr/local/bin | 4.22.7 |
+| gofumpt | 0.3.1 | ~/go/bin | 0.11.0 |
+| Python | 3.13.5 | linuxbrew | system dnf |
+| Node | 24.4.1 | linuxbrew | system dnf |
+| Claude | 2.1.227 | ~/.local/bin | latest |
+
+**NOT installed on this laptop** (automation adds these):
+k9s, stern, cosign, tkn, operator-sdk, ec, gitleaks, actionlint, sops,
+zizmor, transcrypt (in ~/.local/bin but not /usr/local/bin)
+
+**Linuxbrew** provides Python3 and Node.js on this laptop. The automation
+uses system dnf packages instead. This is a deliberate change.
+
+**GONOSUMDB=\*** is set (disables all module checksum verification).
+The automation sets this conditionally via `dotfiles_gonosumdb` only
+when non-empty, which is more secure.
+
+**~/go/bin has 100+ binaries** including many OpenShift CI tools that
+the automation doesn't install. These accumulated organically via
+`go install` over time. The P16v will start clean with only the
+automation's curated set.
