@@ -17,7 +17,7 @@ sourcedir /run/chrony-dhcp
 ntsdumpdir /var/lib/chrony
 
 driftfile /var/lib/chrony/drift
-makestep 1.0 3
+makestep {{ system_chrony_makestep }}
 rtcsync
 leapseclist /usr/share/zoneinfo/leap-seconds.list
 leapsecmode slew
