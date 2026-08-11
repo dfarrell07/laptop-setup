@@ -387,7 +387,7 @@ system_chrony_minsources: 2
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
 system_chrony_service_enabled: "{{ not system_is_container }}"
 system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync fails on NTS-blocking networks)
-system_chrony_makestep: "1.0 3"      # set '1.0 -1' on suspend-heavy laptops to allow unlimited stepping after resume
+system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 
 # Security hardening defaults — authoritative values live in group_vars/all/vars.yml
 # (which overrides these at precedence 5 when running via the project inventory).
