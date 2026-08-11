@@ -73,7 +73,8 @@
   when: is_apt
 
 # --- Alacritty config ---
-- when: desktop_terminal == 'alacritty'
+- name: Deploy Alacritty configuration
+  when: desktop_terminal == 'alacritty'
   block:
     - name: Ensure Alacritty config directory
       ansible.builtin.file:

@@ -2,6 +2,18 @@
 # roles/system/tasks/hardening_core.yml
 # SELinux enforcement + core hardening sub-orchestrator. Included from main.yml.
 # --- SELinux enforcement check ---
+- name: Enforce SELinux enforcing mode
+  ansible.posix.selinux:
+    policy: targeted
+    state: enforcing
+  when:
+    - ansible_facts['selinux'] is defined
+    - ansible_facts['selinux'] is mapping
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - system_selinux_enforcing_required | bool
+
 - name: Verify SELinux is enforcing
   ansible.builtin.assert:
     that:
