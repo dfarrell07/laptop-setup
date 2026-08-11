@@ -52,6 +52,26 @@
     - not (system_chrony_service_enabled | bool)
   failed_when: false
 
+- name: Mask systemd-timesyncd when chrony is active (Fedora/RHEL)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: true
+    state: stopped
+  when:
+    - is_dnf
+    - system_chrony_service_enabled | bool
+  failed_when: false
+
+- name: Unmask systemd-timesyncd when chrony is disabled (Fedora/RHEL)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: false
+    state: started
+  when:
+    - is_dnf
+    - not (system_chrony_service_enabled | bool)
+  failed_when: false
+
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
