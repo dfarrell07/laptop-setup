@@ -2,26 +2,24 @@
 profile: work  # fallback for standalone invocation
 
 # Package lists by category. Override in config.yml or group_vars.
-# Base lists (packages_cli, packages_containers)
-# are shared across all profiles. Lists with a _work suffix are work-profile-only
-# and guarded by 'when: profile == "work"' in the install tasks.
+# Base lists (packages_cli, packages_languages, packages_security, packages_containers)
+# install on all profiles. Lists with a _work suffix are work-profile-only.
 
 packages_cli:
   - make
   - htop
   - tmux
-  - mosh  # mosh client for Tailscale cross-device aliases (zshrc laptop/mac); both profiles connect to remote hosts
+  - mosh
   - jq
   - yq
   - direnv
   - vim-enhanced  # provides /usr/bin/vim binary; neovim does not symlink vim on Fedora (smoke-test checks command -v vim)
   - neovim
   - zsh  # login shell (set by desktop role); explicit to prevent autoremovable-orphan if plugins drop
-  - zsh-autosuggestions  # zsh-autosuggestions plugin for explicit-zsh install above
+  - zsh-autosuggestions  # depends on zsh (pulled in automatically)
   - zsh-syntax-highlighting
   - fzf
   - pipx
-  - python3-pip  # pipx runtime dep; Fedora/RHEL pipx RPM does not declare python3-pip as an RPM dependency
   - zoxide
   - ShellCheck
   - shfmt
@@ -32,31 +30,30 @@ packages_cli:
   - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
 
-# Work-profile-only language tools (OVN-K/Submariner host builds; personal profile does no host Go
-# development — gcc is CGO-only, but golang is needed for any Go build)
+packages_languages:
+  - python3-pip  # pipx runtime dep; Fedora pipx RPM omits python3-pip as RPM dep
+
+# Work-profile-only language tools (CGO builds — OVN-K, Submariner; not needed for pure-Go personal builds)
 packages_languages_work:
   - golang
   - gcc           # needed for Go CGO builds
 
-packages_yubikey_enabled: true  # set false on machines without a YubiKey to skip yubikey-manager and ykpers
-
-# YubiKey packages — conditionally included when packages_yubikey_enabled: true (default).
-# Users without a YubiKey can set packages_yubikey_enabled: false in config.yml to skip these.
-packages_security_yubikey:
+packages_security:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
+  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
 # Merged into _packages_dnf_all only when ansible_distribution != 'Fedora'.
-packages_fido2_rhel:
+packages_security_rhel:
   - libfido2
 
 packages_containers:
-  - podman  # GNOME default via container-management group; not default on Sway/non-GNOME DEs; explicit for non-GNOME Fedora and RHEL/Rocky
+  - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
   - distrobox
 
-# Work-profile-only container tools (OCI image build/inspect — not needed for personal distrobox/podman-run usage)
+# Work-profile-only container tools (OCI image builder — not needed for personal distrobox/podman-run usage)
 packages_containers_work:
   - buildah
   - skopeo
@@ -71,6 +68,7 @@ packages_containers_kubectl:
 
 packages_virtualization:
   - libvirt
+  - libvirt-client
   - qemu-kvm
   - virt-install
 
@@ -78,15 +76,15 @@ packages_virtualization:
 
 packages_networking:
   # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults
-  # (always installed on Fedora; on RHEL/Rocky these are absent from the host and instead in the distrobox container)
+  # (always installed on Fedora; on RHEL/Rocky absent from host, in distrobox instead)
   # nftables: firewalld pulls it in as a dependency; no task calls nft directly
   # VPN
   - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
 
 # Work-profile-only networking tools (OVN-K development at Red Hat)
 packages_networking_work:
-  - ovn            # Open Virtual Network (OVN-K dep; pulls in openvswitch automatically)
-  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K)
+  - ovn            # Open Virtual Network control plane (OVN-K dep; pulls in openvswitch automatically)
+  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
   - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
   - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
   - iperf3         # network bandwidth measurement; work profile only
@@ -105,7 +103,6 @@ packages_support_work:
   - bpftool  # eBPF program/map introspection
 
 packages_apt:
-  # openssl: Debian 13 standard default — already present; Fedora: arrives as a transitive dep of curl/openssh (not installed explicitly).
   - git-lfs  # depends on git (pulled in automatically)
   - make
   - curl
@@ -127,7 +124,7 @@ packages_apt:
                     # needed by ansible.builtin.known_hosts hash_host:true in ssh role
   # Networking tools (not Debian defaults):
   - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
-  - python3-pip    # pipx on Debian does not pull in python3-pip as a transitive dep; explicit install required
+  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - pipx
   - shellcheck
   - ripgrep
@@ -148,10 +145,10 @@ packages_apt_work:
   - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
   - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
   - iperf3  # network bandwidth measurement — mirrors packages_networking_work on Fedora
-  - tshark  # tshark — scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
+  - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
   - conntrack-tools  # netfilter connection tracking — mirrors packages_networking_work on Fedora
-  - buildah  # OCI image builder — mirrors packages_containers_work (work-only on dnf)
-  - skopeo  # OCI image inspection/copy — mirrors packages_containers_work (work-only on dnf)
+  - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
+  - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
@@ -179,10 +176,9 @@ packages_gitleaks_version: "8.30.1"
 packages_gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 packages_gitleaks_sha256_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
 
-# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; arm64 supported but not CI-tested
+# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; x86_64 only (no arm64 CI pin)
 packages_actionlint_version: "1.7.12"
 packages_actionlint_sha256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-packages_actionlint_sha256_arm64: "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
 
 # zizmor version pinned to match CI (linting.yml); SHA256 of x86_64-unknown-linux-gnu tarball; x86_64 only (no arm64 CI pin)
 packages_zizmor_version: "1.29.0"
@@ -239,8 +235,7 @@ packages_go_install_work:
   - "golang.org/x/tools/gopls@v{{ packages_gopls_version }}"
   - "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v{{ packages_golangci_lint_version }}"
   # Pin controller-gen to match OVN-K's update-codegen.sh (not go.mod — controller-tools is not a go.mod dep).
-  # Bump both packages_controller_gen_version and packages_code_generator_version together
-  # when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
+  # Bump packages_code_generator_version together when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
   - "sigs.k8s.io/controller-tools/cmd/controller-gen@v{{ packages_controller_gen_version }}"
   - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
   - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"
@@ -269,7 +264,7 @@ packages_subctl_versioned:
 # Requires: oc installed (from OCP tarball) + podman login registry.redhat.io.
 # Image name: subctl-rhel8 for RHACM <=2.8 (Submariner <=0.15); subctl-rhel9 for RHACM 2.9+
 # Binary inside image: /dist/subctl-v<tag>*-linux-amd64.tar.xz
-packages_subctl_rh_versions: []  # opt-in only — empty by default; define in config.yml to activate
+packages_subctl_rh_versions: []
 # Example to enable:
 # packages_subctl_rh_versions:
 #   - tag: "v0.18"            # image tag (e.g. v0.18 for Submariner 0.18.x / RHACM 2.11)
@@ -280,8 +275,7 @@ packages_subctl_rh_versions: []  # opt-in only — empty by default; define in c
 #     suffix: "RH22"
 
 packages_k9s_version: "0.51.0"
-packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
-packages_k9s_sha256_arm64: "3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c"
+packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
 
 packages_krew_bootstrap_version: "0.5.0"  # Initial tarball only; upgrades self-manage to krew latest
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
@@ -302,30 +296,28 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 
 packages_brew_taps:
   - nikitabobko/tap
-  - domt4/autoupdate
   - theseal/ssh-askpass
+  - domt4/autoupdate
 
 packages_brew_update: false
 
 packages_brew_cask:
   - alacritty
   - google-chrome
+  - bitwarden
   - keepassxc
+  - slack
   - lulu
   - nikitabobko/tap/aerospace
-
-packages_brew_cask_work:
-  - slack
-
-packages_brew_yubikey:
-  - libfido2
-  - ykman
-  - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight.sh)
 
 packages_brew:
   - ansible
   - git
   - git-lfs
+  - openssh
+  - libfido2
+  - ykman
+  - ykpers
   - tmux
   - mosh
   - jq
@@ -340,7 +332,9 @@ packages_brew:
   - gh
   - tailscale
   - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin
+  - openssl
   - gnupg
+  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - ripgrep
   - fd  # fd-find on Linux; Homebrew package is 'fd'
   - bat
@@ -362,6 +356,4 @@ packages_brew_work:
   - transcrypt
   - sops
   - iperf3
-  - wireshark  # tshark — scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli
-  - k9s  # Kubernetes TUI; mirrors packages_k9s_version binary on Linux
-  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
+  - wireshark  # brew formula (tshark CLI only); GUI would require the cask (not installed) — mirrors packages_networking_work wireshark-cli
