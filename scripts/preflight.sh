@@ -198,6 +198,8 @@ if [[ -f "$VAULT_FILE" ]]; then
       record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
     fi
   fi
+else
+  record "vault_encrypted" "fail" "group_vars/all/vault.yml missing — create from vault.yml.example or decrypt from backup"
 fi
 
 # --- config.yml ---
