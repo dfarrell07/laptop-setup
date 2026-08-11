@@ -25,7 +25,7 @@ PermitUserEnvironment no
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3
-MaxSessions {{ system_ssh_max_sessions }}
+MaxSessions {{ system_ssh_max_sessions }}  # OpenSSH default is 10; override system_ssh_max_sessions in config.yml
 LoginGraceTime 30
 
 X11Forwarding no  # overrides 50-redhat.conf (sets yes)
@@ -39,6 +39,7 @@ ClientAliveCountMax 2
 # OpenSSH 10.3 (bz3827) fixed UnusedConnectionTimeout firing prematurely after a
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
+# To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
 {% if system_ssh_channel_timeout | string != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
@@ -48,7 +49,7 @@ UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no
 LogLevel VERBOSE
-UsePAM yes
+UsePAM yes  # compiled default no; matches 50-redhat.conf; explicit (first-occurrence)
 MaxStartups 10:30:60
 RekeyLimit 1G 1h
 GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
