@@ -52,7 +52,7 @@
     - name: UMASK
       value: "{{ system_umask }}"
     - name: HOME_MODE
-      value: "0750"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
+      value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
   loop_control:
@@ -61,6 +61,7 @@
     - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
+# NOTE: YESCRYPT is the Fedora 44 default; this task is a no-op there but enforces on RHEL/Rocky
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
