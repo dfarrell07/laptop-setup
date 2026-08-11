@@ -73,16 +73,21 @@ not theoretical concerns.
   `roles/desktop/defaults/main.yml:34`
 - **Problem**: `desktop_sway_output` defaults to `"*"` (all outputs). Setting
   `desktop_sway_hidpi_scale: 1.5` applies 1.5x to ALL monitors including
-  external 1080p displays, rendering them at effective 720p. No per-output scale
-  mechanism exists.
+  external 1080p displays, rendering them at effective 720p. A per-output scale
+  mechanism exists (setting `desktop_sway_output` to a specific output name like
+  `eDP-1` in config.yml restricts the scale directive to that display), but no
+  multi-output scale mechanism exists for applying different scales to different
+  outputs simultaneously.
 - **Risk**: Plugging in any external monitor produces comically oversized or
-  unusably tiny content.
+  unusably tiny content unless the user sets `desktop_sway_output` to the
+  built-in display name.
 - **Fix options**:
   - A: Change default `desktop_sway_output` to built-in display name (e.g.,
     `eDP-1`) — requires runtime detection or config.yml override
   - B: Support a list/dict of per-output scale directives (similar to
-    `desktop_sway_workspace_outputs`)
-  - C: Add prominent documentation warning in default.config.yml
+    `desktop_sway_workspace_outputs`) for multi-output setups
+  - C: Add prominent documentation warning in default.config.yml noting the
+    existing per-output override
 
 #### 36. Jinja2 parse error in sysctl.yml `#` comment inside double-quoted string
 
@@ -109,11 +114,15 @@ not theoretical concerns.
 
 - **File**: `scripts/preflight.sh:219-227`,
   `common/tasks/pre_flight_checks.yml:63-109`
-- **Problem**: Preflight reports WARN (exit 0) for CHANGE_ME identity variables,
-  telling the user "Ready to run make all." Then `make all` immediately
-  hard-fails on those same sentinels in pre_flight_checks.yml.
-- **Fix**: Change the five identity var checks in preflight.sh from WARN to
-  FAIL, matching the Ansible assertion behavior.
+- **Problem**: Preflight reports WARN (exit 0) for MISSING identity variables
+  (absent from config.yml, falling back to CHANGE_ME defaults via
+  default.config.yml), telling the user "Ready to run make all." Then `make all`
+  immediately hard-fails on those same sentinels in pre_flight_checks.yml.
+  Note: variables explicitly set to CHANGE_ME in config.yml already get FAIL
+  status (line 223); only the missing-variable case (line 221) gets WARN.
+- **Fix**: Change the five missing-variable checks in preflight.sh from WARN to
+  FAIL, matching the Ansible assertion behavior for the default CHANGE_ME
+  fallback.
 
 #### 5. `make update` hard-fails on repos with local work
 
@@ -147,14 +156,22 @@ not theoretical concerns.
 #### 8. Task queue: systemd security directives silently ignored
 
 - **File**: `roles/claude/templates/claude-queue.service.j2:23-37`
-- **Problem**: 10+ directives (`ProtectSystem`, `PrivateTmp`,
-  `ProtectKernelTunables`, etc.) are silently no-ops in user-scoped systemd
-  units. Creates a false sense of security hardening.
+- **Problem**: The 15 directives (lines 23-37) were written assuming they are
+  no-ops in user-scoped systemd units. On the target system (Fedora 44,
+  systemd 257), this is overstated: systemd v256+ enables `PrivateUsers=true`
+  by default for user units (user namespaces), so many directives (`PrivateTmp`,
+  `ProtectSystem`, `ProtectKernelTunables`, `ProtectKernelModules`,
+  `ProtectControlGroups`, `PrivateDevices`, `ProtectHostname`,
+  `RestrictNamespaces`) DO function. Others (`RestrictAddressFamilies`,
+  `LockPersonality`, `RestrictRealtime`, `RestrictSUIDSGID`,
+  `SystemCallArchitectures`) work via seccomp regardless. The actual number of
+  true no-ops on Fedora 44 is likely fewer than claimed, but the exact count
+  requires per-directive testing on the target system.
 - **Fix options**:
-  - A: Remove the no-op directives and add a comment explaining user unit
-    limitations
-  - B: Add `PrivateUsers=true` to enable namespace-based sandboxing (requires
-    testing)
+  - A: Audit each directive on Fedora 44 user units and remove only confirmed
+    no-ops, adding comments for the working ones
+  - B: Add `PrivateUsers=true` explicitly (redundant on v256+ but documents
+    intent)
   - C: Move to system-level unit (requires become)
 
 #### 25. ptrace_scope=0 allows unrestricted process attach
@@ -285,9 +302,13 @@ not theoretical concerns.
 #### 12. `--user-only` smoke-test skips world-readable checks
 
 - **File**: `scripts/smoke-test.sh:684`
-- **Problem**: Entire 1,100-line system block skipped, including checks that
-  don't require sudo: Podman socket, battery thresholds, kernel cmdline,
-  amdgpu runtime PM, sysctl values via /proc.
+- **Problem**: The 1,134-line system block (lines 684-1818) is fully skipped,
+  including checks that don't require sudo: Podman socket, battery thresholds,
+  kernel cmdline runtime checks, amdgpu runtime PM, sysctl values via /proc.
+  Note: the PRIMARY kernel-cmdline persistence check (lines 649-664, reading
+  /proc/cmdline) is OUTSIDE the system block and runs regardless of
+  --user-only; only the supplementary runtime checks inside the block are
+  skipped.
 - **Fix**: Move world-readable checks out of the sudo-gated block into the
   always-run user section.
 
@@ -311,7 +332,8 @@ not theoretical concerns.
 
 #### 15. `cw()` breaks without claude role's work-env file
 
-- **File**: `roles/dotfiles/templates/zshrc.j2:117`
+- **File**: `roles/dotfiles/templates/zshrc.j2:112` (function definition;
+  the tmux command with `source` is at line 117)
 - **Problem**: `source ~/.config/claude/work-env` has no existence guard. If
   user runs `make dotfiles` alone, `cw` produces a cryptic file-not-found error.
 - **Fix**: Add `[[ -f ~/.config/claude/work-env ]] || { echo "Run make claude
@@ -355,13 +377,14 @@ not theoretical concerns.
 - **Dimension**: day-1-onboarding-friction
 - **File**: `Makefile:60-77`, `CLAUDE.md` (step 1)
 - **Problem**: The bootstrap target runs `sudo dnf install -y ansible-core git
-  ykpers make ShellCheck`, but invoking `make bootstrap` requires `make` (and
-  `git` for the initial clone) to already be present. Fedora 44 Workstation does
-  not ship either. The Makefile has a comment on line 58 noting the workaround
-  (`sudo dnf install -y make ShellCheck`) but CLAUDE.md step 1 jumps straight to
-  `make bootstrap` with no mention of the prerequisite.
+  ykpers make ShellCheck`, but invoking `make bootstrap` requires `make` to
+  already be present. Fedora 44 Workstation does not ship `make` (though `git`
+  IS included in the @workstation-product-environment comps group). The Makefile
+  has a comment on line 58 noting the workaround (`sudo dnf install -y make
+  ShellCheck`) but CLAUDE.md step 1 jumps straight to `make bootstrap` with no
+  mention of the prerequisite.
 - **Fix**: Add a pre-bootstrap step to CLAUDE.md telling users to run
-  `sudo dnf install -y make git` before anything else. Consider a `bootstrap.sh`
+  `sudo dnf install -y make` before anything else. Consider a `bootstrap.sh`
   wrapper script that handles the chicken-and-egg problem.
 
 #### 29. SSHD rescue block cannot undo firewall port mismatch
@@ -1056,7 +1079,9 @@ not theoretical concerns.
 
 ## What's solid (no gaps found)
 
-- AMD/Intel dispatch: IOMMU, thermald, TLP, GPU, pstate all runtime-detected
+- AMD/Intel dispatch: IOMMU and thermald properly dispatched by
+  `ansible_facts['processor']` (kernel_lockdown.yml, service_masking.yml);
+  TLP is config-driven (`system_tlp_enabled` toggle), not processor-detected
 - Fedora 44: zero breaking changes across packages, systemd, NM, authselect,
   firewalld
 - dnf5: properly detected and branched throughout
@@ -1065,8 +1090,11 @@ not theoretical concerns.
 - SSH agent: GNOME Keyring disabled, custom ssh-agent single source of truth
 - Binary idempotency: version checks prevent re-downloads on re-runs
 - Firewall-to-sshd ordering: port 722 opened before sshd restart, no lockout
-- CSB hybrid tier: correctly does NOT inherit RHEL CSB restrictions via
-  `csb_rhel` discriminator
+- CSB hybrid tier: `csb_rhel` discriminator correctly separates RHEL CSB from
+  Fedora hybrid for most restrictions, though some guards use the broader
+  `not csb_detected` (e.g., RPM Fusion at repos_dnf lines 322/343 and Mullvad
+  VPN repo at line 176), which blocks these on Fedora hybrid even though
+  `csb_rhel=false` — see items 10 and 28
 
 ---
 
@@ -1473,15 +1501,15 @@ need to make the P16v feel right, not just correct.
 
 ### Who this person is (by the numbers)
 
-- **10,725 lines** of zsh history — heavy CLI user
-- **git push** is the #1 git subcommand (1,391 times) — push-intensive PR
+- **10,726 lines** of zsh history — heavy CLI user
+- **git push** is the #1 git subcommand (1,392 times) — push-intensive PR
   iteration cycle, YubiKey touch per push is real daily friction
 - **gvim** (via `gv` alias) used 916 times — graphical vim with tab pages,
   NOT terminal vim. The `gv` alias maps to `gvim -vp`
 - **make** used 428 times — build-system-driven workflow. Top target:
   `make apply` (126 times, Konflux release), then `make test-remote` (34),
   `make cve-fix` (30)
-- **5 concurrent Claude sessions** running right now via Vertex AI with
+- **5-6 concurrent Claude sessions** running at audit time via Vertex AI with
   `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION=2000`
 - **No tmux sessions active** — works in terminal tabs despite the
   automation's cw/ccp aliases expecting tmux. This is important: the tmux
@@ -1544,7 +1572,7 @@ keybinding and is the single biggest muscle-memory break.
 
 Additionally, i3's default focus keys are j/k/l/semicolon. The automation
 uses h/j/k/l (vim-style). Better ergonomically but different from what
-10,725 lines of history were built on.
+10,726 lines of history were built on.
 
 The user had almost no i3 customization — essentially the wizard default
 plus `nm-applet`, a few volume/brightness keys, and display fix scripts.
@@ -1609,7 +1637,7 @@ first on the P16v:
    fork remotes configured
 2. **Run `make apply` for Konflux releases** — needs oc login to
    Konflux prod cluster, registry auth
-3. **Run 5+ concurrent Claude sessions** — needs Vertex AI env vars,
+3. **Run 5-6+ concurrent Claude sessions** — needs Vertex AI env vars,
    Claude Code installed, CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION set
 4. **Use gvim to edit code** — needs gvim installed (in vim-enhanced
    package), user's vimrc deployed
@@ -1651,9 +1679,9 @@ The user's ACTUAL setup on this old laptop is very different:
   `curl`, `wget` — but these are bypassed by dangerous mode anyway
 
 **Scale of usage:**
-- 5 concurrent Claude sessions is normal (not exceptional)
+- 5-6 concurrent Claude sessions is normal (not exceptional)
 - `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION=2000` (40x default)
-- 98 project contexts in `~/.claude/projects/`
+- 99 project contexts in `~/.claude/projects/`
 - 6.8 GB in `~/.claude/jobs/` (788 jobs)
 - 29 MB in plugins (5 plugin caches)
 - 4 plugin marketplaces configured
@@ -1675,7 +1703,7 @@ The user's ACTUAL setup on this old laptop is very different:
 **The delta the P16v agent must navigate:**
 The automation's security model (sandbox, instance isolation, no dangerous
 mode) is aspirational — the user's actual workflow is `--dangerously-skip-
-permissions` with 5 concurrent sessions. The P16v agent should deploy the
+permissions` with 5-6 concurrent sessions. The P16v agent should deploy the
 security infrastructure but warn the user about the behavior change. The
 `cw`/`ccp` aliases will be new muscle memory to build.
 
@@ -1710,3 +1738,61 @@ when non-empty, which is more secure.
 the automation doesn't install. These accumulated organically via
 `go install` over time. The P16v will start clean with only the
 automation's curated set.
+
+---
+
+## Verification Pass
+
+**Date**: 2026-08-11
+
+12 factual errors identified by verification agents and corrected:
+
+1. **Item 1 (history count)**: "10,725 lines" corrected to "10,726 lines" (off
+   by 1; history grew by one entry since the initial audit count).
+2. **Item 2 (git push count)**: "1,391 times" corrected to "1,392 times" (off
+   by 1; one additional git push recorded since the audit count).
+3. **Item 3 (per-output scale)**: Corrected "No per-output scale mechanism
+   exists" to acknowledge that setting `desktop_sway_output` to a specific
+   output name (e.g., `eDP-1`) in config.yml IS a per-output mechanism. The
+   actual gap is the lack of a MULTI-output scale mechanism for applying
+   different scales to different outputs simultaneously.
+4. **Item 4 (preflight WARN/FAIL)**: Corrected to reflect that explicit
+   CHANGE_ME values in config.yml already get FAIL status (line 223). The
+   WARN-to-FAIL mismatch applies only to MISSING variables (line 221) that
+   fall back to CHANGE_ME via default.config.yml.
+5. **Item 8 (systemd directives)**: Corrected "10+ silently no-ops" claim.
+   On Fedora 44 with systemd 257, many of these directives function in user
+   units via user namespaces (PrivateUsers=true enabled by default in v256+)
+   and seccomp. The actual number of true no-ops is fewer than originally
+   claimed.
+6. **Item 9 (Claude sessions)**: Changed "5 concurrent Claude sessions" to
+   "5-6 concurrent" to account for the verification agent itself being counted
+   as a 6th process.
+7. **Item 10 (project contexts)**: "98 project contexts" corrected to "99
+   project contexts" in `~/.claude/projects/`.
+8. **Item 12 (--user-only kernel cmdline)**: Added note that the PRIMARY
+   kernel-cmdline persistence check (lines 649-664, reading /proc/cmdline) is
+   OUTSIDE the system block and runs regardless of --user-only. Only
+   supplementary runtime checks inside the block are skipped.
+9. **Item 15 (cw function line reference)**: Corrected "zshrc.j2:117" to
+   "zshrc.j2:112" for the function definition. Line 117 is the tmux command
+   inside the function body, not the function itself.
+10. **Item 27 (make/git on Fedora)**: Corrected "Fedora 44 Workstation does not
+    ship either" to note that git IS included in the @workstation-product-
+    environment comps group on Fedora 44 Workstation. Only make is genuinely
+    absent from the default install.
+11. **What's solid (AMD/Intel dispatch)**: Corrected "IOMMU, thermald, TLP, GPU,
+    pstate all runtime-detected" to note that only IOMMU and thermald have
+    actual AMD/Intel runtime dispatch via `ansible_facts['processor']`. TLP is
+    config-driven (`system_tlp_enabled`), and GPU/pstate have zero references
+    in the codebase.
+12. **What's solid (CSB hybrid)**: Corrected "correctly does NOT inherit RHEL CSB
+    restrictions" to note that some guards use the broader `not csb_detected`
+    (RPM Fusion, Mullvad VPN repo), which blocks these on Fedora hybrid even
+    though `csb_rhel=false`. Cross-referenced items 10 and 28.
+
+**Item 36 (sysctl Jinja2 bug)**: Verified as a TRUE positive. The `#` on line
+42 of `sysctl.yml` is inside a YAML double-quoted scalar (lines 31-46). YAML
+folds newlines to spaces and preserves `#` as a literal character, injecting it
+into the `{{ }}` Jinja2 expression. Since `#` is not a valid Jinja2 expression
+token, this causes `TemplateSyntaxError`. Retained at P1.
