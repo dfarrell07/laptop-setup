@@ -303,6 +303,7 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 packages_brew_taps:
   - nikitabobko/tap
   - domt4/autoupdate
+  - theseal/ssh-askpass
 
 packages_brew_update: false
 
@@ -340,7 +341,6 @@ packages_brew:
   - tailscale
   - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin
   - gnupg
-  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - ripgrep
   - fd  # fd-find on Linux; Homebrew package is 'fd'
   - bat
@@ -364,3 +364,4 @@ packages_brew_work:
   - iperf3
   - wireshark  # tshark — scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli
   - k9s  # Kubernetes TUI; mirrors packages_k9s_version binary on Linux
+  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
