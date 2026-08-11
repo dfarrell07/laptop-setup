@@ -138,6 +138,23 @@ not theoretical concerns.
     testing)
   - C: Move to system-level unit (requires become)
 
+#### 25. ptrace_scope=0 allows unrestricted process attach
+
+- **Dimension**: kernel-boot-hardening
+- **File**: `group_vars/all/vars.yml:94`,
+  `roles/system/defaults/main.yml:451`, `roles/system/tasks/sysctl.yml:40`
+- **Current state**: `kernel.yama.ptrace_scope = 0` — any process can attach to
+  any other same-UID process (read/modify memory of SSH agents, browsers,
+  password managers).
+- **Target**: `system_ptrace_scope: 1` deployed via
+  `/etc/sysctl.d/90-hardening.conf` (CIS 1.6.3 — parent-only attach).
+- **Risk**: With ptrace_scope=0, a compromised process can read secrets from
+  any co-user process. The automation correctly sets value 1 (parent-child only);
+  normal `gdb` child-process debugging is unaffected.
+- **Status**: Automation handles this correctly. Gap exists only on
+  pre-provisioned machines. No code change needed — confirms `make all` closes
+  this gap.
+
 ### P3 — Medium (day 1-3 friction)
 
 #### 9. Window borders invisible at HiDPI
@@ -218,6 +235,111 @@ not theoretical concerns.
 - **Fix**: Add a `file: state=directory` task for `~/.config/systemd/user/`
   before the template deployments.
 
+#### 26. ICMP redirect sending enabled (workstation is not a router)
+
+- **Dimension**: kernel-boot-hardening
+- **File**: `roles/system/defaults/main.yml:21-22`,
+  `roles/system/tasks/sysctl.yml`
+- **Current state**: `net.ipv4.conf.all.send_redirects = 1` (kernel default) —
+  host sends ICMP redirect packets, which can be abused for MITM attacks.
+- **Target**: `net.ipv4.conf.all.send_redirects: 0` and
+  `net.ipv4.conf.default.send_redirects: 0` in `system_sysctl_hardening` dict,
+  deployed via `/etc/sysctl.d/90-hardening.conf` (CIS).
+- **Risk**: ICMP redirect sending on a workstation that is not a router serves
+  no purpose and expands the attack surface. Zero UX impact from disabling.
+- **Status**: Automation handles this correctly. Smoke-test verifies both `all`
+  and `default` send_redirects are 0. Gap exists only on pre-provisioned
+  machines. No code change needed.
+
+#### 27. `make bootstrap` requires make and git not installed on fresh Fedora
+
+- **Dimension**: day-1-onboarding-friction
+- **File**: `Makefile:60-77`, `CLAUDE.md` (step 1)
+- **Problem**: The bootstrap target runs `sudo dnf install -y ansible-core git
+  ykpers make ShellCheck`, but invoking `make bootstrap` requires `make` (and
+  `git` for the initial clone) to already be present. Fedora 44 Workstation does
+  not ship either. The Makefile has a comment on line 58 noting the workaround
+  (`sudo dnf install -y make ShellCheck`) but CLAUDE.md step 1 jumps straight to
+  `make bootstrap` with no mention of the prerequisite.
+- **Fix**: Add a pre-bootstrap step to CLAUDE.md telling users to run
+  `sudo dnf install -y make git` before anything else. Consider a `bootstrap.sh`
+  wrapper script that handles the chicken-and-egg problem.
+
+#### 29. SSHD rescue block cannot undo firewall port mismatch
+
+- **Dimension**: partial-failure-resilience
+- **File**: `roles/system/tasks/sshd.yml:90-127,152-179`,
+  `roles/system/tasks/hardening_core.yml:47`
+- **Problem**: firewall.yml runs before sshd.yml, setting the drop zone with
+  only port 722 open (immediate+permanent). If the SELinux seport task at
+  sshd.yml line 157 fails, the rescue block removes 00-hardening.conf so sshd
+  reverts to port 22, which the firewall blocks. No force_handlers is set, so
+  the Restart sshd handler does not fire and the state persists across reboot.
+  The rescue is the correct choice (without it, sshd fails to bind port 722
+  under SELinux enforcing without the port label — total lockout), but it leaves
+  a split-brain state with no firewall revert or warning.
+- **Fix**: When the sshd rescue block removes 00-hardening.conf, also revert the
+  firewall to allow port 22 in the drop zone, or emit a warning that the machine
+  is in a split-brain state (firewall expects 722, sshd serves 22).
+
+#### 30. Parallel source trees from GOPATH migration
+
+- **Dimension**: migration-friction
+- **File**: `roles/git_repos/tasks/main.yml`
+- **Problem**: 106 repos exist in ~/go/src/ (6.6 GB) using the pre-modules
+  GOPATH convention. `make repos` clones to ~/src/ with a category-prefixed
+  layout, producing two parallel source trees with ~16 overlapping project
+  repos at different paths. No migration, cleanup, or warning exists in the
+  automation.
+- **Fix options**:
+  - A: Add a one-time migration task that detects ~/go/src/ and prints a
+    cleanup checklist (audit for unmerged branches, push unpushed work, archive)
+  - B: Document the parallel-tree situation in default.config.yml or CLAUDE.md
+  - C: Both — automated detection with a migration guide
+
+#### 31. Sway exit binding has no confirmation dialog
+
+- **Dimension**: ux-transition
+- **File**: `roles/desktop/templates/sway.config.j2:118`,
+  `roles/desktop/templates/i3.config.j2:88`
+- **Problem**: i3 binds Mod+Shift+e to `i3-nagbar` with a confirmation dialog.
+  Sway binds the same key to bare `swaymsg exit` with no confirmation.
+  Accidentally hitting Mod+Shift+e immediately kills the session — all unsaved
+  work in GUI apps is lost. The upstream Sway default config uses `swaynag` for
+  this binding; this project actively deviates by omitting confirmation.
+- **Fix**: Add a confirmation wrapper:
+  `bindsym $mod+Shift+e exec swaynag -t warning -m 'Exit Sway?' -B 'Yes' 'swaymsg exit'`
+
+#### 33. No Molecule scenario tests desktop_environment=gnome
+
+- **Dimension**: testing
+- **File**: `molecule/` (all scenarios), `roles/desktop/tasks/main.yml:333-354`
+- **Problem**: No Molecule scenario sets `desktop_environment` to `gnome`. The
+  desktop role has a GNOME hardening block (dconf settings for auto-mount,
+  screensaver lock, etc.) that is never exercised. Fedora tests sway and i3;
+  Rocky/Debian/VM all use `unknown`; macOS uses `aerospace`. The GNOME path
+  could silently break. The block uses `ignore_errors: true`, which prevents
+  playbook breakage but also means failures are completely silent — a
+  refactoring error in variable names, dconf key paths, or uint32 value syntax
+  would go undetected.
+- **Fix**: Add a third desktop role `include_role` pass in the Fedora scenario
+  with `desktop_environment: gnome`, or create a dedicated GNOME scenario.
+
+#### 34. `git_repos_pull=true` path (make update) never tested
+
+- **Dimension**: testing
+- **File**: `roles/git_repos/defaults/main.yml:9`,
+  `roles/git_repos/tasks/main.yml:173-188`
+- **Problem**: `git_repos_pull` defaults to `false`. No Molecule scenario,
+  shared CI variable file, or GitHub Actions workflow ever sets it to `true`.
+  The only place it is set to `true` is the manual `make update` Makefile
+  target, which is not part of automated testing. The three tasks gated by
+  `git_repos_pull | bool` (ff-only pull, failure reporter, failure assertion)
+  have zero CI coverage.
+- **Fix**: Add a second `git_repos` role pass in an existing scenario with
+  `git_repos_pull: true`, or create a dedicated scenario that clones then
+  pulls.
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -262,6 +384,54 @@ not theoretical concerns.
 - **Problem**: Plan requires bare Podman container with 16+ security flags.
   Current implementation runs Claude directly on host.
 
+#### 28. Mullvad VPN install attempted without repo on CSB hybrid
+
+- **Dimension**: hybrid-csb-day1-experience
+- **File**: `roles/repos_dnf/tasks/main.yml:173-175`,
+  `roles/system/tasks/services.yml:67-76`
+- **Problem**: The repos_dnf role skips the Mullvad repo with `not csb_detected`,
+  but the system role's services.yml attempts `dnf install mullvad-vpn` guarded
+  only by `is_fedora` — no `csb_detected` check. On CSB hybrid Fedora the
+  install soft-fails and emits "VPN protection is not active on this host," which
+  is misleading when GlobalProtect is the intended corporate VPN (installed by
+  the redhat role).
+- **Fix**: Add `not csb_detected` guard to the Mullvad VPN install block in
+  `roles/system/tasks/services.yml` to match the repos_dnf guard, or make the
+  warning message context-aware for CSB machines.
+
+#### 32. Firewall-to-sshd ordering gap on first provision
+
+- **Dimension**: partial-failure-resilience
+- **File**: `roles/system/tasks/hardening_core.yml:47`,
+  `roles/system/tasks/main.yml:54`
+- **Problem**: firewall.yml runs as step 5 in hardening_core.yml, setting the
+  default zone to drop and opening only port 722/tcp (immediate+permanent).
+  sshd.yml runs as step 15 in main.yml. If any task between steps 5-14 causes
+  a hard failure, the play aborts with firewall=drop+port-722-open but sshd
+  still on port 22. On reboot the machine is SSH-inaccessible from the network.
+- **Mitigating factors**: CLAUDE.md requires running from local console (not
+  SSH), so the operator has physical access. On re-provisions sshd is already
+  on 722. Many intermediate tasks use `failed_when: false`. Console recovery is
+  trivial (`firewall-cmd --add-port=22/tcp`).
+- **Fix**: Consider reordering sshd.yml to run immediately after firewall.yml,
+  or keep port 22 open in the drop zone until sshd.yml confirms the port
+  switch.
+
+#### 35. SELinux enforcement not verified in any CI scenario
+
+- **Dimension**: testing
+- **File**: `molecule/shared/system-container-overrides.yml:38-39`,
+  `molecule/vm/verify.yml:568-579`
+- **Problem**: `system-container-overrides.yml` sets
+  `system_selinux_enforcing_required=false` with an explicit "CI gap" comment.
+  Only the VM scenario (`make test-vm`, local-only, not in CI) checks
+  `getenforce==Enforcing`. A regression in SELinux tasks in
+  `hardening_core.yml` would pass all CI checks. This is a well-documented,
+  inherent limitation of container-based testing (Podman containers cannot
+  enforce their own SELinux policy), not an oversight.
+- **Fix**: Acknowledge as a known CI limitation. Ensure `make test-vm` is run
+  before releases.
+
 ---
 
 ## What's solid (no gaps found)
@@ -289,3 +459,112 @@ expanding test coverage.
 
 Batch into logical commits per the project's `Scope: noun-phrase summary`
 convention with `--signoff`.
+
+---
+
+## Iteration 1
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 25** (P2): `ptrace_scope=0 allows unrestricted process attach` —
+  pre-provisioning security gap where `kernel.yama.ptrace_scope=0` allows any
+  same-UID process to read memory of SSH agents, browsers, and password
+  managers. Automation correctly sets value 1 (CIS 1.6.3). No code change
+  needed; confirms `make all` closes this gap.
+- **Item 26** (P3): `ICMP redirect sending enabled` — pre-provisioning gap
+  where `net.ipv4.conf.all.send_redirects=1` allows ICMP redirect sending on a
+  workstation that is not a router. Automation correctly disables this via
+  `system_sysctl_hardening` dict. No code change needed.
+
+**Rationale**: Both findings are confirmed pre-provisioning sysctl hardening
+gaps on the old laptop. The automation already handles them correctly — they
+document real security exposure that `make all` closes, validating the sysctl
+hardening pipeline (`vars.yml` -> `sysctl.yml` -> `90-hardening.conf`
+template).
+
+---
+
+## Iteration 2
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 27** (P3): `make bootstrap requires make and git not installed on fresh
+  Fedora` — chicken-and-egg problem where the bootstrap target needs `make` to
+  run but installs it as part of the target. CLAUDE.md step 1 does not mention
+  the prerequisite. Makefile has a code comment workaround but nothing
+  user-facing.
+- **Item 28** (P4): `Mullvad VPN install attempted without repo on CSB hybrid` —
+  inconsistent guards between repos_dnf (`not csb_detected`) and
+  system/services.yml (no CSB check) cause a misleading "VPN not active" warning
+  on hybrid machines where GlobalProtect is the intended VPN. Cosmetic only — the
+  soft-fail path works correctly with no security or functionality impact.
+
+---
+
+## Iteration 3
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 29** (P3): `SSHD rescue block cannot undo firewall port mismatch` —
+  if the SELinux seport task fails in sshd.yml, the rescue block correctly
+  removes 00-hardening.conf (preventing total lockout from sshd failing to bind
+  under SELinux), but leaves a split-brain state where the firewall allows only
+  port 722 while sshd reverts to port 22. No firewall revert or warning emitted.
+- **Item 30** (P3): `Parallel source trees from GOPATH migration` — 106 repos
+  (6.6 GB) in ~/go/src/ using pre-modules GOPATH layout will coexist with the
+  new ~/src/ category-prefixed layout after `make repos`. ~16 overlapping repos
+  cloned to different paths with no migration task, cleanup, or warning.
+- **Item 31** (P3): `Sway exit binding has no confirmation dialog` — i3 uses
+  i3-nagbar confirmation on Mod+Shift+e but Sway binds the same key to bare
+  `swaymsg exit`. Upstream Sway default config uses swaynag; this project
+  deviates by omitting the confirmation step.
+- **Item 32** (P4): `Firewall-to-sshd ordering gap on first provision` —
+  temporal gap between firewall hardening (step 5, drop zone with port 722
+  only) and sshd reconfiguration (step 15, port 22 to 722) means a hard
+  failure in between leaves the machine SSH-inaccessible from the network.
+  Mitigated by console-only provisioning requirement and trivial recovery.
+
+**Rationale**: Two partial-failure-resilience findings document real ordering
+dependencies in the system role's firewall-to-sshd pipeline — one in the
+happy path (item 32, low severity due to console requirement) and one in the
+sshd rescue path (item 29, medium severity as it produces a silent
+split-brain). The migration-friction finding (item 30) documents the GOPATH
+to ~/src/ parallel-tree gap. The ux-transition finding (item 31) captures a
+missing safety net in the i3-to-Sway migration.
+
+---
+
+## Iteration 5
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 33** (P3): `No Molecule scenario tests desktop_environment=gnome` —
+  the desktop role's GNOME hardening block (dconf settings for auto-mount,
+  screensaver lock, idle timeout, location services, recent files) is never
+  exercised in any Molecule scenario. Fedora tests sway and i3; Rocky/Debian/VM
+  use `unknown`; macOS uses `aerospace`. The block uses `ignore_errors: true`,
+  so a refactoring error in dconf key paths or value syntax would be completely
+  silent.
+- **Item 34** (P3): `git_repos_pull=true path never tested` — the `make update`
+  pull path (`git pull --ff-only` + failure reporter + failure assertion) has
+  zero CI coverage. `git_repos_pull` defaults to `false` and no Molecule
+  scenario or workflow ever sets it to `true`.
+- **Item 35** (P4): `SELinux enforcement not verified in any CI scenario` —
+  `system-container-overrides.yml` disables `system_selinux_enforcing_required`
+  with an explicit "CI gap" comment. Only the local-only VM scenario checks
+  `getenforce==Enforcing`. Known inherent limitation of Podman-based testing,
+  not an oversight.
+
+**Rationale**: Three testing-dimension findings document CI coverage gaps. The
+GNOME and git_repos_pull gaps (items 33-34) are actionable with new Molecule
+scenario passes. The SELinux gap (item 35) is an inherent container-based
+testing limitation already documented in the codebase; mitigation is ensuring
+`make test-vm` runs before releases.
