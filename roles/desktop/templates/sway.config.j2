@@ -144,12 +144,14 @@ input "type:keyboard" {
 
 seat seat0 xcursor_theme {{ desktop_sway_cursor_theme }} {{ desktop_sway_cursor_size }}
 
+{% if desktop_sway_touchpad_tap != '' or desktop_sway_touchpad_natural_scroll != '' or desktop_sway_touchpad_dwt != '' or desktop_sway_touchpad_middle_emulation != '' %}
 input "type:touchpad" {
     {% if desktop_sway_touchpad_tap != '' %}tap {{ desktop_sway_touchpad_tap }}{% endif %}
     {% if desktop_sway_touchpad_natural_scroll != '' %}natural_scroll {{ desktop_sway_touchpad_natural_scroll }}{% endif %}
     {% if desktop_sway_touchpad_dwt != '' %}dwt {{ desktop_sway_touchpad_dwt }}{% endif %}
     {% if desktop_sway_touchpad_middle_emulation != '' %}middle_emulation {{ desktop_sway_touchpad_middle_emulation }}{% endif %}
 }
+{% endif %}
 
 # TrackPoint scroll: on_button_down (hold middle button) must be scoped to the
 # TrackPoint device only — applying it via 'type:pointer' breaks Bluetooth mice.

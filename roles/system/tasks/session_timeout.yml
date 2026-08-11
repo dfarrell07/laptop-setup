@@ -12,6 +12,7 @@
   when:
     - system_tmout | int > 0
     - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
+    - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
 
 - name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
   ansible.builtin.lineinfile:
@@ -65,6 +66,7 @@
     state: absent
   when:
     - system_tmout | int <= 0
+    - not is_apt  # Debian does not use profile.d for TMOUT; avoid spurious no-op on Debian hosts
 
 - name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
   ansible.builtin.lineinfile:
