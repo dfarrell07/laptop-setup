@@ -196,6 +196,26 @@ not theoretical concerns.
   `uri` tasks in `container-provision-tasks.yml`. Forward `network_proxied` and
   `proxy_url` via the `add_host` registration.
 
+#### 47. verify-sway.yml aborts on undefined `desktop_sway_adaptive_sync`
+
+- **Dimension**: molecule-verify-false-pass
+- **File**: `molecule/shared/verify-sway.yml:39,46`,
+  `molecule/fedora/verify.yml:6-19`
+- **Problem**: Line 39 uses `{{ desktop_sway_adaptive_sync }}` and line 46 uses
+  `desktop_sway_libva_driver` in a `when` clause, but the Fedora verify
+  playbook only loads `group_vars/all/vars.yml` in `pre_tasks` — it does NOT
+  load `default.config.yml` or role defaults. Both variables are defined
+  exclusively in `roles/desktop/defaults/main.yml`, which is never loaded
+  during the verify phase (verify uses `import_tasks`, not `include_role`).
+  The undefined variable at line 39 raises `AnsibleUndefinedVariable`, halting
+  the verify playbook. All subsequent sway assertions (touchpad, portal
+  routing, GTK theme, terminal.conf) plus all post-sway checks (i3, bpfman,
+  Claude queue, distrobox) are never executed — molecule fedora sway
+  verification coverage is zero.
+- **Fix**: Either load `default.config.yml` in the Fedora verify `pre_tasks`
+  (like the Debian verify does), or replace the Jinja2 variable interpolation
+  with hardcoded expected values matching role defaults.
+
 ### P3 — Medium (day 1-3 friction)
 
 #### 9. Window borders invisible at HiDPI
@@ -468,6 +488,63 @@ not theoretical concerns.
   three most impactful settings (lid-close suspend, power-button lock, process
   survival on logout).
 
+#### 48. Smoke test AllowTcpForwarding regex rejects documented `yes` value
+
+- **Dimension**: smoke-test-logic-bugs
+- **File**: `scripts/smoke-test.sh:924`,
+  `roles/system/templates/sshd-hardening.conf.j2:33`
+- **Problem**: The PCRE pattern `P:AllowTcpForwarding:(no|local|remote)` does
+  not include `yes` or `all`. The Ansible assertion at `sshd.yml:40` explicitly
+  accepts `['yes', 'no', 'all', 'local', 'remote']`, the template passes the
+  value verbatim (`AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}`),
+  and both CLAUDE.md and `default.config.yml` document `yes` as valid for
+  enabling both `-L` and `-R` forwarding. A user who follows the docs produces
+  a false FAIL: "AllowTcpForwarding directive wrong or absent."
+- **Fix**: Change the regex to
+  `P:AllowTcpForwarding:(no|local|remote|yes|all)`. Also review
+  `AllowAgentForwarding` (line 923, hardcoded to `no`) given CLAUDE.md
+  documents `yes` as valid.
+
+#### 49. verify-sway.yml stale touchpad assertions after opt-in defaults change
+
+- **Dimension**: molecule-verify-false-pass
+- **File**: `molecule/shared/verify-sway.yml:143-150`,
+  `roles/desktop/defaults/main.yml` (commit `8dcded93`)
+- **Problem**: Commit `8dcded93` changed `desktop_sway_touchpad_tap` and
+  `desktop_sway_touchpad_natural_scroll` from `enabled` to empty string `''`.
+  The sway template conditionally emits these directives:
+  `{% if desktop_sway_touchpad_tap != '' %}tap {{ ... }}{% endif %}`. With
+  empty defaults, neither `tap enabled` nor `natural_scroll enabled` appears
+  in the rendered config. The verify assertions at lines 143-146 and 148-150
+  unconditionally grep for `'tap enabled'` and `'natural_scroll enabled'` (no
+  `when` clause), so they would false-fail. Currently masked by the
+  undefined-variable abort from item 47 above. Additionally,
+  `default.config.yml` lines 316-317 still document the defaults as `enabled`,
+  meaning the documentation was not updated alongside the defaults change.
+- **Fix**: Gate these checks with
+  `when: desktop_sway_touchpad_tap | default('') | length > 0` or remove them
+  since touchpad settings are now opt-in. Update `default.config.yml`
+  documentation to reflect the empty-string defaults.
+
+#### 50. verify-common.yml sysctl checks verify key presence without values
+
+- **Dimension**: molecule-verify-false-pass
+- **File**: `molecule/shared/verify-common.yml:518-522`
+- **Problem**: The sysctl hardening config loop checks five keys for KEY
+  PRESENCE only: `net.ipv6.conf.all.use_tempaddr`,
+  `net.ipv4.conf.all.rp_filter`, `net.ipv4.conf.default.rp_filter`,
+  `net.bridge.bridge-nf-call-iptables`, `vm.max_map_count`. Compare to other
+  items in the same loop that DO verify values: `kernel.dmesg_restrict = 1`,
+  `kernel.kptr_restrict = 1`, `kernel.yama.ptrace_scope = {{ ... }}`. If
+  `use_tempaddr` changes from 2 to 0 (disabling IPv6 privacy extensions) or
+  `rp_filter` changes from 2 to 0 (disabling reverse-path filtering), the
+  key-only grep still matches and the assertion passes. Additionally,
+  `system_sysctl_extra_additional` (applied last in the combine chain at line
+  46 of `sysctl.yml`) can silently override any of these values undetected.
+- **Fix**: Add value assertions for security-relevant keys: change
+  `net.ipv6.conf.all.use_tempaddr` to `net.ipv6.conf.all.use_tempaddr = 2`
+  and `net.ipv4.conf.all.rp_filter` to `net.ipv4.conf.all.rp_filter = 2`.
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -630,6 +707,63 @@ not theoretical concerns.
 - **Fix**: Add `cjpalhdlnbpafiamejdnhcphjbkeiagm` to
   `ExtensionInstallAllowlist` if MV2's more capable dynamic filtering is
   desired. Otherwise, document the intentional MV3-only decision.
+
+#### 51. Distrobox role warns but continues on missing subuid/subgid
+
+- **Dimension**: cross-role-variable-dependencies
+- **File**: `roles/distrobox/tasks/main.yml:55-101`,
+  `roles/system/tasks/account_hardening.yml:194-214`
+- **Problem**: The distrobox role (Play 2) depends on subuid/subgid entries
+  provisioned by the system role's `account_hardening.yml` (Play 1) and
+  `podman.socket` enabled by the containers role. The distrobox role re-checks
+  subuid/subgid at lines 55-69 and podman.socket at lines 84-99, warning and
+  continuing when prerequisites are missing. If podman subsequently fails due
+  to missing subordinate IDs, the error message is cryptic. The rescue block
+  (lines 163-189) handles failure gracefully — recording it for the CSB report
+  on RHEL, marking `distrobox_tool: "none"` to skip Play 3.
+- **Note**: This is a well-implemented defensive coding pattern, not a latent
+  defect. The subuid/subgid provisioning block has no CSB guard and runs on
+  all hosts. If the system role fails entirely, Ansible aborts Play 1 and
+  Play 2 never runs. Informational only.
+
+#### 52. preflight.sh emits raw ANSI escape codes when piped
+
+- **Dimension**: preflight-smoke-test-consistency
+- **File**: `scripts/preflight.sh:20,27-29`
+- **Problem**: Color variables (RED/GRN/YLW/NC at line 20) are unconditionally
+  set to ANSI escape sequences. When piped or redirected
+  (`preflight.sh | tee log.txt`), output contains raw `\033[0;32m` sequences.
+  `smoke-test.sh` (lines 18-22) correctly checks `[[ -t 1 ]] && ! $JSON` and
+  sets color vars to empty strings when stdout is not a terminal.
+- **Fix**: Add the same isatty guard to preflight.sh color initialization:
+  `if [[ -t 1 ]] && ! $JSON; then ... else P='' W='' F='' R=''; fi`
+
+#### 53. JSON output schemas differ between preflight and smoke-test
+
+- **Dimension**: preflight-smoke-test-consistency
+- **File**: `scripts/preflight.sh:353-361`, `scripts/smoke-test.sh:1893`
+- **Problem**: Three mismatches: (1) top-level array key is `checks` vs
+  `results`, (2) preflight has `ready` boolean while smoke-test has
+  `failures`/`warns` integers, (3) preflight includes context fields
+  (`os_family`, `is_csb`, `profile`) absent from smoke-test. The inner
+  check-item schema (`{name, status, detail}`) is consistent. Any unified
+  JSON consumer must branch on which script produced the output.
+- **Fix**: Align schemas: rename one array key to match the other, add
+  `ready` to smoke-test, add counts to preflight, or define a shared schema.
+
+#### 54. Status level case mismatch between preflight and smoke-test JSON
+
+- **Dimension**: preflight-smoke-test-consistency
+- **File**: `scripts/preflight.sh:22-32,356-359`,
+  `scripts/smoke-test.sh:28-37`
+- **Problem**: `preflight.sh` uses lowercase status values (`pass`/`fail`/
+  `warn`/`skip`) stored pipe-delimited with deferred JSON escaping.
+  `smoke-test.sh` uses uppercase (`PASS`/`FAIL`/`WARN`) with no `SKIP`,
+  stored as pre-built JSON strings with escaping at record time. A JSON
+  consumer parsing both must handle `"status":"pass"` and `"status":"PASS"`.
+- **Fix**: Standardize on one case (uppercase to match CIS/audit convention)
+  and add `SKIP` to smoke-test or remove it from preflight. Consider
+  extracting a shared `record()` implementation.
 
 ---
 
@@ -866,3 +1000,62 @@ cross-platform. The backup restore gap (item 45) is a minor documentation
 miss given the trivial restore path. The Chrome extension finding (item 46)
 documents a likely-intentional policy decision that should be explicitly
 acknowledged.
+
+---
+
+## Iteration 8
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 47** (P2): `verify-sway.yml aborts on undefined
+  desktop_sway_adaptive_sync` — the Fedora verify playbook only loads
+  `group_vars/all/vars.yml`, never loading role defaults where
+  `desktop_sway_adaptive_sync` and `desktop_sway_libva_driver` are defined.
+  The undefined variable raises `AnsibleUndefinedVariable` at line 39,
+  halting the verify playbook and leaving molecule fedora sway verification
+  coverage at zero.
+- **Item 48** (P3): `Smoke test AllowTcpForwarding regex rejects documented
+  yes value` — the PCRE pattern `(no|local|remote)` at smoke-test.sh line
+  924 does not include `yes` or `all`, both valid per the Ansible assertion,
+  sshd man page, and CLAUDE.md documentation. Produces a false FAIL for
+  users following the docs.
+- **Item 49** (P3): `verify-sway.yml stale touchpad assertions` — commit
+  `8dcded93` changed touchpad defaults from `enabled` to empty string, but
+  verify assertions still unconditionally grep for `tap enabled` and
+  `natural_scroll enabled`. Would false-fail if they ran; currently masked
+  by item 47's undefined-variable abort. `default.config.yml` also not
+  updated to reflect the new defaults.
+- **Item 50** (P3): `verify-common.yml sysctl checks verify key presence
+  without values` — five security-relevant sysctl keys
+  (`use_tempaddr`, `rp_filter` x2, `bridge-nf-call-iptables`,
+  `max_map_count`) are checked by key name only, not `key = value`. A value
+  regression (e.g., `rp_filter` from 2 to 0) passes the assertion.
+- **Item 51** (P4): `Distrobox role warns but continues on missing
+  subuid/subgid` — cross-role dependency between system role (Play 1
+  subuid/subgid provisioning) and distrobox role (Play 2). The distrobox
+  role's defensive checks and rescue block handle all failure modes
+  gracefully. Informational — documents an existing, working mitigation.
+- **Item 52** (P4): `preflight.sh emits raw ANSI escape codes when piped` —
+  color variables unconditionally set to escape sequences with no `[[ -t 1 ]]`
+  isatty guard, unlike `smoke-test.sh` which handles this correctly.
+- **Item 53** (P4): `JSON output schemas differ between preflight and
+  smoke-test` — three envelope-level mismatches: `checks` vs `results` array
+  key, `ready` bool vs `failures`/`warns` ints, and context fields present
+  only in preflight. Inner check-item schema is consistent.
+- **Item 54** (P4): `Status level case mismatch between preflight and
+  smoke-test JSON` — preflight uses lowercase (`pass`/`fail`/`warn`/`skip`),
+  smoke-test uses uppercase (`PASS`/`FAIL`/`WARN`) with no `SKIP`. Different
+  storage and escaping strategies for the same conceptual `record()` function.
+
+**Rationale**: Eight findings across four dimensions. The high-severity
+verify-sway abort (item 47) is the most impactful — it silences all sway
+verification in the Fedora molecule scenario. Items 49-50 are additional
+molecule-verify-false-pass gaps: stale assertions masked by the same abort,
+and key-only sysctl checks that miss value regressions. The smoke-test
+AllowTcpForwarding regex (item 48) is a false-FAIL bug affecting documented
+configuration values. Items 52-54 are three preflight-smoke-test consistency
+findings — ANSI escaping, JSON schema divergence, and status level case
+mismatch — none causing runtime failures but all complicating any future
+unified consumption of the scripts' output.
