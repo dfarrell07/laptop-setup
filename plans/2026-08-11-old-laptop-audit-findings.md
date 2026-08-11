@@ -1646,12 +1646,13 @@ keeping `gi` as a secondary alias alongside `gri`.
 - **Dual monitors**: laptop eDP-1 + external HDMI-1 2560x1440 at desk
 - **Docking station**: 2x DisplayPort 1920x1200 (one rotated right) via
   `fix_displays.sh` script
-- **Peripherals**: Keychron K2 (wireless mechanical), Logitech MX Master
+- **Peripherals**: ZSA Moonlander Mark I keyboard (USB `3297:1969`),
+  Keychron K2 (wireless mechanical), Logitech MX Master
   (multiple generations), Bang & Olufsen Beoplay Portal headphones,
   Sennheiser MOMENTUM 3
 - **YubiKey**: 5C Nano USB-C, firmware 5.2.3 (pre-5.7, EUCLEAK vulnerable)
-- USBGuard must whitelist: Keychron K2, MX Master (all variants), B&O
-  headphones, Sennheiser — in addition to the internal keyboard/touchpad
+- USBGuard must whitelist: Moonlander (`3297:1969`), Keychron K2, MX Master
+  (all variants), B&O headphones, Sennheiser — plus internal keyboard/touchpad
 
 ### Editor preferences (will be lost on P16v without action)
 
