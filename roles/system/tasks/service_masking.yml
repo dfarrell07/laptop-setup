@@ -106,6 +106,17 @@
   when:
     - _system_tlp_install.rc | default(0) != 0
 
+- name: Stop and disable TLP when TLP disabled
+  ansible.builtin.systemd:
+    name: tlp
+    state: stopped
+    enabled: false
+  when:
+    - not (system_tlp_enabled | bool)
+    - not system_is_container
+    - is_dnf
+  failed_when: false
+
 - name: Unmask power management daemons when TLP disabled
   ansible.builtin.systemd:
     name: "{{ item }}"
