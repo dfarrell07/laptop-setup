@@ -82,7 +82,7 @@ fi
 record "profile" "pass" "$PROFILE"
 
 # --- Required tools ---
-for tool in ansible-playbook ansible-vault git python3 curl make ssh; do
+for tool in ansible-playbook git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     if [[ "$tool" == "ssh" ]]; then
       ver=$(ssh -V 2>&1 | head -1) || ver="installed"
