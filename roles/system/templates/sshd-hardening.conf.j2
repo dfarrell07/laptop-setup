@@ -56,7 +56,9 @@ GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
 # 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list
 # takes precedence over the system crypto policy for SSH. This is intentional — the system
 # crypto policy is more permissive than this hardened list. update-crypto-policies
-# applies to other subsystems (OpenSSL, GnuTLS) but does NOT affect sshd algorithm selection.
+# configures sshd via 40-redhat-crypto-policies.conf, but this file takes precedence:
+# sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
+# 40-redhat-crypto-policies.conf.
 Ciphers {{ ssh_ciphers }}
 MACs {{ ssh_macs }}
 KexAlgorithms {{ ssh_kex_algorithms }}
