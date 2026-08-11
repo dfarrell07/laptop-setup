@@ -1,5 +1,33 @@
 # Old Laptop Audit Findings
 
+## TL;DR
+
+71 findings (P1=4, P2=10, P3=32, P4=25) from an 18-agent audit of the wip1
+branch, targeting the ThinkPad P16v (AMD, Fedora 44, Sway, HiDPI). 269 agents
+validated the results. The codebase is solid -- AMD dispatch, dnf5, vault
+bootstrap, and binary idempotency are clean.
+
+**Showstopper**: Item 36 (P1) -- a `#` comment inside a double-quoted YAML
+string in `sysctl.yml` causes a Jinja2 TemplateSyntaxError that crashes
+`make all` on real hosts. All Molecule tests skip this path. Fix: 1-line
+comment removal.
+
+**Top P16v UX risks**: USBGuard `hardwired` no-op on AMD bricks input (item
+1), SSH client KEX too narrow for corporate servers (item 2), `output * scale`
+breaks external monitors at HiDPI (item 3), i3-to-Sway WM transition changes
+modifier key and focus bindings (Letter section).
+
+**Quick-win diffs** (12 items, each under 10 lines) are in the "Reproduction
+Results and Fix Drafts" section. 8 fixes validated with exact diffs -- 6
+CLEAN_APPLY, 2 NEEDS_ADJUSTMENT (with adjusted diffs provided).
+
+**Letter from the Old Laptop** captures actual user habits: 10,726 lines of
+zsh history, gvim as primary editor, 5-6 concurrent Claude sessions in
+dangerous mode, no tmux despite automation expecting it. 12 factual errors
+corrected in the Verification Pass.
+
+---
+
 Audit performed 2026-08-11 from the old ThinkPad X1 Carbon 7th Gen (Fedora 42,
 i3, Intel) against the wip1 branch targeting the new ThinkPad P16v Gen 1 (AMD,
 Fedora 44, Sway, HiDPI 2560x1600, CSB hybrid).
@@ -2029,3 +2057,169 @@ to match the sshd server config at `vars.yml:119`.
 Change the five missing-variable checks from `record WARN` to
 `record FAIL` so preflight exit status matches the `make all` assertion
 behavior for CHANGE_ME sentinel defaults.
+
+---
+
+## Fix Validation Results
+
+**Date**: 2026-08-11
+
+8 proposed fix diffs validated against the current wip1 working tree.
+All fixes are independent with no file conflicts or semantic interactions.
+
+### Validation Status Table
+
+| Item | Priority | Fix Description | Status | File(s) |
+|------|----------|-----------------|--------|---------|
+| 36 | P1 | Remove inline `#` comment from sysctl.yml Jinja2 dict literal | CLEAN_APPLY | `roles/system/tasks/sysctl.yml:42` |
+| 2 | P1 | SSH client KEX fallback algorithms (`ecdh-sha2-nistp256`, `diffie-hellman-group-exchange-sha256`) | CLEAN_APPLY | `roles/dotfiles/templates/ssh_config.j2:12` |
+| 47 | P2 | Load desktop role defaults in fedora verify pre_tasks | NEEDS_ADJUSTMENT | `molecule/fedora/verify.yml` |
+| 63 | P2 | Add `include_vars` for `group_vars/all/vars.yml` to VM verify | CLEAN_APPLY | `molecule/vm/verify.yml` |
+| 56 | P3 | Remove stale cramfs assertion from VM verify + smoke-test | NEEDS_ADJUSTMENT | `molecule/vm/verify.yml`, `scripts/smoke-test.sh:1824-1831` |
+| 38 | P3 | Add `~/.config/git/template/hooks/**` to `claude_deny_write_only` | CLEAN_APPLY | `roles/claude/defaults/main.yml` |
+| 48 | P3 | AllowTcpForwarding regex: add `yes` and `all` alternatives | CLEAN_APPLY | `scripts/smoke-test.sh:924` |
+| 55 | P3 | Add `\.github/actions/` to molecule workflow path filter | CLEAN_APPLY | `.github/workflows/molecule.yml:45` |
+
+### Adjusted Diffs
+
+#### Item 47 (P2): Include order matters -- desktop defaults BEFORE vars.yml
+
+The original diff placed the desktop defaults `include_vars` AFTER the
+existing `group_vars/all/vars.yml` include. This is wrong: 5 variables
+overlap between desktop defaults and `vars.yml` (`is_apt`, `is_dnf`,
+`is_linux`, `is_macos`, `system_is_container`). Both `include_vars` calls
+share Ansible precedence 17, so the LAST one loaded wins. If desktop
+defaults loads second, `system_is_container` becomes `false` (static value
+in desktop defaults), overriding the Jinja expression in `vars.yml` that
+evaluates to `true` in container CI. This would cause 6 guards in
+`verify-common.yml` (lines 498, 506, 545, 553, 573, 581) to incorrectly
+run kernel/hardware assertions that fail in Podman containers.
+
+**Fix**: Insert the desktop defaults include BEFORE the existing `vars.yml`
+include, so `vars.yml` loads second and its authoritative
+`system_is_container` expression wins.
+
+```diff
+--- a/molecule/fedora/verify.yml
++++ b/molecule/fedora/verify.yml
+@@ -5,6 +5,9 @@
+ 
+   pre_tasks:
++    - name: Load desktop role defaults for verify-sway assertions
++      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/desktop/defaults/main.yml"
++
+     - name: Load group_vars baselines for verify context
+       ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+ 
+     # set_fact from converge does not persist to a separate verify invocation.
+```
+
+#### Item 56 (P3): Missed stale cramfs reference in smoke-test.sh
+
+The VM verify.yml cramfs removal is already correctly applied in the
+working tree. However, the plan missed a second stale cramfs reference in
+`scripts/smoke-test.sh` lines 1824-1827. Since cramfs was removed from
+`modprobe-hardening.conf.j2` in commit `ab7c166d`, the `grep -q '^install
+cramfs /bin/false'` will always fail, causing the `modprobe-hardening`
+smoke test to report FAIL on every provisioned machine.
+
+**Additional fix for smoke-test.sh**:
+
+```diff
+--- a/scripts/smoke-test.sh
++++ b/scripts/smoke-test.sh
+@@ -1824,8 +1824,8 @@
+-# kernel module blacklist — always-present entries (cramfs, n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
++# kernel module blacklist — always-present entries (n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
+ # (usb_storage is conditional on system_disable_usb_storage and checked in the full gate above)
+ if [[ -f /etc/modprobe.d/hardening.conf ]]; then
+-  if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf && \
+-     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
++  if grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
+      grep -q '^install dccp /bin/false' /etc/modprobe.d/hardening.conf && \
+```
+
+**Note on plan diff inaccuracies**: The original plan's diff (Quick Wins
+section, lines 1919-1924) used `ansible.builtin.command:` with `cmd:`
+dictionary key form; the actual code uses inline string form
+(`ansible.builtin.command: grep -q cramfs ...`). The plan also omitted
+`become: true` present in the actual code. These are cosmetic -- the
+working tree fix is correct regardless.
+
+### Recommended Application Order
+
+Apply in this order (lowest risk first, production before tests):
+
+| Order | Item | Scope | Rationale |
+|-------|------|-------|-----------|
+| 1 | 36 | `System: inline comment removal in sysctl hardening task` | Zero behavioral change, pure comment removal, fixes P1 crash |
+| 2 | 38 | `Claude: git hooks directory in deny write-only list` | Additive only, no test changes needed |
+| 3 | 55 | `Ci: .github/actions path in molecule change detection filter` | CI-only, no functional change |
+| 4 | 48 | `Smoke: AllowTcpForwarding regex alignment with sshd validation` | Self-contained regex fix, no Ansible changes |
+| 5 | 56 | `Smoke/Molecule: stale cramfs references after template removal` | Two files but independent regions, no conflicts |
+| 6 | 2 | `Dotfiles: SSH client KEX algorithm fallback broadening` | Client config only, does not affect sshd smoke checks |
+| 7 | 47 | `Molecule: desktop role defaults in fedora verify pre_tasks` | Test-only; uses adjusted diff (BEFORE vars.yml) |
+| 8 | 63 | `Molecule: group_vars include_vars in VM verify pre_tasks` | Test-only; matches fedora/rocky/debian verify pattern |
+
+**Rationale**: Non-behavioral changes first (comment removal, CI config),
+then additive-only production changes (deny list, regex fix), then
+template changes (SSH KEX), then test-infrastructure changes last. This
+way if any test change breaks CI, the production fixes are already landed
+and bisectable.
+
+### Interaction Analysis
+
+All 8 fixes target separate file regions with no textual or semantic
+conflicts:
+
+- **No file overlap**: Each fix targets a unique file, except item 56
+  which touches both `molecule/vm/verify.yml` and `scripts/smoke-test.sh`
+  (different files from item 63's `molecule/vm/verify.yml` edit, but
+  different regions within the file -- include_vars in pre_tasks vs cramfs
+  assertion in the modprobe section).
+- **Sysctl fix vs molecule tests**: The sysctl task is guarded by
+  `when: not system_is_container`. All container CI sets
+  `system_is_container: true`. No interaction.
+- **SSH KEX fix vs smoke-test**: The smoke-test checks SSHD
+  `KexAlgorithms` in server config; the fix modifies CLIENT SSH config.
+  No interaction.
+- **Item 47 include order vs item 63**: Both add `include_vars` to
+  different verify files (fedora vs VM). No interaction.
+
+All 8 fixes can also be applied in a single commit if preferred -- the
+ordering above is for minimal-risk incremental merging.
+
+### CLEAN_APPLY Validation Details
+
+**Item 36 (P1)**: Verified at `roles/system/tasks/sysctl.yml` line 42.
+The proposed removal target matches verbatim. The remaining line
+(`'kernel.kexec_load_disabled': system_kexec_load_disabled | int,`) is
+valid Jinja2 with a trailing comma consistent with all other entries. The
+`# noqa: jinja[spacing]` directive on line 46 is NOT targeted and must be
+preserved.
+
+**Item 2 (P1)**: Line 12 currently ends with `curve25519-sha256` and no
+trailing fallbacks. Both added algorithms (`ecdh-sha2-nistp256`,
+`diffie-hellman-group-exchange-sha256`) appear in the sshd server config
+(`ssh_kex_algorithms` in `vars.yml:119-120`), so the client will never
+offer a KEX the server rejects. Algorithm preference order is correct.
+
+**Item 63 (P2)**: VM verify.yml currently has NO `include_vars` calls.
+The fix adds `include_vars` as the first task in `pre_tasks`, before the
+existing `set_fact` block. `set_fact` (precedence 19) beats `include_vars`
+(precedence 18), so all 11 VM-specific overrides will win.
+
+**Item 38 (P3)**: `claude_deny_write_only` is the correct list (not
+`claude_deny_sensitive`). Claude needs to READ hooks for diagnosing
+commit/push failures but must never WRITE to them. The glob pattern
+`~/.config/git/template/hooks/**` matches the established convention.
+
+**Item 48 (P3)**: Confirmed at line 924. The regex `(no|local|remote)`
+is used via `grep -qP`. The sshd man page documents 5 valid values:
+`yes`, `all`, `no`, `local`, `remote`. The Ansible role validates all 5.
+The fix adds `yes` and `all` to align the smoke-test with the role.
+
+**Item 55 (P3)**: The path filter is a shell `grep -qE` regex on line 45.
+The molecule workflow uses `./.github/actions/molecule-setup` (line 77).
+Adding `\.github/actions/` to the alternation ensures composite action
+changes trigger molecule tests.
