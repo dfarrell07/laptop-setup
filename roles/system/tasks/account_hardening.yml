@@ -47,6 +47,7 @@
       value: "{{ system_pass_max_days }}"
     - name: PASS_MIN_DAYS
       value: "{{ system_pass_min_days }}"
+    # PASS_WARN_AGE: Fedora 44 default is 7 (matches system_pass_warn_age default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: PASS_WARN_AGE
       value: "{{ system_pass_warn_age }}"
     - name: UMASK
@@ -61,7 +62,7 @@
     - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
-# NOTE: YESCRYPT is the Fedora 44 default; this task is a no-op there but enforces on RHEL/Rocky
+# NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT); enforces on RHEL/Rocky
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
@@ -72,6 +73,7 @@
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
+# NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it (same value, idempotent from second run onward)
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
