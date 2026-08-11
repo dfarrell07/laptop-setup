@@ -26,6 +26,82 @@ zsh history, gvim as primary editor, 5-6 concurrent Claude sessions in
 dangerous mode, no tmux despite automation expecting it. 12 factual errors
 corrected in the Verification Pass.
 
+### Summary Index
+
+| # | P | Title | Status |
+|---|---|-------|--------|
+| 1 | P1 | USBGuard hardwired no-op on AMD | open |
+| 2 | P1 | SSH client KEX too narrow | fix-drafted |
+| 3 | P1 | output * scale breaks external monitors | open |
+| 36 | P1 | Jinja2 parse error in sysctl.yml | fix-drafted |
+| 4 | P2 | Preflight WARN vs make all FAIL mismatch | fix-drafted |
+| 5 | P2 | make update hard-fails on local work | open |
+| 6 | P2 | Task queue set -e disabled in subshell | open |
+| 7 | P2 | Task queue Bash(git *) permits force push | open |
+| 8 | P2 | Task queue systemd directives ignored | open |
+| 25 | P2 | ptrace_scope=0 unrestricted attach | no-change-needed |
+| 37 | P2 | No proxy forwarding into distrobox | open |
+| 47 | P2 | verify-sway undefined variable abort | fix-drafted |
+| 63 | P2 | VM verify missing include_vars | fix-drafted |
+| 65 | P2 | verify-claude-queue container guard | open |
+| 9 | P3 | Window borders invisible at HiDPI | open |
+| 10 | P3 | RPM Fusion hard-blocked on CSB hybrid | open |
+| 11 | P3 | No battery indicator by default | open |
+| 12 | P3 | --user-only skips world-readable checks | open |
+| 13 | P3 | USB storage loaded-vs-blacklisted false positive | open |
+| 14 | P3 | No Molecule test for CSB hybrid path | open |
+| 15 | P3 | cw() breaks without work-env file | open |
+| 16 | P3 | No config.yml template generator | open |
+| 17 | P3 | Missing systemd user directory creation | fix-drafted |
+| 26 | P3 | ICMP redirect sending enabled | no-change-needed |
+| 27 | P3 | make bootstrap requires make | open |
+| 29 | P3 | SSHD rescue block firewall mismatch | open |
+| 30 | P3 | Parallel source trees from GOPATH | open |
+| 31 | P3 | Sway exit no confirmation dialog | open |
+| 33 | P3 | No Molecule test for GNOME | open |
+| 34 | P3 | git_repos_pull=true never tested | open |
+| 38 | P3 | Git hooks not write-denied for Claude | fix-drafted |
+| 39 | P3 | hadolint not installed | open |
+| 42 | P3 | AIDE ignores common exit codes | open |
+| 43 | P3 | chrony-nts path wrong on Debian | open |
+| 44 | P3 | Logind settings mostly unverified | open |
+| 48 | P3 | AllowTcpForwarding regex rejects yes | fix-drafted |
+| 49 | P3 | verify-sway stale touchpad assertions | open |
+| 50 | P3 | verify-common sysctl key-only checks | open |
+| 55 | P3 | Molecule path filter omits actions/ | fix-drafted |
+| 56 | P3 | VM verify cramfs stale assertion | fix-drafted |
+| 57 | P3 | No auto-discovery synced variables | open |
+| 64 | P3 | system_kernel_lockdown undefined | open |
+| 66 | P3 | No GNOME dconf molecule test | open |
+| 67 | P3 | Debian apt omits Sway packages | open |
+| 69 | P3 | P3 bucket too broad | open |
+| 70 | P3 | Items 25/26 are confirmations | open |
+| 18 | P4 | No gtk-xft-dpi for XWayland apps | open |
+| 19 | P4 | No managed mako/wofi configs | open |
+| 20 | P4 | Stale Molecule image digest | open |
+| 21 | P4 | packages_security_yubikey undefined | open |
+| 22 | P4 | sntrup761 suffix inconsistency | fix-drafted |
+| 23 | P4 | ccp() work-dir guard absent | open |
+| 24 | P4 | Task queue Podman isolation not done | open |
+| 28 | P4 | Mullvad install without repo on CSB | open |
+| 32 | P4 | Firewall-to-sshd ordering gap | open |
+| 35 | P4 | SELinux enforcement not CI-verified | open |
+| 40 | P4 | Claude not installed in distrobox | open |
+| 41 | P4 | grype not provisioned | open |
+| 45 | P4 | No restore script | open |
+| 46 | P4 | uBlock Origin MV2 missing allowlist | open |
+| 51 | P4 | Distrobox warns on missing subuid | open |
+| 52 | P4 | preflight.sh raw ANSI when piped | open |
+| 53 | P4 | JSON schemas differ preflight/smoke | open |
+| 54 | P4 | Status case mismatch preflight/smoke | open |
+| 58 | P4 | Missing utmp audit watch CIS 4.1.3.6 | fix-drafted |
+| 59 | P4 | ShellCheck CI omits git-template hooks | open |
+| 60 | P4 | Molecule prepare wait loops silent | open |
+| 61 | P4 | Fedora prepare raw install swallowed | open |
+| 62 | P4 | Smoke test only checks redhat.io auth | open |
+| 68 | P4 | gitconfig no [include] for local | open |
+| 71 | P4 | Plan needs Quick wins section | open |
+
 ---
 
 Audit performed 2026-08-11 from the old ThinkPad X1 Carbon 7th Gen (Fedora 42,
@@ -742,7 +818,7 @@ not theoretical concerns.
 #### 69. P3 bucket at 44% of findings spans code bugs to tooling wishes
 
 - **Dimension**: plan-structure
-- **Problem**: Priority distribution is P1=4, P2=8, P3=27, P4=23 (62 total).
+- **Problem**: Priority distribution is P1=4, P2=10, P3=32, P4=25 (71 total).
   The P3 bucket at 27 items contains 44% of all findings and spans everything
   from real UX bugs (item 48, false FAIL in smoke-test) to test coverage gaps
   (item 33, no GNOME scenario) to tooling alignment wishes (item 39, hadolint).
@@ -1213,6 +1289,12 @@ sshd rescue path (item 29, medium severity as it produces a silent
 split-brain). The migration-friction finding (item 30) documents the GOPATH
 to ~/src/ parallel-tree gap. The ux-transition finding (item 31) captures a
 missing safety net in the i3-to-Sway migration.
+
+---
+
+## Iteration 4
+
+*(Internal planning pass -- no findings added. Numbering preserved to match agent session logs.)*
 
 ---
 
@@ -1962,10 +2044,12 @@ did not update the VM verify playbook. Other modules still verified:
 
 ```diff
 -    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
-+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
++    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,{% endif %}curve25519-sha256,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
 ```
 
-Adds two fallback algorithms after the preferred `curve25519-sha256`.
+Adds two fallback algorithms after the preferred `curve25519-sha256`
+and fixes the `sntrup761x25519-sha512` suffix to include `@openssh.com`
+(item 22 combined -- matches the sshd server config at `vars.yml:119`).
 Order preserves preference: Curve25519 first (fastest), then NIST P-256
 ECDH (widely supported), then DH group-exchange SHA-256 (legacy but safe).
 PQ algorithms remain highest priority when enabled. Omits `ecdh-sha2-nistp521`
@@ -2051,12 +2135,14 @@ to match the sshd server config at `vars.yml:119`.
 
 #### 12. Item 4 (P2): Change preflight WARN to FAIL for missing identity vars
 
-**File**: `scripts/preflight.sh`, lines 219-227
-**Lines changed**: 5
+**File**: `scripts/preflight.sh`, line 221
+**Lines changed**: 1
 
-Change the five missing-variable checks from `record WARN` to
-`record FAIL` so preflight exit status matches the `make all` assertion
-behavior for CHANGE_ME sentinel defaults.
+Change the single `record` call at line 221 from `"warn"` to `"fail"`.
+The loop iterates over 5 variables but there is one `record` call:
+`record "identity_${_ivar}" "warn"` becomes `record "identity_${_ivar}" "fail"`.
+This aligns preflight exit status with the `make all` assertion behavior
+for CHANGE_ME sentinel defaults.
 
 ---
 
@@ -2069,16 +2155,16 @@ All fixes are independent with no file conflicts or semantic interactions.
 
 ### Validation Status Table
 
-| Item | Priority | Fix Description | Status | File(s) |
-|------|----------|-----------------|--------|---------|
-| 36 | P1 | Remove inline `#` comment from sysctl.yml Jinja2 dict literal | CLEAN_APPLY | `roles/system/tasks/sysctl.yml:42` |
-| 2 | P1 | SSH client KEX fallback algorithms (`ecdh-sha2-nistp256`, `diffie-hellman-group-exchange-sha256`) | CLEAN_APPLY | `roles/dotfiles/templates/ssh_config.j2:12` |
-| 47 | P2 | Load desktop role defaults in fedora verify pre_tasks | NEEDS_ADJUSTMENT | `molecule/fedora/verify.yml` |
-| 63 | P2 | Add `include_vars` for `group_vars/all/vars.yml` to VM verify | CLEAN_APPLY | `molecule/vm/verify.yml` |
-| 56 | P3 | Remove stale cramfs assertion from VM verify + smoke-test | NEEDS_ADJUSTMENT | `molecule/vm/verify.yml`, `scripts/smoke-test.sh:1824-1831` |
-| 38 | P3 | Add `~/.config/git/template/hooks/**` to `claude_deny_write_only` | CLEAN_APPLY | `roles/claude/defaults/main.yml` |
-| 48 | P3 | AllowTcpForwarding regex: add `yes` and `all` alternatives | CLEAN_APPLY | `scripts/smoke-test.sh:924` |
-| 55 | P3 | Add `\.github/actions/` to molecule workflow path filter | CLEAN_APPLY | `.github/workflows/molecule.yml:45` |
+| Item | Priority | Title | Fix Description | Status | File(s) |
+|------|----------|-------|-----------------|--------|---------|
+| 36 | P1 | Jinja2 parse error in sysctl.yml | Remove inline `#` comment from Jinja2 dict literal | CLEAN_APPLY | `roles/system/tasks/sysctl.yml:42` |
+| 2 | P1 | SSH client KEX too narrow | KEX fallback algorithms + sntrup761 suffix fix | CLEAN_APPLY | `roles/dotfiles/templates/ssh_config.j2:12` |
+| 47 | P2 | verify-sway undefined variable abort | Load desktop role defaults in fedora verify pre_tasks | NEEDS_ADJUSTMENT | `molecule/fedora/verify.yml` |
+| 63 | P2 | VM verify missing include_vars | Add `include_vars` for `group_vars/all/vars.yml` to VM verify | CLEAN_APPLY | `molecule/vm/verify.yml` |
+| 56 | P3 | VM verify cramfs stale assertion | Remove stale cramfs from VM verify + smoke-test | NEEDS_ADJUSTMENT | `molecule/vm/verify.yml`, `scripts/smoke-test.sh:1824-1831` |
+| 38 | P3 | Git hooks not write-denied | Add `~/.config/git/template/hooks/**` to `claude_deny_write_only` | CLEAN_APPLY | `roles/claude/defaults/main.yml` |
+| 48 | P3 | AllowTcpForwarding regex | Add `yes` and `all` alternatives | CLEAN_APPLY | `scripts/smoke-test.sh:924` |
+| 55 | P3 | Molecule path filter omits actions/ | Add `\.github/actions/` to molecule workflow path filter | CLEAN_APPLY | `.github/workflows/molecule.yml:45` |
 
 ### Adjusted Diffs
 
