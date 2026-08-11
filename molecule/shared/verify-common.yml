@@ -687,7 +687,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
-    - ansible_distribution != 'Rocky'  # Rocky CI exercises csb_rhel=true path; symlink intentionally absent
+    - ansible_distribution != 'Rocky'  # Rocky CI lacks stub-resolv.conf pre-symlink; dns_over_tls.yml skips in containers
 
 - name: Assert /etc/resolv.conf is symlink to stub-resolv.conf
   ansible.builtin.assert:
@@ -700,7 +700,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
-    - ansible_distribution != 'Rocky'  # Rocky CI exercises csb_rhel=true path; symlink intentionally absent
+    - ansible_distribution != 'Rocky'  # Rocky CI lacks stub-resolv.conf pre-symlink; dns_over_tls.yml skips in containers
 
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:

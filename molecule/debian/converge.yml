@@ -14,20 +14,9 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
-    - name: Install openssh-server so sshd hardening block is exercised in container CI
-      ansible.builtin.apt:
-        name: openssh-server
-        state: present
-        update_cache: true
-      when: not system_is_container
-      # policy-rc.d (exit 101) is pre-installed in the geerlingguy image and prevents
-      # postinst from auto-starting sshd.service/ssh.socket — no policy-rc.d setup needed.
-      # sshd is intentionally left stopped after install; sshd.service is still DEFINED
-      # (so the sshd.yml hardening block runs), but starting sshd would crash the container.
-      # NOTE: Debian Podman containers skip this install — apt triggers daemon-reload on
-      # /etc/systemd/** writes which crashes the privileged container init. The sshd.service
-      # fact will be absent, so the sshd hardening block in sshd.yml is also skipped for
-      # Debian container CI (CI gap; make test-vm exercises full sshd hardening on Debian).
+    # openssh-server install intentionally skipped in Debian Podman CI: apt triggers daemon-reload
+    # on /etc/systemd/** writes, crashing the privileged container. The sshd hardening block is
+    # therefore also skipped for Debian Podman CI; make test-vm exercises full sshd hardening.
 
   roles:
     - role: system
