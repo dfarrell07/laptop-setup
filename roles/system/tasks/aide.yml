@@ -99,15 +99,29 @@
       when: not system_install_usbguard | bool
       register: _aide_conf_r5_remove
 
-    - name: Add /boot to AIDE monitoring (kernel cmdline parameter protection)
+    - name: Exclude /boot/grub2/grubenv from AIDE (rewritten every boot by GRUB)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/boot'
-        line: '/boot NORMAL'
+        regexp: '^!/boot/grub2/grubenv'
+        line: '!/boot/grub2/grubenv'
         state: present
       register: _aide_conf_r6
-      # grubby modifies /boot/loader/entries/ directly; auditd watches /boot for writes
-      # but AIDE provides the content integrity baseline to detect unauthorized changes.
+
+    - name: Add /boot/loader/entries to AIDE monitoring (boot entry integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/boot/loader/entries'
+        line: '/boot/loader/entries NORMAL'
+        state: present
+      register: _aide_conf_r6b
+
+    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (GRUB config integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/boot/grub2/grub\.cfg'
+        line: '/boot/grub2/grub.cfg NORMAL'
+        state: present
+      register: _aide_conf_r6c
 
     - name: Check if AIDE database exists
       ansible.builtin.stat:
@@ -132,6 +146,8 @@
           or _aide_conf_r5 is changed
           or _aide_conf_r5_remove is changed
           or _aide_conf_r6 is changed
+          or _aide_conf_r6b is changed
+          or _aide_conf_r6c is changed
 
     - name: Reinitialize AIDE database when conf changed
       ansible.builtin.shell:  # noqa: command-instead-of-module
@@ -149,6 +165,8 @@
           or _aide_conf_r5 is changed
           or _aide_conf_r5_remove is changed
           or _aide_conf_r6 is changed
+          or _aide_conf_r6b is changed
+          or _aide_conf_r6c is changed
 
     - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
       ansible.builtin.command:
