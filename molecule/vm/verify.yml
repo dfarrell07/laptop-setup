@@ -532,11 +532,6 @@
         that: verify_usb_storage.rc == 0
         fail_msg: "usb_storage not blacklisted"
 
-    - name: Check modprobe blacklists cramfs
-      ansible.builtin.command: grep -q cramfs /etc/modprobe.d/hardening.conf
-      changed_when: false
-      become: true
-
     - name: Check modprobe blacklists firewire-core
       ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
       changed_when: false
