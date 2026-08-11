@@ -126,7 +126,6 @@
 # /boot: grubby silently modifies BLS entries without touching /etc — these watches
 # catch kernel cmdline stripping (lockdown=integrity, vsyscall=none, etc.)
 -w /boot/loader/entries/ -p wa -k kernel-params
--w /boot/grub2/grubenv -p wa -k kernel-params
 -w /boot/grub2/grub.cfg -p wa -k kernel-params
 
 # Privilege escalation syscalls (CIS benchmark)

@@ -34,7 +34,7 @@
     path: /etc/systemd/resolved.conf.d/99-dot.conf
     state: absent
   when:
-    - csb_rhel
+    - csb_detected
     - not system_is_container
   notify: Restart systemd-resolved
 
@@ -52,7 +52,7 @@
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:
-    - not csb_rhel  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
+    - not csb_detected  # CSB corporate networks block outbound 1.1.1.1; Domains=~. catch-all breaks DNS
     - not system_is_container  # resolved restart crashes privileged Podman containers
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
