@@ -19,6 +19,8 @@
 # so those paths cannot be excluded by exe= without per-toolchain entries.
 -a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/compile -k exclude-go-build
 -a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/link -k exclude-go-build
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/lib/golang/bin/go -k exclude-go-build
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/lib/golang/bin/go -k exclude-go-build
 # Build tools generate thousands of delete/rename events during normal operation
 # (cargo clean, npm install, git checkout). Exclude only those specific syscalls;
 # -w watch rules use the inode-hash path and are unaffected by these exclusions,
