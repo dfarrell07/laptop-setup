@@ -84,6 +84,25 @@ not theoretical concerns.
     `desktop_sway_workspace_outputs`)
   - C: Add prominent documentation warning in default.config.yml
 
+#### 36. Jinja2 parse error in sysctl.yml `#` comment inside double-quoted string
+
+- **Dimension**: ansible-lint
+- **File**: `roles/system/tasks/sysctl.yml:31-46`
+- **Problem**: The inline `# pre-reboot; lockdown=integrity makes it redundant
+  post-reboot` comment on line 42 is inside a double-quoted YAML string (lines
+  31-46). YAML preserves `#` as a literal character inside double quotes. When
+  YAML folds the multiline string, the `#` text becomes part of the Jinja2
+  `{{ ... }}` expression, causing `TemplateSyntaxError: unexpected char '#' at
+  661`. Confirmed with `jinja2.Environment().parse()` and `ansible-lint`. All
+  Molecule tests skip this code path because `system-container-overrides.yml`
+  sets `system_is_container: true`. A real host `make all` (or `make test-vm`)
+  would crash the system role at this task, preventing all sysctl hardening and
+  subsequent system tasks.
+- **Evidence**: Introduced in commit `211c5363`, reworded in 5 subsequent
+  commits, each time preserving the `#` inside the double-quoted string.
+- **Fix**: Move the inline comment to a standalone YAML comment line above the
+  `set_fact` task (outside the double-quoted string), or delete it entirely.
+
 ### P2 — High (misleading or surprising behavior)
 
 #### 4. Preflight WARN vs `make all` FAIL mismatch
@@ -154,6 +173,28 @@ not theoretical concerns.
 - **Status**: Automation handles this correctly. Gap exists only on
   pre-provisioned machines. No code change needed — confirms `make all` closes
   this gap.
+
+#### 37. No proxy forwarding into distrobox container
+
+- **Dimension**: container-provisioning
+- **File**: `roles/distrobox/templates/distrobox.ini.j2`,
+  `common/tasks/container-provision-tasks.yml`
+- **Problem**: `csb_detect.yml` detects `network_proxied` and `proxy_url` from
+  host env vars (HTTP_PROXY, HTTPS_PROXY), but `distrobox.ini.j2` does not pass
+  these as environment variables. On a CSB hybrid machine behind a corporate
+  proxy, dnf installs, `go install`, and `oc` downloads inside the container
+  fail. Distrobox normally inherits the host env, but Ansible Play 3's
+  `containers.podman.podman` connection runs `podman exec` directly, bypassing
+  distrobox's env inheritance. Host-side equivalents (`install_go_tools.yml`,
+  `install_subctl_versions.yml`) explicitly set HTTPS_PROXY/HTTP_PROXY, but the
+  container-side `go install` and `uri`/`get_url` tasks have no proxy
+  environment block. Additionally, the `add_host` registration does not forward
+  `network_proxied` or `proxy_url` to the container host.
+- **Fix**: Add `http_proxy`, `https_proxy`, `no_proxy` environment variables to
+  `distrobox.ini.j2` `init_hooks` or `additional_flags` when
+  `network_proxied` is true. Add `environment:` blocks to `go install` and
+  `uri` tasks in `container-provision-tasks.yml`. Forward `network_proxied` and
+  `proxy_url` via the `add_host` registration.
 
 ### P3 — Medium (day 1-3 friction)
 
@@ -340,6 +381,39 @@ not theoretical concerns.
   `git_repos_pull: true`, or create a dedicated scenario that clones then
   pulls.
 
+#### 38. Git hooks directory not write-denied for Claude
+
+- **Dimension**: deny-list-completeness
+- **File**: `roles/claude/defaults/main.yml` (`claude_deny_write_only`),
+  `roles/dotfiles/templates/gitconfig.j2:79`
+- **Problem**: `~/.config/git/template/hooks/**` is absent from both
+  `claude_deny_sensitive` and `claude_deny_write_only`. `core.hooksPath` in
+  `gitconfig.j2` (line 79) points to this directory. Ansible deploys four hooks
+  there (pre-commit with gitleaks, commit-msg, prepare-commit-msg, pre-push).
+  Claude could overwrite them via Edit/Write tools — disabling gitleaks
+  (allowing secrets to be committed) or injecting arbitrary code that executes
+  with full user privileges on every git commit/push across all repos. Commit
+  `45195885` added `~/.gitconfig` and `~/.config/git/config` to the deny lists
+  to prevent `core.hooksPath` redirection, but this does not prevent overwriting
+  the hook files at the existing path.
+- **Fix**: Add `~/.config/git/template/hooks/**` to `claude_deny_write_only` in
+  `roles/claude/defaults/main.yml`.
+
+#### 39. hadolint (Dockerfile linter) not installed
+
+- **Dimension**: notes-mining
+- **File**: `roles/packages/tasks/install_standalone_binaries.yml`
+- **Problem**: hadolint is labeled "Priority: Must-have" in the MCN content-type
+  tooling doc (`notes-ai/mcn/2026-05-19-content-type-tooling.md`) and marked
+  "Yes" for Phase 1 adoption in the tooling proposal. Not installed on the
+  workstation. The packages role already installs analogous linting tools
+  (actionlint, zizmor, gitleaks, shellcheck, yamllint) via
+  `install_standalone_binaries.yml` and `install_pipx.yml`, establishing a clear
+  pattern that hadolint fits.
+- **Fix**: Add hadolint as a SHA256-verified binary download in
+  `install_standalone_binaries.yml` (work profile, Linux x86_64+arm64),
+  following the existing pattern.
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -431,6 +505,39 @@ not theoretical concerns.
   enforce their own SELinux policy), not an oversight.
 - **Fix**: Acknowledge as a known CI limitation. Ensure `make test-vm` is run
   before releases.
+
+#### 40. Claude Code not installed inside distrobox container
+
+- **Dimension**: container-provisioning
+- **File**: `common/tasks/container-provision-tasks.yml`, `site.yml`
+- **Problem**: The claude role runs in Play 2 (host only).
+  `container-provision-tasks.yml` installs oc, kubectl, golangci-lint, subctl,
+  and dev packages but not Claude Code. On CSB restricted machines (fapolicyd
+  enforcing) where `troubleshooting.md` (line 329) recommends installing Claude
+  Code inside the distrobox container, there is no automation. The claude role's
+  rescue block handles this gracefully via `csb-failure-handler.yml`, recording
+  the failure with manual install instructions — consistent with how all
+  CSB-restricted tool installs are handled across the project.
+- **Fix**: Consider adding a Claude Code install step to
+  `container-provision-tasks.yml` gated on `claude_install_method != 'skip'` and
+  `packages_install_binaries`, or document the manual step in the
+  post-provisioning checklist.
+
+#### 41. grype not provisioned by automation
+
+- **Dimension**: notes-mining
+- **File**: `roles/packages/tasks/install_standalone_binaries.yml`
+- **Problem**: grype (Anchore container vulnerability scanner) v0.112.0 is
+  installed manually at `/usr/local/bin/grype` but is not provisioned by any
+  role or task. The CVE agent uses grype for scanning container images across
+  Submariner release branches. A clean reprovisioned machine would fall back to
+  the container path (`anchore/grype:latest` via Podman), which works but is
+  slower. The `run_grype()` function in `lib.sh` implements this container
+  fallback, so the CVE pipeline would not break — only lose the performance
+  benefit of the local binary.
+- **Fix**: Add grype as a SHA256-verified binary download in
+  `install_standalone_binaries.yml` (work profile, Linux x86_64+arm64),
+  following the gitleaks/actionlint/zizmor pattern.
 
 ---
 
@@ -568,3 +675,53 @@ GNOME and git_repos_pull gaps (items 33-34) are actionable with new Molecule
 scenario passes. The SELinux gap (item 35) is an inherent container-based
 testing limitation already documented in the codebase; mitigation is ensuring
 `make test-vm` runs before releases.
+
+---
+
+## Iteration 6
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 36** (P1): `Jinja2 parse error in sysctl.yml` — inline `#` comment
+  inside a double-quoted YAML string (lines 31-46) is preserved as a literal
+  character by YAML and injected into the Jinja2 expression, causing
+  `TemplateSyntaxError`. All Molecule tests skip this path
+  (`system_is_container: true`). A real host `make all` crashes the system role,
+  preventing all sysctl hardening. Introduced in commit `211c5363`, persisted
+  through 5 rewrites.
+- **Item 37** (P2): `No proxy forwarding into distrobox container` — on CSB
+  hybrid machines behind a corporate proxy, the `containers.podman.podman`
+  connection bypasses distrobox's env inheritance. `distrobox.ini.j2` has no
+  proxy env vars, and container-side `go install`/`uri`/`get_url` tasks lack
+  proxy environment blocks (unlike their host-side equivalents). All container
+  network operations fail behind a proxy.
+- **Item 38** (P3): `Git hooks directory not write-denied for Claude` —
+  `~/.config/git/template/hooks/**` is absent from both `claude_deny_sensitive`
+  and `claude_deny_write_only`. Commit `45195885` blocked `core.hooksPath`
+  redirection but not overwriting the deployed hooks (gitleaks pre-commit,
+  commit-msg, pre-push) at the existing path. Defense-in-depth gap requiring
+  active Edit/Write tool misuse.
+- **Item 39** (P3): `hadolint not installed` — labeled "Must-have" in MCN
+  content-type tooling doc and "Yes" for Phase 1 adoption. Not provisioned
+  despite the packages role installing analogous linters (actionlint, zizmor,
+  gitleaks, shellcheck, yamllint) via the same pattern.
+- **Item 40** (P4): `Claude Code not installed inside distrobox container` —
+  the claude role runs host-only (Play 2). On CSB restricted machines
+  (fapolicyd enforcing), `troubleshooting.md` recommends container install but
+  no automation exists. The rescue block handles this gracefully with manual
+  install instructions, consistent with all CSB-restricted tool handling.
+- **Item 41** (P4): `grype not provisioned by automation` — manually installed
+  at `/usr/local/bin/grype` but absent from any role. The CVE agent's
+  `run_grype()` has a Podman container fallback (`anchore/grype:latest`), so
+  the pipeline would not break on a clean machine — only lose the performance
+  benefit of the local binary.
+
+**Rationale**: Six findings across four dimensions. The critical sysctl.yml
+Jinja2 parse error (item 36) is a real host-only crash bug invisible to
+container-based CI. The proxy forwarding gap (item 37) blocks all container
+network operations on proxied CSB hybrid machines. The Claude deny-list gap
+(item 38) is a defense-in-depth hardening miss. The remaining three (items
+39-41) are missing tool provisioning — two convenience improvements and one
+MCN tooling alignment.
