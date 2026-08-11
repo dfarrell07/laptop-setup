@@ -545,6 +545,51 @@ not theoretical concerns.
   `net.ipv6.conf.all.use_tempaddr` to `net.ipv6.conf.all.use_tempaddr = 2`
   and `net.ipv4.conf.all.rp_filter` to `net.ipv4.conf.all.rp_filter = 2`.
 
+#### 55. Molecule path filter omits `.github/actions/` directory
+
+- **Dimension**: ci-workflows
+- **File**: `.github/workflows/molecule.yml:45`
+- **Problem**: The path-filter regex `^(\.github/workflows/)` matches
+  `.github/workflows/` but NOT `.github/actions/`. The composite action at
+  `.github/actions/molecule-setup/action.yml` installs Python, pip deps, and
+  Ansible collections for all 9 molecule matrix jobs. A PR modifying only files
+  under `.github/actions/` would not trigger molecule tests — a broken
+  molecule-setup change (wrong Python version, bad requirements path) could
+  merge without molecule coverage and break all 9 scenarios on the next
+  unrelated PR.
+- **Fix**: Add `\.github/actions/` to the path filter regex.
+
+#### 56. VM verify cramfs assertion stale after template removal
+
+- **Dimension**: modprobe-hardening
+- **File**: `molecule/vm/verify.yml:535-538`
+- **Problem**: The VM verify test asserts `grep -q cramfs
+  /etc/modprobe.d/hardening.conf` but cramfs was intentionally removed from
+  `modprobe-hardening.conf.j2` in commit `ab7c166d`. The grep returns exit
+  code 1 and Ansible treats it as a task failure. The shared verify
+  (`verify-common.yml`) does NOT check for cramfs, so only the VM scenario is
+  affected. This will cause `make test-vm` to fail at this task.
+- **Fix**: Remove the cramfs grep assertion from `molecule/vm/verify.yml`
+  lines 535-538, or replace it with a check for a module that IS in the
+  template (e.g., jffs2).
+
+#### 57. No auto-discovery of new cross-role synced variables
+
+- **Dimension**: check-vars-sync
+- **File**: `scripts/check-vars-sync.py:30-174,189-240`
+- **Problem**: `REQUIRED_KEYS` and `CROSS_ROLE_MIRROR_KEYS` are hardcoded
+  Python dictionaries requiring manual updates when new variables are added
+  to `vars.yml` and mirrored in role defaults with the standard "fallback;
+  authoritative in group_vars/all/vars.yml" comment. A developer adding a new
+  mirrored variable must remember to also update `check-vars-sync.py`. Three
+  existing cross-role overlaps (`containers_registries`, `registry_tokens`,
+  `ssh_git_signing_pubkey`) are not in either dictionary — these have
+  intentionally different fallback values, but demonstrate the gap. All 56
+  vars.yml-to-system/defaults overlapping keys are covered.
+- **Fix**: Add comment-pattern scanning to auto-discover variables with the
+  "authoritative in group_vars/all/vars.yml" comment, or add a CI check that
+  warns on new overlapping keys absent from either dictionary.
+
 ### P4 — Low (cosmetic or minor)
 
 #### 18. No `gtk-xft-dpi` for XWayland GTK apps
@@ -764,6 +809,88 @@ not theoretical concerns.
 - **Fix**: Standardize on one case (uppercase to match CIS/audit convention)
   and add `SKIP` to smoke-test or remove it from preflight. Consider
   extracting a shared `record()` implementation.
+
+#### 58. Missing `/var/run/utmp` audit watch (CIS 4.1.3.6)
+
+- **Dimension**: auditd-rules-template
+- **File**: `roles/system/templates/auditd-claude.rules.j2:194-198`
+- **Problem**: The "Login/logout events (CIS 4.1.3.6)" section watches
+  `/var/log/lastlog`, `/var/run/faillock`, `/var/log/wtmp`, and
+  `/var/log/btmp` but omits `/var/run/utmp`. CIS 4.1.3.6 specifies
+  `-w /var/run/utmp -p wa -k session` alongside the wtmp/btmp watches. On
+  this Fedora system, `/var/run/utmp` exists (systemd-257, maintained by
+  `systemd-update-utmp.service`). Without the watch, tampering with active
+  login session records (hiding from `who`/`w`/`users`) goes undetected.
+  Redundant detection exists via wtmp (which IS watched) and
+  systemd/journald/loginctl, limiting the practical gap to real-time utmp
+  modification during an active session.
+- **Fix**: Add `-w /var/run/utmp -p wa -k session` to the login/logout
+  events section of the auditd rules template (after line 198).
+
+#### 59. ShellCheck CI step omits git-template hook files
+
+- **Dimension**: ci-workflows
+- **File**: `.github/workflows/linting.yml:101-104`
+- **Problem**: The CI ShellCheck step covers `scripts/*.sh`,
+  `roles/claude/files/*.sh`, `.githooks/pre-commit`, and
+  `.githooks/commit-msg`, but omits the 4 git-template hook files at
+  `roles/dotfiles/files/git-template-{commit-msg,pre-commit,prepare-commit-msg,pre-push}`.
+  All have `#!/bin/sh` shebangs and run on every git operation across all
+  repos on the provisioned machine. The local Makefile `shellcheck` target
+  (line 182) DOES include all 4 files, so there is a divergence between CI
+  and local linting. A shellcheck-detectable bug would be caught locally but
+  not in CI.
+- **Fix**: Add one line to the CI workflow's shellcheck step to include
+  `roles/dotfiles/files/git-template-*`.
+
+#### 60. Molecule prepare systemd wait loops silently pass on exhaustion
+
+- **Dimension**: molecule-prepare-correctness
+- **File**: `molecule/fedora/prepare.yml:34,52`,
+  `molecule/rocky/prepare.yml:28`, `molecule/debian/prepare.yml:37`
+- **Problem**: All systemd wait loops in fedora, rocky, and debian prepare
+  files use `failed_when: false` with no fallback assertion. If systemd never
+  reaches `running` or `degraded` (e.g., container image broken, cgroup mount
+  failure), the retry loop exhausts all attempts, the task "succeeds" with the
+  last non-matching stdout, and prepare completes without error. The converge
+  then runs against an unstable container and fails with cryptic UNREACHABLE
+  or daemon-reload errors that do not point back to the root cause. Total of 4
+  systemd wait loops across three files (2 fedora + 1 rocky + 1 debian).
+- **Fix**: Add a final assert after each wait loop that checks
+  `systemd_state.stdout in ['running', 'degraded']` and fails with a clear
+  message like "systemd did not stabilize within N seconds."
+
+#### 61. Fedora prepare `raw` package install failure silently swallowed
+
+- **Dimension**: molecule-prepare-correctness
+- **File**: `molecule/fedora/prepare.yml:42-44`
+- **Problem**: The `raw: dnf install -y --setopt=tsflags=noscripts
+  openssh-server policycoreutils-python-utils` task (line 42) intentionally
+  uses `noscripts` to avoid daemon-reload crashes, but also has
+  `failed_when: false` (line 44). If the install fails (mirror unreachable,
+  disk full), the failure is silently swallowed. The converge's conditional
+  install (`when: 'openssh-server' not in ansible_facts.packages`) then
+  attempts a normal `dnf install` without `noscripts`, triggering the exact
+  daemon-reload crash that prepare was designed to prevent. Rocky and Debian
+  prepare files explicitly avoid this pattern — Rocky's comment says
+  "do NOT install packages here."
+- **Fix**: Add `register` + post-install assertion on the raw task to catch
+  install failures, or check the package presence after the raw task.
+
+#### 62. Smoke test only verifies `registry.redhat.io` auth
+
+- **Dimension**: container-registry-authentication
+- **File**: `scripts/smoke-test.sh:148-155`
+- **Problem**: The ONLY registry auth check in the entire 1904-line script
+  verifies only `registry.redhat.io`, gated on work profile AND `oc` binary
+  presence. No quay.io or vault-provisioned token checks exist. The containers
+  role checks all registries at provisioning time (lines 32-121 for vault
+  tokens, non-vault registries), but a vault token expiring post-provisioning
+  would go undetected by smoke-test. Impact is limited: quay.io is public
+  (unauthenticated pulls work for public images) and `vault_registry_tokens`
+  defaults to an empty list.
+- **Fix**: Add a quay.io connectivity check and vault-provisioned registry
+  token verification to the smoke-test work-profile section.
 
 ---
 
@@ -1059,3 +1186,59 @@ configuration values. Items 52-54 are three preflight-smoke-test consistency
 findings — ANSI escaping, JSON schema divergence, and status level case
 mismatch — none causing runtime failures but all complicating any future
 unified consumption of the scripts' output.
+
+---
+
+## Iteration 9
+
+**Date**: 2026-08-11
+
+**Added**:
+
+- **Item 55** (P3): `Molecule path filter omits .github/actions/ directory` —
+  the molecule workflow path-filter regex matches `.github/workflows/` but
+  not `.github/actions/`. A broken change to the molecule-setup composite
+  action (used by all 9 matrix jobs) could merge without molecule tests and
+  break all scenarios on the next unrelated PR.
+- **Item 56** (P3): `VM verify cramfs assertion stale after template removal`
+  — commit `ab7c166d` removed cramfs from `modprobe-hardening.conf.j2` but
+  `molecule/vm/verify.yml:535-538` still asserts its presence. `make test-vm`
+  will fail at this task.
+- **Item 57** (P3): `No auto-discovery of new cross-role synced variables` —
+  `check-vars-sync.py` hardcodes `REQUIRED_KEYS` and `CROSS_ROLE_MIRROR_KEYS`
+  with no auto-discovery of new mirrored variables. Three existing cross-role
+  overlaps are outside both dictionaries, demonstrating the gap.
+- **Item 58** (P4): `Missing /var/run/utmp audit watch (CIS 4.1.3.6)` — the
+  auditd rules template watches lastlog, faillock, wtmp, and btmp but omits
+  utmp. Practical gap limited to real-time utmp modification detection;
+  redundant detection exists via wtmp and systemd/journald.
+- **Item 59** (P4): `ShellCheck CI step omits git-template hook files` — CI
+  shellcheck covers `scripts/*.sh` and `.githooks/` but omits 4 git-template
+  hooks in `roles/dotfiles/files/`. The local Makefile shellcheck target does
+  cover them, creating a CI-vs-local divergence.
+- **Item 60** (P4): `Molecule prepare systemd wait loops silently pass on
+  exhaustion` — 4 systemd wait loops across fedora/rocky/debian prepare files
+  use `failed_when: false` with no post-loop assertion. If systemd never
+  stabilizes, prepare completes and converge fails with cryptic errors.
+- **Item 61** (P4): `Fedora prepare raw package install failure silently
+  swallowed` — `failed_when: false` on the noscripts `raw` install means a
+  failed package install is swallowed. The converge fallback then attempts a
+  normal `dnf install` triggering the exact daemon-reload crash that prepare
+  was designed to prevent.
+- **Item 62** (P4): `Smoke test only verifies registry.redhat.io auth` —
+  the only registry auth check in smoke-test.sh verifies registry.redhat.io,
+  gated on work profile and oc presence. No quay.io or vault-provisioned
+  token checks. Impact limited since quay.io is public and vault tokens
+  default to empty.
+
+**Rationale**: Eight findings across six dimensions. The molecule path-filter
+gap (item 55) and stale VM cramfs assertion (item 56) are medium-severity CI
+correctness issues — one allows untested composite action changes to merge,
+the other causes `make test-vm` to fail on a stale assertion. The
+check-vars-sync auto-discovery gap (item 57) is a maintenance/process
+concern where new mirrored variables can escape sync checking. The remaining
+five low-severity findings cover an auditd template completeness gap (item
+58), a CI-vs-local shellcheck divergence (item 59), two molecule prepare
+robustness issues where `failed_when: false` masks container initialization
+failures (items 60-61), and a smoke-test registry auth coverage gap (item
+62).
