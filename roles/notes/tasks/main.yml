@@ -35,7 +35,6 @@
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
       ansible.builtin.command:
         cmd: git lfs install --skip-repo
-      changed_when: true
       failed_when: false
       when:
         - notes_lfs_configured.rc != 0
