@@ -35,10 +35,21 @@
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
       ansible.builtin.command:
         cmd: git lfs install --skip-repo
+      register: notes_lfs_install_result
       failed_when: false
+      changed_when: notes_lfs_install_result.rc == 0
       when:
         - notes_lfs_configured.rc != 0
         - notes_lfs_check.rc == 0
+
+    - name: Warn if git-lfs filter registration failed
+      ansible.builtin.debug:
+        msg: >-
+          git lfs install --skip-repo exited {{ notes_lfs_install_result.rc }} —
+          LFS smudge/clean filters may not be registered. Check git-lfs installation.
+      when:
+        - notes_lfs_install_result is not skipped
+        - notes_lfs_install_result.rc != 0
 
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists

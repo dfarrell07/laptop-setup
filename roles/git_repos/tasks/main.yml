@@ -129,10 +129,21 @@
 - name: Register git-lfs smudge/clean filter drivers
   ansible.builtin.command:
     cmd: git lfs install --skip-repo
+  register: git_repos_lfs_install_result
   failed_when: false
+  changed_when: git_repos_lfs_install_result.rc == 0
   when:
     - git_repos_lfs_check.rc == 0
     - git_repos_lfs_configured.rc != 0
+
+- name: Warn if git-lfs filter registration failed
+  ansible.builtin.debug:
+    msg: >-
+      git lfs install --skip-repo exited {{ git_repos_lfs_install_result.rc }} —
+      LFS smudge/clean filters may not be registered. Check git-lfs installation.
+  when:
+    - git_repos_lfs_install_result is not skipped
+    - git_repos_lfs_install_result.rc != 0
 
 - name: Clone repositories  # noqa: latest[git]
   ansible.builtin.git:

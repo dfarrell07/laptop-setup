@@ -132,7 +132,7 @@
 
     - name: Read opm OCP version marker
       ansible.builtin.slurp:
-        src: /usr/local/bin/.opm-ocp-version
+        src: /var/lib/ansible-packages/opm-ocp-version
       register: packages_opm_marker
       failed_when: false
 
@@ -206,10 +206,18 @@
           become: true
           tags: [become]
 
+        - name: Create ansible-packages state directory
+          ansible.builtin.file:
+            path: /var/lib/ansible-packages
+            state: directory
+            mode: "0755"
+          become: true
+          tags: [become]
+
         - name: Write OCP version marker for opm (enables idempotent version-drift detection)
           ansible.builtin.copy:
             content: "{{ packages_oc_version }}"
-            dest: /usr/local/bin/.opm-ocp-version
+            dest: /var/lib/ansible-packages/opm-ocp-version
             mode: "0644"
           become: true
           tags: [become]
