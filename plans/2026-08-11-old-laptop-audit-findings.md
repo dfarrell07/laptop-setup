@@ -542,3 +542,20 @@ from /etc/opt/chrome/policies/managed/.
 Recurring Chrome crashes: 3 instances over 3 months (SIGBUS/SIGILL).
 Confirmed not hardware-related -- no MCE, EDAC, NVMe, thermal, or
 GPU/DRM errors anywhere in the journal.
+
+## Learning Loop 5
+
+### data-loss-risk (update 4)
+
+old_fbc has 7 unpushed commits on main (previously noted only as dirty,
+not as having unpushed main-branch commits). submariner-release-management
+grew from 6 to 9 unpushed on main. Stash count increased from 78 across
+13 repos to 92 across 17 repos. New metric: 1,849 local branches across
+all 131 repos have no upstream tracking branch at all -- distinct from
+the 500+ unpushed-but-tracked commits previously documented.
+
+### python (update 3)
+
+ansible-core 2.18 (system RPM) is shadowed by pip --user ansible-core
+2.21. Running `ansible-playbook` uses the 2.21 version, which may have
+behavior differences from the RPM-packaged 2.18 the system expects.
