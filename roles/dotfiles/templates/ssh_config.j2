@@ -9,7 +9,7 @@ Host *
     ForwardX11 no
     Ciphers {{ ssh_ciphers }}
     MACs {{ ssh_macs }}
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto

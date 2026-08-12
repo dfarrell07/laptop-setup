@@ -921,7 +921,7 @@ q:LogLevel:VERBOSE
 q:HostKeyAlgorithms:ssh-ed25519
 q:PubkeyAuthentication:yes
 P:AllowAgentForwarding:no
-P:AllowTcpForwarding:(no|local|remote)
+P:AllowTcpForwarding:(no|local|remote|yes|all)
 q:PermitUserEnvironment:no
 P:MaxSessions:[1-9][0-9]*
 q:MaxStartups:10:30:60
@@ -1821,11 +1821,10 @@ fi
 # These files ARE deployed by the system role in Fedora/Rocky/Debian container CI;
 # [[ -f ]] guards make them no-ops on macOS and container scenarios without the system role.
 
-# kernel module blacklist — always-present entries (cramfs, n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
-# (usb_storage is conditional on system_disable_usb_storage and checked in the full gate above)
+# kernel module blacklist — always-present entries (n_hdlc, dccp/rds/tipc CIS 3.4.x); vivid/usb_storage skipped
+# (cramfs removed from template; usb_storage conditional on system_disable_usb_storage)
 if [[ -f /etc/modprobe.d/hardening.conf ]]; then
-  if grep -q '^install cramfs /bin/false' /etc/modprobe.d/hardening.conf && \
-     grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
+  if grep -q '^blacklist n_hdlc' /etc/modprobe.d/hardening.conf && \
      grep -q '^install dccp /bin/false' /etc/modprobe.d/hardening.conf && \
      grep -q '^install rds /bin/false' /etc/modprobe.d/hardening.conf && \
      grep -q '^install tipc /bin/false' /etc/modprobe.d/hardening.conf; then

@@ -5,6 +5,10 @@
   become: false
 
   pre_tasks:
+    - name: Load group_vars for verify assertions
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../group_vars/all/vars.yml"
+
     # Load variable overrides matching vm/converge.yml so shared verify checks
     # evaluate against the correct deployed values (not role/config defaults).
     - name: Apply VM-specific variable overrides for verify
