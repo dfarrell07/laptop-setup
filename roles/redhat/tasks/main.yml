@@ -123,18 +123,17 @@
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
 # CIS 5.6 requires non-login system accounts use /sbin/nologin or be locked.
 - name: Check if splunk user exists
-  ansible.builtin.command:
-    cmd: getent passwd {{ redhat_splunk_service_account }}
-  register: redhat_splunk_user_check
-  changed_when: false
-  failed_when: false
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ redhat_splunk_service_account }}"
+    fail_key: false
   check_mode: false  # read-only probe — must run in check mode
   when: is_rhel or csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
     - is_rhel or csb_detected
-    - redhat_splunk_user_check.rc == 0
+    - ansible_facts.getent_passwd is defined and redhat_splunk_service_account in ansible_facts.getent_passwd
   block:
     - name: Set splunk account shell to nologin
       ansible.builtin.user:
