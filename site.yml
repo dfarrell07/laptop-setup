@@ -123,6 +123,25 @@
         vault_ssh_signing_key_pub is defined
       tags: [always]
 
+    # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
+    # hardening before Play 2, so users who skip 'make preflight' get no other
+    # warning. preflight.sh alone is not sufficient. This block is protected
+    # from automated modification in the audit workflow script (GITIGNORED).
+    - name: Assert identity vars are not CHANGE_ME placeholder values
+      ansible.builtin.assert:
+        that:
+          - dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_user_email_work | default('CHANGE_ME') != 'CHANGE_ME'
+          - dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME'
+        fail_msg: >-
+          Set dotfiles_user_name, dotfiles_github_user, dotfiles_user_email_work,
+          and dotfiles_user_email_personal in config.yml before running make all.
+          These are currently 'CHANGE_ME' placeholder values — git commits will be
+          attributed to 'CHANGE_ME' and email notifications will go to wrong addresses.
+      when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+      tags: [always]
+
   roles:
     - role: common
       # always tag is intentional: common creates prerequisite dirs; '--skip-tags common'
