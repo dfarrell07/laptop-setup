@@ -1605,7 +1605,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   fi  # end GDM check
 
   # Unexpected listening ports (non-loopback)
-  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vF ":${_ssh_port:-722}" | tail -n +2 || true)
+  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-722}([^0-9]|$)" | tail -n +2 || true)
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 

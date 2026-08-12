@@ -19,7 +19,7 @@ ntsdumpdir /var/lib/chrony
 driftfile /var/lib/chrony/drift
 makestep {{ system_chrony_makestep }}
 rtcsync
-leapseclist /usr/share/zoneinfo/leap-seconds.list
+leapseclist {{ system_chrony_leapseclist }}
 leapsecmode {{ system_chrony_leapsecmode }}
 minsources {{ system_chrony_minsources }}
 logdir /var/log/chrony

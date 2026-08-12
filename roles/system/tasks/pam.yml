@@ -71,6 +71,7 @@
   when:
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not system_is_container
 
 - name: Enable authselect with-faillock feature
   ansible.builtin.command:
@@ -150,6 +151,7 @@
   when:
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not system_is_container
 
 - name: Enable authselect with-pwhistory feature
   ansible.builtin.command:

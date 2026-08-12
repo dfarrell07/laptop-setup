@@ -160,6 +160,7 @@
   ansible.builtin.set_fact:
     git_repos_available_dests: >-
       {{ git_repos_clone_results.results
+         | rejectattr('skipped', 'equalto', true)
          | selectattr('failed', 'equalto', false)
          | map(attribute='item.dest') | list }}
 

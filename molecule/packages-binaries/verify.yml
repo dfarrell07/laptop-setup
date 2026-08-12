@@ -365,7 +365,7 @@
     - name: Assert sops version matches packages_sops_version
       ansible.builtin.assert:
         that: packages_sops_version in (verify_sops_ver.stdout + verify_sops_ver.stderr)
-        fail_msg: "sops version mismatch — expected {{ packages_sops_version }}"
+        fail_msg: "sops version mismatch — expected {{ packages_sops_version }}, got: {{ verify_sops_ver.stdout + verify_sops_ver.stderr }}"
 
     - name: Check cosign version output
       ansible.builtin.command:
@@ -477,7 +477,9 @@
     - name: Assert golangci-lint version matches packages_golangci_lint_version
       ansible.builtin.assert:
         that: packages_golangci_lint_version in verify_golangci_lint_ver.stdout
-        fail_msg: "golangci-lint version mismatch — expected {{ packages_golangci_lint_version }}"
+        fail_msg: >-
+          golangci-lint version mismatch — expected {{ packages_golangci_lint_version }},
+          got: {{ verify_golangci_lint_ver.stdout }}
       when: verify_golangci_lint.stat.exists
 
     - name: Check gofumpt version output
@@ -504,7 +506,9 @@
     - name: Assert govulncheck version matches packages_govulncheck_version
       ansible.builtin.assert:
         that: packages_govulncheck_version in (verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr)
-        fail_msg: "govulncheck version mismatch — expected {{ packages_govulncheck_version }}"
+        fail_msg: >-
+          govulncheck version mismatch — expected {{ packages_govulncheck_version }},
+          got: {{ verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr }}
       when: verify_govulncheck.stat.exists
 
     - name: Check gci version output

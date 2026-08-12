@@ -131,10 +131,10 @@
 -w /boot/grub2/grub.cfg -p wa -k kernel-params
 
 # Privilege escalation syscalls (CIS benchmark)
--a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -k privilege-escalation
--a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -k privilege-escalation
--a always,exit -F arch=b64 -S setgid -S setregid -S setresgid -k privilege-escalation
--a always,exit -F arch=b32 -S setgid -S setregid -S setresgid -k privilege-escalation
+-a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b64 -S setgid -S setregid -S setresgid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b32 -S setgid -S setregid -S setresgid -F auid>=1000 -F auid!=-1 -k privilege-escalation
 
 # Kernel module loading (sign of rootkit installation or unauthorized driver)
 -a always,exit -F arch=b64 -S init_module -S finit_module -k kernel-module-load

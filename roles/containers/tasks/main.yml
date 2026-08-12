@@ -281,7 +281,7 @@
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - containers_prune_enabled | bool
     - containers_prune_service.changed or containers_prune_timer.changed
-  failed_when: false
+  failed_when: false  # intentional: enable task below uses ignore_errors, Warn fires on failure
 
 - name: Enable and start podman-prune.timer
   ansible.builtin.systemd:
@@ -321,7 +321,7 @@
     - not (containers_prune_enabled | bool)
     - is_linux
     - not (system_is_container)  # scope:user systemd stop crashes Podman container PID 1
-  failed_when: false
+  failed_when: false  # intentional: unit may not exist on first run (prune was never enabled)
 
 - name: Remove podman-prune systemd unit files (when disabled)
   ansible.builtin.file:
@@ -345,7 +345,7 @@
     - is_linux
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - _prune_unit_removal.changed
-  failed_when: false
+  failed_when: false  # intentional: non-critical; unit files are already gone — stale systemd state resolves at next login
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
 - name: Deploy containers environment.d config (KIND and Podman socket)

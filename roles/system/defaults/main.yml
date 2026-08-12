@@ -396,6 +396,7 @@ system_firewalld_running: false  # runtime set_fact in firewall.yml overrides; f
 system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync fails on NTS-blocking networks)
 system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
+system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
 
 # Security hardening defaults — authoritative values live in group_vars/all/vars.yml
 # (which overrides these at precedence 5 when running via the project inventory).

@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
 [Unit]
-Description=Weekly podman storage cleanup
+Description={{ containers_prune_schedule | capitalize }} podman storage cleanup
 
 [Timer]
 OnCalendar={{ containers_prune_schedule }}

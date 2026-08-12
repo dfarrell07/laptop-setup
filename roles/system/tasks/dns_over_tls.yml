@@ -38,6 +38,17 @@
     - not system_is_container
   notify: Restart systemd-resolved
 
+- name: Warn that DoT and catch-all routing domain are absent on CSB Fedora hybrid
+  ansible.builtin.debug:
+    msg: >-
+      CSB Fedora hybrid: 99-dot.conf removed. DNS-over-TLS and Domains=~. catch-all
+      are not applied. Tailscale MagicDNS uses per-link routing domains and works
+      correctly, but other DNS-over-TLS or catch-all DNS expectations are unmet.
+  when:
+    - csb_detected
+    - not csb_rhel
+    - not system_is_container
+
 # yamllint disable rule:line-length
 - name: Deploy DNS-over-TLS resolved config
   ansible.builtin.copy:
@@ -56,6 +67,17 @@
     - not system_is_container  # resolved restart crashes privileged Podman containers
   notify: Restart systemd-resolved
 # yamllint enable rule:line-length
+
+- name: Warn on strict DoT mode
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_dot_mode=yes (strict) — DNS will fail on networks blocking
+      port 853 (captive portals, hotel/conference Wi-Fi). FallbackDNS also requires
+      port 853 in strict mode.
+  when:
+    - system_dot_mode == 'yes'
+    - not csb_detected
+    - not system_is_container
 
 # --- Verify resolv.conf symlink for split DNS ---
 - name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)

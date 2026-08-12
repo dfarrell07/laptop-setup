@@ -33,6 +33,7 @@ dotfiles_homebrew_prefix: /opt/homebrew
 
 dotfiles_laptop_tailscale_host: ''  # set in config.yml; e.g. 'laptop.tail'
 dotfiles_mac_tailscale_host: ''     # set in config.yml; e.g. 'mac-desktop.tail'
+dotfiles_github_user: 'CHANGE_ME'  # override in config.yml
 # GitHub repo slug for cq() alias; override in config.yml if queue repo name differs
 dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 
@@ -65,3 +66,6 @@ ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml
 notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/defaults; used in zshrc.j2 notes alias
+dotfiles_user_name: 'CHANGE_ME'  # override in config.yml
+dotfiles_user_email_work: 'CHANGE_ME@work.invalid'
+dotfiles_user_email_personal: 'CHANGE_ME@personal.invalid'

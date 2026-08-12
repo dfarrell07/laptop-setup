@@ -45,7 +45,7 @@
   ansible.builtin.command:
     cmd: grep -q 'LIBVA_DRIVER_NAME=' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
-  when: desktop_sway_libva_driver | length > 0
+  when: desktop_sway_libva_driver | default('') | length > 0
 
 - name: Verify sway config sets cursor theme for XWayland consistency
   ansible.builtin.command:

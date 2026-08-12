@@ -261,7 +261,7 @@
     cmd: "podman start {{ distrobox_container_name }}"
   register: distrobox_start_result
   changed_when: distrobox_start_result.rc == 0
-  failed_when: false
+  failed_when: false  # intentional: Warn task below checks rc and surfaces failure; do NOT use ignore_errors
   when:
     - distrobox_tool != 'none'
     - (distrobox_running.stdout | default('') | trim | lower) != 'true'

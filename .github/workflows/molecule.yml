@@ -2,8 +2,6 @@
 name: Molecule
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -77,4 +75,6 @@ jobs:
         uses: ./.github/actions/molecule-setup
 
       - name: Run Molecule ${{ matrix.name }} scenario
-        run: molecule test -s ${{ matrix.scenario }}
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: molecule test -s "$SCENARIO"

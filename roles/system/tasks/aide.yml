@@ -223,9 +223,8 @@
         msg: >-
           AIDE initialization failed (disk exhaustion, OOM, or signal interruption).
           Error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) | default('unknown') | truncate(400) }}.
-          To recover: free disk space, remove any partial /var/lib/aide/aide.db.new.gz,
-          then run 'sudo aide --init && sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'.
-          Re-run this playbook once space is available to complete AIDE setup.
+          To recover: free disk space, then re-run this playbook — it will detect the missing database
+          and reinitialize automatically (this task already removed the partial aide.db.new.gz).
 
     - name: Remove partial aide.db.new.gz after failed init
       ansible.builtin.file:
