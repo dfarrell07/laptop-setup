@@ -41,7 +41,7 @@
     path: /etc/zshrc
     line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
-    create: true
+    create: true  # system role runs before packages; zsh may not be installed yet on first provision
     mode: "0644"
   when:
     - not is_apt
