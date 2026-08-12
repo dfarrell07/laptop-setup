@@ -87,4 +87,6 @@
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
     state: started
     enabled: true
-  when: system_chrony_service_enabled | bool
+  when:
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
