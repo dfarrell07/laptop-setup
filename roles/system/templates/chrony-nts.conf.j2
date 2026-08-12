@@ -20,6 +20,6 @@ driftfile /var/lib/chrony/drift
 makestep {{ system_chrony_makestep }}
 rtcsync
 leapseclist /usr/share/zoneinfo/leap-seconds.list
-leapsecmode slew
+leapsecmode {{ system_chrony_leapsecmode }}
 minsources {{ system_chrony_minsources }}
 logdir /var/log/chrony
