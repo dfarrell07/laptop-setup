@@ -112,6 +112,7 @@ claude() {
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   _claude_check_base_url || return 1
+  [[ -f ~/.config/claude/work-env ]] || { echo "ERROR: ~/.config/claude/work-env missing — run: make claude" >&2; return 1; }
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
   tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"

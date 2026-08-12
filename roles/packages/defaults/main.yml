@@ -39,9 +39,13 @@ packages_languages_work:
   - gcc           # needed for Go CGO builds
 
 packages_security:
+  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
+
+# YubiKey packages — installed only when packages_yubikey_enabled: true (default).
+# Set packages_yubikey_enabled: false in config.yml on machines without a YubiKey.
+packages_security_yubikey:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
-  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.

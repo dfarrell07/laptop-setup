@@ -17,7 +17,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1. Usage: $0 [--json] [--profile work|personal]" >&2; exit 2 ;;
   esac
 done
-RED='\033[0;31m' GRN='\033[0;32m' YLW='\033[0;33m' NC='\033[0m'
+if [[ -t 1 ]] && ! $JSON; then
+  RED='\033[0;31m' GRN='\033[0;32m' YLW='\033[0;33m' NC='\033[0m'
+else
+  RED='' GRN='' YLW='' NC=''
+fi
 RESULTS=() FAILURES=0
 record() {
   local name="$1" status="$2" detail="${3:-}"
@@ -218,7 +222,7 @@ fi
 if [[ -f "$CONFIG_FILE" ]]; then
   for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal system_timezone; do
     if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
-      record "identity_${_ivar}" "warn" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
+      record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
     elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
     else

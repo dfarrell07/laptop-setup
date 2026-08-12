@@ -515,11 +515,11 @@
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
     - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}
     - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
-    - net.bridge.bridge-nf-call-iptables
-    - net.ipv6.conf.all.use_tempaddr
-    - net.ipv4.conf.all.rp_filter
-    - net.ipv4.conf.default.rp_filter
-    - vm.max_map_count
+    - net.bridge.bridge-nf-call-iptables = 1
+    - net.ipv6.conf.all.use_tempaddr = 2
+    - net.ipv4.conf.all.rp_filter = 2
+    - net.ipv4.conf.default.rp_filter = 2
+    - vm.max_map_count = 1048576
   changed_when: false
   when:
     - ansible_system == 'Linux'

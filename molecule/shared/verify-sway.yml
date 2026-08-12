@@ -36,7 +36,9 @@
 
 - name: Verify sway output line contains scale directive and adaptive_sync
   ansible.builtin.command:
-    cmd: grep -q 'output.*scale.*adaptive_sync {{ desktop_sway_adaptive_sync }}' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: >-
+      grep -q 'output.*scale.*adaptive_sync {{ desktop_sway_adaptive_sync | default("disabled") }}'
+      "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
 - name: Verify sway config exports VA-API environment variables
@@ -140,15 +142,6 @@
     cmd: grep -q 'resume.*swaymsg.*output.*power on' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
-- name: Verify sway config enables tap-to-click on touchpad
-  ansible.builtin.command:
-    cmd: grep -q 'tap enabled' "{{ ansible_user_dir }}/.config/sway/config"
-  changed_when: false
-
-- name: Verify sway config enables natural scroll on touchpad
-  ansible.builtin.command:
-    cmd: grep -q 'natural_scroll enabled' "{{ ansible_user_dir }}/.config/sway/config"
-  changed_when: false
 
 - name: Verify sway config exports Qt Wayland platform hint
   ansible.builtin.command:

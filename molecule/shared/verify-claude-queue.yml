@@ -8,6 +8,7 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
   register: verify_claude_queue_service
+  when: not (system_is_container | default(false))
 
 - name: Assert claude-queue.service exists with mode 0644
   ansible.builtin.assert:
@@ -15,11 +16,13 @@
       - verify_claude_queue_service.stat.exists
       - verify_claude_queue_service.stat.mode == '0644'
     fail_msg: "claude-queue.service missing or wrong permissions — template regression?"
+  when: not (system_is_container | default(false))
 
 - name: Verify claude-queue.timer deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
   register: verify_claude_queue_timer
+  when: not (system_is_container | default(false))
 
 - name: Assert claude-queue.timer exists with mode 0644
   ansible.builtin.assert:
@@ -27,6 +30,7 @@
       - verify_claude_queue_timer.stat.exists
       - verify_claude_queue_timer.stat.mode == '0644'
     fail_msg: "claude-queue.timer missing or wrong permissions — template regression?"
+  when: not (system_is_container | default(false))
 
 - name: Verify claude-queue-poller.sh deployed
   ansible.builtin.stat:

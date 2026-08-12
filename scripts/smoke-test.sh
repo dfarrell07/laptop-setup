@@ -1160,7 +1160,9 @@ EOF
 
   # Chrony NTS: first verify config, then verify actual NTS cookies established
   # (port 4460 is required for NTS-KE; may be blocked on CSB corporate networks)
-  if grep -qE '^(pool|server|peer).*\bnts\b' /etc/chrony.conf 2>/dev/null; then
+  _chrony_conf="/etc/chrony.conf"
+  [[ -f /etc/chrony/chrony.conf ]] && _chrony_conf="/etc/chrony/chrony.conf"
+  if grep -qE '^(pool|server|peer).*\bnts\b' "$_chrony_conf" 2>/dev/null; then
     if chronyc -c authdata 2>/dev/null | awk -F, '$5 > 0 {found=1} END {exit !found}'; then
       record "chrony-nts" "PASS"
     else record "chrony-nts" "WARN" "NTS configured but no authenticated sources (port 4460 blocked? needs boot?)"; fi
