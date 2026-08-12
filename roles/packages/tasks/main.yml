@@ -27,6 +27,7 @@
   tags: [become]
   when:
     - is_dnf
+    - not system_is_container  # bpfman.socket enable crashes container PID 1
     - profile == 'work'  # bpfman is in packages_support_work (work-profile only)
   failed_when: false
 
