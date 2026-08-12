@@ -59,7 +59,7 @@ desktop_sway_touchpad_middle_emulation: ''  # middle-click emulation; empty = om
 
 # Appearance
 desktop_wm_border_width: "{{ [1, (desktop_sway_hidpi_scale | float) | round | int] | max }}"
-desktop_wm_floating_border_width: "{{ [1, (desktop_sway_hidpi_scale | float) | round | int] | max }}"
+desktop_wm_floating_border_width: "{{ desktop_wm_border_width }}"
 desktop_wm_hide_edge_borders: ''  # valid values: both, vertical, horizontal, smart, smart_no_gaps; empty = omit (sway/i3 default: none)
 desktop_sway_gaps_inner: 0
 desktop_sway_gaps_outer: 0
@@ -157,9 +157,11 @@ desktop_sway_apt_packages:
   - xdg-desktop-portal-wlr
   - xdg-desktop-portal-gtk
   - wireplumber
+  - wdisplays
   - pavucontrol
   - playerctl
   - wl-clipboard  # wl-copy/wl-paste — essential for clipboard in Wayland terminal workflows
+  - cliphist      # clipboard history manager for Wayland (clipboard dies with source app without it)
   - pulseaudio-utils
 
 desktop_deploy_chrome_policies: false

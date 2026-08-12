@@ -32,12 +32,8 @@
       {{
         git_repos_list
         | selectattr('category', 'in', git_repos_active_categories)
-        | selectattr('enabled', 'undefined') | list
-        +
-        git_repos_list
-        | selectattr('category', 'in', git_repos_active_categories)
-        | selectattr('enabled', 'defined')
-        | selectattr('enabled', 'equalto', true) | list
+        | rejectattr('enabled', 'equalto', false)
+        | list
       }}
 
 - name: Fail when explicit category filter matches no enabled repos
@@ -189,7 +185,9 @@
     - git_repos_pull | bool
     - item.dest in git_repos_available_dests
   register: git_repos_pull_results
-  changed_when: "git_repos_pull_results.rc == 0 and 'Already up to date' not in git_repos_pull_results.stdout"
+  changed_when: >-
+    git_repos_pull_results.rc == 0 and
+    'Already up to date' not in git_repos_pull_results.stdout
   failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
   timeout: 120
 
