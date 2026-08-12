@@ -14,6 +14,20 @@
     - name: Apply container-safe system role overrides
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Install openssh-server so sshd hardening block is exercised in container CI
+      ansible.builtin.dnf:
+        name: openssh-server
+        state: present
+      register: _openssh_install
+      retries: 3
+      delay: 10
+      until: _openssh_install is succeeded
+      when: "'openssh-server' not in ansible_facts.packages"
+
   roles:
     - role: system
 
@@ -87,13 +101,11 @@
 
   post_tasks:
     # desktop_environment is set to 'unknown' in the pre_tasks set_fact (p19) so the role
-    # sees it correctly. The vars: here override package lists only; desktop_environment
-    # is redundant but kept for clarity.
+    # sees it correctly. The vars: here override package lists only.
     - name: Converge desktop role (unknown — no WM in Rocky CI)
       ansible.builtin.include_role:
         name: desktop
       vars:
-        desktop_environment: 'unknown'
         desktop_dnf_packages: []
         desktop_sway_packages: []
         desktop_i3_packages: []
