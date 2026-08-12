@@ -4,9 +4,9 @@ Compiled from the ThinkPad X1 Carbon 7th Gen (Fedora 42, i3, Intel) by
 ~300 Opus agents across 20+ workflow passes. This document covers:
 - **wip3 code review** — 6 findings from auditing the 31 new commits
 - **Messages from the Old Laptop** — what the automation cannot discover
-- **Real-time monitoring** — 9 learning loops captured the K8s rebase crisis
+- **Real-time monitoring** — 6 learning loops captured the K8s rebase crisis
 
-A companion **2,401-line plan on the wip1 branch** (17 commits) contains:
+A companion **2,401-line plan on the wip1 branch** (16 commits) contains:
 71 original findings with fix diffs, verification pass, reproduction
 results, Letter from the Old Laptop (shell history, editor preferences,
 workflow profile), and a ready-to-use `plans/p16v-config.yml` template.
@@ -71,21 +71,18 @@ system role pattern could mask real failures.
 
 Action: add `- not system_is_container` to the `when` conditions.
 
-**N5. opm stable path uses stale SHA256 when oc download block is skipped** (medium)
+**N5. ~~opm stable path uses stale SHA256 when oc download block is skipped~~ INVALID** (was medium, retracted)
 
-In `roles/packages/tasks/install_oc_opm.yml`, when `packages_oc_version == 'stable'`
-and oc is already at the correct version, the outer oc download block (lines 15-19)
-is skipped entirely. `packages_oc_sha256sums` is never registered because the
-`Fetch OpenShift client sha256sum.txt` task only runs inside that block. The opm
-block's SHA256 extraction tasks (lines 146-159) guard with
-`packages_oc_sha256sums is defined`, so they skip silently. The download then uses
-the pinned `packages_opm_sha256` from defaults/main.yml. If the stable pointer has
-advanced, the SHA256 no longer matches and the download fails. Fix: fetch
-sha256sum.txt independently in the opm block when `packages_oc_version == 'stable'`
-and `packages_oc_sha256sums` is undefined.
+This finding is incorrect. The outer oc download block's `when` condition
+(install_oc_opm.yml lines 16-19) includes `packages_oc_version == 'stable'` as an
+OR clause, so the block always runs when the version is `stable` regardless of
+whether oc is already installed at the correct version. The `Fetch OpenShift client
+sha256sum.txt` task (line 21-31) also has `when: packages_oc_version == 'stable'`,
+so it executes and registers `packages_oc_sha256sums`. The opm block (lines 146-153)
+can therefore always access the fresh checksums. The described failure scenario is
+impossible.
 
-Action: add an independent sha256sum.txt fetch in the opm download block, guarded
-by `packages_oc_version == 'stable' and packages_oc_sha256sums is not defined`.
+Action: none required.
 
 **N6. openssl dropped from `packages_brew` without macOS fallback verification** (low)
 
@@ -103,7 +100,7 @@ restore Linux; macOS needs `openssl` re-added to `packages_brew` or the
 Action: either re-add openssl to `packages_brew` or document that LibreSSL is
 acceptable; fix original finding 6 for Linux.
 
-## Messages from the Old Laptop
+## Messages from the Old Laptop (Learning Loop 1)
 
 Direct communications to the P16v provisioning agent. Each addresses something
 the automation does not know or cannot discover on its own.
@@ -112,13 +109,14 @@ the automation does not know or cannot discover on its own.
 
 DOCKER WORKFLOW RISK CONFIRMED but on a DIFFERENT MACHINE. This is a ThinkPad
 X1 Carbon 7th Gen, not the P16v. Docker CE 29.5.3 is installed with
-docker-ce-stable repo, docker.socket is active, and three
+docker-ce-stable repo, docker.socket is active, and five
 submariner-operator CVE fix images exist (fix-0.24-cves-2026-08-11, -v2,
--2026-08-12). No containers are currently running (all exited 3+ hours ago).
+-2026-08-12, -2026-08-12-v2, -2026-08-12-v3). No containers exist (all
+previously exited containers have since been removed).
 The critical gap: no config.yml exists on this machine, and
 group_vars/all/vars.yml has install_docker: false (line 59). The containers
-role at roles/containers/tasks/main.yml lines 204-218 would mask
-docker.socket, stop docker.service when install_docker is false. FOR THE
+role at roles/containers/tasks/main.yml lines 204-218 would stop, disable,
+and mask docker.socket when install_docker is false. FOR THE
 P16V: if this user also does Docker-based CVE work there, ensure config.yml
 includes `install_docker: true` and `repo_docker_ce: true` before running
 make all. The automation handles this correctly when configured -- the toggle
@@ -133,7 +131,7 @@ references anywhere in the codebase. The automation handles: Mullvad RPM repo
 setup (repos_dnf role, Fedora-only, skipped on CSB), mullvad-vpn package
 install, mullvad-daemon service start+enable, and firewall WireGuard
 interface allowance. POST-PROVISION ACTION REQUIRED: user must run
-`mullvad account set ACCOUNT_NUMBER` to authenticate (interactive step, like
+`mullvad account login ACCOUNT_NUMBER` to authenticate (interactive step, like
 tailscale up). The user also needs to cancel their ExpressVPN subscription
 separately -- that is a billing action outside the scope of automation. No
 code changes needed; install_vpn defaults to true and repo_mullvad defaults
@@ -158,9 +156,9 @@ DISK MIGRATION GUIDANCE -- What to copy from the old laptop:
 - ~/drone_25e29epelicantodavis/ (1.3 GB) -- drone footage, likely irreplaceable
 
 **DO NOT COPY (all auto-rebuild or reclone):**
-- ~/ovnk/ (77 GB) -- automation clones to ~/src/
-- ~/.cache/ (60 GB) -- go-build 46G, chrome 4.2G, all rebuildable
-- ~/go/ (20 GB) -- src/pkg/bin all reinstall via go install
+- ~/ovnk/ (92 GB) -- automation clones to ~/src/
+- ~/.cache/ (19 GB) -- go-build, chrome, all rebuildable
+- ~/go/ (22 GB) -- src/pkg/bin all reinstall via go install
 - ~/.claude/jobs/ (6.8 GB) -- ephemeral session artifacts
 - ~/advisory-database/ (4.5 GB) -- git reclone
 - ~/.local/share/containers/ (3.3 GB) -- podman storage, rebuild
@@ -170,7 +168,7 @@ DISK MIGRATION GUIDANCE -- What to copy from the old laptop:
 - Docker/Podman images (4+ GB) -- pull/build on demand
 
 **EMERGENCY SPACE RECOVERY** (if old laptop needs room now):
-`rm -rf ~/.cache/go-build ~/tmp.* ~/advisory-database` frees ~50 GB
+`rm -rf ~/.cache/go-build ~/tmp.* ~/advisory-database` frees ~12 GB
 immediately with zero risk.
 
 ### gemini-cli
@@ -239,9 +237,9 @@ NPM CONFIG STATUS: The old laptop has a manual ~/.npmrc with
 prefix=~/.npm-global and fetch-retry timeout bumps. The automation does NOT
 manage this file at all -- no template, no task, no variable. The
 ~/.npm-global/bin directory is empty (no real packages installed), so there
-is nothing to migrate. On the P16v, npm (installed via dnf nodejs package by the
-packages role) will use its default prefix (/home/linuxbrew/.linuxbrew)
-unless you manually create ~/.npmrc. The project-level .npmrc in
+is nothing to migrate. On the P16v, npm (provided by Homebrew, not managed by the
+packages role) will use its Homebrew prefix unless overridden by ~/.npmrc
+(the old laptop already has ~/.npmrc with prefix=~/.npm-global). The project-level .npmrc in
 laptop-setup/ has ignore-scripts=true for security, but the user's global
 ~/.npmrc does NOT have this setting. RECOMMENDATION: Since npm-global is
 empty and unused, you can skip recreating it on the P16v. If the user later
@@ -261,8 +259,8 @@ AWS config requires two manual steps on the P16v:
    region=us-east-2, output=text) and ~/.aws/credentials (with freshly
    rotated keys from AWS IAM).
 
-The old laptop's keys (AKIA...47EB, created 2022-06-15) are over 4 years old
-and should be rotated regardless. No Ansible role deploys these files; the
+The old laptop's AWS access keys are 4+ years old and should be rotated
+regardless. No Ansible role deploys these files; the
 automation only audits reads of ~/.aws/ for claude-sensitive-read detection
 and excludes ~/.aws/** from claude's file access.
 
@@ -291,17 +289,17 @@ default.config.yml (config override documentation).
 ### Verified Medium+ Findings
 
 1. **docker-workflow-conflict (medium)**: Running `make all` without
-   `install_docker: true` in config.yml will mask docker.socket and stop
-   docker.service (roles/containers/tasks/main.yml lines 204-218). Any
+   `install_docker: true` in config.yml will stop, disable, and mask
+   docker.socket (roles/containers/tasks/main.yml lines 204-218). Any
    active Docker workflow on the P16v would be killed mid-run. Set the
    toggle before provisioning if Docker is needed.
 2. **host-drift / Docker CE (medium)**: The old laptop has Docker CE active
    with no config.yml and install_docker: false in vars.yml. The same
    default applies to the P16v. This is the same root cause as finding 1
-   but confirms the pattern is real (it already bit this machine).
+   (corroborating evidence that the risk materialized on this machine);
+   remediation is identical (set `install_docker: true` in config.yml).
 3. **aws-config / stale credentials (medium)**: AWS access keys are 4+ years
-   old (created 2022-06-15). AWS best practice is 90-day rotation. Rotate
-   before deploying to P16v.
+   old. AWS best practice is 90-day rotation. Rotate before deploying to P16v.
 4. **openshift-kubeconfig / registry auth gap (medium)**: Registry auth for
    registry.redhat.io, quay.io, and brew.registry.redhat.io must be
    regenerated manually post-provision. The smoke-test flags
@@ -315,7 +313,9 @@ default.config.yml (config override documentation).
 
 ### data-loss-risk
 
-88 unpushed commits across 14 repos, 11 dirty working trees. Four critical
+88 unpushed commits across 14 repos (initial limited scan; a broader
+171-repo scan later confirmed 98 unpushed commits across 14 repos),
+11 dirty working trees. Four critical
 repos have 12-16 unpushed CVE-fix commits each: submariner-operator,
 ci-tools, openshift/api, lighthouse (branches: fix-0.24-cves-*,
 fix-main-cves-*, fix-master-cves-*). konflux/submariner-release-management
@@ -470,6 +470,11 @@ and node -- not directly installed.
 
 ## Learning Loop 2 (continued)
 
+> Note: This section contains late-arriving Loop 2 findings that were split
+> into a separate H2 due to processing order. The content below (data-loss-risk
+> update 3, chrome-extensions update, active-work-snapshot update 2) logically
+> belongs to the Learning Loop 2 section above.
+
 ### data-loss-risk (update 3)
 
 Three additional CVE-fix repos with unpushed branches not previously
@@ -505,9 +510,9 @@ rebase has progressed to the Go test compilation phase. Disk at 84%
 
 ### data-integrity (update)
 
-Revised aggregate totals from 130-repo scan: approximately 500+
-unpushed commits across 200+ branches in 30+ repositories (prior
-estimate was 88 commits across 14 repos). Key repos with larger
+Revised aggregate totals from 171-repo scan: 98 unpushed commits
+across 14 repositories (prior estimate was 88 commits across 14 repos;
+the original 500+ estimate was inflated). Key repos with larger
 exposure than previously documented: submariner-operator has 40+
 unpushed branches including a 108-commit bundle-update branch,
 shipyard has 30+ unpushed branches plus 100+ untracked local branches,
@@ -569,9 +574,9 @@ GPU/DRM errors anywhere in the journal.
 old_fbc has 7 unpushed commits on main (previously noted only as dirty,
 not as having unpushed main-branch commits). submariner-release-management
 grew from 6 to 9 unpushed on main. Stash count increased from 78 across
-13 repos to 92 across 17 repos. New metric: 1,849 local branches across
-all 131 repos have no upstream tracking branch at all -- distinct from
-the 500+ unpushed-but-tracked commits previously documented.
+13 repos to 93 across 17 repos. New metric: 2,056 local branches across
+all 171 repos have no upstream tracking branch at all -- distinct from
+the 98 unpushed-but-tracked commits previously documented.
 
 ### python (update 3)
 
@@ -581,11 +586,146 @@ behavior differences from the RPM-packaged 2.18 the system expects.
 
 ## Learning Loop 6
 
-All ten inbound messages (active-work-snapshot, data-loss-risk,
-chrome-extensions, system-health, non-dnf-apps, scheduled-tasks,
-python, hardware-inventory, google_cloud_vertex_config, tailscale)
-are duplicates of information already captured in Learning Loops 1-5.
-No new findings, repos, action items, or metrics were identified.
+Six new findings were added in this pass: P1 sysctl Jinja2 parse error,
+proxy forwarding, git hooks deny-list, hadolint, Claude in distrobox, and
+grype provisioning. See the companion wip1 plan (Iteration 6, items 36-41)
+for details.
+
+---
+
+## Missing Information
+
+The following dimensions were not covered by the original learning loops and
+represent gaps discovered during post-audit verification.
+
+### SSH Key Inventory
+
+SSH key inventory at ~/.ssh/ (15 items total):
+
+**Keys present:**
+1. `id_ed25519_sk` / `id_ed25519_sk.pub` -- Primary YubiKey-backed FIDO2 key
+   (ED25519-SK). Currently a copy of yk0. Permissions: 0600/0644 (correct).
+2. `id_ed25519_sk_yk0.priv` / `id_ed25519_sk_yk0.pub` -- YubiKey 0 backup,
+   same fingerprint as primary. Permissions: 0600/0644 (correct).
+3. `id_ed25519_sk_yk1.priv` / `id_ed25519_sk_yk1.pub` -- YubiKey 1 backup,
+   different fingerprint. Permissions: 0600/0644 (correct).
+4. `id_rh_git` / `id_rh_git.pub` -- Red Hat Git key (ED25519, not SK).
+   Permissions: 0600/0644 (correct).
+
+The README.md explains the YubiKey switching pattern: copy yk0 or yk1
+.priv/.pub over id_ed25519_sk to switch active YubiKey.
+
+**Permission issues (2 problems):**
+- `~/.ssh/` directory is 0775 (should be 0700). OpenSSH strict mode (default)
+  may refuse to use keys from a group-writable .ssh directory. This is a real
+  security/functionality concern.
+- `config` is a symlink (0777 lrwxrwxrwx) pointing to `~/.dotfiles/ssh_config`
+  (which is 0600). Symlink permissions are cosmetic on Linux (the target's 0600
+  is what matters), so this is fine.
+
+**Other files:**
+- `foo` (0644, 377 bytes) -- Not a key; contains SSH config snippets
+  (VisualHostKey, gh/gist host aliases using id_ed25519_sk, redhat.com GSSAPI
+  settings). Appears to be a stale scratchpad, not referenced by anything.
+- `README.md` (0644) -- Documents the YubiKey switching workflow.
+- `known_hosts` (0600, 14 entries) -- Modest size, reasonable.
+- `known_hosts.old` (0600) -- Backup from March 2023.
+- No `authorized_keys` file. No inbound SSH key authentication is configured
+  (fine if client-only, but worth noting since sshd is hardened on port 722).
+
+**Action required:** Fix `~/.ssh/` directory permissions to 0700. Clean up
+stale `foo` file.
+
+### Container State
+
+**Dual runtime (Podman + Docker both installed and have images):**
+- Podman: 3 images (golang 1.26 x2, golangci-lint v2.12.2), 2.74 GB total,
+  1.8 GB reclaimable (66%)
+- Docker: 9 images (grype, golang, shipyard, submariner-operator variants),
+  3.179 GB total, ~3 GB reclaimable (94%); 1 volume 1.979 GB fully
+  reclaimable; 17 build cache entries
+- Total reclaimable across both runtimes: ~6.8 GB
+
+**Missing environment.d/containers.conf:** The file
+`~/.config/environment.d/containers.conf` does NOT exist, despite the
+containers role being designed to deploy it with
+`DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock` and
+`KIND_EXPERIMENTAL_PROVIDER=podman`. The CLAUDE.md warns this is critical for
+OVN-K/Submariner `make kind` since make spawns sh (not zsh), so .zshrc exports
+are invisible. The `environment.d/ssh-agent.conf` and `environment.d/gotmpdir.conf`
+from the dotfiles role are also absent, suggesting `make containers` and
+`make dotfiles` have not been run (or were run before these tasks were added).
+
+**Podman socket inactive and disabled:** `podman.socket` is inactive and
+disabled. The socket at `/run/user/1000/podman/podman.sock` does not exist.
+Even if environment.d were deployed, DOCKER_HOST would point to a nonexistent
+socket.
+
+**Stale podman container:** Container 7b0fa6854582 (golang:1.26.0) is stuck
+in "Removing" state for 6+ hours. May need `podman rm -f` to clean up.
+
+**Auth config:** Docker auth at `~/.docker/config.json` covers
+brew.registry.redhat.io, quay.io, registry.ci.openshift.org,
+registry.redhat.io, registry.stage.redhat.io. No separate podman auth at
+`~/.config/containers/auth.json`.
+
+### Kernel State
+
+**Current machine:** ThinkPad X1 Carbon 7th Gen, Intel i7-8665U, Fedora 42
+(6.19.14-108.fc42), 8 logical CPUs. This is NOT the P16v (AMD Ryzen PRO).
+
+**The system role has never been run on this machine.** Three
+Ansible-managed files are missing:
+- `/etc/modprobe.d/hardening.conf` -- NOT FOUND (no module blacklist)
+- `/etc/sysctl.d/90-hardening.conf` -- NOT FOUND (no sysctl hardening)
+- `/etc/kernel/cmdline` -- NOT FOUND (no persistent kernel cmdline hardening)
+
+Kernel boot cmdline (`/proc/cmdline`) has only stock Fedora params. None of
+the hardening params are present: no `lockdown=integrity`, no
+`intel_iommu=on`, no `vsyscall=none`, no `init_on_free=1`.
+
+**Sysctl gaps (live vs. expected after provisioning):**
+- `kernel.yama.ptrace_scope = 0` (expected: 1)
+- `kernel.io_uring_disabled = 0` (expected: 1)
+- `kernel.kexec_load_disabled = 0` (expected: 1)
+- Kernel lockdown is OFF (expected: integrity)
+- `net.ipv4.conf.all.log_martians = 0` (expected: 1)
+- `net.ipv4.conf.all.rp_filter = 0` (expected: 2)
+- `net.ipv6.conf.all.accept_ra = 1` (expected: 0)
+
+**P16v differences (AMD Ryzen PRO vs this Intel i7):** IOMMU cmdline uses
+`amd_iommu=on` instead of `intel_iommu=on`. USBGuard `hardwired` connect-type
+rule is a no-op on AMD (reports `not used`); P16v needs per-device VID:PID
+rules via `system_usbguard_extra_rules` in config.yml. P16v (2560x1600) needs
+`desktop_sway_hidpi_scale: 1.5`. No other kernel-level differences in role
+logic.
+
+### User Focus / Active Workstreams
+
+Three active workstreams identified from recent activity:
+
+1. **Submariner CVE fixes (primary focus)** -- Actively running
+   `make fix REPO=submariner-operator BRANCH=0.24` (shipyard:cve-fix skill).
+   Multiple CVE fix branches created (fix-0.24-cves-2026-08-12-v3 being
+   latest). Recent commits bump Go dependencies (klauspost/compress, x/crypto,
+   oras-go, grpc, x/text, x/net, otel, sigstore/rekor, sigstore/fulcio).
+   Logged into Konflux production (`oc login --web` to kflux-prd-rh02) in
+   `rhtap-releng-tenant` project. Running `watch -n 30 make watch` to monitor
+   Konflux pipeline runs.
+
+2. **OVN-Kubernetes k8s-rebase** -- Visited
+   `ovnk/openshift-eng/ai-helpers/plugins/k8s-rebase`, checked plans
+   (next-iteration.md), ran `make` and `make matrix`, created/pushed wip2
+   branch.
+
+3. **laptop-setup (this repo)** -- On wip1 branch with 19 commits ahead of
+   main, mostly documentation (P16v audit findings, config templates, merged
+   vimrc) plus code fixes (packages comment cleanup, POSIX-portable uppercase
+   conversion, SELinux fact refresh).
+
+Immediate focus appears to be Submariner 0.24 CVE remediation with Konflux
+build monitoring. The laptop-setup wip1 branch is a documentation/audit
+artifact from the P16v provisioning effort.
 
 ---
 
@@ -598,15 +738,15 @@ No new findings, repos, action items, or metrics were identified.
 4. Set `dotfiles_aws_profile: "aws-acm-subm"` for AWS workflow
 5. Resolve Vertex AI project ID mismatch (3 different values across env vars)
 6. Copy from old laptop: ~/.ssh/, vault.yml, .vimrc, .zsh_history, ~/notes/
-7. Do NOT copy: ~/ovnk/ (77G), ~/go/ (20G), ~/.cache/ (60G), ~/sdk/ (1.9G)
+7. Do NOT copy: ~/ovnk/ (92G), ~/go/ (22G), ~/.cache/ (19G), ~/sdk/ (1.9G)
 8. Do NOT copy: ~/.kube/config (tokens expired), stolostron/deploy (credential file)
 
 **After `make all`:**
 1. Reboot (kernel params, SSH port 722, group membership)
 2. `tailscale up` (NEW — user has never used Tailscale on a workstation)
 3. `gh auth login`
-4. `mullvad account set ACCOUNT_NUMBER` (NEW — replacing ExpressVPN)
-5. `oc login` to 3 Konflux clusters + CI cluster
+4. `mullvad account login ACCOUNT_NUMBER` (NEW — replacing ExpressVPN)
+5. `oc login` to 2 Konflux clusters + 1 CI cluster (3 total)
 6. `podman login` to registry.redhat.io, quay.io, brew.registry.redhat.io
 7. `gcloud auth login` + `gcloud auth application-default login`
 8. Rotate AWS keys (4+ years old)
@@ -614,15 +754,15 @@ No new findings, repos, action items, or metrics were identified.
 10. `make smoke-test`
 
 **Data-loss risk on old laptop:**
-- 500+ unpushed commits across 200+ branches in 30+ repos
-- 1,849 local branches with no upstream tracking
-- 92 git stashes across 17 repos (local-only)
+- 98 unpushed commits across 14 repos
+- 2,056 local branches with no upstream tracking
+- 93 git stashes across 17 repos (local-only)
 - 1 credential file: stolostron/deploy/prereqs/quay_dfarrell_secret.yml
 - Push all CVE-fix branches before decommissioning
 
 **Key behavioral changes from old laptop:**
-- Sway (Mod4) replaces i3 (Mod1) — every keybinding changes
-- Mullvad replaces ExpressVPN
+- Sway replaces i3 — both use Mod4 (Super key); Wayland differences apply
+- Mullvad VPN provisioned (ExpressVPN was used manually on old laptop but was never in this automation)
 - Claude Code instance isolation (cw/ccp) is NEW — user has never used it
 - Sandbox enabled replaces --dangerously-skip-permissions
 - ~/src/ flat layout replaces ~/go/src/ GOPATH layout
