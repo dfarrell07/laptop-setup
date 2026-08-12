@@ -40,7 +40,7 @@
       failed_when: false
       changed_when: notes_lfs_install_result.rc == 0
       when:
-        - notes_lfs_configured.rc != 0
+        - notes_lfs_configured.rc | default(-1) != 0
         - notes_lfs_check.rc == 0
 
     - name: Warn if git-lfs filter registration failed
