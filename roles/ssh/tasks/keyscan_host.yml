@@ -27,6 +27,13 @@
       loop_control:
         label: "{{ item.split()[1] | default('key') }}"
 
+    - name: Warn — keyscan returned no matching lines for {{ _keyscan_host }}
+      ansible.builtin.debug:
+        msg: >
+          WARNING: ssh-keyscan output contained no lines starting with '{{ _keyscan_host }}'.
+          known_hosts was not pre-seeded — git clone will prompt on first connection.
+      when: (ssh_keyscan_result.stdout_lines | select('match', '^' + (_keyscan_host | regex_escape)) | list | length) == 0
+
   rescue:
     - name: Warn — could not fetch host keys for {{ _keyscan_host }}
       ansible.builtin.debug:
