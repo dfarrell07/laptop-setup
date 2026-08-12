@@ -294,3 +294,92 @@ default.config.yml (config override documentation).
    doctoc, and markdownlint in /usr/local/bin are not managed by any role.
    They will be absent on the P16v unless manually installed or added to the
    packages role.
+
+## Learning Loop 2
+
+### data-loss-risk
+
+88 unpushed commits across 14 repos, 11 dirty working trees. Four critical
+repos have 12-16 unpushed CVE-fix commits each: submariner-operator,
+ci-tools, openshift/api, lighthouse (branches: fix-0.24-cves-*,
+fix-main-cves-*, fix-master-cves-*). konflux/submariner-release-management
+has 6 unpushed autorelease automation commits. Push all unpushed CVE-fix
+branches before migration -- losing these would require significant effort
+to recreate.
+
+### chrome-extensions
+
+Chrome security policy exists but is not deployed
+(`desktop_deploy_chrome_policies: false`). Neither allowlisted extension
+(uBlock Origin Lite MV3, Bitwarden) is installed in any profile. Six
+disabled remnants across profiles (LastPass, MetaMask, Phantom, Privacy
+Badger, YouTube, Google Docs Offline) would be blocked if the policy
+deploys. Two distro-provided external extensions (Fedora User Agent, GNOME
+Shell integration) would be removed by `BlockExternalExtensions: true`.
+Active profiles: Default (gmail, Aug 2026) and Profile 6 (onc.design, Jul
+2025); Profiles 1-5 are stale redhat.com profiles from 2022-2024.
+
+### systemd-journal
+
+Disk pressure (99%, 4.1G free) has cascading effects: auditd stopped
+logging, journald cannot rotate logs, plocate-updatedb fails
+(advisory-database exceeds default file descriptor limit -- either exclude
+from index or raise LimitNOFILE). Quick wins beyond those in disk-usage:
+vacuum journald logs (3.9G down to ~500M), clean Go caches. Claude CLI
+shows recurring SIGILL crashes in coredumps (versions 2.1.140-2.1.153) --
+likely upstream, not hardware. No hardware faults detected.
+
+### non-dnf-apps
+
+No Flatpak apps installed. No custom .desktop launchers. Two Ledger Live
+AppImages in ~/Downloads (v2.60.0 stale, v2.96.0 current) -- only
+non-dnf applications on the system. Clean up the stale 2.60.0 copy.
+
+### scheduled-tasks
+
+Nothing to migrate. No user crontab, no custom systemd user timers, no
+~/.config/systemd/user/ directory. Only stock Fedora timers active
+(systemd-tmpfiles-clean, grub-boot-success). podman-auto-update.timer
+exists but is disabled.
+
+### python
+
+Homebrew python3 (3.13.5) shadows system python3 (3.13.13) in PATH. All
+53 pip --user packages live under Homebrew's site-packages. The automation
+expects yamllint/ansible-lint via pipx -- neither is currently present in
+pipx. Non-automation pip --user packages: anthropic, gitlint, ruff,
+rpm-lockfile-prototype, skillsaw, conforma. Non-automation pipx packages:
+chirp, jinjanator, pipeline-migration-tool. Key files:
+roles/packages/tasks/install_pipx.yml, requirements-test.lock.
+
+### hardware-inventory
+
+USBGuard whitelist requirements for P16v planning: YubiKey (1050:0407),
+ZSA Moonlander (3297:1969), internal camera (13d3:56bb), fingerprint
+reader (06cb:00bd), Bluetooth adapter (8087:0aaa). Root hubs (1d6b:0002,
+1d6b:0003) are implicitly trusted. Eight Bluetooth-paired peripherals (3
+Logitech MX mice across 5 pairings, 2 headsets, Keychron K2) connect via
+the BT adapter and need no USB rules. If a Logitech Unifying (046d:c52b)
+or Bolt (046d:c548) dongle is later connected, add it to the whitelist.
+
+### gcloud-vertex-config
+
+Vertex AI environment variables are manual additions in ~/.zshrc (lines
+88-93), not managed by Ansible. The Claude role work-env template
+(roles/claude/tasks/main.yml lines 95-105) has them commented out.
+Migration actions: (1) uncomment and populate Vertex vars in Claude role
+work-env template, (2) remove manual GOOGLE_CLOUD_PROJECT,
+CLAUDE_CODE_USE_VERTEX, CLOUD_ML_REGION, ANTHROPIC_VERTEX_PROJECT_ID
+lines from ~/.zshrc, (3) add `gcloud auth login` and `gcloud auth
+application-default login` to CLAUDE.md step 6 manual actions. Project ID
+mismatch needs resolution: GOOGLE_CLOUD_PROJECT=rich-charmer-232113 vs
+gcloud core/project=itpc-gcp-hybrid-pe-eng-claude vs
+ANTHROPIC_VERTEX_PROJECT_ID=itpc-gcp-hcm-pe-eng-claude.
+
+### tailscale
+
+Tailscale has never been installed on the old laptop -- no binary, RPM,
+systemd unit, or state artifacts. This is new infrastructure on the P16v,
+not a migration. No node identity or pre-existing keys to transfer. The
+automation fully supports fresh Tailscale provisioning; `tailscale up` is
+the only post-provision step.
