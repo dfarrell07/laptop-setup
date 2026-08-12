@@ -421,3 +421,30 @@ installed globally via pip --user rather than in the intended .venv
 `repo_google_cloud_sdk` defaults to false. If gcloud CLI is needed on
 the P16v host (not just in containers), set `repo_google_cloud_sdk: true`
 in config.yml before `make all`.
+
+### active-work-snapshot (update)
+
+Conditions have deteriorated since initial snapshot: /home now 100% full
+with only 324MB free (was 5.6G), load average 72 (was 58.58), 45 total
+Claude processes across 6 interactive terminals plus background tasks.
+Swap 43% consumed. Migration preconditions: (1) k8s-rebase must complete
+or be checkpointed, (2) /home disk space must be freed, (3) all 6
+interactive Claude sessions must be saved/closed. Submariner operator
+fix (`make fix REPO=submariner-operator BRANCH=0.24`) may also have
+in-flight state from recent history.
+
+### data-loss-risk (update 2)
+
+78 git stashes across 13 repos are at risk -- these are local-only and
+not backed up by pushing branches. Highest counts: submariner-operator
+(20 stashes), submariner-operator-fbc (17), submariner (14), shipyard
+(13). Stashes are destroyed if the repo is recloned or the disk fails.
+Consider `git stash list` and selectively converting important stashes
+to branches before migration.
+
+### python (update 2)
+
+Orphaned site-packages directories from Python 3.10 (1.8 MB) and 3.9
+(8.9 MB) under ~/.local/lib/ are safe to remove on the old laptop.
+Homebrew python3 exists only as a transitive dependency of gemini-cli
+and node -- not directly installed.
