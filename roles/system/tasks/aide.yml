@@ -220,5 +220,5 @@
           AIDE initialization failed (disk exhaustion, OOM, or signal interruption).
           Error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) | default('unknown') | truncate(400) }}.
           To recover: free disk space, remove any partial /var/lib/aide/aide.db.new.gz,
-          then run 'sudo aide --init && sudo cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'.
+          then run 'sudo aide --init && sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'.
           Re-run this playbook once space is available to complete AIDE setup.

@@ -31,6 +31,8 @@
     - not csb_rhel
     # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
     - system_chrony_service_enabled | bool
+    # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
+    - is_dnf or is_apt
 
 - name: Mask systemd-timesyncd when chrony is active (Debian)
   ansible.builtin.systemd:
