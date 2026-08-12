@@ -73,6 +73,17 @@
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
+- name: Check yescrypt cost factor in login.defs
+  ansible.builtin.command:
+    cmd: grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs
+  register: _yescrypt_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - not csb_rhel
+    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+
 # NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it (same value, idempotent from second run onward)
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -83,6 +94,7 @@
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - _yescrypt_check.rc != 0
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
