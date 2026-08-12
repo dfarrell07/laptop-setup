@@ -274,6 +274,7 @@
     - system_firewalld_running | bool
     - install_virtualization | bool
     - system_firewall_manage_zone | bool
+    - ssh_port | int != 22
   failed_when: >-
     (_system_libvirt_ssh_remove.failed | default(false)) and
     'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
