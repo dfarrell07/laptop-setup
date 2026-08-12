@@ -448,3 +448,28 @@ Orphaned site-packages directories from Python 3.10 (1.8 MB) and 3.9
 (8.9 MB) under ~/.local/lib/ are safe to remove on the old laptop.
 Homebrew python3 exists only as a transitive dependency of gemini-cli
 and node -- not directly installed.
+
+## Learning Loop 2 (continued)
+
+### data-loss-risk (update 3)
+
+Three additional CVE-fix repos with unpushed branches not previously
+itemized: submariner (8 commits), cloud-prepare (7),
+prometheus/client_golang (4). Two repos have untracked local-only
+branches not covered in earlier updates: ai-helpers (k8s-rebase-skill
+branch) and secure-engineering-container (notgitleak branch).
+
+### chrome-extensions (update)
+
+Credential migration from LastPass to Bitwarden should happen before
+deploying the Chrome security policy. LastPass is installed in the
+Default profile but would be blocked by the allowlist; neither
+allowlisted Bitwarden extension is installed yet. Migration sequence:
+install Bitwarden, import credentials, verify, then deploy policy.
+
+### active-work-snapshot (update 2)
+
+Disk pressure eased to 82% full (193G/237G, ~44G free) from the prior
+100% (324MB free). Cleanup appears to have occurred. Migration
+disruption risk remains due to 4 active Claude rebase agents and 6
+Podman containers, but the immediate disk-failure urgency is reduced.
