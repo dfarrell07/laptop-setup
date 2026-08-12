@@ -133,39 +133,32 @@
         path: /var/lib/aide/aide.db.new.gz
       register: system_aide_db_new
 
+    - name: Set fact — AIDE config changed (consolidates lineinfile registers)
+      ansible.builtin.set_fact:
+        _aide_conf_changed: >-
+          {{ _aide_conf_r1 is changed
+             or _aide_conf_r2 is changed
+             or _aide_conf_r3 is changed
+             or _aide_conf_r3_remove is changed
+             or _aide_conf_r4 is changed
+             or _aide_conf_r4_remove is changed
+             or _aide_conf_r5 is changed
+             or _aide_conf_r5_remove is changed
+             or _aide_conf_r6 is changed
+             or _aide_conf_r6b is changed
+             or _aide_conf_r6c is changed }}
+
     - name: Warn that AIDE reinit takes 5-10 minutes
       ansible.builtin.debug:
         msg: "AIDE configuration changed — reinitializing database. This takes 5-10 minutes. Do not cancel."
-      when:
-        - _aide_conf_r1 is changed
-          or _aide_conf_r2 is changed
-          or _aide_conf_r3 is changed
-          or _aide_conf_r3_remove is changed
-          or _aide_conf_r4 is changed
-          or _aide_conf_r4_remove is changed
-          or _aide_conf_r5 is changed
-          or _aide_conf_r5_remove is changed
-          or _aide_conf_r6 is changed
-          or _aide_conf_r6b is changed
-          or _aide_conf_r6c is changed
+      when: _aide_conf_changed
 
     - name: Reinitialize AIDE database when conf changed
       ansible.builtin.shell:  # noqa: command-instead-of-module
         cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       changed_when: true
       register: system_aide_reinit_result
-      when:
-        - _aide_conf_r1 is changed
-          or _aide_conf_r2 is changed
-          or _aide_conf_r3 is changed
-          or _aide_conf_r3_remove is changed
-          or _aide_conf_r4 is changed
-          or _aide_conf_r4_remove is changed
-          or _aide_conf_r5 is changed
-          or _aide_conf_r5_remove is changed
-          or _aide_conf_r6 is changed
-          or _aide_conf_r6b is changed
-          or _aide_conf_r6c is changed
+      when: _aide_conf_changed
 
     - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
       ansible.builtin.command:
