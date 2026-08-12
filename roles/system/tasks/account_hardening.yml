@@ -236,10 +236,10 @@
 - name: Warn if Lock root account failed
   ansible.builtin.debug:
     msg: >-
-      WARNING: Lock root account failed (rc={{ _lock_root_result.rc | default('?') }}) —
+      WARNING: Lock root account failed ({{ _lock_root_result.msg | default('unknown error') }}) —
       root account may not be locked; check PAM, NSS, or shadow configuration
   when:
-    - _lock_root_result.rc | default(0) != 0
+    - _lock_root_result.failed | default(false)
 
 # --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
 - name: Find non-root UID 0 accounts (CIS 6.2.9)
