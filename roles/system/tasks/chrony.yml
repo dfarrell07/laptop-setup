@@ -74,6 +74,16 @@
     - not (system_chrony_service_enabled | bool)
   failed_when: false
 
+- name: "Warn: no time sync available (chrony disabled, timesyncd absent on Fedora/RHEL)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_chrony_service_enabled=false and systemd-timesyncd is not installed on
+      Fedora/RHEL — host has no NTP source. Install and enable timesyncd or set
+      system_chrony_service_enabled: true.
+  when:
+    - is_dnf
+    - not (system_chrony_service_enabled | bool)
+
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
