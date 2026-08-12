@@ -64,3 +64,4 @@ ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,ae
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml
+notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/defaults; used in zshrc.j2 notes alias

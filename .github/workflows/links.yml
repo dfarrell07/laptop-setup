@@ -52,7 +52,7 @@ jobs:
   report:
     name: Create Issue on Failure
     needs: links
-    if: failure() && github.event_name != 'pull_request'
+    if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

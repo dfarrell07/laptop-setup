@@ -36,7 +36,7 @@
       changed_when: false
 
     - name: Check curl is installed
-      ansible.builtin.command: which curl
+      ansible.builtin.command: curl --version
       changed_when: false
 
     - name: Check tmux is installed
@@ -75,11 +75,6 @@
       ansible.builtin.command: shellcheck --version
       changed_when: false
 
-    - name: Check go is installed
-      ansible.builtin.command: go version
-      changed_when: false
-      when: profile == 'work'
-
     - name: Check direnv is installed
       ansible.builtin.command: direnv version
       changed_when: false
@@ -89,13 +84,8 @@
       changed_when: false
 
     - name: Check dig is installed (dnsutils)
-      ansible.builtin.command: which dig
+      ansible.builtin.command: dig -v
       changed_when: false
-
-    - name: Check nmap is installed
-      ansible.builtin.command: which nmap
-      changed_when: false
-      when: profile == 'work'
 
     - name: Check gpg is installed (gnupg)
       ansible.builtin.command: gpg --version

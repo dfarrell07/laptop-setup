@@ -121,6 +121,7 @@
         and (fapolicyd_enforcing | bool)
       }}
   become: false
+  when: not (_csb_molecule_force | default(false))
 
 # Sections 7 (rootless container readiness) and 8 (toolbox/distrobox detection) removed —
 # podman_rootless_ready was never consumed by any task (distrobox role re-checks subuid/subgid
@@ -169,6 +170,7 @@
         else 'host-only')
       }}
   become: false
+  when: not (_csb_molecule_force | default(false))
 
 - name: Derive csb_rhel
   ansible.builtin.set_fact:

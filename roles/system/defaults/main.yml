@@ -99,7 +99,6 @@ system_firewall_manage_zone: "{{ not csb_rhel }}"
 system_firewall_icmp_types:
   - fragmentation-needed  # IPv4 PMTUd (type 3 code 4 only); packet-too-big covers IPv6
   - packet-too-big
-  - parameter-problem  # IPv4 type 12 + IPv6 type 4; needed for IPv6 ext-header error signalling
   - neighbour-solicitation  # IPv6 NDP — required for link-local even when SLAAC disabled (accept_ra=0); conntrack does not track NS/NA
   - neighbour-advertisement  # same — link-local MAC resolution fails without NA
 
@@ -112,6 +111,9 @@ system_firewall_icmp_types:
 # time-exceeded responses that match outbound tracked flows (the legitimate use case); the only
 # effect of adding it here is to allow unsolicited inbound time-exceeded, enabling external hosts
 # to map this machine's network position via traceroute.
+# parameter-problem (IPv4 type 12, IPv6 type 4) is NOT in the default list — conntrack already
+# admits parameter-problem responses to outbound flows; the only additional traffic this allows
+# is unsolicited inbound parameter-problem, which can probe IPv6 extension-header handling.
 # Example: system_firewall_icmp_extra_types: [echo-request]
 system_firewall_icmp_extra_types: []
 
@@ -318,7 +320,7 @@ ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,ae
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256"
-ssh_host_key_algorithms: 'ssh-ed25519'
+ssh_host_key_algorithms: 'ssh-ed25519-cert-v01@openssh.com,ssh-ed25519'
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)

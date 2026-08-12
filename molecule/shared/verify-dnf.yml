@@ -49,13 +49,13 @@
 - name: Check go is installed
   ansible.builtin.command: go version
   changed_when: false
-  when: profile == 'work'
+  when: profile | default('work') == 'work'
   # golang is in packages_languages_work (work profile only)
 
 - name: Check gcc is installed
   ansible.builtin.command: gcc --version
   changed_when: false
-  when: profile == 'work'
+  when: profile | default('work') == 'work'
 
 - name: Check python3 is installed
   ansible.builtin.command: python3 --version
@@ -84,6 +84,11 @@
   ansible.builtin.command: yq --version
   changed_when: false
   when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge subset
+
+- name: Check neovim is installed
+  ansible.builtin.command: nvim --version
+  changed_when: false
+  when: ansible_distribution != 'Rocky'  # not in Rocky 10 converge packages_cli subset
 
 - name: Check gpg is installed
   ansible.builtin.command: gpg --version

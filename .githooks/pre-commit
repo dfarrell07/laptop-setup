@@ -34,7 +34,7 @@ elif [ -x ".venv/bin/yamllint" ]; then
   YAMLLINT=".venv/bin/yamllint"
 fi
 if [ -n "$YAMLLINT" ]; then
-  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml' | grep -v node_modules | grep -v '^collections/')
+  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml')
   if [ -n "$yaml_files" ]; then
     if ! echo "$yaml_files" | xargs "$YAMLLINT" --strict; then
       failed=1
@@ -65,7 +65,7 @@ else
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi
-  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v node_modules | grep -z -v '^package-lock\.json$')
+  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v '^package-lock\.json$')
 
   # Lockfile integrity (only when package-lock.json is staged)
   if git diff --cached --name-only --diff-filter=ACM | grep -q '^package-lock\.json$'; then

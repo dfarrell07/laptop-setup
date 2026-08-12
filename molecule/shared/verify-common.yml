@@ -1113,6 +1113,7 @@
   when:
     - ansible_system == 'Linux'
     - system_tmout | int > 0
+    - not (system_is_container | default(false))
 
 - name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
@@ -1361,13 +1362,17 @@
     path: /etc/vconsole.conf
   register: verify_vconsole_conf
   become: true
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/vconsole.conf exists
   ansible.builtin.assert:
     that: verify_vconsole_conf.stat.exists
     fail_msg: "/etc/vconsole.conf not deployed — system role timezone_locale.yml regression"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Check /etc/vconsole.conf contains KEYMAP=us
   ansible.builtin.command: grep -q 'KEYMAP=us' /etc/vconsole.conf

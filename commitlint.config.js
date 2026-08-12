@@ -6,7 +6,7 @@ module.exports = {
     // This repo uses "Scope: message" format (scope before colon = commitlint "type" field).
     // type-enum is severity 1 (warn) with Title-Case variants matching CLAUDE.md convention.
     // scope-enum stays at 0 (off) — no parenthetical scopes are used in this repo.
-    'type-enum': [1, 'always', [
+    'type-enum': [2, 'always', [
       'Common', 'Repos-dnf', 'Packages', 'Dotfiles', 'Ssh', 'Git-repos',
       'Notes', 'Redhat', 'Containers', 'Desktop', 'System', 'Distrobox',
       'Claude', 'Ci', 'Docs', 'Chore', 'Smoke', 'Molecule', 'Multi',

@@ -106,7 +106,7 @@ jobs:
         run: |
           TITLE="Galaxy collection drift detected"
           BODY="Monthly drift check found version mismatch or verification error. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          EXISTING=$(gh issue list --label dependencies --state open --search "$TITLE in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          EXISTING=$(gh issue list --label dependencies --state open --search "$TITLE in:title" --json number --jq '.[0].number' || echo "")
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body "$BODY"
           else

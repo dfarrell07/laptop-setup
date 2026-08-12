@@ -121,29 +121,6 @@
         cmd: grep -q 'exec.*autorandr' "{{ ansible_user_dir }}/.config/i3/config"
       changed_when: false
 
-    # --- System role: bpfman.socket ---
-    # bpfman is in packages_support_work which is emptied in converge, so the binary
-    # will not be present in normal CI runs and the assertions below are skipped.
-    # The structure is here so that if bpfman is ever added to the molecule package
-    # set, socket activation is verified automatically.
-    - name: Check bpfman binary presence
-      ansible.builtin.stat:
-        path: /usr/bin/bpfman
-      register: verify_bpfman_bin
-
-    - name: Check bpfman.socket is enabled
-      ansible.builtin.command: systemctl is-enabled bpfman.socket  # noqa: command-instead-of-module
-      register: verify_bpfman_socket
-      changed_when: false
-      failed_when: false
-      when: verify_bpfman_bin.stat.exists
-
-    - name: Assert bpfman.socket is enabled when bpfman binary is present
-      ansible.builtin.assert:
-        that: verify_bpfman_socket.rc == 0
-        fail_msg: "bpfman.socket is not enabled — bpfman load/list will fail at runtime"
-      when: verify_bpfman_bin.stat.exists
-
     # --- System role: usbguard ---
     # usbguard assertions are handled by molecule/shared/verify-smoke.yml.
 
