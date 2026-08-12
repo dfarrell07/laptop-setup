@@ -34,43 +34,23 @@
     # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
     - is_dnf or is_apt
 
-- name: Mask systemd-timesyncd when chrony is active (Debian)
+- name: Mask systemd-timesyncd when chrony is active
   ansible.builtin.systemd:
     name: systemd-timesyncd
     masked: true
     state: stopped
   when:
-    - is_apt
+    - is_apt or is_dnf
     - system_chrony_service_enabled | bool
   failed_when: false
 
-- name: Unmask systemd-timesyncd when chrony is disabled (Debian)
+- name: Unmask systemd-timesyncd when chrony is disabled
   ansible.builtin.systemd:
     name: systemd-timesyncd
     masked: false
     state: started
   when:
-    - is_apt
-    - not (system_chrony_service_enabled | bool)
-  failed_when: false
-
-- name: Mask systemd-timesyncd when chrony is active (Fedora/RHEL)
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: true
-    state: stopped
-  when:
-    - is_dnf
-    - system_chrony_service_enabled | bool
-  failed_when: false
-
-- name: Unmask systemd-timesyncd when chrony is disabled (Fedora/RHEL)
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: false
-    state: started
-  when:
-    - is_dnf
+    - is_apt or is_dnf
     - not (system_chrony_service_enabled | bool)
   failed_when: false
 
@@ -89,7 +69,9 @@
     name: "{{ 'chrony' if is_apt else 'chronyd' }}"
     state: stopped
     enabled: false
-  when: not (system_chrony_service_enabled | bool)
+  when:
+    - not (system_chrony_service_enabled | bool)
+    - is_dnf or is_apt
   failed_when: false
 
 - name: Ensure chrony/chronyd is enabled

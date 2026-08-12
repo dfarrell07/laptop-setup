@@ -101,6 +101,15 @@
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
+- name: Remove DHCP hostname suppression config on CSB
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+    state: absent
+  when:
+    - csb_detected
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
 # tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
 # interface, not controlled by IT's firewalld policy. Trusted zone is required for
 # Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale

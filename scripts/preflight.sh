@@ -2,6 +2,7 @@
 # preflight.sh — Pre-flight checks for workstation Ansible playbook.
 # Exit 0 if ready, 1 if failures. Usage: preflight.sh [--json] [--profile work|personal]
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JSON=false PROFILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,7 +57,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service &>/dev/null && has_fapolicyd=true
+  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && has_fapolicyd=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
   else
@@ -77,11 +78,10 @@ fi
 if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
-  _cfg="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
+  CONFIG_FILE="$SCRIPT_DIR/../config.yml"
   # Apply config.yml profile override in both directions
-  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$_cfg" 2>/dev/null && PROFILE="work"
-  grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && PROFILE="personal"
-  unset _cfg
+  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="work"
+  grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="personal"
 fi
 record "profile" "pass" "$PROFILE"
 
@@ -165,7 +165,6 @@ else
 fi
 
 # --- Vault password scripts ---
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 vscript="${SCRIPT_DIR}/vault-pass.sh"
 if [[ -x "$vscript" ]]; then
   output=$("$vscript" 2>/dev/null) || true
@@ -190,7 +189,7 @@ else
 fi
 
 # --- Vault encryption check ---
-VAULT_FILE="$(cd "$(dirname "$0")/.." && pwd)/group_vars/all/vault.yml"
+VAULT_FILE="$SCRIPT_DIR/../group_vars/all/vault.yml"
 if [[ -f "$VAULT_FILE" ]]; then
   # shellcheck disable=SC2016  # Intentional: matching literal $ANSIBLE_VAULT header
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
@@ -207,7 +206,7 @@ else
 fi
 
 # --- config.yml ---
-CONFIG_FILE="$(cd "$(dirname "$0")/.." && pwd)/config.yml"
+CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ ! -f "$CONFIG_FILE" ]]; then
   record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then

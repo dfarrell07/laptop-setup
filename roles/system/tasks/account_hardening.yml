@@ -73,6 +73,14 @@
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
+- name: Check current YESCRYPT_COST_FACTOR in login.defs
+  ansible.builtin.command:
+    cmd: grep -qE '^YESCRYPT_COST_FACTOR\s+5$' /etc/login.defs
+  register: _yescrypt_factor_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 # NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it (same value, idempotent from second run onward)
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
@@ -83,18 +91,28 @@
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - _yescrypt_factor_check.rc != 0
 
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
     path: "{{ real_user_home }}"
     mode: "0750"
     state: directory
+  register: _home_mode_result
   when:
     - real_user_home | length > 0
     - real_user_home != '/'
     - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
     - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
   failed_when: false
+
+- name: Warn if home directory mode enforcement failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Could not set {{ real_user_home }} to mode 0750
+      ({{ _home_mode_result.msg | default('unknown error') }}) —
+      CIS 6.2.x home dir permission may not be enforced
+  when: _home_mode_result.failed | default(false)
 
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - name: Check useradd default INACTIVE setting

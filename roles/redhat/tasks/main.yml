@@ -138,7 +138,7 @@
     - name: Set splunk account shell to nologin
       ansible.builtin.user:
         name: "{{ redhat_splunk_service_account }}"
-        shell: /sbin/nologin
+        shell: "{{ redhat_splunk_nologin_shell }}"
       become: true
       tags: [become]
   rescue:

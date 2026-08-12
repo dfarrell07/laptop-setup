@@ -655,7 +655,7 @@
         label: "{{ item.path }}"
       when:
         - system_aide_enabled | default(false)
-        - item.path != '/etc/usbguard' or usbguard_expected | default(true)
+        - item.path != '/etc/usbguard' or usbguard_expected | default(false)
       changed_when: false
       become: true
 

@@ -125,10 +125,19 @@ system_libvirt_remove_tftp: true
 system_libvirt_open_ssh: false
 
 # Core dumps
-system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
+# external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
+# pinned to anchor against future upstream change
+system_coredump_storage: external
 # NOTE: fs.suid_dumpable=0 suppresses SUID crashes regardless of this setting (CIS 1.5.1 req a).
 # 'none' disables collection entirely; 'journal' embeds core in journald (adds size pressure, requires extra extraction step)
 system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 disables
+
+# Journald log retention and rate-limiting (deployed via 99-hardening.conf drop-in)
+# Override in config.yml for small-disk systems or high-throughput log environments.
+system_journald_max_use: 4G        # SystemMaxUse — max total journald disk usage
+system_journald_keep_free: 1G      # SystemKeepFree — free disk space to preserve
+system_journald_max_retention: 6month  # MaxRetentionSec — max log age before rotation
+system_journald_rate_burst: 20000  # RateLimitBurst — burst log entries per 30s interval
 
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
@@ -332,7 +341,7 @@ system_dnssec_mode: allow-downgrade
 system_dns_primary: >-
   1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
   2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com
-system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"
+system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net 2620:fe::fe#dns.quad9.net 2620:fe::9#dns.quad9.net"
 # ~. = catch-all required for Tailscale MagicDNS; VPN routing domains (redhat.com, ts.net) always win by specificity
 system_dns_domains: "~."
 # LLMNR and mDNS via systemd-resolved drop-in (98-llmnr.conf).
@@ -397,6 +406,7 @@ system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync 
 system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
 system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
+system_chrony_dhcp_sourcedir: /run/chrony-dhcp  # NM-dispatcher DHCP NTP dir; override in config.yml for non-standard deployments
 
 # Security hardening defaults — authoritative values live in group_vars/all/vars.yml
 # (which overrides these at precedence 5 when running via the project inventory).

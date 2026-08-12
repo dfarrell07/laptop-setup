@@ -3,6 +3,9 @@
   hosts: all
   become: true
   gather_facts: true
+  # prepare.yml pre-installs openssh-server via tsflags=noscripts to avoid daemon-reload
+  # crashes in the container; no install task needed here. Rocky keeps its equivalent block
+  # because rocky/prepare.yml deliberately does NOT install openssh-server.
 
   pre_tasks:
     - name: Capture real user identity
@@ -21,20 +24,6 @@
       retries: 3
       delay: 5
       until: _dnf_cache_refresh is succeeded
-
-    - name: Gather package facts
-      ansible.builtin.package_facts:
-        manager: auto
-
-    - name: Install openssh-server so sshd hardening block is exercised in container CI
-      ansible.builtin.dnf:
-        name: openssh-server
-        state: present
-      register: _openssh_install
-      retries: 3
-      delay: 10
-      until: _openssh_install is succeeded
-      when: "'openssh-server' not in ansible_facts.packages"
 
   roles:
     - role: system

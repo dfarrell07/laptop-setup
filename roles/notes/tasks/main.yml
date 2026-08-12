@@ -26,7 +26,7 @@
 
     - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
       ansible.builtin.command:
-        cmd: git config --global filter.lfs.smudge
+        cmd: git config --global filter.lfs.required
       register: notes_lfs_configured
       changed_when: false
       failed_when: false

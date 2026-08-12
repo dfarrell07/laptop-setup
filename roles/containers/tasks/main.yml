@@ -281,7 +281,9 @@
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - containers_prune_enabled | bool
     - containers_prune_service.changed or containers_prune_timer.changed
-  failed_when: false  # intentional: enable task below uses ignore_errors, Warn fires on failure
+  # intentional: daemon-reload may fail on fresh provision with no active user session;
+  # enable/warn chain below surfaces the symptom
+  failed_when: false
 
 - name: Enable and start podman-prune.timer
   ansible.builtin.systemd:

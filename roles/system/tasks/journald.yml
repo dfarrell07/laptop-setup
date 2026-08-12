@@ -40,11 +40,11 @@
           # {{ ansible_managed }}
           [Journal]
           Storage=persistent
-          SystemMaxUse=4G
-          MaxRetentionSec=6month
-          SystemKeepFree=1G
+          SystemMaxUse={{ system_journald_max_use }}
+          MaxRetentionSec={{ system_journald_max_retention }}
+          SystemKeepFree={{ system_journald_keep_free }}
           RateLimitIntervalSec=30s
-          RateLimitBurst=20000
+          RateLimitBurst={{ system_journald_rate_burst }}
         dest: /etc/systemd/journald.conf.d/99-hardening.conf
         mode: "0644"
       when: not csb_rhel

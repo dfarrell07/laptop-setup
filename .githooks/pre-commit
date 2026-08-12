@@ -46,7 +46,7 @@ fi
 
 # Shell lint staged scripts
 if command -v shellcheck >/dev/null 2>&1; then
-  sh_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh' '.githooks/pre-commit' '.githooks/commit-msg' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
+  sh_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
   if [ -n "$sh_files" ]; then
     if ! echo "$sh_files" | xargs shellcheck -S warning; then
       failed=1
