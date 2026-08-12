@@ -76,7 +76,7 @@ bootstrap:
 	git config --local core.hooksPath .githooks
 	@echo "Bootstrap complete. Git hooks active."
 
-bootstrap-test: .venv
+bootstrap-test:
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
 	sudo systemctl enable --now libvirtd
 	vagrant box add githubixx/fedora-44 --provider libvirt
@@ -154,7 +154,7 @@ ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debia
 lint: .venv shellcheck
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
-	.venv/bin/python3 scripts/check-vars-sync.py
+	$(MAKE) check-vars-sync
 	@command -v actionlint >/dev/null 2>&1 && actionlint -color || echo "SKIP: actionlint not installed (run: make packages)"
 	@command -v zizmor >/dev/null 2>&1 && zizmor .github/ || echo "SKIP: zizmor not installed (run: make packages)"
 

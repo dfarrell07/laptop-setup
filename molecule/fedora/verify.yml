@@ -19,6 +19,7 @@
         go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         system_disable_usb_storage: false  # converge sets this false; verify must match or usb_storage modprobe check fails
+        real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:
     # --- Shared assertions (all platforms) ---

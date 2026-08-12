@@ -10,7 +10,7 @@ while [[ $# -gt 0 ]]; do
     --json)      JSON=true; shift ;;
     --user-only) USER_ONLY=true; shift ;;
     --container) [[ $# -ge 2 ]] || { echo "Error: --container requires a value" >&2; exit 2; }; CONTAINER="$2"; shift 2 ;;
-    -h|--help)   sed -n '2,4p' "$0"; exit 0 ;;
+    -h|--help)   printf 'Usage: %s [--json] [--user-only] [--container <name>]\nExit: 0 = all pass, 1 = any failures\n' "$0"; exit 0 ;;
     *)           echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done

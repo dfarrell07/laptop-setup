@@ -27,6 +27,13 @@
         group: systemd-journal
         mode: "2755"
 
+    - name: Remove journald hardening config on CSB RHEL
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d/99-hardening.conf
+        state: absent
+      when: csb_rhel
+      notify: Restart systemd-journald
+
     - name: Deploy journald hardening config
       ansible.builtin.copy:
         content: |

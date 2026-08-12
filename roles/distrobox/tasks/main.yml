@@ -119,7 +119,6 @@
     distrobox_tool: "none"
   when:
     - distrobox_tool != "none"
-    - not (fapolicyd_enforcing)
     - not (packages_install_binaries | bool)
     - distrobox_container_exists.rc != 0
 

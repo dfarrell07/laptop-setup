@@ -150,7 +150,10 @@
 
     - name: Warn that AIDE reinit takes 5-10 minutes
       ansible.builtin.debug:
-        msg: "AIDE configuration changed — reinitializing database. This takes 5-10 minutes. Do not cancel."
+        msg: >-
+          AIDE {{ 'initialization' if not (system_aide_db.stat.exists | default(false))
+          else 'reinitialization' }} triggered by config change — this takes
+          5-10 minutes. Do not cancel.
       when: _aide_conf_changed
 
     - name: Reinitialize AIDE database when conf changed
@@ -166,6 +169,7 @@
       when:
         - system_aide_db_new.stat.exists | default(false)
         - system_aide_reinit_result is skipped  # reinit was skipped — promote the DB from the previously interrupted init
+        - not (system_aide_db.stat.exists | default(false))
       changed_when: true
 
     - name: Initialize AIDE database (first run only)

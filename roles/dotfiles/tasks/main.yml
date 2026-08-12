@@ -84,7 +84,7 @@
     mode: "0644"
 
 - name: Migrate legacy dotfiles to XDG paths
-  ansible.builtin.include_tasks: '{{ common_project_root }}/common/tasks/xdg_migrate.yml'
+  ansible.builtin.include_tasks: xdg_migrate.yml
   vars:
     _legacy_path: '{{ item.legacy }}'
     _backup_path: '{{ item.backup }}'

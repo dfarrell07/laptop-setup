@@ -110,5 +110,5 @@ jobs:
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body "$BODY"
           else
-            gh issue create --title "$TITLE" --body "$BODY" --label "dependencies" 2>/dev/null || true
+            gh issue create --title "$TITLE" --body "$BODY" --label "dependencies" || echo '::warning::gh issue create failed — check token permissions and label existence'
           fi

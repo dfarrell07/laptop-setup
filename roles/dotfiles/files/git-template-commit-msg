@@ -9,6 +9,14 @@ case "$msg" in
   Merge\ branch*|Merge\ pull*|Merge\ remote*) exit 0 ;;
 esac
 
+if [ -z "$desc_first" ]; then
+  case "$msg" in
+    *:*) echo "ERROR: Subject has no description after scope colon" >&2 ;;
+    *)   echo "ERROR: Subject line is empty" >&2 ;;
+  esac
+  exit 1
+fi
+
 if ! echo "$msg" | grep -qE '^[A-Z]'; then
   echo "ERROR: Capitalize the subject line" >&2
   exit 1
@@ -53,8 +61,10 @@ if ! grep -q '^Signed-off-by:' "$1"; then
   exit 1
 fi
 
-if command -v npx >/dev/null 2>&1; then
+if command -v npx >/dev/null 2>&1 && [ -x "./node_modules/.bin/commitlint" ]; then
   npx --no -- commitlint --edit "$1"
+elif command -v npx >/dev/null 2>&1; then
+  echo "WARNING: commitlint not installed — run: make bootstrap" >&2
 else
   echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
 fi

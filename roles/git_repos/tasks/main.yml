@@ -30,10 +30,9 @@
   ansible.builtin.set_fact:
     git_repos_filtered: >-
       {{
-        git_repos_list
-        | selectattr('category', 'in', git_repos_active_categories)
-        | rejectattr('enabled', 'equalto', false)
-        | list
+        (git_repos_list | selectattr('category', 'in', git_repos_active_categories) | selectattr('enabled', 'undefined') | list)
+        + (git_repos_list | selectattr('category', 'in', git_repos_active_categories)
+          | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list)
       }}
 
 - name: Fail when explicit category filter matches no enabled repos
@@ -97,7 +96,7 @@
     state: directory
     mode: "0755"
 
-- name: Check git-lfs availability
+- name: Check git-lfs availability  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: git lfs version
   register: git_repos_lfs_check

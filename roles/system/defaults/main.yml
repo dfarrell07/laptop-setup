@@ -390,6 +390,7 @@ system_chrony_fallback_pool: "{{ '2.fedora.pool.ntp.org' if is_dnf else '2.debia
 system_chrony_minsources: 2
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
 system_chrony_service_enabled: "{{ not system_is_container }}"
+system_firewalld_running: false  # runtime set_fact in firewall.yml overrides; false ensures tag-isolated runs (--tags nm) are fail-safe
 system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync fails on NTS-blocking networks)
 system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
