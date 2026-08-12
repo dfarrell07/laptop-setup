@@ -166,7 +166,7 @@
 
 - name: Set password aging fields for existing user account
   ansible.builtin.command:
-    cmd: chage {{ item.item.flag }} {{ vars[item.item.var] }} {{ real_user_id }}
+    argv: [chage, '{{ item.item.flag }}', '{{ vars[item.item.var] }}', '{{ real_user_id }}']
   register: _chage_set_result
   when:
     - not csb_rhel
