@@ -60,7 +60,7 @@
       WARNING: libvirt socket enable failed:
       {{ _virt_socket_result.results | selectattr('failed', 'equalto', true) |
       map(attribute='msg') | join(', ') | default('unknown') }}
-  when: _virt_socket_result is failed
+  when: _virt_socket_result.results | selectattr('failed', 'equalto', true) | list | length > 0
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
   ansible.builtin.getent:
