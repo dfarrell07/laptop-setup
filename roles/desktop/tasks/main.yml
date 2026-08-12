@@ -257,20 +257,21 @@
   when: is_linux
 
 # --- macOS: AeroSpace config ---
-- name: Ensure AeroSpace config directory (macOS)
-  ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
-    state: directory
-    mode: "0755"
+- name: Deploy AeroSpace configuration (macOS)
   when: is_macos
+  block:
+    - name: Ensure AeroSpace config directory (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
+        state: directory
+        mode: "0755"
 
-- name: Deploy AeroSpace config (macOS)
-  ansible.builtin.copy:
-    src: aerospace.toml
-    dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
-    mode: "0644"
-    force: false
-  when: is_macos
+    - name: Deploy AeroSpace config (macOS)
+      ansible.builtin.copy:
+        src: aerospace.toml
+        dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
+        mode: "0644"
+        force: false
 
 # --- macOS: defaults ---
 - name: Set macOS defaults
