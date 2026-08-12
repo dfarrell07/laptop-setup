@@ -7,14 +7,6 @@
         path: "{{ notes_repo_path }}/.git"
       register: notes_repo_stat
 
-    - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        cmd: git config --global filter.lfs.smudge
-      register: notes_lfs_configured
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe — must run in check mode
-
     - name: Check git-lfs availability  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: git lfs version
@@ -31,6 +23,15 @@
           Install git-lfs ('{{ is_dnf | ternary('dnf', 'apt') }} install git-lfs') before cloning repos that track large files.
       when:
         - notes_lfs_check.rc != 0
+
+    - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: git config --global filter.lfs.smudge
+      register: notes_lfs_configured
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode
+      when: notes_lfs_check.rc == 0
 
     - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
       ansible.builtin.command:
@@ -185,7 +186,7 @@
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)
       ansible.builtin.debug:
-        verbosity: 0
+        verbosity: 1
         msg: >-
           transcrypt is already initialized — if vault_notes_transcrypt_password changed,
           re-provisioning silently skips re-init. To rotate credentials, manually run:
