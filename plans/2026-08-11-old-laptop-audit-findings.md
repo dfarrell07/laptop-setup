@@ -473,3 +473,36 @@ Disk pressure eased to 82% full (193G/237G, ~44G free) from the prior
 100% (324MB free). Cleanup appears to have occurred. Migration
 disruption risk remains due to 4 active Claude rebase agents and 6
 Podman containers, but the immediate disk-failure urgency is reduced.
+
+## Learning Loop 3
+
+### active-work-snapshot (update 3)
+
+Swap fully exhausted (8.0/8.0Gi used, 8.5Mi free) causing system
+thrashing. Load average 94.61 (was 72 in prior update), 59 Claude
+processes (was 45), 33 concurrent Go compiler/linker processes. The
+rebase has progressed to the Go test compilation phase. Disk at 84%
+(39G free, down from 44G in update 2).
+
+### data-integrity (update)
+
+Revised aggregate totals from 130-repo scan: approximately 500+
+unpushed commits across 200+ branches in 30+ repositories (prior
+estimate was 88 commits across 14 repos). Key repos with larger
+exposure than previously documented: submariner-operator has 40+
+unpushed branches including a 108-commit bundle-update branch,
+shipyard has 30+ unpushed branches plus 100+ untracked local branches,
+lighthouse has 30+ unpushed branches, submariner has 25+ unpushed
+branches. enhancements repo has 6 unpushed commits on devel including
+the SEP modernization proposal (not previously identified).
+CREDENTIAL RISK: stolostron/deploy contains an untracked file
+prereqs/quay_dfarrell_secret.yml which may contain registry
+credentials -- do not include in any bulk migration copy.
+
+### system-health
+
+/tmp holds 3.5G reclaimable space (not previously identified as a
+cleanup target). For the plocate-updatedb failure caused by
+advisory-database exceeding open-file limits, the simplest fix is
+adding the path to PRUNEPATHS in /etc/updatedb.conf rather than
+raising LimitNOFILE.
