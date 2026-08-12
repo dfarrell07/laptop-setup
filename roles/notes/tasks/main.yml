@@ -77,6 +77,7 @@
           environment:
             GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make all
           failed_when: false
+          timeout: 60
 
     - name: Re-check if notes repo exists after clone attempts
       ansible.builtin.stat:
