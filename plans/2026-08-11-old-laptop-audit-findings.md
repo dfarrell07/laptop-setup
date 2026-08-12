@@ -383,3 +383,41 @@ systemd unit, or state artifacts. This is new infrastructure on the P16v,
 not a migration. No node identity or pre-existing keys to transfer. The
 automation fully supports fresh Tailscale provisioning; `tailscale up` is
 the only post-provision step.
+
+### active-work-snapshot
+
+Old laptop is under heavy load from an active Kubernetes 1.36.2 rebase
+operation. Six Claude CLI sessions running the k8s-rebase plugin across
+6 OVN-K repos (cloud-network-config-controller, cluster-network-operator,
+ingress-node-firewall, multus-cni, ovn-kubernetes, ovn-kubernetes-mcp),
+22 concurrent Go compiles, load average 58.58, 3 active Podman containers.
+System at capacity: 7.9G/15G RAM used, 4.1G swap consumed, /home 98% full
+(5.6G remaining). Migration during this rebase would be highly disruptive
+-- all 6 Claude sessions hold significant state and the worktree data
+under .repos/ represents hours of accumulated rebase progress. Disk
+pressure is the most immediate risk even without migration.
+
+### data-loss-risk (update)
+
+Broader 130-repo scan found additional at-risk repos not in the initial
+14-repo sweep: stolostron/acm-threat-model has 9 unpushed commits on
+main. The 5 ovnk rebasebot repos (ovn-kubernetes, cluster-network-operator,
+multus-cni, cloud-network-config-controller, ingress-node-firewall)
+collectively have hundreds of local-only bump branches with no remote
+backup. konflux/submariner-release-management has 120 local-only branches
+beyond the 7 unpushed on main. Four repos with dirty tracked files:
+stolostron/deploy, stolostron/submariner-addon, ovnk workspace root,
+konflux/old_fbc.
+
+### python (update)
+
+Stale /usr/local/bin/pip wrappers from 2021 shadow RPM-provided
+/usr/bin/pip. Testing dependencies (molecule, ansible-core, etc.) are
+installed globally via pip --user rather than in the intended .venv
+(no .venv directory exists; `make pip-sync` has never been run).
+
+### gcloud-vertex-config (update)
+
+`repo_google_cloud_sdk` defaults to false. If gcloud CLI is needed on
+the P16v host (not just in containers), set `repo_google_cloud_sdk: true`
+in config.yml before `make all`.
