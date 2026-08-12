@@ -506,3 +506,39 @@ cleanup target). For the plocate-updatedb failure caused by
 advisory-database exceeding open-file limits, the simplest fix is
 adding the path to PRUNEPATHS in /etc/updatedb.conf rather than
 raising LimitNOFILE.
+
+## Learning Loop 4
+
+### active-work-snapshot (update 4)
+
+System stabilizing: load average dropped from 94.61 to 20+, swap
+from 100% exhausted to 56%, Claude processes from 59 to 24 (6
+interactive + background rebase daemon). Disk at 87% (32G free).
+K8s 1.36.2 rebase still in flight across multus-cni, CNO, CNCC,
+ingress-node-firewall with two Podman golang:1.26 build containers.
+Crisis conditions from LL3 have eased but migration should still
+wait for rebase completion.
+
+### data-safety (update 4)
+
+Two previously unidentified repos with local-only branches (no
+remote tracking): cncf/foundation (13 commits on subm_maints) and
+submariner-diagnostics (2 commits on add-shellcheck-ci). These are
+entirely on-disk with no upstream backup.
+
+### chrome-extensions (update 2)
+
+If user wants Fedora User Agent or GNOME Shell integration to
+survive policy deployment, add their IDs to ExtensionInstallAllowlist
+in chrome-security-policy.json: hojggiaghnldpcknpbciehjcaoafceil
+(Fedora User Agent, active in Profiles 1-4),
+gphhapmejobijbbhgpjhcjognlahblep (GNOME Shell integration, active
+in Profile 5). Deployment trigger: policy will auto-deploy on next
+`make all` because the csb-chrome-policies.json gate file is absent
+from /etc/opt/chrome/policies/managed/.
+
+### systemd-journal (update)
+
+Recurring Chrome crashes: 3 instances over 3 months (SIGBUS/SIGILL).
+Confirmed not hardware-related -- no MCE, EDAC, NVMe, thermal, or
+GPU/DRM errors anywhere in the journal.
