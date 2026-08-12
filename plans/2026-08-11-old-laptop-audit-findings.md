@@ -1,3 +1,19 @@
+# Old Laptop Audit: wip3 Review + Real-Time Monitoring
+
+Compiled from the ThinkPad X1 Carbon 7th Gen (Fedora 42, i3, Intel) by
+~300 Opus agents across 20+ workflow passes. This document covers:
+- **wip3 code review** — 6 findings from auditing the 31 new commits
+- **Messages from the Old Laptop** — what the automation cannot discover
+- **Real-time monitoring** — 9 learning loops captured the K8s rebase crisis
+
+A companion **2,401-line plan on the wip1 branch** (17 commits) contains:
+71 original findings with fix diffs, verification pass, reproduction
+results, Letter from the Old Laptop (shell history, editor preferences,
+workflow profile), and a ready-to-use `plans/p16v-config.yml` template.
+Pull wip1 for the full context.
+
+---
+
 ## wip3 Review
 
 ### Original Findings Status
@@ -8,7 +24,7 @@
 | 2 | packages_security_rhel variable name mismatch | high | FIXED | 08e07d67 |
 | 3 | Idempotent opm rename via copy+absent | low | FIXED | 884afced + 7a0e7b81 |
 | 4 | session_timeout.yml Debian guard on profile.d | medium | FIXED | f00aa20d |
-| 5 | PubkeyAcceptedAlgorithms removed from GitHub SSH host block | medium | FIXED | 2572bbee |
+| 5 | PubkeyAcceptedAlgorithms removed from GitHub SSH host block | **critical** | FIXED | 2572bbee |
 | 6 | packages_security (openssl) orphaned from dnf set_fact | medium | STILL OPEN | -- |
 
 ### New Findings (wip3)
@@ -130,7 +146,7 @@ DISK MIGRATION GUIDANCE -- What to copy from the old laptop:
 **COPY THESE (small, irreplaceable):**
 - ~/.ssh/ (SSH keys -- also encrypted in vault, but copy as backup)
 - ~/laptop-setup/group_vars/all/vault.yml (encrypted vault)
-- ~/laptop-setup/config.yml (machine-specific overrides)
+- ~/laptop-setup/config.yml (if it exists -- this old laptop has NONE)
 - ~/.vimrc, ~/.zshrc customizations (if any beyond dotfiles role)
 - ~/.zsh_history (command history)
 - ~/notes/ (7.4 MB, private notes repo)
@@ -223,7 +239,7 @@ NPM CONFIG STATUS: The old laptop has a manual ~/.npmrc with
 prefix=~/.npm-global and fetch-retry timeout bumps. The automation does NOT
 manage this file at all -- no template, no task, no variable. The
 ~/.npm-global/bin directory is empty (no real packages installed), so there
-is nothing to migrate. On the P16v, npm (installed via Linuxbrew by the
+is nothing to migrate. On the P16v, npm (installed via dnf nodejs package by the
 packages role) will use its default prefix (/home/linuxbrew/.linuxbrew)
 unless you manually create ~/.npmrc. The project-level .npmrc in
 laptop-setup/ has ignore-scripts=true for security, but the user's global
@@ -355,9 +371,12 @@ roles/packages/tasks/install_pipx.yml, requirements-test.lock.
 ### hardware-inventory
 
 USBGuard whitelist requirements for P16v planning: YubiKey (1050:0407),
-ZSA Moonlander (3297:1969), internal camera (13d3:56bb), fingerprint
-reader (06cb:00bd), Bluetooth adapter (8087:0aaa). Root hubs (1d6b:0002,
-1d6b:0003) are implicitly trusted. Eight Bluetooth-paired peripherals (3
+ZSA Moonlander (3297:1969) are portable across machines. **WARNING: the
+following VID:PIDs are from the OLD X1C7 and will differ on the P16v** —
+internal camera (13d3:56bb), fingerprint reader (06cb:00bd), Bluetooth
+adapter (8087:0aaa). Run `usbguard generate-policy` on the P16v to
+discover its actual internal device IDs before enabling USBGuard. Root
+hubs (1d6b:0002, 1d6b:0003) are implicitly trusted. Eight Bluetooth-paired peripherals (3
 Logitech MX mice across 5 pairings, 2 headsets, Keychron K2) connect via
 the BT adapter and need no USB rules. If a Logitech Unifying (046d:c52b)
 or Bolt (046d:c548) dongle is later connected, add it to the whitelist.
@@ -567,3 +586,47 @@ chrome-extensions, system-health, non-dnf-apps, scheduled-tasks,
 python, hardware-inventory, google_cloud_vertex_config, tailscale)
 are duplicates of information already captured in Learning Loops 1-5.
 No new findings, repos, action items, or metrics were identified.
+
+---
+
+## Summary: What the P16v Agent Needs to Know
+
+**Before running `make all` on the P16v:**
+1. Create config.yml — use `plans/p16v-config.yml` template from wip1 branch
+2. Set `install_docker: true` and `repo_docker_ce: true` if Docker is needed
+3. Set `repo_google_cloud_sdk: true` if gcloud CLI is needed on host
+4. Set `dotfiles_aws_profile: "aws-acm-subm"` for AWS workflow
+5. Resolve Vertex AI project ID mismatch (3 different values across env vars)
+6. Copy from old laptop: ~/.ssh/, vault.yml, .vimrc, .zsh_history, ~/notes/
+7. Do NOT copy: ~/ovnk/ (77G), ~/go/ (20G), ~/.cache/ (60G), ~/sdk/ (1.9G)
+8. Do NOT copy: ~/.kube/config (tokens expired), stolostron/deploy (credential file)
+
+**After `make all`:**
+1. Reboot (kernel params, SSH port 722, group membership)
+2. `tailscale up` (NEW — user has never used Tailscale on a workstation)
+3. `gh auth login`
+4. `mullvad account set ACCOUNT_NUMBER` (NEW — replacing ExpressVPN)
+5. `oc login` to 3 Konflux clusters + CI cluster
+6. `podman login` to registry.redhat.io, quay.io, brew.registry.redhat.io
+7. `gcloud auth login` + `gcloud auth application-default login`
+8. Rotate AWS keys (4+ years old)
+9. Install Bitwarden extension BEFORE deploying Chrome policy
+10. `make smoke-test`
+
+**Data-loss risk on old laptop:**
+- 500+ unpushed commits across 200+ branches in 30+ repos
+- 1,849 local branches with no upstream tracking
+- 92 git stashes across 17 repos (local-only)
+- 1 credential file: stolostron/deploy/prereqs/quay_dfarrell_secret.yml
+- Push all CVE-fix branches before decommissioning
+
+**Key behavioral changes from old laptop:**
+- Sway (Mod4) replaces i3 (Mod1) — every keybinding changes
+- Mullvad replaces ExpressVPN
+- Claude Code instance isolation (cw/ccp) is NEW — user has never used it
+- Sandbox enabled replaces --dangerously-skip-permissions
+- ~/src/ flat layout replaces ~/go/src/ GOPATH layout
+- TMOUT=600 (readonly) — terminal sessions timeout after 10 minutes
+- SSH on port 722 (was 22)
+- Firewall drop zone (was FedoraWorkstation)
+- USBGuard blocks unknown devices (was unrestricted)
