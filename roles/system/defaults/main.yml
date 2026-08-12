@@ -118,9 +118,9 @@ system_firewall_icmp_extra_types: []
 # Set false in config.yml to keep tftp in the libvirt zone (needed for PXE/network-boot VMs).
 # When true (default), tftp is removed from the libvirt zone because it is not needed for most hosts.
 system_libvirt_remove_tftp: true
-# Set false in config.yml to prevent VMs from reaching host on ssh_port.
-# Default true for dev workstations that use VM→host SSH.
-system_libvirt_open_ssh: true
+# Set true in config.yml to allow VMs to reach host on ssh_port (opt-in).
+# Default false; explicit opt-in required for VM→host SSH (e.g., ansible-provisioning guests).
+system_libvirt_open_ssh: false
 
 # Core dumps
 system_coredump_storage: external  # external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
