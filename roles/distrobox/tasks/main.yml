@@ -217,6 +217,17 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
+    - name: Warn before destroying existing container when container_replace is true
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
+          The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
+          after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+      when:
+        - distrobox_use_toolbox | bool
+        - distrobox_container_replace | bool
+        - distrobox_container_exists.rc == 0
+
     - name: Remove existing Toolbx container for replacement
       ansible.builtin.command:
         cmd: "toolbox rm --force {{ distrobox_container_name }}"
@@ -229,8 +240,7 @@
       ansible.builtin.command:
         cmd: >-
           toolbox create
-          --distro {{ distrobox_container_distro }}
-          --release {{ distrobox_container_release }}
+          --image {{ distrobox_container_image }}
           {{ distrobox_container_name }}
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_toolbox_create

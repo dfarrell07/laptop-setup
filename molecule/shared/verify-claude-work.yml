@@ -13,7 +13,11 @@
       - verify_claude_work.stat.exists
       - verify_claude_work.stat.isdir
       - verify_claude_work.stat.mode == '0700'
-    fail_msg: "Claude work config dir missing or wrong permissions"
+    fail_msg: >-
+      Claude work config dir missing or wrong permissions
+      (exists={{ verify_claude_work.stat.exists | default(false) }},
+      mode={{ verify_claude_work.stat.mode | default('absent') }},
+      expected isdir+0700)
 
 - name: Verify Claude work settings.local.json exists
   ansible.builtin.stat:

@@ -65,6 +65,10 @@
   ansible.builtin.command: pip3 --version
   changed_when: false
 
+- name: Check pipx is installed
+  ansible.builtin.command: pipx --version
+  changed_when: false
+
 - name: Check direnv is installed
   ansible.builtin.command: direnv version
   changed_when: false
@@ -203,6 +207,10 @@
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
   when: not (system_is_container | default(false))
+
+# CI gap: firewall hardening (firewall.yml) skipped in container CI — firewalld cannot
+# start in Podman containers; make test-vm (vm/verify.yml) exercises default zone=drop,
+# ssh port, and icmp-block-inversion assertions.
 
 # CI gap: all PAM, authselect, faillock, pwquality, login.defs, dnf-automatic, ABRT, and cron assertions below
 # are gated on not system_is_container. Fedora and Rocky molecule scenarios set system_is_container=true,

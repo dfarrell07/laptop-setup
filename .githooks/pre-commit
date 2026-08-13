@@ -79,6 +79,7 @@ else
 
   # Guard against future supply-chain drift: all current packages use sha512 + registry.npmjs.org
   # Lockfile integrity (only when package-lock.json is staged)
+  # Only checks repo-root package-lock.json; subdirectory lockfiles would need separate handling
   if git diff --cached --name-only -z --diff-filter=ACM | grep -qz '^package-lock\.json$'; then
     if ! git show :package-lock.json | python3 -c "
 import json, sys

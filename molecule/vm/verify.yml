@@ -239,8 +239,8 @@
 
     - name: Assert reverse path filtering
       ansible.builtin.assert:
-        that: verify_rp_filter.stdout == '2'
-        fail_msg: "Reverse path filtering not set to loose mode (2) required for Tailscale"
+        that: verify_rp_filter.stdout | int == 2
+        fail_msg: "Reverse path filtering is '{{ verify_rp_filter.stdout }}', expected '2' (loose mode required for Tailscale)"
 
     - name: Check sysctl net.ipv4.ip_forward
       ansible.builtin.command: sysctl -n net.ipv4.ip_forward
@@ -262,8 +262,10 @@
 
     - name: Assert bridge-nf-call-iptables is 1 (required for OVN-K NetworkPolicy)
       ansible.builtin.assert:
-        that: verify_bridge_nf.stdout == '1'
-        fail_msg: "net.bridge.bridge-nf-call-iptables is not 1 — Kubernetes NetworkPolicy will not be enforced"
+        that: verify_bridge_nf.stdout | int == 1
+        fail_msg: >-
+          net.bridge.bridge-nf-call-iptables is '{{ verify_bridge_nf.stdout }}',
+          expected '1' (required for Kubernetes NetworkPolicy)
 
     - name: Verify ip_tables, br_netfilter, overlay modules loaded at runtime
       ansible.builtin.command: sh -c "lsmod | grep -qE 'ip_tables|br_netfilter|overlay'"

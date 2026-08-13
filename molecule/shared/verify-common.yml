@@ -572,7 +572,7 @@
     - not (system_is_container | default(false))
 
 - name: Check sysctl hardening config contains security-critical keys
-  ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
     - kernel.dmesg_restrict = 1  # hardcoded: no system_dmesg_restrict var; matches _system_sysctl_hardening_defaults dict
@@ -596,7 +596,7 @@
     - verify_sysctl_file.stat.exists
 
 - name: Check sysctl hardening config contains ip_forward keys
-  ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
@@ -1298,7 +1298,7 @@
     - system_tmout | int > 0
 
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
-  ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:
     - "LLMNR={{ system_resolved_llmnr | default('no') }}"
     - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"

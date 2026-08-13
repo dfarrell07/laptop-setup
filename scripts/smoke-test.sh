@@ -336,7 +336,7 @@ fi
 
 # ~/.cargo/bin in PATH (added by dotfiles role — required for Rust/bpfman toolchain)
 if grep -qE '^[^#]*\.cargo/bin' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "cargo-path" "PASS"
-else record "cargo-path" "FAIL" "$HOME/.cargo/bin not in PATH exports (.zshrc/.bashrc) — Rust toolchain binaries unavailable"; fi
+else record "cargo-path" "FAIL" "$HOME/.cargo/bin not exported in .zshrc or .bashrc — Rust toolchain binaries unavailable"; fi
 
 # oh-my-zsh XDG path (dotfiles role clones to ~/.local/share/oh-my-zsh; legacy ~/.oh-my-zsh removed)
 if [[ -f "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh" ]]; then record "omz-xdg-dir" "PASS"
@@ -798,7 +798,8 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
         else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
       fi
       if [[ -n "$_ssh_port" ]]; then
-        if ss -tlnp 2>/dev/null | grep -qE ":${_ssh_port}([^0-9]|$)"; then record "sshd-port-bound" "PASS"
+        if ! command -v ss &>/dev/null; then record "sshd-port-bound" "WARN" "ss not installed — cannot verify sshd binding"
+        elif ss -tlnp 2>/dev/null | grep -qE ":${_ssh_port}([^0-9]|$)"; then record "sshd-port-bound" "PASS"
         else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
       fi
     fi
@@ -1618,9 +1619,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   fi  # end GDM check
 
   # Unexpected listening ports (non-loopback)
-  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-$_cfg_ssh_port}([^0-9]|$)" | tail -n +2 || true)
-  if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
-  else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
+  if ! command -v ss &>/dev/null; then record "no-open-ports" "WARN" "ss not installed — cannot check for unexpected listeners"
+  else
+    listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-$_cfg_ssh_port}([^0-9]|$)" | tail -n +2 || true)
+    if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
+    else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
+  fi
 
   _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   _system_umask="${_system_umask:-027}"

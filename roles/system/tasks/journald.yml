@@ -3,11 +3,11 @@
 # --- Journald persistent logging and retention ---
 # Skipped entirely in containers: inotify on /etc/systemd/journald.conf.d and creating
 # /var/log/journal both trigger journald restart, which crashes privileged Podman containers.
-# Rationale for /var/log/journal: Storage=auto writes there only when the directory exists;
+# Rationale for /var/log/journal: Storage=persistent (systemd 256+ default) creates this directory automatically;
 # creating it is additive. NOTE: 99-hardening.conf sorts last; if IT deploys a journald
 # drop-in on hybrid Fedora with a lower-numbered name, this config wins. If IT tuning
 # must take precedence on hybrid CSB, add a csb_detected guard or rename the drop-in
-# to a lower sort-order name. If they use Storage=auto, persistent logging is a security
+# to a lower sort-order name. If they use an older systemd with Storage=auto, persistent logging is a security
 # benefit (logs survive reboots).
 # journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM pipeline uses
 # audisp-remote (auditd), a completely separate subsystem.
@@ -22,7 +22,7 @@
         state: directory
         mode: "0755"
 
-    # NOTE: Storage=auto (default on CSB after drop-in removal) uses persistent storage
+    # NOTE: Storage=persistent (systemd 256+ compiled-in default, effective on CSB after drop-in removal) uses persistent storage
     # when this directory exists — intentional; see block-level comment above.
     - name: Ensure /var/log/journal exists for persistent storage
       ansible.builtin.file:

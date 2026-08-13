@@ -77,7 +77,8 @@
     - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
 
-# NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT); enforces on RHEL/Rocky
+# NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT);
+# enforces on RHEL/Rocky; skipped on Debian (SHA512 default preserved)
 - name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
@@ -87,11 +88,14 @@
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - not is_apt  # Debian 13 defaults to SHA512; YESCRYPT_COST_FACTOR is not in Debian's login.defs template
 
 # NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it.
 # regexp matches both commented and uncommented forms for true idempotency — narrow
 # '^#YESCRYPT_COST_FACTOR' would fail to match the already-uncommented line on re-runs
 # and lineinfile would append a duplicate rather than no-op.
+# YESCRYPT_COST_FACTOR is a Fedora/RHEL shadow-utils extension; Debian's login.defs does not
+# include this key — shadow-utils ignores it but lineinfile would append a stray line.
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
@@ -101,6 +105,7 @@
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
 
 - name: Restrict existing user home directory to {{ system_home_mode }} (CIS 6.2.x, retroactive)
   ansible.builtin.file:
