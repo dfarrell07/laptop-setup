@@ -694,7 +694,7 @@ if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
 fi
 if $_is_rhel; then
   # RHEL CSB: cert AND fapolicyd installed
-  $_has_rh_cert && systemctl list-unit-files fapolicyd.service &>/dev/null && CSB_HOST=true
+  $_has_rh_cert && systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd\.service' && CSB_HOST=true
 else
   # Fedora CSB: cert AND FQDN ends in .csb
   $_has_rh_cert && [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true

@@ -11,26 +11,10 @@
       # {{ ansible_managed }}
       [connection.wifi-mac-rand]
       match-device=type:wifi
-      wifi.cloned-mac-address=stable-ssid
+      wifi.cloned-mac-address={{ 'stable-ssid' if system_wifi_mac_rand | bool else 'preserve' }}
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     mode: "0644"
-  when:
-    - system_wifi_mac_rand | bool
-    - not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
-  notify: Restart NetworkManager
-
-- name: Deploy WiFi MAC address preserve config when randomization disabled
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      [connection.wifi-mac-rand]
-      match-device=type:wifi
-      wifi.cloned-mac-address=preserve
-    dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
-    mode: "0644"
-  when:
-    - not (system_wifi_mac_rand | bool)
-    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+  when: not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   notify: Restart NetworkManager
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces
@@ -117,6 +101,13 @@
 # interface, not controlled by IT's firewalld policy. Trusted zone is required for
 # Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale
 # peers can reach any listening port on this machine (passim, etc. are masked separately).
+- name: Warn when tailscale0 zone assignment will be skipped
+  ansible.builtin.debug:
+    msg: "system_firewalld_running=false — tailscale0 zone assignment skipped; run without --tags to configure firewall"
+  when:
+    - not system_is_container
+    - not system_firewalld_running | bool
+
 - name: Assign tailscale0 to firewall trusted zone
   ansible.posix.firewalld:
     zone: trusted

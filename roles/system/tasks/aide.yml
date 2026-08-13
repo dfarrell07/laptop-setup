@@ -13,6 +13,14 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Warn that AIDE is not implemented for apt hosts
+  ansible.builtin.debug:
+    msg: 'CIS 1.3 WARNING: system_aide_enabled=true has no effect on apt hosts — AIDE setup is DNF/RPM-only.'
+  when:
+    - is_apt
+    - system_aide_enabled | bool
+    - not system_is_container
+
 - name: AIDE file integrity monitoring
   when:
     - is_dnf

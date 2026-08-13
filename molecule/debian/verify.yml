@@ -15,7 +15,6 @@
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
         profile: personal
         dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches ci-default-vars.yml value; not re-loaded in verify phase
-        system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:

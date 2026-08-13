@@ -7,9 +7,6 @@
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_stat
 
-    - name: Set up git-lfs smudge/clean filter drivers
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
-
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists
       block:
@@ -59,6 +56,10 @@
           {{ notes_repo_stat.stat.exists or
              (notes_repo_post_clone.stat | default({'exists': false})).exists }}
 
+    - name: Set up git-lfs smudge/clean filter drivers
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
+      when: notes_repo_available
+
     - name: Warn if notes repo could not be cloned
       ansible.builtin.debug:
         msg: >-
@@ -66,38 +67,36 @@
           Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
       when: not notes_repo_available
 
-    - name: Check if transcrypt is available
-      ansible.builtin.stat:
-        path: "{{ notes_transcrypt_bin_path }}"
-      register: notes_transcrypt_bin
-      check_mode: false
-      when: notes_repo_available
+    - block:
+        - name: Check if transcrypt is available
+          ansible.builtin.stat:
+            path: "{{ notes_transcrypt_bin_path }}"
+          register: notes_transcrypt_bin
+          check_mode: false
 
-    - name: Set transcrypt availability fact
-      ansible.builtin.set_fact:
-        notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists }}"
-      when: notes_repo_available
+        - name: Set transcrypt availability fact
+          ansible.builtin.set_fact:
+            notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists }}"
 
-    - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
-      ansible.builtin.copy:
-        dest: "{{ notes_repo_path }}/.gitleaks.toml"
-        mode: "0644"
-        content: |
-          # Allow all blobs — transcrypt encrypts file contents before staging.
-          # The global pre-commit hook (core.hooksPath) would otherwise flag
-          # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
-          [allowlist]
-            description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
-            paths = ['.*']
-      when: notes_repo_available
+        - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
+          ansible.builtin.copy:
+            dest: "{{ notes_repo_path }}/.gitleaks.toml"
+            mode: "0644"
+            content: |
+              # Allow all blobs — transcrypt encrypts file contents before staging.
+              # The global pre-commit hook (core.hooksPath) would otherwise flag
+              # every commit in this repo as containing "secrets" (AES-256-CBC ciphertext).
+              [allowlist]
+                description = "Transcrypt-encrypted notes repo — all blobs are encrypted ciphertext"
+                paths = ['.*']
 
-    - name: Suppress gitleaks allowlist from git status (repo-local exclude)
-      ansible.builtin.lineinfile:
-        path: "{{ notes_repo_path }}/.git/info/exclude"
-        line: ".gitleaks.toml"
-        create: true
-        mode: "0644"
-      failed_when: false
+        - name: Suppress gitleaks allowlist from git status (repo-local exclude)
+          ansible.builtin.lineinfile:
+            path: "{{ notes_repo_path }}/.git/info/exclude"
+            line: ".gitleaks.toml"
+            create: true
+            mode: "0644"
+          failed_when: false
       when: notes_repo_available
 
     - name: Check if transcrypt is initialized
@@ -170,22 +169,22 @@
         - notes_transcrypt_inited
 
 
-    - name: Restrict notes repo directory and .git/config permissions
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "{{ item.mode }}"
-        state: "{{ item.state }}"
-      loop:
-        - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
-        - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
-      when: notes_repo_available
+    - block:
+        - name: Restrict notes repo directory and .git/config permissions
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            mode: "{{ item.mode }}"
+            state: "{{ item.state }}"
+          loop:
+            - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
+            - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
 
-    - name: Warn if transcrypt not available
-      ansible.builtin.debug:
-        msg: "transcrypt not installed — run 'make packages' first"
-      when:
-        - notes_repo_available
-        - not (notes_transcrypt_available)
+        - name: Warn if transcrypt not available
+          ansible.builtin.debug:
+            msg: "transcrypt not installed — run 'make packages' first"
+          when:
+            - not (notes_transcrypt_available)
+      when: notes_repo_available
 
     - name: Warn if transcrypt password not set
       ansible.builtin.debug:

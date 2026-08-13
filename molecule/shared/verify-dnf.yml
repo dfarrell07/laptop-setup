@@ -114,6 +114,9 @@
   changed_when: false
   when: verify_ykman_bin.stat.exists
 
+# CI gap: /etc/kernel/cmdline only written by grubby (kernel_lockdown.yml),
+# which is blocked on not system_is_container. All four assertions below
+# silently skip in Podman CI — make test-vm exercises kernel cmdline hardening.
 - name: Stat /etc/kernel/cmdline
   ansible.builtin.stat:
     path: /etc/kernel/cmdline

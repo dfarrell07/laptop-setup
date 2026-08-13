@@ -49,20 +49,11 @@ jobs:
       - name: Check for version drift
         run: |
           python3 - "$GALAXY_WORK_DIR" <<'PYEOF'
-          import json, sys, pathlib, re
+          import json, sys, pathlib, yaml
 
           work_dir = pathlib.Path(sys.argv[1])
-          pinned = {}
-          current_name = None
-          with open('requirements.yml') as f:
-              for line in f:
-                  m = re.match(r'^\s*-\s*name:\s*(\S+)', line)
-                  if m:
-                      current_name = m.group(1)
-                  v = re.match(r'^\s+version:\s*["\']?([^"\']+)["\']?', line)
-                  if v and current_name:
-                      pinned[current_name] = v.group(1).strip()
-                      current_name = None
+          reqs = yaml.safe_load(open('requirements.yml'))
+          pinned = {c['name']: c['version'] for c in reqs.get('collections', []) if 'version' in c}
 
           drift = []
           errors = []

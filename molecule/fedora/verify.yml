@@ -18,8 +18,6 @@
         profile: work
         dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
-        # required: not in group_vars/default.config.yml; role defaults absent in verify phase; omitting causes chrony assertions to fail
-        system_chrony_service_enabled: false
         system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 

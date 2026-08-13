@@ -98,7 +98,7 @@
           tags: [always]
 
     - name: Non-molecule pre-flight assertions
-      when: not _pf_is_molecule and _pf_assertions_checked is not defined and _config_parse_warn_shown is not defined
+      when: not _pf_is_molecule and _pf_assertions_checked is not defined
       block:
         - name: Assert system_timezone is set and not the CHANGE_ME placeholder
           ansible.builtin.assert:

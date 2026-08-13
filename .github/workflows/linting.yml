@@ -266,7 +266,8 @@ jobs:
             first=$(echo "$subject" | awk '{print $1}')
             first="${first%:}"
             # For scoped commits (Scope: Verb noun), extract word after colon to check verb
-            desc_first=$(echo "$subject" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
+            desc_first=$(echo "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
+            desc_first="${desc_first%:}"
             # Also catch when the scope word itself is a banned past-tense/gerund word
             # Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
             if [ "$desc_first" != "$first" ]; then
