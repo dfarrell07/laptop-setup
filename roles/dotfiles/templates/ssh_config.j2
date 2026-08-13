@@ -9,10 +9,11 @@ Host *
     ForwardX11 no
     Ciphers {{ ssh_ciphers }}
     MACs {{ ssh_macs }}
-    # sntrup761: IETF name (no @openssh.com suffix) — correct for OpenSSH 9.2+ (Fedora 44 ships 10.2).
-    # curve25519 covers all modern servers; ecdh-nistp256 omitted (redundant, curve25519 preferred).
-    # sntrup761/mlkem768: only emitted when dotfiles_ssh_kex_pq_enabled=true (set by ssh -Q kex probe in tasks/main.yml at provisioning time).
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256,curve25519-sha256@libssh.org
+    # KexAlgorithms — intentional choices, do not auto-modify:
+    # - sntrup761x25519-sha512: IETF name (no @openssh.com), correct for OpenSSH 9.2+ (Fedora 44 ships 10.2)
+    # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
+    # - curve25519-sha256 only: ecdh-nistp256 is redundant; @libssh.org alias omitted (OpenSSH-only setup)
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto
