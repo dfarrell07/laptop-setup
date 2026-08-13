@@ -998,16 +998,21 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Assert auditd.conf deployed with mode 0640
   ansible.builtin.assert:
     that:
       - verify_auditd_conf.stat.exists
       - verify_auditd_conf.stat.mode == '0640'
-    fail_msg: "/etc/audit/auditd.conf missing or wrong mode — system role auditd deploy regression"
+    fail_msg: >-
+      /etc/audit/auditd.conf missing or wrong mode
+      (expected 0640, got {{ verify_auditd_conf.stat.mode | default('missing') }})
+      — system role auditd deploy regression
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
   ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file }}' /etc/audit/auditd.conf

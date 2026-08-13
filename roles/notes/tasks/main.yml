@@ -7,52 +7,8 @@
         path: "{{ notes_repo_path }}/.git"
       register: notes_repo_stat
 
-    - name: Check git-lfs availability  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        cmd: git lfs version
-      register: notes_lfs_check
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Warn if git-lfs is not installed
-      ansible.builtin.debug:
-        msg: >-
-          git-lfs is not installed. Repos with LFS-tracked files will clone with
-          pointer text files instead of real content.
-          Install git-lfs ('{{ is_dnf | ternary('dnf', 'apt') }} install git-lfs') before cloning repos that track large files.
-      when:
-        - notes_lfs_check.rc != 0
-
-    - name: Check if git-lfs filter is already registered  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        cmd: git config --global filter.lfs.required
-      register: notes_lfs_configured
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe — must run in check mode
-      when: notes_lfs_check.rc == 0
-
-    - name: Register git-lfs smudge/clean filters before clone (if git-lfs installed)
-      ansible.builtin.command:
-        cmd: git lfs install --skip-repo
-      register: notes_lfs_install_result
-      failed_when: false
-      changed_when: >-
-        notes_lfs_install_result.rc == 0 and
-        ("Updated" in notes_lfs_install_result.stdout or "initialized" in notes_lfs_install_result.stdout)
-      when:
-        - notes_lfs_check.rc == 0
-        - notes_lfs_configured.rc | default(-1) != 0
-
-    - name: Warn if git-lfs filter registration failed
-      ansible.builtin.debug:
-        msg: >-
-          git lfs install --skip-repo exited {{ notes_lfs_install_result.rc }} —
-          LFS smudge/clean filters may not be registered. Check git-lfs installation.
-      when:
-        - notes_lfs_install_result is not skipped
-        - notes_lfs_install_result.rc != 0
+    - name: Set up git-lfs smudge/clean filter drivers
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
 
     - name: Clone notes repo (SSH, then HTTPS fallback)
       when: not notes_repo_stat.stat.exists

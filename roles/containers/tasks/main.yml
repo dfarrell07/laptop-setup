@@ -71,7 +71,7 @@
   no_log: true
   register: containers_vault_auth_status
   changed_when: false
-  failed_when: false
+  failed_when: false  # intentional: rc!=0 = registry not authenticated; Warn task verifies and surfaces
   check_mode: false
   when:
     - is_linux
@@ -103,7 +103,7 @@
     label: "{{ item }}"
   register: containers_auth_status
   changed_when: false
-  failed_when: false
+  failed_when: false  # intentional: rc!=0 = not yet authenticated; Report task surfaces unauthenticated registries
   check_mode: false  # read-only probe — must run in check mode
   when: is_linux
 
@@ -166,7 +166,7 @@
   ansible.builtin.command: systemctl cat docker.socket
   register: _docker_socket_exists
   changed_when: false
-  failed_when: false
+  failed_when: false  # intentional: rc!=0 = unit file absent (Docker not installed); downstream tasks guard on rc==0
   check_mode: false  # read-only probe — must run in check mode
   when:
     - is_linux

@@ -40,6 +40,7 @@
     - ansible_facts['os_family'] == 'RedHat'
     - ansible_facts['distribution'] != 'Fedora'
     - container_release is not defined
+    - distrobox_use_toolbox | bool
 
 - name: Skip container setup if no tool available
   ansible.builtin.debug:

@@ -62,7 +62,7 @@
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/csb-report.md"
     state: absent
-  when: not _csb_has_failures | bool
+  when: not (_csb_has_failures | bool)
   tags: [always]
 
 - name: Write CSB report to file

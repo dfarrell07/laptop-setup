@@ -174,7 +174,7 @@ if [[ -x "$vscript" ]]; then
   output=$("$vscript" 2>/dev/null) || true
   len=${#output}
   if [[ $len -ge 8 ]]; then
-    if echo "$output" | grep -q 'ci-dummy-vault-password'; then
+    if [[ "$output" == *ci-dummy-vault-password* ]]; then
       record "vault" "warn" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
     else
       record "vault" "pass" "script returned valid password"
@@ -311,7 +311,7 @@ fi
 
 # --- Sudo scope ---
 if sudo_out=$(sudo -n -l 2>/dev/null); then
-  if printf '%s' "$sudo_out" | grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]+ALL'; then
+  if grep -qE '\(ALL[^)]*\)[[:space:]]+NOPASSWD:[[:space:]]+ALL' <<< "$sudo_out"; then
     record "sudo" "pass" "full sudo available"
   else
     record "sudo" "warn" "scoped sudo — some system tasks may fail"

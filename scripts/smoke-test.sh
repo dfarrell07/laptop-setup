@@ -168,7 +168,7 @@ if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
   _vp="$SCRIPT_DIR/vault-pass.sh"
   if [[ -x "$_vp" ]]; then
     _vp_out=$(bash "$_vp" 2>/dev/null) || true
-    if echo "$_vp_out" | grep -q 'ci-dummy-vault-password'; then
+    if [[ "$_vp_out" == *ci-dummy-vault-password* ]]; then
       record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
     else
       record "vault-pass-stub" "PASS"
@@ -186,8 +186,8 @@ else record "tailscale" "WARN" "tailscaled not running or VPN not established (c
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 out=$(ssh-add -L 2>&1 || true)
-if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
-elif echo "$out" | grep -qE 'Error connecting|Connection refused|Could not open'; then
+if [[ "$out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
+elif grep -qE 'Error connecting|Connection refused|Could not open' <<< "$out"; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "$out" != *"Error"* ]]; then
   record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"
@@ -723,7 +723,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   # Kernel lockdown (system_kernel_lockdown: '' in config.yml removes the param — silent skip then)
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(<"/sys/kernel/security/lockdown")
-    if echo "$ld" | grep -qE '\[integrity\]|\[confidentiality\]'; then record "kernel-lockdown" "PASS"
+    if grep -qE '\[integrity\]|\[confidentiality\]' <<< "$ld"; then record "kernel-lockdown" "PASS"
     elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
       record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
     fi
@@ -754,6 +754,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   fi
 
+  _ssh_port=""
   # Firewall default zone = drop, SSH port open, tailscale0 in trusted zone
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
@@ -1323,7 +1324,7 @@ EOF
   if systemctl is-active systemd-resolved &>/dev/null; then record "systemd-resolved-active" "PASS"
   else record "systemd-resolved-active" "FAIL" "systemd-resolved.service not active — stub socket 127.0.0.53 down; fix: sudo systemctl enable --now systemd-resolved"; fi
 
-  # Basic DNS resolution (confirms DNS works regardless of DoT/DHCP source — critical on CSB)
+  # Connectivity sanity check — verifies DoT/stub-resolver config did not break DNS (not provisioning-specific).
   if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"
   else record "dns-resolves" "FAIL" "DNS resolution failed for redhat.com"; fi
 

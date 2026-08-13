@@ -10,6 +10,8 @@
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
 # authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
 # break corporate WiFi auth. Skip on CSB (default) and rely on IT's NM configuration.
+# Note: NM 1.45+ ships this as a package default via /usr/lib/NetworkManager/conf.d/22-wifi-mac-addr.conf;
+# this task is redundant but harmless on Fedora 44.
 - name: Configure WiFi MAC address randomization
   ansible.builtin.copy:
     content: |

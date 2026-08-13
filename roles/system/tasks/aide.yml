@@ -45,6 +45,24 @@
         label: "{{ item }}"
       register: _aide_conf_r2
 
+    - name: Add /etc/bpfman to AIDE monitoring (work profile — bpfman installed)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/bpfman\s'
+        line: '/etc/bpfman NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: profile == 'work'
+      register: _aide_conf_r2b
+
+    - name: Remove /etc/bpfman from AIDE monitoring (personal profile — bpfman not installed)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/bpfman\s'
+        state: absent
+      when: profile != 'work'
+      register: _aide_conf_r2b_remove
+
     - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
@@ -138,6 +156,8 @@
         _aide_conf_changed: >-
           {{ _aide_conf_r1 is changed
              or _aide_conf_r2 is changed
+             or _aide_conf_r2b is changed
+             or _aide_conf_r2b_remove is changed
              or _aide_conf_r3 is changed
              or _aide_conf_r3_remove is changed
              or _aide_conf_r4 is changed
