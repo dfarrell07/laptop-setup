@@ -57,8 +57,8 @@
       [Resolve]
       DNS={{ system_dns_primary }}
       Domains={{ system_dns_domains }}
-      DNSOverTLS={{ system_dot_mode }}
-      DNSSEC={{ system_dnssec_mode }}
+      DNSOverTLS={{ system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
+      DNSSEC={{ system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
       FallbackDNS={{ system_dns_fallback }}
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"

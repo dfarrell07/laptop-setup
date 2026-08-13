@@ -283,7 +283,6 @@
       assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
   changed_when: false
-  when: verify_claude_default_settings.stat.exists
 
 - name: Verify Claude settings.local.json exists
   ansible.builtin.stat:
@@ -308,7 +307,6 @@
       assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
   changed_when: false
-  when: verify_claude_settings.stat.exists
 
 - name: Verify claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.stat:
@@ -1320,28 +1318,6 @@
   when: ansible_system == 'Linux'
 
 # --- Login banner (system role, non-CSB Linux only) ---
-- name: Stat login banner files (/etc/issue and /etc/issue.net)
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/issue
-    - /etc/issue.net
-  register: verify_login_banners
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - not (system_is_container | default(false))
-
-- name: Assert login banner files exist
-  ansible.builtin.assert:
-    that: item.stat.exists
-    fail_msg: "{{ item.item }} not deployed — system role login_banner.yml regression"
-  loop: "{{ verify_login_banners.results }}"
-  when:
-    - ansible_system == 'Linux'
-    - not csb_rhel
-    - not (system_is_container | default(false))
-
 - name: Slurp /etc/issue content
   ansible.builtin.slurp:
     src: /etc/issue

@@ -42,8 +42,7 @@ _bad_word() {
 }
 # Check description word (word after "Scope: ") — this is the critical tense check
 if _bad_word "$desc_first"; then
-  echo "ERROR: Use imperative mood ('$desc_first' is not imperative)" >&2
-  echo "  Write 'Scope: fix ...' not 'Scope: Fixed/Fixing ...'" >&2
+  echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
   exit 1
 fi
 # Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')

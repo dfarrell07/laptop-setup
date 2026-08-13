@@ -45,7 +45,7 @@
         - name: Log HTTPS clone failure reason
           ansible.builtin.debug:
             msg: "HTTPS clone failed: {{ notes_https_clone_result.msg | default('unknown') }}"
-          when: notes_https_clone_result.rc | default(0) != 0
+          when: notes_https_clone_result.failed | default(false)
 
     - name: Re-check if notes repo exists after clone attempts
       ansible.builtin.stat:
@@ -146,7 +146,6 @@
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - notes_transcrypt_available
-        - notes_transcrypt_init_result is not skipped
         - notes_transcrypt_init_result.rc | default(0) != 0
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)

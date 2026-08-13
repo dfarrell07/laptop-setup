@@ -37,7 +37,7 @@ record() {
 }
 
 # --- OS / CSB / profile detection ---
-OS_FAMILY="unknown" IS_CSB=false fapolicyd_installed=false
+OS_FAMILY="unknown" IS_CSB=false
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release

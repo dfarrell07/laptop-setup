@@ -45,6 +45,38 @@
             'net.ipv6.conf.all.forwarding': system_enable_ip_forward | bool | int
           }) | combine(system_sysctl_extra) | combine(system_sysctl_extra_additional) }}" # noqa: jinja[spacing]
 
+    - name: Assert no toggle-managed sysctl keys in system_sysctl_extra
+      ansible.builtin.assert:
+        that:
+          - "'net.ipv4.ip_forward' not in system_sysctl_extra"
+          - "'net.ipv6.conf.all.forwarding' not in system_sysctl_extra"
+          - "'kernel.yama.ptrace_scope' not in system_sysctl_extra"
+          - "'kernel.kexec_load_disabled' not in system_sysctl_extra"
+          - "'kernel.io_uring_disabled' not in system_sysctl_extra"
+          - "'kernel.sysrq' not in system_sysctl_extra"
+          - "'kernel.core_pattern' not in system_sysctl_extra"
+          - "'kernel.panic' not in system_sysctl_extra"
+          - "'kernel.panic_on_oops' not in system_sysctl_extra"
+          - "'kernel.unprivileged_bpf_disabled' not in system_sysctl_extra"
+          - "'net.core.bpf_jit_harden' not in system_sysctl_extra"
+          - "'net.ipv6.conf.all.accept_ra' not in system_sysctl_extra"
+          - "'net.ipv6.conf.default.accept_ra' not in system_sysctl_extra"
+        fail_msg: >-
+          system_sysctl_extra contains a toggle-managed key. Use the
+          corresponding toggle variable instead: system_enable_ip_forward
+          (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
+          system_ptrace_scope (kernel.yama.ptrace_scope),
+          system_kexec_load_disabled (kernel.kexec_load_disabled),
+          system_io_uring_disabled (kernel.io_uring_disabled),
+          system_sysrq (kernel.sysrq),
+          system_core_pattern (kernel.core_pattern),
+          system_kernel_panic (kernel.panic),
+          system_kernel_panic_on_oops (kernel.panic_on_oops),
+          system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
+          system_bpf_jit_harden (net.core.bpf_jit_harden),
+          system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
+          net.ipv6.conf.default.accept_ra).
+
     - name: Assert no toggle-managed sysctl keys in system_sysctl_extra_additional
       ansible.builtin.assert:
         that:

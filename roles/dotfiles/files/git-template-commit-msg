@@ -37,8 +37,7 @@ _bad_word() {
   esac
 }
 if _bad_word "$desc_first"; then
-  echo "ERROR: Use imperative mood ('$desc_first' is not imperative)" >&2
-  echo "  Write 'Scope: fix ...' not 'Scope: Fixed/Fixing ...'" >&2
+  echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
   exit 1
 fi
 if [ "$desc_first" != "$first" ] && _bad_word "$first"; then

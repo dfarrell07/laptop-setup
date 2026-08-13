@@ -23,25 +23,25 @@
     csb_failures: >-
       {{
         csb_failures | default([]) + [{
-          'role': _csb_role,
-          'task': _csb_task_name,
+          'role': _csb_role | default('MISSING'),
+          'task': _csb_task_name | default('MISSING'),
           'error': _csb_error | default('unknown error'),
           'timestamp': now(utc=True, fmt='%Y-%m-%dT%H:%M:%SZ'),
           'suggested_action': _csb_action,
           'ticket': {
-            'summary': _csb_ticket_summary,
-            'body': _csb_ticket_body,
+            'summary': _csb_ticket_summary | default('MISSING'),
+            'body': _csb_ticket_body | default('MISSING'),
             'priority': _csb_ticket_priority | default('Normal'),
             'category': _csb_ticket_category | default('Software Installation'),
           },
         }]
       }}
 
-- name: "CSB restriction warn: {{ _csb_task_name }}"
+- name: "CSB restriction warn: {{ _csb_task_name | default('MISSING') }}"
   become: false
   ansible.builtin.debug:
     msg: >-
-      CSB BLOCKED: {{ _csb_task_name }} in role {{ _csb_role }}.
+      CSB BLOCKED: {{ _csb_task_name | default('MISSING') }} in role {{ _csb_role }}.
       Error: {{ _csb_error | default('unknown error') | truncate(200) }}.
       Suggested action: {{ _csb_action }}.
       Continuing playbook execution.

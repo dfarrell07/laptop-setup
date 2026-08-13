@@ -117,14 +117,6 @@
           Blocked workflows: all internal network access when off the
           Red Hat corporate network.
       when: csb_detected
-    - name: Warn VPN package install failed (non-CSB network error)
-      ansible.builtin.debug:
-        msg: >-
-          PACKAGE INSTALL FAILED: Install VPN packages in role redhat.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This may be a transient network error or missing repo access.
-          Continuing playbook execution.
-      when: not csb_detected
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
