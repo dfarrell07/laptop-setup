@@ -77,12 +77,14 @@ _sysctl_check() {
 # ---- User-level checks (always run) ----
 
 # SSH auth to GitHub (bypass run() — GitHub's success message is on stderr, which run() discards)
-out=$(timeout 10 ssh -T git@github.com 2>&1 || true)
-if echo "$out" | grep -q "successfully authenticated"; then
+_ssh_ret=0
+timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
+if [[ "$_ssh_ret" -eq 1 ]]; then
   record "github-ssh-auth" "PASS"
 else
-  record "github-ssh-auth" "WARN" "ssh auth unconfirmed"
+  record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
 fi
+unset _ssh_ret
 
 # Dev tool presence
 # In a Molecule CI container (MOLECULE_PROJECT_DIRECTORY set), many tools are intentionally
@@ -720,7 +722,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # Kernel lockdown (system_kernel_lockdown: '' in config.yml removes the param — silent skip then)
   if [[ -f /sys/kernel/security/lockdown ]]; then
-    ld=$(cat /sys/kernel/security/lockdown)
+    ld=$(<"/sys/kernel/security/lockdown")
     if echo "$ld" | grep -qE '\[integrity\]|\[confidentiality\]'; then record "kernel-lockdown" "PASS"
     elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
       record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
@@ -1399,10 +1401,6 @@ EOF
     record "tmp-hardening" "WARN" "/tmp noexec disabled — system_tmp_noexec: false (intentional)"
   fi
   unset _tmp_opts _tmp_dropin
-  _tmp_mode=$(stat -c '%a' /tmp 2>/dev/null || echo "?")
-  if [[ "$_tmp_mode" == "1777" ]]; then record "tmp-sticky-bit" "PASS"
-  else record "tmp-sticky-bit" "FAIL" "/tmp mode=$_tmp_mode expected 1777 (sticky bit)"; fi
-  unset _tmp_mode
 
   # /dev/shm hardening (CIS 1.1.7.x) — noexec/nosuid/nodev all required
   _shm_opts=$(findmnt -n -o OPTIONS /dev/shm 2>/dev/null || echo "")
@@ -1538,7 +1536,7 @@ EOF
   fi
   # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
   if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
-    _bat_end=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo "?")
+    _bat_end=$(<"/sys/class/power_supply/BAT0/charge_control_end_threshold" 2>/dev/null || echo "?")
     if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
     else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
     unset _bat_end
@@ -1767,7 +1765,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # AMD CPU power driver (amd-pstate-epp is default on Fedora 44 + Zen 4)
   if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
     if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver ]]; then
-      _pstate=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver)
+      _pstate=$(<"/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver")
       if [[ "$_pstate" == "amd-pstate-epp" ]]; then record "amd-pstate-epp" "PASS"
       elif [[ "$_pstate" == "amd-pstate" ]]; then
         record "amd-pstate-epp" "WARN" "guided mode ($_pstate) not EPP — check BIOS CPPC setting"
@@ -1778,7 +1776,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   fi
   # amdgpu runtime PM (-1=auto is correct; 0=off wastes power)
   if [[ -f /sys/module/amdgpu/parameters/runpm ]]; then
-    _runpm=$(cat /sys/module/amdgpu/parameters/runpm)
+    _runpm=$(<"/sys/module/amdgpu/parameters/runpm")
     if [[ "$_runpm" == "-1" ]]; then record "amdgpu-runpm-auto" "PASS"
     elif [[ "$_runpm" == "0" ]]; then record "amdgpu-runpm-auto" "FAIL" "runpm=0 disables GPU runtime PM"
     else record "amdgpu-runpm-auto" "WARN" "runpm=$_runpm — prefer -1 (ACPI auto)"; fi

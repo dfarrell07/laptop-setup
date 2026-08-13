@@ -22,6 +22,7 @@
       when: system_selinux_enforce_result.changed
 
     - name: Verify SELinux is enforcing
+      when: not ansible_check_mode
       ansible.builtin.assert:
         that:
           - ansible_facts['selinux'].status == 'enabled'

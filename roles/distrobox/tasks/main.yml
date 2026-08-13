@@ -139,6 +139,7 @@
     src: distrobox.ini.j2
     dest: "{{ distrobox_ini_path }}"
     mode: "0644"
+  register: _distrobox_ini_changed
   when:
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
@@ -188,6 +189,16 @@
         distrobox_tool: "none"
         distrobox_use_distrobox: false
         distrobox_use_toolbox: false
+
+- name: Warn if distrobox.ini changed but container already exists
+  ansible.builtin.debug:
+    msg: >-
+      distrobox.ini changed — run make container-rebuild to apply changes to the existing container
+  when:
+    - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing)
+    - _distrobox_ini_changed.changed | default(false)
+    - distrobox_container_exists.rc == 0
 
 # --- Toolbx path ---
 - name: Create container via Toolbx

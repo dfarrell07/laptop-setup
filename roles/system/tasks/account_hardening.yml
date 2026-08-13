@@ -87,7 +87,7 @@
 - name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
   ansible.builtin.file:
     path: "{{ real_user_home }}"
-    mode: "0750"
+    mode: "{{ system_home_mode }}"
     state: directory
   register: _home_mode_result
   when:

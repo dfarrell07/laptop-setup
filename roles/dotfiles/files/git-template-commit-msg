@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 msg=$(head -1 "$1")
 first=$(echo "$msg" | awk '{print $1}')
 first="${first%:}"
@@ -23,6 +23,7 @@ if ! echo "$msg" | grep -qE '^[A-Z]'; then
 fi
 
 _bad_word() {
+  local _w
   _w=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
   case "$_w" in
     added|changed|created|deleted|enabled|disabled|expanded|fixed|\

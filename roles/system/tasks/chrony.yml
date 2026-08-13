@@ -42,6 +42,7 @@
   when:
     - is_apt or is_dnf
     - system_chrony_service_enabled | bool
+    - not system_is_container
   failed_when: false
 
 - name: Unmask systemd-timesyncd when chrony is disabled
@@ -96,3 +97,13 @@
     - system_chrony_service_enabled | bool
     - csb_detected
     - not csb_rhel
+
+- name: "Warn: NTS-KE requires outbound TCP 4460 (standard deployment)"
+  ansible.builtin.debug:
+    msg: >-
+      chrony NTS deployed — requires TCP 4460 to time.cloudflare.com/nts.netnod.se/ptbtime1.ptb.de/ntppool1.time.nl;
+      if blocked, chrony falls back to unauthenticated pool. Set
+      system_chrony_authselectmode: require in config.yml to surface NTS failure as an error.
+  when:
+    - system_chrony_service_enabled | bool
+    - not csb_detected

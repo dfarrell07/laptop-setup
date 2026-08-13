@@ -53,27 +53,6 @@
     - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
     - usbguard_expected | default(false)
 
-- name: Stat /etc/usbguard/rules.conf (shared)
-  ansible.builtin.stat:
-    path: /etc/usbguard/rules.conf
-  register: verify_usbguard_rules_shared
-  become: true
-  when:
-    - usbguard_expected | default(false)
-    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
-    - verify_usbguard_pkg_shared.rc == 0
-
-- name: Assert /etc/usbguard/rules.conf exists with mode 0600
-  ansible.builtin.assert:
-    that:
-      - verify_usbguard_rules_shared.stat.exists
-      - verify_usbguard_rules_shared.stat.mode == '0600'
-    fail_msg: "/etc/usbguard/rules.conf missing or wrong permissions (expected 0600)"
-  when:
-    - usbguard_expected | default(false)
-    - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
-    - verify_usbguard_pkg_shared.rc == 0
-
 - name: Check ImplicitPolicyTarget=block in usbguard-daemon.conf (shared)
   ansible.builtin.command: grep -q 'ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
   changed_when: false

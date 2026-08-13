@@ -106,7 +106,7 @@
 
     - name: Check if transcrypt is available
       ansible.builtin.stat:
-        path: /usr/local/bin/transcrypt
+        path: "{{ notes_transcrypt_bin_path }}"
       register: notes_transcrypt_bin
       check_mode: false
       when: notes_repo_available

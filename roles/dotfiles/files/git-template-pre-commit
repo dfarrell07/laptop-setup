@@ -2,7 +2,7 @@
 # Use '# gitleaks:allow' on a line to suppress a false positive
 _gitleaks_rc=0
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks git --pre-commit --staged --redact --max-decode-depth 2
+  gitleaks git --pre-commit --staged --redact --max-decode-depth 2 $([ -f .gitleaks.toml ] && echo --config .gitleaks.toml)
   _gitleaks_rc=$?
 else
   echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
