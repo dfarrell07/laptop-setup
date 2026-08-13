@@ -149,11 +149,15 @@ if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
   if command -v ykchalresp &>/dev/null; then
     if ! $JSON; then
-      echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-      if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
-        record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
+      if ! command -v timeout &>/dev/null; then
+        record "yubikey_chalresp" "skip" "timeout not available (install gnu-coreutils on macOS)"
       else
-        record "yubikey_chalresp" "warn" "Slot 2 no response within 15s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
+        echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
+        if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
+          record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
+        else
+          record "yubikey_chalresp" "warn" "Slot 2 no response within 15s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
+        fi
       fi
     else
       record "yubikey_chalresp" "skip" "skipped in --json mode (interactive)"
@@ -228,6 +232,7 @@ fi
 # --- Identity vars CHANGE_ME check ---
 if [[ -f "$CONFIG_FILE" ]]; then
   for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal system_timezone; do
+    if [[ "$_ivar" == "dotfiles_user_email_work" && "$PROFILE" == "personal" ]]; then continue; fi
     if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
       if [[ "$_ivar" == "system_timezone" ]]; then
         record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — timedatectl set-timezone CHANGE_ME will fail; run timedatectl list-timezones to find yours"

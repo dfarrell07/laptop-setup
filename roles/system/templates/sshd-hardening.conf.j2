@@ -17,7 +17,7 @@ PermitRootLogin no
 PermitEmptyPasswords no  # OpenSSH compiled default; also unreachable because PasswordAuthentication no closes the only path where empty passwords would matter
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}  # ed25519 and FIDO2 only (cert variants dormant without TrustedUserCAKeys); RSA/ECDSA user keys rejected
-AuthorizedKeysFile .ssh/authorized_keys  # OpenSSH upstream compiled default includes .ssh/authorized_keys2; Fedora package overrides this in the base sshd_config, but this drop-in guards against rpmnew replacing that restriction
+AuthorizedKeysFile .ssh/authorized_keys  # Explicit in the drop-in so this restriction holds regardless of /etc/ssh/sshd_config state; Fedora base sshd_config and rpmnew both already restrict to .ssh/authorized_keys
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3

@@ -173,7 +173,6 @@
   loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
-  when: git_repos_pull | bool
 
 - name: Fail if any pulls failed
   ansible.builtin.fail:

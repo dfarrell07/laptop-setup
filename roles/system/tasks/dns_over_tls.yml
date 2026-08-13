@@ -120,6 +120,19 @@
     - not csb_detected
     - not system_is_container
 
+- name: Warn on opportunistic DoT with allow-downgrade DNSSEC (default full-downgrade risk)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_dot_mode=opportunistic + system_dnssec_mode=allow-downgrade (defaults) —
+      an on-path attacker can silently strip both TLS encryption and DNSSEC validation from DNS
+      responses simultaneously. Set system_dot_mode: yes and system_dnssec_mode: yes for a
+      fully protected channel.
+  when:
+    - system_dot_mode | string | lower not in ['yes', 'true', '1']
+    - system_dnssec_mode | string | lower not in ['yes', 'true', '1']
+    - not csb_detected
+    - not system_is_container
+
 # --- Verify resolv.conf symlink for split DNS ---
 - name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
   ansible.builtin.file:

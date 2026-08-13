@@ -163,13 +163,13 @@
   ansible.builtin.stat:
     path: /etc/yum.repos.d/mullvad.repo
   register: verify_mullvad_repo
-  when: repo_mullvad and is_dnf
+  when: repo_mullvad and is_dnf and is_fedora
 
 - name: Assert mullvad repo configured
   ansible.builtin.assert:
     that: verify_mullvad_repo.stat.exists
     fail_msg: "mullvad repo not configured"
-  when: repo_mullvad and is_dnf
+  when: repo_mullvad and is_dnf and is_fedora
 
 - name: Verify rpmfusion-free repo configured
   ansible.builtin.stat:

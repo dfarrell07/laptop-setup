@@ -383,7 +383,6 @@
         cmd: /usr/local/bin/sops --version
       register: verify_sops_ver
       changed_when: false
-      failed_when: false
       when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert sops version matches packages_sops_version

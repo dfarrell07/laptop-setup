@@ -71,6 +71,7 @@
         and (_fapolicyd_permissive_grep.rc | default(1) != 0)
       }}
   become: false
+  when: is_linux | bool
 
 # sudo probing and usbguard_running sections removed — facts were only
 # consumed in the verbosity=1 debug summary and not by any downstream role task.

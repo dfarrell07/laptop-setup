@@ -25,6 +25,13 @@
     - name: Include common verify assertions
       ansible.builtin.import_tasks: ../shared/verify-common.yml
 
+    - name: Assert csb_rhel is true on Rocky (guard against _csb_molecule_force removal)
+      ansible.builtin.assert:
+        that: csb_rhel | bool
+        fail_msg: >-
+          csb_rhel was reset to false on Rocky after csb_detect.yml re-ran —
+          _csb_molecule_force guard removed from csb_detect.yml?
+
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
@@ -38,11 +45,13 @@
       ansible.builtin.stat:
         path: /etc/yum.repos.d/gh-cli.repo
       register: verify_gh_cli_repo
+      when: repo_gh_cli
 
     - name: Assert gh-cli.repo was deployed by repos_dnf
       ansible.builtin.assert:
         that: verify_gh_cli_repo.stat.exists
-        fail_msg: "gh-cli.repo missing — repos_dnf role not exercised or template broken"
+        fail_msg: "gh-cli.repo missing — repos_dnf role not exercised, template broken, or repos_dnf block/rescue caught a network error (check repos_dnf CSB report)"  # yamllint disable-line rule:line-length
+      when: repo_gh_cli
 
     # --- Work profile checks ---
     - name: Include Claude work instance directory and settings assertions
