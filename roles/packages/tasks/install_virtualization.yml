@@ -50,6 +50,9 @@
       become: true
       tags: [become]
       when: not system_is_container and _packages_virt_install.changed
+    # Unconditional (no changed guard) — intentionally re-enables sockets after manual
+    # 'systemctl disable'; daemon_reload above is change-gated because it is only needed
+    # when packages changed.
     - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
       ansible.builtin.systemd:
         name: "{{ item }}"

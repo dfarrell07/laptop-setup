@@ -278,7 +278,10 @@
         that:
           - verify_golangci_lint.stat.exists
           - verify_golangci_lint.stat.executable
-        fail_msg: "{{ ansible_user_dir }}/go/bin/golangci-lint missing — packages_go_install_work v2 module path regression"
+        fail_msg: >-
+          golangci-lint missing at ~/go/bin/golangci-lint —
+          packages_go_install_work empty or go install failed
+          (check install_go_tools.yml loop)
 
     - name: Stat govulncheck binary
       ansible.builtin.stat:

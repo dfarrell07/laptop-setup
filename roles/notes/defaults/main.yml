@@ -7,8 +7,6 @@ notes_remote_url_https: "https://github.com/{{ dotfiles_github_user }}/{{ notes_
 notes_transcrypt_cipher: aes-256-cbc
 notes_transcrypt_password: ''  # sentinel fallback; group_vars/all/vars.yml sets this via vault_notes_transcrypt_password
 notes_transcrypt_linux_bin_path: /usr/local/bin/transcrypt
-dotfiles_homebrew_prefix: "{{ '/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew' }}"  # macOS x86/arm fallback
-# keep in sync with roles/dotfiles/defaults/main.yml
 notes_transcrypt_bin_path: >-
   {{ (dotfiles_homebrew_prefix + '/bin/transcrypt') if ansible_facts['os_family'] == 'Darwin'
   else notes_transcrypt_linux_bin_path }}

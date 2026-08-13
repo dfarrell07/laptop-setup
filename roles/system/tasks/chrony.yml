@@ -32,7 +32,7 @@
         masked: false
         state: started
         enabled: true
-      failed_when: false
+      ignore_errors: true
       register: _chrony_restore_result
       when: is_apt and not system_is_container
 
@@ -73,7 +73,7 @@
         masked: false
         state: started
         enabled: true
-      failed_when: false
+      ignore_errors: true
       register: _chrony_restore_result
       when: is_dnf and not system_is_container
 

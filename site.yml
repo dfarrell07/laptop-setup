@@ -130,9 +130,11 @@
     - name: Assert identity vars are not CHANGE_ME placeholder values
       ansible.builtin.assert:
         that:
-          - dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME'
-          - dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME'
-          - dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME'
+          - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_user_name | default('') | length > 0)
+          - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_github_user | default('') | length > 0)
+          - >-
+            (dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME') and
+            (dotfiles_user_email_personal | default('') | length > 0)
         fail_msg: >-
           Set dotfiles_user_name, dotfiles_github_user, and dotfiles_user_email_personal
           in config.yml before running make all.

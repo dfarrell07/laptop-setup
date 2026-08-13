@@ -126,6 +126,7 @@ ssh_port: 722  # mirrors in roles/system/defaults/main.yml and roles/dotfiles/de
 ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
 dotfiles_ssh_hardware_key_basename: "id_ed25519_sk"  # shared between dotfiles and ssh roles; must match
 dotfiles_ssh_redhat_key_basename: "id_rsa_redhat"  # shared between dotfiles and ssh roles; must match
+dotfiles_homebrew_prefix: "{{ '/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew' }}"
 # SSH crypto vars below: mirrored in roles/system/defaults/main.yml; check-vars-sync.py enforces sync
 # cert variants allow cert-authority entries in authorized_keys; TrustedUserCAKeys must be configured
 # separately for CA-based cert auth; distinct from host certs (HostKeyAlgorithms)

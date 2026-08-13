@@ -30,8 +30,6 @@ dotfiles_ssh_agent_timeout: 28800  # 8-hour key lifetime (workday policy); ssh-a
 dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
                                     # default guards against undefined-var in template if probe skipped
 
-dotfiles_homebrew_prefix: "{{ '/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew' }}"
-
 dotfiles_laptop_tailscale_host: ''  # set in config.yml; e.g. 'laptop.tail'
 dotfiles_mac_tailscale_host: ''     # set in config.yml; e.g. 'mac-desktop.tail'
 dotfiles_github_user: 'CHANGE_ME'  # override in config.yml

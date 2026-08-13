@@ -1485,6 +1485,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
+    - verify_locale_conf is not skipped
     - verify_locale_conf.stat.exists
 
 - name: Stat /etc/vconsole.conf (system role deploys it)
@@ -1510,4 +1511,5 @@
   become: true
   when:
     - ansible_system == 'Linux'
+    - verify_vconsole_conf is not skipped
     - verify_vconsole_conf.stat.exists

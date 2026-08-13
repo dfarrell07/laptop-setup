@@ -13,8 +13,10 @@ set -ga terminal-overrides ",xterm-256color:Tc"
 # Refresh SSH_AUTH_SOCK on tmux attach so reattached sessions use the
 # current agent socket, not the one inherited at session creation time.
 # SSH_AUTH_SOCK is already in tmux's built-in default update-environment list.
+{% if _system == 'Linux' %}
 set -ga update-environment "WAYLAND_DISPLAY"
 set -ga update-environment "XDG_RUNTIME_DIR"
+{% endif %}
 
 # Reduce escape sequence ambiguity (default 500ms is too slow)
 set -s escape-time 10

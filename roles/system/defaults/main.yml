@@ -212,9 +212,9 @@ system_lid_switch_docked: ignore
 # restart the CUPS daemon even when cups.service is disabled. Set false if any
 # printing is needed — cups.socket is required for all print dialogs (native apps, browsers, GNOME, Flatpak).
 system_disable_printing: true
-# CIS 2.1.5: disable BT on machines with no BT peripherals. Default false (enabled) —
-# required for ThinkPad P16v AMD Bluetooth mouse. Set true in config.yml to blacklist BT.
-system_disable_bluetooth: false
+# CIS 2.1.5: disable BT on machines with no BT peripherals. Default true (disabled) —
+# set false in config.yml on machines with BT peripherals (e.g. BT mouse/keyboard).
+system_disable_bluetooth: true
 system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
 # install/start bolt; false on VMs and containers
 # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
