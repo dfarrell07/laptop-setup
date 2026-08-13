@@ -59,7 +59,7 @@
   ansible.builtin.systemd:
     name: thermald
     masked: "{{ not _intel }}"
-    enabled: true
+    enabled: "{{ _intel | bool }}"
     state: "{{ 'stopped' if not _intel else 'started' }}"
   when: not system_is_container and is_dnf  # thermald not present in containers; mask/stop crash container systemd
   failed_when: false

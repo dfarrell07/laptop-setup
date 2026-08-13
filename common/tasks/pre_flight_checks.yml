@@ -136,8 +136,10 @@
               Set dotfiles_user_email_work in config.yml before running make all.
               The value is empty or still has the 'CHANGE_ME' placeholder.
               Without it, git commits to work repos use the wrong email.
+              If you are using a personal profile, set `profile: personal` in config.yml to bypass this check.
           tags: [always]
 
+        # Catches user typos — in normal operation profile is always 'work' or 'personal'
         - name: Assert profile is a valid value
           ansible.builtin.assert:
             that: profile in ['work', 'personal']

@@ -136,11 +136,12 @@ system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 d
 
 # Journald log retention and rate-limiting (deployed via 99-hardening.conf drop-in)
 # Override in config.yml for small-disk systems or high-throughput log environments.
+system_journald_storage: persistent  # Storage= — journal storage mode; persistent writes to /var/log/journal (Fedora 44 vendor default)
 system_journald_max_use: 4G        # SystemMaxUse — max total journald disk usage
 system_journald_keep_free: 1G      # SystemKeepFree — free disk space to preserve
 system_journald_max_retention: 6month  # MaxRetentionSec — max log age before rotation
-system_journald_rate_interval: 30s  # RateLimitIntervalSec — sliding window for rate limiting
-system_journald_rate_burst: 10000  # RateLimitBurst — burst log entries per rate interval
+system_journald_rate_interval: 30s  # RateLimitIntervalSec — sliding window for rate limiting (matches systemd compiled-in default)
+system_journald_rate_burst: 10000  # RateLimitBurst — burst log entries per rate interval (matches systemd compiled-in default)
 
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability

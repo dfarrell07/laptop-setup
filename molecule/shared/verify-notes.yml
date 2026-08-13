@@ -22,7 +22,7 @@
 - name: Verify notes .git/config permissions
   ansible.builtin.assert:
     that: verify_notes_config.stat.mode == '0600'
-    fail_msg: "notes .git/config should be 0600"
+    fail_msg: "notes .git/config should be 0600 (got {{ verify_notes_config.stat.mode | default('absent') }})"
   when: verify_notes.stat.exists and verify_notes_config.stat.exists
 
 - name: Stat notes directory for permission check

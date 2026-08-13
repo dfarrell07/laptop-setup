@@ -1319,6 +1319,7 @@
   failed_when: false
   when:
     - ansible_system == 'Linux'
+    - not csb_rhel
     - not (system_is_container | default(false))
 
 - name: Assert sshd.socket is masked

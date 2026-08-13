@@ -82,7 +82,11 @@ else
   if git diff --cached --name-only -z --diff-filter=ACM | grep -qz '^package-lock\.json$'; then
     if ! git show :package-lock.json | python3 -c "
 import json, sys
-lock = json.load(sys.stdin)
+try:
+    lock = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f'ERROR: package-lock.json is not valid JSON: {e}', file=sys.stderr)
+    sys.exit(1)
 errors = []
 for name, info in lock.get('packages', {}).items():
     if not name:

@@ -7,5 +7,5 @@ exclude_paths:
   - molecule/shared/  # task-include files; not standalone playbooks — linted via scenario verify.yml inclusion
 
 skip_list:
-  - yaml[line-length]  # yamllint handles this with 140 char limit
+  - yaml  # yamllint --strict handles all yaml rules, including .github/ and line-length
   - var-naming[no-role-prefix]  # cross-role shared vars and underscore-prefixed register vars

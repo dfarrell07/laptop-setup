@@ -28,7 +28,7 @@
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
         # Created by dnf_automatic.yml; removed here to prevent aide --update running against a non-existent DB
-        - "/etc/systemd/system/{{ 'dnf5-automatic' if is_dnf5 else 'dnf-automatic' }}.service.d/aide-update.conf"  # yamllint disable-line rule:line-length
+        - "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
       loop_control:
         label: "{{ item }}"
       register: system_aide_unit_removal

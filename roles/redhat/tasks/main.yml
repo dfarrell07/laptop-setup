@@ -127,11 +127,11 @@
     database: passwd
     key: "{{ redhat_splunk_service_account }}"
     fail_key: false
-  when: csb_detected
+  when: csb_rhel
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
-    - csb_detected
+    - csb_rhel
     - redhat_splunk_service_account in (ansible_facts.getent_passwd | default({}))
   block:
     - name: Set splunk account shell to nologin
