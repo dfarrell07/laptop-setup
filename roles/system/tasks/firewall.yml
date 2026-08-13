@@ -30,7 +30,9 @@
       zone ssh removal) — also guard on this fact and will likewise be skipped.
       Install and start firewalld before re-running if firewall management is
       required.
-  when: not (system_firewalld_running | bool)
+  when:
+    - not (system_firewalld_running | bool)
+    - is_dnf
 
 - name: Check current default firewall zone
   ansible.posix.firewalld_info:

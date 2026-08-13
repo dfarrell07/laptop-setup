@@ -293,7 +293,7 @@
       WARNING: loginctl enable-linger {{ real_user_id }} exited
       {{ _linger_result.rc | default('skipped') }} —
       rootless podman socket may not persist after session end; DOCKER_HOST will stop working
-  when: _linger_result.rc | default(0) != 0
+  when: (_linger_result is defined) and (_linger_result.rc | default(0) != 0)
 
 # --- Lock root account ---
 - name: Lock root account

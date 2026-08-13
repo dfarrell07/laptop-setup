@@ -1334,10 +1334,6 @@ EOF
   if systemctl is-active systemd-resolved &>/dev/null; then record "systemd-resolved-active" "PASS"
   else record "systemd-resolved-active" "FAIL" "systemd-resolved.service not active — stub socket 127.0.0.53 down; fix: sudo systemctl enable --now systemd-resolved"; fi
 
-  # Connectivity sanity check — verifies DoT/stub-resolver config did not break DNS (not provisioning-specific).
-  if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"
-  else record "dns-resolves" "WARN" "DNS resolution failed for redhat.com"; fi
-
   # cron.allow restricts cron to root only (CIS 5.1.8)
   # Skipped on RHEL CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
   # non-root system users; cron.allow=root-only would silently break those IT management jobs

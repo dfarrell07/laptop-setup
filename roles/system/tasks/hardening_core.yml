@@ -23,7 +23,7 @@
       block:
         - name: Enforce SELinux enforcing mode
           ansible.posix.selinux:
-            policy: targeted
+            policy: "{{ system_selinux_policy }}"
             state: enforcing
           register: system_selinux_enforce_result
 

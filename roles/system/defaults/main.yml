@@ -338,7 +338,7 @@ ssh_pubkey_accepted_algorithms:
   - sk-ssh-ed25519-cert-v01@openssh.com
 ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
-ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,curve25519-sha256,\
+ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384"
 ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
 
@@ -389,6 +389,7 @@ system_home_nosuid_force: false
 # hosts before security-sensitive tasks run.
 # CI gap: SELinux enforcement is NOT verified by Podman-based scenarios when set false.
 system_selinux_enforcing_required: true
+system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
 # LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
 # LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
 # If rd.luks.key is active and you set this true, the machine will require manual LUKS

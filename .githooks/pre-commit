@@ -88,6 +88,8 @@ for name, info in lock.get('packages', {}).items():
         continue
     integrity = info.get('integrity', '')
     resolved = info.get('resolved', '')
+    if resolved.startswith('https://registry.npmjs.org/') and not integrity:
+        errors.append(f'ERROR: Missing integrity in lockfile: {name}')
     if integrity and not integrity.startswith('sha512-'):
         errors.append(f'ERROR: Weak hash in lockfile: {name}')
     if resolved and not (resolved.startswith('https://registry.npmjs.org/') or resolved.startswith('file:')):

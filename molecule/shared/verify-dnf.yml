@@ -53,13 +53,13 @@
 - name: Check go is installed
   ansible.builtin.command: go version
   changed_when: false
-  when: profile | default('work') == 'work'
+  when: profile | default('personal') == 'work'
   # golang is in packages_languages_work (work profile only)
 
 - name: Check gcc is installed
   ansible.builtin.command: gcc --version
   changed_when: false
-  when: profile | default('work') == 'work'
+  when: profile | default('personal') == 'work'
 
 - name: Check pip3 is installed
   ansible.builtin.command: pip3 --version

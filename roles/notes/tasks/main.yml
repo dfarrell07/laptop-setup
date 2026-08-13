@@ -83,6 +83,7 @@
           ansible.builtin.copy:
             dest: "{{ notes_repo_path }}/.gitleaks.toml"
             mode: "0644"
+            force: false
             content: |
               # Allow all blobs — transcrypt encrypts file contents before staging.
               # The global pre-commit hook (core.hooksPath) would otherwise flag

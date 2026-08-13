@@ -14,19 +14,6 @@
   roles:
     - role: system
 
-- name: Converge — System setup (Fedora)
-  hosts: all
-  become: true
-  gather_facts: true
-
-  pre_tasks:
-    - name: Load CI pre-tasks (config, group_vars, project root)
-      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
-
-  roles:
-    - role: repos_dnf
-      when: ansible_pkg_mgr in ['dnf', 'dnf5']
-
 - name: Converge (Fedora)
   hosts: all
   gather_facts: true
@@ -46,6 +33,8 @@
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"
 
   roles:
+    - role: repos_dnf
+      when: ansible_pkg_mgr in ['dnf', 'dnf5']
     - role: common
     - role: packages
     - role: dotfiles

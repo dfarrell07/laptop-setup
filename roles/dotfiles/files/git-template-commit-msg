@@ -20,7 +20,7 @@ first=$(echo "$msg" | sed 's/\([A-Za-z][-A-Za-z0-9/]*\):.*/\1/')
 # Extract the description word — the first word after "Scope: "
 # This is what should be imperative mood.
 desc_first=$(echo "$msg" | sed 's/^[A-Za-z][-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
-desc_first="${desc_first%:}"
+desc_first="${desc_first%:}"  # strip trailing colon: 'Added:' would not match 'added' in case without this
 if [ -z "$desc_first" ]; then
   echo "ERROR: Subject has no description after scope colon" >&2
   exit 1

@@ -73,7 +73,7 @@
       Domains={{ system_dns_domains }}
       DNSOverTLS={{ system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
       DNSSEC={{ system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
-      FallbackDNS={{ system_dns_fallback }}
+      {% if system_dot_mode | string | lower not in ['yes', 'true', '1'] %}FallbackDNS={{ system_dns_fallback }}{% endif %}
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:

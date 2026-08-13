@@ -80,7 +80,7 @@ packages_containers_kubectl:
 
 packages_virtualization:
   - libvirt
-  - qemu-kvm
+  - qemu-kvm  # not pulled in by libvirt on Fedora 44 (libvirt-daemon-driver-qemu requires qemu-img, not qemu-kvm)
   - virt-install
 
 # Desktop packages managed by the desktop role, not here.
@@ -331,7 +331,6 @@ packages_brew:
   - git  # Xcode CLT git is stale; brew git tracks upstream releases
   - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
-  - make  # Xcode CLT ships make; brew tracks it declaratively — keeps bootstrap-installed make under playbook control
   - tmux
   - mosh
   - jq
