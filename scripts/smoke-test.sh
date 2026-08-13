@@ -85,6 +85,8 @@ _ssh_ret=0
 timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
 if [[ "$_ssh_ret" -eq 1 ]]; then
   record "github-ssh-auth" "PASS"
+elif [[ "$_ssh_ret" -eq 124 ]]; then
+  record "github-ssh-auth" "WARN" "ssh timed out after 10s — network slow or github.com unreachable; auth status unknown"
 else
   record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
 fi

@@ -36,7 +36,15 @@
 - name: Filter repos by category and enabled status
   ansible.builtin.set_fact:
     git_repos_filtered: >-
-      {{ git_repos_list | selectattr('category', 'in', git_repos_active_categories) | rejectattr('enabled', 'equalto', false) | list }}
+      {{
+        git_repos_list
+        | selectattr('category', 'in', git_repos_active_categories)
+        | selectattr('enabled', 'undefined') | list
+        + git_repos_list
+        | selectattr('category', 'in', git_repos_active_categories)
+        | selectattr('enabled', 'defined')
+        | selectattr('enabled', 'equalto', true) | list
+      }}
 
 - name: Fail when explicit category filter matches no enabled repos
   ansible.builtin.fail:
@@ -166,7 +174,7 @@
 - name: Report failed pulls
   ansible.builtin.debug:
     msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
-  loop: "{{ git_repos_pull_results.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
   when: git_repos_pull | bool
@@ -174,13 +182,13 @@
 - name: Fail if any pulls failed
   ansible.builtin.fail:
     msg: >-
-      git pull failed for: {{ git_repos_pull_results.results
+      git pull failed for: {{ (git_repos_pull_results.results | default([]))
         | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
         | map(attribute='item.dest') | list | join(', ') }}
   when:
     - git_repos_pull | bool
     - >-
-      (git_repos_pull_results.results
+      (git_repos_pull_results.results | default([])
       | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
       | list | length) > 0
 

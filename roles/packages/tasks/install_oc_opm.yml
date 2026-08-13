@@ -245,12 +245,12 @@
             state: absent
           when: packages_opm_download is defined
 
-    - name: Remove opm-rhel8 artifact (unconditional safety cleanup)
-      ansible.builtin.file:
-        path: /usr/local/bin/opm-rhel8
-        state: absent
-      become: true
-      tags: [become]
+        - name: Remove opm-rhel8 artifact (safety cleanup)
+          ansible.builtin.file:
+            path: /usr/local/bin/opm-rhel8
+            state: absent
+          become: true
+          tags: [become]
 
   rescue:
     - name: Record opm download failure (CSB)

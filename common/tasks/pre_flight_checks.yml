@@ -110,8 +110,7 @@
               The current value is empty or still the CHANGE_ME placeholder —
               timedatectl will reject both. Run 'timedatectl list-timezones'
               to find yours, then add system_timezone: <zone> to config.yml.
-              Note: if config.yml was just parsed with a YAML error (see WARNING above),
-              fix the YAML syntax first — this assertion fires because user overrides could not be loaded.
+              If config.yml does not exist, create it from default.config.yml and set system_timezone.
           tags: [always]
 
         - name: Assert identity vars are not CHANGE_ME placeholders
@@ -133,8 +132,7 @@
               | selectattr(1, 'in', ['CHANGE_ME', '']) | map(attribute=0) | list }}.
               Without these, git commits are attributed
               to 'CHANGE_ME', the macOS SSH agent launchd plist will be named incorrectly, and the notes repo clone fails.
-              Note: if config.yml was just parsed with a YAML error (see WARNING above),
-              fix the YAML syntax first — this assertion fires because user overrides could not be loaded.
+              If config.yml does not exist, create it from default.config.yml and populate it.
           tags: [always]
 
         - name: Assert work identity vars are not CHANGE_ME placeholders

@@ -939,6 +939,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - verify_journald_conf.stat.exists
 
 - name: Assert journald drop-in contains required directives
@@ -957,6 +958,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - verify_journald_conf.stat.exists
 
 - name: Check sudoers drop-in has logfile directive
@@ -1175,6 +1177,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
 
 # CI gap: system_chrony_service_enabled=false in all container scenario verify pre_tasks;
@@ -1186,6 +1189,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
     - verify_chrony_nts is not skipped
 

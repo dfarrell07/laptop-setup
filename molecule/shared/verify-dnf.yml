@@ -201,15 +201,22 @@
 
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
-  when: not (system_is_container | default(false))
 
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
 - name: Check authselect with-faillock is active
   ansible.builtin.command: authselect is-feature-enabled with-faillock
   register: verify_faillock_authselect
   changed_when: false
-  failed_when: verify_faillock_authselect.rc != 0
+  failed_when: false
   become: true
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
+
+- name: Assert authselect with-faillock is active
+  ansible.builtin.assert:
+    that: verify_faillock_authselect.rc == 0
+    fail_msg: "authselect feature with-faillock is not enabled — faillock PAM integration missing"
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
@@ -218,8 +225,16 @@
   ansible.builtin.command: authselect is-feature-enabled with-pwhistory
   register: verify_pwhistory_authselect
   changed_when: false
-  failed_when: verify_pwhistory_authselect.rc != 0
+  failed_when: false
   become: true
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
+
+- name: Assert authselect with-pwhistory is active
+  ansible.builtin.assert:
+    that: verify_pwhistory_authselect.rc == 0
+    fail_msg: "authselect feature with-pwhistory is not enabled — password history PAM integration missing"
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
@@ -268,8 +283,17 @@
   ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
   register: verify_even_deny_root
   changed_when: false
-  failed_when: verify_even_deny_root.rc == 0
+  failed_when: false
   become: true
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
+    - not (system_faillock_even_deny_root | bool)
+
+- name: Assert faillock even_deny_root is absent
+  ansible.builtin.assert:
+    that: verify_even_deny_root.rc != 0
+    fail_msg: "/etc/security/faillock.conf contains even_deny_root — not expected when system_faillock_even_deny_root: false"
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))

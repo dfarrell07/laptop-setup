@@ -171,7 +171,9 @@ fi
 
 # --- Vault password scripts ---
 vscript="${SCRIPT_DIR}/vault-pass.sh"
-if [[ -x "$vscript" ]]; then
+if [[ -x "$vscript" ]] && $JSON; then
+  record "vault" "skip" "skipped in --json mode (interactive)"
+elif [[ -x "$vscript" ]]; then
   output=$("$vscript" 2>/dev/null) || true
   len=${#output}
   if [[ $len -ge 8 ]]; then
@@ -252,9 +254,10 @@ fi
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+_curl_ok=false; command -v curl &>/dev/null && _curl_ok=true
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
-  if command -v curl &>/dev/null; then
+  if [[ $_curl_ok == true ]]; then
     if curl -sSLf --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
       record "net_${nlabel}" "pass" "$nurl reachable"
     else record "net_${nlabel}" "fail" "$nurl unreachable"; fi

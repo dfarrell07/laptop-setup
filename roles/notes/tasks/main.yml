@@ -154,7 +154,6 @@
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - notes_transcrypt_available
-        - notes_transcrypt_init_result is defined
         - not (notes_transcrypt_init_result.skipped | default(false))
         - notes_transcrypt_init_result.rc | default(-1) != 0
 
