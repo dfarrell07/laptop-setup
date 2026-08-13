@@ -54,6 +54,8 @@ system_sysctl_hardening:
   # CIS 3.3.4/3.3.5 require this independently. Note: if accept_redirects is overridden to 1 via
   # system_sysctl_extra_additional, this setting (lower precedence) accepts redirects from any host
   # rather than gateways only — which is expected CIS behavior since CIS mandates secure_redirects=0 regardless.
+  # Note: secure_redirects is a no-op when accept_redirects=0 (the default config). The explicit 0 guards
+  # CIS 3.3.4/3.3.5 compliance if accept_redirects is re-enabled by an extra sysctl.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
@@ -137,7 +139,8 @@ system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 d
 system_journald_max_use: 4G        # SystemMaxUse — max total journald disk usage
 system_journald_keep_free: 1G      # SystemKeepFree — free disk space to preserve
 system_journald_max_retention: 6month  # MaxRetentionSec — max log age before rotation
-system_journald_rate_burst: 20000  # RateLimitBurst — burst log entries per 30s interval
+system_journald_rate_interval: 30s  # RateLimitIntervalSec — sliding window for rate limiting
+system_journald_rate_burst: 20000  # RateLimitBurst — burst log entries per rate interval
 
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability

@@ -40,7 +40,7 @@ ClientAliveCountMax 2
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
 # system_ssh_unused_connection_timeout: default 600; set to empty string in config.yml to omit
-{% if system_ssh_unused_connection_timeout != '' %}
+{% if system_ssh_unused_connection_timeout != '' %} {# '' to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no

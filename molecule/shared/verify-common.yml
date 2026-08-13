@@ -512,7 +512,7 @@
 - name: Check sysctl hardening config contains security-critical keys
   ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
-    - kernel.yama.ptrace_scope = {{ system_ptrace_scope }}
+    - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
     - kernel.dmesg_restrict = 1
     - kernel.kptr_restrict = 1
     - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(2) }}
@@ -527,6 +527,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_sysctl_file.stat.exists
 
 - name: Check sysctl hardening config contains ip_forward keys
@@ -537,6 +538,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_sysctl_file.stat.exists
     - system_enable_ip_forward | default(true) | bool
 

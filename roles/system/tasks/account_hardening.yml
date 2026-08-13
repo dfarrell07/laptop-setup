@@ -95,7 +95,7 @@
     - real_user_home != '/'
     - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
     - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
-  failed_when: false
+  ignore_errors: true
 
 - name: Warn if home directory mode enforcement failed
   ansible.builtin.debug:
@@ -261,7 +261,7 @@
     name: root
     password_lock: true
   register: _lock_root_result
-  failed_when: false
+  ignore_errors: true
   when: not csb_rhel and not system_is_container
 
 - name: Warn if Lock root account failed

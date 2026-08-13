@@ -1,6 +1,17 @@
 ---
 # roles/system/tasks/chrony.yml
 # --- Chrony NTS (authenticated time sync) ---
+- name: Mask systemd-timesyncd when chrony is active
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: true
+    state: stopped
+  when:
+    - is_apt or is_dnf
+    - system_chrony_service_enabled | bool
+    - not system_is_container
+  failed_when: false
+
 - name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
   ansible.builtin.apt:
     name: chrony
@@ -33,17 +44,6 @@
     - system_chrony_service_enabled | bool
     # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
     - is_dnf or is_apt
-
-- name: Mask systemd-timesyncd when chrony is active
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: true
-    state: stopped
-  when:
-    - is_apt or is_dnf
-    - system_chrony_service_enabled | bool
-    - not system_is_container
-  failed_when: false
 
 - name: Unmask systemd-timesyncd when chrony is disabled
   ansible.builtin.systemd:

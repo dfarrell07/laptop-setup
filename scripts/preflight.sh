@@ -57,7 +57,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service &>/dev/null && fapolicyd_installed=true
+  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else

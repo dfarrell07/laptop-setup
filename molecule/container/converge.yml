@@ -1,5 +1,5 @@
 ---
-# Converge: exercise container-provision-tasks.yml.
+# Converge: exercise roles/distrobox/tasks/container-provision.yml.
 # Running inside the geerlingguy Fedora 44 container (no real distrobox):
 #   - distrobox-host-exec stub present (from prepare) → symlink path executes
 #     (not flatpak-spawn); flatpak-spawn path is covered by the
@@ -7,7 +7,7 @@
 #   - oc stub present (from prepare) → download block skipped.
 #   - golangci-lint/subctl stubs echo pinned versions → version-string guard skips go install.
 #   - distrobox-export stub present (from prepare) → export task succeeds and
-#     ~/.local/bin/oc is asserted by container-provision-tasks.yml.
+#     ~/.local/bin/oc is asserted by roles/distrobox/tasks/container-provision.yml.
 - name: Converge (container provisioning)
   hosts: all
   become: false

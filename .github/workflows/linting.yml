@@ -23,15 +23,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: '3.14'
-          cache: pip
-          cache-dependency-path: requirements-test.lock
-
-      - name: Install ansible-lint
-        run: pip install -r requirements-test.lock
+      - name: Set up Molecule environment
+        uses: ./.github/actions/molecule-setup
 
       - name: Create vault password script for CI
         run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
@@ -259,14 +252,15 @@ jobs:
       - name: Run syntax check
         run: ansible-playbook site.yml --syntax-check
 
-  markdownlint:
-    name: Markdown Lint
+  node-lint:
+    name: Node Lint
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -280,6 +274,69 @@ jobs:
 
       - name: Run markdownlint
         run: npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
+
+      - name: Run commitlint
+        if: github.actor != 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
+
+      - name: Check imperative mood
+        if: github.actor != 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
+          _bad_word() {
+            local lw; lw=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+            case "$lw" in
+              added|changed|created|deleted|enabled|disabled|expanded|\
+              fixed|implemented|improved|merged|moved|refactored|\
+              removed|renamed|replaced|resolved|reverted|started|\
+              stopped|updated|upgraded|\
+              adding|changing|creating|deleting|enabling|disabling|\
+              expanding|fixing|implementing|improving|merging|moving|\
+              refactoring|removing|renaming|replacing|resolving|\
+              reverting|starting|stopping|updating|upgrading) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          failed=0
+          # shellcheck disable=SC2046
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            msg=$(git log -1 --format=%s "$sha")
+            first=$(echo "$msg" | awk '{print $1}')
+            # For scoped commits (Scope: Verb noun), extract word after colon to check verb
+            desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
+            if _bad_word "$first"; then
+              echo "::error::Commit $sha: Use imperative mood, not '$first'"
+              failed=1
+            fi
+            # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
+            if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
+              echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Check Signed-off-by
+        if: github.actor != 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          # shellcheck disable=SC2046
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            if ! git log -1 --format=%B "$sha" | grep -q '^Signed-off-by:'; then
+              echo "::error::Commit $sha is missing Signed-off-by: trailer (use git commit -s)"
+              failed=1
+            fi
+          done
+          exit $failed
 
   gitleaks:
     name: Secret Detection
@@ -348,87 +405,6 @@ jobs:
       - name: Run zizmor
         run: ./zizmor .github/
 
-  commitlint:
-    name: Commit Message Lint
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    if: github.actor != 'dependabot[bot]'
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
-        with:
-          node-version: '22'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Run commitlint
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
-
-      - name: Check imperative mood
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
-          _bad_word() {
-            local lw; lw=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
-            case "$lw" in
-              added|changed|created|deleted|enabled|disabled|expanded|\
-              fixed|implemented|improved|merged|moved|refactored|\
-              removed|renamed|replaced|resolved|reverted|started|\
-              stopped|updated|upgraded|\
-              adding|changing|creating|deleting|enabling|disabling|\
-              expanding|fixing|implementing|improving|merging|moving|\
-              refactoring|removing|renaming|replacing|resolving|\
-              reverting|starting|stopping|updating|upgrading) return 0 ;;
-              *) return 1 ;;
-            esac
-          }
-          failed=0
-          # shellcheck disable=SC2046
-          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
-            msg=$(git log -1 --format=%s "$sha")
-            first=$(echo "$msg" | awk '{print $1}')
-            # For scoped commits (Scope: Verb noun), extract word after colon to check verb
-            desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
-            if _bad_word "$first"; then
-              echo "::error::Commit $sha: Use imperative mood, not '$first'"
-              failed=1
-            fi
-            # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
-            if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
-              echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
-              failed=1
-            fi
-          done
-          exit $failed
-
-      - name: Check Signed-off-by
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          failed=0
-          # shellcheck disable=SC2046
-          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
-            if ! git log -1 --format=%B "$sha" | grep -q '^Signed-off-by:'; then
-              echo "::error::Commit $sha is missing Signed-off-by: trailer (use git commit -s)"
-              failed=1
-            fi
-          done
-          exit $failed
-
   all-checks-pass:
     name: All Checks Pass
     runs-on: ubuntu-24.04
@@ -441,11 +417,10 @@ jobs:
       - lockfile-lint
       - vault-encryption
       - syntax-check
-      - markdownlint
+      - node-lint
       - gitleaks
       - actionlint
       - zizmor
-      - commitlint
     steps:
       - name: Verify no required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

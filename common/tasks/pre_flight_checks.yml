@@ -14,6 +14,12 @@
       failed_when: false
       tags: [always]
 
+    - name: Stat config.yml for parse-failure detection
+      ansible.builtin.stat:
+        path: config.yml
+      register: _config_yml_stat
+      tags: [always]
+
     - name: Load user config for vault key inspection
       # Second load into a named dict — include_vars with name: does not populate the play
       # namespace, so this does NOT duplicate the first load. Both loads are required: the
@@ -32,7 +38,7 @@
           WARNING: config.yml exists but could not be parsed (YAML error) —
           vault-key assertions are being skipped.
       when:
-        - _user_config_load.failed | default(false)
+        - _config_yml_stat.stat.exists
         - _user_config is not defined
       tags: [always]
 

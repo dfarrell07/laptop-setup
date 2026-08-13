@@ -13,7 +13,7 @@
     - name: Set work profile and identity vars for verify context
       ansible.builtin.set_fact:
         profile: work
-        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
+        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches ci-default-vars.yml; re-stated here for verify phase
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
@@ -54,7 +54,7 @@
     - name: Assert git email is work profile
       ansible.builtin.assert:
         that: "dotfiles_user_email_work in verify_git_email.stdout"
-        fail_msg: "git user.email is not set to a Red Hat work address"
+        fail_msg: "git user.email ('{{ verify_git_email.stdout }}') missing expected dotfiles_user_email_work value"
 
     # --- Notes role ---
     - name: Verify notes role

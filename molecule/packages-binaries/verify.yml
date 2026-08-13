@@ -240,7 +240,6 @@
     - name: Assert gofumpt exists and is executable
       ansible.builtin.assert:
         that:
-          - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
       when: verify_gofumpt.stat.exists
@@ -253,7 +252,6 @@
     - name: Assert golangci-lint exists and is executable
       ansible.builtin.assert:
         that:
-          - verify_golangci_lint.stat.exists
           - verify_golangci_lint.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/golangci-lint missing — packages_go_install_work v2 module path regression"
       when: verify_golangci_lint.stat.exists
@@ -266,7 +264,6 @@
     - name: Assert govulncheck exists and is executable
       ansible.builtin.assert:
         that:
-          - verify_govulncheck.stat.exists
           - verify_govulncheck.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
       when: verify_govulncheck.stat.exists
@@ -279,7 +276,6 @@
     - name: Assert gci exists and is executable
       ansible.builtin.assert:
         that:
-          - verify_gci.stat.exists
           - verify_gci.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
       when: verify_gci.stat.exists
@@ -292,7 +288,6 @@
     - name: Assert gopls exists and is executable
       ansible.builtin.assert:
         that:
-          - verify_gopls.stat.exists
           - verify_gopls.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
       when: verify_gopls.stat.exists
