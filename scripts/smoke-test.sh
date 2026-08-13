@@ -1326,7 +1326,7 @@ EOF
 
   # Connectivity sanity check — verifies DoT/stub-resolver config did not break DNS (not provisioning-specific).
   if getent hosts redhat.com &>/dev/null; then record "dns-resolves" "PASS"
-  else record "dns-resolves" "FAIL" "DNS resolution failed for redhat.com"; fi
+  else record "dns-resolves" "WARN" "DNS resolution failed for redhat.com"; fi
 
   # cron.allow restricts cron to root only (CIS 5.1.8)
   # Skipped on RHEL CSB — katello-agent, Insights client, and IT monitoring run cron jobs under

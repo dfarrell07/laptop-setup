@@ -93,7 +93,7 @@
 - name: Assert usbguard.service is enabled
   ansible.builtin.assert:
     that: verify_usbguard_svc_shared.rc == 0
-    fail_msg: "usbguard.service is not enabled"
+    fail_msg: "usbguard.service is not enabled (systemctl is-enabled returned: '{{ verify_usbguard_svc_shared.stdout }}')"
   when:
     - usbguard_expected | default(false)
     - ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']

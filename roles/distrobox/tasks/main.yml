@@ -5,7 +5,7 @@
 # --- Detect container tool ---
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: command -v distrobox
+    cmd: which distrobox
   register: distrobox_check
   changed_when: false
   failed_when: false
@@ -13,7 +13,7 @@
 
 - name: Probe toolbox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: command -v toolbox
+    cmd: which toolbox
   register: distrobox_toolbox_check
   changed_when: false
   failed_when: false

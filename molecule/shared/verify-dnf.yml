@@ -417,11 +417,6 @@
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: dnf-automatic.conf checks skipped in container (not configured by Ansible)
-  ansible.builtin.debug:
-    msg: "dnf-automatic.conf checks skipped: system_is_container=true. File not configured by Ansible in container CI."
-  when: system_is_container | default(false)
-
 - name: Verify dnf-automatic timer enabled
   ansible.builtin.systemd:
     name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
@@ -431,11 +426,6 @@
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
-
-- name: dnf-automatic timer assertions skipped in container (VM scenario only)
-  ansible.builtin.debug:
-    msg: "dnf-automatic timer assertions skipped: system_is_container=true. Only make test-vm exercises these checks."
-  when: system_is_container | default(false)
 
 - name: Assert dnf-automatic timer is enabled
   ansible.builtin.assert:
