@@ -43,6 +43,7 @@ fi
 if [ -n "$YAMLLINT" ]; then
   while IFS= read -r -d '' f; do
     git show ":$f" | "$YAMLLINT" --strict - 2>&1 | sed "s|^stdin:|${f}:|"
+    # PIPESTATUS indices: [0]=git-show [1]=yamllint [2]=sed — update index if pipe structure changes
     _yl_rc=${PIPESTATUS[1]}
     [ "$_yl_rc" -ne 0 ] && failed=1
   done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml' | grep -zEv '(^|/)vault\.yml$' | grep -zv '^\.github/') # .github/ excluded: stdin-mode yamllint ignores the 'ignore:' config; exclude to match .yamllint + make lint behaviour

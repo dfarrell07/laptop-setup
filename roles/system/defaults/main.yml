@@ -137,7 +137,7 @@ system_journald_max_use: 4G        # SystemMaxUse — max total journald disk us
 system_journald_keep_free: 1G      # SystemKeepFree — free disk space to preserve
 system_journald_max_retention: 6month  # MaxRetentionSec — max log age before rotation
 system_journald_rate_interval: 30s  # RateLimitIntervalSec — sliding window for rate limiting
-system_journald_rate_burst: 20000  # RateLimitBurst — burst log entries per rate interval
+system_journald_rate_burst: 10000  # RateLimitBurst — burst log entries per rate interval
 
 # USBGuard
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
@@ -171,7 +171,6 @@ system_aide_enabled: false  # 5-10 min init on first provision; enable only when
 system_aide_monitoring_etc_paths:
   - /etc/ssh/sshd_config.d      # sshd hardening drop-ins
   - /etc/NetworkManager/conf.d   # MAC randomization and DNS policy
-  - /etc/systemd/resolved.conf.d # DNS-over-TLS policy
   - /etc/systemd/logind.conf.d   # session timeout policy
   - /etc/systemd/journald.conf.d # log persistence policy
   - /etc/systemd/coredump.conf.d # coredump config integrity
@@ -272,7 +271,7 @@ system_enable_ip_forward: true  # set false on terminal-only hosts without Kuber
 # net.ipv4.ip_forward, net.ipv6.conf.all.forwarding, kernel.yama.ptrace_scope,
 # kernel.kexec_load_disabled, kernel.io_uring_disabled, kernel.sysrq, kernel.core_pattern,
 # kernel.panic, kernel.panic_on_oops, kernel.unprivileged_bpf_disabled, net.core.bpf_jit_harden,
-# net.ipv6.conf.all.accept_ra, net.ipv6.conf.default.accept_ra.
+# net.ipv6.conf.all.accept_ra, net.ipv6.conf.default.accept_ra, kernel.perf_event_paranoid.
 _system_sysctl_work_defaults:
   net.netfilter.nf_conntrack_max: 524288
   net.core.rmem_max: 16777216
@@ -338,7 +337,7 @@ ssh_pubkey_accepted_algorithms:
   - sk-ssh-ed25519-cert-v01@openssh.com
 ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
-ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
+ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384"
 ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
 

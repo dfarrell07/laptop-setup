@@ -205,6 +205,18 @@
           become: true
           tags: [become]
 
+        - name: Stat opm-rhel8 after extraction
+          ansible.builtin.stat:
+            path: /usr/local/bin/opm-rhel8
+          register: _opm_rhel8_stat
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+
+        - name: Assert opm-rhel8 exists before rename
+          ansible.builtin.assert:
+            that: _opm_rhel8_stat.stat.exists
+            fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for this OCP release"
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+
         - name: Rename opm-rhel8 to opm
           ansible.builtin.command:
             cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm

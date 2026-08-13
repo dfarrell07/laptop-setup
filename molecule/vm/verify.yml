@@ -297,9 +297,11 @@
 
     - name: Assert kernel lockdown integrity
       ansible.builtin.assert:
-        that: "'lockdown=integrity' in verify_lockdown.stdout"
+        that: "'lockdown=' ~ (system_kernel_lockdown | default('integrity')) ~ '' in verify_lockdown.stdout"
         fail_msg: "Kernel lockdown=integrity not found in boot args"
-      when: verify_lockdown.rc == 0
+      when:
+        - verify_lockdown.rc == 0
+        - system_kernel_lockdown | default('integrity') | length > 0
 
     - name: Verify port 722 is labeled ssh_port_t
       ansible.builtin.command:

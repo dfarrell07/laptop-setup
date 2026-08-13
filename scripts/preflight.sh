@@ -287,7 +287,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      pl=$(awk -F= '/^\[/{section=$0} /^pipelining/ && section ~ /\[defaults\]/{gsub(/ /,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+      pl=$(awk -F= '/^\[/{section=$0} /^pipelining/ && section ~ /\[defaults\]/{gsub(/ /,"",$2); gsub(/#.*$/,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
       pl=${pl:-not configured}
       if [[ "$pl" == "true" ]]; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"

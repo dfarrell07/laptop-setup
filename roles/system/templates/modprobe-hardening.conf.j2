@@ -5,7 +5,8 @@
 # squashfs is NOT blacklisted — Flatpak runtime images require it. Without it
 # all Flatpak app launches fail. CIS 1.1.1.6 calls for squashfs; this is the
 # intentional exception matching the SCTP pattern in the network section below.
-# jffs2: removed from Fedora kernels at Fedora 44 (kernel 6.8+). 'blacklist jffs2' intentionally omitted.
+# jffs2: present in Fedora 44 (jffs2.ko.xz, alias fs-jffs2); blacklisted as unused attack surface.
+blacklist jffs2
 install jffs2 /bin/false
 blacklist hfs
 install hfs /bin/false

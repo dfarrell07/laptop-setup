@@ -5,6 +5,9 @@
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-% \
+       test-fedora test-rocky test-debian test-macos test-vm \
+       test-container test-container-offline test-container-offline-distrobox \
+       test-distrobox-role test-packages-binaries \
        repos-% \
        preflight guard-not-root \
        pip-lock pip-sync

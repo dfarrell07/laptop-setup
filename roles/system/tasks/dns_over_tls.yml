@@ -27,7 +27,9 @@
     dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
     mode: "0644"
   notify: Restart systemd-resolved
-  when: not system_is_container  # resolved restart crashes privileged Podman containers
+  when:
+    - not csb_rhel
+    - not system_is_container  # resolved restart crashes privileged Podman containers
 
 - name: Remove DNS-over-TLS config on CSB machines (corporate networks block outbound 1.1.1.1)
   ansible.builtin.file:

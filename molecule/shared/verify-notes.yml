@@ -8,7 +8,7 @@
     path: "{{ ansible_user_dir }}/notes/.git"
   register: verify_notes
 
-- name: Assert notes .git/config has 0600 when repo exists
+- name: Stat notes .git/config for permission check
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/notes/.git/config"
   register: verify_notes_config

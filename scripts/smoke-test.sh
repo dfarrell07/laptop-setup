@@ -52,7 +52,7 @@ _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]]/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || echo "722")
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
-_system_keymap=$(awk -F': ' '/^system_keymap:/{gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+_system_keymap=$(awk -F': ' '/^system_keymap:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 _system_keymap="${_system_keymap:-us}"
 unset _cfg
 

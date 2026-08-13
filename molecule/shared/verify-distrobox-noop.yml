@@ -2,6 +2,15 @@
 # molecule/shared/verify-distrobox-noop.yml
 # Assertions for the distrobox role no-op path (packages_containers emptied in converge).
 # Included by rocky/verify.yml and fedora/verify.yml.
+#
+# NOTE: Both assertions are intentionally "trivially true" under normal operation.
+# The first passes because packages_containers: [] prevents the packages role from
+# ever installing distrobox; the second passes because the distrobox role only writes
+# distrobox.ini when it detects an installed distrobox binary. These are guard-logic
+# regression tests: they catch bugs where the guard itself regresses (e.g., the role
+# installs distrobox despite the override, or writes distrobox.ini despite no binary).
+# The value is in detecting future regressions to those guards, not in exercising a
+# non-trivial code path today.
 
 - name: Check distrobox binary presence in CI (should be absent)
   ansible.builtin.stat:

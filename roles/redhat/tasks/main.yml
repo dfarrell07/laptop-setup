@@ -3,6 +3,7 @@
 # Red Hat-specific: CA certs, VPN. Work profile only.
 
 - name: Stat and deploy Red Hat CA certificates
+  when: not csb_rhel
   block:
     - name: Stat Red Hat CA certificate files in role
       ansible.builtin.stat:
@@ -52,9 +53,7 @@
         msg: >-
           No Red Hat CA certificate files found in {{ role_path }}/files/.
           Populate the files listed in redhat_ca_certs to deploy CA trust.
-      when:
-        - not csb_rhel
-        - redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
+      when: redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
 
 - name: Install Red Hat cert packages
   # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)

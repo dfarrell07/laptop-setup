@@ -103,7 +103,7 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
 
@@ -112,7 +112,7 @@
     cmd: authselect enable-feature with-faillock
   register: system_authselect_faillock_enable
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container  # authselect enable-feature triggers PAM reload → inotify → daemon-reload → crashes container
     - system_authselect_faillock_check.rc | default(0) != 0
@@ -183,7 +183,7 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
 
@@ -192,7 +192,7 @@
     cmd: authselect enable-feature with-pwhistory
   register: system_authselect_pwhistory_enable
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container  # authselect enable-feature triggers PAM reload → inotify → daemon-reload → crashes container
     - system_authselect_pwhistory_check.rc | default(0) != 0
@@ -215,7 +215,7 @@
     value: "{{ system_pwhistory_remember }}"
     mode: "0644"
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
     - not is_apt
@@ -228,7 +228,7 @@
     allow_no_value: true
     mode: "0644"
   when:
-    - system_authselect_bin.stat.exists
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
     - not is_apt
