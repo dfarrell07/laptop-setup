@@ -644,10 +644,11 @@
   ansible.builtin.assert:
     that:
       - verify_sshd_dropin.stat.exists
-      - verify_sshd_dropin.stat.mode == '0600'
+      - (verify_sshd_dropin.stat.mode | default('')) == '0600'
     fail_msg: >-
-      /etc/ssh/sshd_config.d/00-hardening.conf has wrong permissions
-      (expected 0600, got {{ verify_sshd_dropin.stat.mode | default('unknown') }})
+      /etc/ssh/sshd_config.d/00-hardening.conf missing or has wrong permissions
+      (exists={{ verify_sshd_dropin.stat.exists | default(false) }}, expected mode 0600,
+      got {{ verify_sshd_dropin.stat.mode | default('absent') }})
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'

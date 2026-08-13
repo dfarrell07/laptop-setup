@@ -11,6 +11,7 @@ first="${first%:}"
 # Extract the description word — the first word after "Scope: " (or the first word if no scope)
 # This is what should be imperative mood.
 desc_first=$(echo "$msg" | sed 's/^[-A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
+desc_first="${desc_first%:}"
 
 if [ -z "$desc_first" ]; then
   case "$msg" in

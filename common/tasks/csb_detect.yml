@@ -15,7 +15,7 @@
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
     is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
     is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
-    _is_csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
+    _is_csb_hostname: "{{ ansible_facts['fqdn'] | default('') is search('\\.csb$') }}"
   become: false
 
 # ---------------------------------------------------------------------------
@@ -204,6 +204,7 @@
     msg: >-
       NOTE: RHEL host with CSB detection but fapolicyd not enforcing — running in hybrid tier.
       Dev tools will be installed in a container rather than the host.
+      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
   become: false
   when:
     - not (_csb_molecule_force | default(false))

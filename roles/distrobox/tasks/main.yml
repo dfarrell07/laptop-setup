@@ -298,7 +298,9 @@
   changed_when: false
   failed_when: false
   check_mode: false  # always executes, even with --check (read-only, no state change)
-  when: distrobox_tool != 'none'
+  when:
+    - distrobox_tool != 'none'
+    - distrobox_start_result.rc | default(0) == 0
 
 - name: Register container as Ansible host for Play 3
   ansible.builtin.add_host:
@@ -318,6 +320,7 @@
     distrobox_oc_mirror_url: "{{ distrobox_oc_mirror_url }}"
   when:
     - distrobox_tool != 'none'
+    - distrobox_start_result.rc | default(0) == 0
     - distrobox_python.rc == 0
 
 - name: Warn if Python not found in container
@@ -327,4 +330,5 @@
       Container provisioning (Play 3) will be skipped.
   when:
     - distrobox_tool != 'none'
+    - distrobox_start_result.rc | default(0) == 0
     - distrobox_python.rc != 0

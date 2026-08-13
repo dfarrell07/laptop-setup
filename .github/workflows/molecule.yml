@@ -90,6 +90,7 @@ jobs:
       - changes
       - molecule
     steps:
+      # 'skipped' result (ansible=false / doc-only PR) is intentionally not treated as failure.
       - name: Verify no required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |

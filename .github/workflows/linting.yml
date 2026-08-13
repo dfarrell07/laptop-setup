@@ -304,8 +304,8 @@ jobs:
       - name: Run gitleaks
         run: ./gitleaks git . --redact --config .gitleaks.toml
 
-  actionlint:
-    name: Workflow Security (actionlint)
+  workflow-security:
+    name: Workflow Security
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -325,16 +325,6 @@ jobs:
 
       - name: Run actionlint
         run: ./actionlint -color
-
-  zizmor:
-    name: Workflow Security (zizmor)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
         env:
@@ -360,8 +350,7 @@ jobs:
       - syntax-check
       - node-lint
       - gitleaks
-      - actionlint
-      - zizmor
+      - workflow-security
     steps:
       - name: Verify no required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

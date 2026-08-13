@@ -67,7 +67,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "WARNING: python3 not found — JSON/lockfile validation skipped" >&2
 else
   while IFS= read -r -d '' f; do
-    if ! git show ":$f" | python3 -m json.tool > /dev/null 2>&1; then
+    if ! git show ":$f" | python3 -m json.tool > /dev/null; then
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi

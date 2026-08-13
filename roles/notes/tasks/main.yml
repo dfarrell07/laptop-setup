@@ -141,7 +141,7 @@
     - name: Warn if transcrypt initialization failed
       ansible.builtin.debug:
         msg: >-
-          transcrypt initialization exited {{ notes_transcrypt_init_result.rc }} —
+          transcrypt initialization exited {{ notes_transcrypt_init_result.rc | default('unknown') }} —
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - notes_transcrypt_available

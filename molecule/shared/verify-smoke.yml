@@ -296,19 +296,9 @@
         fail_msg: "ctrl-alt-del.target UnitFileState is '{{ verify_cad_shared.status.UnitFileState }}', expected 'masked'"
       when:
         - verify_cad_shared.status.UnitFileState | default('') != ''
-        # 'alias' means an existing symlink prevents systemctl mask — container CI gap;
-        # masking of alias units requires removing the pre-existing symlink first.
-        # The VM scenario (make test-vm) exercises full masking on real systemd.
-        - verify_cad_shared.status.UnitFileState != 'alias'
-        # 'enabled' on Rocky 10 privileged Podman container CI gap: systemd cannot mask
-        # ctrl-alt-del.target; service_masking.yml uses failed_when: false so it silently
-        # passes. The VM scenario (make test-vm) exercises the full masking path.
-        - verify_cad_shared.status.UnitFileState != 'enabled'
-        # 'disabled'/'static' on Rocky 10 minimal Podman container CI gap: systemd reports
-        # UnitFileState as disabled or static rather than masked when masking fails inside
-        # a rootless/minimal container. The VM scenario exercises the full masking path.
-        - verify_cad_shared.status.UnitFileState != 'disabled'
-        - verify_cad_shared.status.UnitFileState != 'static'
+        # Skipped in container CI — systemd masking is unreliable in all Podman container
+        # scenarios. The VM scenario (make test-vm) exercises the full masking path.
+        - not (system_is_container | default(false))
 
     - name: Check passim service state (shared)
       ansible.builtin.systemd:

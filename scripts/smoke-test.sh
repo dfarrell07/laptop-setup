@@ -55,12 +55,12 @@ unset _cfg
 
 run() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
-    if command -v toolbox &>/dev/null; then
-      toolbox run -c "$CONTAINER" "$@" 2>/dev/null
-    elif command -v distrobox &>/dev/null; then
+    if command -v distrobox &>/dev/null; then
       distrobox enter "$CONTAINER" -- "$@" 2>/dev/null
+    elif command -v toolbox &>/dev/null; then
+      toolbox run -c "$CONTAINER" "$@" 2>/dev/null
     else
-      echo "Neither toolbox nor distrobox found" >&2; return 1
+      echo "Neither distrobox nor toolbox found" >&2; return 1
     fi
   else
     "$@" 2>/dev/null
@@ -191,9 +191,9 @@ _ssh_add_rc=0; out=$(ssh-add -L 2>&1) || _ssh_add_rc=$?
 if [[ "$out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
-elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "$out" != *"Error"* ]]; then
-  record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"
-else record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"; fi
+elif [[ "$_ssh_add_rc" -eq 1 ]]; then
+  record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"
+else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
 # --- Editor checks ---
 if command -v vim &>/dev/null; then record "vim-binary" "PASS"

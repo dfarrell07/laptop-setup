@@ -103,12 +103,12 @@
       changed_when: false
       become: true
 
-    - name: Assert fs.inotify.max_user_watches >= 524288
+    - name: Assert fs.inotify.max_user_watches >= 1048576
       ansible.builtin.assert:
-        that: verify_inotify_watches.stdout | int >= 524288
+        that: verify_inotify_watches.stdout | int >= 1048576
         fail_msg: >-
           fs.inotify.max_user_watches={{ verify_inotify_watches.stdout }},
-          expected >=524288 (required for IDE/file-watcher tools)
+          expected >=1048576 (role default: _system_sysctl_performance_defaults)
 
     - name: Check fs.inotify.max_user_instances (system role)
       ansible.builtin.command: sysctl -n fs.inotify.max_user_instances
@@ -116,12 +116,12 @@
       changed_when: false
       become: true
 
-    - name: Assert fs.inotify.max_user_instances >= 512
+    - name: Assert fs.inotify.max_user_instances >= 8192
       ansible.builtin.assert:
-        that: verify_inotify_instances.stdout | int >= 512
+        that: verify_inotify_instances.stdout | int >= 8192
         fail_msg: >-
           fs.inotify.max_user_instances={{ verify_inotify_instances.stdout }},
-          expected >=512
+          expected >=8192 (role default: _system_sysctl_performance_defaults)
 
     # --- System hardening checks (VM only) ---
     - name: Gather service facts for conditional checks
