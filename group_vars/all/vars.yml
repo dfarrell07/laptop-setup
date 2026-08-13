@@ -139,7 +139,7 @@ ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384"
 # sshd only — ssh client uses capability-detected list in ssh_config.j2 (dotfiles_ssh_kex_pq_enabled)
-ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
+ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; RSA/ECDSA excluded intentionally — on disk but unused
 # Baseline false — csb_detect.yml overrides at runtime via set_fact
 # (csb_detected and is_rhel). True on RHEL CSB where IT manages security
 # baselines; false on hybrid Fedora CSB where the user manages their own system.

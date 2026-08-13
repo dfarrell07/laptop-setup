@@ -342,7 +342,7 @@ ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,ae
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384"
-ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
+ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; RSA/ECDSA excluded intentionally — on disk but unused
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)

@@ -31,4 +31,4 @@
 - name: Assert distrobox.ini is absent when no tool is installed
   ansible.builtin.assert:
     that: not verify_distrobox_ini.stat.exists
-    fail_msg: "distrobox.ini was deployed despite distrobox_tool==none — role no-op guard regressed"
+    fail_msg: "distrobox.ini deployed despite /usr/bin/distrobox being absent — distrobox role guard (distrobox_tool detection) regressed"

@@ -104,6 +104,7 @@
       loop: [oc, kubectl]
       become: true
       tags: [become]
+      when: packages_oc_download is defined
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)
@@ -205,13 +206,13 @@
                 remote_src: true
                 extra_opts:
                   - --no-same-owner
-                  - opm-rhel8 # opm-rhel8 is the binary name for OCP 4.10+; verify when bumping packages_oc_version
+                  - "{{ packages_opm_binary_name }}" # set in defaults/main.yml; verify when bumping packages_oc_version
               become: true
               tags: [become]
 
             - name: Copy opm-rhel8 to opm
               ansible.builtin.copy:
-                src: /usr/local/bin/opm-rhel8
+                src: /usr/local/bin/{{ packages_opm_binary_name }}
                 dest: /usr/local/bin/opm
                 remote_src: true
                 mode: '0755'
@@ -220,7 +221,7 @@
 
             - name: Remove opm-rhel8 after copy
               ansible.builtin.file:
-                path: /usr/local/bin/opm-rhel8
+                path: /usr/local/bin/{{ packages_opm_binary_name }}
                 state: absent
               become: true
               tags: [become]
@@ -250,7 +251,7 @@
 
         - name: Remove opm-rhel8 artifact (safety cleanup)
           ansible.builtin.file:
-            path: /usr/local/bin/opm-rhel8
+            path: /usr/local/bin/{{ packages_opm_binary_name }}
             state: absent
           become: true
           tags: [become]

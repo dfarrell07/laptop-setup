@@ -24,7 +24,7 @@ else
   P="" W="" F="" R=""
 fi
 
-declare -a RESULTS=()
+RESULTS=()
 FAILURES=0
 WARNS=0
 
@@ -178,7 +178,7 @@ else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
   _vp="$SCRIPT_DIR/vault-pass.sh"
   if [[ -x "$_vp" ]]; then
-    _vp_out=$(bash "$_vp" 2>/dev/null) || true
+    _vp_out=$("$_vp" 2>/dev/null) || true
     if [[ "$_vp_out" == *ci-dummy-vault-password* ]]; then
       record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
     else

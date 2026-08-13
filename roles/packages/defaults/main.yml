@@ -51,7 +51,7 @@ packages_security_yubikey:
 
 packages_brew_yubikey:
   - ykman
-  - ykpers
+  - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
   - theseal/ssh-askpass/ssh-askpass
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
@@ -225,6 +225,7 @@ packages_oc_version: "4.22.8"
 # packages_oc_sha256 and packages_opm_sha256 must be updated together whenever packages_oc_version is bumped.
 packages_oc_sha256: "22cb5df5206569ca2c8ca3b56f55f5af9dbd68fc35ea237a4069e06ffd6e9218"
 packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09ca36e2a"
+packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
 

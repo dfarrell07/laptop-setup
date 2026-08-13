@@ -133,19 +133,19 @@
         state: present
       register: _aide_conf_r6
 
-    - name: Add /boot/loader/entries to AIDE monitoring (boot entry integrity)
+    - name: Add /boot/loader/entries to AIDE monitoring (PERMS — content changes on every kernel update)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/loader/entries\s'
-        line: '/boot/loader/entries NORMAL'
+        line: '/boot/loader/entries PERMS'
         state: present
       register: _aide_conf_r6b
 
-    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (GRUB config integrity)
+    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (PERMS — content changes on every kernel update)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/grub2/grub\.cfg\s'
-        line: '/boot/grub2/grub.cfg NORMAL'
+        line: '/boot/grub2/grub.cfg PERMS'
         state: present
       register: _aide_conf_r6c
 
@@ -260,9 +260,10 @@
           AIDE block failed — check the error for the actual cause (config edit, unit deploy,
           timer enable, or AIDE init failure such as disk exhaustion, OOM, or signal interruption).
           Error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) | default('unknown') | truncate(400) }}.
-          To recover: address the failure above, then re-run this playbook — this rescue removes both
-          aide.db.new.gz (partial) and aide.db.gz (stale/missing baseline) so the next run
-          initializes a fresh baseline cleanly.
+          To recover: address the failure above, then re-run this playbook.
+          This rescue always removes aide.db.new.gz (partial). aide.db.gz is removed only when the
+          reinit command itself failed, forcing a fresh baseline on re-run; if the failure was in
+          unit deployment, aide.db.gz is preserved and the next run skips the 5-10 min reinit.
 
     - name: Remove partial aide.db.new.gz after failed init
       ansible.builtin.file:

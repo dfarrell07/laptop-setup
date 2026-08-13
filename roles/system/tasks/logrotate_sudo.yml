@@ -5,7 +5,7 @@
   ansible.builtin.package:
     name: logrotate
     state: present
-  when: not system_is_container  # apt install logrotate triggers deb-systemd-helper daemon-reload, crashes Debian containers
+  when: not csb_rhel and not system_is_container  # apt install logrotate triggers deb-systemd-helper daemon-reload
 
 - name: Deploy logrotate config for sudo.log
   ansible.builtin.copy:

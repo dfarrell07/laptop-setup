@@ -17,7 +17,7 @@ PermitRootLogin no
 PermitEmptyPasswords no  # OpenSSH compiled default; unreachable because both PasswordAuthentication no (line 14) and KbdInteractiveAuthentication no (line 15) close all password-equivalent auth paths (UsePAM yes makes both relevant)
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}  # ed25519 and FIDO2 only (cert variants require TrustedUserCAKeys or cert-authority in authorized_keys); RSA/ECDSA user keys rejected
-AuthorizedKeysFile .ssh/authorized_keys  # Narrows OpenSSH compiled default (.ssh/authorized_keys .ssh/authorized_keys2) to one file; drop-in placement ensures this takes first-occurrence precedence over any sshd_config change
+AuthorizedKeysFile .ssh/authorized_keys  # Ensures first-occurrence precedence to a single authorized_keys file; guards against any future base sshd_config adding .ssh/authorized_keys2 (the OpenSSH source-code compiled default)
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3

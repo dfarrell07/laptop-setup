@@ -139,7 +139,7 @@ fi
 # --- YubiKey presence ---
 yk_found=false
 yk_detect_possible=true
-if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -qi "yubico\|1050:"; then
+if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -qiE "yubico|1050:"; then
   yk_found=true
 elif command -v ykman &>/dev/null && ykman info &>/dev/null; then
   yk_found=true

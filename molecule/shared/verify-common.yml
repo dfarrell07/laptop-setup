@@ -637,35 +637,35 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - verify_modprobe_hardening.stat.exists
     - not (system_is_container | default(false))
+    - verify_modprobe_hardening.stat.exists
 
 - name: Check modprobe hardening contains usb_storage blacklist entry
   ansible.builtin.command: grep -qF 'install usb_storage /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_modprobe_hardening.stat.exists
     - system_disable_usb_storage | default(true) | bool
-    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains udf blacklist entry
   ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_modprobe_hardening.stat.exists
     - system_disable_udf | default(true) | bool
-    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains sctp blacklist entry
   ansible.builtin.command: grep -qF 'install sctp /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_modprobe_hardening.stat.exists
     - system_disable_sctp | default(false) | bool
-    - not (system_is_container | default(false))
 
 # --- system role drop-in file assertions (sshd, resolved, DNS-over-TLS, coredump, logind, sudoers, journald, auditd rules; Linux only) ---
 # sshd drop-in is mode 0600 root:root — become: true required for stat and grep.
@@ -802,8 +802,8 @@
   register: verify_coredump_content
   when:
     - ansible_system == 'Linux'
-    - verify_coredump_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_coredump_conf.stat.exists
 
 - name: Assert coredump Storage= value matches deployed variable
   ansible.builtin.assert:
@@ -814,8 +814,8 @@
       coredump drop-in missing expected Storage={{ system_coredump_storage | default('external') }} — template regression?
   when:
     - ansible_system == 'Linux'
-    - verify_coredump_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_coredump_conf.stat.exists
 
 - name: Assert coredump ProcessSizeMax= value matches deployed variable
   ansible.builtin.assert:
@@ -826,8 +826,8 @@
       coredump drop-in missing expected ProcessSizeMax={{ system_coredump_process_size_max | default('2G') }} — template regression?
   when:
     - ansible_system == 'Linux'
-    - verify_coredump_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_coredump_conf.stat.exists
 
 
 - name: Stat logind hardening drop-in (system role must deploy it)
@@ -877,8 +877,8 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - verify_logind_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_logind_conf.stat.exists
 
 - name: Stat sudoers go-env drop-in (system role must deploy it on non-CSB)
   ansible.builtin.stat:
@@ -970,8 +970,8 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - verify_sudoers_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_sudoers_conf.stat.exists
 
 - name: Stat auditd rules file (system role deploys it on all non-CSB Linux)
   ansible.builtin.stat:
@@ -1264,8 +1264,8 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
-    - verify_llmnr_conf.stat.exists
     - not (system_is_container | default(false))
+    - verify_llmnr_conf.stat.exists
 
 # --- System role: service masking (Linux container CI) ---
 # Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.

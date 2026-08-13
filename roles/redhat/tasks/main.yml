@@ -101,6 +101,7 @@
       become: true
       tags: [become]
   rescue:
+    # No csb_detected guard needed — block is csb_detected-only, so csb_detected is always true here
     - name: Record VPN package install failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:

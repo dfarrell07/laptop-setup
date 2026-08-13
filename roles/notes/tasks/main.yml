@@ -95,7 +95,7 @@
           ansible.builtin.lineinfile:
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
-            mode: "0644"
+            mode: "0600"
             create: true
       when: notes_repo_available
 
@@ -161,7 +161,6 @@
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)
       ansible.builtin.debug:
-        verbosity: 1
         msg: >-
           transcrypt is already initialized — if vault_notes_transcrypt_password changed,
           re-provisioning silently skips re-init. To rotate credentials, manually run:
