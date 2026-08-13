@@ -77,7 +77,7 @@ else
 fi
 CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ -z "$PROFILE" ]]; then
-  PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
+  PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
   if grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; fi
@@ -109,7 +109,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
       fi
-    else record "required_${tool}" "fail" "not installed"; fi
+    else record "required_${tool}" "fail" "not installed"; fi  # fallback for any tool added to the loop without a specific elif
   fi
 done
 if command -v shellcheck &>/dev/null; then

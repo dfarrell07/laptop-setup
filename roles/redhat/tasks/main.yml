@@ -53,7 +53,9 @@
           No Red Hat CA certificate files found in {{ role_path }}/files/.
           Populate the files listed in redhat_ca_certs to deploy CA trust.
         verbosity: 1
-      when: redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
+      when:
+        - not csb_rhel
+        - redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
 
 - name: Install Red Hat cert packages
   # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)

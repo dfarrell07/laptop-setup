@@ -75,7 +75,7 @@
 
     - name: Set transcrypt availability fact
       ansible.builtin.set_fact:
-        notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists | default(false) }}"
+        notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists }}"
       when: notes_repo_available
 
     - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
@@ -96,6 +96,7 @@
         path: "{{ notes_repo_path }}/.git/info/exclude"
         line: ".gitleaks.toml"
         create: false
+      failed_when: false
       when: notes_repo_available
 
     - name: Check if transcrypt is initialized

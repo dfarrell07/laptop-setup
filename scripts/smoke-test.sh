@@ -1587,13 +1587,15 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "dconf-db-gdm" "WARN" "/etc/dconf/db/gdm missing (GDM not installed? Sway/greetd systems not affected)"; fi
   # Media-handling automount/autorun (CIS 1.8.6-1.8.8)
   if grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
-     grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening 2>/dev/null; then
+     grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening 2>/dev/null && \
+     grep -q '^automount-open=false' /etc/dconf/db/local.d/50-hardening 2>/dev/null; then
     record "dconf-media-handling" "PASS"
   elif [[ -f /etc/dconf/db/local.d/50-hardening ]]; then
-    record "dconf-media-handling" "FAIL" "automount=false or autorun-never=true missing in /etc/dconf/db/local.d/50-hardening"
+    record "dconf-media-handling" "FAIL" "automount=false or autorun-never=true or automount-open=false missing in /etc/dconf/db/local.d/50-hardening"
   else record "dconf-media-handling" "FAIL" "/etc/dconf/db/local.d/50-hardening not deployed"; fi
   # Media-handling policy locks (CIS 1.8.6-1.8.8)
-  if grep -q '^/org/gnome/desktop/media-handling/automount$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null; then
+  if grep -q '^/org/gnome/desktop/media-handling/automount$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null && \
+     grep -q '^/org/gnome/desktop/media-handling/autorun-never$' /etc/dconf/db/local.d/locks/50-hardening 2>/dev/null; then
     record "dconf-media-locks" "PASS"
   else record "dconf-media-locks" "FAIL" "media-handling keys not locked in /etc/dconf/db/local.d/locks/50-hardening"; fi
   # Screensaver idle-delay + lock-enabled (CIS 1.8.4/1.8.5)

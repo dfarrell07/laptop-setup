@@ -42,6 +42,7 @@
 # are not guaranteed to be in started state on all configurations (e.g. re-runs after
 # a manual disable), and the system role has no logic to enable these socket units.
 - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
+  when: _packages_virt_install is succeeded
   block:
     - name: Reload systemd after libvirt package install
       ansible.builtin.systemd:

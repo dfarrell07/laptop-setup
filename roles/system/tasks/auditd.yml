@@ -45,9 +45,6 @@
           real_user_home='{{ real_user_home }}' is not a valid absolute path.
           A newline or special character in HOME would inject arbitrary directives into
           the auditd rules file. Ensure HOME is set correctly before running.
-      when:
-        - not csb_rhel
-        - not system_is_container
 
     - name: Deploy auditd rules
       ansible.builtin.template:

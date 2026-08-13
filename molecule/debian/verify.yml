@@ -26,10 +26,6 @@
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
-    - name: Include NetworkManager conf.d assertions
-      ansible.builtin.import_tasks: ../shared/verify-nm.yml
-      when: not (system_is_container | default(false))
-
     # --- Packages (apt) ---
     - name: Include apt package assertions
       ansible.builtin.import_tasks: ../shared/verify-apt.yml

@@ -8,17 +8,8 @@
   # because rocky/prepare.yml deliberately does NOT install openssh-server.
 
   pre_tasks:
-    - name: Capture real user identity
-      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/capture-user-identity.yml"
-
-    - name: Load CI pre-tasks (config, group_vars, project root)
-      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
-
-    - name: Apply container-safe system role overrides
-      ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
-
-    - name: Refresh DNF cache so system role sees current mirror metadata
-      ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/dnf-cache-refresh.yml"
+    - name: Run common DNF system play pre-tasks
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/dnf-system-play-pre-tasks.yml"
 
   roles:
     - role: system
