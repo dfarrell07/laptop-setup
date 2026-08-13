@@ -2,7 +2,8 @@
 # molecule/shared/verify-sway.yml
 # Sway WM config assertions.
 # Include from scenario verify.yml files where converge.yml sets desktop_environment: sway.
-# This file has no internal guard — callers are responsible for skipping it when sway is not the configured WM.
+# This file has no WM-detection guard — callers are responsible for skipping it when sway is not the configured WM.
+# Individual tasks carry container guards where the deployed artifact requires non-container execution.
 
 - name: Verify sway config deployed
   ansible.builtin.stat:

@@ -110,7 +110,9 @@
       block:
         - name: Check if transcrypt is initialized
           ansible.builtin.command:
-            cmd: "{{ notes_transcrypt_bin_path }} --display"
+            argv:
+              - "{{ notes_transcrypt_bin_path }}"
+              - --display
             chdir: "{{ notes_repo_path }}"
           register: notes_transcrypt_check
           changed_when: false

@@ -94,6 +94,8 @@ if [[ -z "$PROFILE" ]]; then
     record "config_profile" "pass" "profile=personal"
   elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then
     record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
+  else
+    record "config_profile" "pass" "profile=${PROFILE} (default — no override in config.yml)"
   fi
 fi
 
@@ -108,7 +110,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
     fi
     record "required_${tool}" "pass" "$ver"
   else
-    # Keep this elif chain in sync with the for-loop tools list above; every tool must have a branch (no else)
+    # Keep this elif chain in sync with the for-loop tools list above; else at the bottom catches any tool added without an explicit branch
     if [[ "$tool" == "make" ]]; then
       record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
     elif [[ "$tool" == "ssh" ]]; then
@@ -371,13 +373,13 @@ fi
 
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then
-  _raw_ram_gb=$(sysctl -n hw.memsize 2>/dev/null)
-  [[ -n "$_raw_ram_gb" ]] && ram_gb=$(( _raw_ram_gb / 1073741824 ))
+  _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+  [[ -n "$_raw_ram_bytes" ]] && ram_gb=$(( _raw_ram_bytes / 1073741824 ))
 elif [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
-else _raw_ram_gb=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_gb; fi
+else _raw_ram_kib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_kib; fi
 if [[ "$OS_FAMILY" != "unknown" ]]; then
   ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent
-  if [[ -z "${_raw_ram_gb:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
+  if [[ -z "${_raw_ram_bytes:-}${_raw_ram_kib:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
   elif [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
   elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
   else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi

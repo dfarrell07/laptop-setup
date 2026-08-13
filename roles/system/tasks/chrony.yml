@@ -135,6 +135,8 @@
     - system_chrony_service_enabled | bool
     # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
     - is_dnf or is_apt
+    # Chrony is not installed in containers (install tasks above are guarded by not system_is_container).
+    - not system_is_container
 
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
