@@ -108,8 +108,8 @@
   ansible.builtin.set_fact:
     csb_detected: >-
       {{
-        ((is_rhel | bool) and (fapolicyd_installed | default(false) | bool) and (internal_ca_present | bool))
-        or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | bool))
+        ((is_rhel | bool) and (fapolicyd_installed | default(false) | bool) and (internal_ca_present | default(false) | bool))
+        or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | default(false) | bool))
       }}
   become: false
   when: not (_csb_molecule_force | default(false))

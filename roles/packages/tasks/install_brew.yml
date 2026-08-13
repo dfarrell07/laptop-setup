@@ -11,7 +11,7 @@
         state: present
       loop: >-
         {{ packages_brew_taps
-           + (packages_brew_taps_work | default([]) if profile == 'work' else [])
+           + (packages_brew_taps_work if profile == 'work' else [])
            + (packages_brew_taps_yubikey if packages_yubikey_enabled | bool else []) }}
       async: 600
       poll: 10

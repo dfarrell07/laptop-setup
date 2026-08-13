@@ -34,7 +34,7 @@ record() {
       warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
       *) printf "${RED}[BUG]${NC} unknown status '%s' for check '%s'\n" "$status" "$name" >&2; exit 99 ;;
     esac
-  else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
+  else if [[ "$status" == "fail" ]]; then FAILURES=$((FAILURES+1)); fi; fi
 }
 
 # --- OS / CSB / profile detection ---
@@ -363,9 +363,9 @@ fi
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
 elif [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
-else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
+else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null); fi
 if [[ "$OS_FAMILY" != "unknown" ]]; then
-  ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent; || echo 0 only triggers on awk error
+  ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent
   if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
   elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
   else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi

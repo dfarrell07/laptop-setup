@@ -153,6 +153,8 @@
       after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
   when:
     - distrobox_use_distrobox | bool
+    - not (fapolicyd_enforcing)
+    - packages_install_binaries | bool
     - distrobox_container_replace | bool
     - distrobox_container_exists.rc == 0
 

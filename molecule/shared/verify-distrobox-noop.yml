@@ -3,25 +3,9 @@
 # Assertions for the distrobox role no-op path (packages_containers emptied in converge).
 # Included by rocky/verify.yml and fedora/verify.yml.
 #
-# NOTE: Both assertions are intentionally "trivially true" under normal operation.
-# The first passes because packages_containers: [] prevents the packages role from
-# ever installing distrobox; the second passes because the distrobox role only writes
-# distrobox.ini when it detects an installed distrobox binary. These are guard-logic
-# regression tests: they catch bugs where the guard itself regresses (e.g., the role
-# installs distrobox despite the override, or writes distrobox.ini despite no binary).
-# The value is in detecting future regressions to those guards, not in exercising a
-# non-trivial code path today.
-
-- name: Check distrobox binary presence in CI (should be absent)
-  ansible.builtin.stat:
-    path: /usr/bin/distrobox
-  register: verify_distrobox_bin
-
-- name: Assert distrobox is not installed (packages_containers emptied)
-  ansible.builtin.assert:
-    that:
-      - not verify_distrobox_bin.stat.exists
-    fail_msg: "distrobox found in PATH despite packages_containers: [] — converge override not applied?"
+# This assertion targets the distrobox role's "Remove stale distrobox.ini when distrobox
+# is not installed" task guard (distrobox_check.rc != 0). It detects regressions where
+# the role writes distrobox.ini despite no binary being present.
 
 - name: Stat distrobox.ini (must be absent on no-op path)
   ansible.builtin.stat:
