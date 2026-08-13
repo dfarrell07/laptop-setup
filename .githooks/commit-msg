@@ -12,8 +12,8 @@ case "$msg" in
   Merge\ branch*|Merge\ pull*|Merge\ remote*|'Merge tag'*) exit 0 ;;
   Revert\ *) exit 0 ;;
 esac
-if ! echo "$msg" | grep -qE '^[A-Z][-A-Za-z0-9/]*:'; then
-  echo "ERROR: Missing or uncapitalized scope — format must be 'Scope: description'" >&2
+if ! echo "$msg" | grep -qE '^[A-Z][-A-Za-z0-9/]*:[[:space:]]'; then
+  echo "ERROR: Missing or uncapitalized scope — format must be 'Scope: description' (space after colon required)" >&2
   exit 1
 fi
 # Extract scope portion for scope-parts bad-word check below

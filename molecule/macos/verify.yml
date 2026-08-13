@@ -166,3 +166,4 @@
       ansible.builtin.assert:
         that: "'State = 1' in verify_fw.stdout"
         fail_msg: "macOS application firewall not enabled — desktop role firewall task regression"
+      when: verify_fw.rc == 0

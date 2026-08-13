@@ -200,6 +200,7 @@ else
   record "vault" "fail" "no script and no ~/.vault_pass"
 fi
 
+# vault_encrypted is a file-only check — no YubiKey interaction needed — runs in --json mode unlike the vault script test above
 # --- Vault encryption check ---
 VAULT_FILE="$SCRIPT_DIR/../group_vars/all/vault.yml"
 if [[ -f "$VAULT_FILE" ]]; then

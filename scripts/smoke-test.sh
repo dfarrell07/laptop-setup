@@ -829,7 +829,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     elif $CSB_HOST; then record "firewall-icmp-inversion" "WARN" "skipped on CSB — drop zone not active"
     else record "firewall-icmp-inversion" "FAIL" "icmp-block-inversion not enabled in drop zone"; fi
     # libvirt zone must not have ssh enabled (VMs could reach host sshd — lateral movement path)
-    if firewall-cmd --get-zones 2>/dev/null | grep -q '\blibvirt\b'; then
+    if firewall-cmd --info-zone=libvirt &>/dev/null; then
       if firewall-cmd --zone=libvirt --query-service=ssh &>/dev/null; then
         record "firewall-libvirt-no-ssh" "FAIL" "ssh service in libvirt zone — VMs on virbr0 can reach host sshd"
       else record "firewall-libvirt-no-ssh" "PASS"; fi
@@ -1521,7 +1521,7 @@ EOF
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
   if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    if dnf repolist 2>/dev/null | grep -q '^rpmfusion-free\b'; then record "rpmfusion-free-repo" "PASS"
+    if dnf repolist rpmfusion-free 2>/dev/null | grep -q .; then record "rpmfusion-free-repo" "PASS"
     else record "rpmfusion-free-repo" "WARN" "rpmfusion-free repo not enabled (run: make repos_dnf; default repo_rpmfusion_free=true)"; fi
   fi
 

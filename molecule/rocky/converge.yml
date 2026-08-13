@@ -67,8 +67,9 @@
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"
 
   roles:
-    - role: common
     - role: repos_dnf
+      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+    - role: common
     - role: packages
     - role: dotfiles
     - role: ssh

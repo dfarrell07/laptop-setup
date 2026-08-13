@@ -38,7 +38,7 @@
             that:
               - ansible_facts['selinux'].status == 'enabled'
               - ansible_facts['selinux'].mode == 'enforcing'
-              - ansible_facts['selinux'].type == 'targeted'
+              - ansible_facts['selinux'].type == system_selinux_policy
             fail_msg: >-
               SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
               (type: {{ ansible_facts['selinux'].type | default('unknown') }}).

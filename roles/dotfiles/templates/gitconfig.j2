@@ -111,11 +111,11 @@
 	sslCAInfo = {{ dotfiles_internal_ca_path }}
 {% endif %}
 
-{% for org in dotfiles_work_src_dirs %}
+{% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}
 [includeIf "gitdir:~/src/{{ org }}/"]
 	path = ~/.config/git/config-work
 
-{% endfor %}
+{% endfor %}{% endif %}
 {% if dotfiles_github_user != 'CHANGE_ME' %}
 [includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
 	path = ~/.config/git/config-personal
