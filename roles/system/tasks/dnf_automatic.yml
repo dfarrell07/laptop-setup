@@ -60,7 +60,7 @@
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
       [Service]
-      ExecStartPost=/usr/bin/bash -c 'aide --update; ec=$?; if [ "$ec" -ne 1 ]; then mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz; fi'
+      ExecStartPost=/usr/bin/bash -c 'aide --update; case $? in [0-7]) mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz;; esac'
     dest: "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"
