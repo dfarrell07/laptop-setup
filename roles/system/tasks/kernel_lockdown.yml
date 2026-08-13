@@ -8,6 +8,15 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode to enable kernel-cmdline task conditionals
 
+- name: Warn when grubby probe failed (grubby-based cmdline hardening will be skipped)
+  ansible.builtin.debug:
+    msg: >-
+      grubby --info=DEFAULT failed (rc={{ system_grubby_info.rc }}) — all grubby-based kernel cmdline
+      hardening tasks (lockdown, vsyscall, IOMMU, init_on_free, page_alloc.shuffle) are being skipped
+      for the current boot entry. The /etc/kernel/cmdline shell fallback still runs but only takes
+      effect for future kernel installs, not the currently running boot entry.
+  when: system_grubby_info.rc != 0 and not csb_rhel
+
 # On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
 # /etc/kernel/cmdline edits are skipped. Fedora hybrid CSB runs its own kernel — lockdown applies.
 - name: Skip grubby kernel param tasks on CSB (IT manages boot config)

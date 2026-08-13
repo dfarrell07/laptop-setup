@@ -212,6 +212,13 @@
           delay: 10
           until: packages_opm_download is succeeded
 
+        - name: Assert opm binary name exists in tarball
+          ansible.builtin.command: tar -tzf /tmp/opm-linux.tar.gz
+          register: packages_opm_tarball_list
+          changed_when: false
+          failed_when: packages_opm_binary_name not in packages_opm_tarball_list.stdout
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+
         - name: Extract and install opm-rhel8 binary
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           block:

@@ -88,6 +88,13 @@
             _pf_vault_asserted: true
           tags: [always]
 
+    # Catches user typos — in normal operation profile is always 'work' or 'personal'
+    - name: Assert profile is a valid value
+      ansible.builtin.assert:
+        that: profile in ['work', 'personal']
+        fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
+      tags: [always]
+
     - name: Non-molecule pre-flight assertions
       when: not _pf_is_molecule and _pf_assertions_checked is not defined
       block:
@@ -137,13 +144,6 @@
               The value is empty or still has the 'CHANGE_ME' placeholder.
               Without it, git commits to work repos use the wrong email.
               If you are using a personal profile, set `profile: personal` in config.yml to bypass this check.
-          tags: [always]
-
-        # Catches user typos — in normal operation profile is always 'work' or 'personal'
-        - name: Assert profile is a valid value
-          ansible.builtin.assert:
-            that: profile in ['work', 'personal']
-            fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

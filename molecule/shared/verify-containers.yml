@@ -28,7 +28,7 @@
 
 - name: Assert containers.conf sets log_driver to k8s-file
   ansible.builtin.command:
-    cmd: grep -q 'log_driver.*k8s-file' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    cmd: grep -qE '^log_driver\s*=\s*"k8s-file"' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
 - name: Assert containers.conf sets pids_limit to {{ containers_pids_limit | default(65536) }}

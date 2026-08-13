@@ -183,13 +183,14 @@
           loop:
             - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
             - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
-
-        - name: Warn if transcrypt not available
-          ansible.builtin.debug:
-            msg: "transcrypt not installed — run 'make packages' first"
-          when:
-            - not notes_transcrypt_available
       when: notes_repo_available
+
+    - name: Warn if transcrypt not available
+      ansible.builtin.debug:
+        msg: "transcrypt not installed — run 'make packages' first"
+      when:
+        - notes_repo_available
+        - not notes_transcrypt_available
 
     - name: Warn if transcrypt password not set
       ansible.builtin.debug:

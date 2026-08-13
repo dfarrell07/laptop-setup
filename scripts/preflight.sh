@@ -339,7 +339,7 @@ fi
 
 # --- Transcrypt (for notes repo) ---
 notes_enabled=false
-grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && notes_enabled=true
+grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && notes_enabled=true
 if command -v transcrypt &>/dev/null; then
   record "installed_transcrypt" "pass" "$(transcrypt --version 2>&1)"
 else

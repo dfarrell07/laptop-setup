@@ -339,6 +339,7 @@ system_ssh_channel_timeout: ""
 system_ssh_unused_connection_timeout: 600  # seconds before idle connection with no channels is closed ("" to omit directive/disable)
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
 system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
+system_ssh_rekey_limit: '1G 1h'  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window
 # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability; check-vars-sync.py enforces this mirror
 ssh_pubkey_accepted_algorithms:
   - ssh-ed25519

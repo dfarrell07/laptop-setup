@@ -37,7 +37,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/usr/local/bin\s'
-        line: '/usr/local/bin PERMS'
+        line: '/usr/local/bin NORMAL'
         state: present
       register: _aide_conf_r1
 
@@ -111,7 +111,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/etc/usbguard\s'
-        line: '/etc/usbguard PERMS'
+        line: '/etc/usbguard NORMAL'
         insertbefore: '^/etc\s'
         state: present
       register: _aide_conf_r5
