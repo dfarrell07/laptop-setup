@@ -1,6 +1,6 @@
 ---
-name: Molecule setup
-description: Set up Python 3.14, install pip test dependencies, and install Ansible collections (with retry)
+name: CI setup
+description: Set up Python 3.14, install pip dependencies, and install Ansible collections (with retry)
 
 runs:
   using: composite
@@ -12,7 +12,7 @@ runs:
         cache: pip
         cache-dependency-path: requirements-test.lock
 
-    - name: Install test dependencies
+    - name: Install CI dependencies
       run: pip install -r requirements-test.lock
       shell: bash
 

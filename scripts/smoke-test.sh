@@ -1845,6 +1845,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv6.conf.default.use_tempaddr"   "2"        "sysctl-ipv6-tempaddr-default"
 
 fi
+unset _csb_non_fedora
 
 # ---- File-gated checks (run always; silently skip where system role was not run) ----
 # These files ARE deployed by the system role in Fedora/Rocky/Debian container CI;

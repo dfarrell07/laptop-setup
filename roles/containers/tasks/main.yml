@@ -55,7 +55,10 @@
     label: "{{ item.item.registry }}"
   no_log: true
   changed_when: _vault_login_result.rc == 0
-  failed_when: false  # intentional: Check/Warn tasks verify success; do NOT use ignore_errors: true (sets .failed, alters changed_when)
+  # intentional: Check/Warn tasks verify success; do NOT use ignore_errors: true
+  # (sets .failed=True; no downstream task needs _vault_login_result.failed —
+  # failure is surfaced via the post-auth check task below)
+  failed_when: false
   when:
     - is_linux
     - registry_tokens | length > 0

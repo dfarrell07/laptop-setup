@@ -101,6 +101,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
     fi
     record "required_${tool}" "pass" "$ver"
   else
+    # Keep this elif chain in sync with the for-loop tools list above
     if [[ "$tool" == "make" ]]; then
       record "required_${tool}" "fail" "not installed — install first: sudo dnf install make (Fedora/RHEL) | brew install make (macOS), then: make bootstrap"
     elif [[ "$tool" == "ssh" ]]; then
@@ -117,8 +118,6 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
-    else
-      record "required_${tool}" "fail" "not installed — add install guidance in preflight.sh elif chain"
     fi
   fi
 done

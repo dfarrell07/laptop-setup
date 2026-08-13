@@ -74,8 +74,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Molecule environment
-        uses: ./.github/actions/molecule-setup
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
 
       - name: Run Molecule ${{ matrix.name }} scenario
         env:

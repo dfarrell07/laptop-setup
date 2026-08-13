@@ -229,7 +229,6 @@
           The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
           after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
       when:
-        - distrobox_container_replace | bool
         - distrobox_container_exists.rc == 0
 
     - name: Remove existing Toolbx container for replacement
@@ -238,7 +237,6 @@
       changed_when: true
       when:
         - distrobox_container_exists.rc == 0
-        - distrobox_container_replace | bool
 
     - name: Create Toolbx container
       ansible.builtin.command:

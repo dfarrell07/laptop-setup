@@ -1435,12 +1435,12 @@
 - name: Check /etc/subuid has entry for real_user_id
   ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subuid"
   changed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 - name: Check /etc/subgid has entry for real_user_id
   ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subgid"
   changed_when: false
-  when: ansible_system == 'Linux'
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 # --- Login banner (system role, non-CSB Linux only) ---
 - name: Slurp /etc/issue content

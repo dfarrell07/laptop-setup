@@ -24,8 +24,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up lint environment
-        uses: ./.github/actions/lint-setup
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
 
       - name: Run ansible-lint
         run: ansible-lint
@@ -179,8 +179,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up lint environment
-        uses: ./.github/actions/lint-setup
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
 
       - name: Run syntax check
         run: ansible-playbook site.yml --syntax-check

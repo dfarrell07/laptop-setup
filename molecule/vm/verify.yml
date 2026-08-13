@@ -634,7 +634,7 @@
       ansible.builtin.assert:
         that: verify_ppd.status.UnitFileState == 'masked'
         fail_msg: "power-profiles-daemon is not masked — TLP and power-profiles-daemon will conflict"
-      when: verify_ppd.status.UnitFileState | default('') != ''
+      when: system_tlp_enabled | bool and verify_ppd.status.UnitFileState | default('') != ''
 
     - name: Check tuned-ppd state
       ansible.builtin.systemd:
@@ -647,7 +647,7 @@
       ansible.builtin.assert:
         that: verify_tuned_ppd.status.UnitFileState == 'masked'
         fail_msg: "tuned-ppd is not masked — TLP and tuned-ppd will conflict"
-      when: verify_tuned_ppd.status.UnitFileState | default('') != ''
+      when: system_tlp_enabled | bool and verify_tuned_ppd.status.UnitFileState | default('') != ''
 
     - name: Check tlp.service is enabled (system_tlp_enabled path)
       ansible.builtin.systemd:

@@ -88,6 +88,7 @@
           ansible.builtin.copy:
             dest: "{{ notes_repo_path }}/.gitleaks.toml"
             mode: "0644"
+            force: false  # create-once: do not overwrite a committed custom allowlist
             content: |
               # Allow all blobs — transcrypt encrypts file contents before staging.
               # The global pre-commit hook (core.hooksPath) would otherwise flag
@@ -158,6 +159,7 @@
       when:
         - notes_repo_available
         - not (notes_transcrypt_init_result.skipped | default(false))
+        # default(0) required: skipped tasks have no .rc; prevents UndefinedError
         - notes_transcrypt_init_result.rc | default(0) != 0
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)
