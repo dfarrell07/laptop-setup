@@ -59,7 +59,7 @@ done
 
 # Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
 # This value must match header-max-length in commitlint.config.js
-len=$(printf '%s' "$msg" | wc -m)
+len=$(printf '%s' "$msg" | LC_ALL=en_US.UTF-8 wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2
   exit 1

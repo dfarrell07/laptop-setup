@@ -46,6 +46,7 @@
   when:
     - is_linux | bool
     - _fapolicyd_unit.rc | default(1) == 0
+    - '"fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))'
 
 
 - name: Check fapolicyd config for permissive mode

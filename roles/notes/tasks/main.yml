@@ -44,7 +44,7 @@
             msg: >-
               HTTPS clone failed:
               {{ notes_https_clone_result.stderr | default('', true) or notes_https_clone_result.msg | default('unknown') }}
-          when: notes_https_clone_result.rc | default(-1) != 0
+          when: not (notes_https_clone_result.changed | default(false))
 
     - name: Re-check if notes repo exists after clone attempts
       ansible.builtin.stat:
@@ -101,6 +101,7 @@
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
             create: true
+            mode: "0600"
 
         - name: Enforce mode on notes repo git exclude
           # .git/info/exclude pre-exists from git clone; file task is the sole mode enforcement point

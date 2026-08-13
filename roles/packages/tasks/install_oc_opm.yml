@@ -97,6 +97,12 @@
             state: absent
           when: packages_oc_download is defined
 
+    - name: Stat oc binary
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: packages_oc_stat
+      check_mode: false
+
     - name: Set permissions on oc and kubectl
       ansible.builtin.file:
         path: "/usr/local/bin/{{ item }}"
@@ -104,11 +110,9 @@
       loop: [oc, kubectl]
       become: true
       tags: [become]
-      when:
-        - packages_oc_download is defined
-        - >-
-          packages_oc_download.changed or packages_oc_check.rc != 0
-          or not packages_kubectl_stat.stat.exists
+      when: >-
+        (item == 'oc' and packages_oc_stat.stat.exists) or
+        (item == 'kubectl' and packages_kubectl_stat.stat.exists)
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)

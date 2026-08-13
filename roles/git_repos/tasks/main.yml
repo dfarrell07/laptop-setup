@@ -164,6 +164,7 @@
     - git_repos_pull | bool
     - item.dest in git_repos_available_dests
   register: git_repos_pull_results
+  # during per-iteration eval, git_repos_pull_results is the current item result (not the accumulated .results list)
   changed_when: >-
     git_repos_pull_results.rc == 0 and
     'Already up to date' not in git_repos_pull_results.stdout

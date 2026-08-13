@@ -239,6 +239,8 @@
 
     - name: Assert reverse path filtering
       ansible.builtin.assert:
+        # hardcoded: no system_rp_filter var exists;
+        # must match _system_sysctl_hardening_defaults net.ipv4.conf.all.rp_filter = 2
         that: verify_rp_filter.stdout | int == 2
         fail_msg: "Reverse path filtering is '{{ verify_rp_filter.stdout }}', expected '2' (loose mode required for Tailscale)"
 

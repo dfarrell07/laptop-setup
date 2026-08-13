@@ -79,6 +79,8 @@
       Check authselect status manually.
   when:
     - system_authselect_disable_fp_result.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
 
 - name: Configure fprintd.service mask (fingerprint auth control)
   ansible.builtin.systemd:

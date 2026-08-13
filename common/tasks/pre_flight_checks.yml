@@ -57,11 +57,11 @@
         - name: Assert config.yml contains no vault_* keys
           ansible.builtin.assert:
             that: >-
-              (_user_config.keys() | select('match', '^vault_') | list | length == 0)
+              (_user_config.keys() | select('match', 'vault_') | list | length == 0)
             fail_msg: >-
               config.yml must not define vault_* variables — include_vars outranks
               group_vars (precedence 18 vs 4-5), so these keys silently shadow
-              vault.yml: {{ (_user_config | default({})).keys() | select('match', '^vault_') | list }}
+              vault.yml: {{ (_user_config | default({})).keys() | select('match', 'vault_') | list }}
           tags: [always]
 
         - name: Assert config.yml contains no indirection-layer secret keys

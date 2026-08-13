@@ -597,7 +597,7 @@ if [[ -d "$HOME/notes/.git" ]]; then
         if [[ "$(file -b "$HOME/notes/$_f" 2>/dev/null)" == *text* ]]; then
           _any_text=true; break
         fi
-      done < <(git -C "$HOME/notes" ls-files 2>/dev/null | head -20)
+      done < <(git -C "$HOME/notes" ls-files 2>/dev/null | head -100)
       if $_any_text; then
         record "notes-transcrypt" "PASS"
       else
