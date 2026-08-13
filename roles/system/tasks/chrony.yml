@@ -24,6 +24,7 @@
         # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
         # false) to prevent the daemon start from crashing the Podman container.
         - system_chrony_service_enabled | bool
+        - not system_is_container
   rescue:
     - name: Restore timesyncd if chrony install failed (Debian)
       ansible.builtin.systemd:
@@ -57,6 +58,7 @@
       when:
         - is_dnf
         - system_chrony_service_enabled | bool
+        - not system_is_container
   rescue:
     - name: Restore timesyncd if chrony install failed (Fedora)
       ansible.builtin.systemd:
@@ -185,6 +187,7 @@
   when:
     - system_chrony_service_enabled | bool
     - system_chrony_authselectmode == 'require'
+    - not csb_rhel
 
 - name: "Warn: NTS-KE requires outbound TCP 4460 (standard deployment)"
   ansible.builtin.debug:

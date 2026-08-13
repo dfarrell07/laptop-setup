@@ -83,8 +83,9 @@ if command -v npx >/dev/null 2>&1; then
     exit $?
   else
     echo "WARNING: commitlint not installed — run: make bootstrap" >&2
+    exit 0
   fi
 else
   echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
+  exit 0
 fi
-exit 0

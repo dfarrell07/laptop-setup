@@ -71,15 +71,18 @@ jobs:
           shellcheck -S warning scripts/*.sh
           shellcheck -S warning roles/claude/files/*.sh
           shellcheck -S warning .githooks/pre-commit .githooks/commit-msg
+          shellcheck -S warning roles/dotfiles/files/git-template-*
 
       - name: Validate preflight JSON output
         run: |
           bash scripts/preflight.sh --json > /tmp/pf.json || true
+          test -s /tmp/pf.json || { echo 'preflight.sh --json produced no output'; exit 1; }
           python3 -c "import json,sys; json.load(open('/tmp/pf.json'))"
 
       - name: Validate smoke-test JSON output
         run: |
           bash scripts/smoke-test.sh --user-only --json > /tmp/st.json || true
+          test -s /tmp/st.json || { echo 'smoke-test.sh --json produced no output'; exit 1; }
           python3 -c "import json,sys; json.load(open('/tmp/st.json'))"
 
       - name: Run queue poller unit tests
@@ -346,6 +349,7 @@ jobs:
           persist-credentials: false
 
       - name: Download actionlint  # Last bumped: 2026-08-05; check https://github.com/rhysd/actionlint/releases
+        id: actionlint_download
         continue-on-error: true
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -362,10 +366,7 @@ jobs:
         run: ./actionlint -color
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
-        # always() required: ensures zizmor runs even if actionlint download fails
-        # (not just actionlint execution failure, which continue-on-error covers)
         id: zizmor_download
-        if: always()
         continue-on-error: true
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
@@ -377,7 +378,7 @@ jobs:
 
       - name: Run zizmor
         id: zizmor
-        if: always() && steps.zizmor_download.outcome == 'success'
+        if: steps.zizmor_download.outcome == 'success'
         continue-on-error: true
         run: ./zizmor .github/
 
@@ -385,6 +386,10 @@ jobs:
         if: always()
         run: |
           failed=0
+          if [ "${{ steps.actionlint_download.outcome }}" != "success" ]; then
+            echo "actionlint download failed"
+            failed=1
+          fi
           if [ "${{ steps.actionlint.outcome }}" != "success" ]; then
             echo "actionlint failed or was skipped"
             failed=1

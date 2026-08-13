@@ -133,7 +133,10 @@
     - name: Assert opm SHA256 is set for pinned version
       ansible.builtin.assert:
         that: packages_opm_sha256 | length == 64
-        fail_msg: "packages_opm_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+        fail_msg: >-
+          packages_opm_sha256 must be a 64-char hex string — update
+          packages_opm_sha256 and packages_oc_sha256 in defaults/main.yml
+          when bumping packages_oc_version
       when: packages_oc_version != 'stable'
 
     - name: Check if opm binary exists

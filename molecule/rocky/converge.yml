@@ -76,17 +76,11 @@
     - role: ssh
     - role: git_repos
     - role: notes
-      vars:
-        notes_transcrypt_password: ""
     - role: redhat
       when: csb_rhel
     - role: containers
     - role: distrobox
     - role: claude
-      vars:
-        claude_install_method: skip
-        claude_queue_enabled: true
-        claude_queue_repo: "dfarrell07/laptop-setup"
 
   post_tasks:
     # desktop_environment is set to 'unknown' in the pre_tasks set_fact (p19) so the role

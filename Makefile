@@ -24,7 +24,7 @@ export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 help:
 	@echo "Primary:    all minimal offline container container-rebuild update"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
-	@echo "            redhat containers claude distrobox"
+	@echo "            redhat containers claude"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"

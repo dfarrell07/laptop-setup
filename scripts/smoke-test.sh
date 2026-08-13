@@ -846,7 +846,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "sshd-enabled" "FAIL" "sshd.service not enabled — reboot will leave machine unreachable"; fi
   # Verify sshd.socket masked — prevents socket activation from reopening port 22
   # Note: systemctl is-masked is not a valid verb in systemd 259; use show UnitFileState.
-  if systemctl list-unit-files sshd.socket &>/dev/null; then
+  if systemctl cat sshd.socket &>/dev/null; then
     if [[ "$(systemctl show -p UnitFileState --value sshd.socket 2>/dev/null)" == "masked" ]]; then
       record "sshd-socket-masked" "PASS"
     elif $CSB_HOST; then
@@ -1030,7 +1030,7 @@ EOF
       else record "auditd-watch-${_key}" "WARN" "watch key ${_key} missing from claude-code.rules"; fi
     done
   fi
-  if systemctl list-unit-files aide-check.timer &>/dev/null; then
+  if systemctl cat aide-check.timer &>/dev/null; then
     # AIDE monitoring of security-critical conf.d directories (verify lineinfile tasks applied)
     if [[ -f /etc/aide.conf ]]; then
       for _path in "/usr/local/bin" "/etc/ssh/sshd_config.d" "/etc/NetworkManager/conf.d" "/etc/systemd/resolved.conf.d" "/etc/systemd/logind.conf.d" "/etc/crypto-policies" "/etc/selinux" "/etc/bpfman" "/etc/usbguard" "/etc/audit" "/etc/aide.conf" "/boot" "/etc/sysctl.d" "/etc/kernel" "/etc/modprobe.d" "/etc/sudoers.d" "/etc/dconf" "/etc/systemd/system" "/etc/systemd/journald.conf.d" "/etc/systemd/coredump.conf.d"; do
@@ -1167,7 +1167,7 @@ EOF
   fi
 
   # AIDE file integrity — only check if aide-check.timer is deployed (skips cleanly when AIDE disabled)
-  if systemctl list-unit-files aide-check.timer &>/dev/null; then
+  if systemctl cat aide-check.timer &>/dev/null; then
     if systemctl is-enabled aide-check.timer &>/dev/null && systemctl is-active aide-check.timer &>/dev/null; then
       record "aide-timer" "PASS"
     elif systemctl is-enabled aide-check.timer &>/dev/null; then

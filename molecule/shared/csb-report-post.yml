@@ -4,3 +4,4 @@
 # Included by fedora, rocky, and debian converge.yml post_tasks with tags: [always].
 - name: Generate CSB compatibility report
   ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
+  when: csb_detected

@@ -52,17 +52,11 @@
     - role: ssh
     - role: git_repos
     - role: notes
-      vars:
-        notes_transcrypt_password: ""
     - role: redhat
       when: is_rhel or csb_detected
     - role: containers
     - role: distrobox
     - role: claude
-      vars:
-        claude_install_method: skip
-        claude_queue_enabled: true
-        claude_queue_repo: "dfarrell07/laptop-setup"
 
   post_tasks:
     # Desktop role called via include_role so vars: are at role-params precedence (p20),

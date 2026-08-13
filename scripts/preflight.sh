@@ -352,7 +352,7 @@ fi
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
 else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
-ram_gb=${ram_gb:-0}
+ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent; || echo 0 only triggers on awk error
 if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
 elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
 else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi
