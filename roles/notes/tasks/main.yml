@@ -53,7 +53,7 @@
 
     - name: Set notes repo available fact
       ansible.builtin.set_fact:
-        notes_repo_available: "{{ notes_repo_stat.stat.exists or notes_repo_post_clone.stat.exists }}"
+        notes_repo_available: "{{ notes_repo_post_clone.stat.exists }}"
 
     - name: Notes repo setup
       when: notes_repo_available

@@ -290,7 +290,8 @@ net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ $_curl_ok == true ]]; then
-    if curl -sSLf --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
+    _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
+    if [[ -n "$_http_code" ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable"
     else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
   else

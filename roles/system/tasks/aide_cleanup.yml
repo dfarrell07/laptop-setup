@@ -27,8 +27,12 @@
         - /etc/systemd/system/aide-check.service
         - /etc/systemd/system/aide-check.timer
         - /etc/systemd/system/aide-notify@.service
-        # Created by dnf_automatic.yml; removed here to prevent aide --update running against a non-existent DB
-        - "/etc/systemd/system/{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}.d/aide-update.conf"  # yamllint disable-line rule:line-length
+        # Created by dnf_automatic.yml; removed here to prevent aide --update running against a non-existent DB.
+        # Both paths are listed so removal is correct regardless of whether csb_detect.yml ran —
+        # is_dnf5 defaults to false in isolated tag runs, which would miss the dnf5 path on Fedora 44+.
+        # state: absent is idempotent, so listing both is safe when only one exists.
+        - /etc/systemd/system/dnf-automatic.service.d/aide-update.conf
+        - /etc/systemd/system/dnf5-automatic.service.d/aide-update.conf
       loop_control:
         label: "{{ item }}"
       register: system_aide_unit_removal

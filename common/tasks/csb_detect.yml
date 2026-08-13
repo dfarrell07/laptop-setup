@@ -112,7 +112,7 @@
         or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | bool))
       }}
   become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
 
 - name: Set CSB restricted fact
   ansible.builtin.set_fact:
@@ -122,7 +122,7 @@
         and (fapolicyd_enforcing | bool)
       }}
   become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
 
 # rootless container readiness and toolbox/distrobox detection sections removed —
 # podman_rootless_ready was never consumed by any task (distrobox role re-checks subuid/subgid
@@ -173,13 +173,13 @@
         else 'host-only')
       }}
   become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
 
 - name: Derive csb_rhel
   ansible.builtin.set_fact:
     csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"
   become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)
 
 - name: Warn on bare RHEL hybrid tier
   ansible.builtin.debug:
@@ -270,4 +270,4 @@
       Container tier     : {{ needs_container_tier }}
       ================================
   become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)

@@ -363,7 +363,6 @@ jobs:
       - name: Run actionlint
         id: actionlint
         if: steps.actionlint_download.outcome == 'success'
-        continue-on-error: true
         run: ./actionlint -color
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
@@ -380,10 +379,9 @@ jobs:
       - name: Run zizmor
         id: zizmor
         if: steps.zizmor_download.outcome == 'success'
-        continue-on-error: true
         run: ./zizmor .github/
 
-      # skipped scan outcomes are intentionally handled via the download-failure branch above
+      # scan steps fail the job directly; only download failures need aggregation
       - name: Check security scanner results
         if: always()
         run: |
@@ -392,16 +390,8 @@ jobs:
             echo "actionlint download failed"
             failed=1
           fi
-          if [ "${{ steps.actionlint_download.outcome }}" = "success" ] && [ "${{ steps.actionlint.outcome }}" != "success" ]; then
-            echo "actionlint scan failed"
-            failed=1
-          fi
           if [ "${{ steps.zizmor_download.outcome }}" = "failure" ]; then
             echo "zizmor download failed"
-            failed=1
-          fi
-          if [ "${{ steps.zizmor_download.outcome }}" = "success" ] && [ "${{ steps.zizmor.outcome }}" != "success" ]; then
-            echo "zizmor scan failed"
             failed=1
           fi
           exit $failed

@@ -16,34 +16,28 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/notes/.git/config"
   register: verify_notes_config
-  when: verify_notes.stat.exists
 
 - name: Verify notes .git/config permissions
   ansible.builtin.assert:
     that: verify_notes_config.stat.mode == '0600'
     fail_msg: "notes .git/config should be 0600 (got {{ verify_notes_config.stat.mode | default('absent') }})"
-  when: verify_notes.stat.exists and verify_notes_config.stat.exists
 
 - name: Stat notes directory for permission check
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/notes"
   register: verify_notes_dir
-  when: verify_notes.stat.exists
 
 - name: Assert notes directory is mode 0700
   ansible.builtin.assert:
     that: verify_notes_dir.stat.mode == '0700'
     fail_msg: "notes/ should be 0700 — world-readable notes regression"
-  when: verify_notes.stat.exists
 
 - name: Stat notes gitleaks allowlist
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/notes/.gitleaks.toml"
   register: verify_notes_gitleaks
-  when: verify_notes.stat.exists
 
 - name: Assert notes gitleaks allowlist deployed
   ansible.builtin.assert:
     that: verify_notes_gitleaks.stat.exists
     fail_msg: "notes/.gitleaks.toml missing — pre-commit gitleaks hook will reject all notes commits"
-  when: verify_notes.stat.exists

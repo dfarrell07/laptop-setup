@@ -85,7 +85,6 @@
     path: /etc/login.defs
     regexp: '^#?ENCRYPT_METHOD'
     line: 'ENCRYPT_METHOD YESCRYPT'
-    mode: "0644"
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
@@ -102,7 +101,6 @@
     path: /etc/login.defs
     regexp: '^#?YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
-    mode: "0644"
   when:
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
