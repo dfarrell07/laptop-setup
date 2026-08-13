@@ -732,8 +732,8 @@
     - "PermitEmptyPasswords no"
     - "X11Forwarding no"
     - "HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
-    - "ClientAliveInterval {{ system_ssh_client_alive_interval }}"
-    - "ClientAliveCountMax {{ system_ssh_client_alive_count_max }}"
+    - "ClientAliveInterval {{ system_ssh_client_alive_interval | default(300) }}"
+    - "ClientAliveCountMax {{ system_ssh_client_alive_count_max | default(2) }}"
     - "^Port {{ ssh_port }}$"
     - "AllowUsers "
   loop_control:

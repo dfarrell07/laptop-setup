@@ -11,7 +11,6 @@
         state: present
       loop: >-
         {{ packages_brew_taps
-           + (packages_brew_taps_work if profile == 'work' else [])
            + (packages_brew_taps_yubikey if packages_yubikey_enabled | bool else []) }}
       async: 600
       poll: 10
@@ -96,7 +95,7 @@
   ansible.builtin.command:
     cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --upgrade --cleanup
   when: is_macos
-  changed_when: false
+  changed_when: true
   failed_when: false
   register: _packages_brew_autoupdate
 

@@ -327,6 +327,7 @@
     - is_linux
     - not (system_is_container)  # scope:user systemd start crashes Podman container PID 1
     - containers_prune_enabled | bool
+    - not (_prune_daemon_reload.failed | default(false))
   ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
 
 - name: Warn if podman-prune.timer failed to enable
@@ -334,7 +335,7 @@
     msg: >-
       WARNING: podman-prune.timer failed to enable/start.
       Periodic container storage cleanup will not run automatically.
-      Fix: systemctl --user enable --now podman-prune.timer.
+      Fix: systemctl --user daemon-reload && systemctl --user enable --now podman-prune.timer.
       Check: systemctl --user status podman-prune.timer; journalctl --user -u podman-prune.timer
       On a fresh provision without an active user session, this is expected — the timer will enable at first login.
   when:

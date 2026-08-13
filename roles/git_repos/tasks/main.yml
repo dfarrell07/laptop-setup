@@ -106,6 +106,7 @@
     path: "{{ git_repos_base_dir }}"
     state: directory
     mode: "0755"
+  when: git_repos_filtered | length > 0
 
 - name: Set up git-lfs smudge/clean filter drivers
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"

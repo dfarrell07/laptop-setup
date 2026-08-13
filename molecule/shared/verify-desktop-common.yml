@@ -20,13 +20,13 @@
   ansible.builtin.stat:
     path: /etc/opt/chrome/policies/managed/security.json
   register: verify_chrome
-  when: not (system_is_container | default(false))
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 - name: Assert Chrome policy exists
   ansible.builtin.assert:
     that: verify_chrome.stat.exists
     fail_msg: "Chrome security policy not deployed"
-  when: not (system_is_container | default(false))
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 - name: Validate Chrome security policy JSON
   ansible.builtin.command:
@@ -34,4 +34,4 @@
       python3 -c "import json; d=json.load(open('/etc/opt/chrome/policies/managed/security.json'));
       assert d.get('RemoteDebuggingAllowed') == False, 'RemoteDebuggingAllowed not false'"
   changed_when: false
-  when: not (system_is_container | default(false))
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))

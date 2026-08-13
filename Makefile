@@ -5,9 +5,6 @@
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-% \
-       test-fedora test-rocky test-debian test-macos test-vm \
-       test-container test-container-offline test-container-offline-distrobox \
-       test-distrobox-role test-packages-binaries \
        repos-% \
        preflight guard-not-root \
        pip-lock pip-sync
@@ -80,7 +77,7 @@ bootstrap:
 	$(MAKE) hooks
 	@echo "Bootstrap complete. Git hooks active."
 
-bootstrap-test:
+bootstrap-test: guard-not-root
 	sudo dnf install -y libvirt vagrant vagrant-libvirt
 	sudo systemctl enable --now libvirtd
 	vagrant box add githubixx/fedora-44 --provider libvirt

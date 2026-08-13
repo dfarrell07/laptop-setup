@@ -85,7 +85,7 @@
   register: _ca_certs
   loop: "{{ csb_ca_cert_paths }}"
   become: false
-  when: is_linux | bool
+  when: is_linux | bool and (is_rhel | bool or _is_csb_hostname | bool)
 
 - name: Set internal CA fact
   ansible.builtin.set_fact:
@@ -96,7 +96,7 @@
          | list | length > 0)
       }}
   become: false
-  when: is_linux | bool
+  when: is_linux | bool and (is_rhel | bool or _is_csb_hostname | bool)
 
 # ---------------------------------------------------------------------------
 # 4. CSB heuristic: RHEL + fapolicyd + internal CA

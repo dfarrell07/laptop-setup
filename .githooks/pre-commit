@@ -24,7 +24,7 @@ done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*vault.yml')
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks_args=()
   [ -f .gitleaks.toml ] && gitleaks_args+=(--config .gitleaks.toml)
-  gitleaks git --pre-commit --redact --max-decode-depth 2 "${gitleaks_args[@]}"
+  gitleaks git --pre-commit --staged --redact --max-decode-depth 2 "${gitleaks_args[@]}"
   _gitleaks_rc=$?
   if [ "$_gitleaks_rc" -ne 0 ]; then
     failed=1

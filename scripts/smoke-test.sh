@@ -465,7 +465,7 @@ if ! $IS_LINUX; then
   record "home-dir-perms" "PASS" "macOS default 755 accepted (system role is Linux-only)"
 elif [[ "$homedir_perms" =~ ^[0-9]?7[0145]0$ ]]; then record "home-dir-perms" "PASS"
 elif [[ -f /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
-     && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+     && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
   record "home-dir-perms" "WARN" "RHEL CSB: IPA/oddjob-mkhomedir manages home perms ($homedir_perms); 0750 not enforced by Ansible (not csb_rhel guard)"
 elif $USER_ONLY && grep -qiE '^ID(_LIKE)?=.*rhel' /etc/os-release 2>/dev/null; then
   record "home-dir-perms" "WARN" "RHEL-compatible in user-only mode: home perms ($homedir_perms) may be managed by csb_rhel path; system role skips chmod when csb_rhel=true"
@@ -685,7 +685,7 @@ fi
 # Mirrors csb_detect.yml OR logic: any of the three RH CA cert files triggers.
 CSB_HOST=false
 _is_rhel=false
-grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null && _is_rhel=true
+grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null && _is_rhel=true
 _has_rh_cert=false
 if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
    || [[ -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
@@ -788,11 +788,11 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     else
       # Verify sshd_config loads the drop-in directory (absent Include = drop-in deployed but never read)
       if grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config 2>/dev/null; then record "sshd-include" "PASS"
-      elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
+      elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "sshd-include" "WARN" "sshd drop-in not loaded on RHEL CSB — IT manages sshd_config"
       else record "sshd-include" "FAIL" "/etc/ssh/sshd_config missing Include /etc/ssh/sshd_config.d/*.conf — 00-hardening.conf not loaded; run: make system"; fi
       _ssh_port=$(grep -oP '^Port \K[0-9]+' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null)
       if [[ -n "$_ssh_port" && "$_ssh_port" -ne 22 ]]; then record "sshd-port" "PASS"
-      elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
+      elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "sshd-port" "WARN" "sshd drop-in not deployed on RHEL CSB — IT manages sshd port (likely 22)"
       else record "sshd-port" "FAIL" "Port='${_ssh_port:-missing}' expected non-default port !=22 (config absent or port=22); run: make system (console/tmux, not over SSH)"; fi
       if [[ -n "$_ssh_port" ]] && command -v semanage &>/dev/null; then
         if semanage port -l 2>/dev/null | grep -qE "ssh_port_t.*\b${_ssh_port}\b"; then record "selinux-ssh-port" "PASS"
@@ -991,7 +991,7 @@ EOF
   if [[ "$EUID" -ne 0 ]]; then
     record "sshd-banner" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root"
   elif [[ -f /etc/ssh/sshd_config.d/00-hardening.conf ]]; then
-    if $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+    if $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
       if grep -q '^Banner ' /etc/ssh/sshd_config.d/00-hardening.conf 2>/dev/null; then
         record "sshd-banner" "WARN" "Banner directive present on CSB — IT manages SSH banner; may conflict with corporate policy"
       else record "sshd-banner" "PASS"; fi
@@ -1001,12 +1001,12 @@ EOF
         else record "sshd-banner" "FAIL" "Banner directive present but /etc/issue.net is empty — NIST AC-8 login notice not shown; run: make system"; fi
       else record "sshd-banner" "FAIL" "Banner /etc/issue.net absent from sshd drop-in — NIST AC-8 login warning notice missing; run: make system"; fi
     fi
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
   # auditd rules (verify immutability flag and sentinel watch rule; skipped on RHEL CSB — IT manages audit rules)
-  if $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+  if $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "auditd-rules" "WARN" "skipped on RHEL CSB — audit rules managed by IT/SIEM pipeline"
   elif grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
@@ -1207,7 +1207,7 @@ EOF
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
   elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
     record "pam-wheel" "WARN" "skipped on Debian — 'sudo' group used instead of 'wheel'; pam_wheel.so not deployed by Ansible on apt systems"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "pam-wheel" "WARN" "skipped on RHEL CSB — IT manages pam_wheel.so via Satellite/SCAP"
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "pam-wheel" "WARN" "skipped on RHEL CSB — IT manages pam_wheel.so via Satellite/SCAP"
   else record "pam-wheel" "FAIL" "su not restricted to wheel group"; fi
 
   # Root account locked (passwd -S root requires root — WARN not FAIL when non-root)
@@ -1315,7 +1315,7 @@ EOF
   if [[ "$_fprintd_state" == "masked" ]]; then record "fprintd-masked" "PASS"
   elif [[ "$_fprintd_state" == "enabled" || "$_fprintd_state" == "static" ]]; then
     record "fprintd-masked" "WARN" "fprintd.service enabled (state: $_fprintd_state) — confirm system_disable_fingerprint: false is intentional (faillock bypass risk)"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "fprintd-masked" "WARN" "fprintd masking skipped on RHEL CSB — IT manages fingerprint auth; Ansible not csb_rhel gate"
   else record "fprintd-masked" "FAIL" "fprintd.service not masked (state: $_fprintd_state) — fingerprint can bypass faillock"; fi
   unset _fprintd_state
@@ -1335,11 +1335,11 @@ EOF
   # Skipped on RHEL CSB — katello-agent, Insights client, and IT monitoring run cron jobs under
   # non-root system users; cron.allow=root-only would silently break those IT management jobs
   if grep -qx 'root' /etc/cron.allow 2>/dev/null; then record "cron-allow-root" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "cron-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents use cron; cron.allow not restricted to root"
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "cron-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents use cron; cron.allow not restricted to root"
   else record "cron-allow-root" "FAIL" "/etc/cron.allow missing or not restricted to root (CIS 5.1.8)"; fi
   # at.allow restricts 'at' command to root only (CIS 5.1.9)
   if grep -qx 'root' /etc/at.allow 2>/dev/null; then record "at-allow-root" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "at-allow-root" "WARN" "skipped on RHEL CSB — IT monitoring agents may use at; at.allow not restricted to root"
   else record "at-allow-root" "FAIL" "/etc/at.allow missing or not restricted to root (CIS 5.1.9)"; fi
 
   # splunk system account shell (CIS 5.6) — CSB hosts only; splunk absent on standard Fedora
@@ -1355,7 +1355,7 @@ EOF
   # write /etc/issue on RHEL CSB (csb_rhel guard). On Fedora hybrid CSB, Ansible does deploy
   # the banner (not csb_rhel is true), so a missing banner is a real FAIL there.
   if grep -qi 'authorized users' /etc/issue 2>/dev/null; then record "login-banner" "PASS"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then record "login-banner" "WARN" "skipped on RHEL CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then record "login-banner" "WARN" "skipped on RHEL CSB — IT deploys mandated legal banner; Ansible does not write /etc/issue"
   else record "login-banner" "FAIL" "login banner not deployed or missing expected text (/etc/issue)"; fi
 
   # Critical file permissions (CIS 6.1.x)
@@ -1512,7 +1512,7 @@ EOF
     record "dnf-automatic" "PASS"
   elif systemctl is-enabled "$timer" &>/dev/null; then
     record "dnf-automatic" "WARN" "timer enabled but not active (reboot or: systemctl start $timer)"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "dnf-automatic" "WARN" "skipped on RHEL CSB — IT manages updates via Satellite/RHSM; Ansible not-csb_rhel guard"
   else record "dnf-automatic" "WARN" "timer not enabled"; fi
 
@@ -1529,7 +1529,7 @@ EOF
     record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
   elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "WARN" "TLP not installed on Debian (apt package not managed by this role) — battery charge thresholds absent on laptop hardware"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "WARN" "TLP intentionally absent on RHEL CSB (IT manages power policy; cycle-41 not-csb_rhel guard)"
   elif [[ -d /sys/class/power_supply/BAT0 ]]; then
     record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
@@ -1576,7 +1576,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Sway/i3 systems use greetd not GDM; dconf policies are GNOME-specific.
   if ! systemctl cat gdm.service &>/dev/null; then
     record "dconf-policies" "PASS" "GDM not installed — dconf system policies are GNOME-specific (Sway/i3 systems not affected)"
-  elif $CSB_HOST && grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null; then
+  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "dconf-policies" "WARN" "dconf hardening skipped on CSB — IT manages GDM banner and screensaver policy (Satellite/SCAP)"
   else
   # Source key files checked directly — no D-Bus session required for smoke tests.
@@ -1624,7 +1624,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else
     listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-$_cfg_ssh_port}([^0-9]|$)" | tail -n +2 || true)
     if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
-    else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
+    else record "no-open-ports" "WARN" "$listeners"; fi
   fi
 
   _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)

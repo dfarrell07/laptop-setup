@@ -123,8 +123,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
-    else
-      record "required_${tool}" "fail" "not installed — see: make bootstrap"
+    # unreachable — all loop tools have explicit branches
     fi
   fi
 done

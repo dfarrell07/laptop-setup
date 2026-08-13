@@ -37,7 +37,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/usr/local/bin\s'
-        line: '/usr/local/bin NORMAL'
+        line: '/usr/local/bin PERMS'
         state: present
       register: _aide_conf_r1
 
@@ -287,8 +287,6 @@
         state: absent
       ignore_errors: true
       when:
-        - system_aide_reinit_result is defined
-        - system_aide_reinit_result is failed
         - _aide_init_result is defined
         - _aide_init_result is failed
 

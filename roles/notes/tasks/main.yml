@@ -143,7 +143,7 @@
         chdir: "{{ notes_repo_path }}"
       register: notes_transcrypt_init_result
       no_log: true
-      changed_when: not ansible_check_mode and (notes_transcrypt_init_result.rc | default(1)) == 0
+      changed_when: (notes_transcrypt_init_result.rc | default(1)) == 0
       failed_when: false
       when:
         - notes_repo_available

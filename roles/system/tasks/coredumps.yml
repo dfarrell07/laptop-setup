@@ -40,6 +40,7 @@
         mode: "0644"
       when: system_coredump_storage == 'none'
 
+    # Cleanup path: no-op in default config; relevant only on re-provision when system_coredump_storage changes from none to external.
     - name: Remove RLIMIT_CORE limits when coredump storage is active
       ansible.builtin.file:
         path: /etc/security/limits.d/90-coredump.conf

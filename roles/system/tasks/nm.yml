@@ -68,22 +68,12 @@
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
-- name: Remove WiFi power saving config when disabled
+- name: Remove WiFi power saving config
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     state: absent
   when:
-    - not csb_rhel  # IT manages NM power policy on CSB-RHEL; guard holds even when var overridden
-    - not (system_wifi_powersave_disabled | bool)
-    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
-  notify: Restart NetworkManager
-
-- name: Remove WiFi power saving config on CSB RHEL
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
-    state: absent
-  when:
-    - csb_rhel
+    - csb_rhel or not (system_wifi_powersave_disabled | bool)
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 

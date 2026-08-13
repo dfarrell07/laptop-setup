@@ -42,6 +42,13 @@
       ansible.builtin.dnf:
         name: aide
         state: absent
+      failed_when: false
+      register: _aide_pkg_remove
+
+    - name: Warn if aide package removal failed
+      ansible.builtin.debug:
+        msg: "aide package removal failed — aide may still be installed; manual intervention may be required"
+      when: _aide_pkg_remove is failed
 
     - name: Stat AIDE database before removal
       ansible.builtin.stat:

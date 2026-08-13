@@ -2,7 +2,7 @@
 # molecule/shared/verify-dnf.yml
 # Assertions for dnf-based platforms (Fedora, Rocky Linux, VM).
 # Include after verify-common.yml.
-# NOTE: verify-containers.yml and verify-nm.yml are also imported directly by
+# NOTE: verify-containers.yml is also imported directly by
 # debian/verify.yml. Keep them as separate files — merging them into this file
 # would break Debian reuse (this file contains authselect, pwquality, login.defs,
 # cron, and crypto-policy which are all DNF/RHEL-only).
@@ -115,6 +115,7 @@
   ansible.builtin.stat:
     path: /etc/kernel/cmdline
   register: verify_kernel_cmdline
+  when: not (system_is_container | default(false))
 
 - name: Assert /etc/kernel/cmdline contains vsyscall=none
   ansible.builtin.command:

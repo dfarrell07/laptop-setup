@@ -31,6 +31,16 @@
       csb-failure-handler.yml: one or more required variables are missing or empty.
       Required: _csb_task_name, _csb_action, _csb_ticket_summary, _csb_ticket_body, _csb_role.
 
+- name: Validate _csb_error is a string when provided
+  become: false
+  ansible.builtin.assert:
+    that:
+      - (_csb_error | default('')) is string
+    fail_msg: >-
+      csb-failure-handler.yml: _csb_error must be a string
+      (e.g. ansible_failed_result.msg | default('unknown error')), not a dict.
+      truncate() in csb-report.yml will fail if a dict is passed.
+
 - name: Record CSB failure
   become: false
   ansible.builtin.set_fact:

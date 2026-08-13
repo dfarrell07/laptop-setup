@@ -40,7 +40,7 @@ ClientAliveCountMax {{ system_ssh_client_alive_count_max }}
 {% if system_ssh_channel_timeout %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
-# system_ssh_unused_connection_timeout: default 600 — directive is always emitted; set '' or 0 in config.yml to disable (both are falsy).
+# system_ssh_unused_connection_timeout: default 600 — directive is always emitted; set '' in config.yml to omit directive; integer 0 is also falsy and omits it (not emitted as UnusedConnectionTimeout 0).
 {% if system_ssh_unused_connection_timeout %} {# '' or 0 to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}

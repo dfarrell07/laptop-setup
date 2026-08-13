@@ -3,9 +3,13 @@
 # Assertions for NetworkManager conf.d files deployed by the system role.
 # Include after verify-common.yml (which re-runs csb_detect.yml).
 # Covered scenarios: vm only (container CI skips all tasks — system_is_container=true in all Podman scenarios).
-# NOTE: All assertions below are gated on `not system_is_container`. Since
+# NOTE: No individual task in this file carries a `not system_is_container` when clause.
+# The guard is on the import_tasks caller in verify-dnf.yml (line 208):
+#   when: not (system_is_container | default(false))
+# Ansible's import_tasks (static import) propagates that condition to every task
+# here at parse time, so each task effectively runs only on non-container hosts.
 # fedora, rocky, and debian molecule scenarios all set system_is_container=true,
-# this file runs zero effective assertions in those scenarios. Only `make test-vm`
+# so this file runs zero effective assertions in those scenarios. Only `make test-vm`
 # (the VM scenario) exercises these checks against a real host.
 
 - name: Stat /etc/NetworkManager/conf.d/tailscale.conf

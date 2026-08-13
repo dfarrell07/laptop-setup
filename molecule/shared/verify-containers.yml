@@ -40,6 +40,9 @@
     cmd: grep -q 'default_ulimits.*nofile' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
+# CI gap: environment.d/containers.conf and KIND_EXPERIMENTAL_PROVIDER not verified in container CI
+# (containers role guards deploy with not system_is_container — user inotify triggers daemon-reload,
+# crashes PID 1); make test-vm only.
 - name: Verify environment.d containers.conf is deployed by containers role
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
