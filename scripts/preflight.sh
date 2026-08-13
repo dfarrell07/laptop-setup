@@ -31,7 +31,7 @@ record() {
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail"; FAILURES=$((FAILURES+1)) ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(tr '[:lower:]' '[:upper:]' <<< "$status")" "$name" "$detail" ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }
@@ -209,7 +209,7 @@ if [[ -f "$VAULT_FILE" ]]; then
     if grep -q 'vault_placeholder' "$VAULT_FILE" 2>/dev/null; then
       record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
     else
-      record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"
+      record "vault_encrypted" "warn" "vault.yml is plaintext without vault_placeholder sentinel — encrypt or add vault_placeholder stub"
     fi
   fi
 else

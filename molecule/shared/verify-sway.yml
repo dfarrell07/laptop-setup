@@ -158,16 +158,19 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/environment.d/terminal.conf"
   register: verify_terminal_conf
+  when: not (system_is_container | default(false))
 
 - name: Assert terminal.conf exists
   ansible.builtin.assert:
     that: verify_terminal_conf.stat.exists
     fail_msg: "terminal.conf not deployed — TERMINAL env var missing, Sway terminal keybind broken"
+  when: not (system_is_container | default(false))
 
 - name: Verify terminal.conf exports TERMINAL variable
   ansible.builtin.command:
     cmd: grep -q '^TERMINAL=' "{{ ansible_user_dir }}/.config/environment.d/terminal.conf"
   changed_when: false
+  when: not (system_is_container | default(false))
 
 - name: Stat GTK 3.0 settings.ini
   ansible.builtin.stat:

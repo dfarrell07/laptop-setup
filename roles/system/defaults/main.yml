@@ -434,7 +434,8 @@ csb_detected: false        # authoritative in group_vars/all/vars.yml; here for 
 is_fedora: false           # authoritative in group_vars/all/vars.yml; here for standalone invocability
 system_disable_avahi: true        # mask avahi-daemon; false enables .local; authoritative in group_vars/all/vars.yml
 system_mask_nfs_server: true      # NFS mask (CIS 2.2.7); false: unmasks but NOT auto-started, enable manually; group_vars authoritative
-                                  # nfs-server disabled by vendor preset; mask enforces CIS 2.2.7, prevents accidental enable
+                                  # nfs-server/rpcbind disabled by vendor preset IF nfs-utils installed; mask is pre-emptive hardening
+                                  # on workstations where nfs-utils may not be present (creates /dev/null symlinks regardless)
 system_mask_iscsi: true           # mask iSCSI initiator (CIS 2.3.x); set false on iSCSI storage; authoritative in group_vars/all/vars.yml
 system_init_on_free: true         # zero freed memory pages (init_on_free=1); authoritative in group_vars/all/vars.yml
 system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative

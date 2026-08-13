@@ -44,16 +44,19 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
   register: verify_env_containers_conf
+  when: not (system_is_container | default(false))
 
 - name: Assert environment.d/containers.conf exists
   ansible.builtin.assert:
     that: verify_env_containers_conf.stat.exists
     fail_msg: "environment.d/containers.conf was not deployed (DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER needed for make kind)"
+  when: not (system_is_container | default(false))
 
 - name: Assert environment.d/containers.conf sets DOCKER_HOST
   ansible.builtin.command:
     cmd: grep -q 'DOCKER_HOST=unix://' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
   changed_when: false
+  when: not (system_is_container | default(false))
 
 - name: Assert environment.d/containers.conf sets KIND_EXPERIMENTAL_PROVIDER
   ansible.builtin.command:

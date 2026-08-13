@@ -190,7 +190,7 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: ${{ (github.event_name != 'pull_request' || github.actor == 'dependabot[bot]') && 1 || 0 }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
@@ -356,6 +356,8 @@ jobs:
         run: ./actionlint -color
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
+        # always() required: ensures zizmor runs even if actionlint download fails
+        # (not just actionlint execution failure, which continue-on-error covers)
         if: always()
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839

@@ -193,6 +193,18 @@
           delay: 10
           until: packages_opm_download is succeeded
 
+        - name: List opm tarball contents
+          ansible.builtin.command: tar tf /tmp/opm-linux.tar.gz
+          register: _opm_tarball_contents
+          changed_when: false
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+
+        - name: Assert opm-rhel8 is present in tarball
+          ansible.builtin.assert:
+            that: "'opm-rhel8' in _opm_tarball_contents.stdout_lines"
+            fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for OCP {{ packages_oc_version }}"
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+
         - name: Extract opm binary
           ansible.builtin.unarchive:
             src: /tmp/opm-linux.tar.gz
@@ -204,18 +216,6 @@
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           become: true
           tags: [become]
-
-        - name: Stat opm-rhel8 after extraction
-          ansible.builtin.stat:
-            path: /usr/local/bin/opm-rhel8
-          register: _opm_rhel8_stat
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
-
-        - name: Assert opm-rhel8 exists before rename
-          ansible.builtin.assert:
-            that: _opm_rhel8_stat.stat.exists
-            fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for this OCP release"
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
 
         - name: Copy opm-rhel8 to opm
           ansible.builtin.copy:

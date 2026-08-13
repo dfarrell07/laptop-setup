@@ -203,6 +203,9 @@
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
 
+# CI gap: all PAM, authselect, faillock, pwquality, login.defs, dnf-automatic, ABRT, and cron assertions below
+# are gated on not system_is_container. Fedora and Rocky molecule scenarios set system_is_container=true,
+# so zero assertions from here down run in container CI. Only make test-vm exercises these checks.
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
 - name: Check authselect with-faillock is active
   ansible.builtin.command: authselect is-feature-enabled with-faillock

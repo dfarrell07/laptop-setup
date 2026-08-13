@@ -89,6 +89,22 @@
         - ansible_pkg_mgr == 'apt'
         - not (system_is_container | default(false))
 
+    - name: Check pwquality.conf minlen (Debian)
+      ansible.builtin.command:
+        cmd: grep -q '^minlen = {{ system_pwquality_minlen }}' /etc/security/pwquality.conf
+      changed_when: false
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
+
+    - name: Check pwquality.conf enforce_for_root (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^enforce_for_root' /etc/security/pwquality.conf
+      changed_when: false
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
+
     - name: Check git user.email is personal email
       ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
       register: verify_git_email_personal

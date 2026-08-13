@@ -34,7 +34,7 @@
       failed_when: false
       tags: [always]
 
-    - name: Warn and set flag when config.yml exists but could not be parsed
+    - name: Warn and fail when config.yml exists but could not be parsed
       when:
         - _config_yml_stat.stat.exists
         - _user_config is not defined
@@ -46,21 +46,12 @@
               vault-key assertions are being skipped.
           tags: [always]
 
-        # Setting the flag here ensures the fail task below only fires on parse-error runs —
-        # when config.yml loads successfully this block is skipped, the flag stays unset,
-        # and the fail task's when-guard evaluates to false.
-        - name: Set config parse warn flag (gates the fail task below to parse-error runs only)
-          ansible.builtin.set_fact:
-            _config_parse_warn_shown: true
+        - name: Fail when config.yml exists but could not be parsed
+          ansible.builtin.fail:
+            msg: >-
+              config.yml exists but failed to parse (YAML error). Fix the syntax error
+              before re-running. All user overrides were silently dropped.
           tags: [always]
-
-    - name: Fail when config.yml exists but could not be parsed
-      ansible.builtin.fail:
-        msg: >-
-          config.yml exists but failed to parse (YAML error). Fix the syntax error
-          before re-running. All user overrides were silently dropped.
-      when: _config_parse_warn_shown is defined
-      tags: [always]
 
     - name: Set molecule context flag
       ansible.builtin.set_fact:

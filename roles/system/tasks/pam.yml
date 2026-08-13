@@ -176,6 +176,51 @@
         insertbefore: '^password.*pam_unix\.so'
         mode: "0644"
 
+# --- Debian PAM pwquality (password complexity) ---
+# On Debian, pam_pwquality.so is active in common-password by default (via
+# libpam-pwquality) and reads /etc/security/pwquality.conf. Configure the
+# same complexity requirements applied on Fedora/RHEL.
+- name: Configure password quality requirements (Debian)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - key: minlen
+      value: "{{ system_pwquality_minlen }}"
+    - key: dcredit
+      value: "{{ system_pwquality_dcredit }}"
+    - key: ucredit
+      value: "{{ system_pwquality_ucredit }}"
+    - key: lcredit
+      value: "{{ system_pwquality_lcredit }}"
+    - key: ocredit
+      value: "{{ system_pwquality_ocredit }}"
+    - key: difok
+      value: "{{ system_pwquality_difok }}"
+    - key: maxrepeat
+      value: "{{ system_pwquality_maxrepeat }}"
+    - key: maxsequence
+      value: "{{ system_pwquality_maxsequence }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Enforce pwquality for root (Debian, CIS 5.3.4)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    mode: "0644"
+  when:
+    - is_apt
+    - not system_is_container
+
 # --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
 - name: Check if authselect with-pwhistory feature is already enabled
   ansible.builtin.command:

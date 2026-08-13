@@ -16,7 +16,11 @@
     that:
       - verify_claude_queue_service.stat.exists
       - verify_claude_queue_service.stat.mode == '0644'
-    fail_msg: "claude-queue.service missing or wrong permissions — template regression?"
+    fail_msg: >-
+      claude-queue.service missing or wrong mode
+      (exists={{ verify_claude_queue_service.stat.exists | default(false) }},
+      got mode={{ verify_claude_queue_service.stat.mode | default('absent') }},
+      expected 0644)
   when: not (system_is_container | default(false))
 
 # CI gap: not verified in container CI — make test-vm only
@@ -31,7 +35,11 @@
     that:
       - verify_claude_queue_timer.stat.exists
       - verify_claude_queue_timer.stat.mode == '0644'
-    fail_msg: "claude-queue.timer missing or wrong permissions — template regression?"
+    fail_msg: >-
+      claude-queue.timer missing or wrong mode
+      (exists={{ verify_claude_queue_timer.stat.exists | default(false) }},
+      got mode={{ verify_claude_queue_timer.stat.mode | default('absent') }},
+      expected 0644)
   when: not (system_is_container | default(false))
 
 - name: Verify claude-queue-poller.sh deployed
