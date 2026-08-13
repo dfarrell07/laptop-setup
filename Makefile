@@ -53,10 +53,10 @@ container-rebuild: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox -e container_replace=true
 
 backup:
-	bash scripts/backup.sh
+	scripts/backup.sh
 
 backup-dry-run:
-	bash scripts/backup.sh --dry-run
+	scripts/backup.sh --dry-run
 
 # --- Bootstrap ---
 # Fedora/RHEL: if make is not yet installed: sudo dnf install -y make ShellCheck
@@ -207,7 +207,7 @@ test-scripts:
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:
-	bash scripts/test-queue-poller.sh
+	scripts/test-queue-poller.sh
 
 test-%: .venv
 	.venv/bin/molecule test -s $*

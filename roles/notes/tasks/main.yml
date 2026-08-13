@@ -165,6 +165,8 @@
           cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
+        - notes_repo_available
+        - notes_transcrypt_available
         - notes_transcrypt_inited
 
 

@@ -58,6 +58,7 @@
   failed_when: false  # intentional: Check/Warn tasks verify success; do NOT use ignore_errors: true (sets .failed, alters changed_when)
   when:
     - is_linux
+    - registry_tokens | length > 0
     # re-login if: not currently authenticated (rc!=0) or logged in as wrong user (stdout != username)
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 

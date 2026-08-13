@@ -42,11 +42,11 @@ elif [ -x ".venv/bin/yamllint" ]; then
 fi
 if [ -n "$YAMLLINT" ]; then
   while IFS= read -r -d '' f; do
-    git show ":$f" | "$YAMLLINT" --strict - 2>&1 | awk -v fn="$f" 'sub(/^stdin:/, fn":")||1'
+    git show ":$f" | "$YAMLLINT" --strict -f parsable - 2>&1 | awk -v fn="$f" 'sub(/^stdin:/, fn":")||1'
     # PIPESTATUS indices: [0]=git-show [1]=yamllint [2]=awk — update index if pipe structure changes
     _yl_rc=${PIPESTATUS[1]}
     [ "$_yl_rc" -ne 0 ] && failed=1
-  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml' | grep -zEv '(^|/)vault\.yml$' | grep -zEv '^(\.github|collections|node_modules|\.venv)/') # .github/, collections/, node_modules/, .venv/ excluded: stdin-mode yamllint ignores the 'ignore:' config; exclude to match .yamllint + make lint behaviour
+  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml' | grep -zEv '(^|/)vault\.yml$' | grep -zEv '^(collections|node_modules|\.venv)/') # collections/, node_modules/, .venv/ excluded: stdin-mode yamllint ignores the 'ignore:' config; exclude to match .yamllint + make lint behaviour
 else
   echo "WARNING: yamllint not found — YAML lint skipped (run 'make lint' to install)" >&2
 fi

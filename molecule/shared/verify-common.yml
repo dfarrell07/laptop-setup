@@ -380,6 +380,7 @@
     fail_msg: "direnv.toml missing expected settings (strict_env = true, disable_stdin = true)"
 
 # --- Dotfiles: SSH agent (Linux only) ---
+# CI gap: SSH agent service/envd deployment only verified in make test-vm (system_is_container guard skips container CI)
 - name: Verify SSH agent systemd service deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
@@ -434,6 +435,7 @@
 
 # These assertions catch regressions in csb_detect.yml that would silently misclassify
 # all Fedora/Debian/Rocky molecule runs as CSB, suppressing repo tasks and container-tier logic.
+# Guard-logic regression tests only — they catch future false-positive bugs in csb_detect.yml, not gaps in coverage today.
 - name: Assert csb_detected is false on non-CSB test host
   ansible.builtin.assert:
     that: not (csb_detected)
@@ -480,7 +482,6 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - verify_fstab_shm_nosuid is not skipped
 
 - name: Check /dev/shm fstab entry has nodev (CIS 1.1.7.2)
   ansible.builtin.command:
@@ -503,7 +504,6 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - verify_fstab_shm_nodev is not skipped
 
 - name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.3)
   ansible.builtin.command:
@@ -526,7 +526,6 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - verify_fstab_shm_noexec is not skipped
 
 # --- Sysctl hardening: file-content assertions (system role, Linux only) ---
 # File-content assertions (safer than sysctl -n live kernel reads on VMs);
@@ -675,6 +674,7 @@
   register: verify_sshd_dropin
   become: true
   when: ansible_system == 'Linux'
+# Rocky scenario (csb_rhel=true) runs this stat but skips both asserts below via not csb_rhel
 
 - name: Assert sshd hardening drop-in deployed
   ansible.builtin.assert:
@@ -1169,7 +1169,6 @@
     - not csb_rhel
     - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
-    - verify_chronyd is not skipped
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
 - name: Check chrony NTS config in /etc/chrony.conf
@@ -1195,7 +1194,6 @@
     - not csb_rhel
     - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
-    - verify_chrony_nts is not skipped
 
 # --- Chrony NTS template render guard (container-safe) ---
 # Renders chrony-nts.conf.j2 to a temp path so Jinja2 errors surface in container CI

@@ -155,7 +155,7 @@
         packages_opm_check.rc != 0 or
         packages_oc_version == 'stable' or
         'content' not in packages_opm_marker or
-        packages_oc_version not in (packages_opm_marker.content | b64decode)
+        (packages_opm_marker.content | b64decode | trim) != packages_oc_version
       block:
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:
@@ -200,7 +200,7 @@
             remote_src: true
             extra_opts:
               - --no-same-owner
-              - opm-rhel8
+              - opm-rhel8 # opm-rhel8 is the binary name for OCP 4.10+; verify when bumping packages_oc_version
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           become: true
           tags: [become]

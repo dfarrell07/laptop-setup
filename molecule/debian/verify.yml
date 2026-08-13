@@ -13,6 +13,7 @@
     - name: Override profile and identity vars to match converge
       ansible.builtin.set_fact:
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
+        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         profile: personal
         dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches ci-default-vars.yml value; not re-loaded in verify phase
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
