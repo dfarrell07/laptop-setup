@@ -34,7 +34,10 @@ record() {
       warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(printf '%s' "$status" | tr '[:lower:]' '[:upper:]')" "$name" "$detail" ;;
       *) printf "${RED}[BUG]${NC} unknown status '%s' for check '%s'\n" "$status" "$name" >&2; exit 99 ;;
     esac
-  elif [[ "$status" == "fail" ]]; then FAILURES=$((FAILURES+1)); fi
+  else
+    [[ "$status" =~ ^(pass|fail|warn|skip)$ ]] || { echo "BUG: unknown status '$status' for '$name'" >&2; exit 99; }
+    [[ "$status" == fail ]] && FAILURES=$((FAILURES+1))
+  fi
 }
 
 # --- OS / CSB / profile detection ---
@@ -83,8 +86,10 @@ if [[ -z "$PROFILE" ]]; then
   # Apply config.yml profile override in both directions
   if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
     PROFILE=work
+    record "config_profile" "pass" "profile=work"
   elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
     PROFILE=personal
+    record "config_profile" "pass" "profile=personal"
   elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then
     record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
   fi
@@ -118,6 +123,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
+    else
+      record "required_${tool}" "fail" "not installed — see CLAUDE.md for install guidance"
     fi
   fi
 done

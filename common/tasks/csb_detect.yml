@@ -112,7 +112,7 @@
         or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | bool))
       }}
   become: false
-  when: not (_csb_molecule_force | default(false))
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
 - name: Set CSB restricted fact
   ansible.builtin.set_fact:
@@ -122,7 +122,7 @@
         and (fapolicyd_enforcing | bool)
       }}
   become: false
-  when: not (_csb_molecule_force | default(false))
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
 # rootless container readiness and toolbox/distrobox detection sections removed —
 # podman_rootless_ready was never consumed by any task (distrobox role re-checks subuid/subgid
@@ -173,7 +173,7 @@
         else 'host-only')
       }}
   become: false
-  when: not (_csb_molecule_force | default(false))
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
 - name: Warn on bare RHEL hybrid tier
   ansible.builtin.debug:
@@ -186,6 +186,7 @@
   become: false
   when:
     - not (_csb_molecule_force | default(false))
+    - is_linux | bool
     - needs_container_tier == 'hybrid'
     - not (csb_detected | bool)
 
@@ -200,6 +201,7 @@
   become: false
   when:
     - not (_csb_molecule_force | default(false))
+    - is_linux | bool
     - needs_container_tier == 'hybrid'
     - csb_detected | bool
     - is_fedora | bool
@@ -215,6 +217,7 @@
   become: false
   when:
     - not (_csb_molecule_force | default(false))
+    - is_linux | bool
     - needs_container_tier == 'hybrid'
     - csb_detected | bool
     - is_rhel | bool
@@ -227,16 +230,18 @@
       Run 'systemctl status fapolicyd' and 'grep -i permissive /etc/fapolicyd/fapolicyd.conf' to verify enforcement state.
       Pass -e needs_container_tier=hybrid on the ansible-playbook command line to override
       (set_fact outranks config.yml; use -e flag, not config.yml).
+    verbosity: 1
   become: false
   when:
     - not (_csb_molecule_force | default(false))
+    - is_linux | bool
     - needs_container_tier == 'container'
 
 - name: Derive csb_rhel
   ansible.builtin.set_fact:
     csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"
   become: false
-  when: not (_csb_molecule_force | default(false))
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
 # ---------------------------------------------------------------------------
 # 7. Summary for the user

@@ -39,7 +39,7 @@
 # On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
 # On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
 # /etc/zshrc is silently ignored by Debian's zsh binary).
-- name: Deploy session timeout to /etc/zshrc (Fedora/RHEL zsh)
+- name: Deploy session timeout to /etc/zshrc (Fedora/RHEL/macOS zsh)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"

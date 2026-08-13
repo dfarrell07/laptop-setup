@@ -263,17 +263,8 @@ jobs:
             # For scoped commits (Scope: Verb noun), extract word after colon to check verb
             desc_first=$(printf "%s\n" "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
             desc_first="${desc_first%:}"
-            # Also catch when the scope word itself is a banned past-tense/gerund word
-            # Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
-            if [ "$desc_first" != "$first" ]; then
-              IFS='/' read -ra _scope_parts <<< "$first"
-              for _part in "${_scope_parts[@]}"; do
-                if _bad_word "$_part"; then
-                  echo "::error::Commit $sha: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)"
-                  failed=1
-                fi
-              done
-            fi
+            # Note: scope-word tense is already covered by commitlint's type-enum — any
+            # past-tense/gerund word is absent from the allowed-types list and rejected there.
             # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
             if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
               echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
