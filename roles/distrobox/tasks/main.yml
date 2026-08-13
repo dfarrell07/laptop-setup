@@ -121,7 +121,7 @@
     distrobox_use_toolbox: false
   when:
     - distrobox_tool != "none"
-    - not (packages_install_binaries | bool)
+    - (not (packages_install_binaries | bool)) or fapolicyd_enforcing
     - distrobox_container_exists.rc != 0
 
 # --- Distrobox path ---
@@ -175,7 +175,7 @@
           machines. Registry access restrictions or disk space may be the cause.
           Re-run 'make container' once the underlying issue is resolved.
         _csb_ticket_priority: "High"
-      when: csb_detected
+      when: csb_rhel
     - name: Warn on distrobox assemble create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
@@ -183,7 +183,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
-      when: not csb_detected
+      when: not csb_rhel
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
@@ -241,7 +241,7 @@
           Registry access restrictions or disk space may be the cause.
           Re-run 'make container' once the underlying issue is resolved.
         _csb_ticket_priority: "High"
-      when: csb_detected
+      when: csb_rhel
     - name: Warn on toolbox create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
@@ -249,7 +249,7 @@
           Error: {{ ansible_failed_result.msg | default("unknown") | truncate(200) }}.
           Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
-      when: not csb_detected
+      when: not csb_rhel
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"

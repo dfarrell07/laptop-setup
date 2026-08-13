@@ -83,7 +83,6 @@ if [[ -z "$PROFILE" ]]; then
   grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="work"
   grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="personal"
 fi
-record "profile_detected" "pass" "$PROFILE"
 
 # --- Required tools ---
 for tool in ansible-playbook git python3 curl make ssh; do

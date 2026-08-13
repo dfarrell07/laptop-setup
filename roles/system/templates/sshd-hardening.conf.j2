@@ -58,5 +58,5 @@ GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
 # sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
 # 40-redhat-crypto-policies.conf.
 Ciphers {{ ssh_ciphers }}
-MACs {{ ssh_macs }}
+MACs {{ ssh_macs }}  # only active for aes*-ctr fallback; AEAD ciphers supply their own authentication
 KexAlgorithms {{ ssh_kex_algorithms }}

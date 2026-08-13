@@ -152,7 +152,7 @@ make repos-downstream # downstream repos only
   `system_mask_abrt` (true — masks ABRT crash-reporter daemons; set false to restore ABRT, e.g. when `system_coredump_storage: none`),
   `system_disable_avahi` (true — masks avahi-daemon for mDNS/DNS-SD; set false to restore .local resolution),
   `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl),
-  `system_chrony_service_enabled` (`not system_is_container` — chrony disabled in containers; set `true` to force-enable inside a container),
+  `system_chrony_service_enabled` (`not system_is_container` — chrony disabled in containers; import guard in main.yml prevents enabling chrony inside a container regardless of this variable),
   `system_dnssec_mode` (allow-downgrade — DNSSEC validation mode for systemd-resolved; set `yes` when also using `system_dot_mode: yes` for full strict DoT+DNSSEC enforcement; allow-downgrade pairs with opportunistic DoT).
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`
   (interactive shells) AND `~/.config/environment.d/containers.conf` (systemd user session generator).

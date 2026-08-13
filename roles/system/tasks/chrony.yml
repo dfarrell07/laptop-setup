@@ -98,6 +98,17 @@
     - csb_detected
     - not csb_rhel
 
+- name: "Warn: authselectmode require means no fallback if TCP 4460 blocked"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_authselectmode=require — if TCP 4460 (NTS-KE) is blocked, chrony
+      will not sync at all (no unauthenticated fallback). Set authselectmode: prefer
+      if this host may be used on restricted networks.
+  when:
+    - system_chrony_service_enabled | bool
+    - system_chrony_authselectmode == 'require'
+    - not csb_detected
+
 - name: "Warn: NTS-KE requires outbound TCP 4460 (standard deployment)"
   ansible.builtin.debug:
     msg: >-

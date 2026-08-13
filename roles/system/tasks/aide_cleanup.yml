@@ -43,6 +43,10 @@
         name: aide
         state: absent
 
+    - name: Warn that AIDE database is being removed
+      ansible.builtin.debug:
+        msg: 'AIDE database at /var/lib/aide/aide.db.gz is being removed (system_aide_enabled=false). Re-enabling AIDE will require a full 5-10 minute baseline rebuild.'  # yamllint disable-line rule:line-length
+
     - name: Remove AIDE database when AIDE disabled (force fresh init on re-enable)
       ansible.builtin.file:
         path: "{{ item }}"

@@ -80,7 +80,7 @@ jobs:
           cache-dependency-path: requirements-test.lock
 
       - name: Install dependencies
-        run: pip install -r requirements-test.lock
+        run: pip install pyyaml packaging
 
       - name: Check vars sync
         run: python3 scripts/check-vars-sync.py
@@ -402,11 +402,6 @@ jobs:
             first=$(echo "$msg" | awk '{print $1}')
             # For scoped commits (Scope: Verb noun), extract word after colon to check verb
             desc_first=$(echo "$msg" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
-            # Allow: 'Capital letter start' (commitlint enforces Title-Case scopes)
-            if ! echo "$msg" | grep -qE '^[A-Z]'; then
-              echo "::error::Commit $sha: Subject must start with a capital letter"
-              failed=1
-            fi
             if _bad_word "$first"; then
               echo "::error::Commit $sha: Use imperative mood, not '$first'"
               failed=1

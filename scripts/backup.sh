@@ -107,38 +107,28 @@ OPTIONAL_FILES=(
   .gnupg/common.conf
 )
 
-count=0
-for f in "${DOTFILES[@]}"; do
-  src="${HOME}/${f}"
-  if [ -f "$src" ]; then
-    dest="${BACKUP_DIR}/${f}"
-    if [ "$DRY_RUN" = true ]; then
-      echo "[dry-run] would copy $src -> $dest"
-    else
-      mkdir -p "$(dirname "$dest")"
-      cp -p "$src" "$dest"
+_backup_array() {
+  local f src dest
+  for f in "$@"; do
+    src="${HOME}/${f}"
+    if [ -f "$src" ]; then
+      dest="${BACKUP_DIR}/${f}"
+      if [ "$DRY_RUN" = true ]; then
+        echo "[dry-run] would copy $src -> $dest"
+      else
+        mkdir -p "$(dirname "$dest")"
+        cp -p "$src" "$dest"
+      fi
+      count=$((count + 1))
+    elif [ -L "$src" ]; then
+      echo "[warn] broken symlink, skipping: $src" >&2
     fi
-    count=$((count + 1))
-  elif [ -L "$src" ]; then
-    echo "[warn] broken symlink, skipping: $src" >&2
-  fi
-done
+  done
+}
 
-for f in "${OPTIONAL_FILES[@]}"; do
-  src="${HOME}/${f}"
-  if [ -f "$src" ]; then
-    dest="${BACKUP_DIR}/${f}"
-    if [ "$DRY_RUN" = true ]; then
-      echo "[dry-run] would copy $src -> $dest"
-    else
-      mkdir -p "$(dirname "$dest")"
-      cp -p "$src" "$dest"
-    fi
-    count=$((count + 1))
-  elif [ -L "$src" ]; then
-    echo "[warn] broken symlink, skipping: $src" >&2
-  fi
-done
+count=0
+_backup_array "${DOTFILES[@]}"
+_backup_array "${OPTIONAL_FILES[@]}"
 
 # Catch-all: any private key in ~/.ssh/ not explicitly listed above
 for key in "${HOME}/.ssh"/id_*; do

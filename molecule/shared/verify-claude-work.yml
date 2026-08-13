@@ -51,3 +51,21 @@
   ansible.builtin.assert:
     that: verify_claude_md_work.stat.exists
     fail_msg: "Claude CLAUDE.md not deployed (work profile)"
+
+- name: Verify Claude work-env file exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/claude/work-env"
+  register: verify_claude_work_env
+
+- name: Assert Claude work-env exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - verify_claude_work_env.stat.exists
+      - verify_claude_work_env.stat.mode == '0600'
+    fail_msg: "Claude work-env missing or wrong permissions"
+
+- name: Assert Claude work-env contains CLAUDE_CONFIG_DIR export
+  ansible.builtin.command:
+    cmd: grep -q 'CLAUDE_CONFIG_DIR' "{{ ansible_user_dir }}/.config/claude/work-env"
+  changed_when: false
+  when: verify_claude_work_env.stat.exists
