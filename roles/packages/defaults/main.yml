@@ -53,6 +53,7 @@ packages_brew_yubikey:
   - ykman
   - ykpers
   - theseal/ssh-askpass/ssh-askpass
+  - libfido2
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
@@ -329,7 +330,6 @@ packages_brew:
   - git  # Xcode CLT git is stale; brew git tracks upstream releases
   - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
-  - libfido2  # runtime dep of brew openssh for FIDO2/sk-ssh-ed25519 key operations; also installed explicitly by make bootstrap
   - make  # Xcode CLT ships make; brew tracks it declaratively — keeps bootstrap-installed make under playbook control
   - tmux
   - mosh

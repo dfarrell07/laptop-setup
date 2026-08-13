@@ -50,8 +50,6 @@
     # PASS_WARN_AGE: Fedora 44 default is 7 (matches system_pass_warn_age default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: PASS_WARN_AGE
       value: "{{ system_pass_warn_age }}"
-    - name: UMASK
-      value: "{{ system_umask }}"
     # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
@@ -59,6 +57,20 @@
       value: "{{ system_inactive_days }}"
   loop_control:
     label: "{{ item.name }}"
+  when:
+    - not csb_rhel
+    - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
+
+# UMASK 027: applies to PAM sessions that do not source rc files (cron, systemd user services).
+# Overridden by dotfiles for interactive shells (umask 077 in ~/.bashrc and ~/.zshrc).
+- name: Set default login umask in login.defs (CIS)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^UMASK\\s+"
+    line: "UMASK\t{{ system_umask }}"
+    insertafter: EOF
+    create: false
+    mode: "0644"
   when:
     - not csb_rhel
     - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)

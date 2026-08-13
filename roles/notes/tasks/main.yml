@@ -99,23 +99,23 @@
             mode: "0644"
       when: notes_repo_available
 
-    - name: Check if transcrypt is initialized
-      ansible.builtin.command:
-        cmd: "{{ notes_transcrypt_bin_path }} --display"
-        chdir: "{{ notes_repo_path }}"
-      register: notes_transcrypt_check
-      changed_when: false
-      failed_when: false
-      check_mode: false  # always executes, even with --check (read-only, no state change)
-      no_log: true
-      when:
-        - notes_transcrypt_available
+    - block:
+        - name: Check if transcrypt is initialized
+          ansible.builtin.command:
+            cmd: "{{ notes_transcrypt_bin_path }} --display"
+            chdir: "{{ notes_repo_path }}"
+          register: notes_transcrypt_check
+          changed_when: false
+          failed_when: false
+          check_mode: false  # always executes, even with --check (read-only, no state change)
+          no_log: true
 
-    - name: Set transcrypt initialized fact
-      ansible.builtin.set_fact:
-        notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
+        - name: Set transcrypt initialized fact
+          ansible.builtin.set_fact:
+            notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
       when:
         - notes_transcrypt_available
+        - notes_repo_available
 
     - name: Initialize transcrypt
       ansible.builtin.command:

@@ -53,6 +53,9 @@ jobs:
 
           work_dir = pathlib.Path(sys.argv[1])
           reqs = yaml.safe_load(open('requirements.yml'))
+          unpinned = [c['name'] for c in reqs.get('collections', []) if 'version' not in c]
+          [print(f'::error::{n}: no version pin in requirements.yml') for n in unpinned]
+          unpinned and sys.exit(1)
           pinned = {c['name']: c['version'] for c in reqs.get('collections', []) if 'version' in c}
 
           drift = []
