@@ -6,11 +6,11 @@
 # CONFIG_BPF_UNPRIV_DEFAULT_OFF=y before sysctl.d is processed; this entry
 # is a no-op on stock Fedora 44 but retained for portability to custom kernels.
 {% endif %}
-{% if key == 'net.ipv4.conf.all.secure_redirects' %}
+{% if key in ['net.ipv4.conf.all.secure_redirects', 'net.ipv4.conf.default.secure_redirects'] %}
 # NOTE: secure_redirects is a no-op unless accept_redirects overridden to 1 via system_sysctl_extra_additional
 {% endif %}
 {{ key }} = {{ value }}{% if key in ['fs.protected_regular', 'fs.protected_fifos'] %}  # intentionally 2, not vendor default 1; covers group-writable sticky dirs{% endif %}
-{% if key == 'net.ipv6.conf.all.use_tempaddr' and system_ipv6_accept_ra | int == 0 %}
+{% if key in ['net.ipv6.conf.all.use_tempaddr', 'net.ipv6.conf.default.use_tempaddr'] and system_ipv6_accept_ra | int == 0 %}
 # NOTE: use_tempaddr is inert — SLAAC disabled (accept_ra=0); set system_ipv6_accept_ra: 2 to activate
 {% endif %}
 {% endfor %}

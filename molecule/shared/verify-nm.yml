@@ -13,13 +13,11 @@
     path: /etc/NetworkManager/conf.d/tailscale.conf
   register: verify_nm_tailscale
   become: true
-  when: not (system_is_container | default(false))
 
 - name: Assert tailscale.conf deployed by system role
   ansible.builtin.assert:
     that: verify_nm_tailscale.stat.exists
     fail_msg: "tailscale.conf missing — NM will manage podman/kind interfaces and break OVN-K"
-  when: not (system_is_container | default(false))
 
 - name: Slurp tailscale.conf for content check
   ansible.builtin.slurp:
@@ -44,7 +42,6 @@
   become: true
   when:
     - not csb_rhel
-    - not (system_is_container | default(false))
 
 - name: Assert 99-dns.conf deployed by system role
   ansible.builtin.assert:
@@ -52,7 +49,6 @@
     fail_msg: "99-dns.conf missing — Tailscale MagicDNS split-DNS will not work"
   when:
     - not csb_rhel
-    - not (system_is_container | default(false))
 
 - name: Slurp 99-dns.conf for content check
   ansible.builtin.slurp:
@@ -78,7 +74,6 @@
   become: true
   when:
     - system_wifi_mac_rand | default(not csb_detected) | bool
-    - not (system_is_container | default(false))
 
 - name: Assert 99-wifi-mac-rand.conf deployed by system role
   ansible.builtin.assert:
@@ -86,7 +81,6 @@
     fail_msg: "99-wifi-mac-rand.conf missing — Wi-Fi MAC address randomisation not configured"
   when:
     - system_wifi_mac_rand | default(not csb_detected) | bool
-    - not (system_is_container | default(false))
 
 - name: Slurp 99-wifi-mac-rand.conf for content check
   ansible.builtin.slurp:
@@ -112,7 +106,6 @@
   become: true
   when:
     - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not (system_is_container | default(false))
 
 - name: Assert 99-wifi-powersave.conf deployed by system role
   ansible.builtin.assert:
@@ -120,7 +113,6 @@
     fail_msg: "99-wifi-powersave.conf missing — Wi-Fi power management not configured"
   when:
     - system_wifi_powersave_disabled | default(not csb_rhel) | bool
-    - not (system_is_container | default(false))
 
 - name: Slurp 99-wifi-powersave.conf for content check
   ansible.builtin.slurp:

@@ -46,7 +46,7 @@
               TASK FAILED: Deploy Red Hat CA certificates in role redhat.
               Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
               Continuing playbook execution.
-          # non-CSB RHEL work host (is_rhel=true, csb_detected=false): log only, no ticket
+          # non-CSB host: csb_detected=false means no ticket needed, log only
           when: not csb_detected
 
     - name: Warn when no CA cert files found in role

@@ -187,6 +187,7 @@
   when:
     - not (_csb_molecule_force | default(false))
     - is_linux | bool
+    - is_rhel | bool
     - needs_container_tier == 'hybrid'
     - not (csb_detected | bool)
 

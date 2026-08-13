@@ -99,8 +99,10 @@ system_sysctl_hardening:
 system_firewall_manage_zone: "{{ not csb_rhel }}"
 
 system_firewall_icmp_types:
-  - fragmentation-needed  # IPv4 PMTUd (type 3 code 4 only); packet-too-big covers IPv6
-  - packet-too-big
+  # fragmentation-needed (IPv4) and packet-too-big (IPv6) are intentionally omitted.
+  # Conntrack marks them RELATED for established outbound flows and admits them before
+  # the drop zone's DROP target fires — explicit icmp-block allowlist entries are not
+  # needed and would also admit unsolicited PMTUd from arbitrary sources.
   - neighbour-solicitation  # IPv6 NDP — required for link-local even when SLAAC disabled (accept_ra=0); conntrack does not track NS/NA
   - neighbour-advertisement  # same — link-local MAC resolution fails without NA
 
@@ -328,6 +330,8 @@ real_user_id: "{{ lookup('env', 'USER') }}"
 # Fallback for standalone invocation; authoritative value in group_vars/all/vars.yml.
 ssh_port: 722
 system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
+system_ssh_client_alive_interval: 300  # seconds between server keepalive probes (0 disables); override in config.yml
+system_ssh_client_alive_count_max: 2  # unacknowledged probes before server disconnects client; override in config.yml
 # disabled (bz3827): OpenSSH < 10.3 fires UnusedConnectionTimeout prematurely after ChannelTimeout;
 # standard ssh(1) unaffected, but API-style clients may disconnect;
 # set e.g. "global 1h" once all targets run >= 10.3

@@ -145,7 +145,9 @@
 
 - name: Report failed clones
   ansible.builtin.debug:
-    msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
+    msg: >-
+      FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}:
+      {{ item.stderr | default('', true) or item.msg | default('unknown error') }}
   loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
@@ -174,7 +176,7 @@
 
 - name: Report failed pulls
   ansible.builtin.debug:
-    msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
+    msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default('', true) or item.msg | default('unknown error') }}"
   loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"

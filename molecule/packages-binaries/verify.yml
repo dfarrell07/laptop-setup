@@ -254,6 +254,30 @@
         fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
       when: ansible_facts['architecture'] == 'x86_64'
 
+    # --- pipx-installed tools ---
+
+    - name: Check yamllint version output
+      ansible.builtin.command:
+        cmd: yamllint --version
+      register: verify_yamllint_ver
+      changed_when: false
+
+    - name: Assert yamllint is installed and runnable
+      ansible.builtin.assert:
+        that: verify_yamllint_ver.rc == 0
+        fail_msg: "yamllint --version failed (rc={{ verify_yamllint_ver.rc }}) — pipx install regression"
+
+    - name: Check ansible-lint version output
+      ansible.builtin.command:
+        cmd: ansible-lint --version
+      register: verify_ansible_lint_ver
+      changed_when: false
+
+    - name: Assert ansible-lint is installed and runnable
+      ansible.builtin.assert:
+        that: verify_ansible_lint_ver.rc == 0
+        fail_msg: "ansible-lint --version failed (rc={{ verify_ansible_lint_ver.rc }}) — pipx install regression"
+
     # --- go install binaries ---
 
     - name: Stat gofumpt binary
@@ -267,6 +291,7 @@
           - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
+      when: verify_gofumpt.stat.exists
 
     - name: Stat golangci-lint binary
       ansible.builtin.stat:
@@ -282,6 +307,7 @@
           golangci-lint missing at ~/go/bin/golangci-lint —
           packages_go_install_work empty or go install failed
           (check install_go_tools.yml loop)
+      when: verify_golangci_lint.stat.exists
 
     - name: Stat govulncheck binary
       ansible.builtin.stat:
@@ -294,6 +320,7 @@
           - verify_govulncheck.stat.exists
           - verify_govulncheck.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
+      when: verify_govulncheck.stat.exists
 
     - name: Stat gci binary
       ansible.builtin.stat:
@@ -306,6 +333,7 @@
           - verify_gci.stat.exists
           - verify_gci.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
+      when: verify_gci.stat.exists
 
     - name: Stat gopls binary
       ansible.builtin.stat:
@@ -318,6 +346,7 @@
           - verify_gopls.stat.exists
           - verify_gopls.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
+      when: verify_gopls.stat.exists
 
     - name: Stat subctl18 binary
       ansible.builtin.stat:
@@ -595,5 +624,6 @@
         fail_msg: >-
           subctl18 entry missing from packages_subctl_versioned or version mismatch —
           expected suffix='18' entry with version in subctl18 output,
-          got: {{ verify_subctl18_ver.stdout }}
+          got: {{ verify_subctl18_ver.stdout }},
+          available: {{ packages_subctl_versioned | to_json }}
       when: ansible_facts['architecture'] == 'x86_64'

@@ -16,7 +16,7 @@ KbdInteractiveAuthentication no  # compiled default yes; 50-redhat.conf currentl
 PermitRootLogin no
 PermitEmptyPasswords no  # OpenSSH compiled default; unreachable because both PasswordAuthentication no (line 14) and KbdInteractiveAuthentication no (line 15) close all password-equivalent auth paths (UsePAM yes makes both relevant)
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}  # cert variant excluded intentionally (no host CA); add ssh-ed25519-cert-v01@openssh.com here and configure TrustedUserCAKeys if deploying host certs
-PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}  # ed25519 and FIDO2 only (cert variants require TrustedUserCAKeys or cert-authority in authorized_keys); RSA/ECDSA user keys rejected
+PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}  # ed25519 and FIDO2, plain and cert variants; cert auth requires cert-authority in authorized_keys or TrustedUserCAKeys; RSA/ECDSA rejected
 AuthorizedKeysFile .ssh/authorized_keys  # restricts compiled default (.ssh/authorized_keys .ssh/authorized_keys2) to a single file; prevents auth via the legacy authorized_keys2 path
 
 AllowUsers {{ real_user_id }}
@@ -30,8 +30,8 @@ AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}
 # NOTE: AcceptEnv is cumulative in sshd — 50-redhat.conf AcceptEnv COLORTERM cannot be
 # overridden from this file regardless of drop-in order. COLORTERM forwarding is always active.
 
-ClientAliveInterval 300
-ClientAliveCountMax 2
+ClientAliveInterval {{ system_ssh_client_alive_interval }}
+ClientAliveCountMax {{ system_ssh_client_alive_count_max }}
 # ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
 # Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
 # NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed

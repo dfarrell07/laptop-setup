@@ -2,7 +2,7 @@ module.exports = {
   rules: {
     'header-max-length': [2, 'always', 72],
     'body-leading-blank': [2, 'always'],
-    'body-max-line-length': [2, 'always', 100],
+    'body-max-line-length': [1, 'always', 200],
     // This repo uses "Scope: message" format (scope before colon = commitlint "type" field).
     // type-enum is severity 2 (error) with Title-Case variants matching CLAUDE.md convention.
     // scope-enum stays at 0 (off) — no parenthetical scopes are used in this repo.

@@ -187,9 +187,16 @@
           5-10 minutes. Do not cancel.
       when: _aide_conf_changed
 
-    - name: Reinitialize AIDE database when conf changed
+    - name: Reinitialize AIDE database — aide --init (when conf changed)
       ansible.builtin.shell:  # noqa: command-instead-of-module
-        cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+        cmd: aide --init
+      changed_when: true
+      register: _aide_init_result
+      when: _aide_conf_changed
+
+    - name: Reinitialize AIDE database — promote to active baseline (when conf changed)
+      ansible.builtin.command:
+        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
       changed_when: true
       register: system_aide_reinit_result
       when: _aide_conf_changed
@@ -279,7 +286,11 @@
         path: /var/lib/aide/aide.db.gz
         state: absent
       ignore_errors: true
-      when: system_aide_reinit_result is defined and system_aide_reinit_result is failed
+      when:
+        - system_aide_reinit_result is defined
+        - system_aide_reinit_result is failed
+        - _aide_init_result is defined
+        - _aide_init_result is failed
 
     - name: Stop and disable aide-check.timer after failed init (prevents spurious check failures)
       ansible.builtin.systemd:

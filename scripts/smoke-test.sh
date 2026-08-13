@@ -1387,7 +1387,7 @@ EOF
   else
     record "tmout-zsh" "FAIL" "TMOUT=$_tmout_zsh in $_zsh_tmout_file exceeds CIS 5.5.5 maximum of 900s"
   fi
-  unset _zsh_tmout_file
+  unset _zsh_tmout_file _tmout_val _tmout_zsh
 
   # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
   _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")
@@ -1444,7 +1444,7 @@ EOF
     elif $_csb_non_fedora; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
     else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid/nodev not set: $_home_opts"; fi
     unset _home_opts
-  else record "home-nosuid" "PASS"; fi
+  else record "home-nosuid" "WARN" "/home is on the root filesystem — nosuid not verifiable without a separate /home mount"; fi
 
   # /boot hardening — nosuid,nodev,noexec (guard: /boot may not be a separate mountpoint)
   if findmnt -n /boot &>/dev/null; then

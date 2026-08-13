@@ -102,10 +102,10 @@
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
             create: true
-            mode: '0644'
+            mode: '0600'
 
         - name: Enforce mode on notes repo git exclude
-          # .git/info/exclude pre-exists from git clone; file task is the sole mode enforcement point
+          # .git/info/exclude pre-exists from git clone; file task is belt-and-suspenders enforcement
           ansible.builtin.file:
             path: "{{ notes_repo_path }}/.git/info/exclude"
             mode: "0600"
@@ -158,6 +158,7 @@
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - notes_repo_available
+        - notes_transcrypt_available
         - not (notes_transcrypt_init_result.skipped | default(false))
         # default(0) required: skipped tasks have no .rc; prevents UndefinedError
         - notes_transcrypt_init_result.rc | default(0) != 0

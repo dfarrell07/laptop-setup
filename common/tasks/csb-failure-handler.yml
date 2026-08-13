@@ -11,7 +11,8 @@
 #   _csb_role            - role that failed (repos_dnf, packages, system, etc.)
 #
 # Optional variables (defaults shown):
-#   _csb_error           - the ansible_failed_result or error message (default: 'unknown error')
+#   _csb_error           - error message string (e.g. ansible_failed_result.msg | default('unknown error'));
+#                          must be a string — truncate() in csb-report.yml will fail if a dict is passed
 #   _csb_ticket_priority - IT ticket priority (default: 'Normal'); pass 'High' for
 #                          severe failures such as CA cert install or security hardening
 #   _csb_ticket_category - IT ticket category (default: 'Software Installation')

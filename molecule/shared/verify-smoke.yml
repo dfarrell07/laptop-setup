@@ -112,7 +112,10 @@
   block:
     - name: Check AllowAgentForwarding no in 00-hardening.conf (shared)
       ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: grep -qF 'AllowAgentForwarding no' /etc/ssh/sshd_config.d/00-hardening.conf
+        cmd: >-
+          grep -qF
+          'AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | default("no") }}'
+          /etc/ssh/sshd_config.d/00-hardening.conf
       changed_when: false
       become: true
       when:

@@ -313,6 +313,7 @@
     - is_linux
     - not (system_is_container)
     - containers_prune_enabled | bool
+    - containers_prune_service.changed or containers_prune_timer.changed
     - _prune_daemon_reload.failed | default(false)
 
 - name: Enable and start podman-prune.timer

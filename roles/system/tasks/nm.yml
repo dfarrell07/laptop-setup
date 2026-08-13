@@ -78,6 +78,15 @@
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
+- name: Remove WiFi power saving config on CSB RHEL
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
   ansible.builtin.copy:
     content: |

@@ -2,6 +2,8 @@
 # roles/packages/tasks/install_oc_opm.yml
 # OpenShift CLI (oc+kubectl) and OPM operator registry tool downloads.
 # Included from main.yml; inherits become from the calling play.
+# Guarded by _packages_linux_x86_work (is_linux + x86_64 + profile==work +
+# packages_install_binaries); do not include directly without that guard.
 - name: Install oc and kubectl
   block:
     - name: Assert oc SHA256 is set for pinned version

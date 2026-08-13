@@ -115,6 +115,18 @@
     - (not (packages_install_binaries | bool)) or fapolicyd_enforcing
     - distrobox_container_exists.rc != 0
 
+- name: Warn container_replace ignored in offline mode
+  ansible.builtin.debug:
+    msg: >-
+      container_replace=true was requested but binary installs are disabled (packages_install_binaries=false) —
+      container '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
+      config.yml or re-run without the offline flag to allow image pulls.
+  when:
+    - distrobox_tool != 'none'
+    - not (packages_install_binaries | bool)
+    - distrobox_container_replace | bool
+    - distrobox_container_exists.rc == 0
+
 # --- Distrobox path ---
 - name: Ensure distrobox config directory
   ansible.builtin.file:
@@ -152,7 +164,7 @@
       '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
       config.yml or disable fapolicyd enforcement before re-running.
   when:
-    - distrobox_use_distrobox | bool
+    - distrobox_tool != 'none'
     - fapolicyd_enforcing
     - distrobox_container_replace | bool
     - distrobox_container_exists.rc == 0
@@ -224,18 +236,6 @@
     - not (distrobox_container_replace | bool)
 
 # --- Toolbx path ---
-- name: Warn container_replace ignored under fapolicyd enforcement (Toolbx)
-  ansible.builtin.debug:
-    msg: >-
-      container_replace=true was requested but fapolicyd enforcement is active — container
-      '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
-      config.yml or disable fapolicyd enforcement before re-running.
-  when:
-    - distrobox_use_toolbox | bool
-    - fapolicyd_enforcing
-    - distrobox_container_replace | bool
-    - distrobox_container_exists.rc == 0
-
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool

@@ -115,7 +115,7 @@ jobs:
             fi
             echo "::error file=${f}::Unencrypted vault file: ${f}"
             failed=1
-          done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*')
+          done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*' -not -path './.venv/*')
           exit $failed
 
       - name: Ensure vault is not encrypted with CI dummy password
@@ -132,7 +132,8 @@ jobs:
           result = subprocess.run(
               ['find', '.', '-name', '*vault.yml',
                '-not', '-path', './node_modules/*',
-               '-not', '-path', './collections/*'],
+               '-not', '-path', './collections/*',
+               '-not', '-path', './.venv/*'],
               capture_output=True, text=True)
           if result.returncode != 0:
               print(f"find failed: {result.stderr}", file=sys.stderr); sys.exit(1)

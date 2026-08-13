@@ -140,7 +140,7 @@
           in config.yml before running make all.
           These are currently 'CHANGE_ME' placeholder values — git commits will be
           attributed to 'CHANGE_ME' and email notifications will go to wrong addresses.
-      when: lookup('env', 'MOLECULE_SCENARIO_NAME') == ''
+      when: not _pf_is_molecule
       tags: [always]
 
     - name: Assert work email var is not CHANGE_ME placeholder value (work profile)
@@ -150,7 +150,7 @@
         fail_msg: >-
           Set dotfiles_user_email_work in config.yml before running make all with
           profile=work. It is currently a 'CHANGE_ME' placeholder value.
-      when: (lookup('env', 'MOLECULE_SCENARIO_NAME') == '') and (profile == 'work')
+      when: not _pf_is_molecule and profile == 'work'
       tags: [always]
 
   roles:
