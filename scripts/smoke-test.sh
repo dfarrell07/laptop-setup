@@ -694,7 +694,7 @@ if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
 fi
 if $_is_rhel; then
   # RHEL CSB: cert AND fapolicyd installed
-  $_has_rh_cert && systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd\.service' && CSB_HOST=true
+  $_has_rh_cert && systemctl cat fapolicyd.service &>/dev/null && CSB_HOST=true
 else
   # Fedora CSB: cert AND FQDN ends in .csb
   $_has_rh_cert && [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
@@ -949,7 +949,7 @@ q:LoginGraceTime:30
 q:HostbasedAuthentication:no
 q:IgnoreRhosts:yes
 q:GSSAPIAuthentication:no
-q:AuthorizedKeysFile:.ssh/authorized_keys
+q:AuthorizedKeysFile:\.ssh/authorized_keys
 EOF
       [[ "$_max_auth" != "?" && "$_max_auth" -le 4 ]] || _bad_directive="${_bad_directive:-MaxAuthTries}"
     fi

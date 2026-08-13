@@ -44,6 +44,13 @@
           This may be a transient network error or a missing formula.
           Continuing playbook execution.
 
+- name: Remind user mtr requires sudo for ICMP on macOS
+  ansible.builtin.debug:
+    msg: >-
+      mtr installed. ICMP mode requires sudo on macOS (raw socket). Run 'sudo mtr <host>'
+      or use '--tcp' flag for unprivileged TCP-mode traces.
+  when: is_macos and profile == 'work'
+
 - name: Install Homebrew cask packages (macOS)
   when: is_macos
   block:
@@ -75,7 +82,7 @@
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: brew autoupdate start 86400 --upgrade --cleanup
+    cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --upgrade --cleanup
   when: is_macos
   changed_when:
     - _packages_brew_autoupdate.rc == 0

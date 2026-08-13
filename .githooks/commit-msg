@@ -11,8 +11,7 @@ if ! echo "$msg" | grep -qE '^[A-Za-z][-A-Za-z0-9/]*:'; then
   echo "ERROR: Missing scope separator ':' — format must be 'Scope: description'" >&2
   exit 1
 fi
-first=$(echo "$msg" | awk '{print $1}')
-first="${first%:}"
+first=$(echo "$msg" | sed 's/\([A-Za-z][-A-Za-z0-9/]*\):.*/\1/')
 # Extract the description word — the first word after "Scope: "
 # This is what should be imperative mood.
 desc_first=$(echo "$msg" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')

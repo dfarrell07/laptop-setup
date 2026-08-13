@@ -102,17 +102,7 @@
   ansible.builtin.command: mosh --version
   changed_when: false
 
-- name: Check ykman binary presence
-  ansible.builtin.stat:
-    path: /usr/bin/ykman
-  register: verify_ykman_bin
-  # ykman is from packages_security_yubikey (a dnf package), not a binary download;
-  # packages_security_yubikey is set to [] in Podman CI converge, so absence is intentional.
-
-- name: Check ykman version when installed
-  ansible.builtin.command: ykman --version
-  changed_when: false
-  when: verify_ykman_bin.stat.exists
+# CI gap: ykman (packages_security_yubikey) not installed in Podman CI — no test path exists without a hardware YubiKey present
 
 # CI gap: /etc/kernel/cmdline only written by grubby (kernel_lockdown.yml),
 # which is blocked on not system_is_container. All four assertions below

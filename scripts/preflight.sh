@@ -31,7 +31,7 @@ record() {
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail"; FAILURES=$((FAILURES+1)) ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(printf '%s' "$status" | tr 'a-z' 'A-Z')" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }
@@ -57,7 +57,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd\.service' && fapolicyd_installed=true
+  systemctl cat fapolicyd.service &>/dev/null && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else
@@ -107,7 +107,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
       if command -v make &>/dev/null; then
         record "required_${tool}" "fail" "not installed — run: make bootstrap"
       else
-        record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
+        record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
     else echo "BUG in preflight.sh: missing error message for tool '$tool'" >&2; record "required_${tool}" "fail" "not installed"; fi  # fallback for any tool added to the loop without a specific elif
   fi

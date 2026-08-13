@@ -586,10 +586,11 @@
     - name: Assert subctl18 version matches packages_subctl_versioned entry
       ansible.builtin.assert:
         that: >-
-          (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | first).version
-          in (verify_subctl18_ver.stdout + verify_subctl18_ver.stderr)
+          (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | list | length > 0) and
+          ((packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | first).version
+          in (verify_subctl18_ver.stdout + verify_subctl18_ver.stderr))
         fail_msg: >-
-          subctl18 version mismatch — expected
-          {{ (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | first).version }},
+          subctl18 entry missing from packages_subctl_versioned or version mismatch —
+          expected suffix='18' entry with version in subctl18 output,
           got: {{ verify_subctl18_ver.stdout }}
       when: ansible_facts['architecture'] == 'x86_64'

@@ -137,7 +137,10 @@
       WARNING: useradd -D -f {{ system_inactive_days }} exited
       {{ _useradd_inactive_result.rc | default('skipped') }} —
       CIS 5.5.1.5 default inactive days for new accounts may not be enforced
-  when: _useradd_inactive_result.rc | default(0) != 0
+  when:
+    - _useradd_inactive_result.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
 
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
 # inactive lockout to the pre-existing real user account (CIS 5.5.1.5).

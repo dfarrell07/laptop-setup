@@ -36,6 +36,17 @@
       ansible.builtin.fail:
         msg: "chrony install failed; systemd-timesyncd has been unmasked to restore a time source"
 
+- name: Stop and mask systemd-timesyncd before chrony install (Fedora)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: true
+    state: stopped
+  failed_when: false
+  when:
+    - is_dnf
+    - system_chrony_service_enabled | bool
+    - not system_is_container
+
 - name: Install chrony (Fedora/RHEL)
   ansible.builtin.dnf:
     name: chrony
@@ -87,6 +98,18 @@
     state: started
   when:
     - is_apt
+    - not (system_chrony_service_enabled | bool)
+    - not system_is_container
+  failed_when: false
+
+- name: Enable systemd-timesyncd when chrony is disabled (Fedora fallback)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: false
+    state: started
+    enabled: true
+  when:
+    - is_dnf
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
   failed_when: false
