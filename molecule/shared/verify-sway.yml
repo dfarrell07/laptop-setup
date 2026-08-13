@@ -49,7 +49,7 @@
 
 - name: Verify sway config sets cursor theme for XWayland consistency
   ansible.builtin.command:
-    cmd: grep -q 'xcursor_theme Adwaita' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: grep -q 'xcursor_theme {{ desktop_sway_cursor_theme | default("Adwaita") }}' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
 - name: Verify sway config starts cliphist clipboard history daemon

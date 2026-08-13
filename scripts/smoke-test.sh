@@ -50,6 +50,7 @@ _system_umask="${_system_umask:-027}"
 _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true' "$_cfg" 2>/dev/null && _notes_enabled=true
 unset _cfg
+_cfg_ssh_port=$(grep -oP '^ssh_port:[[:space:]]*\K[0-9]+' "$SCRIPT_DIR/../config.yml" 2>/dev/null || echo "722")
 
 run() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
@@ -750,7 +751,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   fi
 
-  _ssh_port=""  # empty so ${_ssh_port:-722} at the listeners check substitutes 722 on non-root runs
+  _ssh_port=""  # empty so ${_ssh_port:-$_cfg_ssh_port} at the listeners check substitutes 722 on non-root runs
   # Firewall default zone = drop, SSH port open, tailscale0 in trusted zone
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
@@ -794,10 +795,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
     if [[ "$zone" == "drop" ]]; then
       # Only check drop-zone-specific rules when the drop zone is actually active
-      if firewall-cmd --zone=drop --query-port="${_ssh_port:-722}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
-      else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-722}/tcp not open in drop zone"; fi
+      if firewall-cmd --zone=drop --query-port="${_ssh_port:-$_cfg_ssh_port}/tcp" &>/dev/null; then record "firewall-ssh-port" "PASS"
+      else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-$_cfg_ssh_port}/tcp not open in drop zone"; fi
     elif $CSB_HOST; then record "firewall-ssh-port" "WARN" "skipped on CSB — drop zone not active (IT manages zones)"
-    else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-722}/tcp not open in drop zone"; fi
+    else record "firewall-ssh-port" "FAIL" "port ${_ssh_port:-$_cfg_ssh_port}/tcp not open in drop zone"; fi
     # Check permanent rule regardless of whether tailscale0 is up (catches post-snapshot regressions)
     if firewall-cmd --permanent --zone=trusted --query-interface=tailscale0 &>/dev/null; then
       record "firewall-tailscale-permanent" "PASS"
@@ -1610,7 +1611,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   fi  # end GDM check
 
   # Unexpected listening ports (non-loopback)
-  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-722}([^0-9]|$)" | tail -n +2 || true)
+  listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-$_cfg_ssh_port}([^0-9]|$)" | tail -n +2 || true)
   if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
   else record "no-open-ports" "WARN" "$(echo "$listeners" | wc -l) non-loopback listeners"; fi
 

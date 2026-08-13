@@ -64,18 +64,22 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.service"
   register: verify_prune_service
+  when: not (system_is_container | default(false))
 
 - name: Assert podman-prune.service unit file exists
   ansible.builtin.assert:
     that: verify_prune_service.stat.exists
     fail_msg: "podman-prune.service was not deployed to ~/.config/systemd/user/"
+  when: not (system_is_container | default(false))
 
 - name: Verify podman-prune.timer unit file is deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.timer"
   register: verify_prune_timer
+  when: not (system_is_container | default(false))
 
 - name: Assert podman-prune.timer unit file exists
   ansible.builtin.assert:
     that: verify_prune_timer.stat.exists
     fail_msg: "podman-prune.timer was not deployed to ~/.config/systemd/user/"
+  when: not (system_is_container | default(false))

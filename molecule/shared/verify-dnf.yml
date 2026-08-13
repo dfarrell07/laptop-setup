@@ -409,7 +409,6 @@
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
     - not (system_is_container | default(false))
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Assert ABRT services are masked
   ansible.builtin.assert:
@@ -420,7 +419,6 @@
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
     - not (system_is_container | default(false))
-    - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
     - item.status.UnitFileState | default('') not in ['', 'not-found']
 
 - name: Verify crypto-policy

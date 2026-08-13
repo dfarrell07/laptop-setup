@@ -260,3 +260,10 @@
         path: /var/lib/aide/aide.db.gz
         state: absent
       ignore_errors: true
+
+    - name: Stop and disable aide-check.timer after failed init (prevents spurious check failures)
+      ansible.builtin.systemd:
+        name: aide-check.timer
+        state: stopped
+        enabled: false
+      failed_when: false

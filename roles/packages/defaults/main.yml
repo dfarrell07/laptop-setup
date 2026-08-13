@@ -305,7 +305,6 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 
 packages_brew_taps:
   - nikitabobko/tap
-  - theseal/ssh-askpass
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow
 
@@ -344,7 +343,6 @@ packages_brew:
   # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
   # (macOS ships LibreSSL which has API/behavior differences from upstream OpenSSL)
   - openssl
-  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - ripgrep
   - fd  # fd-find on Linux; Homebrew package is 'fd'
   - bat
@@ -370,3 +368,4 @@ packages_brew_work:
   - tshark  # CLI-only formula; mirrors packages_networking_work wireshark-cli (no Qt GUI libs)
   - k9s
   - krew
+  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it

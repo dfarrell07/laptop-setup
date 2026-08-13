@@ -380,8 +380,10 @@ if [[ "$JSON" == true ]]; then
   printf '],"ready":%s}\n' "$( [[ $FAILURES -eq 0 ]] && echo true || echo false )"
 else
   echo ""
-  [[ $FAILURES -eq 0 ]] \
-    && printf "${GRN}Ready to run 'make all'${NC}\n" \
-    || printf "${RED}%d check(s) failed — resolve before running 'make all'${NC}\n" "$FAILURES"
+  if [[ $FAILURES -eq 0 ]]; then
+    printf "${GRN}Ready to run 'make all'${NC}\n"
+  else
+    printf "${RED}%d check(s) failed — resolve before running 'make all'${NC}\n" "$FAILURES"
+  fi
 fi
 exit $(( FAILURES > 0 ? 1 : 0 ))

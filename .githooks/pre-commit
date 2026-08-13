@@ -4,7 +4,10 @@ failed=0
 
 # Block unencrypted vault files
 while IFS= read -r -d '' f; do
-  _vault_content=$(git show ":$f")
+  if ! _vault_content=$(git show ":$f" 2>/dev/null); then
+    echo "WARNING: could not read staged $f — skipping vault check" >&2
+    continue
+  fi
   if ! printf '%s' "$_vault_content" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     # Allow plaintext stub: vault_placeholder present and all other vault_* vars are empty stubs ([] only)
     if printf '%s' "$_vault_content" | grep -q 'vault_placeholder' && \

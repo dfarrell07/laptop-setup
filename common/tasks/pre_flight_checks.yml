@@ -92,7 +92,7 @@
           tags: [always]
 
     - name: Non-molecule pre-flight assertions
-      when: not _pf_is_molecule
+      when: not _pf_is_molecule and _pf_assertions_checked is not defined
       block:
         - name: Assert system_timezone is not the CHANGE_ME placeholder
           ansible.builtin.assert:
@@ -137,6 +137,13 @@
               Set dotfiles_user_email_work in config.yml before running make all.
               The value is empty or still has the 'CHANGE_ME' placeholder.
               Without it, git commits to work repos use the wrong email.
+          tags: [always]
+
+        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
+        # Play 1's include of this file sets _pf_assertions_checked; Play 2's include then sees it defined.
+        - name: Set assertions checked flag (suppresses duplicate assertions in Play 2)
+          ansible.builtin.set_fact:
+            _pf_assertions_checked: true
           tags: [always]
 
     - name: Warn and flag when vault stub is not populated
