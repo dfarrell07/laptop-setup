@@ -155,8 +155,8 @@ ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debia
 lint: .venv shellcheck markdownlint check-vars-sync
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
-	@command -v actionlint >/dev/null 2>&1 && actionlint -color || echo "SKIP: actionlint not installed (run: make packages)"
-	@command -v zizmor >/dev/null 2>&1 && zizmor .github/ || echo "SKIP: zizmor not installed (run: make packages)"
+	@if command -v actionlint >/dev/null 2>&1; then actionlint -color; else echo "SKIP: actionlint not installed (run: make packages)"; fi
+	@if command -v zizmor >/dev/null 2>&1; then zizmor .github/; else echo "SKIP: zizmor not installed (run: make packages)"; fi
 
 check-vars-sync: .venv
 	.venv/bin/python3 scripts/check-vars-sync.py

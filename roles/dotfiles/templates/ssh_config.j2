@@ -1,4 +1,5 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 
 Host *
     VisualHostKey yes
@@ -16,7 +17,7 @@ Host *
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
     ControlPath /run/user/%i/ssh/%r@%h-%p
 {% else %}
     ControlPath ~/.ssh/sockets/%r@%h-%p

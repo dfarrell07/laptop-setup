@@ -56,14 +56,14 @@ dotfiles_direnv_warn_timeout: "10s"  # upstream default 5s; 10s accommodates slo
 dotfiles_direnv_strict_env: true  # enables set -euo pipefail in .envrc; upstream default false
 dotfiles_direnv_disable_stdin: true  # blocks interactive prompts in .envrc; upstream default false; set false in config.yml
 
-is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml; used transitively via dotfiles_internal_ca_path in gitconfig.j2
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml and handlers/main.yml, not templates
 ssh_port: 722  # fallback for standalone molecule invocation; authoritative value in group_vars/all/vars.yml
 ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
 ssh_git_signing_pubkey: ""  # fallback; authoritative in group_vars/all/vars.yml (vault-backed); set in config.yml pre-vault
 # fallback; authoritative in group_vars/all/vars.yml
-ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
+ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates

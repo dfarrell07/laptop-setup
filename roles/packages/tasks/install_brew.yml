@@ -66,12 +66,31 @@
           This may be a transient network error or a missing cask.
           Continuing playbook execution.
 
+- name: Install LuLu cask (macOS)
+  when: is_macos
+  block:
+    - name: Install LuLu cask (macOS)
+      community.general.homebrew_cask:
+        name: lulu
+        state: present
+      async: 600
+      poll: 10
+      register: _packages_brew_cask_lulu
+  rescue:
+    - name: Warn LuLu cask install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install LuLu cask in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing cask.
+          Continuing playbook execution.
+
 - name: Remind user to approve LuLu system extension
   ansible.builtin.debug:
     msg: >-
       LuLu installed. Open System Settings > Privacy & Security > System Extensions
       and approve LuLu to activate the application firewall.
-  when: is_macos and _packages_brew_casks.changed | default(false)
+  when: is_macos and _packages_brew_cask_lulu.changed | default(false)
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:

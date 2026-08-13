@@ -24,7 +24,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      issues: write
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -102,8 +101,15 @@ jobs:
           print('All pinned collections are current.')
           PYEOF
 
+  create-drift-issue:
+    name: Create drift issue
+    needs: [galaxy-drift]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
       - name: Create drift issue (scheduled run only)
-        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

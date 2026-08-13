@@ -109,8 +109,7 @@
         _csb_ticket_summary: "Cannot install VPN packages on CSB"
         _csb_ticket_body: >-
           The VPN client package could not be installed. Package name:
-          redhat-internal-globalprotect-ui (Fedora or RHEL >= 10) or
-          redhat-internal-openvpn-profiles (RHEL < 10).
+          {{ redhat_vpn_packages | join(' or ') }}.
           Without VPN, all internal Red Hat network access is blocked
           off-site: internal registries, Jira, Confluence, source repos,
           and build infrastructure are unreachable without an active tunnel.

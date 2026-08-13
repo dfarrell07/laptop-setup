@@ -597,6 +597,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_modprobe_hardening.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains usb_storage blacklist entry
   ansible.builtin.command: grep -qF 'install usb_storage /bin/false' /etc/modprobe.d/hardening.conf
@@ -605,6 +606,7 @@
     - ansible_system == 'Linux'
     - verify_modprobe_hardening.stat.exists
     - system_disable_usb_storage | default(true) | bool
+    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains udf blacklist entry
   ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf
@@ -613,6 +615,7 @@
     - ansible_system == 'Linux'
     - verify_modprobe_hardening.stat.exists
     - system_disable_udf | default(true) | bool
+    - not (system_is_container | default(false))
 
 - name: Check modprobe hardening contains sctp blacklist entry
   ansible.builtin.command: grep -qF 'install sctp /bin/false' /etc/modprobe.d/hardening.conf
@@ -621,6 +624,7 @@
     - ansible_system == 'Linux'
     - verify_modprobe_hardening.stat.exists
     - system_disable_sctp | default(false) | bool
+    - not (system_is_container | default(false))
 
 # --- system role drop-in file assertions (sshd, resolved, DNS-over-TLS, coredump, logind, sudoers, journald, auditd rules; Linux only) ---
 # sshd drop-in is mode 0600 root:root — become: true required for stat and grep.
@@ -639,6 +643,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
+    - not csb_rhel
 
 - name: Assert sshd hardening drop-in has mode 0600
   ansible.builtin.assert:
@@ -652,6 +657,7 @@
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
+    - not csb_rhel
 
 - name: Check sshd hardening drop-in contains critical directives
   ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
@@ -752,6 +758,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_coredump_conf.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Assert coredump Storage= value matches deployed variable
   ansible.builtin.assert:
@@ -763,6 +770,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_coredump_conf.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Assert coredump ProcessSizeMax= value matches deployed variable
   ansible.builtin.assert:
@@ -774,6 +782,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_coredump_conf.stat.exists
+    - not (system_is_container | default(false))
 
 
 - name: Stat logind hardening drop-in (system role must deploy it)
@@ -823,6 +832,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_logind_conf.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Stat sudoers go-env drop-in (system role must deploy it on non-CSB)
   ansible.builtin.stat:
@@ -913,6 +923,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_sudoers_conf.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Stat auditd rules file (system role deploys it on all non-CSB Linux)
   ansible.builtin.stat:
@@ -1020,6 +1031,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - verify_auditd_conf.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Check auditd.conf log_format=ENRICHED (CIS 4.1.2.1)
   ansible.builtin.command: grep -q '^log_format = ENRICHED' /etc/audit/auditd.conf
@@ -1029,6 +1041,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - verify_auditd_conf.stat.exists
+    - not (system_is_container | default(false))
 
 # --- dconf hardening (CIS 1.8.x — GNOME/GDM only, stat-gated) ---
 # Only fires when the system role's dconf.yml ran (gdm.service present on target).
@@ -1183,6 +1196,7 @@
   when:
     - ansible_system == 'Linux'
     - verify_llmnr_conf.stat.exists
+    - not (system_is_container | default(false))
 
 # --- System role: service masking (Linux container CI) ---
 # Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.

@@ -33,8 +33,12 @@
 -a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/npm -k exclude-build-deletes
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/dnf5 -k exclude-build-deletes
 -a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/dnf5 -k exclude-build-deletes
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/rpm -k exclude-build-deletes
 -a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/rpm -k exclude-build-deletes
 
 # Write/attribute changes on frequently-accessed sensitive paths
 -w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write

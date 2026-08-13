@@ -243,6 +243,7 @@ jobs:
         run: |
           npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
           # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
+          # Sync partner: .githooks/commit-msg — keep this word list identical
           _bad_word() {
             local lw; lw=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
             case "$lw" in
@@ -263,11 +264,19 @@ jobs:
             subject=$(git log -1 --format=%s "$sha")
             body=$(git log -1 --format=%B "$sha")
             first=$(echo "$subject" | awk '{print $1}')
+            first="${first%:}"
             # For scoped commits (Scope: Verb noun), extract word after colon to check verb
             desc_first=$(echo "$subject" | sed 's/^[A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
-            if _bad_word "$first"; then
-              echo "::error::Commit $sha: Use imperative mood, not '$first'"
-              failed=1
+            # Also catch when the scope word itself is a banned past-tense/gerund word
+            # Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
+            if [ "$desc_first" != "$first" ]; then
+              IFS='/' read -ra _scope_parts <<< "$first"
+              for _part in "${_scope_parts[@]}"; do
+                if _bad_word "$_part"; then
+                  echo "::error::Commit $sha: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)"
+                  failed=1
+                fi
+              done
             fi
             # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
             if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then

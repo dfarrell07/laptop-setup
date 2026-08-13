@@ -1,4 +1,5 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 [user]
 	name = {{ dotfiles_user_name }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
@@ -37,7 +38,7 @@
 
 [merge]
 	conflictStyle = zdiff3
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 	tool = meld
 {% endif %}
 
@@ -62,7 +63,7 @@
 	# 'recent' alias removed — [branch] sort = -committerdate makes plain 'git branch' sort by recency
 
 [diff]
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 	tool = meld
 {% endif %}
 	algorithm = histogram
@@ -103,7 +104,7 @@
 
 [credential "https://github.com"]
 	helper = !gh auth git-credential
-{% if profile == 'work' and ansible_facts['system'] | default('Linux') == 'Linux' and dotfiles_internal_git_host != '' %}
+{% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
 
 [http "https://{{ dotfiles_internal_git_host }}"]
 	sslCAInfo = {{ dotfiles_internal_ca_path }}

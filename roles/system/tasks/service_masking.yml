@@ -393,7 +393,6 @@
     - cockpit.socket
   when:
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
-    - _cockpit_stat.stat.exists
   failed_when: false
 
 - name: Configure cockpit state and enablement (installed units only)
