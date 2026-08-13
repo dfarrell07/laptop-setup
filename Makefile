@@ -142,10 +142,10 @@ preflight:
 csb-audit: preflight
 	ansible-playbook site.yml --tags common --check -v
 
-check:
+check: guard-not-root
 	ansible-playbook site.yml --check --diff --ask-become-pass
 
-diff:
+diff: guard-not-root
 	ansible-playbook site.yml --check --diff --tags dotfiles
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test

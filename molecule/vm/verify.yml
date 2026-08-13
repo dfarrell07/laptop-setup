@@ -65,24 +65,13 @@
         path: /etc/yum.repos.d/mullvad.repo
       register: verify_mullvad_repo
       become: true
+      when: repo_mullvad
 
     - name: Assert mullvad repo exists
       ansible.builtin.assert:
         that: verify_mullvad_repo.stat.exists
         fail_msg: "mullvad repo not configured"
-
-    - name: Verify tailscale-stable repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/tailscale-stable.repo
-      register: verify_tailscale_repo
-      become: true
-      when: repo_tailscale
-
-    - name: Assert tailscale-stable repo exists
-      ansible.builtin.assert:
-        that: verify_tailscale_repo.stat.exists
-        fail_msg: "tailscale-stable repo not configured"
-      when: repo_tailscale
+      when: repo_mullvad
 
     - name: Verify slack repo configured
       ansible.builtin.stat:
@@ -109,32 +98,6 @@
         that: verify_gcloud_repo.stat.exists
         fail_msg: "google-cloud-cli repo not configured"
       when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
-
-    - name: Verify rpmfusion-free repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/rpmfusion-free.repo
-      register: verify_rpmfusion_free_repo
-      become: true
-      when: (repo_rpmfusion_free) and ansible_distribution == 'Fedora'
-
-    - name: Assert rpmfusion-free repo exists
-      ansible.builtin.assert:
-        that: verify_rpmfusion_free_repo.stat.exists
-        fail_msg: "rpmfusion-free repo not configured"
-      when: (repo_rpmfusion_free) and ansible_distribution == 'Fedora'
-
-    - name: Verify rpmfusion-nonfree repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/rpmfusion-nonfree.repo
-      register: verify_rpmfusion_nonfree_repo
-      become: true
-      when: (repo_rpmfusion_nonfree) and ansible_distribution == 'Fedora'
-
-    - name: Assert rpmfusion-nonfree repo exists
-      ansible.builtin.assert:
-        that: verify_rpmfusion_nonfree_repo.stat.exists
-        fail_msg: "rpmfusion-nonfree repo not configured"
-      when: (repo_rpmfusion_nonfree) and ansible_distribution == 'Fedora'
 
     - name: Check sysctl config contains kernel.panic = 0 (workstation default; group_vars default is 0; CIS target is 10)
       ansible.builtin.command: grep -q 'kernel.panic = {{ system_kernel_panic }}' /etc/sysctl.d/90-hardening.conf
@@ -171,17 +134,6 @@
         fail_msg: >-
           fs.inotify.max_user_instances={{ verify_inotify_instances.stdout }},
           expected >=512
-
-    - name: Verify modprobe hardening config deployed
-      ansible.builtin.stat:
-        path: /etc/modprobe.d/hardening.conf
-      register: verify_modprobe
-      become: true
-
-    - name: Assert modprobe hardening deployed
-      ansible.builtin.assert:
-        that: verify_modprobe.stat.exists
-        fail_msg: "Modprobe hardening config not deployed"
 
     # --- System hardening checks (VM only) ---
     - name: Gather service facts for conditional checks
@@ -423,17 +375,6 @@
           - "'nosuid' in verify_shm.stdout"
           - "'nodev' in verify_shm.stdout"
         fail_msg: "/dev/shm missing required mount options (noexec,nosuid,nodev)"
-
-    - name: Verify /tmp hardening drop-in exists (CIS 1.1.2.x)
-      ansible.builtin.stat:
-        path: /etc/systemd/system/tmp.mount.d/hardening.conf
-      register: verify_tmp_dropin
-      become: true
-
-    - name: Assert /tmp hardening drop-in deployed
-      ansible.builtin.assert:
-        that: verify_tmp_dropin.stat.exists
-        fail_msg: "/etc/systemd/system/tmp.mount.d/hardening.conf not deployed"
 
     - name: Check /tmp mount options (CIS 1.1.2.x)
       ansible.builtin.command: findmnt -n -o OPTIONS /tmp

@@ -106,6 +106,18 @@
   when:
     - _system_tlp_install.rc | default(0) != 0
 
+- name: Detect TLP (may not be installed)
+  ansible.builtin.command:
+    cmd: systemctl cat tlp
+  register: _system_tlp_disable_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when:
+    - not (system_tlp_enabled | bool)
+    - not system_is_container
+    - is_dnf
+
 - name: Stop and disable TLP when TLP disabled
   ansible.builtin.systemd:
     name: tlp
@@ -115,7 +127,7 @@
     - not (system_tlp_enabled | bool)
     - not system_is_container
     - is_dnf
-  failed_when: false
+    - (_system_tlp_disable_check.rc | default(-1)) == 0
 
 - name: Unmask power management daemons when TLP disabled
   ansible.builtin.systemd:
@@ -361,7 +373,6 @@
     - cockpit.socket
   when:
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
-    - _cockpit_stat.stat.exists
   failed_when: false
 
 - name: Configure cockpit state and enablement (installed units only)

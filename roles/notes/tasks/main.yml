@@ -43,7 +43,7 @@
         ("Updated" in notes_lfs_install_result.stdout or "initialized" in notes_lfs_install_result.stdout)
       when:
         - notes_lfs_check.rc == 0
-        - notes_lfs_configured.rc != 0
+        - notes_lfs_configured.rc | default(-1) != 0
 
     - name: Warn if git-lfs filter registration failed
       ansible.builtin.debug:
@@ -104,18 +104,16 @@
           Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
       when: not notes_repo_available
 
-    - name: Check if transcrypt is available  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        cmd: which transcrypt
+    - name: Check if transcrypt is available
+      ansible.builtin.stat:
+        path: /usr/local/bin/transcrypt
       register: notes_transcrypt_bin
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe — must run in check mode
+      check_mode: false
       when: notes_repo_available
 
     - name: Set transcrypt availability fact
       ansible.builtin.set_fact:
-        notes_transcrypt_available: "{{ notes_transcrypt_bin.rc == 0 }}"
+        notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists | default(false) }}"
       when: notes_repo_available
 
     - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)

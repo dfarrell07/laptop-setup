@@ -18,12 +18,7 @@
       ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
 
     - name: Refresh DNF cache so system role sees current mirror metadata
-      ansible.builtin.dnf:
-        update_cache: true
-      register: _dnf_cache_refresh
-      retries: 3
-      delay: 5
-      until: _dnf_cache_refresh is succeeded
+      ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/dnf-cache-refresh.yml"
 
   roles:
     - role: system

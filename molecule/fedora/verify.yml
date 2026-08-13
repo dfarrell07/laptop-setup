@@ -18,7 +18,6 @@
         profile: work
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
-        system_disable_usb_storage: false  # converge sets this false; verify must match or usb_storage modprobe check fails
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:

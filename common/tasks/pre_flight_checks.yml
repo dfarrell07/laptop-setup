@@ -119,6 +119,8 @@
               rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
           tags: [always]
 
+        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
+        # Play 1's include of this file sets vault_stub_warned; Play 2's include then sees it defined.
         - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
           ansible.builtin.set_fact:
             vault_stub_warned: true

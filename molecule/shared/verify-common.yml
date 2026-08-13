@@ -490,7 +490,8 @@
     - not (system_is_container | default(false))
 
 # --- Sysctl hardening: file-content assertions (system role, Linux only) ---
-# Checks that the template was deployed without live kernel reads — safe in container CI.
+# File-content assertions (safer than sysctl -n live kernel reads on VMs);
+# skipped in container CI since sysctl.yml does not apply settings in containers.
 # No become: true needed because /etc/sysctl.d/90-hardening.conf is deployed mode 0644.
 - name: Stat sysctl hardening config (asserts system role ran)
   ansible.builtin.stat:

@@ -131,7 +131,7 @@
     ("Updated" in git_repos_lfs_install_result.stdout or "initialized" in git_repos_lfs_install_result.stdout)
   when:
     - git_repos_lfs_check.rc == 0
-    - git_repos_lfs_configured.rc != 0
+    - git_repos_lfs_configured.rc | default(-1) != 0
 
 - name: Warn if git-lfs filter registration failed
   ansible.builtin.debug:

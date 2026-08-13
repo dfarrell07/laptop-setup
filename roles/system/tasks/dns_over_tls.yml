@@ -87,5 +87,7 @@
     state: link
     force: true
   when:
+    # csb_detected NOT guarded: resolved runs on Fedora hybrid; stub is valid
+    # even without 99-dot.conf (DoT removed but stub is interface-agnostic).
     - not csb_rhel
     - not system_is_container  # dangling symlink breaks DNS when resolved is not running in containers

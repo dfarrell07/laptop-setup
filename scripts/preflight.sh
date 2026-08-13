@@ -321,7 +321,6 @@ fi
 
 # --- Disk space (need 5GB free in $HOME) ---
 avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}') || avail_kb=0
-avail_kb="${avail_kb:-0}"
 avail_gb=$((avail_kb / 1048576))
 if [[ $avail_gb -ge 5 ]]; then
   record "disk_space" "pass" "${avail_gb}GB free in \$HOME"
@@ -346,6 +345,8 @@ if [[ -n "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}" ]]; then
   else
     record "ssh_session" "fail" "running over SSH — sshd will restart mid-play and drop this connection. Use a local console or run inside tmux: tmux new-session 'make all'"
   fi
+else
+  record "ssh_session" "pass" "local console (not over SSH)"
 fi
 
 # --- Existing installations ---

@@ -167,6 +167,17 @@
   changed_when: _chage_inactive_result.rc == 0
   failed_when: false
 
+- name: Warn if Set inactive lock for existing user account failed
+  ansible.builtin.debug:
+    msg: >
+      WARNING: chage -I {{ system_inactive_days }} {{ real_user_id }} exited
+      {{ _chage_inactive_result.rc | default('skipped') }} —
+      CIS 5.5.1.5 inactive lockout may not be set on the existing account
+  when:
+    - _chage_inactive_result.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
+
 - name: Check current password aging fields for existing user account
   ansible.builtin.command:
     argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print ${{ item.field }}} END{if (!found) exit 1}", /etc/shadow]
