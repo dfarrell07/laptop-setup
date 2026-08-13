@@ -216,9 +216,10 @@
         state: absent
       when: (system_aide_db.stat.exists | default(false)) and (system_aide_db_new.stat.exists | default(false)) and not _aide_conf_changed
 
-    # Reached only when aide.conf is already fully configured (zero lineinfile changes above) but no DB exists.
-    # Normal first provisions reach this via the _aide_conf_changed=true reinit path at line 159 instead.
-    - name: Initialize AIDE database (first run only)
+    # Reached when no DB exists and no reinit was triggered: either aide.conf was already fully configured
+    # (zero lineinfile changes, _aide_conf_changed=false) on first run, or the rescue block deleted aide.db.gz
+    # after a failed reinit and control returned here for a recovery re-init.
+    - name: Initialize AIDE database (no existing DB; first run or post-rescue recovery)
       when:
         - not (system_aide_db.stat.exists | default(false))
         - not (system_aide_db_new.stat.exists | default(false))

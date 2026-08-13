@@ -45,7 +45,7 @@ ChannelTimeout {{ system_ssh_channel_timeout }}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no  # OpenSSH compiled default is yes; disabled in favour of encrypted ClientAlive messages (ClientAliveInterval/CountMax above)
-SyslogFacility AUTHPRIV  # forward guard: 50-redhat.conf also sets AUTHPRIV; compiled default is AUTH; 00-hardening.conf wins via first-occurrence lexicographic order
+SyslogFacility AUTHPRIV  # compiled default is AUTH; explicit here to guarantee AUTHPRIV regardless of 50-redhat.conf presence or order
 LogLevel VERBOSE
 UsePAM yes  # compiled default no; setting no bypasses PAM account/session modules (faillock lockout, audit, MOTD); matches 50-redhat.conf; explicit (first-occurrence)
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100

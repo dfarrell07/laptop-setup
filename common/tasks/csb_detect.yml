@@ -65,6 +65,7 @@
   ansible.builtin.set_fact:
     fapolicyd_installed: >-
       {{ (_fapolicyd_unit.rc | default(1) == 0) and ("fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))) }}
+    # _fapolicyd_permissive_grep.rc | default(1): skipped-task -> 1, grep-miss -> 1, grep-match (permissive) -> 0
     fapolicyd_enforcing: >-
       {{
         (_fapolicyd_active.rc | default(1) == 0)

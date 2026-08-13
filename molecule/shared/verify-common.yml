@@ -462,7 +462,7 @@
 - name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian
   ansible.builtin.assert:
     that: needs_container_tier == 'host-only'
-    fail_msg: "needs_container_tier is not host-only on non-CSB host — CSB detection regression"
+    fail_msg: "needs_container_tier is '{{ needs_container_tier }}', expected 'host-only' on non-CSB host — CSB detection regression"
   when:
     - ansible_distribution in ['Fedora', 'Debian']
     - ansible_system == 'Linux'
@@ -1204,7 +1204,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
+    - system_chrony_service_enabled | default(true) | bool
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
 # make test-vm exercises full chrony service-enablement and NTS coverage.
@@ -1216,7 +1216,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
+    - system_chrony_service_enabled | default(true) | bool
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
 - name: Check chrony NTS config in /etc/chrony.conf

@@ -34,6 +34,16 @@
           csb_rhel was reset to false on Rocky after csb_detect.yml re-ran —
           _csb_molecule_force guard removed from csb_detect.yml?
 
+    - name: Stat sshd hardening drop-in (must be absent on Rocky — sshd.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.d/00-hardening.conf
+      register: verify_sshd_dropin_rocky
+
+    - name: Assert sshd hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_sshd_dropin_rocky.stat.exists
+        fail_msg: "00-hardening.conf deployed on Rocky (csb_rhel=true) — sshd.yml not csb_rhel guard regressed"
+
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 

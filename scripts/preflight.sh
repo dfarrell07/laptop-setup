@@ -102,6 +102,7 @@ if [[ -z "$PROFILE" ]]; then
     record "config_profile" "skip" "config.yml absent — profile defaults to ${PROFILE}"
   fi
 fi
+[[ -z "${RESULTS[*]}" ]] || grep -q 'config_profile' <<< "${RESULTS[*]}" || record "config_profile" "skip" "profile=${PROFILE} (set via --profile CLI flag)"
 
 # --- Required tools ---
 # When adding a tool to the loop, add a matching elif branch with install guidance.
@@ -289,7 +290,7 @@ net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
-  if [[ $_curl_ok == true ]]; then
+  if [[ "$_curl_ok" == true ]]; then
     _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
     if [[ -n "$_http_code" ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable"

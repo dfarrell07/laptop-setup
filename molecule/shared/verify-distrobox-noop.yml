@@ -3,9 +3,9 @@
 # Assertions for the distrobox role no-op path (packages_containers emptied in converge).
 # Included by rocky/verify.yml and fedora/verify.yml.
 #
-# This assertion targets the distrobox role's "Remove stale distrobox.ini when distrobox
-# is not installed" task guard (distrobox_check.rc != 0). It detects regressions where
-# the role writes distrobox.ini despite no binary being present.
+# Asserts distrobox.ini is not created by the distrobox role when the binary is absent
+# (packages_containers=[] in CI suppresses binary install). CI gap: the stale-ini removal
+# path (binary removed after being installed) is not exercised here — make test-vm only.
 
 - name: Stat distrobox.ini (must be absent on no-op path)
   ansible.builtin.stat:

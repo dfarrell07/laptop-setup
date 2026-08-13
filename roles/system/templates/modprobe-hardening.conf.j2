@@ -8,9 +8,13 @@
 # jffs2: present in Fedora 44 (jffs2.ko.xz, alias fs-jffs2); blacklisted as unused attack surface.
 blacklist jffs2
 install jffs2 /bin/false
-# cramfs: CONFIG_CRAMFS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction
+# cramfs: CONFIG_CRAMFS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist cramfs' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist cramfs
 install cramfs /bin/false
-# freevxfs: CONFIG_VXFS_FS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction
+# freevxfs: CONFIG_VXFS_FS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist freevxfs' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist freevxfs
 install freevxfs /bin/false
 blacklist hfs
 install hfs /bin/false
@@ -33,9 +37,10 @@ blacklist sctp
 install sctp /bin/false
 {% endif %}
 # dccp: removed from Fedora kernels at Fedora 40 (CONFIG_IP_DCCP not set in Fedora 44).
-# 'blacklist dccp' intentionally omitted — no .ko exists to blacklist.
-# 'install dccp /bin/false' is the sole effective guard: modprobe checks the install directive
+# 'install dccp /bin/false' is the effective guard: modprobe checks the install directive
 # before looking up module files, blocking any future re-introduction without code change.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist dccp' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist dccp
 install dccp /bin/false
 blacklist rds
 install rds /bin/false

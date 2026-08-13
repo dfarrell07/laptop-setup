@@ -96,7 +96,7 @@
   ansible.builtin.command:
     cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --upgrade --cleanup
   when: is_macos
-  changed_when: true
+  changed_when: false
   failed_when: false
   register: _packages_brew_autoupdate
 
