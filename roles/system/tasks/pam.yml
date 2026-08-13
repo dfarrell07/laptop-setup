@@ -23,17 +23,51 @@
     - not csb_rhel
     - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 
-- name: Configure pam_faillock boolean flags
+- name: Configure pam_faillock audit flag
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
-    option: "{{ item }}"
+    option: audit
     allow_no_value: true
     mode: "0644"
-  loop:
-    - audit
-    - local_users_only  # prevent double-lockout with SSSD/IPA domain users
   when:
+    - system_faillock_audit | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Remove pam_faillock audit flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: audit
+    state: absent
+    mode: "0644"
+  when:
+    - not (system_faillock_audit | bool)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Configure pam_faillock local_users_only flag
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: local_users_only  # prevent double-lockout with SSSD/IPA domain users
+    allow_no_value: true
+    mode: "0644"
+  when:
+    - system_faillock_local_users_only | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Remove pam_faillock local_users_only flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: local_users_only
+    state: absent
+    mode: "0644"
+  when:
+    - not (system_faillock_local_users_only | bool)
     - not csb_rhel
     - not system_is_container
 

@@ -46,7 +46,7 @@ dotfiles_internal_ca_path: "{{ '/etc/ssl/certs/ca-certificates.crt' if is_apt el
 # Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks and
 # the ccp() guard in zshrc.j2 to route work repos to the work git identity / block personal Claude.
 # Override in config.yml to add or remove work orgs without editing templates.
-dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]
+dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; without this, ccp() has no work-directory guard
 
 real_user_id: "{{ lookup('env', 'USER') }}"  # fallback; authoritative in site.yml play vars
 dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
@@ -57,8 +57,8 @@ dotfiles_direnv_strict_env: true  # enables set -euo pipefail in .envrc; upstrea
 dotfiles_direnv_disable_stdin: true  # blocks interactive prompts in .envrc; upstream default false; set false in config.yml
 
 is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
-is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
-is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml and handlers/main.yml, not templates
 ssh_port: 722  # fallback for standalone molecule invocation; authoritative value in group_vars/all/vars.yml
 ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
 ssh_git_signing_pubkey: ""  # fallback; authoritative in group_vars/all/vars.yml (vault-backed); set in config.yml pre-vault

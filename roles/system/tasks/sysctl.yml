@@ -63,8 +63,25 @@
           - "'net.ipv6.conf.default.accept_ra' not in _dict"
           - "'kernel.perf_event_paranoid' not in _dict"
         fail_msg: >-
-          {{ item }} contains a toggle-managed key. Use the
-          corresponding toggle variable instead: system_enable_ip_forward
+          Toggle-managed keys
+          {{ (vars[item].keys() | list) | intersect([
+            'net.ipv4.ip_forward',
+            'net.ipv6.conf.all.forwarding',
+            'kernel.yama.ptrace_scope',
+            'kernel.kexec_load_disabled',
+            'kernel.io_uring_disabled',
+            'kernel.sysrq',
+            'kernel.core_pattern',
+            'kernel.panic',
+            'kernel.panic_on_oops',
+            'kernel.unprivileged_bpf_disabled',
+            'net.core.bpf_jit_harden',
+            'net.ipv6.conf.all.accept_ra',
+            'net.ipv6.conf.default.accept_ra',
+            'kernel.perf_event_paranoid'
+          ]) | join(', ') }}
+          found in {{ item }}. Use the corresponding toggle variables
+          instead: system_enable_ip_forward
           (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
           system_ptrace_scope (kernel.yama.ptrace_scope),
           system_kexec_load_disabled (kernel.kexec_load_disabled),
