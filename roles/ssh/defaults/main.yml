@@ -16,4 +16,8 @@ ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value
 # Set in config.yml: ssh_work_keyscan_hosts: [gitlab.example.com, ...]
 ssh_work_keyscan_hosts: []
 # fallback; authoritative in group_vars/all/vars.yml; check-vars-sync.py enforces this mirror
-ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
+ssh_pubkey_accepted_algorithms:
+  - ssh-ed25519
+  - ssh-ed25519-cert-v01@openssh.com
+  - sk-ssh-ed25519@openssh.com
+  - sk-ssh-ed25519-cert-v01@openssh.com

@@ -24,8 +24,8 @@
         state: directory
         mode: "0755"
 
-    # NOTE: Storage=persistent (systemd 256+ compiled-in default, effective on CSB after drop-in removal) uses persistent storage
-    # when this directory exists — intentional; see block-level comment above.
+    # NOTE: With Storage=auto (compiled-in default), creating /var/log/journal triggers persistent storage —
+    # this remains true on CSB after drop-in removal; see block-level comment above.
     - name: Ensure /var/log/journal exists for persistent storage
       ansible.builtin.file:
         path: /var/log/journal

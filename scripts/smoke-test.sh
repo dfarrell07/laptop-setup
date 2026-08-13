@@ -48,7 +48,7 @@ profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
-_cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]]/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || echo "722")
+_cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || echo "722")
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 unset _cfg
 

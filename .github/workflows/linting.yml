@@ -291,11 +291,11 @@ jobs:
         if: always()
         run: |
           failed=0
-          if [ "${{ steps.npm_signatures.outcome }}" != "success" ]; then
+          if [ "${{ steps.npm_signatures.outcome }}" = "failure" ]; then
             echo "npm audit signatures failed"
             failed=1
           fi
-          if [ "${{ steps.npm_audit.outcome }}" != "success" ]; then
+          if [ "${{ steps.npm_audit.outcome }}" = "failure" ]; then
             echo "npm audit --audit-level=moderate failed"
             failed=1
           fi
@@ -372,7 +372,7 @@ jobs:
         if: always()
         run: |
           failed=0
-          if [ "${{ steps.actionlint_download.outcome }}" != "success" ]; then
+          if [ "${{ steps.actionlint_download.outcome }}" = "failure" ]; then
             echo "actionlint download failed"
             failed=1
           fi
@@ -380,7 +380,7 @@ jobs:
             echo "actionlint scan failed"
             failed=1
           fi
-          if [ "${{ steps.zizmor_download.outcome }}" != "success" ]; then
+          if [ "${{ steps.zizmor_download.outcome }}" = "failure" ]; then
             echo "zizmor download failed"
             failed=1
           fi

@@ -11,7 +11,7 @@ while IFS= read -r -d '' f; do
   if ! printf '%s' "$_vault_content" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
     # Allow plaintext stub: vault_placeholder present and all other vault_* vars are empty stubs ([] only)
     if printf '%s' "$_vault_content" | grep -q 'vault_placeholder' && \
-       [ "$(printf '%s' "$_vault_content" | grep -E '^vault_' | grep -Ev 'vault_placeholder|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
+       [ "$(printf '%s' "$_vault_content" | grep -E '^vault_' | grep -Ev '^vault_placeholder:|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
       echo "NOTE: $f is a plaintext stub (no real secrets) — OK" >&2
       continue
     fi
