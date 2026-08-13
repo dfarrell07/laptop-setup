@@ -288,17 +288,18 @@
     - name: Stat /etc/resolv.conf for symlink check
       ansible.builtin.stat:
         path: /etc/resolv.conf
+        follow: false
       register: verify_resolv_conf
 
     - name: Assert /etc/resolv.conf is a symlink to stub-resolv
       ansible.builtin.assert:
         that:
           - verify_resolv_conf.stat.islnk
-          - "'stub-resolv' in verify_resolv_conf.stat.lnk_source"
+          - verify_resolv_conf.stat.lnk_target == '/run/systemd/resolve/stub-resolv.conf'
         fail_msg: >-
           /etc/resolv.conf is not a symlink to stub-resolv.conf
           (islnk={{ verify_resolv_conf.stat.islnk | default(false) }},
-          lnk_source={{ verify_resolv_conf.stat.lnk_source | default('') }})
+          lnk_target={{ verify_resolv_conf.stat.lnk_target | default('') }})
       when: ansible_facts.services['systemd-resolved.service'] is defined
 
     - name: Verify kernel lockdown in grubby

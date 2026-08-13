@@ -384,6 +384,9 @@
   when:
     - not (csb_rhel | default(false))
     - verify_dnf_auto.status.UnitFileState | default('') != ''
+    # CI gap: dnf-automatic timer not installed in Podman container CI
+    # (dnf_automatic.yml guards all tasks with not system_is_container);
+    # assertion silently skips. make test-vm exercises full dnf-automatic coverage.
 
 - name: Gather ABRT service unit state
   ansible.builtin.systemd:

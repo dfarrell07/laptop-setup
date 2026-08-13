@@ -22,7 +22,7 @@
       when: system_selinux_enforce_result.changed
 
     - name: Verify SELinux is enforcing
-      when: not ansible_check_mode
+      when: not ansible_check_mode and not (system_selinux_enforce_result.reboot_required | default(false))
       ansible.builtin.assert:
         that:
           - ansible_facts['selinux'].status == 'enabled'
@@ -33,6 +33,11 @@
           (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
           Fix: sudo setenforce 1 && sudo sed -i
           's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+
+    - name: SELinux reboot required notice
+      when: system_selinux_enforce_result.reboot_required | default(false)
+      ansible.builtin.debug:
+        msg: SELinux config set to enforcing — reboot required for change to take effect
 
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml

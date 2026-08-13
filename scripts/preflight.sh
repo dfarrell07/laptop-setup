@@ -75,10 +75,10 @@ if [[ "$IS_CSB" == true ]]; then
 else
   record "csb_detected" "pass" "not CSB"
 fi
+CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
-  CONFIG_FILE="$SCRIPT_DIR/../config.yml"
   # Apply config.yml profile override in both directions
   grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="work"
   grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="personal"
@@ -208,7 +208,6 @@ else
 fi
 
 # --- config.yml ---
-CONFIG_FILE="$SCRIPT_DIR/../config.yml"
 if [[ ! -f "$CONFIG_FILE" ]]; then
   record "config_yml" "fail" "config.yml missing — create it before running make all (Play 1 runs fully before Play 2 checks identity; SSH port moves to 722 and kernel hardening applies before the CHANGE_ME assert fires)"
 elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then

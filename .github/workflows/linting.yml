@@ -73,7 +73,7 @@ jobs:
           cache-dependency-path: requirements-test.lock
 
       - name: Install dependencies
-        run: pip install pyyaml packaging
+        run: pip install -r requirements-test.lock
 
       - name: Check vars sync
         run: python3 scripts/check-vars-sync.py

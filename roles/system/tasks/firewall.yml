@@ -239,6 +239,21 @@
     'INVALID_ZONE' not in (_system_redhat_ssh_open.msg | default(''))
   notify: Apply firewall rules
 
+- name: Warn SSH port {{ ssh_port }} not opened in redhat zone (zone absent on this Fedora hybrid CSB host)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: csb_detected=true, is_fedora=true and the 'redhat' firewall zone
+      does not exist on this host. Port {{ ssh_port }}/tcp was not opened in the
+      redhat zone — VPN tun0 interface traffic may not reach sshd.
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - csb_detected
+    - is_fedora
+    - not csb_rhel | bool
+    - _system_redhat_ssh_open is defined
+    - "'INVALID_ZONE' in (_system_redhat_ssh_open.msg | default(''))"
+
 - name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
   ansible.posix.firewalld:
     zone: "redhat"

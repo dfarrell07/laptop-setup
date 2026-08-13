@@ -185,7 +185,7 @@ elif run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
-out=$(run ssh-add -L 2>&1 || true)
+out=$(ssh-add -L 2>&1 || true)
 if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
 elif echo "$out" | grep -qE 'Error connecting|Connection refused'; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"

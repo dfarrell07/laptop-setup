@@ -89,7 +89,8 @@ system_sysctl_hardening:
   # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
-  # No-op in default config (accept_ra=0, SLAAC off, no temp addrs generated); activates with system_ipv6_accept_ra: 2
+  # Behaviorally inert in default config (no SLAAC addresses, so no temporary addresses generated);
+  # pre-set here so enabling SLAAC via system_ipv6_accept_ra: 2 activates privacy extensions without re-provisioning.
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
 
@@ -331,7 +332,7 @@ ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,ae
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
   ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256"
-ssh_host_key_algorithms: 'ssh-ed25519-cert-v01@openssh.com,ssh-ed25519'
+ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
 # opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)

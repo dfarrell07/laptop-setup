@@ -172,6 +172,8 @@
         - not (system_aide_db.stat.exists | default(false))
       changed_when: true
 
+    # Reached only when aide.conf is already fully configured (zero lineinfile changes above) but no DB exists.
+    # Normal first provisions reach this via the _aide_conf_changed=true reinit path at line 159 instead.
     - name: Initialize AIDE database (first run only)
       when:
         - not (system_aide_db.stat.exists | default(false))

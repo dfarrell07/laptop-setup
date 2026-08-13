@@ -31,16 +31,15 @@
 - name: Warn if RHEL host will use wrong default container image version
   ansible.builtin.debug:
     msg: >-
-      On RHEL hosts the default container_image inherits the host OS major version
-      (e.g. fedora-toolbox:{{ ansible_facts['distribution_major_version'] }}) which does not
-      correspond to any Fedora toolbox image. Add the following to config.yml before
-      running 'make container':
-        container_image: 'registry.fedoraproject.org/fedora-toolbox:{{ distrobox_fedora_release }}'
+      On RHEL hosts the default container_release inherits the host OS major version
+      (used by the toolbox path: toolbox create --distro fedora --release
+      {{ ansible_facts['distribution_major_version'] }}) which is not a valid Fedora
+      release number. Add the following to config.yml before running 'make container':
         container_release: '{{ distrobox_fedora_release }}'
   when:
     - ansible_facts['os_family'] == 'RedHat'
     - ansible_facts['distribution'] != 'Fedora'
-    - container_image is not defined
+    - container_release is not defined
 
 - name: Skip container setup if no tool available
   ansible.builtin.debug:

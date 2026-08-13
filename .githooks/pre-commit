@@ -19,7 +19,9 @@ done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*vault.yml')
 
 # Secret scanning
 if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2 --config .gitleaks.toml; then
+  gitleaks git --pre-commit --staged --redact --max-decode-depth 2 $([ -f .gitleaks.toml ] && echo --config .gitleaks.toml)
+  _gitleaks_rc=$?
+  if [ "$_gitleaks_rc" -ne 0 ]; then
     failed=1
   fi
 else
@@ -45,7 +47,8 @@ fi
 
 # Shell lint staged scripts
 if command -v shellcheck >/dev/null 2>&1; then
-  mapfile -d '' sh_files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
+  sh_files=()
+  while IFS= read -r -d '' _f; do sh_files+=("$_f"); done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
   if (( ${#sh_files[@]} > 0 )); then
     if ! shellcheck -S warning "${sh_files[@]}"; then
       failed=1
