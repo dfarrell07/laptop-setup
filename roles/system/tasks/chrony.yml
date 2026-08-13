@@ -82,3 +82,14 @@
   when:
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
+
+- name: "Warn: NTS-KE may be blocked on CSB Fedora hybrid"
+  ansible.builtin.debug:
+    msg: >-
+      chrony NTS deployed on CSB Fedora hybrid — if TCP 4460 is blocked by corporate firewall,
+      NTS-KE will fail silently and chrony falls back to unauthenticated pool; set
+      system_chrony_authselectmode: require in config.yml to surface this as an error
+  when:
+    - system_chrony_service_enabled | bool
+    - csb_detected
+    - not csb_rhel

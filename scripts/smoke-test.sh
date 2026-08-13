@@ -1376,9 +1376,9 @@ EOF
   # /tmp hardening (CIS 1.1.2.x) — noexec/nosuid/nodev all required
   _tmp_opts=$(findmnt -n -o OPTIONS /tmp 2>/dev/null || echo "")
   _tmp_dropin="/etc/systemd/system/tmp.mount.d/hardening.conf"
-  if ! echo "$_tmp_opts" | grep -q nosuid || ! echo "$_tmp_opts" | grep -q nodev; then
+  if [[ "$_tmp_opts" != *nosuid* ]] || [[ "$_tmp_opts" != *nodev* ]]; then
     record "tmp-hardening" "FAIL" "/tmp missing nosuid/nodev: $_tmp_opts"
-  elif echo "$_tmp_opts" | grep -q noexec; then
+  elif [[ "$_tmp_opts" == *noexec* ]]; then
     record "tmp-hardening" "PASS"
   elif [[ ! -f "$_tmp_dropin" ]]; then
     record "tmp-hardening" "WARN" "tmp.mount.d/hardening.conf missing — system role may not have run"
@@ -1395,7 +1395,7 @@ EOF
 
   # /dev/shm hardening (CIS 1.1.7.x) — noexec/nosuid/nodev all required
   _shm_opts=$(findmnt -n -o OPTIONS /dev/shm 2>/dev/null || echo "")
-  if echo "$_shm_opts" | grep -q noexec && echo "$_shm_opts" | grep -q nosuid && echo "$_shm_opts" | grep -q nodev; then
+  if [[ "$_shm_opts" == *noexec* ]] && [[ "$_shm_opts" == *nosuid* ]] && [[ "$_shm_opts" == *nodev* ]]; then
     record "shm-hardening" "PASS"
   else record "shm-hardening" "FAIL" "/dev/shm missing hardening options: $_shm_opts"; fi
   unset _shm_opts
@@ -1412,7 +1412,7 @@ EOF
   _vt_opts=$(findmnt -n -o OPTIONS /var/tmp 2>/dev/null || echo "")
   _vt_min=$(findmnt -n -o MAJ:MIN /var/tmp 2>/dev/null | tr -d ' ' || echo "")
   _tmp_min=$(findmnt -n -o MAJ:MIN /tmp 2>/dev/null | tr -d ' ' || echo "")
-  if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && echo "$_vt_opts" | grep -q noexec; then record "var-tmp-bind" "PASS"
+  if [[ -n "$_vt_min" && "$_vt_min" = "$_tmp_min" ]] && [[ "$_vt_opts" == *noexec* ]]; then record "var-tmp-bind" "PASS"
   elif [[ ! -f /etc/systemd/system/var-tmp.mount ]]; then record "var-tmp-bind" "WARN" "var-tmp.mount not deployed — system_var_tmp_noexec may be false (intentional)"
   elif $CSB_HOST; then record "var-tmp-bind" "WARN" "/var/tmp not bind-mounted with noexec on CSB: $_vt_opts"
   else record "var-tmp-bind" "FAIL" "/var/tmp not bind-mounted with noexec: $_vt_opts"; fi
@@ -1428,7 +1428,7 @@ EOF
   # Skipped on CSB — IT manages /home mount (may be NFS/autofs for LDAP users; remounting with nosuid may break access)
   if findmnt -n /home &>/dev/null; then
     _home_opts=$(findmnt -n -o OPTIONS /home 2>/dev/null || echo "")
-    if echo "$_home_opts" | grep -q nosuid && echo "$_home_opts" | grep -q nodev; then record "home-nosuid" "PASS"
+    if [[ "$_home_opts" == *nosuid* ]] && [[ "$_home_opts" == *nodev* ]]; then record "home-nosuid" "PASS"
     elif $_csb_non_fedora; then record "home-nosuid" "WARN" "skipped on RHEL CSB — IT manages /home mount (may be NFS/autofs); nosuid not applied"
     else record "home-nosuid" "FAIL" "/home is a separate mount but nosuid/nodev not set: $_home_opts"; fi
     unset _home_opts
@@ -1437,7 +1437,7 @@ EOF
   # /boot hardening — nosuid,nodev,noexec (guard: /boot may not be a separate mountpoint)
   if findmnt -n /boot &>/dev/null; then
     _boot_opts=$(findmnt -n -o OPTIONS /boot 2>/dev/null || echo "")
-    if echo "$_boot_opts" | grep -q nosuid && echo "$_boot_opts" | grep -q nodev && echo "$_boot_opts" | grep -q noexec; then
+    if [[ "$_boot_opts" == *nosuid* ]] && [[ "$_boot_opts" == *nodev* ]] && [[ "$_boot_opts" == *noexec* ]]; then
       record "boot-hardening" "PASS"
     elif $CSB_HOST; then record "boot-hardening" "WARN" "/boot missing hardening options on CSB (IT manages fstab; boot-harden.service re-applies on reboot): $_boot_opts"
     else record "boot-hardening" "FAIL" "/boot missing hardening options: $_boot_opts"; fi
@@ -1454,7 +1454,7 @@ EOF
   # /boot/efi hardening — nosuid,noexec (vfat does not support nodev)
   if findmnt -n /boot/efi &>/dev/null; then
     _efi_opts=$(findmnt -n -o OPTIONS /boot/efi 2>/dev/null || echo "")
-    if echo "$_efi_opts" | grep -q nosuid && echo "$_efi_opts" | grep -q noexec; then
+    if [[ "$_efi_opts" == *nosuid* ]] && [[ "$_efi_opts" == *noexec* ]]; then
       record "boot-efi-hardening" "PASS"
     elif $CSB_HOST; then
       record "boot-efi-hardening" "WARN" "/boot/efi missing nosuid/noexec on CSB: $_efi_opts (IT manages fstab; may reset on reboot)"

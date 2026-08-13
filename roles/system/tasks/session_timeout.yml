@@ -32,7 +32,10 @@
     - is_apt
     - system_tmout | int > 0
 
-# /etc/profile.d/*.sh is bash-only; zsh needs TMOUT set directly.
+# /etc/profile.d/*.sh is sourced by bash login shells and by zsh login shells
+# (Fedora zsh /etc/zprofile sources /etc/profile). The /etc/zshrc line is needed
+# for non-login interactive zsh shells (most terminal emulators). Redundant
+# readonly assignment for login zsh shells is silently ignored in zsh 5.9+.
 # On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
 # On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
 # /etc/zshrc is silently ignored by Debian's zsh binary).
