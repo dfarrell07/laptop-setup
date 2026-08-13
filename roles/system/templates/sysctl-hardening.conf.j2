@@ -6,5 +6,5 @@
 # CONFIG_BPF_UNPRIV_DEFAULT_OFF=y before sysctl.d is processed; this entry
 # is a no-op on stock Fedora 44 but retained for portability to custom kernels.
 {% endif %}
-{{ key }} = {{ value }}
+{{ key }} = {{ value }}{% if key in ['fs.protected_regular', 'fs.protected_fifos'] %}  # intentionally 2, not vendor default 1; covers group-writable sticky dirs{% endif %}
 {% endfor %}

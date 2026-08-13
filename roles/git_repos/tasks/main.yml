@@ -125,6 +125,16 @@
          | selectattr('failed', 'equalto', false)
          | map(attribute='item.dest') | list }}
 
+- name: Warn when all clones failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: all {{ git_repos_filtered | length }} clone(s) failed —
+      git_repos_available_dests is empty. Subsequent fork-remote tasks will
+      silently skip every repo. Check clone errors above.
+  when:
+    - git_repos_filtered | length > 0
+    - git_repos_available_dests | length == 0
+
 - name: Report failed clones
   ansible.builtin.debug:
     msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"

@@ -464,29 +464,71 @@
 - name: Check /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
   ansible.builtin.command:
     cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nosuid' /etc/fstab
+  register: verify_fstab_shm_nosuid
   changed_when: false
+  failed_when: false
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
+
+- name: Assert /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_nosuid.rc == 0
+    fail_msg: >-
+      /dev/shm fstab entry missing nosuid mount option (CIS 1.1.7.1) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+    - verify_fstab_shm_nosuid is not skipped
 
 - name: Check /dev/shm fstab entry has nodev (CIS 1.1.7.2)
   ansible.builtin.command:
     cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nodev' /etc/fstab
+  register: verify_fstab_shm_nodev
   changed_when: false
+  failed_when: false
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
 
-- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.3)
-  ansible.builtin.command:
-    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*noexec' /etc/fstab
-  changed_when: false
+- name: Assert /dev/shm fstab entry has nodev (CIS 1.1.7.2)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_nodev.rc == 0
+    fail_msg: >-
+      /dev/shm fstab entry missing nodev mount option (CIS 1.1.7.2) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
+    - verify_fstab_shm_nodev is not skipped
+
+- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.3)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*noexec' /etc/fstab
+  register: verify_fstab_shm_noexec
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+
+- name: Assert /dev/shm fstab entry has noexec (CIS 1.1.7.3)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_noexec.rc == 0
+    fail_msg: >-
+      /dev/shm fstab entry missing noexec mount option (CIS 1.1.7.3) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+    - verify_fstab_shm_noexec is not skipped
 
 # --- Sysctl hardening: file-content assertions (system role, Linux only) ---
 # File-content assertions (safer than sysctl -n live kernel reads on VMs);
@@ -647,9 +689,7 @@
 
 - name: Assert sshd hardening drop-in has mode 0600
   ansible.builtin.assert:
-    that:
-      - verify_sshd_dropin.stat.exists
-      - (verify_sshd_dropin.stat.mode | default('')) == '0600'
+    that: (verify_sshd_dropin.stat.mode | default('')) == '0600'
     fail_msg: >-
       /etc/ssh/sshd_config.d/00-hardening.conf missing or has wrong permissions
       (exists={{ verify_sshd_dropin.stat.exists | default(false) }}, expected mode 0600,
@@ -1106,6 +1146,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
 
 # CI gap: system_chrony_service_enabled=false in all container scenario verify pre_tasks;
@@ -1117,6 +1158,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
     - verify_chronyd is not skipped
     - (verify_chronyd.status.UnitFileState | default('')) != ''

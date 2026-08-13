@@ -25,8 +25,8 @@
 # (cargo clean, npm install, git checkout). Exclude only those specific syscalls;
 # -w watch rules use the inode-hash path and are unaffected by these exclusions,
 # and other syscall rules (privilege-escalation, bpf, perm_mod) remain active.
--a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/cargo -k exclude-build-deletes
--a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/git -k exclude-build-deletes
 -a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/git -k exclude-build-deletes
 -a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/npm -k exclude-build-deletes

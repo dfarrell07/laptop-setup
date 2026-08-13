@@ -322,7 +322,6 @@ packages_brew_cask_personal:
   - bitwarden
 
 packages_brew:
-  - ansible  # bootstrap installs this; listed here so brew-autoupdate keeps it current and brew remains the authoritative manager
   - git  # Xcode CLT git is stale; brew git tracks upstream releases
   - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
@@ -356,6 +355,7 @@ packages_brew:
 packages_brew_personal: []
 
 packages_brew_work:
+  - ansible  # bootstrap installs this; work-profile Macs only (no use case on personal-profile machines)
   - golang
   - kubectl    # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - kind       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml

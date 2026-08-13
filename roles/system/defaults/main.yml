@@ -49,11 +49,9 @@ system_sysctl_hardening:
   # brief kernel log noise from pods before routes are established.
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
-  # CIS 3.3.4/3.3.5 require this independently. Note: if accept_redirects is overridden to 1 via
-  # system_sysctl_extra_additional, this setting (lower precedence) accepts redirects from any host
-  # rather than gateways only — which is expected CIS behavior since CIS mandates secure_redirects=0 regardless.
-  # Note: secure_redirects is a no-op when accept_redirects=0 (the default config). The explicit 0 guards
-  # CIS 3.3.4/3.3.5 compliance if accept_redirects is re-enabled by an extra sysctl.
+  # CIS 3.3.4/3.3.5. NOTE: secure_redirects is a no-op when accept_redirects=0 (the default here);
+  # these entries only activate if accept_redirects is overridden to 1 via system_sysctl_extra_additional.
+  # When active: value 0 rejects redirects from non-gateway hosts; CIS mandates 0 regardless.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
   # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml

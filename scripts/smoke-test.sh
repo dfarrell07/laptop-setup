@@ -1850,7 +1850,7 @@ fi
 
 # NM conf.d content checks — file-gated; silently skip on macOS or where system role was not run
 if [[ -f /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf ]]; then
-  if grep -q '^wifi.scan-rand-mac-address=yes' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf; then
+  if grep -q '^wifi.cloned-mac-address=stable-ssid' /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf; then
     record "wifi-mac-rand" "PASS"
   elif $CSB_HOST; then record "wifi-mac-rand" "WARN" "skipped on CSB — IT may use MAC-based NAC; stable-ssid not deployed"
   else record "wifi-mac-rand" "WARN" "WiFi MAC randomization not configured"; fi

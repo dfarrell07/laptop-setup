@@ -283,6 +283,6 @@
     line: 'auth		required	pam_wheel.so use_uid'
     insertafter: '^auth\s+sufficient\s+pam_rootok\.so'
   when:
-    - not is_apt  # Debian uses 'sudo' group not 'wheel'; skip entirely
+    - is_dnf  # pam_wheel.so / wheel group restriction is RHEL/Fedora-only; Debian uses 'sudo' group, macOS has different PAM stack
     - not csb_rhel
     - not system_is_container  # /etc/pam.d/su absent in minimal containers
