@@ -15,7 +15,7 @@
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
     is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
     is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
-    _csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
+    _is_csb_hostname: "{{ ansible_facts['fqdn'] is search('\\.csb$') }}"
   become: false
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@
     csb_detected: >-
       {{
         ((is_rhel | bool) and (fapolicyd_installed | bool) and (internal_ca_present | bool))
-        or ((is_fedora | bool) and (_csb_hostname | bool) and (internal_ca_present | bool))
+        or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | bool))
       }}
   become: false
   when: not (_csb_molecule_force | default(false))
@@ -199,7 +199,7 @@
       fapolicyd enforcing: {{ fapolicyd_enforcing }}
       Internal CA certs  : {{ internal_ca_present }}
       ---
-      CSB hostname (.csb): {{ _csb_hostname }}
+      CSB hostname (.csb): {{ _is_csb_hostname }}
       CSB detected       : {{ csb_detected }}
       CSB restricted     : {{ csb_restricted }}
       CSB RHEL           : {{ csb_rhel }}

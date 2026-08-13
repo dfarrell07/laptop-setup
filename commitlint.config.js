@@ -13,6 +13,7 @@ module.exports = {
       'Sshd', 'Nm', 'Auditd', 'Backup', 'Handlers', 'Security',
       'Vault', 'Preflight',
     ]],
+    'subject-empty': [2, 'never'],
 
   },
 };

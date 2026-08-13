@@ -75,7 +75,7 @@
       port 853 (captive portals, hotel/conference Wi-Fi). FallbackDNS also requires
       port 853 in strict mode.
   when:
-    - system_dot_mode == 'yes'
+    - system_dot_mode | string | lower in ['yes', 'true', '1']
     - not csb_detected
     - not system_is_container
 

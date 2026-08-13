@@ -15,6 +15,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+IS_LINUX=true
+[[ "$(uname -s)" == "Darwin" ]] && IS_LINUX=false
+
 if [[ -t 1 ]] && ! $JSON; then
   P="\033[32m" W="\033[33m" F="\033[31m" R="\033[0m"
 else
@@ -354,7 +357,7 @@ else record "direnvrc" "FAIL" "$_drc not deployed — run: make dotfiles"; fi
 unset _drc
 
 # environment.d containers.conf (KIND + Podman socket — pam_env injection for make kind)
-if [[ "$(uname -s)" == "Linux" ]]; then
+if $IS_LINUX; then
   _ecf="$HOME/.config/environment.d/containers.conf"
   if [[ -f "$_ecf" ]] && grep -q "DOCKER_HOST" "$_ecf" && grep -q "KIND_EXPERIMENTAL_PROVIDER" "$_ecf"; then
     record "env-d-containers" "PASS"
@@ -448,7 +451,7 @@ homedir_perms=$(stat -c '%a' "$HOME" 2>/dev/null || stat -f '%Lp' "$HOME" 2>/dev
 # CIS intent: home dir should be no MORE permissive than 750 (owner=7, group≤5, others=0)
 # Modes like 710 are acceptable (more restrictive than 750 — group has execute only)
 # macOS defaults to 755 and the system role that hardens this is Linux-only — skip on Darwin
-if [[ "$(uname -s)" == "Darwin" ]]; then
+if ! $IS_LINUX; then
   record "home-dir-perms" "PASS" "macOS default 755 accepted (system role is Linux-only)"
 elif [[ "$homedir_perms" =~ ^[0-9]?7[0145]0$ ]]; then record "home-dir-perms" "PASS"
 elif [[ -f /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem || -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
@@ -552,7 +555,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
   else record "perms(${d##*/})" "FAIL" "permissions $perms, expected 700"; fi
 done
 _ctf="$HOME/.config/user-tmpfiles.d/claude-privacy.conf"
-if [[ "$(uname -s)" == "Linux" ]]; then
+if $IS_LINUX; then
   if [[ -f "$_ctf" ]]; then record "claude-privacy-tmpfiles" "PASS"
   else record "claude-privacy-tmpfiles" "FAIL" "claude-privacy.conf tmpfiles not deployed — run: make claude"; fi
 fi
@@ -607,7 +610,7 @@ else
 fi
 
 # --- Wayland desktop tools (Linux only — not installed on macOS) ---
-if [[ "$(uname -s)" == "Linux" ]]; then
+if $IS_LINUX; then
   # cliphist: clipboard history manager — exec wl-paste --watch cliphist store in sway config;
   # clipboard contents die with source app if this is missing
   if command -v cliphist &>/dev/null; then record "cliphist" "PASS"
@@ -664,8 +667,6 @@ if [[ -f /etc/kernel/cmdline ]]; then
 fi
 
 # ---- System-level checks (skipped with --user-only, --container, or macOS) ----
-IS_LINUX=true
-[[ "$(uname -s)" == "Darwin" ]] && IS_LINUX=false
 
 # CSB detection: mirrors csb_detect.yml -- two paths require BOTH conditions:
 # Fedora CSB: FQDN ends in .csb AND Red Hat internal CA cert present
@@ -674,12 +675,22 @@ IS_LINUX=true
 # installed manually without being on a Red Hat corporate network.
 # Mirrors csb_detect.yml OR logic: any of the three RH CA cert files triggers.
 CSB_HOST=false
+_is_rhel=false
+grep -qiE '^ID=rhel' /etc/os-release 2>/dev/null && _is_rhel=true
+_has_rh_cert=false
 if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
    || [[ -f /etc/pki/ca-trust/source/anchors/Eng-CA.crt ]] \
    || [[ -f /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem ]]; then
-  [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
-  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q "fapolicyd" && CSB_HOST=true
+  _has_rh_cert=true
 fi
+if $_is_rhel; then
+  # RHEL CSB: cert AND fapolicyd installed
+  $_has_rh_cert && systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q "fapolicyd" && CSB_HOST=true
+else
+  # Fedora CSB: cert AND FQDN ends in .csb
+  $_has_rh_cert && [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
+fi
+unset _is_rhel _has_rh_cert
 
 if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 

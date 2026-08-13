@@ -52,14 +52,14 @@ else
   record "os_family" "pass" "$OS_FAMILY"
 fi
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
-  has_certs=false has_fapolicyd=false
+  has_certs=false fapolicyd_installed=false
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && has_fapolicyd=true
+  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
-    [[ "$has_certs" == true && "$has_fapolicyd" == true ]] && IS_CSB=true
+    [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else
     # Fedora CSB: FQDN ends in .csb AND internal CA present (fapolicyd not required)
     fqdn=$(hostname -f 2>/dev/null || hostname)
@@ -67,7 +67,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   fi
 fi
 if [[ "$IS_CSB" == true ]]; then
-  if [[ "$has_fapolicyd" == true ]]; then
+  if [[ "$fapolicyd_installed" == true ]]; then
     record "csb_detected" "warn" "CSB detected (fapolicyd installed) — see fapolicyd and container_tier checks below for enforcement status"
   else
     record "csb_detected" "warn" "CSB detected (no fapolicyd) — hybrid mode; may need --ask-become-pass"
@@ -121,7 +121,7 @@ if command -v ansible-galaxy &>/dev/null; then
   missing_cols=()
   _galaxy_list=$(ansible-galaxy collection list 2>/dev/null)
   for col in community.general containers.podman ansible.posix; do
-    echo "$_galaxy_list" | grep -qF "${col} " || missing_cols+=("$col")
+    [[ -d "${SCRIPT_DIR}/../collections/ansible_collections/${col//.//}" ]] || missing_cols+=("$col")
   done
   if [[ ${#missing_cols[@]} -eq 0 ]]; then
     record "ansible_collections" "pass" "all required collections installed"

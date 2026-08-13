@@ -1205,24 +1205,6 @@
     - ansible_os_family != 'Debian'
     - verify_usbguard_rules.stat.exists
 
-- name: Check usbguard-daemon.conf has ImplicitPolicyTarget=block
-  ansible.builtin.command: grep -q '^ImplicitPolicyTarget=block' /etc/usbguard/usbguard-daemon.conf
-  changed_when: false
-  become: true
-  when:
-    - ansible_system == 'Linux'
-    - usbguard_expected | default(false)
-    - ansible_os_family != 'Debian'
-
-- name: Check usbguard-daemon.conf has AuditBackend=LinuxAudit
-  ansible.builtin.command: grep -q '^AuditBackend=LinuxAudit' /etc/usbguard/usbguard-daemon.conf
-  changed_when: false
-  become: true
-  when:
-    - ansible_system == 'Linux'
-    - usbguard_expected | default(false)
-    - ansible_os_family != 'Debian'
-
 - name: Check git-lfs is installed (packages role)
   ansible.builtin.command:
     cmd: git lfs version

@@ -52,6 +52,7 @@
   when:
     - is_apt or is_dnf
     - not (system_chrony_service_enabled | bool)
+    - not system_is_container
   failed_when: false
 
 - name: "Warn: no time sync available (chrony disabled, timesyncd absent on Fedora/RHEL)"
@@ -72,6 +73,7 @@
   when:
     - not (system_chrony_service_enabled | bool)
     - is_dnf or is_apt
+    - not system_is_container
   failed_when: false
 
 - name: Ensure chrony/chronyd is enabled

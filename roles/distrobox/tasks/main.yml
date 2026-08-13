@@ -118,6 +118,7 @@
   ansible.builtin.set_fact:
     distrobox_tool: "none"
     distrobox_use_distrobox: false
+    distrobox_use_toolbox: false
   when:
     - distrobox_tool != "none"
     - not (packages_install_binaries | bool)
@@ -187,6 +188,8 @@
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
+        distrobox_use_distrobox: false
+        distrobox_use_toolbox: false
 
 # --- Toolbx path ---
 - name: Create container via Toolbx
@@ -241,6 +244,8 @@
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
+        distrobox_use_distrobox: false
+        distrobox_use_toolbox: false
 
 # --- Start and register for Play 3 ---
 - name: Check if container is running

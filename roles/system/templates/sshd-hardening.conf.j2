@@ -12,7 +12,7 @@ Banner /etc/issue.net
 #   cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
 # Alternatively, populate vault.yml with vault_ssh_auth_key_pub (ed25519).
 PasswordAuthentication no
-KbdInteractiveAuthentication no  # overrides 50-redhat.conf deprecated ChallengeResponseAuthentication no alias; explicit to guard against upstream changes
+KbdInteractiveAuthentication no  # 50-redhat.conf also sets this to no; explicit for first-occurrence guard against upstream changes
 PermitRootLogin no
 PermitEmptyPasswords no
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}

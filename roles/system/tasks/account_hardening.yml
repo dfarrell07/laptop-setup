@@ -80,6 +80,9 @@
   changed_when: false
   failed_when: false
   check_mode: false
+  when:
+    - not csb_rhel
+    - not system_is_container
 
 # NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it (same value, idempotent from second run onward)
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)

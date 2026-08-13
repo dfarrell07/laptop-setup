@@ -38,7 +38,9 @@
         cmd: git lfs install --skip-repo
       register: notes_lfs_install_result
       failed_when: false
-      changed_when: notes_lfs_install_result.rc == 0
+      changed_when: >-
+        notes_lfs_install_result.rc == 0 and
+        ("Updated" in notes_lfs_install_result.stdout or "initialized" in notes_lfs_install_result.stdout)
       when:
         - notes_lfs_check.rc == 0
         - notes_lfs_configured.rc != 0
@@ -165,17 +167,17 @@
         - notes_transcrypt_available
         - not (notes_transcrypt_inited)
         - notes_transcrypt_password | length > 0
-        - notes_transcrypt_password != 'REPLACE_ME'
+        - notes_transcrypt_password != notes_transcrypt_password_sentinel
 
     - name: Warn if transcrypt password is placeholder
       ansible.builtin.debug:
         msg: >-
-          notes_transcrypt_password is still set to 'REPLACE_ME' — transcrypt not initialized.
+          notes_transcrypt_password is still set to '{{ notes_transcrypt_password_sentinel }}' — transcrypt not initialized.
           Replace vault_notes_transcrypt_password in vault.yml with the real password.
       when:
         - notes_transcrypt_available
         - not (notes_transcrypt_inited)
-        - notes_transcrypt_password == 'REPLACE_ME'
+        - notes_transcrypt_password == notes_transcrypt_password_sentinel
 
     - name: Warn if transcrypt initialization failed
       ansible.builtin.debug:

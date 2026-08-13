@@ -14,6 +14,7 @@
       ansible.builtin.set_fact:
         profile: personal
         dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches converge set_fact; default.config.yml has 'CHANGE_ME'
+        system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:

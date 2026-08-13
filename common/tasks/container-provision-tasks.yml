@@ -255,7 +255,7 @@
   ansible.builtin.debug:
     msg: |
       === Container Provisioning Summary ===
-      packages     : {{ 'skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')') }}
+      packages     : {{ 'skipped (container mode)' if (system_is_container | default(false)) else ('skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')')) }}
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
       oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING')) }}
       golangci-lint: {{ 'OK' if container_golangci_lint_result.rc | default(-1) == 0 else ('already installed' if container_golangci_lint_result.skipped | default(false) else 'FAILED (rc=' + (container_golangci_lint_result.rc | string) + ')') }}

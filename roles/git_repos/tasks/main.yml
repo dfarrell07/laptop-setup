@@ -126,7 +126,9 @@
     cmd: git lfs install --skip-repo
   register: git_repos_lfs_install_result
   failed_when: false
-  changed_when: git_repos_lfs_install_result.rc == 0
+  changed_when: >-
+    git_repos_lfs_install_result.rc == 0 and
+    ("Updated" in git_repos_lfs_install_result.stdout or "initialized" in git_repos_lfs_install_result.stdout)
   when:
     - git_repos_lfs_check.rc == 0
     - git_repos_lfs_configured.rc != 0
@@ -160,7 +162,6 @@
   ansible.builtin.set_fact:
     git_repos_available_dests: >-
       {{ git_repos_clone_results.results
-         | rejectattr('skipped', 'equalto', true)
          | selectattr('failed', 'equalto', false)
          | map(attribute='item.dest') | list }}
 

@@ -68,7 +68,7 @@ else
   done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.json' | grep -z -v '^package-lock\.json$')
 
   # Lockfile integrity (only when package-lock.json is staged)
-  if git diff --cached --name-only --diff-filter=ACM | grep -q '^package-lock\.json$'; then
+  if git diff --cached --name-only -z --diff-filter=ACM | grep -qz '^package-lock\.json$'; then
     if ! git show :package-lock.json | python3 -c "
 import json, sys
 lock = json.load(sys.stdin)
