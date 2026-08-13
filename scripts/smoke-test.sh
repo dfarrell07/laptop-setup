@@ -492,7 +492,7 @@ else record "git-allowed-signers" "PASS"; fi
 unset _as
 
 # git safe.directory must not contain dangerous wildcards (* ** /)
-if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E '^\*{1,2}$|^/$') && [[ -n "$dirs" ]]; then
+if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E '^\*{1,2}$|^/$'); then
   record "git-safe-directory" "FAIL" "unsafe wildcard entries: $dirs"
 else record "git-safe-directory" "PASS"; fi
 
@@ -754,7 +754,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     fi
   fi
 
-  _ssh_port=""
+  _ssh_port=""  # empty so ${_ssh_port:-722} at the listeners check substitutes 722 on non-root runs
   # Firewall default zone = drop, SSH port open, tailscale0 in trusted zone
   if command -v firewall-cmd &>/dev/null; then
     zone=$(firewall-cmd --get-default-zone 2>/dev/null || echo "?")
@@ -776,7 +776,6 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       unset _iface_zone
     fi
     unset _primary_iface
-    _ssh_port=""  # empty so ${_ssh_port:-722} at the listeners check substitutes 722 on non-root runs
     if [[ "$EUID" -ne 0 ]]; then
       record "sshd-config-readable" "WARN" "skipped — /etc/ssh/sshd_config.d/ requires root (re-run with sudo for full sshd checks)"
     else

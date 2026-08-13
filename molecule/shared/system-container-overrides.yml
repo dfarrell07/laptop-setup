@@ -29,9 +29,6 @@
                                           # daemon.conf settings, service) is NOT exercised by any
                                           # Podman-based scenario — make test-vm is required for full USBGuard coverage
     install_virtualization: false         # libvirt not needed in CI container
-    install_vpn: false                    # prevents redhat role VPN package install in Rocky CI (csb_detected=true;
-                                          # redhat/tasks/main.yml has no system_is_container guard); system role VPN tasks
-                                          # are already doubly-gated by not system_is_container
     real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert
     packages_install_binaries: false      # no binary downloads in container CI
     ssh_signing_key_pub: "sk-ssh-ed25519 AAAAIMoleculeTestKeyForCI molecule-test@ci"  # vault empty in CI

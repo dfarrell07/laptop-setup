@@ -305,7 +305,6 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 
 packages_brew_taps:
   - nikitabobko/tap
-  - theseal/ssh-askpass
   - domt4/autoupdate
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow
@@ -326,7 +325,7 @@ packages_brew_cask_personal: []
 packages_brew:
   - ansible
   - git  # Xcode CLT git is stale; brew git tracks upstream releases
-  - git-lfs
+  - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
   - tmux
   - mosh

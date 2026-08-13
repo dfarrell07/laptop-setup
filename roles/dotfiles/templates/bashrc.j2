@@ -6,9 +6,6 @@ export GOTOOLCHAIN=auto  # auto-download toolchain when go.mod requires a newer 
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
 export VISUAL=vim
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
-export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
-{% endif %}
 HISTSIZE=50000
 HISTFILESIZE=50000
 HISTCONTROL=ignoredups:erasedups
@@ -19,6 +16,7 @@ export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
 command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
 export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
 {% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"

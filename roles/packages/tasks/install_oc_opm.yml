@@ -88,6 +88,7 @@
             path: "/usr/local/bin/{{ item }}"
             mode: "0755"
           loop: [oc, kubectl]
+          when: packages_oc_download.changed or packages_oc_check.rc != 0
           become: true
           tags: [become]
 

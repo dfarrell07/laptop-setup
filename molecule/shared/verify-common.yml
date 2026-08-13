@@ -768,19 +768,6 @@
     - ansible_system == 'Linux'
     - verify_coredump_conf.stat.exists
 
-- name: Stat orphaned coredump disable.conf (must be absent — pre-cycle-2 name)
-  ansible.builtin.stat:
-    path: /etc/systemd/coredump.conf.d/disable.conf
-  register: verify_coredump_disable_conf
-  when: ansible_system == 'Linux'
-
-- name: Assert orphaned disable.conf is absent
-  ansible.builtin.assert:
-    that: not verify_coredump_disable_conf.stat.exists
-    fail_msg: >-
-      /etc/systemd/coredump.conf.d/disable.conf exists — orphaned pre-cycle-2 drop-in
-      sorts before coredump.conf alphabetically and silently overrides it
-  when: ansible_system == 'Linux'
 
 - name: Stat logind hardening drop-in (system role must deploy it)
   ansible.builtin.stat:

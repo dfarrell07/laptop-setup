@@ -104,10 +104,12 @@ for tool in ansible-playbook git python3 curl make ssh; do
       record "required_${tool}" "fail" "not installed — run: sudo dnf install python3 (Fedora/RHEL) | brew install python3 (macOS)"
     elif [[ "$tool" == "git" ]]; then
       record "required_${tool}" "fail" "not installed — run: sudo dnf install git (Fedora/RHEL) | brew install git (macOS)"
-    elif command -v make &>/dev/null; then
-      record "required_${tool}" "fail" "not installed — run: make bootstrap"
-    else
-      record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
+    elif [[ "$tool" == "ansible-playbook" ]]; then
+      if command -v make &>/dev/null; then
+        record "required_${tool}" "fail" "not installed — run: make bootstrap"
+      else
+        record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
+      fi
     fi
   fi
 done

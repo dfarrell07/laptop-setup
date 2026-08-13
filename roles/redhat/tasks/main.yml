@@ -48,7 +48,15 @@
               Continuing playbook execution.
           when: not csb_detected
 
+    - name: Warn when no CA cert files found in role
+      ansible.builtin.debug:
+        msg: >-
+          No Red Hat CA certificate files found in {{ role_path }}/files/.
+          Populate the files listed in redhat_ca_certs to deploy CA trust.
+      when: redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
+
 - name: Install Red Hat cert packages
+  # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)
   when: csb_rhel
   block:
     - name: Install cert packages via dnf
@@ -127,7 +135,6 @@
     database: passwd
     key: "{{ redhat_splunk_service_account }}"
     fail_key: false
-  check_mode: false  # read-only probe — must run in check mode
   when: is_rhel or csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)

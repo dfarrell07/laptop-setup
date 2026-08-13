@@ -37,15 +37,13 @@ setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
 {% if ansible_facts['system'] | default('Linux') == 'Darwin' %}
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"  # preserve existing socket if set
 {% endif %}
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
-export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
-{% endif %}
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output on every cd
 export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
 command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
 export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
 {% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 # SSH_AUTH_SOCK fallback for shells that bypass systemd user session (sudo -s, su -)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
 export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"

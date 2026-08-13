@@ -377,6 +377,11 @@
   failed_when: false
   when: not (csb_rhel | default(false))
 
+- name: dnf-automatic timer assertions skipped in container (VM scenario only)
+  ansible.builtin.debug:
+    msg: "dnf-automatic timer assertions skipped: system_is_container=true. Only make test-vm exercises these checks."
+  when: system_is_container | default(false)
+
 - name: Assert dnf-automatic timer is enabled
   ansible.builtin.assert:
     that: verify_dnf_auto.status.UnitFileState == 'enabled'
