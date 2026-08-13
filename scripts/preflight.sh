@@ -56,7 +56,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
-  # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
+  # systemctl cat returns exit 1 when the unit file is absent — more reliable than list-unit-files which may exit 0 with empty output on older systemd
   systemctl cat fapolicyd.service &>/dev/null && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true

@@ -255,10 +255,10 @@ jobs:
           for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
             subject=$(git log -1 --format=%s "$sha")
             body=$(git log -1 --format=%B "$sha")
-            first=$(echo "$subject" | awk '{print $1}')
+            first=$(printf "%s\n" "$subject" | awk '{print $1}')
             first="${first%:}"
             # For scoped commits (Scope: Verb noun), extract word after colon to check verb
-            desc_first=$(echo "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
+            desc_first=$(printf "%s\n" "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
             desc_first="${desc_first%:}"
             # Also catch when the scope word itself is a banned past-tense/gerund word
             # Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
@@ -276,7 +276,7 @@ jobs:
               echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
               failed=1
             fi
-            if ! echo "$body" | grep -q '^Signed-off-by:'; then
+            if ! printf "%s\n" "$body" | grep -q '^Signed-off-by:'; then
               echo "::error::Commit $sha is missing Signed-off-by: trailer (use git commit -s)"
               failed=1
             fi

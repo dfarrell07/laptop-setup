@@ -19,9 +19,6 @@
           missingok
           notifempty
           create 0600 root root
-          postrotate
-              /usr/sbin/augenrules --load > /dev/null 2>&1 || /usr/bin/pkill -HUP auditd 2>/dev/null || true
-          endscript
       }
     dest: /etc/logrotate.d/sudo
     mode: "0644"

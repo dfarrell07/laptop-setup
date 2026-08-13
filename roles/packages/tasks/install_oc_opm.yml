@@ -264,6 +264,7 @@
             state: absent
           become: true
           tags: [become]
+          when: packages_opm_download is defined
 
   rescue:
     - name: Record opm download failure (CSB)

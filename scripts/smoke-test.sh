@@ -1793,7 +1793,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Additional sysctl checks (CIS + hardening)
   _sysctl_check "fs.protected_hardlinks"              "1" "sysctl-protected-hardlinks"
   _sysctl_check "fs.protected_symlinks"               "1" "sysctl-protected-symlinks"
-  _sysctl_check "fs.protected_fifos"                  "1" "sysctl-protected-fifos"
+  _sysctl_check "fs.protected_fifos"                  "2" "sysctl-protected-fifos"
   _sysctl_check "fs.protected_regular"                "2" "sysctl-protected-regular"
   # sysrq: read expected value from deployed config (system_sysrq in config.yml may override default 0).
   # Hardcoding 0 here would false-FAIL on machines with system_sysrq: 176 (OVN-K kernel debugging).

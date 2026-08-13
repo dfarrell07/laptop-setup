@@ -275,6 +275,7 @@
         path: /var/lib/aide/aide.db.gz
         state: absent
       ignore_errors: true
+      when: system_aide_reinit_result is defined and system_aide_reinit_result is not skipped
 
     - name: Stop and disable aide-check.timer after failed init (prevents spurious check failures)
       ansible.builtin.systemd:

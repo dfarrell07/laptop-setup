@@ -83,7 +83,6 @@
           ansible.builtin.copy:
             dest: "{{ notes_repo_path }}/.gitleaks.toml"
             mode: "0644"
-            force: false
             content: |
               # Allow all blobs — transcrypt encrypts file contents before staging.
               # The global pre-commit hook (core.hooksPath) would otherwise flag
@@ -110,14 +109,12 @@
       check_mode: false  # always executes, even with --check (read-only, no state change)
       no_log: true
       when:
-        - notes_repo_available
         - notes_transcrypt_available
 
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
         notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
       when:
-        - notes_repo_available
         - notes_transcrypt_available
 
     - name: Initialize transcrypt
@@ -135,7 +132,6 @@
       changed_when: notes_transcrypt_init_result.rc == 0
       failed_when: false
       when:
-        - notes_repo_available
         - notes_transcrypt_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password | length > 0
@@ -147,7 +143,6 @@
           notes_transcrypt_password is still set to '{{ notes_transcrypt_password_sentinel }}' — transcrypt not initialized.
           Replace vault_notes_transcrypt_password in vault.yml with the real password.
       when:
-        - notes_repo_available
         - notes_transcrypt_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password == notes_transcrypt_password_sentinel
@@ -197,7 +192,6 @@
           notes_transcrypt_password is empty — transcrypt not initialized.
           Set vault_notes_transcrypt_password in vault.yml to enable.
       when:
-        - notes_repo_available
         - notes_transcrypt_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password | length == 0

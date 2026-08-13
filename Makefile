@@ -202,6 +202,8 @@ test-scripts:
 	bash -n scripts/preflight.sh
 	bash -n scripts/smoke-test.sh
 	bash -n scripts/backup.sh
+	bash -n scripts/vault-pass-ci.sh
+	bash -n scripts/test-queue-poller.sh
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:

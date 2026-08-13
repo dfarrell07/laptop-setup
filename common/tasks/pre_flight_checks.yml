@@ -38,7 +38,6 @@
       when:
         - _config_yml_stat.stat.exists
         - _user_config is not defined
-        - _config_parse_warn_shown is not defined
       block:
         - name: Warn when config.yml exists but could not be parsed
           ansible.builtin.debug:

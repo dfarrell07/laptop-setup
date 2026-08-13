@@ -92,6 +92,14 @@
     - item.rc is defined
     - item.rc != 0
 
+- name: Set auth.json permissions after vault auth
+  ansible.builtin.file:
+    path: "{{ containers_auth_file }}"
+    mode: "0600"
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+
 - name: Check registry auth status
   ansible.builtin.command:
     cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item }}"

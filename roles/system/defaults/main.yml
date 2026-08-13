@@ -440,6 +440,7 @@ system_init_on_free: true         # zero freed memory pages (init_on_free=1); au
 system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative
 system_faillock_audit: true            # log failed auth attempts via audit subsystem; set false to remove flag
 system_faillock_local_users_only: true  # prevent double-lockout with SSSD/IPA domain users; set false to remove flag
+system_pam_wheel_su: true              # restrict su to wheel group via pam_wheel.so; set false to remove the restriction
 install_vpn: true           # fallback; authoritative value in group_vars/all/vars.yml
 install_virtualization: true # fallback; authoritative value in group_vars/all/vars.yml
 network_proxied: false  # authoritative in group_vars/all/vars.yml; here for standalone invocability

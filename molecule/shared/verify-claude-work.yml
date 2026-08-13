@@ -70,6 +70,8 @@
   changed_when: false
   when: verify_claude_work_env.stat.exists
 
+# Note: this git-email check also serves as the standalone work-profile git assertion
+# (previously in verify-work-profile.yml, now consolidated here).
 - name: Check git user.email is work email
   ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
   register: verify_git_email

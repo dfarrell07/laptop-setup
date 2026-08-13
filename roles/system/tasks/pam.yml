@@ -292,3 +292,15 @@
     - is_dnf  # pam_wheel.so / wheel group restriction is RHEL/Fedora-only; Debian uses 'sudo' group, macOS has different PAM stack
     - not csb_rhel
     - not system_is_container  # /etc/pam.d/su absent in minimal containers
+    - system_pam_wheel_su | bool
+
+- name: Remove pam_wheel.so from su (wheel restriction disabled)
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
+    state: absent
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - not system_pam_wheel_su | bool
