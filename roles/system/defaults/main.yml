@@ -429,7 +429,7 @@ system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync 
 system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
 system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
-system_chrony_dhcp_sourcedir: /run/chrony-dhcp  # NM-dispatcher DHCP NTP dir; override in config.yml for non-standard deployments
+system_chrony_dhcp_sourcedir: ''  # NM-dispatcher DHCP NTP dir; set to /run/chrony-dhcp in config.yml to enable DHCP NTP source injection
 system_chrony_driftfile: "{{ '/var/lib/chrony/chrony.drift' if is_apt else '/var/lib/chrony/drift' }}"  # apt: chrony.drift; dnf: drift
 system_chrony_ntsdumpdir: /var/lib/chrony   # NTS cookie persistence dir; override in config.yml for small /var partitions
 system_chrony_logdir: /var/log/chrony       # chrony log dir; override in config.yml for small /var/log partitions

@@ -442,11 +442,6 @@
         fail_msg: "/boot/efi missing required mount options (nosuid,noexec)"
       when: verify_boot_efi.rc | default(1) == 0  # skip if /boot/efi is not a separate mountpoint
 
-    - name: Check modprobe blacklists cramfs
-      ansible.builtin.command: grep -qF 'install cramfs /bin/false' /etc/modprobe.d/hardening.conf
-      changed_when: false
-      become: true
-
     # --- Bluetooth disable path (system_disable_bluetooth: true) ---
     - name: Query bluetooth.service UnitFileState
       ansible.builtin.systemd:

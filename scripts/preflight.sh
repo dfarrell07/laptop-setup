@@ -376,10 +376,10 @@ if [[ "$OS_FAMILY" == "darwin" ]]; then
   _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null)
   [[ -n "$_raw_ram_bytes" ]] && ram_gb=$(( _raw_ram_bytes / 1073741824 ))
 elif [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
-else _raw_ram_kib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_kib; fi
+else _raw_ram_gib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_gib; fi
 if [[ "$OS_FAMILY" != "unknown" ]]; then
   ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent
-  if [[ -z "${_raw_ram_bytes:-}${_raw_ram_kib:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
+  if [[ -z "${_raw_ram_bytes:-}${_raw_ram_gib:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
   elif [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
   elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
   else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi

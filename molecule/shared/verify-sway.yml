@@ -13,7 +13,7 @@
 - name: Assert sway config exists
   ansible.builtin.assert:
     that: verify_sway.stat.exists
-    fail_msg: "sway config not deployed"
+    fail_msg: "~/.config/sway/config not deployed — desktop role sway config task regression"
 
 - name: Verify sway config uses exec_always for lxqt-policykit-agent (polkit-gnome removed Fedora 41+)
   ansible.builtin.command:

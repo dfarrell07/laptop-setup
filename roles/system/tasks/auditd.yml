@@ -29,12 +29,14 @@
   when:
     - is_apt
     - not system_is_container
+  register: _apt_audit_pkg_install
+  failed_when: false
 
 - name: Apply auditd rules and configuration
   when:
     - not csb_rhel  # no SIEM at home; audit package not installed in container CI (see comment above)
     - not system_is_container
-    - _audit_pkg_install.rc | default(0) == 0
+    - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install.rc | default(0) == 0)
   block:
     - name: Assert real_user_home is a valid absolute path before deploying auditd rules
       ansible.builtin.assert:

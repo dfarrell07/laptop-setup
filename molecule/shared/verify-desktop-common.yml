@@ -25,7 +25,7 @@
 - name: Assert Chrome policy exists
   ansible.builtin.assert:
     that: verify_chrome.stat.exists
-    fail_msg: "Chrome security policy not deployed"
+    fail_msg: "/etc/opt/chrome/policies/managed/security.json not deployed — desktop role Chrome policy task regression"
   when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 - name: Validate Chrome security policy JSON

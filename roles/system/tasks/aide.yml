@@ -214,7 +214,7 @@
       ansible.builtin.file:
         path: /var/lib/aide/aide.db.new.gz
         state: absent
-      when: (system_aide_db.stat.exists | default(false)) and (system_aide_db_new.stat.exists | default(false))
+      when: (system_aide_db.stat.exists | default(false)) and (system_aide_db_new.stat.exists | default(false)) and not _aide_conf_changed
 
     # Reached only when aide.conf is already fully configured (zero lineinfile changes above) but no DB exists.
     # Normal first provisions reach this via the _aide_conf_changed=true reinit path at line 159 instead.

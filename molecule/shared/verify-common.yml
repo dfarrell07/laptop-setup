@@ -1396,7 +1396,6 @@
   register: verify_git_lfs_filter
   changed_when: false
   failed_when: false
-  when: verify_git_lfs.rc == 0
 
 - name: Assert git-lfs filter registered (git lfs install was run)
   ansible.builtin.assert:
@@ -1404,7 +1403,6 @@
     fail_msg: >
       git lfs install has not been run — global LFS filter drivers not registered;
       run: git lfs install --skip-repo
-  when: verify_git_lfs.rc == 0
 
 - name: Check zshrc has GONOSUMDB (profile=work)
   ansible.builtin.command:

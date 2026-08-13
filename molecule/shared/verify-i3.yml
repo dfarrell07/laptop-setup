@@ -12,7 +12,7 @@
 - name: Assert i3 config exists
   ansible.builtin.assert:
     that: verify_i3.stat.exists
-    fail_msg: "i3 config not deployed"
+    fail_msg: "~/.config/i3/config not deployed — desktop role i3 config task regression"
 
 - name: Verify i3 config has terminal keybinding
   ansible.builtin.command:

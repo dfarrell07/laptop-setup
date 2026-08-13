@@ -66,13 +66,11 @@
     - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
-    # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---
-    # Rocky has ansible_distribution='Rocky' not 'RedHat', so is_rhel=False and
-    # redhat role skips internal CA cert deployment — assert the detection is correct.
-    # --- CSB detection: Rocky is NOT RedHat (ansible_distribution='Rocky' != 'RedHat') ---
-    # is_rhel=False on Rocky → needs_container_tier='host-only' (not 'hybrid').
-    # verify-common.yml re-includes csb_detect.yml so facts are populated in verify phase.
-    # Downstream consequence of is_rhel=false: redhat role skips CA cert deployment
+    # --- Redhat role: runs on Rocky (csb_detected=true); cert copy skipped ---
+    # redhat role runs on Rocky (csb_detected=true) but the file-copy block
+    # (when: not csb_rhel) is skipped because csb_rhel=true. The RPM-based
+    # install path (when: csb_rhel) also fails silently — no internal RHEL
+    # repos in CI. Certs are absent regardless.
     - name: Stat Red Hat internal CA certs (must be absent on Rocky — redhat role skipped)
       ansible.builtin.stat:
         path: "/etc/pki/ca-trust/source/anchors/{{ item }}"

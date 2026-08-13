@@ -31,6 +31,8 @@ jobs:
         run: ansible-lint
 
       - name: Run yamllint
+        # ansible-lint skips yaml rules (see .ansible-lint skip_list); yamllint covers them
+        # and also lints .github/ (excluded from ansible-lint)
         run: yamllint --strict .
 
   check-vars-sync:
