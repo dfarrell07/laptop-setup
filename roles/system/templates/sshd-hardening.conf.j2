@@ -21,7 +21,7 @@ AuthorizedKeysFile .ssh/authorized_keys  # OpenSSH upstream compiled default inc
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3
-MaxSessions {{ system_ssh_max_sessions }}  # OpenSSH default is 10; emitted so system_ssh_max_sessions overrides in config.yml take effect
+MaxSessions {{ system_ssh_max_sessions }}  # OpenSSH default is 10; explicit so value is auditable and config.yml overrides are visible in the drop-in
 LoginGraceTime 30
 
 X11Forwarding no  # overrides 50-redhat.conf (sets yes)

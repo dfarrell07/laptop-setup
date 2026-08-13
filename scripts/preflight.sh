@@ -181,7 +181,7 @@ if [[ -x "$vscript" ]]; then
       record "vault" "pass" "script returned valid password"
     fi
   elif [[ $len -gt 0 ]]; then
-    record "vault" "warn" "script returned only ${len} chars"
+    record "vault" "fail" "script returned only ${len} chars — vault password too short"
   else
     record "vault" "fail" "script returned empty output"
   fi
@@ -343,9 +343,9 @@ fi
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
 else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
-if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GB"
-elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GB — 8GB+ recommended"
-else record "ram" "fail" "${ram_gb}GB — insufficient"; fi
+if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
+elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
+else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi
 
 # --- SSH session safety check ---
 # make all restarts sshd mid-play; an SSH session gets SIGHUP and dies, leaving

@@ -142,7 +142,7 @@
     path: "{{ distrobox_ini_path }}"
     state: absent
   when:
-    - not (distrobox_use_distrobox | bool)
+    - distrobox_check.rc != 0
     - is_linux
 
 - name: Create container via Distrobox

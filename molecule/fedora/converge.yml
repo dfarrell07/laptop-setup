@@ -47,17 +47,11 @@
     - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
-        packages_security_yubikey: []  # skip YubiKey packages in CI
-        packages_containers: []
-        packages_containers_kubectl: []
-        packages_containers_work: []  # must also clear work-specific list after packages split
-        packages_networking: []
-        packages_networking_work: []  # must also clear work-specific list after packages split
-        packages_support_work: []  # avoid dnf repo dependencies in CI
-        packages_go_install_work: []  # work-profile OVN-K codegen go tools — not installable in CI
         dotfiles_gonosumdb: "test.example.com"  # non-empty so verify-common GONOSUMDB assertions run
         dotfiles_goprivate: "git.example.com"   # non-empty so verify-common GOPRIVATE assertions run
         # install_virtualization, packages_install_binaries, ssh_signing_key_pub are in molecule/shared/system-container-overrides.yml
+        # packages_security_yubikey/containers/networking/support_work/go_install_work
+        # empty list overrides live in molecule/shared/ci-default-vars.yml
 
     - name: Create mock notes repo structure for CI
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"

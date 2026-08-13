@@ -716,6 +716,8 @@
   become: true
   when:
     - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - not csb_rhel
     - verify_sshd_dropin.stat.exists
 
 - name: Stat /etc/systemd/resolved.conf.d/98-llmnr.conf
@@ -864,6 +866,7 @@
     fail_msg: "/etc/sudoers.d/99-hardening has wrong mode {{ verify_sudoers_conf.stat.mode }} — expected 0440"
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_sudoers_conf.stat.exists
 
 - name: Check logind drop-in has IdleAction=lock

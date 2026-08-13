@@ -3,26 +3,38 @@
 # --- Chrony NTS (authenticated time sync) ---
 # Mask timesyncd before the apt install so chrony's postinst does not race
 # for UDP 123 with a still-running timesyncd.
-- name: Stop and mask systemd-timesyncd before chrony install (Debian)
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: true
-    state: stopped
-  when:
-    - is_apt
-    - system_chrony_service_enabled | bool
-    - not system_is_container
-  failed_when: false
+- block:
+    - name: Stop and mask systemd-timesyncd before chrony install (Debian)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: true
+        state: stopped
+      when:
+        - is_apt
+        - system_chrony_service_enabled | bool
+        - not system_is_container
+      failed_when: false
 
-- name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
-  ansible.builtin.apt:
-    name: chrony
-    state: present
-  when:
-    - is_apt
-    # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
-    # false) to prevent the daemon start from crashing the Podman container.
-    - system_chrony_service_enabled | bool
+    - name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+      when:
+        - is_apt
+        # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
+        # false) to prevent the daemon start from crashing the Podman container.
+        - system_chrony_service_enabled | bool
+  rescue:
+    - name: Restore timesyncd if chrony install failed (Debian)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: false
+      failed_when: false
+      when: is_apt and not system_is_container
+
+    - name: Re-raise chrony install failure
+      ansible.builtin.fail:
+        msg: "chrony install failed; systemd-timesyncd has been unmasked to restore a time source"
 
 - name: Install chrony (Fedora/RHEL)
   ansible.builtin.dnf:

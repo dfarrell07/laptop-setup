@@ -30,7 +30,7 @@ WARNS=0
 
 record() { # name status [detail]
   local n="$1" s="$2" d="${3:-}"
-  local dj="${d//\\/\\\\}"; dj="${dj//$'\n'/\\n}"; dj="${dj//$'\t'/\\t}"
+  local dj="${d//\\/\\\\}"; dj="${dj//$'\n'/\\n}"; dj="${dj//$'\t'/\\t}"; dj="${dj//$'\r'/\\r}"
   RESULTS+=("$(printf '{"name":"%s","status":"%s","detail":"%s"}' "$n" "$s" "${dj//\"/\\\"}")")
   case "$s" in
     PASS) $JSON || printf "${P}PASS${R}  %s\n" "$n" ;;

@@ -284,6 +284,7 @@
     - system_mask_abrt | bool
     - not csb_rhel
     - not system_is_container
+    - is_dnf
   failed_when: false
 
 - name: Unmask ABRT services when system_mask_abrt disabled
@@ -301,6 +302,7 @@
     - not (system_mask_abrt | bool)
     - not csb_rhel
     - not system_is_container
+    - is_dnf
   failed_when: false
 
 - name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
@@ -312,6 +314,7 @@
     - not (system_mask_abrt | bool)
     - not csb_rhel
     - not system_is_container
+    - is_dnf
   failed_when: false
 
 - name: Unmask abrt-pstoreoops (vendor default disabled; do not enable)
@@ -322,6 +325,7 @@
     - not (system_mask_abrt | bool)
     - not csb_rhel
     - not system_is_container
+    - is_dnf
   failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---

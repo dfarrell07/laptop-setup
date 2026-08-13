@@ -46,13 +46,7 @@ jobs:
           echo "GALAXY_WORK_DIR=$WORK_DIR" >> "$GITHUB_ENV"
           while IFS= read -r coll; do
             ansible-galaxy collection install "$coll" --collections-path "$WORK_DIR"
-          done < <(python3 -c 'import re
-          with open("requirements.yml") as f:
-              for line in f:
-                  m = re.match(r"^\s*-\s*name:\s*(\S+)", line)
-                  if m:
-                      print(m.group(1))
-          ')
+          done < <(python3 -c "import yaml; [print(c['name']) for c in yaml.safe_load(open('requirements.yml'))['collections']]")
 
       - name: Check for version drift
         run: |
