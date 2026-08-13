@@ -93,7 +93,7 @@
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: brew autoupdate start 43200 --upgrade --cleanup
+    cmd: brew autoupdate start 86400 --upgrade --cleanup
   when: is_macos
   changed_when:
     - _packages_brew_autoupdate.rc == 0

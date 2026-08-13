@@ -76,6 +76,10 @@
   ansible.builtin.command: tree --version
   changed_when: false
 
+- name: Check mosh is installed
+  ansible.builtin.command: mosh --version
+  changed_when: false
+
 # --- PAM pwhistory (Debian direct stack insertion) ---
 - name: Check pam_pwhistory enforce_for_root in common-password (CIS 5.3.5)
   ansible.builtin.command: grep -q 'pam_pwhistory\.so.*enforce_for_root' /etc/pam.d/common-password

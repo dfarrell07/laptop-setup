@@ -75,6 +75,12 @@
   when: not system_is_container  # tailscale not in containers
   ignore_errors: true  # noqa: ignore-errors
 
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  when: not system_is_container  # daemon_reload: true crashes privileged Podman containers; ignore_errors cannot catch a process death
+
 # Must use SysV wrapper, not 'systemctl restart auditd': the SysV script calls
 # auditctl to reload rules into the kernel; systemctl sends SIGTERM and skips
 # that step, leaving new rules defined in config but not loaded at runtime.

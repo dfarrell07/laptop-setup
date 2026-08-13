@@ -186,6 +186,19 @@
     - needs_container_tier == 'hybrid'
     - not (csb_detected | bool)
 
+- name: Inform on Fedora CSB hybrid tier
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: Fedora host with .csb hostname and internal CA detected — running in hybrid tier.
+      Dev tools will be installed in a container rather than the host.
+      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
+  become: false
+  when:
+    - not (_csb_molecule_force | default(false))
+    - needs_container_tier == 'hybrid'
+    - csb_detected | bool
+    - is_fedora | bool
+
 - name: Derive csb_rhel
   ansible.builtin.set_fact:
     csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"

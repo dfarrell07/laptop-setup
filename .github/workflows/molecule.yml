@@ -91,8 +91,7 @@ jobs:
       - molecule
     steps:
       - name: Verify no required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          if [[ "${{ needs.molecule.result }}" == "failure" || "${{ needs.molecule.result }}" == "cancelled" ]]; then
-            echo "One or more required jobs failed or were cancelled"
-            exit 1
-          fi
+          echo "One or more required jobs failed or were cancelled"
+          exit 1

@@ -123,18 +123,14 @@ else
 fi
 
 # --- Ansible collections ---
-if command -v ansible-galaxy &>/dev/null; then
-  missing_cols=()
-  for col in community.general containers.podman ansible.posix; do
-    [[ -d "${SCRIPT_DIR}/../collections/ansible_collections/${col//.//}" ]] || missing_cols+=("$col")
-  done
-  if [[ ${#missing_cols[@]} -eq 0 ]]; then
-    record "ansible_collections" "pass" "all required collections installed"
-  else
-    record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
-  fi
+missing_cols=()
+for col in community.general containers.podman ansible.posix; do
+  [[ -d "${SCRIPT_DIR}/../collections/ansible_collections/${col//.//}" ]] || missing_cols+=("$col")
+done
+if [[ ${#missing_cols[@]} -eq 0 ]]; then
+  record "ansible_collections" "pass" "all required collections installed"
 else
-  record "ansible_collections" "skip" "ansible-galaxy not found"
+  record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
 fi
 
 # --- YubiKey presence ---
@@ -152,11 +148,15 @@ fi
 if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
   if command -v ykchalresp &>/dev/null; then
-    ! $JSON && echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-    if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
-      record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
+    if ! $JSON; then
+      echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
+      if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
+        record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
+      else
+        record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
+      fi
     else
-      record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
+      record "yubikey_chalresp" "skip" "skipped in --json mode (interactive)"
     fi
   else
     record "yubikey_chalresp" "skip" "ykchalresp not installed (need ykpers)"

@@ -21,11 +21,6 @@
         state: directory
         mode: "0755"
 
-    - name: Remove legacy coredump disable.conf drop-in (renamed in cycle 2)
-      ansible.builtin.file:
-        path: /etc/systemd/coredump.conf.d/disable.conf
-        state: absent
-
     - name: Configure coredump storage
       ansible.builtin.template:
         src: coredump.conf.j2

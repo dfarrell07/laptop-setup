@@ -95,7 +95,7 @@
 
 - name: Check registry auth status
   ansible.builtin.command:
-    cmd: "podman login --get-login {{ item }}"
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item }}"
   vars:
     _vault_registries: "{{ registry_tokens | map(attribute='registry') | list }}"
     _check_registries: "{{ (containers_registries + containers_registries_extra) | unique | reject('in', _vault_registries) | list }}"

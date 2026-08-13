@@ -57,6 +57,7 @@
     name: mullvad-vpn
     state: present
   register: _system_mullvad_install
+  notify: Reload systemd daemon
   when:
     - install_vpn | bool
     - is_dnf
@@ -80,7 +81,6 @@
     name: mullvad-daemon
     state: started
     enabled: true
-    daemon_reload: true
   when:
     - install_vpn | bool
     - is_dnf

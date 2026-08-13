@@ -6,7 +6,8 @@
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller \
        preflight guard-not-root \
-       pip-lock pip-sync
+       pip-lock pip-sync \
+       test-% repos-%
 
 CONTAINER ?= fedora-dev
 

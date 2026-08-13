@@ -22,12 +22,7 @@
 - name: Override for container testing (system role)
   ansible.builtin.set_fact:
     system_is_container: true             # explicit guard — auto-detect via virtualization_type may miss some images
-    system_disable_usb_storage: false    # USB modprobe blacklisting is meaningless in containers
     system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
-    system_install_usbguard: false        # no USB devices to guard in containers
-                                          # CI gap: USBGuard install-configure-enable (package, rules.conf,
-                                          # daemon.conf settings, service) is NOT exercised by any
-                                          # Podman-based scenario — make test-vm is required for full USBGuard coverage
     install_virtualization: false         # libvirt not needed in CI container
     real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert
     packages_install_binaries: false      # no binary downloads in container CI

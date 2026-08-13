@@ -12,6 +12,7 @@
       become: true
       tags: [become]
       timeout: 300
+      register: _packages_virt_install
   rescue:
     - name: Record virtualization package install failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -47,7 +48,7 @@
         daemon_reload: true
       become: true
       tags: [become]
-      when: not system_is_container
+      when: not system_is_container and _packages_virt_install.changed
     - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
       ansible.builtin.systemd:
         name: "{{ item }}"
