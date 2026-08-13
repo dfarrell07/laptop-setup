@@ -52,10 +52,10 @@ container: guard-not-root
 container-rebuild: guard-not-root
 	ansible-playbook site.yml --tags common,distrobox -e container_replace=true
 
-backup:
+backup: guard-not-root
 	scripts/backup.sh
 
-backup-dry-run:
+backup-dry-run: guard-not-root
 	scripts/backup.sh --dry-run
 
 # --- Bootstrap ---

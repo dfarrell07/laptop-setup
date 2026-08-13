@@ -88,8 +88,6 @@
 - name: Refresh /etc/group facts for libvirt/kvm membership check
   ansible.builtin.getent:
     database: group
-  become: true
-  tags: [become]
 
 - name: Add user to libvirt and kvm groups (Play 2 — groups exist after install)
   ansible.builtin.user:

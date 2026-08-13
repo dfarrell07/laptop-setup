@@ -51,23 +51,21 @@
     # Desktop role called via include_role so vars: are at role-params precedence (p20),
     # overriding desktop role default (desktop_environment: auto from roles/desktop/defaults/main.yml).
     # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
+    # Package lists are suppressed via the shared include (set_fact p19 overrides defaults p2).
+    - name: Set desktop package list overrides to empty (CI)
+      ansible.builtin.include_tasks: ../shared/converge-desktop-no-packages.yml
+
     - name: Converge desktop role (sway)
       ansible.builtin.include_role:
         name: desktop
       vars:
         desktop_environment: sway
-        desktop_dnf_packages: []
-        desktop_sway_packages: []
-        desktop_i3_packages: []
 
     - name: Converge desktop role (i3)
       ansible.builtin.include_role:
         name: desktop
       vars:
         desktop_environment: i3
-        desktop_dnf_packages: []
-        desktop_sway_packages: []
-        desktop_i3_packages: []
 
     - name: Run shared converge post-tasks
       ansible.builtin.include_tasks: ../shared/converge-post-common.yml

@@ -83,14 +83,13 @@
 
   post_tasks:
     # desktop_environment is set to 'unknown' in the pre_tasks set_fact (p19) so the role
-    # sees it correctly. The vars: here override package lists only.
+    # sees it correctly. Package lists are suppressed via the shared include below.
+    - name: Set desktop package list overrides to empty (CI)
+      ansible.builtin.include_tasks: ../shared/converge-desktop-no-packages.yml
+
     - name: Converge desktop role (unknown — no WM in Rocky CI)
       ansible.builtin.include_role:
         name: desktop
-      vars:
-        desktop_dnf_packages: []
-        desktop_sway_packages: []
-        desktop_i3_packages: []
 
     - name: Run shared converge post-tasks
       ansible.builtin.include_tasks: ../shared/converge-post-common.yml

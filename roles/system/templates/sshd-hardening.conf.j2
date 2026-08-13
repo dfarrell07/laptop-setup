@@ -52,6 +52,7 @@ MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH def
 RekeyLimit 1G 1h
 Compression no  # OpenSSH 10.2p1 (Fedora 44) compiled default is yes; disabled — no benefit for interactive sessions and reduces protocol complexity
 GSSAPIAuthentication no  # compiled default no; overrides 50-redhat.conf which sets yes on Fedora/RHEL
+GSSAPIKeyExchange no  # compiled default no; forward guard if 50-redhat.conf adds this in future
 
 # CIS 4.2.12 — approved algorithms. NOTE: sshd processes drop-in files lexicographically;
 # 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list

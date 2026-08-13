@@ -1,0 +1,9 @@
+---
+# Suppress desktop package installation in molecule CI.
+# Include before a desktop include_role call to override package lists without
+# repeating them across scenario converge files.
+- name: Override desktop package lists to empty for CI
+  ansible.builtin.set_fact:
+    desktop_dnf_packages: []
+    desktop_sway_packages: []
+    desktop_i3_packages: []

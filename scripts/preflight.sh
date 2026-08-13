@@ -109,6 +109,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
+    else
+      record "required_${tool}" "fail" "not installed"
     # Note: add an elif here if adding a new tool to the loop above
     fi
   fi

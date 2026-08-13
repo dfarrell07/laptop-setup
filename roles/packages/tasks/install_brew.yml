@@ -35,6 +35,7 @@
         update_homebrew: "{{ packages_brew_update }}"
       async: 600
       poll: 10
+      register: _packages_brew_formulas
   rescue:
     - name: Warn Homebrew package install failed
       ansible.builtin.debug:
@@ -49,7 +50,7 @@
     msg: >-
       mtr installed. ICMP mode requires sudo on macOS (raw socket). Run 'sudo mtr <host>'
       or use '--tcp' flag for unprivileged TCP-mode traces.
-  when: is_macos and profile == 'work'
+  when: is_macos and profile == 'work' and _packages_brew_formulas.changed | default(false)
 
 - name: Install Homebrew cask packages (macOS)
   when: is_macos

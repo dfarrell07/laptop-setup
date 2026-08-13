@@ -1240,6 +1240,22 @@
     - ansible_os_family == 'Debian'
     - system_tmout | int > 0
 
+- name: Check TMOUT readonly in /etc/bash.bashrc (CIS 5.5.5 — bash, Debian)
+  ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/bash.bashrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
+    - system_tmout | int > 0
+
+- name: Check TMOUT export in /etc/bash.bashrc (CIS 5.5.5 — bash, Debian)
+  ansible.builtin.command: grep -qE '^export TMOUT' /etc/bash.bashrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
+    - system_tmout | int > 0
+
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:

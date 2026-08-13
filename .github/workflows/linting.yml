@@ -385,16 +385,16 @@ jobs:
             echo "actionlint download failed"
             failed=1
           fi
-          if [ "${{ steps.actionlint.outcome }}" != "success" ]; then
-            echo "actionlint failed or was skipped"
+          if [ "${{ steps.actionlint_download.outcome }}" = "success" ] && [ "${{ steps.actionlint.outcome }}" != "success" ]; then
+            echo "actionlint scan failed"
             failed=1
           fi
           if [ "${{ steps.zizmor_download.outcome }}" != "success" ]; then
             echo "zizmor download failed or was skipped"
             failed=1
           fi
-          if [ "${{ steps.zizmor.outcome }}" != "success" ]; then
-            echo "zizmor failed or was skipped"
+          if [ "${{ steps.zizmor_download.outcome }}" = "success" ] && [ "${{ steps.zizmor.outcome }}" != "success" ]; then
+            echo "zizmor scan failed"
             failed=1
           fi
           exit $failed

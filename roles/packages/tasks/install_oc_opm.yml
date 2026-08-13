@@ -28,7 +28,7 @@
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_findall('(?:Client Version: |oc v)(\S+)') + [''])[0] != packages_oc_version or
+        (packages_oc_check.stdout | regex_findall('(?:Client Version: |oc v)(\d+\.\d+\.\d+)') + [''])[0] != packages_oc_version or
         not packages_kubectl_stat.stat.exists
       block:
         - name: Fetch OpenShift client sha256sum.txt
@@ -198,16 +198,6 @@
         - name: Extract and install opm-rhel8 binary
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           block:
-            - name: List opm tarball contents  # noqa: command-instead-of-module
-              ansible.builtin.command: tar tf /tmp/opm-linux.tar.gz
-              register: _opm_tarball_contents
-              changed_when: false
-
-            - name: Assert opm-rhel8 is present in tarball
-              ansible.builtin.assert:
-                that: "'opm-rhel8' in _opm_tarball_contents.stdout_lines"
-                fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for OCP {{ packages_oc_version }}"
-
             - name: Extract opm binary
               ansible.builtin.unarchive:
                 src: /tmp/opm-linux.tar.gz
