@@ -71,6 +71,7 @@
   register: containers_vault_auth_status
   changed_when: false
   failed_when: false  # intentional: rc!=0 = registry not authenticated; Warn task verifies and surfaces
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - is_linux
     - registry_tokens | length > 0

@@ -176,7 +176,7 @@
     that:
       - verify_known_hosts.stat.exists
       - verify_known_hosts.stat.mode == '0600'
-    fail_msg: "~/.ssh/known_hosts was not created — GitHub known_hosts seeding did not run"
+    fail_msg: "~/.ssh/known_hosts missing or wrong permissions (expected 0600) — known_hosts seeding regression"
 
 - name: Check known_hosts contains github.com entry
   ansible.builtin.command:

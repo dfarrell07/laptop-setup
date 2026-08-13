@@ -324,37 +324,17 @@
     'INVALID_ZONE' not in (_system_libvirt_tftp_remove.msg | default(''))
   notify: Apply firewall rules
 
-- name: Open SSH port in libvirt zone
+- name: Open/close SSH port in libvirt zone (enabled when system_libvirt_open_ssh is true)
   ansible.posix.firewalld:
     zone: libvirt
     port: "{{ ssh_port }}/tcp"
     permanent: true
     immediate: true
-    state: enabled
+    state: "{{ 'enabled' if system_libvirt_open_ssh | bool else 'disabled' }}"
   register: _result_lv_ssh
   when:
     - system_firewalld_running | bool
     - install_virtualization | bool
     - system_firewall_manage_zone | bool
-    - system_libvirt_open_ssh | bool
   failed_when: (_result_lv_ssh.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh.msg | default(''))
-  notify: Apply firewall rules
-
-# On fresh provisioning with system_libvirt_open_ssh=false (the default), this task is a no-op:
-# state=disabled against a non-existent port on the libvirt zone is always ok.
-# The task only has an effect when transitioning from system_libvirt_open_ssh: true → false.
-- name: Close SSH port in libvirt zone (system_libvirt_open_ssh disabled)
-  ansible.posix.firewalld:
-    zone: libvirt
-    port: "{{ ssh_port }}/tcp"
-    permanent: true
-    immediate: true
-    state: disabled
-  register: _result_lv_ssh_close
-  when:
-    - system_firewalld_running | bool
-    - install_virtualization | bool
-    - system_firewall_manage_zone | bool
-    - not (system_libvirt_open_ssh | bool)
-  failed_when: (_result_lv_ssh_close.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh_close.msg | default(''))
   notify: Apply firewall rules

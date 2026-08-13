@@ -263,6 +263,7 @@
   when:
     - not csb_rhel
     - not system_is_container
+    - not is_apt
 
 - name: Enforce pwquality for root (CIS 5.3.4)
   community.general.ini_file:
@@ -274,6 +275,7 @@
   when:
     - not csb_rhel
     - not system_is_container
+    - not is_apt
 
 # --- Restrict su to wheel group ---
 - name: Enable pam_wheel.so for su

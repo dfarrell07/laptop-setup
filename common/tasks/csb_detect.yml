@@ -179,7 +179,8 @@
     msg: >-
       NOTE: RHEL host without CSB detection — running in hybrid tier.
       Dev tools will be installed in a container rather than the host.
-      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
+      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override
+      (set_fact outranks config.yml; use -e flag, not config.yml).
   become: false
   when:
     - not (_csb_molecule_force | default(false))
@@ -191,7 +192,8 @@
     msg: >-
       NOTE: Fedora host with .csb hostname and internal CA detected — running in hybrid tier.
       Dev tools will be installed in a container rather than the host.
-      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
+      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override
+      (set_fact outranks config.yml; use -e flag, not config.yml).
   become: false
   when:
     - not (_csb_molecule_force | default(false))
@@ -204,7 +206,8 @@
     msg: >-
       NOTE: RHEL host with CSB detection but fapolicyd not enforcing (stopped or permissive mode) — running in hybrid tier.
       Dev tools will be installed in a container rather than the host.
-      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
+      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override
+      (set_fact outranks config.yml; use -e flag, not config.yml).
   become: false
   when:
     - not (_csb_molecule_force | default(false))
@@ -218,7 +221,8 @@
       NOTE: CSB host detected with fapolicyd enforcing — running in container tier.
       Full dev environment will be provisioned in a container (run 'make container' after provisioning).
       Run 'systemctl status fapolicyd' and 'grep -i permissive /etc/fapolicyd/fapolicyd.conf' to verify enforcement state.
-      Pass -e needs_container_tier=hybrid on the ansible-playbook command line to override (config.yml is overwritten by set_fact).
+      Pass -e needs_container_tier=hybrid on the ansible-playbook command line to override
+      (set_fact outranks config.yml; use -e flag, not config.yml).
   become: false
   when:
     - not (_csb_molecule_force | default(false))

@@ -67,7 +67,8 @@
           Run 'gh auth login' or load SSH keys, then re-run 'make notes'.
       when: not notes_repo_available
 
-    - block:
+    - name: Transcrypt detection and gitleaks config
+      block:
         - name: Check if transcrypt is available
           ansible.builtin.stat:
             path: "{{ notes_transcrypt_bin_path }}"
@@ -108,12 +109,15 @@
       check_mode: false  # always executes, even with --check (read-only, no state change)
       no_log: true
       when:
+        - notes_repo_available
         - notes_transcrypt_available
 
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
         notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
-      when: notes_transcrypt_available
+      when:
+        - notes_repo_available
+        - notes_transcrypt_available
 
     - name: Initialize transcrypt
       ansible.builtin.command:
@@ -168,7 +172,8 @@
         - notes_transcrypt_inited
 
 
-    - block:
+    - name: Notes repo permission hardening
+      block:
         - name: Restrict notes repo directory and .git/config permissions
           ansible.builtin.file:
             path: "{{ item.path }}"

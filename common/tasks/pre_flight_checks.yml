@@ -54,6 +54,15 @@
             _config_parse_warn_shown: true
           tags: [always]
 
+    - name: Fail when config.yml exists but could not be parsed
+      ansible.builtin.assert:
+        that: not (_config_yml_stat.stat.exists and _user_config is not defined)
+        fail_msg: >-
+          config.yml exists but failed to parse (YAML error). Fix the syntax error
+          before re-running. All user overrides were silently dropped.
+      when: _config_parse_warn_shown is defined
+      tags: [always]
+
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"

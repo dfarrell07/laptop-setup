@@ -47,7 +47,7 @@ UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 TCPKeepAlive no
 SyslogFacility AUTHPRIV  # explicit; 50-redhat.conf also sets this; first-occurrence guard and self-contained logging config
 LogLevel VERBOSE
-UsePAM yes  # compiled default no; matches 50-redhat.conf; explicit (first-occurrence)
+UsePAM yes  # compiled default no; Fedora build does not support UsePAM no; matches 50-redhat.conf; explicit (first-occurrence)
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100
 RekeyLimit 1G 1h
 GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)

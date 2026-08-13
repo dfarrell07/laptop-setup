@@ -220,12 +220,6 @@ jobs:
           print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
           "
 
-      - name: Verify npm package signatures
-        run: npm audit signatures
-
-      - name: Check for known vulnerabilities
-        run: npm audit --audit-level=moderate
-
       - name: Run markdownlint
         run: npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
@@ -284,6 +278,12 @@ jobs:
             fi
           done
           exit $failed
+
+      - name: Verify npm package signatures
+        run: npm audit signatures
+
+      - name: Check for known vulnerabilities
+        run: npm audit --audit-level=moderate
 
   gitleaks:
     name: Secret Detection
