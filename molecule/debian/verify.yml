@@ -113,4 +113,7 @@
     - name: Assert git email is personal profile
       ansible.builtin.assert:
         that: "dotfiles_user_email_personal in verify_git_email_personal.stdout"
-        fail_msg: "git user.email is not set to the personal address — profile conditional regression in gitconfig.j2?"
+        fail_msg: >-
+          git user.email ('{{ verify_git_email_personal.stdout }}') does not contain
+          expected personal address '{{ dotfiles_user_email_personal }}' —
+          gitconfig.j2 profile conditional regression?

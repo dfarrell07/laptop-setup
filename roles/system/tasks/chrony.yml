@@ -159,18 +159,33 @@
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
     - not csb_rhel
-  failed_when: false
+  register: _chrony_timesyncd_fallback
+  ignore_errors: true
 
-- name: "Warn: no time sync available (chrony disabled, timesyncd disabled on Fedora)"
+- name: "Warn: timesyncd re-enabled as fallback (chrony disabled, Fedora)"
   ansible.builtin.debug:
     msg: >-
-      system_chrony_service_enabled=false — systemd-timesyncd has been re-enabled as a
-      fallback time source on Fedora (failed silently on RHEL where timesyncd is not
-      packaged). To restore chrony NTS, set system_chrony_service_enabled: true.
+      system_chrony_service_enabled=false — systemd-timesyncd re-enabled as fallback
+      time source on Fedora. To restore chrony NTS, set system_chrony_service_enabled: true.
   when:
-    - is_fedora
+    - is_dnf
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
+    - not csb_rhel
+    - _chrony_timesyncd_fallback is not failed
+
+- name: "Warn: NO time sync source available (chrony disabled, timesyncd failed to start)"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_service_enabled=false and systemd-timesyncd failed to start — no
+      time-sync daemon is running. To restore authenticated time sync, set
+      system_chrony_service_enabled: true in config.yml.
+  when:
+    - is_dnf
+    - not (system_chrony_service_enabled | bool)
+    - not system_is_container
+    - not csb_rhel
+    - _chrony_timesyncd_fallback is failed
 
 - name: "Warn: no time sync active (chrony disabled, timesyncd not packaged on RHEL)"
   ansible.builtin.debug:

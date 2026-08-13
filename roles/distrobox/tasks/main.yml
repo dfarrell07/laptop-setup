@@ -73,7 +73,9 @@
   changed_when: false
   failed_when: false
   check_mode: false  # always executes, even with --check (read-only, no state change)
-  when: distrobox_tool != 'none'
+  when:
+    - distrobox_tool != 'none'
+    - not (system_is_container | default(false))
 
 - name: Warn if Podman socket failed
   ansible.builtin.debug:
@@ -83,6 +85,7 @@
       If that fails, check: systemctl --user status podman.socket
   when:
     - distrobox_tool != 'none'
+    - not (system_is_container | default(false))
     - distrobox_podman_socket_active.rc != 0
 
 # --- Check if container exists ---

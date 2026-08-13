@@ -130,6 +130,7 @@
         path: /etc/aide.conf
         regexp: '^!/boot/grub2/grubenv'
         line: '!/boot/grub2/grubenv'
+        insertbefore: '^/boot\s'
         state: present
       register: _aide_conf_r6
 
@@ -138,6 +139,7 @@
         path: /etc/aide.conf
         regexp: '^/boot/loader/entries\s'
         line: '/boot/loader/entries PERMS'
+        insertbefore: '^/boot\s'
         state: present
       register: _aide_conf_r6b
 
@@ -146,6 +148,7 @@
         path: /etc/aide.conf
         regexp: '^/boot/grub2/grub\.cfg\s'
         line: '/boot/grub2/grub.cfg PERMS'
+        insertbefore: '^/boot\s'
         state: present
       register: _aide_conf_r6c
 

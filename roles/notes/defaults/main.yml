@@ -1,7 +1,7 @@
 ---
 notes_enabled: false  # opt-in: set true in config.yml (private repo — dfarrell07 account only)
 notes_repo_name: notes
-notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"
+notes_repo_path: "{{ ansible_facts['user_dir'] }}/{{ notes_repo_name }}"
 notes_remote_url: "git@github.com:{{ dotfiles_github_user }}/{{ notes_repo_name }}.git"
 notes_remote_url_https: "https://github.com/{{ dotfiles_github_user }}/{{ notes_repo_name }}.git"
 notes_transcrypt_cipher: aes-256-cbc

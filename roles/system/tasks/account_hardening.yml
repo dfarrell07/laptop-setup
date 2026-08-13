@@ -53,8 +53,8 @@
     # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
-    # login.defs INACTIVE: chage/passwd expired-password lockout;
-    # useradd -D -f (below) sets /etc/default/useradd new-account defaults — different tools
+    # login.defs INACTIVE: read by newusers/passwd for account aging policy on RHEL/Rocky;
+    # on Fedora 44 shadow-utils, useradd reads INACTIVE from /etc/default/useradd (set below via useradd -D) not from login.defs
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
   loop_control:
@@ -134,6 +134,7 @@
     cmd: useradd -D
   register: system_useradd_defaults
   changed_when: false
+  failed_when: false
   check_mode: false  # read-only probe — must run in check mode
   when:
     - not csb_rhel

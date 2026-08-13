@@ -84,4 +84,7 @@
 - name: Assert git email is work profile
   ansible.builtin.assert:
     that: "dotfiles_user_email_work in verify_git_email.stdout"
-    fail_msg: "git user.email ('{{ verify_git_email.stdout }}') missing expected dotfiles_user_email_work value"
+    fail_msg: >-
+      git user.email ('{{ verify_git_email.stdout }}') does not contain
+      expected '{{ dotfiles_user_email_work }}' —
+      gitconfig.j2 profile conditional regression?

@@ -26,9 +26,30 @@
         group: root
         mode: "0755"
 
-    - name: Set shared toggle-key list for sysctl assert tasks
-      ansible.builtin.set_fact:
-        _toggle_keys_shared:
+    - name: Assert no toggle-managed sysctl keys in extra dicts
+      ansible.builtin.assert:
+        that:
+          - "(_item.dict.keys() | list | intersect(_toggle_keys)) | length == 0"
+        fail_msg: >-
+          Toggle-managed keys
+          {{ (_item.dict.keys() | list) | intersect(_toggle_keys) | join(', ') }}
+          found in {{ _item.name }}. Use the corresponding toggle variables
+          instead: system_enable_ip_forward
+          (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
+          system_ptrace_scope (kernel.yama.ptrace_scope),
+          system_kexec_load_disabled (kernel.kexec_load_disabled),
+          system_io_uring_disabled (kernel.io_uring_disabled),
+          system_sysrq (kernel.sysrq),
+          system_core_pattern (kernel.core_pattern),
+          system_kernel_panic (kernel.panic),
+          system_kernel_panic_on_oops (kernel.panic_on_oops),
+          system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
+          system_bpf_jit_harden (net.core.bpf_jit_harden),
+          system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
+          net.ipv6.conf.default.accept_ra),
+          system_perf_event_paranoid (kernel.perf_event_paranoid).
+      vars:
+        _toggle_keys:
           - net.ipv4.ip_forward
           - net.ipv6.conf.all.forwarding
           - kernel.yama.ptrace_scope
@@ -43,58 +64,13 @@
           - net.ipv6.conf.all.accept_ra
           - net.ipv6.conf.default.accept_ra
           - kernel.perf_event_paranoid
-
-    - name: Assert no toggle-managed sysctl keys in system_sysctl_extra
-      ansible.builtin.assert:
-        that:
-          - "(_dict.keys() | list | intersect(_toggle_keys)) | length == 0"
-        fail_msg: >-
-          Toggle-managed keys
-          {{ (_dict.keys() | list) | intersect(_toggle_keys) | join(', ') }}
-          found in system_sysctl_extra. Use the corresponding toggle variables
-          instead: system_enable_ip_forward
-          (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
-          system_ptrace_scope (kernel.yama.ptrace_scope),
-          system_kexec_load_disabled (kernel.kexec_load_disabled),
-          system_io_uring_disabled (kernel.io_uring_disabled),
-          system_sysrq (kernel.sysrq),
-          system_core_pattern (kernel.core_pattern),
-          system_kernel_panic (kernel.panic),
-          system_kernel_panic_on_oops (kernel.panic_on_oops),
-          system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
-          system_bpf_jit_harden (net.core.bpf_jit_harden),
-          system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
-          net.ipv6.conf.default.accept_ra),
-          system_perf_event_paranoid (kernel.perf_event_paranoid).
-      vars:
-        _toggle_keys: "{{ _toggle_keys_shared }}"
-        _dict: "{{ system_sysctl_extra }}"
-
-    - name: Assert no toggle-managed sysctl keys in system_sysctl_extra_additional
-      ansible.builtin.assert:
-        that:
-          - "(_dict.keys() | list | intersect(_toggle_keys)) | length == 0"
-        fail_msg: >-
-          Toggle-managed keys
-          {{ (_dict.keys() | list) | intersect(_toggle_keys) | join(', ') }}
-          found in system_sysctl_extra_additional. Use the corresponding toggle variables
-          instead: system_enable_ip_forward
-          (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
-          system_ptrace_scope (kernel.yama.ptrace_scope),
-          system_kexec_load_disabled (kernel.kexec_load_disabled),
-          system_io_uring_disabled (kernel.io_uring_disabled),
-          system_sysrq (kernel.sysrq),
-          system_core_pattern (kernel.core_pattern),
-          system_kernel_panic (kernel.panic),
-          system_kernel_panic_on_oops (kernel.panic_on_oops),
-          system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
-          system_bpf_jit_harden (net.core.bpf_jit_harden),
-          system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
-          net.ipv6.conf.default.accept_ra),
-          system_perf_event_paranoid (kernel.perf_event_paranoid).
-      vars:
-        _toggle_keys: "{{ _toggle_keys_shared }}"
-        _dict: "{{ system_sysctl_extra_additional }}"
+      loop:
+        - name: system_sysctl_extra
+          dict: "{{ system_sysctl_extra }}"
+        - name: system_sysctl_extra_additional
+          dict: "{{ system_sysctl_extra_additional }}"
+      loop_control:
+        loop_var: _item
 
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:

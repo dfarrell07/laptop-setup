@@ -86,7 +86,7 @@ if [[ -z "$PROFILE" ]]; then
   elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
     PROFILE=personal
   elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then
-    record "config_profile" "warn" "unrecognized profile value in config.yml — using default: $PROFILE"
+    record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
   fi
 fi
 
@@ -117,6 +117,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
+    else
+      record "required_${tool}" "fail" "not installed — add install guidance in preflight.sh elif chain"
     fi
   fi
 done
@@ -360,11 +362,14 @@ fi
 
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
+elif [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
 else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
-ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent; || echo 0 only triggers on awk error
-if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
-elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
-else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi
+if [[ "$OS_FAMILY" != "unknown" ]]; then
+  ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent; || echo 0 only triggers on awk error
+  if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
+  elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
+  else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi
+fi
 
 # --- SSH session safety check ---
 # make all restarts sshd mid-play; an SSH session gets SIGHUP and dies, leaving

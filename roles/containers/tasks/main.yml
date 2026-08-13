@@ -129,6 +129,7 @@
     label: "{{ item.item | default('unknown') }}"
   when:
     - is_linux
+    - not ansible_check_mode
     - item.rc != 0
 
 - name: Check user group membership
