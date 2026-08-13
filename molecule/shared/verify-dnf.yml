@@ -199,6 +199,8 @@
 - name: Include containers.conf assertions
   ansible.builtin.import_tasks: verify-containers.yml
 
+# CI gap: all NM conf.d assertions require not system_is_container; zero
+# assertions run in fedora/rocky/debian container CI — make test-vm only.
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
 

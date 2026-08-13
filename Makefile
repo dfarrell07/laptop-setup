@@ -4,7 +4,8 @@
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
-       test-scripts test-poller \
+       test-scripts test-poller test-% \
+       repos-% \
        preflight guard-not-root \
        pip-lock pip-sync
 

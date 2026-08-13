@@ -338,6 +338,9 @@
   failed_when: (_result_lv_ssh.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh.msg | default(''))
   notify: Apply firewall rules
 
+# On fresh provisioning with system_libvirt_open_ssh=false (the default), this task is a no-op:
+# state=disabled against a non-existent port on the libvirt zone is always ok.
+# The task only has an effect when transitioning from system_libvirt_open_ssh: true → false.
 - name: Close SSH port in libvirt zone (system_libvirt_open_ssh disabled)
   ansible.posix.firewalld:
     zone: libvirt

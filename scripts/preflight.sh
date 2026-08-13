@@ -31,7 +31,7 @@ record() {
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail"; FAILURES=$((FAILURES+1)) ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(printf '%s' "$status" | tr '[:lower:]' '[:upper:]')" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }
@@ -57,7 +57,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service &>/dev/null && fapolicyd_installed=true
+  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd\.service' && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else

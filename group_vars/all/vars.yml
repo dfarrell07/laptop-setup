@@ -2,6 +2,9 @@
 # Indirection layer between vault secrets and role variables.
 # Roles reference these; vault_ prefixed variables come from vault.yml.
 
+# Replaces DEFAULT_MANAGED_STR (removed in ansible-core 2.23); all templates use {{ ansible_managed }}
+ansible_managed: 'Ansible managed — do not edit'
+
 # SSH keys (deployed by ssh role when vault is populated)
 ssh_auth_key: "{{ vault_ssh_auth_key | default('') }}"
 ssh_auth_key_pub: "{{ vault_ssh_auth_key_pub | default('') }}"

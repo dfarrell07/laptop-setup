@@ -168,8 +168,7 @@ make repos-downstream # downstream repos only
 - Always use `--signoff` (`-s`) when creating git commits
 - The commit-msg hook rejects past-tense and gerund first words after the colon
   (Added, Fixed, Adding…) but noun-phrase descriptions are the established norm
-- Scope values (capitalize in commits per the convention above; commitlint.config.js
-  keeps lowercase reference for rule matching): `Common`, `Repos-dnf`, `Packages`,
+- Scope values (capitalize in commits; commitlint.config.js enforces the same Title-Case values via type-enum): `Common`, `Repos-dnf`, `Packages`,
   `Dotfiles`, `Ssh`, `Git-repos`, `Notes`, `Redhat`, `Containers`, `Desktop`,
   `System`, `Distrobox`, `Claude`, `Ci`, `Docs`, `Chore`, `Smoke`, `Molecule`,
   `Multi`, `Sshd`, `Nm`, `Auditd`, `Backup`, `Handlers`, `Security`,

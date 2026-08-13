@@ -36,6 +36,7 @@ record() { # name status [detail]
     PASS) $JSON || printf "${P}PASS${R}  %s\n" "$n" ;;
     WARN) $JSON || printf "${W}WARN${R}  %s — %s\n" "$n" "$d"; WARNS=$((WARNS + 1)) ;;
     FAIL) $JSON || printf "${F}FAIL${R}  %s — %s\n" "$n" "$d"; FAILURES=$((FAILURES + 1)) ;;
+    *) echo "BUG: unknown record status '$s'" >&2; exit 99 ;;
   esac
 }
 

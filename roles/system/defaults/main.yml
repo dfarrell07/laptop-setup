@@ -479,11 +479,11 @@ system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1
 system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl);
                                    # CIS defense-in-depth independent of lockdown; set 0 in config.yml
                                    # on machines where kdump requires kexec_load() and lockdown is also disabled
-                                   # NOTE: lockdown=integrity (system_kernel_lockdown default) blocks kexec_load() at
-                                   # the kernel level, making this sysctl security-redundant after the first reboot
-                                   # (still applied; sole guard pre-reboot and when system_kernel_lockdown is empty
-                                   # AND Secure Boot is not active (Secure Boot enforces lockdown=integrity at boot,
-                                   # making this sysctl a no-op on Secure Boot machines immediately)).
+                                   # NOTE: lockdown=integrity (system_kernel_lockdown default) blocks kexec_load()
+                                   # at the kernel level. On Secure Boot machines, lockdown=integrity is active
+                                   # before sysctl.d runs, making this sysctl a no-op from first boot. On
+                                   # non-Secure Boot machines, this sysctl guards the pre-reboot window before
+                                   # lockdown activates (and is the sole guard when system_kernel_lockdown is empty).
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1

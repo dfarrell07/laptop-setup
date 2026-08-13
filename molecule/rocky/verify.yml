@@ -19,6 +19,7 @@
         _csb_molecule_force: true  # prevents csb_detect.yml overriding csb_rhel (Rocky has no RHEL markers)
         # required: not in group_vars/default.config.yml; role defaults absent in verify phase; omitting causes chrony assertions to fail
         system_chrony_service_enabled: false
+        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
 
   tasks:

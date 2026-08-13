@@ -208,7 +208,6 @@
 -a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
 -w /etc/hosts -p wa -k system-locale
 -w /etc/hostname -p wa -k system-locale
--w /etc/sysconfig/network -p wa -k system-locale
 -w /etc/issue -p wa -k login-banner
 -w /etc/issue.net -p wa -k login-banner
 -w /etc/locale.conf -p wa -k system-locale
@@ -228,7 +227,6 @@
 -a always,exit -F path=/usr/sbin/setsebool -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
 -a always,exit -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
 -a always,exit -F path=/usr/sbin/setfiles -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
--w /usr/share/selinux/ -p wa -k mac-policy
 
 # sudo log watch (CIS 4.1.3.3)
 -w /var/log/sudo.log -p wa -k actions

@@ -391,4 +391,4 @@
       mode: "{{ '0640' if is_apt else '0000' }}"
   loop_control:
     label: "{{ item.path }}"
-  when: not system_is_container  # mode 0000 on /etc/shadow breaks PAM auth → crashes systemd in privileged Podman containers
+  when: not csb_rhel and not system_is_container  # CSB: Satellite/SCAP owns these permissions; shadow group ownership may differ on RHEL

@@ -132,7 +132,9 @@
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
 
-- name: Remove stale distrobox.ini when not using distrobox
+# uses distrobox_check.rc directly (not distrobox_use_distrobox) — the ini should persist when
+# distrobox is installed but temporarily disabled (offline/fapolicyd); only remove when the binary is gone
+- name: Remove stale distrobox.ini when distrobox is not installed
   ansible.builtin.file:
     path: "{{ distrobox_ini_path }}"
     state: absent
