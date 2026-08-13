@@ -78,7 +78,7 @@ _sysctl_check() {
 
 # ---- User-level checks (always run) ----
 
-# SSH auth to GitHub (bypass run() — GitHub's success message is on stderr, which run() discards)
+# SSH auth to GitHub (bypass run() — host SSH keys and agent are not forwarded into the container; run() would use container key material and always fail)
 _ssh_ret=0
 timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
 if [[ "$_ssh_ret" -eq 1 ]]; then

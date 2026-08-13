@@ -82,7 +82,6 @@
       ansible.builtin.copy:
         dest: "{{ notes_repo_path }}/.gitleaks.toml"
         mode: "0644"
-        force: false
         content: |
           # Allow all blobs — transcrypt encrypts file contents before staging.
           # The global pre-commit hook (core.hooksPath) would otherwise flag
@@ -146,6 +145,7 @@
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - notes_transcrypt_available
+        - notes_transcrypt_init_result is defined
         - notes_transcrypt_init_result.rc | default(0) != 0
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)

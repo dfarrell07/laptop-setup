@@ -36,7 +36,7 @@
     masked: true
     state: stopped
   when:
-    - is_apt or is_dnf
+    - is_apt
     - system_chrony_service_enabled | bool
     - not system_is_container
   failed_when: false
@@ -62,7 +62,7 @@
     masked: false
     state: started
   when:
-    - is_apt or is_dnf
+    - is_apt
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
   failed_when: false

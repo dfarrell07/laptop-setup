@@ -113,7 +113,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
   fi
 done
 if command -v shellcheck &>/dev/null; then
-  record "linttools_shellcheck" "pass" "$(shellcheck --version | head -1)"
+  record "linttools_shellcheck" "pass" "$(shellcheck --version | awk '/^version:/{print "shellcheck " $2}')"
 else
   if [[ "$OS_FAMILY" == "darwin" ]]; then
     record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: brew install shellcheck or: make bootstrap)"
@@ -153,7 +153,7 @@ if [[ "$yk_found" == true ]]; then
       if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
         record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
       else
-        record "yubikey_chalresp" "warn" "Slot 2 challenge-response failed — HMAC-SHA1 configured?"
+        record "yubikey_chalresp" "warn" "Slot 2 no response within 15s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
       fi
     else
       record "yubikey_chalresp" "skip" "skipped in --json mode (interactive)"

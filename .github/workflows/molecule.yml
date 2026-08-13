@@ -95,3 +95,28 @@ jobs:
         run: |
           echo "One or more required jobs failed or were cancelled"
           exit 1
+
+  notify-failure:
+    name: Create Issue on Failure
+    needs: [all-molecule-pass]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Create issue on failure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Molecule tests failed (scheduled run)"
+          BODY="Weekly Molecule run failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          EXISTING=$(gh issue list --label bug --state open \
+            --search "$TITLE in:title" --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "bug" || \
+              echo '::warning::gh issue create failed — check token permissions and label existence'
+          fi
