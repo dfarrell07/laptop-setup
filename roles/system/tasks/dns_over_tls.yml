@@ -79,6 +79,19 @@
     - not csb_detected
     - not system_is_container
 
+- name: Warn on strict DNSSEC without strict DoT
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_dnssec_mode=yes (strict) without system_dot_mode=yes — in
+      opportunistic DoT mode, systemd-resolved may fall back to plain UDP on port 853
+      failure, allowing a network-path adversary to strip DNSSEC records. Set
+      system_dot_mode: yes alongside system_dnssec_mode: yes for a protected channel.
+  when:
+    - system_dnssec_mode | string | lower in ['yes', 'true', '1']
+    - system_dot_mode | string | lower not in ['yes', 'true', '1']
+    - not csb_detected
+    - not system_is_container
+
 # --- Verify resolv.conf symlink for split DNS ---
 - name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
   ansible.builtin.file:

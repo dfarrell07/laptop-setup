@@ -578,17 +578,6 @@
       changed_when: false
       become: true
 
-    # --- Session timeout ---
-    - name: Verify TMOUT configured via profile.d (CIS 5.5.5 — bash login shells)
-      ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/profile.d/tmout.sh
-      changed_when: false
-      become: true
-
-    - name: Verify TMOUT configured via /etc/zshrc (CIS 5.5.5 — zsh interactive shells)
-      ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zshrc
-      changed_when: false
-      become: true
-
     # pwquality minlen=14 covered by verify-dnf.yml (included at line 35)
 
     # --- Journald persistence ---

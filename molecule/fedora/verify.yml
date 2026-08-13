@@ -33,9 +33,7 @@
     - name: Include dnf verify assertions
       ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
-    # --- redhat role: minimal assertions (cert/VPN packages unavailable from public repos in CI) ---
-    # Verify the condition logic fired correctly — is_fedora=true triggers cert/VPN install blocks.
-    # Full install-success verification requires internal repos (out of scope for Podman CI).
+    # --- redhat role: not exercised on Fedora (when: is_rhel or csb_detected — both false in CI) ---
 
     # --- Notes role ---
     - name: Verify notes role

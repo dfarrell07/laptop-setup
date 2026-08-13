@@ -5,7 +5,9 @@ server {{ server }} iburst nts
 {% endfor %}
 
 # Unauthenticated fallback — used by authselectmode prefer when NTS sources are unreachable (port 4460 blocked, NTS-KE fails). minsources={{ system_chrony_minsources }} is the minimum sources before clock adjustment, a separate concern.
+{% if system_chrony_authselectmode != 'require' %}
 pool {{ system_chrony_fallback_pool }} iburst
+{% endif %}
 
 # Prefer NTS; fall back to pool only when NTS unavailable
 authselectmode {{ system_chrony_authselectmode }}

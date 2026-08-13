@@ -39,6 +39,18 @@
       when:
         - _config_yml_stat.stat.exists
         - _user_config is not defined
+        - _config_parse_warn_shown is not defined
+      tags: [always]
+
+    # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
+    # Play 1's include of this file sets _config_parse_warn_shown; Play 2's include then sees it defined.
+    - name: Set config parse warn flag (suppresses duplicate warning in Play 2)
+      ansible.builtin.set_fact:
+        _config_parse_warn_shown: true
+      when:
+        - _config_yml_stat.stat.exists
+        - _user_config is not defined
+        - _config_parse_warn_shown is not defined
       tags: [always]
 
     - name: Set molecule context flag

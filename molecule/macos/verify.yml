@@ -4,6 +4,12 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Load configuration defaults
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
     # set_fact from converge does not persist to a separate verify invocation.
     # macOS converge sets dotfiles_github_user: dfarrell07; re-apply here so
     # the SSH agent launchd plist path resolves correctly.

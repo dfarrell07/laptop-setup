@@ -17,7 +17,7 @@ PermitRootLogin no
 PermitEmptyPasswords no
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}
-AuthorizedKeysFile .ssh/authorized_keys  # narrows OpenSSH compiled default (.ssh/authorized_keys .ssh/authorized_keys2) — .authorized_keys2 deprecated since 7.0
+AuthorizedKeysFile .ssh/authorized_keys  # matches main sshd_config; guards against rpmnew replacing that setting (.ssh/authorized_keys2 deprecated since 7.0)
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3
@@ -36,7 +36,7 @@ ClientAliveCountMax 2
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
 # To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
-{% if system_ssh_channel_timeout %}
+{% if system_ssh_channel_timeout != "" %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
 # system_ssh_unused_connection_timeout: default 600; set to empty string in config.yml to omit

@@ -51,7 +51,8 @@
       community.general.homebrew_cask:
         name: >-
           {{ packages_brew_cask
-             + (packages_brew_cask_work | default([]) if profile == 'work' else []) }}
+             + (packages_brew_cask_work | default([]) if profile == 'work' else [])
+             + (packages_brew_cask_personal | default([]) if profile != 'work' else []) }}
         state: present
       async: 600
       poll: 10
