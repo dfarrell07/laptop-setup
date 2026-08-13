@@ -12,7 +12,7 @@ Banner /etc/issue.net
 #   cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
 # Alternatively, populate vault.yml with vault_ssh_auth_key_pub (ed25519).
 PasswordAuthentication no
-KbdInteractiveAuthentication no  # forward guard: 50-redhat.conf currently also sets no; guards against future upstream change
+KbdInteractiveAuthentication no  # compiled default yes; 50-redhat.conf currently also sets no; explicit here so hardening holds if drop-ins are reordered or 50-redhat.conf changes
 PermitRootLogin no
 PermitEmptyPasswords no  # OpenSSH compiled default; also unreachable because PasswordAuthentication no closes the only path where empty passwords would matter
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}

@@ -711,8 +711,8 @@
     - "PermitEmptyPasswords no"
     - "X11Forwarding no"
     - "HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
-    - "ClientAliveInterval 300"
-    - "ClientAliveCountMax 2"
+    - "ClientAliveInterval 300"  # hardcoded: no system_ssh_client_alive_interval var; matches sshd-hardening.conf.j2
+    - "ClientAliveCountMax 2"  # hardcoded: no system_ssh_client_alive_count_max var; matches sshd-hardening.conf.j2
     - "^Port {{ ssh_port }}$"
     - "AllowUsers "
   changed_when: false

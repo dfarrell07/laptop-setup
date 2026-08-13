@@ -109,7 +109,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
-    else echo "BUG in preflight.sh: missing error message for tool '$tool'" >&2; record "required_${tool}" "fail" "not installed"; fi  # fallback for any tool added to the loop without a specific elif
+    # Note: add an elif here if adding a new tool to the loop above
+    fi
   fi
 done
 if command -v shellcheck &>/dev/null; then

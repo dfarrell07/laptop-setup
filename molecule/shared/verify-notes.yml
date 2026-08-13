@@ -8,6 +8,11 @@
     path: "{{ ansible_user_dir }}/notes/.git"
   register: verify_notes
 
+- name: Assert notes/.git directory exists
+  ansible.builtin.assert:
+    that: verify_notes.stat.exists
+    fail_msg: "notes/.git does not exist — notes role did not clone or ci-mock-notes.yml failed"
+
 - name: Stat notes .git/config for permission check
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/notes/.git/config"

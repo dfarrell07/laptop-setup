@@ -29,30 +29,10 @@
     - name: Assert no toggle-managed sysctl keys in extra dicts
       ansible.builtin.assert:
         that:
-          - "(_dict.keys() | list | intersect(['net.ipv4.ip_forward', 'net.ipv6.conf.all.forwarding',
-            'kernel.yama.ptrace_scope', 'kernel.kexec_load_disabled', 'kernel.io_uring_disabled',
-            'kernel.sysrq', 'kernel.core_pattern', 'kernel.panic', 'kernel.panic_on_oops',
-            'kernel.unprivileged_bpf_disabled', 'net.core.bpf_jit_harden',
-            'net.ipv6.conf.all.accept_ra', 'net.ipv6.conf.default.accept_ra',
-            'kernel.perf_event_paranoid'])) | length == 0"
+          - "(_dict.keys() | list | intersect(_toggle_keys)) | length == 0"
         fail_msg: >-
           Toggle-managed keys
-          {{ (_dict.keys() | list) | intersect([
-            'net.ipv4.ip_forward',
-            'net.ipv6.conf.all.forwarding',
-            'kernel.yama.ptrace_scope',
-            'kernel.kexec_load_disabled',
-            'kernel.io_uring_disabled',
-            'kernel.sysrq',
-            'kernel.core_pattern',
-            'kernel.panic',
-            'kernel.panic_on_oops',
-            'kernel.unprivileged_bpf_disabled',
-            'net.core.bpf_jit_harden',
-            'net.ipv6.conf.all.accept_ra',
-            'net.ipv6.conf.default.accept_ra',
-            'kernel.perf_event_paranoid'
-          ]) | join(', ') }}
+          {{ (_dict.keys() | list) | intersect(_toggle_keys) | join(', ') }}
           found in {{ item }}. Use the corresponding toggle variables
           instead: system_enable_ip_forward
           (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
@@ -72,6 +52,21 @@
         - system_sysctl_extra
         - system_sysctl_extra_additional
       vars:
+        _toggle_keys:
+          - net.ipv4.ip_forward
+          - net.ipv6.conf.all.forwarding
+          - kernel.yama.ptrace_scope
+          - kernel.kexec_load_disabled
+          - kernel.io_uring_disabled
+          - kernel.sysrq
+          - kernel.core_pattern
+          - kernel.panic
+          - kernel.panic_on_oops
+          - kernel.unprivileged_bpf_disabled
+          - net.core.bpf_jit_harden
+          - net.ipv6.conf.all.accept_ra
+          - net.ipv6.conf.default.accept_ra
+          - kernel.perf_event_paranoid
         _dict: "{{ vars[item] }}"
 
     - name: Merge configurable sysctl values into hardening dict

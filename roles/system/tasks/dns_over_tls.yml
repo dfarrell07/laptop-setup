@@ -8,14 +8,14 @@
     enabled: true
   # container detection is unreliable in Molecule; starting resolved triggers
   # systemd re-exec, crashing undetected privileged Podman containers
-  when: not system_is_container
+  when: not system_is_container and not csb_rhel
 
 - name: Ensure resolved drop-in directory
   ansible.builtin.file:
     path: /etc/systemd/resolved.conf.d
     state: directory
     mode: "0755"
-  when: not system_is_container  # inotify on /etc/systemd/resolved.conf.d triggers resolved restart, crashes containers
+  when: not system_is_container and not csb_rhel  # inotify on /etc/systemd/resolved.conf.d triggers resolved restart, crashes containers
 
 - name: Disable LLMNR and mDNS via resolved drop-in
   ansible.builtin.copy:

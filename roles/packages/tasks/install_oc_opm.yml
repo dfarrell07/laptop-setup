@@ -196,47 +196,45 @@
           delay: 10
           until: packages_opm_download is succeeded
 
-        - name: List opm tarball contents  # noqa: command-instead-of-module
-          ansible.builtin.command: tar tf /tmp/opm-linux.tar.gz
-          register: _opm_tarball_contents
-          changed_when: false
+        - name: Extract and install opm-rhel8 binary
           when: packages_opm_download.changed or packages_opm_check.rc != 0
+          block:
+            - name: List opm tarball contents  # noqa: command-instead-of-module
+              ansible.builtin.command: tar tf /tmp/opm-linux.tar.gz
+              register: _opm_tarball_contents
+              changed_when: false
 
-        - name: Assert opm-rhel8 is present in tarball
-          ansible.builtin.assert:
-            that: "'opm-rhel8' in _opm_tarball_contents.stdout_lines"
-            fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for OCP {{ packages_oc_version }}"
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
+            - name: Assert opm-rhel8 is present in tarball
+              ansible.builtin.assert:
+                that: "'opm-rhel8' in _opm_tarball_contents.stdout_lines"
+                fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for OCP {{ packages_oc_version }}"
 
-        - name: Extract opm binary
-          ansible.builtin.unarchive:
-            src: /tmp/opm-linux.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --no-same-owner
-              - opm-rhel8 # opm-rhel8 is the binary name for OCP 4.10+; verify when bumping packages_oc_version
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
-          become: true
-          tags: [become]
+            - name: Extract opm binary
+              ansible.builtin.unarchive:
+                src: /tmp/opm-linux.tar.gz
+                dest: /usr/local/bin
+                remote_src: true
+                extra_opts:
+                  - --no-same-owner
+                  - opm-rhel8 # opm-rhel8 is the binary name for OCP 4.10+; verify when bumping packages_oc_version
+              become: true
+              tags: [become]
 
-        - name: Copy opm-rhel8 to opm
-          ansible.builtin.copy:
-            src: /usr/local/bin/opm-rhel8
-            dest: /usr/local/bin/opm
-            remote_src: true
-            mode: '0755'
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
-          become: true
-          tags: [become]
+            - name: Copy opm-rhel8 to opm
+              ansible.builtin.copy:
+                src: /usr/local/bin/opm-rhel8
+                dest: /usr/local/bin/opm
+                remote_src: true
+                mode: '0755'
+              become: true
+              tags: [become]
 
-        - name: Remove opm-rhel8 after copy
-          ansible.builtin.file:
-            path: /usr/local/bin/opm-rhel8
-            state: absent
-          when: packages_opm_download.changed or packages_opm_check.rc != 0
-          become: true
-          tags: [become]
+            - name: Remove opm-rhel8 after copy
+              ansible.builtin.file:
+                path: /usr/local/bin/opm-rhel8
+                state: absent
+              become: true
+              tags: [become]
 
         - name: Create ansible-packages state directory
           ansible.builtin.file:
