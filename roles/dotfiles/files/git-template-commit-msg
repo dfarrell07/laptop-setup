@@ -61,6 +61,7 @@ if ! grep -q '^Signed-off-by:' "$1"; then
   exit 1
 fi
 
+# Sync partner: .githooks/commit-msg — keep the commitlint block below identical in both files
 if command -v npx >/dev/null 2>&1; then
   if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then
     npx --no -- commitlint --edit "$1"

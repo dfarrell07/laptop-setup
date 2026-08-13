@@ -144,6 +144,18 @@
     - is_dnf
   failed_when: false
 
+- name: Unmask tuned.service when TLP disabled
+  ansible.builtin.systemd:
+    name: tuned.service
+    masked: false
+    # intentionally not started: let tuned remain stopped on resume; systemd starts it on next boot
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  failed_when: false
+
 - name: TLP power management (enabled, install succeeded, not RHEL CSB)
   when:
     - system_tlp_enabled | bool
@@ -157,6 +169,7 @@
         state: stopped
       loop:
         - tuned-ppd
+        - tuned
       when:
         - is_dnf
         - not system_is_container

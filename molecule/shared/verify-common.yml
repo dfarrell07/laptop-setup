@@ -640,7 +640,9 @@
     fail_msg: >-
       /etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions
       (expected 0600, got {{ verify_sshd_dropin.stat.mode | default('missing') }})
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - verify_sshd_dropin.stat.exists
 
 - name: Check sshd hardening drop-in contains critical directives
   ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf

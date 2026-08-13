@@ -52,6 +52,7 @@
       value: "{{ system_pass_warn_age }}"
     - name: UMASK
       value: "{{ system_umask }}"
+    # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
     - name: INACTIVE  # belt-and-suspenders with useradd -D -f below; both paths must agree
@@ -87,7 +88,7 @@
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
-- name: Restrict existing user home directory to 0750 (CIS 6.2.x, retroactive)
+- name: Restrict existing user home directory to {{ system_home_mode }} (CIS 6.2.x, retroactive)
   ansible.builtin.file:
     path: "{{ real_user_home }}"
     mode: "{{ system_home_mode }}"

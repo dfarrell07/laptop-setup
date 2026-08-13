@@ -79,6 +79,20 @@
     - not csb_detected
     - not system_is_container
 
+- name: "Warn: Domains=~. catch-all breaks non-NM VPN split DNS"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_dns_domains=~. (catch-all) routes all DNS through the resolved
+      stub on 127.0.0.53. Non-NetworkManager VPNs (e.g. wg-quick, openconnect outside
+      NM) configure split DNS by writing nameservers to /etc/resolv.conf, but that path
+      is a symlink to the stub, so those writes are ignored or break the symlink. VPN
+      DNS will not work unless the VPN is integrated with NetworkManager or pushes
+      per-link routing domains to resolved via resolvectl.
+  when:
+    - system_dns_domains == '~.'
+    - not csb_detected
+    - not system_is_container
+
 - name: Warn on strict DNSSEC without strict DoT
   ansible.builtin.debug:
     msg: >-

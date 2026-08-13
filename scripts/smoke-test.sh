@@ -221,6 +221,7 @@ _tmux_conf="$HOME/.config/tmux/tmux.conf"
 if [[ ! -f "$_tmux_conf" ]]; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "not deployed — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_tmux_conf"; then record "dotfile-.config/tmux/tmux.conf" "FAIL" "$_tmux_conf present but not Ansible-managed — inspect and re-run: make dotfiles"
 else record "dotfile-.config/tmux/tmux.conf" "PASS"; fi
+unset _tmux_conf
 _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"

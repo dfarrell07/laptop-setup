@@ -21,7 +21,7 @@ ntsdumpdir {{ system_chrony_ntsdumpdir }}
 driftfile {{ system_chrony_driftfile }}
 makestep {{ system_chrony_makestep }}
 rtcsync
-leapseclist {{ system_chrony_leapseclist }}
+{% if system_chrony_leapseclist %}leapseclist {{ system_chrony_leapseclist }}{% endif %}
 leapsecmode {{ system_chrony_leapsecmode }}
 minsources {{ system_chrony_minsources }}
 logdir {{ system_chrony_logdir }}
