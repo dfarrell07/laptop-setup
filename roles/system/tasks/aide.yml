@@ -38,7 +38,7 @@
         path: /etc/aide.conf
         regexp: "^{{ item | replace('.', '\\.') }}[$]?\\s"  # [$]? matches AIDE $ suffix; \s prevents matching /path.bak
         line: "{{ item }} NORMAL"
-        insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (longest-match-wins)
+        insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (first-match ordering)
         state: present
       loop: "{{ system_aide_monitoring_etc_paths }}"
       loop_control:

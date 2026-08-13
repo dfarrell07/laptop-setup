@@ -4,6 +4,10 @@ name: OSSF Scorecard
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'references/**'
+      - 'docs/**'
   schedule:
     - cron: '23 4 * * 0'
   workflow_dispatch:

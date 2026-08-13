@@ -93,6 +93,17 @@
     - not csb_detected
     - not system_is_container
 
+- name: "Warn: per-link DNS resolvers bypass DNSOverTLS"
+  ansible.builtin.debug:
+    msg: >-
+      Per-link DNS resolvers pushed by VPN/Tailscale via resolvectl bypass DNSOverTLS
+      — systemd-resolved sends those queries to the per-link resolver using its native
+      transport (typically plain UDP 53). system_dot_mode: yes does not encrypt
+      per-link DNS.
+  when:
+    - not csb_detected
+    - not system_is_container
+
 - name: Warn on strict DNSSEC without strict DoT
   ansible.builtin.debug:
     msg: >-

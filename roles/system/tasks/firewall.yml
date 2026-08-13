@@ -294,6 +294,9 @@
   # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is shipped by
   # libvirt-daemon-driver-network, which is installed in Play 2 by the packages role;
   # on first provision (before packages run) the zone file is absent. All other failures surface.
+  # Note: libvirt zone target=ACCEPT applies to forwarded (VM-to-external) traffic; a priority=32767
+  # reject rule blocks all host-bound traffic except explicitly listed services, so removing ssh here
+  # does prevent VMs from reaching sshd on port 22.
   notify: Apply firewall rules
 
 - name: Remove tftp service from libvirt zone (upstream default; not needed on this host)

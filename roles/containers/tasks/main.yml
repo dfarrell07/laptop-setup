@@ -31,7 +31,7 @@
 
 - name: Check vault registry pre-auth status
   ansible.builtin.command:
-    cmd: "podman login --get-login {{ item.registry }}"
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
   loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"
@@ -46,7 +46,7 @@
 
 - name: Authenticate to container registries from vault
   ansible.builtin.command:
-    cmd: "podman login --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
+    cmd: "podman login --authfile {{ containers_auth_file }} --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
     stdin: "{{ item.item.token }}"
   timeout: 60
   register: _vault_login_result
@@ -64,7 +64,7 @@
 
 - name: Check registry auth status after vault login
   ansible.builtin.command:
-    cmd: "podman login --get-login {{ item.registry }}"
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
   loop: "{{ registry_tokens }}"
   loop_control:
     label: "{{ item.registry }}"

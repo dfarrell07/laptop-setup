@@ -81,3 +81,18 @@ jobs:
         env:
           SCENARIO: ${{ matrix.scenario }}
         run: molecule test -s "$SCENARIO"
+
+  all-molecule-pass:
+    name: All Molecule Checks Pass
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - changes
+      - molecule
+    steps:
+      - name: Verify no required job failed or was cancelled
+        run: |
+          if [[ "${{ needs.molecule.result }}" == "failure" || "${{ needs.molecule.result }}" == "cancelled" ]]; then
+            echo "One or more required jobs failed or were cancelled"
+            exit 1
+          fi

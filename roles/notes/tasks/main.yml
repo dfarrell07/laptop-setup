@@ -45,7 +45,7 @@
         - name: Log HTTPS clone failure reason
           ansible.builtin.debug:
             msg: "HTTPS clone failed: {{ notes_https_clone_result.msg | default('unknown') }}"
-          when: notes_https_clone_result.failed | default(false)
+          when: notes_https_clone_result.rc | default(0) != 0
 
     - name: Re-check if notes repo exists after clone attempts
       ansible.builtin.stat:

@@ -1,13 +1,12 @@
 #!/bin/bash
 msg=$(head -1 "$1")
-first=$(echo "$msg" | awk '{print $1}')
-first="${first%:}"
-desc_first=$(echo "$msg" | sed 's/^[-A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
-
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
   Merge\ branch*|Merge\ pull*|Merge\ remote*) exit 0 ;;
 esac
+first=$(echo "$msg" | awk '{print $1}')
+first="${first%:}"
+desc_first=$(echo "$msg" | sed 's/^[-A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
 
 if [ -z "$desc_first" ]; then
   case "$msg" in

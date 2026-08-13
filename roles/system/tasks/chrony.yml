@@ -113,8 +113,9 @@
   ansible.builtin.debug:
     msg: >-
       chrony NTS deployed — requires TCP 4460 to {{ system_chrony_nts_servers | join('/') }};
-      if blocked, chrony falls back to unauthenticated pool. Set
-      system_chrony_authselectmode: require in config.yml to surface NTS failure as an error.
+      if blocked, chrony falls back to unauthenticated pool (not cryptographically verified,
+      vulnerable to on-path NTP spoofing); set system_chrony_authselectmode: require in
+      config.yml to surface NTS failure as an error if authenticated time is a hard requirement.
   when:
     - system_chrony_service_enabled | bool
     - not csb_detected

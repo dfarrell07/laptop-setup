@@ -80,8 +80,10 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="work"
-  grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="personal"
+  _prof=$(grep -oP '^profile:[[:space:]]*\K(work|personal)(?=[[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null | head -1)
+  case "${_prof:-}" in
+    work|personal) PROFILE="$_prof" ;;
+  esac
 fi
 
 # --- Required tools ---
@@ -284,7 +286,7 @@ fi
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
-    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
+    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
@@ -293,7 +295,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
       if [[ "$pl" == "true" ]]; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
       else
-        record "fapolicyd" "warn" "active and enforcing — WARNING: pipelining=$pl in ansible.cfg — fapolicyd will block /tmp execution"
+        record "fapolicyd" "warn" "active and enforcing — pipelining=$pl in ansible.cfg — fapolicyd will block /tmp execution"
       fi
     fi
   else

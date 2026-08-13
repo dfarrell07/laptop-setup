@@ -270,7 +270,7 @@
     that:
       - verify_claude_default_settings.stat.exists
       - verify_claude_default_settings.stat.mode == '0600'
-    fail_msg: "~/.claude/settings.local.json not deployed — default claude instance has no deny lists or sandbox"
+    fail_msg: "~/.claude/settings.local.json missing or wrong permissions (expected 0600)"
 
 - name: Validate Claude default settings.local.json sandbox and deny config
   ansible.builtin.command:
@@ -1167,8 +1167,8 @@
 - name: Check 98-llmnr.conf disables LLMNR and mDNS
   ansible.builtin.command: grep -q '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:
-    - "LLMNR=no"
-    - "MulticastDNS=no"
+    - "LLMNR={{ system_resolved_llmnr | default('no') }}"
+    - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
   changed_when: false
   when:
     - ansible_system == 'Linux'

@@ -80,17 +80,19 @@ else
     if ! git show :package-lock.json | python3 -c "
 import json, sys
 lock = json.load(sys.stdin)
+errors = []
 for name, info in lock.get('packages', {}).items():
     if not name:
         continue
     integrity = info.get('integrity', '')
     resolved = info.get('resolved', '')
     if integrity and not integrity.startswith('sha512-'):
-        print(f'ERROR: Weak hash in lockfile: {name}', file=sys.stderr)
-        sys.exit(1)
+        errors.append(f'ERROR: Weak hash in lockfile: {name}')
     if resolved and not resolved.startswith('https://registry.npmjs.org/'):
-        print(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}', file=sys.stderr)
-        sys.exit(1)
+        errors.append(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}')
+if errors:
+    print('\n'.join(errors), file=sys.stderr)
+    sys.exit(1)
 " 2>&1; then
       failed=1
     fi
