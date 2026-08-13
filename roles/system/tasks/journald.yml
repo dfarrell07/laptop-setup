@@ -4,8 +4,11 @@
 # Skipped entirely in containers: inotify on /etc/systemd/journald.conf.d and creating
 # /var/log/journal both trigger journald restart, which crashes privileged Podman containers.
 # Rationale for /var/log/journal: Storage=auto writes there only when the directory exists;
-# creating it is additive. If CSB IT uses Storage=volatile in their own drop-in, it wins;
-# if they use Storage=auto, persistent logging is a security benefit (logs survive reboots).
+# creating it is additive. NOTE: 99-hardening.conf sorts last; if IT deploys a journald
+# drop-in on hybrid Fedora with a lower-numbered name, this config wins. If IT tuning
+# must take precedence on hybrid CSB, add a csb_detected guard or rename the drop-in
+# to a lower sort-order name. If they use Storage=auto, persistent logging is a security
+# benefit (logs survive reboots).
 # journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM pipeline uses
 # audisp-remote (auditd), a completely separate subsystem.
 # The opinionated config (rate limits, disk quota) is also CSB-guarded because those specific

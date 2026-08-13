@@ -10,12 +10,19 @@
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
 
+- name: Warn if gh not installed
+  ansible.builtin.debug:
+    msg: >-
+      gh not found in PATH — run 'make packages' first.
+      Cloning will fail for private repos.
+  when: git_repos_gh_auth.rc == 127
+
 - name: Warn if gh not authenticated
   ansible.builtin.debug:
     msg: >-
       GitHub CLI not authenticated. Run 'gh auth login' before
       'make repos'. Cloning will fail for private repos.
-  when: git_repos_gh_auth.rc != 0
+  when: git_repos_gh_auth.rc not in [0, 127]
 
 - name: Determine active categories for profile
   ansible.builtin.set_fact:

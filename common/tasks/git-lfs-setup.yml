@@ -33,9 +33,7 @@
     cmd: git lfs install --skip-repo
   register: git_lfs_install_result
   failed_when: false
-  changed_when: >-
-    git_lfs_install_result.rc == 0 and
-    ("Updated" in git_lfs_install_result.stdout or "initialized" in git_lfs_install_result.stdout)
+  changed_when: git_lfs_install_result.rc == 0 and (git_lfs_configured.rc | default(1) != 0)
   when:
     - git_lfs_check.rc == 0
     - git_lfs_configured.rc | default(-1) != 0

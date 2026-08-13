@@ -17,7 +17,7 @@ PermitRootLogin no
 PermitEmptyPasswords no  # OpenSSH compiled default; explicit for first-occurrence guard
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}
-AuthorizedKeysFile .ssh/authorized_keys  # matches main sshd_config; guards against rpmnew replacing that setting (.ssh/authorized_keys2 deprecated since 7.0)
+AuthorizedKeysFile .ssh/authorized_keys  # matches main sshd_config; guards against rpmnew replacing that setting; default still includes .ssh/authorized_keys2 as of OpenSSH 10.x; explicit single-file list removes the deprecated second path
 
 AllowUsers {{ real_user_id }}
 MaxAuthTries 3

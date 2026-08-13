@@ -37,7 +37,7 @@ record() {
 }
 
 # --- OS / CSB / profile detection ---
-OS_FAMILY="unknown" IS_CSB=false
+OS_FAMILY="unknown" IS_CSB=false fapolicyd_installed=false
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
@@ -110,6 +110,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
       fi
+    else
+      record "required_${tool}" "fail" "not installed — run: make bootstrap"
     fi
   fi
 done
@@ -276,7 +278,7 @@ fi
 
 # --- fapolicyd detection (Linux only) ---
 FAPOLICYD_BLOCKING=false
-if [[ "$OS_FAMILY" != "darwin" ]]; then
+if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
     if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"

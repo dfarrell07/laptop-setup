@@ -114,7 +114,10 @@
   check_mode: false  # read-only probe — must run in check mode
   when: distrobox_tool != 'none'
 
-- name: Mark container unavailable when offline and container does not exist
+# Two distinct reasons to skip container creation when the container does not yet exist:
+# (1) packages_install_binaries=false — offline/no-download mode; pulling a new image would fail.
+# (2) fapolicyd_enforcing — CSB restricted mode; distrobox cannot pull images under fapolicyd enforcement.
+- name: Mark container unavailable when binary installs are disabled or fapolicyd is enforcing
   ansible.builtin.set_fact:
     distrobox_tool: "none"
     distrobox_use_distrobox: false

@@ -40,6 +40,12 @@
             GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make all
           failed_when: false
           timeout: 60
+          register: notes_https_clone_result
+
+        - name: Log HTTPS clone failure reason
+          ansible.builtin.debug:
+            msg: "HTTPS clone failed: {{ notes_https_clone_result.msg | default('unknown') }}"
+          when: notes_https_clone_result.rc | default(0) != 0
 
     - name: Re-check if notes repo exists after clone attempts
       ansible.builtin.stat:
@@ -70,6 +76,7 @@
     - name: Set transcrypt availability fact
       ansible.builtin.set_fact:
         notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists | default(false) }}"
+      when: notes_repo_available
 
     - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
       ansible.builtin.copy:
@@ -100,6 +107,7 @@
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
         notes_transcrypt_inited: "{{ notes_transcrypt_check.rc | default(-1) == 0 }}"
+      when: notes_transcrypt_available
 
     - name: Initialize transcrypt
       ansible.builtin.command:
