@@ -40,7 +40,7 @@
       assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true'
       assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true'
       assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false'
-      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false'
+      assert d.get('enableAllProjectMcpServers', True) == False, 'enableAllProjectMcpServers is missing or not false'
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'
       "
   changed_when: false

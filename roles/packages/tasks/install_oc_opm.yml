@@ -30,7 +30,7 @@
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_findall('(?:Client Version: |oc v)(\d+\.\d+\.\d+)') + [''])[0] != packages_oc_version or
+        (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+)') + [''])[0] != packages_oc_version or
         not packages_kubectl_stat.stat.exists
       block:
         - name: Fetch OpenShift client sha256sum.txt

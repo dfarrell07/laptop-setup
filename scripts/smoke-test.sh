@@ -1920,7 +1920,7 @@ fi
 
 # ---- Output ----
 if $JSON; then
-  printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; echo "${RESULTS[*]}")" "$FAILURES" "$WARNS"
+  printf '{"results":[%s],"failures":%d,"warns":%d}\n' "$(IFS=,; printf '%s' "${RESULTS[*]}")" "$FAILURES" "$WARNS"
 else
   total=${#RESULTS[@]}
   passes=$((total - FAILURES - WARNS))

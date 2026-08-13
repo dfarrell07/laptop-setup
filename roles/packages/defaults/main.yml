@@ -346,7 +346,7 @@ packages_brew:
   - pipx  # yamllint + ansible-lint pinned installs (all profiles; no profile guard in install_pipx.yml); pulls python3 transitively
   - gh
   - tailscale  # formula provides CLI + tailscaled daemon; menubar app requires the cask — consistent with Linux daemon treatment
-  - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin
+  - gitleaks  # no work guard — useful for personal repos; actionlint/zizmor are GHA-specific (work-only)
   - gnupg
   # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
   # (macOS ships LibreSSL which has API/behavior differences from upstream OpenSSL)

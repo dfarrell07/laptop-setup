@@ -56,7 +56,7 @@
       ansible.builtin.set_fact:
         notes_repo_available: >-
           {{ notes_repo_stat.stat.exists or
-             (notes_repo_post_clone.stat | default({'exists': false})).exists }}
+             (not (notes_repo_post_clone is skipped) and notes_repo_post_clone.stat.exists) }}
 
     - name: Set up git-lfs smudge/clean filter drivers
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
@@ -104,12 +104,6 @@
             create: true
             mode: '0600'
 
-        - name: Enforce mode on notes repo git exclude
-          # .git/info/exclude pre-exists from git clone; file task is belt-and-suspenders enforcement
-          ansible.builtin.file:
-            path: "{{ notes_repo_path }}/.git/info/exclude"
-            mode: "0600"
-            state: file
       when: notes_repo_available
 
     - name: Check transcrypt initialization status
