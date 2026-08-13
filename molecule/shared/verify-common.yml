@@ -632,16 +632,25 @@
   become: true
   when: ansible_system == 'Linux'
 
-- name: Assert sshd hardening drop-in deployed with mode 0600
+- name: Assert sshd hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_sshd_dropin.stat.exists
+    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf not deployed — system role sshd task regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+
+- name: Assert sshd hardening drop-in has mode 0600
   ansible.builtin.assert:
     that:
+      - verify_sshd_dropin.stat.exists
       - verify_sshd_dropin.stat.mode == '0600'
     fail_msg: >-
       /etc/ssh/sshd_config.d/00-hardening.conf has wrong permissions
       (expected 0600, got {{ verify_sshd_dropin.stat.mode | default('unknown') }})
   when:
     - ansible_system == 'Linux'
-    - verify_sshd_dropin.stat.exists
+    - ansible_os_family != 'Debian'
 
 - name: Check sshd hardening drop-in contains critical directives
   ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf

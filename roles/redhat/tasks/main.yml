@@ -53,27 +53,6 @@
           No Red Hat CA certificate files found in {{ role_path }}/files/.
           Populate the files listed in redhat_ca_certs to deploy CA trust.
       when: redhat_ca_stat.results | selectattr('stat.exists') | list | length == 0
-  rescue:
-    - name: Record CA certificate stat failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: redhat
-        _csb_task_name: "Stat Red Hat CA certificate files in role"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: "Red Hat internal CA certs could not be stat'd; verify {{ role_path }}/files/ is accessible"
-        _csb_ticket_summary: "Cannot stat Red Hat CA certificate files on CSB"
-        _csb_ticket_body: >-
-          Red Hat CA certificate files could not be stat'd at
-          {{ role_path }}/files/. CA cert deployment may be
-          skipped, affecting access to internal HTTPS services.
-      when: csb_detected
-    - name: Warn CA certificate stat failed (non-CSB)
-      ansible.builtin.debug:
-        msg: >-
-          TASK FAILED: Stat Red Hat CA certificate files in role redhat.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          Continuing playbook execution.
-      when: not csb_detected
 
 - name: Install Red Hat cert packages
   # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)

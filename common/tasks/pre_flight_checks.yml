@@ -100,16 +100,16 @@
     - name: Non-molecule pre-flight assertions
       when: not _pf_is_molecule and _pf_assertions_checked is not defined
       block:
-        - name: Assert system_timezone is not the CHANGE_ME placeholder
+        - name: Assert system_timezone is set and not the CHANGE_ME placeholder
           ansible.builtin.assert:
             that:
               - system_timezone != 'CHANGE_ME'
               - system_timezone | length > 0
             fail_msg: >-
               Set system_timezone in config.yml before running make all.
-              The default 'CHANGE_ME' sentinel is invalid — timedatectl will
-              reject it. Run 'timedatectl list-timezones' to find yours,
-              then add system_timezone: <zone> to config.yml.
+              The current value is empty or still the CHANGE_ME placeholder —
+              timedatectl will reject both. Run 'timedatectl list-timezones'
+              to find yours, then add system_timezone: <zone> to config.yml.
               Note: if config.yml was just parsed with a YAML error (see WARNING above),
               fix the YAML syntax first — this assertion fires because user overrides could not be loaded.
           tags: [always]

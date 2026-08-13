@@ -41,7 +41,7 @@ OS_FAMILY="unknown" IS_CSB=false fapolicyd_installed=false
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
-  case "$ID" in
+  case "${ID:-}" in
     fedora) OS_FAMILY="fedora" ;; rhel|centos|rocky|almalinux) OS_FAMILY="rhel" ;;
   esac
 elif [[ "$(uname -s)" == "Darwin" ]]; then OS_FAMILY="darwin"; fi

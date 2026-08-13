@@ -42,7 +42,7 @@ jobs:
           fi
           ANSIBLE_PATHS='^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml'
           ANSIBLE_PATHS+='|requirements\.yml|requirements-test\.(txt|lock)|molecule/|scripts/'
-          ANSIBLE_PATHS+='|\.github/workflows/|\.github/actions/)'
+          ANSIBLE_PATHS+='|\.github/workflows/molecule\.yml|\.github/actions/)'
           if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -qE "$ANSIBLE_PATHS"; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
           else

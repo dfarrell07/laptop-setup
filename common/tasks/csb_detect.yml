@@ -199,6 +199,18 @@
     - csb_detected | bool
     - is_fedora | bool
 
+- name: Inform on RHEL CSB hybrid tier (fapolicyd inactive)
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: RHEL host with CSB detection but fapolicyd not enforcing — running in hybrid tier.
+      Dev tools will be installed in a container rather than the host.
+  become: false
+  when:
+    - not (_csb_molecule_force | default(false))
+    - needs_container_tier == 'hybrid'
+    - csb_detected | bool
+    - is_rhel | bool
+
 - name: Derive csb_rhel
   ansible.builtin.set_fact:
     csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"

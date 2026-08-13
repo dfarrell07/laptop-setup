@@ -279,7 +279,7 @@
     path: /etc/pam.d/su
     regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
     line: 'auth		required	pam_wheel.so use_uid'
-    insertafter: '^#.*pam_wheel.so'
+    insertafter: '^auth\s+sufficient\s+pam_rootok\.so'
   when:
     - not is_apt  # Debian uses 'sudo' group not 'wheel'; skip entirely
     - not csb_rhel
