@@ -17,6 +17,19 @@
 #   _csb_ticket_category - IT ticket category (default: 'Software Installation')
 
 ---
+- name: Validate required CSB failure handler variables
+  become: false
+  ansible.builtin.assert:
+    that:
+      - _csb_task_name is defined and _csb_task_name | length > 0
+      - _csb_action is defined and _csb_action | length > 0
+      - _csb_ticket_summary is defined and _csb_ticket_summary | length > 0
+      - _csb_ticket_body is defined and _csb_ticket_body | length > 0
+      - _csb_role is defined and _csb_role | length > 0
+    fail_msg: >-
+      csb-failure-handler.yml: one or more required variables are missing or empty.
+      Required: _csb_task_name, _csb_action, _csb_ticket_summary, _csb_ticket_body, _csb_role.
+
 - name: Record CSB failure
   become: false
   ansible.builtin.set_fact:

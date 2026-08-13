@@ -13,7 +13,7 @@
         profile: work
         is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
         is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
-        packages_go_install: []                   # skip Go tool compilation — no Go in container (is_dnf: false)
+        packages_go_install: []                   # ci-defaults set packages_go_install_work: []; Go tools omitted to reduce CI run time
         packages_go_install_work: []              # clear work-profile go tools
         packages_security_yubikey: []             # skip YubiKey packages in CI
         packages_networking: []                   # avoid dnf repo dependencies

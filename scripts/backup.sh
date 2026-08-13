@@ -12,7 +12,7 @@ done
 
 # Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
 GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || echo "dfarrell07")"
-[[ -n "$GITHUB_USER" ]] || GITHUB_USER="dfarrell07"
+[[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER="dfarrell07"
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 if [ "$DRY_RUN" = false ]; then

@@ -321,9 +321,10 @@ else
   else
     # Guard cleanup with trap so set -e abort doesn't leak the temp file
     trap 'rm -f "$_htmp_test"' EXIT
-    cp /bin/true "$_htmp_test" && chmod +x "$_htmp_test"
-    if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
-    else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
+    if cp /bin/true "$_htmp_test" 2>/dev/null && chmod +x "$_htmp_test" 2>/dev/null; then
+      if "$_htmp_test" 2>/dev/null; then record "home-tmp-dir" "PASS"
+      else record "home-tmp-dir" "FAIL" "$HOME/tmp is noexec — go test ./... will fail"; fi
+    else record "home-tmp-dir" "WARN" "exec-test setup failed (cp or chmod error)"; fi
     rm -f "$_htmp_test"
     trap - EXIT
   fi

@@ -44,6 +44,15 @@
     - is_dnf
     - system_chrony_service_enabled | bool
 
+- name: Assert NTS server list non-empty when authselectmode=require
+  ansible.builtin.assert:
+    that: system_chrony_nts_servers | length > 0
+    fail_msg: "system_chrony_authselectmode=require but system_chrony_nts_servers is empty — no NTS sources, chrony will not sync"
+  when:
+    - system_chrony_authselectmode == 'require'
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
     src: chrony-nts.conf.j2

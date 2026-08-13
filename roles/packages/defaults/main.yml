@@ -313,6 +313,7 @@ packages_brew_update: false  # autoupdate daemon handles background upgrades; up
 packages_brew_cask:
   - alacritty
   - nikitabobko/tap/aerospace
+  - lulu
 
 packages_brew_cask_work:
   - google-chrome
@@ -336,7 +337,7 @@ packages_brew:
   - zoxide
   - shellcheck
   - shfmt
-  - pipx  # needed for yamllint + ansible-lint pinned installs (cycle-41b moved these from brew to pipx); pulls python3 transitively
+  - pipx  # yamllint + ansible-lint pinned installs (all profiles; no profile guard in install_pipx.yml); pulls python3 transitively
   - gh
   - tailscale  # formula provides CLI + tailscaled daemon; menubar app requires the cask — consistent with Linux daemon treatment
   - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin

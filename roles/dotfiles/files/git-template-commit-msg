@@ -81,7 +81,7 @@ fi
 
 # Sync partner: .githooks/commit-msg — keep ENTIRE hook logic identical in both files (not just the commitlint block)
 if command -v npx >/dev/null 2>&1; then
-  if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then
+  if [ -x "./node_modules/.bin/commitlint" ]; then
     npx --no -- commitlint --edit "$1"
     exit $?
   else

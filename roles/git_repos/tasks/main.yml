@@ -122,7 +122,7 @@
   ansible.builtin.set_fact:
     git_repos_available_dests: >-
       {{ git_repos_clone_results.results
-         | selectattr('failed', 'equalto', false)
+         | rejectattr('failed')
          | map(attribute='item.dest') | list }}
 
 - name: Warn when all clones failed
@@ -138,7 +138,7 @@
 - name: Report failed clones
   ansible.builtin.debug:
     msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.stderr | default(item.msg) | default('unknown error') }}"
-  loop: "{{ git_repos_clone_results.results | selectattr('failed', 'equalto', true) | list }}"
+  loop: "{{ git_repos_clone_results.results | selectattr('failed') | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
 

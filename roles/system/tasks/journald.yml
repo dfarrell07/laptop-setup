@@ -29,6 +29,7 @@
         owner: root
         group: systemd-journal
         mode: "2755"
+      notify: Restart systemd-journald
 
     - name: Remove journald hardening config on CSB
       ansible.builtin.file:

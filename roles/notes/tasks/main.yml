@@ -95,7 +95,8 @@
       ansible.builtin.lineinfile:
         path: "{{ notes_repo_path }}/.git/info/exclude"
         line: ".gitleaks.toml"
-        create: false
+        create: true
+        mode: "0644"
       failed_when: false
       when: notes_repo_available
 

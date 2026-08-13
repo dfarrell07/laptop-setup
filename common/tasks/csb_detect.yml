@@ -63,7 +63,7 @@
 - name: Set fapolicyd facts
   ansible.builtin.set_fact:
     fapolicyd_installed: >-
-      {{ (is_linux | bool) and (_fapolicyd_unit.rc | default(1) == 0) }}
+      {{ (is_linux | bool) and (_fapolicyd_unit.rc | default(1) == 0) and ("fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))) }}
     fapolicyd_enforcing: >-
       {{
         (is_linux | bool)

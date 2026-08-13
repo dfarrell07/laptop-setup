@@ -214,6 +214,14 @@
           become: true
           tags: [become]
 
+        - name: Set permissions on opm
+          ansible.builtin.file:
+            path: /usr/local/bin/opm
+            mode: '0755'
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+          become: true
+          tags: [become]
+
         - name: Create ansible-packages state directory
           ansible.builtin.file:
             path: /var/lib/ansible-packages
