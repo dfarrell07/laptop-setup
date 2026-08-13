@@ -60,6 +60,9 @@
     cmd: grep -q 'KIND_EXPERIMENTAL_PROVIDER=podman' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
   changed_when: false
 
+# CI gap: podman-prune.service/.timer not deployed in container CI (containers role guards
+# deploy with not system_is_container — user inotify triggers daemon-reload, crashes PID 1).
+# make test-vm is the only scenario that exercises these assertions.
 - name: Verify podman-prune.service unit file is deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.service"

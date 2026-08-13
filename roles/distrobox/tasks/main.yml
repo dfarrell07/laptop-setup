@@ -2,6 +2,10 @@
 # roles/distrobox/tasks/main.yml
 # Create Distrobox/Toolbx container + register for Play 3 provisioning.
 
+- name: Skip distrobox role when disabled
+  ansible.builtin.meta: end_play
+  when: not (distrobox_enabled | bool)
+
 # --- Detect container tool ---
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:

@@ -37,7 +37,7 @@ ClientAliveCountMax 2
 # NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed
 # UnusedConnectionTimeout firing prematurely; API-style clients on OpenSSH < 10.3 may disconnect early.
 # To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
-{% if system_ssh_channel_timeout != '' %}
+{% if system_ssh_channel_timeout %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
 # system_ssh_unused_connection_timeout: default 600; set to '' (empty string) or 0 in config.yml to omit (both are falsy).

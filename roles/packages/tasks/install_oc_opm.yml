@@ -208,6 +208,7 @@
         - name: Rename opm-rhel8 to opm
           ansible.builtin.command:
             cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm
+            removes: /usr/local/bin/opm-rhel8
           changed_when: true
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           become: true

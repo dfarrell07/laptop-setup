@@ -9,7 +9,8 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      [connection]
+      [connection.wifi-mac-rand]
+      match-device=type:wifi
       wifi.cloned-mac-address=stable-ssid
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     mode: "0644"
@@ -22,7 +23,8 @@
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
-      [connection]
+      [connection.wifi-mac-rand]
+      match-device=type:wifi
       wifi.cloned-mac-address=preserve
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     mode: "0644"

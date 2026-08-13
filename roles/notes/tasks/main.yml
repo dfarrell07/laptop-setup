@@ -167,8 +167,8 @@
         mode: "{{ item.mode }}"
         state: "{{ item.state }}"
       loop:
-        - {path: '{{ notes_repo_path }}', mode: '0700', state: directory}
-        - {path: '{{ notes_repo_path }}/.git/config', mode: '0600', state: file}
+        - {path: "{{ notes_repo_path }}", mode: '0700', state: directory}
+        - {path: "{{ notes_repo_path }}/.git/config", mode: '0600', state: file}
       when: notes_repo_available
 
     - name: Warn if transcrypt not available

@@ -2,7 +2,7 @@
 # molecule/shared/verify-nm.yml
 # Assertions for NetworkManager conf.d files deployed by the system role.
 # Include after verify-common.yml (which re-runs csb_detect.yml).
-# Covered scenarios: fedora, rocky, vm, debian.
+# Covered scenarios: vm only (container CI skips all tasks — system_is_container=true in all Podman scenarios).
 # NOTE: All assertions below are gated on `not system_is_container`. Since
 # fedora, rocky, and debian molecule scenarios all set system_is_container=true,
 # this file runs zero effective assertions in those scenarios. Only `make test-vm`

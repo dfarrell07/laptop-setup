@@ -147,8 +147,8 @@
     - item.dest in git_repos_available_dests
   register: git_repos_pull_results
   changed_when: >-
-    git_repos_pull_results.rc == 0 and
-    'Already up to date' not in git_repos_pull_results.stdout
+    rc == 0 and
+    'Already up to date' not in stdout
   # NOTE: failed_when: false forces failed=false on non-zero rc; use selectattr('rc', 'ne', 0) to detect failures
   failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
   timeout: 120
