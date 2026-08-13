@@ -89,7 +89,7 @@
           tags: [always]
 
     # Catches user typos — in normal operation profile is always 'work' or 'personal'
-    - name: Assert profile is a valid value
+    - name: Validate profile value (run once per playbook)
       when: _pf_profile_asserted is not defined
       block:
         - name: Assert profile is a valid value

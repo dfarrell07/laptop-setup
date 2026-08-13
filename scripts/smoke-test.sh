@@ -33,9 +33,9 @@ record() { # name status [detail]
   local dj="${d//\\/\\\\}"; dj="${dj//$'\n'/\\n}"; dj="${dj//$'\t'/\\t}"; dj="${dj//$'\r'/\\r}"
   RESULTS+=("$(printf '{"name":"%s","status":"%s","detail":"%s"}' "$n" "$s" "${dj//\"/\\\"}")")
   case "$s" in
-    PASS) $JSON || printf "${P}PASS${R}  %s\n" "$n" ;;
-    WARN) WARNS=$((WARNS + 1)); $JSON || printf "${W}WARN${R}  %s — %s\n" "$n" "$d" ;;
-    FAIL) FAILURES=$((FAILURES + 1)); $JSON || printf "${F}FAIL${R}  %s — %s\n" "$n" "$d" ;;
+    PASS) [[ "$JSON" != true ]] && printf "${P}PASS${R}  %s\n" "$n" ;;
+    WARN) WARNS=$((WARNS + 1)); [[ "$JSON" != true ]] && printf "${W}WARN${R}  %s — %s\n" "$n" "$d" ;;
+    FAIL) FAILURES=$((FAILURES + 1)); [[ "$JSON" != true ]] && printf "${F}FAIL${R}  %s — %s\n" "$n" "$d" ;;
     *) echo "BUG: unknown record status '$s'" >&2; exit 99 ;;
   esac
 }

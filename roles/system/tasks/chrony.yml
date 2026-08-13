@@ -108,6 +108,20 @@
     - is_dnf or is_apt
     - not csb_rhel
 
+- name: "Warn: sourcedir suppressed — DHCP sources incompatible with authselectmode=require"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_dhcp_sourcedir is set but system_chrony_authselectmode=require —
+      DHCP-provided NTP sources are unauthenticated and cannot be used in require mode;
+      the sourcedir directive has been suppressed in chrony.conf. To use DHCP sources,
+      set system_chrony_authselectmode: prefer in config.yml.
+  when:
+    - system_chrony_dhcp_sourcedir | length > 0
+    - system_chrony_authselectmode == 'require'
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
 - name: "Warn: no NTS servers configured — chrony uses unauthenticated pool only"
   ansible.builtin.debug:
     msg: >-

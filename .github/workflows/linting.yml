@@ -51,7 +51,21 @@ jobs:
           python-version: '3.14'
 
       - name: Install dependencies
-        run: pip install pyyaml==6.0.3 packaging==26.3
+        run: |
+          pip install --require-hashes -r <(awk '
+            /^pyyaml==|^packaging==/ {
+              in_pkg=1; line=$0
+              sub(/[[:space:]]*\\[[:space:]]*$/, "", line)
+              printf "%s", line; next
+            }
+            in_pkg && /--hash=sha256:/ {
+              line=$0
+              sub(/^[[:space:]]*/, "", line)
+              sub(/[[:space:]]*\\[[:space:]]*$/, "", line)
+              printf "\n    %s", line; next
+            }
+            in_pkg {printf "\n"; in_pkg=0}
+          ' requirements-test.lock)
 
       - name: Check vars sync
         run: python3 scripts/check-vars-sync.py
@@ -369,6 +383,7 @@ jobs:
         continue-on-error: true
         run: ./zizmor .github/
 
+      # skipped scan outcomes are intentionally handled via the download-failure branch above
       - name: Check security scanner results
         if: always()
         run: |

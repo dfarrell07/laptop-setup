@@ -12,7 +12,7 @@
     - is_dnf
     - not system_is_container
 
-- name: Enable bpfman.socket (no-op if bpfman not yet installed)
+- name: Enable bpfman.socket (skipped if bpfman not yet installed)
   ansible.builtin.systemd:
     name: bpfman.socket
     state: started
