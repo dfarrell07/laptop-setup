@@ -92,7 +92,7 @@ if [[ -z "$PROFILE" ]]; then
   elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
     PROFILE=personal
     record "config_profile" "pass" "profile=personal"
-  elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then
+  elif grep -qE '^profile:[[:space:]]*' "$CONFIG_FILE" 2>/dev/null; then
     record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
   else
     record "config_profile" "pass" "profile=${PROFILE} (default — no override in config.yml)"
@@ -101,6 +101,7 @@ fi
 
 # --- Required tools ---
 # When adding a tool to the loop, add a matching elif branch with install guidance.
+_curl_ok=false
 for tool in ansible-playbook git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     if [[ "$tool" == "ssh" ]]; then
@@ -109,6 +110,7 @@ for tool in ansible-playbook git python3 curl make ssh; do
       ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     fi
     record "required_${tool}" "pass" "$ver"
+    [[ "$tool" == "curl" ]] && _curl_ok=true
   else
     # Keep this elif chain in sync with the for-loop tools list above; else at the bottom catches any tool added without an explicit branch
     if [[ "$tool" == "make" ]]; then
@@ -281,7 +283,6 @@ fi
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
-_curl_ok=false; command -v curl &>/dev/null && _curl_ok=true
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ $_curl_ok == true ]]; then

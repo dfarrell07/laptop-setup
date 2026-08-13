@@ -53,9 +53,9 @@
     # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
-    # login.defs INACTIVE: read by newusers/passwd for account aging policy on RHEL/Rocky;
-    # on Fedora 44 shadow-utils, useradd reads INACTIVE from /etc/default/useradd (set below via useradd -D) not from login.defs
-    # See also: 'Set default inactive days for new accounts' below (useradd -D -f) which is the operative INACTIVE setting on Fedora 44
+    # login.defs INACTIVE: read by newusers(8) for batch account creation on RHEL/Rocky;
+    # on all shadow-utils platforms, useradd reads INACTIVE from /etc/default/useradd (set below via useradd -D -f) not from login.defs;
+    # login.defs INACTIVE is only the operative setting for newusers(8) and as a pre-provisioning safety net before useradd -D -f executes
     - name: INACTIVE
       value: "{{ system_inactive_days }}"
   loop_control:

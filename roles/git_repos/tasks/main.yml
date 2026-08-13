@@ -145,6 +145,13 @@
     - git_repos_filtered | length > 0
     - git_repos_available_dests | length == 0
 
+- name: Fail when all clones failed
+  ansible.builtin.fail:
+    msg: "All {{ git_repos_filtered | length }} clone(s) failed — see errors above"
+  when:
+    - git_repos_filtered | length > 0
+    - git_repos_available_dests | length == 0
+
 - name: Report failed clones
   ansible.builtin.debug:
     msg: >-

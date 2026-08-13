@@ -216,7 +216,7 @@
           ansible.builtin.command: tar -tzf /tmp/opm-linux.tar.gz
           register: packages_opm_tarball_list
           changed_when: false
-          failed_when: packages_opm_binary_name not in packages_opm_tarball_list.stdout
+          failed_when: packages_opm_tarball_list.stdout_lines | select('equalto', packages_opm_binary_name) | list | length == 0
           when: packages_opm_download.changed or packages_opm_check.rc != 0
 
         - name: Extract and install opm-rhel8 binary

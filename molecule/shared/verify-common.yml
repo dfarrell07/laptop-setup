@@ -1204,7 +1204,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(true) | bool
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
 # make test-vm exercises full chrony service-enablement and NTS coverage.
@@ -1216,7 +1216,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(true) | bool
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
     - (verify_chronyd.status.UnitFileState | default('')) != ''
 
 - name: Check chrony NTS config in /etc/chrony.conf
@@ -1229,7 +1229,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(true) | bool
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
 # make test-vm exercises full chrony service-enablement and NTS coverage.
@@ -1241,7 +1241,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
-    - system_chrony_service_enabled | default(true) | bool
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
 
 # --- Chrony NTS template render guard (container-safe) ---
 # Renders chrony-nts.conf.j2 to a temp path so Jinja2 errors surface in container CI

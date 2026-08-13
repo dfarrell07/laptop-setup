@@ -14,7 +14,9 @@
       - verify_containers_dir.stat.exists
       - verify_containers_dir.stat.isdir
       - verify_containers_dir.stat.mode == '0700'
-    fail_msg: "Containers config directory was not created"
+    fail_msg: >-
+      Containers config directory missing, not a directory, or wrong mode
+      (expected 0700, got {{ verify_containers_dir.stat.mode | default('absent') }})
 
 - name: Verify containers.conf is deployed by containers role
   ansible.builtin.stat:

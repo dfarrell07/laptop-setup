@@ -124,7 +124,7 @@
   register: verify_nm_wifi_ps_content
   become: true
   when:
-    - not csb_rhel
+    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
     - verify_nm_wifi_ps.stat.exists
 
 - name: Assert 99-wifi-powersave.conf contains wifi.powersave=2
@@ -132,5 +132,5 @@
     that: (verify_nm_wifi_ps_content.content | b64decode) is search('wifi\.powersave=2')
     fail_msg: "99-wifi-powersave.conf exists but does not contain wifi.powersave=2"
   when:
-    - not csb_rhel
+    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
     - verify_nm_wifi_ps.stat.exists

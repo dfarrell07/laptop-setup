@@ -379,7 +379,24 @@
     - is_linux
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - _prune_unit_removal.changed
-  failed_when: false  # intentional: non-critical; unit files are already gone — stale systemd state resolves at next login
+  # intentional: daemon-reload may fail on fresh provision with no active user session;
+  # unit files are already gone — stale systemd state resolves at next login
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+  register: _prune_remove_daemon_reload
+
+- name: Warn if systemd user daemon-reload failed after removing podman-prune unit files
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: systemd --user daemon-reload failed after removing prune unit files.
+      Unit files are already gone — stale systemd state resolves at next login.
+      Fix: systemctl --user daemon-reload.
+      Check: journalctl --user -xe
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)
+    - _prune_unit_removal.changed
+    - _prune_remove_daemon_reload.failed | default(false)
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
 - name: Deploy containers environment.d config (KIND and Podman socket)
