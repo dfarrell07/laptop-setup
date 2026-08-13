@@ -58,12 +58,12 @@ if echo "$msg" | grep -qE '\.$'; then
 fi
 
 if ! grep -q '^Signed-off-by:' "$1"; then
-  echo "ERROR: Missing Signed-off-by — use 'git commit -s'" >&2
+  echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
   exit 1
 fi
 
 if command -v npx >/dev/null 2>&1; then
-  if [ -x "./node_modules/.bin/commitlint" ]; then
+  if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then
     npx --no -- commitlint --edit "$1"
   else
     echo "WARNING: commitlint not installed — run: make bootstrap" >&2

@@ -46,15 +46,8 @@
     - name: Include Claude work instance directory and settings assertions
       ansible.builtin.import_tasks: ../shared/verify-claude-work.yml
 
-    - name: Check git user.email is work email
-      ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
-      register: verify_git_email
-      changed_when: false
-
-    - name: Assert git email is work profile
-      ansible.builtin.assert:
-        that: "dotfiles_user_email_work in verify_git_email.stdout"
-        fail_msg: "git user.email ('{{ verify_git_email.stdout }}') missing expected dotfiles_user_email_work value"
+    - name: Include work profile assertions
+      ansible.builtin.import_tasks: ../shared/verify-work-profile.yml
 
     # --- Notes role ---
     - name: Verify notes role

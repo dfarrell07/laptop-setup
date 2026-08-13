@@ -73,11 +73,11 @@
     - not csb_rhel
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
 
-# NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it (same value, idempotent from second run onward)
+# NOTE: regexp matches only the commented form; Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' — no-op when already uncommented
 - name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
-    regexp: '^#?YESCRYPT_COST_FACTOR'
+    regexp: '^#YESCRYPT_COST_FACTOR'
     line: 'YESCRYPT_COST_FACTOR 5'
     mode: "0644"
   when:

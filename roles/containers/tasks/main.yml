@@ -283,7 +283,7 @@
     - containers_prune_service.changed or containers_prune_timer.changed
   # intentional: daemon-reload may fail on fresh provision with no active user session;
   # warn task below surfaces the failure to the operator
-  failed_when: false
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
   register: _prune_daemon_reload
 
 - name: Warn if systemd user daemon-reload failed after deploying prune units

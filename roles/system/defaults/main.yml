@@ -22,14 +22,12 @@ system_sysctl_hardening:
   # of alternate routes (manual set; not auto-disabled by ip_forward=1)
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
-  # kernel auto-disables accept_redirects when ip_forward=1 (same behavior as accept_ra=0 +
-  # forwarding=1 noted above); on a standard provisioned host (system_enable_ip_forward=true,
-  # the default) the kernel already enforces these to 0 — the explicit pin guards only against
-  # a future ip_forward=false override in config.yml
+  # explicit set prevents redirect acceptance via kernel ANDCONF(conf.all=0, per-iface) in router
+  # mode (ip_forward=1); also guards against future ip_forward=false override in config.yml
   net.ipv4.conf.all.accept_redirects: 0
   net.ipv4.conf.default.accept_redirects: 0
-  # IPv6 forwarding auto-zeros accept_redirects when forwarding=1 (same as IPv4 above); explicit
-  # pin guards against a future system_enable_ip_forward: false override in config.yml
+  # IPv6: same ANDCONF logic — conf.all=0 short-circuits per-iface; explicit set guards against
+  # future system_enable_ip_forward: false override in config.yml
   net.ipv6.conf.all.accept_redirects: 0
   net.ipv6.conf.default.accept_redirects: 0
   net.ipv4.conf.all.accept_source_route: 0   # CIS — IPv4 source routing off; pinned to block sysctl.d override
@@ -334,7 +332,7 @@ ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert
 ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
 ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
-  ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256"
+  ecdh-sha2-nistp521,ecdh-sha2-nistp384,diffie-hellman-group-exchange-sha256"
 ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; add back if host CA/signed cert deployed
 
 # DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.

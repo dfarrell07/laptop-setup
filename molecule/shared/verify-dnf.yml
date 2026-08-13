@@ -102,6 +102,14 @@
   ansible.builtin.command: openssl version
   changed_when: false
 
+- name: Check shellcheck is installed
+  ansible.builtin.command: shellcheck --version
+  changed_when: false
+
+- name: Check mosh is installed
+  ansible.builtin.command: mosh --version
+  changed_when: false
+
 - name: Check ykman binary presence
   ansible.builtin.stat:
     path: /usr/bin/ykman

@@ -2,6 +2,20 @@
 # roles/system/tasks/hardening_core.yml
 # SELinux enforcement + core hardening sub-orchestrator. Included from main.yml.
 # --- SELinux enforcement check ---
+- name: Warn - SELinux is disabled — enforcing mode requires reboot
+  ansible.builtin.debug:
+    msg: >-
+      SELinux is config-disabled on this host. system_selinux_enforcing_required is true
+      but the selinux fact is not a mapping (SELinux disabled in /etc/selinux/config).
+      The enforcement block will be skipped. Set SELINUX=enforcing in /etc/selinux/config
+      and reboot to allow Ansible to enforce the correct mode.
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - system_selinux_enforcing_required | bool
+    - ansible_facts['selinux'] is not mapping
+
 - name: SELinux enforcement block
   when:
     - ansible_facts['selinux'] is mapping

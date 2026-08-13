@@ -1542,7 +1542,7 @@ EOF
     unset _bat_end
   fi
   if [[ -f /sys/class/power_supply/BAT0/charge_control_start_threshold ]]; then
-    _bat_start=$(cat /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null || echo "?")
+    _bat_start=$(<"/sys/class/power_supply/BAT0/charge_control_start_threshold" 2>/dev/null || echo "?")
     if [[ "$_bat_start" != "?" && "$_bat_start" -gt 0 && "$_bat_start" -lt 100 ]] 2>/dev/null; then
       record "tlp-bat-start-threshold" "PASS"
     else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi

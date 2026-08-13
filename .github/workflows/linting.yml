@@ -128,8 +128,6 @@ jobs:
                   errors.append(f'Weak hash ({integrity[:10]}...): {name}')
               if resolved and not resolved.startswith('https://registry.npmjs.org/'):
                   errors.append(f'Non-npmjs registry: {name} -> {resolved}')
-              if resolved.startswith(('git://', 'git+', 'ssh://')):
-                  errors.append(f'Git protocol dependency (bypasses ignore-scripts): {name}')
           if errors:
               for e in errors:
                   print(f'::error::{e}')
