@@ -37,11 +37,13 @@
 - name: Warn if authselect sssd profile selection failed
   ansible.builtin.debug:
     msg: >-
-      WARNING: authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc }}).
+      WARNING: authselect select sssd --force returned non-zero (rc={{ system_authselect_select_result.rc | default("unknown") }}).
       enable-feature with-faillock and with-pwhistory may not activate — PAM lockout and
       password reuse prevention will be unconfigured. Check authselect status manually.
   when:
     - system_authselect_select_result.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
 
 # --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
 - name: Probe authselect with-fingerprint feature state

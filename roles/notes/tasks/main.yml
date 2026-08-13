@@ -137,18 +137,6 @@
         - notes_repo_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password | length > 0
-        - notes_transcrypt_password != notes_transcrypt_password_sentinel
-
-    - name: Warn if transcrypt password is placeholder
-      ansible.builtin.debug:
-        msg: >-
-          notes_transcrypt_password is still set to '{{ notes_transcrypt_password_sentinel }}' — transcrypt not initialized.
-          Replace vault_notes_transcrypt_password in vault.yml with the real password.
-      when:
-        - notes_repo_available
-        - notes_transcrypt_available
-        - not notes_transcrypt_inited
-        - notes_transcrypt_password == notes_transcrypt_password_sentinel
 
     - name: Warn if transcrypt initialization failed
       ansible.builtin.debug:
@@ -157,7 +145,7 @@
           notes may not be decrypted. Check the password in vault.yml.
       when:
         - not (notes_transcrypt_init_result.skipped | default(false))
-        - notes_transcrypt_init_result.rc | default(-1) != 0
+        - notes_transcrypt_init_result.rc | default(0) != 0
 
     - name: Warn if transcrypt already initialized (password rotation not automatic)
       ansible.builtin.debug:
@@ -166,7 +154,10 @@
           re-provisioning silently skips re-init. To rotate credentials, manually run:
           cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
-      when: notes_transcrypt_inited
+      when:
+        - notes_transcrypt_available
+        - notes_repo_available
+        - notes_transcrypt_inited
 
 
     - name: Notes repo permission hardening

@@ -71,7 +71,7 @@ jobs:
               latest = data['collection_info']['version']
               if latest != pinned_ver:
                   drift.append((fqcn, pinned_ver, latest))
-                  print(f'::warning::{fqcn}: pinned {pinned_ver} -> latest {latest}')
+                  print(f'DRIFT  {fqcn}: pinned {pinned_ver} -> latest {latest}')
               else:
                   print(f'OK  {fqcn} == {pinned_ver}')
 

@@ -344,7 +344,7 @@ else
 fi
 
 # --- Disk space (need 5GB free in $HOME) ---
-if ! avail_kb=$(df -Pk "$HOME" | awk 'NR==2 {print $4}') 2>/dev/null || [[ -z "$avail_kb" ]]; then
+avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}'); if [[ -z "$avail_kb" ]]; then
   record "disk_space" "warn" "df failed on $HOME — cannot measure free space"
 else
   avail_gb=$((avail_kb / 1048576))

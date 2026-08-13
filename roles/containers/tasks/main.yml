@@ -100,7 +100,6 @@
     - is_linux
     - registry_tokens | length > 0
     - >-
-      containers_auth_stat.stat.exists | default(false) or
       (containers_vault_auth_status.results | default([]) |
       selectattr('rc', 'equalto', 0) | list | length > 0)
 

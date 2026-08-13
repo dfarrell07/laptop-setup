@@ -562,6 +562,8 @@
     - net.ipv4.conf.all.rp_filter = 2  # hardcoded: no system_rp_filter var; matches _system_sysctl_hardening_defaults dict
     - net.ipv4.conf.default.rp_filter = 2  # hardcoded: no system_rp_filter_default var; matches _system_sysctl_hardening_defaults dict
     - vm.max_map_count = 1048576  # hardcoded: no system_max_map_count var; matches _system_sysctl_hardening_defaults dict
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   when:
     - ansible_system == 'Linux'
@@ -574,6 +576,8 @@
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   when:
     - ansible_system == 'Linux'
@@ -604,6 +608,8 @@
     - nosuid
     - nodev
     - noexec
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   when:
     - ansible_system == 'Linux'
@@ -715,6 +721,8 @@
     - "ClientAliveCountMax 2"  # hardcoded: no system_ssh_client_alive_count_max var; matches sshd-hardening.conf.j2
     - "^Port {{ ssh_port }}$"
     - "AllowUsers "
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   become: true
   when:
@@ -958,6 +966,8 @@
     - "SystemKeepFree={{ system_journald_keep_free | default('1G') }}"
     - "RateLimitIntervalSec={{ system_journald_rate_interval | default('30s') }}"
     - "RateLimitBurst={{ system_journald_rate_burst | default(10000) }}"
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -1023,6 +1033,8 @@
     - actions
     - audit-config
     - claude-sensitive-write
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   become: true
   when:
@@ -1041,6 +1053,8 @@
     - 'arch=b32.*renameat2.*exe=/usr/bin/git'
     - 'arch=b64.*renameat2.*exe=/usr/bin/npm'
     - 'arch=b32.*renameat2.*exe=/usr/bin/npm'
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
   changed_when: false
   become: true
   when:

@@ -1521,7 +1521,7 @@ EOF
 
   # RPM Fusion free repo (Fedora only; mirrors repos_dnf not csb_rhel guard)
   if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
-    if dnf repolist rpmfusion-free 2>/dev/null | grep -q .; then record "rpmfusion-free-repo" "PASS"
+    if dnf repolist rpmfusion-free 2>/dev/null | grep -q 'rpmfusion-free'; then record "rpmfusion-free-repo" "PASS"
     else record "rpmfusion-free-repo" "WARN" "rpmfusion-free repo not enabled (run: make repos_dnf; default repo_rpmfusion_free=true)"; fi
   fi
 

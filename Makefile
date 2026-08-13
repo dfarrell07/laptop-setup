@@ -143,7 +143,7 @@ distrobox: container  # alias for backwards compatibility
 preflight:
 	scripts/preflight.sh
 
-csb-audit: preflight
+csb-audit: guard-not-root preflight
 	ansible-playbook site.yml --tags common --check -v
 
 check: guard-not-root
