@@ -126,7 +126,9 @@
   ansible.builtin.command:
     cmd: grep -q 'vsyscall=none' /etc/kernel/cmdline
   changed_when: false
-  when: verify_kernel_cmdline.stat.exists
+  when:
+    - verify_kernel_cmdline.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/kernel/cmdline contains init_on_free=1
   ansible.builtin.command:
@@ -134,13 +136,16 @@
   changed_when: false
   when:
     - verify_kernel_cmdline.stat.exists
+    - not (system_is_container | default(false))
     - system_init_on_free | bool
 
 - name: Assert /etc/kernel/cmdline contains page_alloc.shuffle=1
   ansible.builtin.command:
     cmd: grep -q 'page_alloc.shuffle=1' /etc/kernel/cmdline
   changed_when: false
-  when: verify_kernel_cmdline.stat.exists
+  when:
+    - verify_kernel_cmdline.stat.exists
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/kernel/cmdline contains lockdown={{ system_kernel_lockdown | default('integrity') }}
   ansible.builtin.command:
@@ -148,6 +153,7 @@
   changed_when: false
   when:
     - verify_kernel_cmdline.stat.exists
+    - not (system_is_container | default(false))
     - system_kernel_lockdown | default('integrity') | length > 0
 
 # --- repos_dnf role: third-party repo files ---

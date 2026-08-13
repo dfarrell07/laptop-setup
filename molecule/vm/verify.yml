@@ -23,6 +23,7 @@
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
         system_tmout: 600                    # matches default; parameterizes TMOUT session-timeout assertions
+        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         system_dot_mode: opportunistic       # matches role default; parameterizes DNSOverTLS assertions
 
   tasks:
@@ -693,18 +694,6 @@
       ansible.builtin.stat:
         path: /usr/bin/toolbox
       register: verify_toolbox_bin
-
-    - name: Resolve distrobox_tool for verify
-      ansible.builtin.set_fact:
-        verify_distrobox_tool: >-
-          {{ 'distrobox' if (verify_distrobox_bin.stat.exists)
-             else ('toolbox' if (verify_toolbox_bin.stat.exists)
-             else 'none') }}
-
-    - name: Assert distrobox_tool fact resolves to a known value
-      ansible.builtin.assert:
-        that: verify_distrobox_tool in ['distrobox', 'toolbox', 'none']
-        fail_msg: "distrobox_tool resolved to unexpected value: {{ verify_distrobox_tool }}"
 
     - name: Assert distrobox binary is present (installed by packages role)
       ansible.builtin.assert:

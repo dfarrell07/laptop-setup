@@ -224,6 +224,7 @@ REQUIRED_KEYS = {
     "system_sysrq": int,
     "system_bpf_jit_harden": int,
     "system_unprivileged_bpf_disabled": int,
+    "system_perf_event_paranoid": int,
     "system_io_uring_disabled": int,
     "system_enable_ip_forward": bool,
     "is_dnf5": bool,

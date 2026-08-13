@@ -681,7 +681,10 @@
 - name: Assert sshd hardening drop-in deployed
   ansible.builtin.assert:
     that: verify_sshd_dropin.stat.exists
-    fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf not deployed — system role sshd task regression"
+    fail_msg: >-
+      /etc/ssh/sshd_config.d/00-hardening.conf not deployed —
+      sshd task regression or openssh-server not installed
+      (deployment block gated on sshd.service being defined)
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'

@@ -155,6 +155,10 @@
           tags: [always]
 
     - name: Warn and flag when vault stub is not populated
+      when:
+        - vault_ssh_auth_key | default('') | length == 0
+        - _vault_stub_warned is not defined
+        - not _pf_is_molecule
       block:
         - name: Warn when vault.yml has not been populated with real secrets
           ansible.builtin.debug:
@@ -171,7 +175,3 @@
           ansible.builtin.set_fact:
             _vault_stub_warned: true
           tags: [always]
-      when:
-        - vault_ssh_auth_key | default('') | length == 0
-        - _vault_stub_warned is not defined
-        - not _pf_is_molecule

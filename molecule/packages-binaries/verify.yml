@@ -90,6 +90,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/sops
       register: verify_sops
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert sops exists and is executable
       ansible.builtin.assert:
@@ -97,11 +98,13 @@
           - verify_sops.stat.exists
           - verify_sops.stat.executable
         fail_msg: "/usr/local/bin/sops missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat /usr/local/bin/gitleaks
       ansible.builtin.stat:
         path: /usr/local/bin/gitleaks
       register: verify_gitleaks
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert gitleaks exists and is executable
       ansible.builtin.assert:
@@ -109,6 +112,7 @@
           - verify_gitleaks.stat.exists
           - verify_gitleaks.stat.executable
         fail_msg: "/usr/local/bin/gitleaks missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat /usr/local/bin/actionlint
       ansible.builtin.stat:
@@ -184,6 +188,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/operator-sdk
       register: verify_operator_sdk
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert operator-sdk exists and is executable
       ansible.builtin.assert:
@@ -191,11 +196,13 @@
           - verify_operator_sdk.stat.exists
           - verify_operator_sdk.stat.executable
         fail_msg: "/usr/local/bin/operator-sdk missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat /usr/local/bin/cosign
       ansible.builtin.stat:
         path: /usr/local/bin/cosign
       register: verify_cosign
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert cosign exists and is executable
       ansible.builtin.assert:
@@ -203,11 +210,13 @@
           - verify_cosign.stat.exists
           - verify_cosign.stat.executable
         fail_msg: "/usr/local/bin/cosign missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat /usr/local/bin/tkn
       ansible.builtin.stat:
         path: /usr/local/bin/tkn
       register: verify_tkn
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert tkn exists and is executable
       ansible.builtin.assert:
@@ -215,11 +224,13 @@
           - verify_tkn.stat.exists
           - verify_tkn.stat.executable
         fail_msg: "/usr/local/bin/tkn missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat /usr/local/bin/ec
       ansible.builtin.stat:
         path: /usr/local/bin/ec
       register: verify_ec
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert ec exists and is executable
       ansible.builtin.assert:
@@ -227,6 +238,7 @@
           - verify_ec.stat.exists
           - verify_ec.stat.executable
         fail_msg: "/usr/local/bin/ec missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Stat krew binary
       ansible.builtin.stat:

@@ -107,6 +107,7 @@ system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in co
 system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
 system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
 system_unprivileged_bpf_disabled: 2  # write-once on Fedora 44 (BPF_UNPRIV_DEFAULT_OFF); value 1 requires custom kernel
+system_perf_event_paranoid: 2      # restrict perf_event_open to CAP_PERFMON+ (CIS); set 1 for normal users, -1 to disable
 system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
 system_enable_ip_forward: true     # net.ipv4.ip_forward + net.ipv6.conf.all.forwarding; false on terminal-only hosts
 system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
