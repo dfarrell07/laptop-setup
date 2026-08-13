@@ -202,7 +202,8 @@ else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
 # --- Editor checks ---
 if command -v vim &>/dev/null; then record "vim-binary" "PASS"
-else record "vim-binary" "WARN" "vim not found"; fi
+elif $IS_LINUX; then record "vim-binary" "FAIL" "vim not found — run: make packages"
+else record "vim-binary" "WARN" "vim not found (macOS: system or brew)"; fi
 
 # --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
 for tool in yamllint ansible-lint; do

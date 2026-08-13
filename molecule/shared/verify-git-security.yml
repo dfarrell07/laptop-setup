@@ -176,7 +176,6 @@
     that:
       - verify_allowed_signers.stat.size > 0
     fail_msg: "~/.config/git/allowed_signers is empty — SSH signature verification not configured"
-  when: verify_allowed_signers.stat.exists
 
 - name: Check allowed_signers contains sk-ssh-ed25519 key
   ansible.builtin.command:
@@ -184,7 +183,6 @@
   register: verify_allowed_signers_key
   changed_when: false
   failed_when: false
-  when: verify_allowed_signers.stat.exists
 
 - name: Assert allowed_signers contains sk-ssh-ed25519 key
   ansible.builtin.assert:

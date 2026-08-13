@@ -124,6 +124,9 @@ desktop: guard-not-root
 system: guard-not-root
 	ansible-playbook site.yml --tags common,system --ask-become-pass
 
+repos-dnf:
+	@echo 'ERROR: Did you mean: make repos_dnf (underscore) -- manages DNF package repositories' >&2 && exit 1
+
 repos_dnf: guard-not-root
 	ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
 

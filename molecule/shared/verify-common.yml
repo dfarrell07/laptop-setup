@@ -1252,6 +1252,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
     - system_tmout | int > 0
     - not (system_is_container | default(false))
 

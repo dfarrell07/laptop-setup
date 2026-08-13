@@ -55,6 +55,7 @@
     - name: Check go is installed
       ansible.builtin.command: go version
       changed_when: false
+      when: profile == 'work'
 
     - name: Check shellcheck is installed
       ansible.builtin.command: shellcheck --version
@@ -75,6 +76,7 @@
     - name: Check nmap is installed
       ansible.builtin.command: nmap --version
       changed_when: false
+      when: profile == 'work'
 
     - name: Check bat is installed (packages_brew)
       ansible.builtin.command: bat --version
