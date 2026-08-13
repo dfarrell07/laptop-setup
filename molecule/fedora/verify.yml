@@ -50,70 +50,8 @@
       ansible.builtin.import_tasks: ../shared/verify-sway.yml
 
     # --- Desktop WM configs (second converge run sets desktop_environment: i3) ---
-    - name: Verify i3 config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/i3/config"
-      register: verify_i3
-
-    - name: Assert i3 config exists
-      ansible.builtin.assert:
-        that: verify_i3.stat.exists
-        fail_msg: "i3 config not deployed"
-
-    - name: Verify i3 config has terminal keybinding
-      ansible.builtin.command:
-        cmd: grep -q 'bindsym.*Return exec' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts lxpolkit authentication agent
-      ansible.builtin.command:
-        cmd: grep -q 'lxpolkit' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config caps audio raise volume at 100% (wpctl -l 1.0)
-      ansible.builtin.command:
-        cmd: grep -q 'wpctl set-volume -l 1\.0' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts dunst notification daemon
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*dunst' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts clipit clipboard manager
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*clipit' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts xss-lock for sleep-triggered screen lock
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*xss-lock' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts xautolock for idle screen lock
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*xautolock' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3lock invocation in xautolock includes lock color flag
-      ansible.builtin.command:
-        cmd: grep -q 'i3lock -c [0-9a-fA-F]' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config starts nm-applet for network tray icon
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*nm-applet' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 screenshot binding uses scrot
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*scrot' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
-
-    - name: Verify i3 config runs autorandr for display profile
-      ansible.builtin.command:
-        cmd: grep -q 'exec.*autorandr' "{{ ansible_user_dir }}/.config/i3/config"
-      changed_when: false
+    - name: Include i3 config assertions
+      ansible.builtin.import_tasks: ../shared/verify-i3.yml
 
     # --- System role: usbguard ---
     # usbguard assertions are handled by molecule/shared/verify-smoke.yml.

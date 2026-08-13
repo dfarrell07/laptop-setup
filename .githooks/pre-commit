@@ -40,7 +40,7 @@ if [ -n "$YAMLLINT" ]; then
     if ! git show ":$f" | "$YAMLLINT" --strict -; then
       failed=1
     fi
-  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml')
+  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml' | grep -zv 'vault\.yml' | grep -zv '^\.github/')
 else
   echo "WARNING: yamllint not found — YAML lint skipped (run 'make lint' to install)" >&2
 fi

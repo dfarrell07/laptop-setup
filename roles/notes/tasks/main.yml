@@ -205,6 +205,7 @@
       ansible.builtin.file:
         path: "{{ item.path }}"
         mode: "{{ item.mode }}"
+        state: "{{ item.state }}"
       loop:
         - {path: '{{ notes_repo_path }}', mode: '0700', state: directory}
         - {path: '{{ notes_repo_path }}/.git/config', mode: '0600', state: file}

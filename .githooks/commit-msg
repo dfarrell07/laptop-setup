@@ -73,7 +73,7 @@ fi
 
 # Run commitlint for remaining rules (body blank line, etc.)
 if command -v npx >/dev/null 2>&1; then
-  if [ -x "./node_modules/.bin/commitlint" ]; then
+  if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then
     npx --no -- commitlint --edit "$1"
   else
     echo "WARNING: commitlint not installed — run: make bootstrap" >&2

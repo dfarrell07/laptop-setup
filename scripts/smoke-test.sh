@@ -49,7 +49,7 @@ _system_umask=$(grep -oE '^system_umask:[[:space:]]*"?([0-9]+)"?' "$_cfg" 2>/dev
 _system_umask="${_system_umask:-027}"
 _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true' "$_cfg" 2>/dev/null && _notes_enabled=true
-unset _cfg SCRIPT_DIR
+unset _cfg
 
 run() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
@@ -165,7 +165,7 @@ else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
 # vault-pass.sh stub (skip in molecule — stub is intentional in CI)
 if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
-  _vp="$(dirname "$0")/vault-pass.sh"
+  _vp="$SCRIPT_DIR/vault-pass.sh"
   if [[ -x "$_vp" ]]; then
     _vp_out=$(bash "$_vp" 2>/dev/null) || true
     if echo "$_vp_out" | grep -q 'ci-dummy-vault-password'; then
@@ -187,7 +187,7 @@ else record "tailscale" "WARN" "tailscaled not running or VPN not established (c
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
 out=$(ssh-add -L 2>&1 || true)
 if echo "$out" | grep -q 'sk-ssh-ed25519'; then record "ssh-agent-key" "PASS"
-elif echo "$out" | grep -qE 'Error connecting|Connection refused'; then
+elif echo "$out" | grep -qE 'Error connecting|Connection refused|Could not open'; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ -n "$out" && "$out" != *"no identities"* && "$out" != *"Could not"* && "$out" != *"Error"* ]]; then
   record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"

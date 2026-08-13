@@ -30,77 +30,8 @@
       ansible.builtin.import_tasks: ../shared/verify-nm.yml
 
     # --- Packages (apt) ---
-    - name: Check vim is installed
-      ansible.builtin.command: vim --version
-      changed_when: false
-
-    - name: Check neovim is installed
-      ansible.builtin.command: nvim --version
-      changed_when: false
-
-    - name: Check curl is installed
-      ansible.builtin.command: curl --version
-      changed_when: false
-
-    - name: Check tmux is installed
-      ansible.builtin.command: tmux -V
-      changed_when: false
-
-    - name: Check zsh is installed
-      ansible.builtin.command: zsh --version
-      changed_when: false
-
-    - name: Check jq is installed
-      ansible.builtin.command: jq --version
-      changed_when: false
-
-    - name: Check fzf is installed
-      ansible.builtin.command: fzf --version
-      changed_when: false
-
-    - name: Check ripgrep is installed
-      ansible.builtin.command: rg --version
-      changed_when: false
-
-    - name: Check bat is installed (Debian package installs as batcat)
-      ansible.builtin.command: batcat --version
-      changed_when: false
-
-    - name: Check fd-find is installed (Debian binary is fdfind, not fd)
-      ansible.builtin.command: fdfind --version
-      changed_when: false
-
-    - name: Check shfmt is installed
-      ansible.builtin.command: shfmt --version
-      changed_when: false
-
-    - name: Check shellcheck is installed
-      ansible.builtin.command: shellcheck --version
-      changed_when: false
-
-    - name: Check direnv is installed
-      ansible.builtin.command: direnv version
-      changed_when: false
-
-    - name: Check zoxide is installed
-      ansible.builtin.command: zoxide --version
-      changed_when: false
-
-    - name: Check dig is installed (dnsutils)
-      ansible.builtin.command: dig -v
-      changed_when: false
-
-    - name: Check gpg is installed (gnupg)
-      ansible.builtin.command: gpg --version
-      changed_when: false
-
-    - name: Check pip3 is installed (python3-pip)
-      ansible.builtin.command: pip3 --version
-      changed_when: false
-
-    - name: Check tree is installed
-      ansible.builtin.command: tree --version
-      changed_when: false
+    - name: Include apt package assertions
+      ansible.builtin.import_tasks: ../shared/verify-apt.yml
 
     # wl-clipboard moved to desktop_apt_packages (Wayland-only; not installed in headless CI)
 

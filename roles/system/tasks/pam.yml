@@ -183,6 +183,7 @@
   when:
     - not csb_rhel
     - not system_is_container
+    - not is_apt
 
 - name: Enforce pam_pwhistory for root (CIS 5.3.5)
   community.general.ini_file:
@@ -194,6 +195,7 @@
   when:
     - not csb_rhel
     - not system_is_container
+    - not is_apt
 
 # --- PAM pwquality (password complexity) ---
 - name: Configure password quality requirements

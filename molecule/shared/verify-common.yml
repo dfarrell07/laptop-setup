@@ -462,6 +462,7 @@
     - ansible_distribution in ['Fedora', 'Debian', 'Rocky']
     - ansible_system == 'Linux'
 
+# /dev/shm fstab checks — container CI gap; only fires in make test-vm (VM scenario)
 - name: Check /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
   ansible.builtin.command:
     cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nosuid' /etc/fstab
@@ -1130,6 +1131,7 @@
     - system_tmout | int > 0
     - not (system_is_container | default(false))
 
+# No system_is_container guard: session_timeout.yml writes /etc/zshrc in containers (unlike profile.d which crashes PID 1)
 - name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
   ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zshrc
   changed_when: false

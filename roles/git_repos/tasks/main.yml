@@ -226,6 +226,4 @@
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
   when: item.0.dest in git_repos_available_dests
   register: git_repos_remote_result
-  changed_when: >-
-    'added' in git_repos_remote_result.stdout or
-    'updated' in git_repos_remote_result.stdout
+  changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']

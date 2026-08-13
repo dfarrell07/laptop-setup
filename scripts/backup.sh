@@ -107,6 +107,7 @@ OPTIONAL_FILES=(
   .gnupg/common.conf
 )
 
+count=0
 _backup_array() {
   local f src dest
   for f in "$@"; do
@@ -126,7 +127,6 @@ _backup_array() {
   done
 }
 
-count=0
 _backup_array "${DOTFILES[@]}"
 _backup_array "${OPTIONAL_FILES[@]}"
 
