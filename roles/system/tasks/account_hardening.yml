@@ -212,6 +212,7 @@
   loop: "{{ _chage_set_result.results | default([]) }}"
   when:
     - item.rc | default(0) != 0
+    - item.skipped | default(false) == false
     - not csb_rhel
     - not system_is_container
 

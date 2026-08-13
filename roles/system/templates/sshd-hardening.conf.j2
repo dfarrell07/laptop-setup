@@ -40,9 +40,8 @@ ClientAliveCountMax 2
 {% if system_ssh_channel_timeout != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
-# system_ssh_unused_connection_timeout: default 600; set to '' (empty string) in config.yml to omit.
-# NOTE: use "" (empty string) to omit this directive — integer 0 passes the `!= ""` comparison (0 != "" is True), so it would emit UnusedConnectionTimeout 0 rather than omitting the line.
-{% if system_ssh_unused_connection_timeout != '' %} {# '' to omit/disable #}
+# system_ssh_unused_connection_timeout: default 600; set to '' (empty string) or 0 in config.yml to omit (both are falsy).
+{% if system_ssh_unused_connection_timeout %} {# '' or 0 to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no
@@ -61,5 +60,5 @@ GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
 # sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
 # 40-redhat-crypto-policies.conf.
 Ciphers {{ ssh_ciphers }}
-MACs {{ ssh_macs }}  # applies to CTR-mode ciphers (aes*-ctr); AEAD ciphers (gcm, chacha20) authenticate internally and ignore this list
+MACs {{ ssh_macs }}  # applies to CTR-mode ciphers (aes*-ctr); for AEAD ciphers (gcm, chacha20) a MAC is negotiated but not applied — authentication is provided by the cipher itself
 KexAlgorithms {{ ssh_kex_algorithms }}

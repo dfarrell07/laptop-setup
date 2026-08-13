@@ -1,4 +1,5 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 # ~/.zshrc — managed by Ansible (roles/dotfiles)
 
 export ZSH="$HOME/.local/share/oh-my-zsh"
@@ -34,7 +35,7 @@ HISTSIZE=50000
 SAVEHIST=50000
 unsetopt SHARE_HISTORY  # oh-my-zsh sets this; unset so APPEND_HISTORY controls write behavior
 setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
-{% if ansible_facts['system'] | default('Linux') == 'Darwin' %}
+{% if _system == 'Darwin' %}
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"  # preserve existing socket if set
 {% endif %}
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
@@ -42,7 +43,7 @@ export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output 
 export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
 command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
 export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 # SSH_AUTH_SOCK fallback for shells that bypass systemd user session (sudo -s, su -)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
@@ -59,24 +60,24 @@ export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not do
 # --- Tool hooks (silently skip if not installed) ---
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
 # Fedora rpm ships completion via /usr/share/zsh/site-functions/_fzf (picked up by compinit);
 # completion.zsh does not exist in the Fedora package. No explicit source needed for rpm installs.
-{% elif ansible_facts['system'] | default('Linux') == 'Darwin' %}
+{% elif _system == 'Darwin' %}
 command -v fzf &>/dev/null && [[ -f {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh ]] && source {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh
 command -v fzf &>/dev/null && [[ -f {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh ]] && source {{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh
 {% endif %}
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
 command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # syntax-highlighted man pages
 {% endif %}
 
 # --- zsh quality-of-life plugins ---
-{% if ansible_facts['system'] | default('Linux') == 'Linux' %}
+{% if _system == 'Linux' %}
 [[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 [[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-{% elif ansible_facts['system'] | default('Linux') == 'Darwin' %}
+{% elif _system == 'Darwin' %}
 [[ -f {{ dotfiles_homebrew_prefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source {{ dotfiles_homebrew_prefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 [[ -f {{ dotfiles_homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source {{ dotfiles_homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 {% endif %}
@@ -300,7 +301,7 @@ kind-load() {
 
 # --- Status ---
 alias yk='ykman info'
-{% if ansible_facts['system'] | default('Linux') == 'Darwin' %}
+{% if _system == 'Darwin' %}
 alias vpn='netstat -rn | grep -E "utun|wg"'
 {% else %}
 alias vpn='ip route | grep -E "tun|wg"'

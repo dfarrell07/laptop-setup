@@ -50,7 +50,7 @@
     stdin: "{{ item.item.token }}"
   timeout: 60
   register: _vault_login_result
-  loop: "{{ containers_vault_pre_auth.results }}"
+  loop: "{{ containers_vault_pre_auth.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry }}"
   no_log: true

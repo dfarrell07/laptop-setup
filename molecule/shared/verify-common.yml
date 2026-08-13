@@ -638,7 +638,7 @@
     fail_msg: "/etc/ssh/sshd_config.d/00-hardening.conf not deployed — system role sshd task regression"
   when:
     - ansible_system == 'Linux'
-    - not (system_is_container | default(false))
+    - ansible_os_family != 'Debian'
 
 - name: Assert sshd hardening drop-in has mode 0600
   ansible.builtin.assert:

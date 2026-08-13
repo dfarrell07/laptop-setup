@@ -5,6 +5,10 @@
     name: firewalld
     state: started
     enabled: true
+  register: _firewalld_start_result
+  failed_when: >-
+    _firewalld_start_result.failed and
+    'Unit firewalld.service not found' not in (_firewalld_start_result.msg | default(''))
   when: not system_is_container and is_dnf  # enabling+starting firewalld triggers daemon-reload, crashes privileged Podman containers
 
 - name: Re-gather service facts after firewalld start

@@ -72,11 +72,11 @@
       }}
   become: false
 
-# Sections 3 (sudo probing) and 4 (usbguard_running) removed — facts were only
+# sudo probing and usbguard_running sections removed — facts were only
 # consumed in the verbosity=1 debug summary and not by any downstream role task.
 
 # ---------------------------------------------------------------------------
-# 5. Internal CA certificates (Red Hat specific)
+# 3. Internal CA certificates (Red Hat specific)
 # ---------------------------------------------------------------------------
 - name: Check for Red Hat internal CA certs
   ansible.builtin.stat:
@@ -98,7 +98,7 @@
   become: false
 
 # ---------------------------------------------------------------------------
-# 6. CSB heuristic: RHEL + fapolicyd + internal CA
+# 4. CSB heuristic: RHEL + fapolicyd + internal CA
 #    Fedora path: hostname + internal CA only; fapolicyd not required —
 #    hybrid Fedora CSB may lack enforcing fapolicyd; csb_restricted handles
 #    the container vs. hybrid split downstream.
@@ -123,13 +123,13 @@
   become: false
   when: not (_csb_molecule_force | default(false))
 
-# Sections 7 (rootless container readiness) and 8 (toolbox/distrobox detection) removed —
+# rootless container readiness and toolbox/distrobox detection sections removed —
 # podman_rootless_ready was never consumed by any task (distrobox role re-checks subuid/subgid
 # independently at task-time); distrobox role detects
 # these independently via its own 'which' checks; these facts were unused.
 
 # ---------------------------------------------------------------------------
-# 9. Network proxy detection
+# 5. Network proxy detection
 # ---------------------------------------------------------------------------
 - name: Set proxy facts
   ansible.builtin.set_fact:
@@ -151,11 +151,11 @@
       }}
   become: false
 
-# Sections 10 (firewall_zone) and 11 (OSCAP/STIG detection) removed — all facts
+# firewall_zone and OSCAP/STIG detection sections removed — all facts
 # were only consumed in the verbosity=1 debug summary; no role task used them.
 
 # ---------------------------------------------------------------------------
-# 12. Derived: container tier strategy
+# 6. Derived: container tier strategy
 # ---------------------------------------------------------------------------
 # Three tiers from the migration plan:
 #   host-only  - unrestricted Fedora/macOS, install everything on host
@@ -218,7 +218,7 @@
   when: not (_csb_molecule_force | default(false))
 
 # ---------------------------------------------------------------------------
-# 13. Summary for the user
+# 7. Summary for the user
 # ---------------------------------------------------------------------------
 - name: CSB detection summary
   ansible.builtin.debug:

@@ -1,11 +1,15 @@
 #!/bin/bash
+# Reject past-tense/gerund first words in commit description (allows noun-phrase subjects per repo convention)
 msg=$(head -1 "$1")
+# Allow git autosquash prefixes and merge commits unchanged
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
   Merge\ branch*|Merge\ pull*|Merge\ remote*) exit 0 ;;
 esac
 first=$(echo "$msg" | awk '{print $1}')
 first="${first%:}"
+# Extract the description word — the first word after "Scope: " (or the first word if no scope)
+# This is what should be imperative mood.
 desc_first=$(echo "$msg" | sed 's/^[-A-Za-z/]*:[[:space:]]*//' | awk '{print $1}')
 
 if [ -z "$desc_first" ]; then
@@ -16,11 +20,13 @@ if [ -z "$desc_first" ]; then
   exit 1
 fi
 
+# Check capitalized
 if ! echo "$msg" | grep -qE '^[A-Z]'; then
   echo "ERROR: Capitalize the subject line" >&2
   exit 1
 fi
 
+# Reject common past tense and gerund first words in the description (after scope colon)
 _bad_word() {
   local _w
   _w=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
@@ -35,10 +41,13 @@ _bad_word() {
     *) return 1 ;;
   esac
 }
+# Check description word (word after "Scope: ") — this is the critical tense check
 if _bad_word "$desc_first"; then
   echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
   exit 1
 fi
+# Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')
+# Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
 if [ "$desc_first" != "$first" ]; then
   IFS='/' read -ra _scope_parts <<< "$first"
   for _part in "${_scope_parts[@]}"; do
@@ -49,17 +58,21 @@ if [ "$desc_first" != "$first" ]; then
   done
 fi
 
+# Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
+# This value must match header-max-length in commitlint.config.js
 len=$(printf '%s' "$msg" | wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2
   exit 1
 fi
 
+# No trailing period
 if echo "$msg" | grep -qE '\.$'; then
   echo "ERROR: Remove trailing period from subject line" >&2
   exit 1
 fi
 
+# Require Signed-off-by (enforce 'git commit -s')
 if ! grep -q '^Signed-off-by:' "$1"; then
   echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
   exit 1

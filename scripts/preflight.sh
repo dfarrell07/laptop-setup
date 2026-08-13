@@ -80,7 +80,7 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE=work; grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE=personal
+  if grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; fi
 fi
 
 # --- Required tools ---
@@ -252,10 +252,9 @@ fi
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
-_has_curl=false; command -v curl &>/dev/null && _has_curl=true
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
-  if [[ "$_has_curl" == true ]]; then
+  if command -v curl &>/dev/null; then
     if curl -sSLf --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
       record "net_${nlabel}" "pass" "$nurl reachable"
     else record "net_${nlabel}" "fail" "$nurl unreachable"; fi

@@ -53,3 +53,9 @@
       loop:
         - /var/lib/aide/aide.db.gz
         - /var/lib/aide/aide.db.new.gz
+
+    - name: Remove aide.conf.rpmsave artifact after package removal
+      ansible.builtin.file:
+        path: /etc/aide.conf.rpmsave
+        state: absent
+      failed_when: false
