@@ -13,7 +13,7 @@ pool {{ system_chrony_fallback_pool }} iburst
 authselectmode {{ system_chrony_authselectmode }}
 
 # Use NTP servers from DHCP
-sourcedir {{ system_chrony_dhcp_sourcedir }}
+{% if system_chrony_dhcp_sourcedir %}sourcedir {{ system_chrony_dhcp_sourcedir }}{% endif %}
 
 # Persist NTS cookies across restarts
 ntsdumpdir {{ system_chrony_ntsdumpdir }}

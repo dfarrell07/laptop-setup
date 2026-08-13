@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 DRY_RUN=false
 for arg in "$@"; do
@@ -10,7 +11,7 @@ for arg in "$@"; do
 done
 
 # Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
-GITHUB_USER="$(grep '^dotfiles_github_user:' "$(dirname "$0")/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$(dirname "$0")/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || echo "dfarrell07")"
+GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || echo "dfarrell07")"
 [[ -n "$GITHUB_USER" ]] || GITHUB_USER="dfarrell07"
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"

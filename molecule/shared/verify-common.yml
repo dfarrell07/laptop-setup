@@ -635,11 +635,10 @@
 - name: Assert sshd hardening drop-in deployed with mode 0600
   ansible.builtin.assert:
     that:
-      - verify_sshd_dropin.stat.exists
       - verify_sshd_dropin.stat.mode == '0600'
     fail_msg: >-
-      /etc/ssh/sshd_config.d/00-hardening.conf missing or wrong permissions
-      (expected 0600, got {{ verify_sshd_dropin.stat.mode | default('missing') }})
+      /etc/ssh/sshd_config.d/00-hardening.conf has wrong permissions
+      (expected 0600, got {{ verify_sshd_dropin.stat.mode | default('unknown') }})
   when:
     - ansible_system == 'Linux'
     - verify_sshd_dropin.stat.exists

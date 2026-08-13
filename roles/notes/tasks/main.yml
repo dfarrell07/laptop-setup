@@ -98,7 +98,7 @@
       register: notes_transcrypt_check
       changed_when: false
       failed_when: false
-      check_mode: false  # read-only probe — must run even in --check mode
+      check_mode: false  # always executes, even with --check (read-only, no state change)
       no_log: true
       when:
         - notes_transcrypt_available

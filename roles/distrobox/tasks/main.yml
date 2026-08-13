@@ -9,7 +9,7 @@
   register: distrobox_check
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
 
 - name: Probe toolbox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -17,7 +17,7 @@
   register: distrobox_toolbox_check
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
 
 - name: Set container tool facts
   ansible.builtin.set_fact:
@@ -44,7 +44,7 @@
   register: distrobox_subuid_check
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 - name: Re-check subgid entry for current user
@@ -53,7 +53,7 @@
   register: distrobox_subgid_check
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 - name: Warn if rootless podman prerequisites are missing
@@ -73,7 +73,7 @@
   register: distrobox_podman_socket_active
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 - name: Warn if Podman socket failed
@@ -97,7 +97,7 @@
   register: distrobox_container_exists
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 # Two distinct reasons to skip container creation when the container does not yet exist:
@@ -258,7 +258,7 @@
   register: distrobox_running
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 - name: Start container
@@ -289,7 +289,7 @@
   register: distrobox_python
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # always executes, even with --check (read-only, no state change)
   when: distrobox_tool != 'none'
 
 - name: Register container as Ansible host for Play 3

@@ -190,6 +190,12 @@
     - not csb_rhel
     - is_dnf
 
+# NOTE: this policy sets 40-redhat-crypto-policies.conf, but it does NOT affect
+# sshd's negotiated algorithms. 00-hardening.conf (written by the sshd_config
+# template) sorts before 40-redhat-crypto-policies.conf and its explicit
+# Ciphers/MACs/KexAlgorithms directives take precedence via first-occurrence
+# semantics. To change sshd's algorithm negotiation, adjust ssh_ciphers,
+# ssh_macs, and ssh_kex_algorithms — not system_crypto_policy_target.
 - name: Set crypto policy to {{ system_crypto_policy_target }}
   ansible.builtin.command:
     cmd: update-crypto-policies --set {{ system_crypto_policy_target }}

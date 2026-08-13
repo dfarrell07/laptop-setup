@@ -42,7 +42,6 @@ elif [ -x ".venv/bin/yamllint" ]; then
 fi
 if [ -n "$YAMLLINT" ]; then
   while IFS= read -r -d '' f; do
-    echo "yamllint: $f" >&2
     if ! git show ":$f" | "$YAMLLINT" --strict -; then
       failed=1
     fi

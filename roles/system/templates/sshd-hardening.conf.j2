@@ -36,10 +36,11 @@ ClientAliveCountMax 2
 # ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
 # close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
 # To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
-{% if system_ssh_channel_timeout != "" %}
+{% if system_ssh_channel_timeout != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
-# system_ssh_unused_connection_timeout: default 600; set to empty string in config.yml to omit
+# system_ssh_unused_connection_timeout: default 600; set to '' (empty string) in config.yml to omit.
+# NOTE: integer 0 is truthy in Jinja2 and will NOT omit this directive — use '' not 0 to disable.
 {% if system_ssh_unused_connection_timeout != '' %} {# '' to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}

@@ -173,8 +173,8 @@
 -a always,exit -F arch=b32 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
 
 # Date/time modification (CIS 4.1.x)
--a always,exit -F arch=b64 -S adjtimex -S settimeofday -S clock_adjtime -k time-change
--a always,exit -F arch=b32 -S adjtimex -S settimeofday -S clock_adjtime -k time-change
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -S clock_adjtime -F auid>=1000 -F auid!=-1 -k time-change
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -S clock_adjtime -F auid>=1000 -F auid!=-1 -k time-change
 -a always,exit -F arch=b64 -S clock_settime -k time-change
 -a always,exit -F arch=b32 -S clock_settime -k time-change
 -w /etc/localtime -p wa -k time-change

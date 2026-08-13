@@ -376,8 +376,8 @@
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: Check login.defs HOME_MODE={{ system_home_mode | default('0750') }} (CIS 5.4.2)
-  ansible.builtin.command: grep -q '^HOME_MODE\s\+{{ system_home_mode | default("0750") }}' /etc/login.defs
+- name: Check login.defs HOME_MODE={{ system_home_mode | default('0700') }} (CIS 5.4.2)
+  ansible.builtin.command: grep -q '^HOME_MODE\s\+{{ system_home_mode | default("0700") }}' /etc/login.defs
   changed_when: false
   become: true
   when:
