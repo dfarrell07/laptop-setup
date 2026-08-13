@@ -158,5 +158,7 @@
   when:
     # csb_detected NOT guarded: resolved runs on Fedora hybrid; stub is valid
     # even without 99-dot.conf (DoT removed but stub is interface-agnostic).
+    # On CSB Fedora hybrid: 99-dot.conf is absent but stub is still valid for
+    # Tailscale MagicDNS per-link routing and NM DHCP DNS. No DoT or catch-all is active.
     - not csb_rhel
     - not system_is_container  # dangling symlink breaks DNS when resolved is not running in containers

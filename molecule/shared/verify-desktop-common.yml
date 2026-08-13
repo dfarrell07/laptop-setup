@@ -8,11 +8,13 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
   register: verify_alacritty
+  when: desktop_terminal | default('alacritty') == 'alacritty'
 
 - name: Assert Alacritty config exists
   ansible.builtin.assert:
     that: verify_alacritty.stat.exists
     fail_msg: "Alacritty config not deployed"
+  when: desktop_terminal | default('alacritty') == 'alacritty'
 
 - name: Chrome policy verification skipped in container (VM scenario only)
   ansible.builtin.debug:

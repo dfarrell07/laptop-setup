@@ -3,9 +3,11 @@
 # --- Journald persistent logging and retention ---
 # Skipped entirely in containers: inotify on /etc/systemd/journald.conf.d and creating
 # /var/log/journal both trigger journald restart, which crashes privileged Podman containers.
-# Rationale for /var/log/journal: Storage=persistent (systemd 256+ default) creates this directory automatically;
-# creating it is additive. NOTE: 99-hardening.conf sorts last; if IT deploys a journald
-# drop-in on hybrid Fedora with a lower-numbered name, this config wins. If IT tuning
+# Rationale for /var/log/journal: Storage=auto is the compiled-in default; creating
+# /var/log/journal triggers persistent behavior; the explicit Storage=persistent drop-in
+# makes intent unambiguous and independent of directory state.
+# NOTE: 99-hardening.conf sorts last; if IT deploys a journald drop-in on hybrid Fedora
+# with a lower-numbered name, this config wins. If IT tuning
 # must take precedence on hybrid CSB, add a csb_detected guard or rename the drop-in
 # to a lower sort-order name. If they use an older systemd with Storage=auto, persistent logging is a security
 # benefit (logs survive reboots).

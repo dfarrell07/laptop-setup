@@ -101,7 +101,6 @@
           ansible.builtin.lineinfile:
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
-            create: true
             mode: "0600"
 
         - name: Enforce mode on notes repo git exclude
@@ -143,7 +142,7 @@
         chdir: "{{ notes_repo_path }}"
       register: notes_transcrypt_init_result
       no_log: true
-      changed_when: notes_transcrypt_init_result.rc == 0
+      changed_when: not ansible_check_mode and (notes_transcrypt_init_result.rc | default(1)) == 0
       failed_when: false
       when:
         - notes_repo_available

@@ -145,18 +145,13 @@
     - distrobox_check.rc != 0
     - is_linux
 
-- name: Warn before destroying existing container when container_replace is true
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
-      The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
-      after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+- name: Remove stale distrobox config dir when distrobox is not installed
+  ansible.builtin.file:
+    path: "{{ distrobox_ini_path | dirname }}"
+    state: absent
   when:
-    - distrobox_use_distrobox | bool
-    - not (fapolicyd_enforcing)
-    - packages_install_binaries | bool
-    - distrobox_container_replace | bool
-    - distrobox_container_exists.rc == 0
+    - distrobox_check.rc != 0
+    - is_linux
 
 - name: Create container via Distrobox
   when:
@@ -165,6 +160,16 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
+    - name: Warn before destroying existing container when container_replace is true
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
+          The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
+          after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+      when:
+        - distrobox_container_replace | bool
+        - distrobox_container_exists.rc == 0
+
     - name: Create container with distrobox assemble
       ansible.builtin.command:
         cmd: >-

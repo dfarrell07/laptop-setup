@@ -308,15 +308,13 @@
     path: "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
   register: verify_claude_settings
 
-- name: Assert Claude settings.local.json exists with 0600
+- name: Assert Claude personal settings.local.json has mode 0600
   ansible.builtin.assert:
     that:
-      - verify_claude_settings.stat.exists
       - verify_claude_settings.stat.mode == '0600'
     fail_msg: >-
-      Claude settings.local.json not deployed or wrong permissions
-      (exists={{ verify_claude_settings.stat.exists | default(false) }},
-      mode={{ verify_claude_settings.stat.mode | default('absent') }},
+      Claude settings.local.json wrong permissions
+      (mode={{ verify_claude_settings.stat.mode | default('absent') }},
       expected 0600)
 
 - name: Verify claude-privacy tmpfiles config deployed (Linux)

@@ -304,9 +304,10 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     else
       FAPOLICYD_BLOCKING=true
       pl=$(awk -F= '/^\[/{section=$0} /^pipelining/ && section ~ /\[defaults\]/{gsub(/ /,"",$2); gsub(/#.*$/,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
-      pl=${pl:-false (default — not set in ansible.cfg)}
       if [[ "$pl" == "true" || "$pl" == "yes" || "$pl" == "on" || "$pl" == "1" ]]; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
+      elif [[ -z "$pl" ]]; then
+        record "fapolicyd" "warn" "active and enforcing — pipelining not set in ansible.cfg — fapolicyd will block /tmp execution"
       else
         record "fapolicyd" "warn" "active and enforcing — pipelining=$pl in ansible.cfg — fapolicyd will block /tmp execution"
       fi

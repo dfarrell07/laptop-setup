@@ -25,7 +25,7 @@
     - name: Assert oc stub outputs expected version string
       ansible.builtin.assert:
         that: "'stub' in verify_oc_version.stdout"
-        fail_msg: "oc version output unexpected: {{ verify_oc_version.stdout }}"
+        fail_msg: "oc stub version output did not contain 'stub' — expected oc stub binary, got: {{ verify_oc_version.stdout }}"
 
     - name: Verify kubectl is present at /usr/local/bin/kubectl
       ansible.builtin.stat:

@@ -142,9 +142,11 @@ for key in "${HOME}/.ssh"/id_*; do
   dest="${BACKUP_DIR}/.ssh/$(basename "$key")"
   if [[ "$DRY_RUN" = true ]]; then
     echo "[dry-run] would copy $key -> $dest"
+    [[ -f "${key}.pub" ]] && { echo "[dry-run] would copy ${key}.pub -> ${dest}.pub"; count=$((count + 1)); }
   else
     mkdir -p "${BACKUP_DIR}/.ssh"
     cp -p "$key" "$dest"
+    [[ -f "${key}.pub" ]] && { cp -p "${key}.pub" "${dest}.pub"; count=$((count + 1)); }
   fi
   count=$((count + 1))
 done
