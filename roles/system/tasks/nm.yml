@@ -25,13 +25,17 @@
     - not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   notify: Restart NetworkManager
 
-- name: Remove WiFi MAC address randomization config when disabled
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
-    state: absent
+- name: Deploy WiFi MAC address preserve config when randomization disabled
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      wifi.cloned-mac-address=preserve
+    dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    mode: "0644"
   when:
     - not (system_wifi_mac_rand | bool)
-    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Configure NetworkManager to ignore Tailscale and kind interfaces

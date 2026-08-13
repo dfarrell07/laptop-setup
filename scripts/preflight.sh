@@ -37,7 +37,7 @@ record() {
 }
 
 # --- OS / CSB / profile detection ---
-OS_FAMILY="unknown" IS_CSB=false
+OS_FAMILY="unknown" IS_CSB=false fapolicyd_installed=false
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
@@ -52,12 +52,12 @@ else
   record "os_family" "pass" "$OS_FAMILY"
 fi
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
-  has_certs=false fapolicyd_installed=false
+  has_certs=false
   for p in '2022-IT-Root-CA.pem' 'Eng-CA.crt' 'RH-IT-Root-CA.pem'; do
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && fapolicyd_installed=true
+  systemctl list-unit-files fapolicyd.service &>/dev/null && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else
@@ -288,7 +288,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      pl=$(awk -F= '/^pipelining/{gsub(/ /,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null)
+      pl=$(awk -F= '/^pipelining/{gsub(/ /,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]')
       if [[ "$pl" == "true" ]]; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
       else

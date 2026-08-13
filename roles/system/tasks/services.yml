@@ -80,7 +80,7 @@
     name: mullvad-daemon
     state: started
     enabled: true
-    daemon_reload: true
+    daemon_reload: "{{ _system_mullvad_install.changed }}"
   when:
     - install_vpn | bool
     - is_dnf

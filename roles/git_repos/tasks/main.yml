@@ -8,7 +8,7 @@
   register: git_repos_gh_auth
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # read-only probe — must run even in --check mode
 
 - name: Warn if gh not installed
   ansible.builtin.debug:
@@ -62,7 +62,7 @@
   register: git_repos_ssh_agent
   changed_when: false
   failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false  # read-only probe — must run even in --check mode
 
 - name: Warn if SSH agent has no identities loaded
   ansible.builtin.debug:
@@ -162,7 +162,6 @@
   loop: "{{ git_repos_pull_results.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
-  when: git_repos_pull | bool
 
 - name: Fail if any pulls failed
   ansible.builtin.fail:
@@ -171,7 +170,6 @@
         | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
         | map(attribute='item.dest') | list | join(', ') }}
   when:
-    - git_repos_pull | bool
     - >-
       (git_repos_pull_results.results
       | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)

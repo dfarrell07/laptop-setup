@@ -1,10 +1,10 @@
 .PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
-       dotfiles packages repos notes repos-% \
+       dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude distrobox container \
        container-rebuild csb-audit vault-edit update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
-       test-scripts test-poller test-% \
+       test-scripts test-poller \
        preflight guard-not-root \
        pip-lock pip-sync
 

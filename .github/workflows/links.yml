@@ -64,9 +64,12 @@ jobs:
         run: |
           TITLE="Broken links detected"
           BODY="Link check failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          EXISTING=$(gh issue list --label documentation --state open --search "$TITLE in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          EXISTING=$(gh issue list --label documentation --state open \
+            --search "$TITLE in:title" --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --body "$BODY"
           else
-            gh issue create --title "$TITLE" --body "$BODY" --label "documentation" || echo '::warning::gh issue create failed — check token permissions and label existence'
+            gh issue create --title "$TITLE" --body "$BODY" --label "documentation" || \
+              echo '::warning::gh issue create failed — check token permissions and label existence'
           fi

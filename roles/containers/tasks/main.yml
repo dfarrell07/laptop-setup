@@ -89,6 +89,7 @@
     label: "{{ item.item.registry | default('unknown') }}"
   when:
     - is_linux
+    - registry_tokens | length > 0
     - item.rc is defined
     - item.rc != 0
 

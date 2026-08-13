@@ -59,6 +59,7 @@
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
+      when: _pf_is_molecule is not defined
       tags: [always]
 
     - name: Assert config.yml vault and secret-key constraints
@@ -111,6 +112,8 @@
               The default 'CHANGE_ME' sentinel is invalid — timedatectl will
               reject it. Run 'timedatectl list-timezones' to find yours,
               then add system_timezone: <zone> to config.yml.
+              Note: if config.yml was just parsed with a YAML error (see WARNING above),
+              fix the YAML syntax first — this assertion fires because user overrides could not be loaded.
           tags: [always]
 
         - name: Assert identity vars are not CHANGE_ME placeholders
@@ -132,6 +135,8 @@
               | selectattr(1, 'in', ['CHANGE_ME', '']) | map(attribute=0) | list }}.
               Without these, git commits are attributed
               to 'CHANGE_ME', the macOS SSH agent launchd plist will be named incorrectly, and the notes repo clone fails.
+              Note: if config.yml was just parsed with a YAML error (see WARNING above),
+              fix the YAML syntax first — this assertion fires because user overrides could not be loaded.
           tags: [always]
 
         - name: Assert work identity vars are not CHANGE_ME placeholders

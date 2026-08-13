@@ -685,7 +685,7 @@ if [[ -f /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem ]] \
 fi
 if $_is_rhel; then
   # RHEL CSB: cert AND fapolicyd installed
-  $_has_rh_cert && systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q "fapolicyd" && CSB_HOST=true
+  $_has_rh_cert && systemctl list-unit-files fapolicyd.service &>/dev/null && CSB_HOST=true
 else
   # Fedora CSB: cert AND FQDN ends in .csb
   $_has_rh_cert && [[ "$(hostname -f 2>/dev/null)" == *".csb" ]] && CSB_HOST=true
@@ -833,7 +833,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "sshd-enabled" "FAIL" "sshd.service not enabled — reboot will leave machine unreachable"; fi
   # Verify sshd.socket masked — prevents socket activation from reopening port 22
   # Note: systemctl is-masked is not a valid verb in systemd 259; use show UnitFileState.
-  if systemctl list-unit-files sshd.socket 2>/dev/null | grep -q 'sshd.socket'; then
+  if systemctl list-unit-files sshd.socket &>/dev/null; then
     if [[ "$(systemctl show -p UnitFileState --value sshd.socket 2>/dev/null)" == "masked" ]]; then
       record "sshd-socket-masked" "PASS"
     elif $CSB_HOST; then

@@ -65,8 +65,8 @@ ssh_git_signing_pubkey: ""  # fallback; authoritative in group_vars/all/vars.yml
 # fallback; authoritative in group_vars/all/vars.yml
 ssh_ciphers: 'aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
 ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
-system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
-needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
+needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
 notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/defaults; used in zshrc.j2 notes alias
 dotfiles_user_name: 'CHANGE_ME'  # override in config.yml
 dotfiles_user_email_work: 'CHANGE_ME@work.invalid'
