@@ -90,21 +90,20 @@
           become: true
           tags: [become]
 
-        - name: Set permissions on oc and kubectl
-          ansible.builtin.file:
-            path: "/usr/local/bin/{{ item }}"
-            mode: "0755"
-          loop: [oc, kubectl]
-          when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
-          become: true
-          tags: [become]
-
       always:
         - name: Clean up oc tarball
           ansible.builtin.file:
             path: /tmp/openshift-client-linux.tar.gz
             state: absent
           when: packages_oc_download is defined
+
+    - name: Set permissions on oc and kubectl
+      ansible.builtin.file:
+        path: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [oc, kubectl]
+      become: true
+      tags: [become]
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)

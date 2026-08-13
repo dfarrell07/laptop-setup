@@ -12,10 +12,11 @@ case "$msg" in
   Merge\ branch*|Merge\ pull*|Merge\ remote*|'Merge tag'*) exit 0 ;;
   Revert\ *) exit 0 ;;
 esac
-if ! echo "$msg" | grep -qE '^[A-Za-z][-A-Za-z0-9/]*:'; then
-  echo "ERROR: Missing scope separator ':' — format must be 'Scope: description'" >&2
+if ! echo "$msg" | grep -qE '^[A-Z][-A-Za-z0-9/]*:'; then
+  echo "ERROR: Missing or uncapitalized scope — format must be 'Scope: description'" >&2
   exit 1
 fi
+# Extract scope portion for scope-parts bad-word check below
 first=$(echo "$msg" | sed 's/^\([A-Za-z][-A-Za-z0-9/]*\):.*/\1/')
 # Extract the description word — the first word after "Scope: "
 # This is what should be imperative mood.
@@ -23,12 +24,6 @@ desc_first=$(echo "$msg" | sed 's/^[A-Za-z][-A-Za-z0-9/]*:[[:space:]]*//' | awk 
 desc_first="${desc_first%:}"  # strip trailing colon: 'Added:' would not match 'added' in case without this
 if [ -z "$desc_first" ]; then
   echo "ERROR: Subject has no description after scope colon" >&2
-  exit 1
-fi
-
-# Check capitalized
-if ! echo "$msg" | grep -qE '^[A-Z]'; then
-  echo "ERROR: Capitalize the scope word — e.g. 'Packages: ...' not 'packages: ...'" >&2
   exit 1
 fi
 

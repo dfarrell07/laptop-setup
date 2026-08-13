@@ -34,17 +34,15 @@
       failed_when: false
       tags: [always]
 
-    - name: Warn and fail when config.yml exists but could not be parsed
+    - name: Fail when config.yml exists but could not be parsed
       when:
         - _config_yml_stat.stat.exists
         - _user_config is not defined
-      block:
-        - name: Fail when config.yml exists but could not be parsed
-          ansible.builtin.fail:
-            msg: >-
-              config.yml exists but failed to load (YAML error, encoding problem, or unreadable file). Fix the issue
-              before re-running. All user overrides were silently dropped.
-          tags: [always]
+      ansible.builtin.fail:
+        msg: >-
+          config.yml exists but failed to load (YAML error, encoding problem, or unreadable file). Fix the issue
+          before re-running. All user overrides were silently dropped.
+      tags: [always]
 
     - name: Set molecule context flag
       ansible.builtin.set_fact:

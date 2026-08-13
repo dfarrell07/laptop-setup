@@ -63,6 +63,7 @@
     dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     mode: "0644"
   when:
+    - not csb_rhel  # IT manages NM power policy on CSB-RHEL; guard holds even when var overridden
     - system_wifi_powersave_disabled | bool
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
@@ -72,8 +73,9 @@
     path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
     state: absent
   when:
+    - not csb_rhel  # IT manages NM power policy on CSB-RHEL; guard holds even when var overridden
     - not (system_wifi_powersave_disabled | bool)
-    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)

@@ -356,7 +356,7 @@ jobs:
 
       - name: Run actionlint
         id: actionlint
-        if: always() && steps.actionlint_download.outcome == 'success'
+        if: steps.actionlint_download.outcome == 'success'
         continue-on-error: true
         run: ./actionlint -color
 

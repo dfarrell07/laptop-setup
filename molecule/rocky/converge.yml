@@ -35,7 +35,6 @@
 
     - name: Override for container testing
       ansible.builtin.set_fact:
-        profile: work
         _csb_molecule_force: true  # pin csb_detected/csb_rhel; prevents csb_detect.yml from overwriting
         csb_rhel: true          # Rocky = RHEL CSB path; overrides system-container-overrides.yml baseline
         csb_detected: true      # Rocky is CSB-detected (RHEL CSB)

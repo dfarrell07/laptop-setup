@@ -80,7 +80,7 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; fi
+  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then record "config_profile" "warn" "unrecognized profile value in config.yml — using default: $PROFILE"; fi
 fi
 
 # --- Required tools ---

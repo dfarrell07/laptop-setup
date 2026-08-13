@@ -35,13 +35,18 @@
     cmd: grep -q 'exec_always mako' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
 
-- name: Verify sway output line contains scale directive and adaptive_sync
+- name: Verify sway output line contains scale directive
+  ansible.builtin.command:
+    cmd: grep -q 'output.*scale' "{{ ansible_user_dir }}/.config/sway/config"
+  changed_when: false
+
+- name: Verify sway output line contains adaptive_sync setting
   ansible.builtin.command:
     cmd: >-
       grep -q 'output.*scale.*adaptive_sync {{ desktop_sway_adaptive_sync | default("disabled") }}'
       "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
-  when: desktop_sway_adaptive_sync | default('') | length > 0
+  when: desktop_sway_adaptive_sync | default('disabled') | length > 0
 
 - name: Verify sway config exports VA-API environment variables
   ansible.builtin.command:

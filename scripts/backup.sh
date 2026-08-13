@@ -15,7 +15,7 @@ GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/
 [[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER="dfarrell07"
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
-if [ "$DRY_RUN" = false ]; then
+if [[ "$DRY_RUN" = false ]]; then
   mkdir -p "$BACKUP_DIR"
   chmod 700 "$BACKUP_DIR"
 fi
@@ -114,16 +114,16 @@ _backup_array() {
   local f src dest
   for f in "$@"; do
     src="${HOME}/${f}"
-    if [ -f "$src" ]; then
+    if [[ -f "$src" ]]; then
       dest="${BACKUP_DIR}/${f}"
-      if [ "$DRY_RUN" = true ]; then
+      if [[ "$DRY_RUN" = true ]]; then
         echo "[dry-run] would copy $src -> $dest"
       else
         mkdir -p "$(dirname "$dest")"
         cp -p "$src" "$dest"
       fi
       count=$((count + 1))
-    elif [ -L "$src" ]; then
+    elif [[ -L "$src" ]]; then
       echo "[warn] broken symlink, skipping: $src" >&2
     fi
   done
@@ -138,9 +138,9 @@ for key in "${HOME}/.ssh"/id_*; do
     *.pub) continue ;;
     */id_ed25519_sk|*/id_ed25519_sk_signing|*/id_rsa_redhat) continue ;;
   esac
-  [ -f "$key" ] || continue
+  [[ -f "$key" ]] || continue
   dest="${BACKUP_DIR}/.ssh/$(basename "$key")"
-  if [ "$DRY_RUN" = true ]; then
+  if [[ "$DRY_RUN" = true ]]; then
     echo "[dry-run] would copy $key -> $dest"
   else
     mkdir -p "${BACKUP_DIR}/.ssh"
@@ -151,11 +151,11 @@ done
 
 # ~/.claude/projects/ (per-project Claude memories and history — recurse subdirs)
 _claude_projects_dir="${HOME}/.claude/projects"
-if [ -d "$_claude_projects_dir" ]; then
+if [[ -d "$_claude_projects_dir" ]]; then
   while IFS= read -r -d '' proj_file; do
     rel="${proj_file#"${HOME}/"}"
     dest="${BACKUP_DIR}/${rel}"
-    if [ "$DRY_RUN" = true ]; then
+    if [[ "$DRY_RUN" = true ]]; then
       echo "[dry-run] would copy $proj_file -> $dest"
     else
       mkdir -p "$(dirname "$dest")"
@@ -167,11 +167,11 @@ fi
 
 # ~/.gnupg/private-keys-v1.d/ (directory of subkeys — copy all files)
 _gpg_dir="${HOME}/.gnupg/private-keys-v1.d"
-if [ -d "$_gpg_dir" ]; then
+if [[ -d "$_gpg_dir" ]]; then
   for key in "$_gpg_dir"/*.key; do
-    [ -f "$key" ] || continue
+    [[ -f "$key" ]] || continue
     dest="${BACKUP_DIR}/.gnupg/private-keys-v1.d/$(basename "$key")"
-    if [ "$DRY_RUN" = true ]; then
+    if [[ "$DRY_RUN" = true ]]; then
       echo "[dry-run] would copy $key -> $dest"
     else
       mkdir -p "${BACKUP_DIR}/.gnupg/private-keys-v1.d"
@@ -183,11 +183,11 @@ fi
 
 # ~/.gnupg/public-keys.d/ (keyboxd public key database — GnuPG 2.3+)
 _gpg_pub_dir="${HOME}/.gnupg/public-keys.d"
-if [ -d "$_gpg_pub_dir" ]; then
+if [[ -d "$_gpg_pub_dir" ]]; then
   for db in "$_gpg_pub_dir"/*.db; do
-    [ -f "$db" ] || continue
+    [[ -f "$db" ]] || continue
     dest="${BACKUP_DIR}/.gnupg/public-keys.d/$(basename "$db")"
-    if [ "$DRY_RUN" = true ]; then
+    if [[ "$DRY_RUN" = true ]]; then
       echo "[dry-run] would copy $db -> $dest"
     else
       mkdir -p "${BACKUP_DIR}/.gnupg/public-keys.d"
@@ -197,7 +197,7 @@ if [ -d "$_gpg_pub_dir" ]; then
   done
 fi
 
-if [ "$DRY_RUN" = true ]; then
+if [[ "$DRY_RUN" = true ]]; then
   echo "[dry-run] would back up ${count} files to ${BACKUP_DIR}"
 else
   echo "Backed up ${count} files to ${BACKUP_DIR}"

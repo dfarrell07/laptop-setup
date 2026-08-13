@@ -90,7 +90,7 @@
   when:
     - is_linux
     - registry_tokens | length > 0
-    - item.rc != 0
+    - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Set auth.json permissions after vault auth
   ansible.builtin.file:
@@ -100,7 +100,7 @@
     - is_linux
     - registry_tokens | length > 0
     - >-
-      containers_auth_stat.stat.exists or
+      containers_auth_stat.stat.exists | default(false) or
       (containers_vault_auth_status.results | default([]) |
       selectattr('rc', 'equalto', 0) | list | length > 0)
 

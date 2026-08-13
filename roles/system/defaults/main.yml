@@ -439,6 +439,8 @@ system_mask_nfs_server: true      # NFS mask (CIS 2.2.7); false: unmasks but NOT
                                   # nfs-server/rpcbind disabled by vendor preset IF nfs-utils installed; mask is pre-emptive hardening
                                   # on workstations where nfs-utils may not be present (creates /dev/null symlinks regardless)
 system_mask_iscsi: true           # mask iSCSI initiator (CIS 2.3.x); set false on iSCSI storage; authoritative in group_vars/all/vars.yml
+                                  # NOTE: masking iscsid.socket disables libvirt-daemon-driver-storage-iscsi;
+                                  # set false if VM iSCSI storage is required
 system_init_on_free: true         # zero freed memory pages (init_on_free=1); authoritative in group_vars/all/vars.yml
 system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative
 system_faillock_audit: true            # log failed auth attempts via audit subsystem; set false to remove flag
