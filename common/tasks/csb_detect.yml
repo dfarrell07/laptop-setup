@@ -68,7 +68,7 @@
     fapolicyd_enforcing: >-
       {{
         (_fapolicyd_active.rc | default(1) == 0)
-        and (_fapolicyd_permissive_grep.rc | default(1) != 0)
+        and (_fapolicyd_permissive_grep.rc | default(1) == 1)
       }}
   become: false
   when: is_linux | bool

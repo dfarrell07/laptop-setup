@@ -50,14 +50,10 @@
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_post_clone
-      when: not notes_repo_stat.stat.exists
 
     - name: Set notes repo available fact
       ansible.builtin.set_fact:
-        # notes_repo_post_clone is registered even when skipped (Ansible registers skip-result objects); 'is skipped' is safe
-        notes_repo_available: >-
-          {{ notes_repo_stat.stat.exists or
-             (not (notes_repo_post_clone is skipped) and notes_repo_post_clone.stat.exists) }}
+        notes_repo_available: "{{ notes_repo_stat.stat.exists or notes_repo_post_clone.stat.exists }}"
 
     - name: Notes repo setup
       when: notes_repo_available
@@ -145,7 +141,6 @@
               notes may not be decrypted. Check the password in vault.yml.
           when:
             - notes_transcrypt_available
-            - not (notes_transcrypt_init_result.skipped | default(false))
             # default(0) required: skipped tasks have no .rc; prevents UndefinedError
             - notes_transcrypt_init_result.rc | default(0) != 0
 

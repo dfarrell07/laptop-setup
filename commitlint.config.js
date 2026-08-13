@@ -4,9 +4,10 @@ module.exports = {
     'body-leading-blank': [2, 'always'],
     'body-max-line-length': [2, 'always', 200],
     // This repo uses "Scope: message" format (scope before colon = commitlint "type" field).
-    // type-enum is severity 2 (error) with Title-Case variants matching CLAUDE.md convention.
+    // type-enum is severity 0 (off) — slash-combined scopes (System/Nm, Common/Molecule, etc.)
+    // are too open-ended to enumerate; format is enforced by the commit-msg hook regex instead.
     // scope-enum stays at 0 (off) — no parenthetical scopes are used in this repo.
-    'type-enum': [2, 'always', [
+    'type-enum': [0, 'always', [
       'Common', 'Repos-dnf', 'Packages', 'Dotfiles', 'Ssh', 'Git-repos',
       'Notes', 'Redhat', 'Containers', 'Desktop', 'System', 'Distrobox',
       'Claude', 'Ci', 'Docs', 'Chore', 'Smoke', 'Molecule', 'Multi',

@@ -31,7 +31,7 @@ record() {
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) FAILURES=$((FAILURES+1)); printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail" ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(printf '%s' "$status" | tr '[:lower:]' '[:upper:]')" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
       *) printf "${RED}[BUG]${NC} unknown status '%s' for check '%s'\n" "$status" "$name" >&2; exit 99 ;;
     esac
   else
@@ -86,16 +86,20 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
-    PROFILE=work
-    record "config_profile" "pass" "profile=work"
-  elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
-    PROFILE=personal
-    record "config_profile" "pass" "profile=personal"
-  elif grep -qE '^profile:[[:space:]]*' "$CONFIG_FILE" 2>/dev/null; then
-    record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
+  if [[ -f "$CONFIG_FILE" ]]; then
+    if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+      PROFILE=work
+      record "config_profile" "pass" "profile=work"
+    elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+      PROFILE=personal
+      record "config_profile" "pass" "profile=personal"
+    elif grep -qE '^profile:[[:space:]]*' "$CONFIG_FILE" 2>/dev/null; then
+      record "config_profile" "fail" "unrecognized profile value in config.yml — set 'work' or 'personal'"
+    else
+      record "config_profile" "pass" "profile=${PROFILE} (default — no override in config.yml)"
+    fi
   else
-    record "config_profile" "pass" "profile=${PROFILE} (default — no override in config.yml)"
+    record "config_profile" "skip" "config.yml absent — profile defaults to ${PROFILE}"
   fi
 fi
 

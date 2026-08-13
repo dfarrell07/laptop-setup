@@ -309,20 +309,22 @@ is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
 
-packages_brew_taps:
-  - nikitabobko/tap
+packages_brew_taps: []
 
 packages_brew_taps_yubikey:
   - theseal/ssh-askpass
+
+packages_brew_taps_work:
+  - nikitabobko/tap
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow
 packages_brew_autoupdate_interval: 86400  # seconds per autoupdate cycle; run 'brew autoupdate stop' before changing (idempotency guard)
 
 packages_brew_cask:
   - alacritty
-  - aerospace
 
 packages_brew_cask_work:
+  - nikitabobko/tap/aerospace
   - google-chrome
   - slack
   - keepassxc
@@ -335,7 +337,6 @@ packages_brew:
   - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
   - tmux
-  - mosh
   - jq
   - yq
   - direnv
@@ -371,6 +372,7 @@ packages_brew_work:
   - kustomize  # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - socat
   - nmap
+  - mosh
   - transcrypt  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_transcrypt_version pin
   - sops  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_sops_version pin
   - iperf3

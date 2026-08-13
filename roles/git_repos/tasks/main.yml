@@ -39,7 +39,7 @@
       {{
         git_repos_list
         | selectattr('category', 'in', git_repos_active_categories)
-        | rejectattr('enabled', 'equalto', false) | list
+        | rejectattr('enabled', 'equalto', false) | rejectattr('enabled', 'equalto', 'false') | list
       }}
 
 - name: Fail when explicit category filter matches no enabled repos

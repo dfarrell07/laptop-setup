@@ -311,6 +311,8 @@ system_disable_udf: true          # kernel-blocks udf module; set false if UDF m
 # (sysctl.d uses lexicographic ordering; 90- wins over any competing file except 99-*).
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
 system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
+# Non-root apps using io_uring directly (tokio, libuv, some DB clients) will receive ENOSYS or
+# fall back to epoll — test affected workloads before applying on dev machines
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
 # debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
 # for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
