@@ -230,7 +230,11 @@ fi
 if [[ -f "$CONFIG_FILE" ]]; then
   for _ivar in dotfiles_user_name dotfiles_github_user dotfiles_user_email_work dotfiles_user_email_personal system_timezone; do
     if ! grep -q "^${_ivar}:" "$CONFIG_FILE"; then
-      record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
+      if [[ "$_ivar" == "system_timezone" ]]; then
+        record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — timedatectl set-timezone CHANGE_ME will fail; run timedatectl list-timezones to find yours"
+      else
+        record "identity_${_ivar}" "fail" "${_ivar} not set in config.yml — provisioning uses 'CHANGE_ME' placeholder, producing wrong gitconfig/zshrc"
+      fi
     elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
     else
@@ -241,7 +245,7 @@ fi
 
 # --- vault_* key guard (mirrors pre_flight_checks.yml assert) ---
 if [[ -f "$CONFIG_FILE" ]]; then
-  if grep -qE '^vault_[a-zA-Z_]+:' "$CONFIG_FILE"; then
+  if grep -qE '^vault_[^:]*:' "$CONFIG_FILE"; then
     record "config_vault_keys" "fail" "config.yml defines vault_* key(s) — include_vars outranks group_vars (precedence 17 > 4), silently shadowing the encrypted vault value; remove vault_* keys from config.yml"
   else
     record "config_vault_keys" "pass" "no vault_* keys in config.yml"
@@ -334,8 +338,9 @@ if ! avail_kb=$(df -Pk "$HOME" | awk 'NR==2 {print $4}') 2>/dev/null || [[ -z "$
   record "disk_space" "warn" "df failed on $HOME — cannot measure free space"
 else
   avail_gb=$((avail_kb / 1048576))
+  avail_mb=$((avail_kb / 1024))
   if [[ $avail_gb -ge 5 ]]; then record "disk_space" "pass" "${avail_gb}GiB free in \$HOME"
-  else record "disk_space" "fail" "only ${avail_gb}GiB free — need at least 5GiB"; fi
+  else record "disk_space" "fail" "only ${avail_mb}MiB free — need at least 5GiB"; fi
 fi
 
 # --- RAM ---

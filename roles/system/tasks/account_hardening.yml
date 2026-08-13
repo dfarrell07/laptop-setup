@@ -104,7 +104,7 @@
 - name: Warn if home directory mode enforcement failed
   ansible.builtin.debug:
     msg: >-
-      WARNING: Could not set {{ real_user_home }} to mode 0750
+      WARNING: Could not set {{ real_user_home }} to mode {{ system_home_mode }}
       ({{ _home_mode_result.msg | default('unknown error') }}) —
       CIS 6.2.x home dir permission may not be enforced
   when: _home_mode_result.failed | default(false)

@@ -62,7 +62,7 @@
       tags: [always]
 
     - name: Assert config.yml vault and secret-key constraints
-      when: _user_config is defined
+      when: _user_config is defined and _pf_vault_asserted is not defined
       block:
         - name: Assert config.yml contains no vault_* keys
           ansible.builtin.assert:
@@ -89,6 +89,13 @@
               'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
               'registry_tokens']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
               (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
+          tags: [always]
+
+        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
+        # Play 1's include of this file sets _pf_vault_asserted; Play 2's include then sees it defined.
+        - name: Set vault asserted flag (suppresses duplicate assertions in Play 2)
+          ansible.builtin.set_fact:
+            _pf_vault_asserted: true
           tags: [always]
 
     - name: Non-molecule pre-flight assertions

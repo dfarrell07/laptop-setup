@@ -101,6 +101,16 @@ jobs:
       - name: Validate smoke-test JSON output
         run: bash scripts/smoke-test.sh --user-only --json | python3 -c "import json,sys; json.load(sys.stdin)"
 
+  poller-tests:
+    name: Queue Poller Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh
 
@@ -393,6 +403,7 @@ jobs:
       - yamllint
       - vars-sync
       - shellcheck
+      - poller-tests
       - lockfile-lint
       - vault-encryption
       - syntax-check

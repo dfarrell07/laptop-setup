@@ -46,9 +46,15 @@ if _bad_word "$desc_first"; then
   exit 1
 fi
 # Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')
-if [ "$desc_first" != "$first" ] && _bad_word "$first"; then
-  echo "ERROR: Scope word '$first' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
-  exit 1
+# Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
+if [ "$desc_first" != "$first" ]; then
+  IFS='/' read -ra _scope_parts <<< "$first"
+  for _part in "${_scope_parts[@]}"; do
+    if _bad_word "$_part"; then
+      echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
+      exit 1
+    fi
+  done
 fi
 
 # Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
