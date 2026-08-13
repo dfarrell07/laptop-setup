@@ -13,7 +13,7 @@ Host *
     # - sntrup761x25519-sha512@openssh.com: available since OpenSSH 8.5; sntrup761x25519-sha512 (without @openssh.com): 10.0+ alias; mlkem768x25519-sha256: 9.9+
     # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
     # - curve25519-sha256 only: ecdh-nistp256 is redundant; @libssh.org alias omitted (OpenSSH-only setup)
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512@openssh.com,{% endif %}curve25519-sha256
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto

@@ -84,6 +84,7 @@ if [[ -z "$PROFILE" ]]; then
 fi
 
 # --- Required tools ---
+# When adding a tool to the loop, add a matching elif branch with install guidance.
 for tool in ansible-playbook git python3 curl make ssh; do
   if command -v "$tool" &>/dev/null; then
     if [[ "$tool" == "ssh" ]]; then
@@ -109,9 +110,6 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
-    else
-      record "required_${tool}" "fail" "not installed"
-    # Note: add an elif here if adding a new tool to the loop above
     fi
   fi
 done

@@ -46,6 +46,7 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
   register: verify_claude_queue_poller
+  when: claude_queue_enabled | default(false) | bool
 
 - name: Assert claude-queue-poller.sh exists with mode 0700
   ansible.builtin.assert:
@@ -53,11 +54,13 @@
       - verify_claude_queue_poller.stat.exists
       - verify_claude_queue_poller.stat.mode == '0700'
     fail_msg: "claude-queue-poller.sh missing or wrong permissions — expected 0700"
+  when: claude_queue_enabled | default(false) | bool
 
 - name: Verify queue-repos.conf deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/claude/queue-repos.conf"
   register: verify_claude_queue_repos_conf
+  when: claude_queue_enabled | default(false) | bool
 
 - name: Assert queue-repos.conf exists with mode 0600
   ansible.builtin.assert:
@@ -65,3 +68,4 @@
       - verify_claude_queue_repos_conf.stat.exists
       - verify_claude_queue_repos_conf.stat.mode == '0600'
     fail_msg: "queue-repos.conf missing or wrong permissions — expected 0600"
+  when: claude_queue_enabled | default(false) | bool

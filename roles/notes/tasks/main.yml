@@ -116,7 +116,6 @@
             notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
       when:
         - notes_transcrypt_available
-        - notes_repo_available
 
     - name: Initialize transcrypt
       ansible.builtin.command:
@@ -134,7 +133,6 @@
       failed_when: false
       when:
         - notes_transcrypt_available
-        - notes_repo_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password | length > 0
 
@@ -156,7 +154,6 @@
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
         - notes_transcrypt_available
-        - notes_repo_available
         - notes_transcrypt_inited
 
 
@@ -184,7 +181,6 @@
           notes_transcrypt_password is empty — transcrypt not initialized.
           Set vault_notes_transcrypt_password in vault.yml to enable.
       when:
-        - notes_repo_available
         - notes_transcrypt_available
         - not notes_transcrypt_inited
         - notes_transcrypt_password | length == 0
