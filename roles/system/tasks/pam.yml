@@ -136,7 +136,7 @@
       ansible.builtin.lineinfile:
         path: /etc/pam.d/common-password
         regexp: '^password\s+required\s+pam_pwhistory\.so'
-        line: 'password required                        pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember }}'
+        line: 'password required                   pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember }} enforce_for_root'
         insertbefore: '^password.*pam_unix\.so'
         mode: "0644"
 

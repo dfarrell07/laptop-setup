@@ -53,6 +53,7 @@ if [ "$desc_first" != "$first" ] && _bad_word "$first"; then
 fi
 
 # Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
+# This value must match header-max-length in commitlint.config.js
 len=$(printf '%s' "$msg" | wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2

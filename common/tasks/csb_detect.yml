@@ -164,6 +164,8 @@
 #   host-only  - unrestricted Fedora/macOS, install everything on host
 #   hybrid     - RHEL with full sudo, install basics on host + container for extras
 #   container  - CSB restricted, minimal host + full dev env in container
+# is_rhel alone triggers hybrid because any RHEL host is treated as IT-managed;
+# csb_rhel=false on non-CSB RHEL so rescue blocks do not engage.
 - name: Determine container tier
   ansible.builtin.set_fact:
     needs_container_tier: >-

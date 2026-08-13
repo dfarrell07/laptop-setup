@@ -790,13 +790,17 @@
     path: /etc/sudoers.d/99-hardening
   register: verify_sudoers_conf
   become: true
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert sudoers hardening drop-in deployed
   ansible.builtin.assert:
     that: verify_sudoers_conf.stat.exists
     fail_msg: "/etc/sudoers.d/99-hardening not deployed — system role sudoers task regression"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert sudoers drop-in is mode 0440
   ansible.builtin.assert:
@@ -1358,16 +1362,20 @@
     path: /etc/locale.conf
   register: verify_locale_conf
   become: true
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/locale.conf exists
   ansible.builtin.assert:
     that: verify_locale_conf.stat.exists
     fail_msg: "/etc/locale.conf not deployed — system role timezone_locale.yml regression"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Check /etc/locale.conf contains LANG=en_US.UTF-8
-  ansible.builtin.command: grep -q 'LANG=en_US.UTF-8' /etc/locale.conf
+  ansible.builtin.command: grep -q 'LANG={{ system_locale | default("en_US.UTF-8") }}' /etc/locale.conf
   changed_when: false
   become: true
   when:
@@ -1392,7 +1400,7 @@
     - not (system_is_container | default(false))
 
 - name: Check /etc/vconsole.conf contains KEYMAP=us
-  ansible.builtin.command: grep -q 'KEYMAP=us' /etc/vconsole.conf
+  ansible.builtin.command: grep -q 'KEYMAP={{ system_keymap | default("us") }}' /etc/vconsole.conf
   changed_when: false
   become: true
   when:

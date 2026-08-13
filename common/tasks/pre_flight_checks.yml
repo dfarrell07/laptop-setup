@@ -16,7 +16,7 @@
 
     - name: Stat config.yml for parse-failure detection
       ansible.builtin.stat:
-        path: config.yml
+        path: "{{ playbook_dir }}/config.yml"
       register: _config_yml_stat
       tags: [always]
 
@@ -25,6 +25,9 @@
       # namespace, so this does NOT duplicate the first load. Both loads are required: the
       # first (above) provides overrides to the play namespace; this load provides a dict
       # for the vault_ and secret-key assertions below that need to inspect key names.
+      # Note: include_vars resolves 'file: config.yml' relative to the playbook dir (same as
+      # the plain 'include_vars: config.yml' above). The stat probe above uses playbook_dir
+      # explicitly so both probes agree regardless of the invoker's cwd.
       ansible.builtin.include_vars:
         file: config.yml
         name: _user_config
@@ -148,12 +151,12 @@
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets vault_stub_warned; Play 2's include then sees it defined.
+        # Play 1's include of this file sets _vault_stub_warned; Play 2's include then sees it defined.
         - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
           ansible.builtin.set_fact:
-            vault_stub_warned: true
+            _vault_stub_warned: true
           tags: [always]
       when:
         - vault_ssh_auth_key | default('') | length == 0
-        - vault_stub_warned is not defined
+        - _vault_stub_warned is not defined
         - not _pf_is_molecule

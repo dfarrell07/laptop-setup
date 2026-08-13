@@ -284,8 +284,8 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      # ansible.cfg hardcodes pipelining=true; warn unconditionally rather than
-      # checking ansible.cfg (the else-branch could never be reached)
+      # ansible.cfg always sets pipelining=true, so warn unconditionally; no need to
+      # parse ansible.cfg (a check for pipelining=false could never be true there)
       record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"
     fi
   else
@@ -327,12 +327,12 @@ else
 fi
 
 # --- Disk space (need 5GB free in $HOME) ---
-avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}') || avail_kb=0
-avail_gb=$((avail_kb / 1048576))
-if [[ $avail_gb -ge 5 ]]; then
-  record "disk_space" "pass" "${avail_gb}GB free in \$HOME"
+if ! avail_kb=$(df -Pk "$HOME" | awk 'NR==2 {print $4}') 2>/dev/null || [[ -z "$avail_kb" ]]; then
+  record "disk_space" "warn" "df failed on $HOME — cannot measure free space"
 else
-  record "disk_space" "fail" "only ${avail_gb}GB free — need at least 5GB"
+  avail_gb=$((avail_kb / 1048576))
+  if [[ $avail_gb -ge 5 ]]; then record "disk_space" "pass" "${avail_gb}GB free in \$HOME"
+  else record "disk_space" "fail" "only ${avail_gb}GB free — need at least 5GB"; fi
 fi
 
 # --- RAM ---

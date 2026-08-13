@@ -90,7 +90,7 @@
 - name: Install VPN packages
   when:
     - install_vpn
-    - is_rhel or csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
+    - csb_detected  # corporate VPN: RHEL CSB or CSB-detected Fedora only
   block:
     - name: Install VPN packages via dnf
       ansible.builtin.dnf:
