@@ -172,6 +172,15 @@
             fail_msg: "packages_opm_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
           when: packages_oc_version != 'stable'
 
+        - name: Fail if stable-mode opm SHA256 could not be loaded from sha256sum.txt
+          ansible.builtin.fail:
+            msg: >-
+              packages_oc_version is 'stable' but sha256sum.txt was not fetched
+              (oc block likely entered rescue). Cannot verify opm SHA256.
+          when:
+            - packages_oc_version == 'stable'
+            - not (packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums)
+
         - name: Download opm tarball (SHA256-verified)
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"

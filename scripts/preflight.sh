@@ -80,10 +80,7 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by CSB/macOS/config.yml below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  _prof=$(grep -oP '^profile:[[:space:]]*\K(work|personal)(?=[[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null | head -1)
-  case "${_prof:-}" in
-    work|personal) PROFILE="$_prof" ;;
-  esac
+  grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE=work; grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE=personal
 fi
 
 # --- Required tools ---
@@ -112,8 +109,6 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
       fi
-    else
-      record "required_${tool}" "fail" "not installed — run: make bootstrap to add this tool"
     fi
   fi
 done

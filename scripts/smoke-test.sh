@@ -48,7 +48,7 @@ grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && p
 _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 _system_umask="${_system_umask:-027}"
 _notes_enabled=false
-grep -qE '^notes_enabled:[[:space:]]*true' "$_cfg" 2>/dev/null && _notes_enabled=true
+grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]]/, "", $2); print $2}' "$_cfg" 2>/dev/null || echo "722")
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 unset _cfg

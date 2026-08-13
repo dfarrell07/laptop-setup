@@ -157,6 +157,7 @@
           - usbguard
           - usbguard-selinux
         state: present
+      register: _system_usbguard_install
 
     - name: Deploy USBGuard whitelist rules
       ansible.builtin.template:
@@ -215,3 +216,4 @@
         name: usbguard
         state: started
         enabled: true
+        daemon_reload: "{{ _system_usbguard_install.changed }}"

@@ -64,6 +64,7 @@
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc == 0
     - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
+    - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_disable_fp_result.rc == 0
   failed_when: false
 
@@ -96,5 +97,6 @@
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc != 0
     - not csb_rhel  # CSB: IT manages authselect; all authselect action tasks carry this guard
+    - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_enable_fp_result.rc == 0
   failed_when: false

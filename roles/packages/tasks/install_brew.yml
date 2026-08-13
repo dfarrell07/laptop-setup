@@ -56,6 +56,7 @@
         state: present
       async: 600
       poll: 10
+      register: _packages_brew_casks
   rescue:
     - name: Warn Homebrew cask package install failed
       ansible.builtin.debug:
@@ -70,7 +71,7 @@
     msg: >-
       LuLu installed. Open System Settings > Privacy & Security > System Extensions
       and approve LuLu to activate the application firewall.
-  when: is_macos
+  when: is_macos and _packages_brew_casks.changed | default(false)
 
 - name: Install ssh-askpass (macOS)
   when: is_macos

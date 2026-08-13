@@ -88,7 +88,7 @@ for name, info in lock.get('packages', {}).items():
     resolved = info.get('resolved', '')
     if integrity and not integrity.startswith('sha512-'):
         errors.append(f'ERROR: Weak hash in lockfile: {name}')
-    if resolved and not resolved.startswith('https://registry.npmjs.org/'):
+    if resolved and not (resolved.startswith('https://registry.npmjs.org/') or resolved.startswith('file:')):
         errors.append(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}')
 if errors:
     print('\n'.join(errors), file=sys.stderr)

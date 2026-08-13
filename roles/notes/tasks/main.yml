@@ -57,7 +57,7 @@
       ansible.builtin.set_fact:
         notes_repo_available: >-
           {{ notes_repo_stat.stat.exists or
-             (notes_repo_post_clone.stat.exists | default(false)) }}
+             (notes_repo_post_clone.stat | default({'exists': false})).exists }}
 
     - name: Warn if notes repo could not be cloned
       ansible.builtin.debug:

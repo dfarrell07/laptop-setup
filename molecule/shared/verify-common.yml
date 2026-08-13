@@ -444,7 +444,7 @@
     - ansible_distribution in ['Fedora', 'Debian']
     - ansible_system == 'Linux'
 
-- name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian/Rocky
+- name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian
   ansible.builtin.assert:
     that: needs_container_tier == 'host-only'
     fail_msg: "needs_container_tier is not host-only on non-CSB host — CSB detection regression"

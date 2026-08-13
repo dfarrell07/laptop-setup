@@ -483,12 +483,15 @@
   changed_when: false
   become: true
   failed_when: false
+  when: not (csb_rhel | default(false))
 
 - name: Assert crypto-policy is DEFAULT:NO-SHA1
   ansible.builtin.assert:
     that: verify_crypto.stdout == (system_crypto_policy_target | default('DEFAULT:NO-SHA1'))
     fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected {{ system_crypto_policy_target | default('DEFAULT:NO-SHA1') }}"
-  when: verify_crypto.rc == 0
+  when:
+    - verify_crypto.rc == 0
+    - not (csb_rhel | default(false))
 
 # golangci-lint coverage is provided by molecule/packages-binaries/verify.yml unconditionally.
 # See packages-binaries scenario for golangci-lint tests.

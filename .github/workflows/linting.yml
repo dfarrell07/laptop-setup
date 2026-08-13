@@ -104,8 +104,8 @@ jobs:
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh
 
-  lockfile-lint:
-    name: Lockfile Integrity Check
+  vault-encryption:
+    name: Vault Encryption Check
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -135,16 +135,6 @@ jobs:
               sys.exit(1)
           print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
           "
-
-  vault-encryption:
-    name: Vault Encryption Check
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
 
       - name: Ensure vault files are encrypted
         run: |
@@ -393,7 +383,6 @@ jobs:
       - yamllint
       - vars-sync
       - shell-checks
-      - lockfile-lint
       - vault-encryption
       - syntax-check
       - node-lint
