@@ -155,6 +155,7 @@
           transcrypt initialization exited {{ notes_transcrypt_init_result.rc | default('unknown') }} —
           notes may not be decrypted. Check the password in vault.yml.
       when:
+        - notes_repo_available
         - not (notes_transcrypt_init_result.skipped | default(false))
         - notes_transcrypt_init_result.rc | default(0) != 0
 

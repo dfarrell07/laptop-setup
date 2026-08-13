@@ -5,14 +5,8 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Capture real user identity
-      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/capture-user-identity.yml"
-
-    - name: Load CI pre-tasks (config, group_vars, project root)
-      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
-
-    - name: Apply container-safe system role overrides
-      ansible.builtin.include_tasks: "{{ common_project_root }}/molecule/shared/system-container-overrides.yml"
+    - name: Load common system play pre-tasks
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/common-system-play-pre-tasks.yml"
 
     # openssh-server install intentionally skipped in Debian Podman CI: apt triggers daemon-reload
     # on /etc/systemd/** writes, crashing the privileged container. The sshd hardening block is

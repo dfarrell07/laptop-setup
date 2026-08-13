@@ -288,17 +288,20 @@
       mode={{ verify_claude_default_settings.stat.mode | default('absent') }},
       expected 0600)
 
-- name: Validate Claude default settings.local.json sandbox and deny config
+- name: Validate Claude settings.local.json sandbox and deny config
   ansible.builtin.command:
     cmd: >-
       python3 -c "import json, sys;
-      d = json.load(open('{{ ansible_user_dir }}/.claude/settings.local.json'));
+      d = json.load(open('{{ item }}'));
       assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
       assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
       assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
       assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
       assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
   changed_when: false
+  loop:
+    - "{{ ansible_user_dir }}/.claude/settings.local.json"
+    - "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
 
 - name: Verify Claude settings.local.json exists
   ansible.builtin.stat:
@@ -315,18 +318,6 @@
       (exists={{ verify_claude_settings.stat.exists | default(false) }},
       mode={{ verify_claude_settings.stat.mode | default('absent') }},
       expected 0600)
-
-- name: Validate Claude settings.local.json is valid JSON and has sandbox.enabled
-  ansible.builtin.command:
-    cmd: >-
-      python3 -c "import json, sys;
-      d = json.load(open('{{ ansible_user_dir }}/.claude-personal/settings.local.json'));
-      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
-      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
-      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
-      assert d.get('enableAllProjectMcpServers') == False, 'enableAllProjectMcpServers is not false';
-      assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
-  changed_when: false
 
 - name: Verify claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.stat:

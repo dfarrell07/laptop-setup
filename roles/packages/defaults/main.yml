@@ -45,6 +45,10 @@ packages_security:
 # Set packages_yubikey_enabled: false in config.yml on machines without a YubiKey.
 packages_yubikey_enabled: true
 
+# LuLu application firewall cask — installed only when packages_brew_cask_lulu_enabled: true (default).
+# Set packages_brew_cask_lulu_enabled: false in config.yml to suppress (avoids system extension approval prompt on macOS upgrades).
+packages_brew_cask_lulu_enabled: true
+
 packages_security_yubikey:
   - yubikey-manager
   - ykpers  # provides ykchalresp for HMAC-SHA1 vault challenge-response (preflight test)
@@ -319,7 +323,6 @@ packages_brew_autoupdate_interval: 86400  # seconds per autoupdate cycle; run 'b
 packages_brew_cask:
   - alacritty
   - nikitabobko/tap/aerospace
-  - lulu
 
 packages_brew_cask_work:
   - google-chrome
