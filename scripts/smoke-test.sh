@@ -903,10 +903,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
 
   # Crypto policy (skipped on CSB — IT may enforce FIPS/FUTURE; Ansible guard deliberately omits DEFAULT:NO-SHA1 there)
   if command -v update-crypto-policies &>/dev/null; then
-    cp=$(update-crypto-policies --show 2>/dev/null || echo "?")
-    if [[ "$cp" == "DEFAULT:NO-SHA1" ]]; then record "crypto-policy" "PASS"
-    elif $CSB_HOST; then record "crypto-policy" "WARN" "skipped on CSB — policy is '$cp' (IT-managed; DEFAULT:NO-SHA1 not applied)"
-    else record "crypto-policy" "FAIL" "'$cp', expected 'DEFAULT:NO-SHA1' (SHA1 accepted system-wide)"; fi
+    _cp=$(update-crypto-policies --show 2>/dev/null || echo "?")
+    if [[ "$_cp" == "DEFAULT:NO-SHA1" ]]; then record "crypto-policy" "PASS"
+    elif $CSB_HOST; then record "crypto-policy" "WARN" "skipped on CSB — policy is '$_cp' (IT-managed; DEFAULT:NO-SHA1 not applied)"
+    else record "crypto-policy" "FAIL" "'$_cp', expected 'DEFAULT:NO-SHA1' (SHA1 accepted system-wide)"; fi
   fi
 
   # sshd hardening (verify key directives and value of MaxAuthTries ≤4)
@@ -1138,7 +1138,7 @@ EOF
       if [[ "$_abrt_state" == "masked" ]]; then record "$_abrt_key" "PASS"
       else record "$_abrt_key" "FAIL" "$_abrt_svc not masked (state: $_abrt_state) — ABRT should be masked in favour of systemd-coredump"; fi
     done
-    unset _abrt_svc _abrt_state _abrt_key
+    unset _abrt_svc _abrt_state _abrt_key _abrt_base
   fi
 
   # thermald: masked on non-Intel; enabled on Intel (Intel-only thermal daemon)

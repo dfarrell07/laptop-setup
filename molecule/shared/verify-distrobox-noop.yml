@@ -4,24 +4,20 @@
 # Included by rocky/verify.yml and fedora/verify.yml.
 
 - name: Check distrobox binary presence in CI (should be absent)
-  ansible.builtin.command:
-    cmd: which distrobox
+  ansible.builtin.stat:
+    path: /usr/bin/distrobox
   register: verify_distrobox_bin
-  changed_when: false
-  failed_when: false
 
 - name: Check toolbox binary presence in CI (should be absent)
-  ansible.builtin.command:
-    cmd: which toolbox
+  ansible.builtin.stat:
+    path: /usr/bin/toolbox
   register: verify_toolbox_bin
-  changed_when: false
-  failed_when: false
 
 - name: Assert neither distrobox nor toolbox is installed (packages_containers emptied)
   ansible.builtin.assert:
     that:
-      - verify_distrobox_bin.rc != 0
-      - verify_toolbox_bin.rc != 0
+      - not verify_distrobox_bin.stat.exists
+      - not verify_toolbox_bin.stat.exists
     fail_msg: "distrobox or toolbox found in PATH despite packages_containers: [] — converge override not applied?"
 
 - name: Stat distrobox.ini (must be absent on no-op path)

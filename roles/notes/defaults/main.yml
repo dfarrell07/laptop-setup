@@ -7,7 +7,7 @@ notes_transcrypt_cipher: aes-256-cbc
 notes_transcrypt_password_sentinel: 'REPLACE_ME'
 # notes_transcrypt_password: owned by group_vars/all/vars.yml via vault_notes_transcrypt_password;
 # empty string = transcrypt init skipped
-notes_transcrypt_bin_path: /usr/local/bin/transcrypt
+notes_transcrypt_bin_path: "{{ '/opt/homebrew/bin/transcrypt' if ansible_facts['os_family'] == 'Darwin' else '/usr/local/bin/transcrypt' }}"
 notes_transcrypt_available: false  # set via set_fact in tasks/main.yml when transcrypt is found
 # Sentinel fallback; overwritten by set_fact in tasks/main.yml when notes_repo_available is true;
 # value here is only the initial sentinel to prevent UndefinedError before set_fact runs

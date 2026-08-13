@@ -147,7 +147,7 @@
     - name: Assert ICMP block inversion is enabled in drop zone
       ansible.builtin.assert:
         that: verify_fw_icmp_inversion.rc == 0
-        fail_msg: "icmp-block-inversion not enabled — ICMP blocks now BLOCK (not allow); NDP and PMTU discovery broken"
+        fail_msg: "icmp-block-inversion not enabled in drop zone — NDP/PMTU ICMP cannot be selectively allowed"
 
     - name: Check drop zone interface list excludes tun* interfaces
       ansible.builtin.command: firewall-cmd --zone=drop --list-interfaces
@@ -703,24 +703,20 @@
 
     # --- distrobox role ---
     - name: Check for distrobox binary
-      ansible.builtin.command:
-        cmd: which distrobox
+      ansible.builtin.stat:
+        path: /usr/bin/distrobox
       register: verify_distrobox_bin
-      changed_when: false
-      failed_when: false
 
     - name: Check for toolbox binary
-      ansible.builtin.command:
-        cmd: which toolbox
+      ansible.builtin.stat:
+        path: /usr/bin/toolbox
       register: verify_toolbox_bin
-      changed_when: false
-      failed_when: false
 
     - name: Resolve distrobox_tool for verify
       ansible.builtin.set_fact:
         verify_distrobox_tool: >-
-          {{ 'distrobox' if (verify_distrobox_bin.rc == 0)
-             else ('toolbox' if (verify_toolbox_bin.rc == 0)
+          {{ 'distrobox' if (verify_distrobox_bin.stat.exists)
+             else ('toolbox' if (verify_toolbox_bin.stat.exists)
              else 'none') }}
 
     - name: Assert distrobox_tool fact resolves to a known value
@@ -730,8 +726,8 @@
 
     - name: Assert distrobox binary is present (installed by packages role)
       ansible.builtin.assert:
-        that: verify_distrobox_bin.rc == 0
-        fail_msg: "distrobox binary not found in PATH — packages role should install it"
+        that: verify_distrobox_bin.stat.exists
+        fail_msg: "distrobox binary not found in /usr/bin — packages role should install it"
 
     - name: Stat distrobox.ini deployed by template
       ansible.builtin.stat:

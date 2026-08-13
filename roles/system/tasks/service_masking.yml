@@ -292,12 +292,19 @@
 
 - name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
   ansible.builtin.systemd:
-    name: "{{ item }}"
+    name: abrt-vmcore.service
     masked: false
     enabled: true
-  loop:
-    - abrt-vmcore.service
-    - abrt-pstoreoops.service
+  when:
+    - not (system_mask_abrt | bool)
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
+- name: Unmask abrt-pstoreoops (vendor default disabled; do not enable)
+  ansible.builtin.systemd:
+    name: abrt-pstoreoops.service
+    masked: false
   when:
     - not (system_mask_abrt | bool)
     - not csb_rhel
@@ -373,6 +380,7 @@
     - cockpit.socket
   when:
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
+    - _cockpit_stat.stat.exists
   failed_when: false
 
 - name: Configure cockpit state and enablement (installed units only)

@@ -31,7 +31,7 @@ record() {
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail"; FAILURES=$((FAILURES+1)) ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(printf '%s' "$status" | tr '[:lower:]' '[:upper:]')" "$name" "$detail" ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }
@@ -216,6 +216,8 @@ elif ! grep -q '^desktop_environment:' "$CONFIG_FILE"; then
   record "config_yml" "fail" "config.yml exists but does not set desktop_environment — 'auto' detection fails before any WM is installed; set 'desktop_environment: sway' (or i3/gnome)"
 elif grep -qE '^desktop_environment:[[:space:]]*auto([[:space:]]|$)' "$CONFIG_FILE"; then
   record "config_yml" "fail" "desktop_environment is 'auto' — auto-detection requires an active XDG session and will fail on first provision; set 'desktop_environment: sway' (or i3/gnome) in config.yml"
+elif ! grep -qE '^desktop_environment:[[:space:]]*(sway|i3|gnome)([[:space:]]|$)' "$CONFIG_FILE"; then
+  record "config_yml" "fail" "desktop_environment must be sway, i3, or gnome — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
 else
   record "config_yml" "pass" "desktop_environment is set"
 fi

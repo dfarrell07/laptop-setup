@@ -44,6 +44,7 @@ ChannelTimeout {{ system_ssh_channel_timeout }}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
 TCPKeepAlive no
+SyslogFacility AUTHPRIV  # explicit; 50-redhat.conf also sets this; first-occurrence guard and self-contained logging config
 LogLevel VERBOSE
 UsePAM yes  # compiled default no; matches 50-redhat.conf; explicit (first-occurrence)
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100

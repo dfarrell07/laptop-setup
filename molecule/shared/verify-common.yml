@@ -1097,6 +1097,8 @@
     - not csb_rhel
     - system_chrony_service_enabled | default(true) | bool
 
+# CI gap: system_chrony_service_enabled=false in all container scenario verify pre_tasks;
+# make test-vm exercises full chrony service-enablement and NTS coverage.
 - name: Assert chrony/chronyd is enabled
   ansible.builtin.assert:
     that: verify_chronyd.status.UnitFileState | default('') == 'enabled'
@@ -1119,6 +1121,8 @@
     - not csb_rhel
     - system_chrony_service_enabled | default(true) | bool
 
+# CI gap: system_chrony_service_enabled=false in all container scenario verify pre_tasks;
+# make test-vm exercises full chrony service-enablement and NTS coverage.
 - name: Assert chrony NTS config is present
   ansible.builtin.assert:
     that: verify_chrony_nts.rc == 0
@@ -1191,7 +1195,9 @@
   register: masked_sshd_socket_state
   changed_when: false
   failed_when: false
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert sshd.socket is masked
   ansible.builtin.assert:
@@ -1202,6 +1208,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
     - masked_sshd_socket_state.rc == 0
     - masked_sshd_socket_state.stdout | length > 0
 

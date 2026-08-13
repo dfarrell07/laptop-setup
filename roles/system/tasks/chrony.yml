@@ -109,12 +109,11 @@
   when:
     - system_chrony_service_enabled | bool
     - system_chrony_authselectmode == 'require'
-    - not csb_detected
 
 - name: "Warn: NTS-KE requires outbound TCP 4460 (standard deployment)"
   ansible.builtin.debug:
     msg: >-
-      chrony NTS deployed — requires TCP 4460 to time.cloudflare.com/nts.netnod.se/ptbtime1.ptb.de/ntppool1.time.nl;
+      chrony NTS deployed — requires TCP 4460 to {{ system_chrony_nts_servers | join('/') }};
       if blocked, chrony falls back to unauthenticated pool. Set
       system_chrony_authselectmode: require in config.yml to surface NTS failure as an error.
   when:

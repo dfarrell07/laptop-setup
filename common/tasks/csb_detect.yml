@@ -102,6 +102,9 @@
 
 # ---------------------------------------------------------------------------
 # 6. CSB heuristic: RHEL + fapolicyd + internal CA
+#    Fedora path: hostname + internal CA only; fapolicyd not required —
+#    hybrid Fedora CSB may lack enforcing fapolicyd; csb_restricted handles
+#    the container vs. hybrid split downstream.
 # ---------------------------------------------------------------------------
 - name: Set CSB detected fact
   ansible.builtin.set_fact:

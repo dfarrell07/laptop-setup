@@ -70,7 +70,6 @@
     - name: Set transcrypt availability fact
       ansible.builtin.set_fact:
         notes_transcrypt_available: "{{ notes_transcrypt_bin.stat.exists | default(false) }}"
-      when: notes_repo_available
 
     - name: Deploy gitleaks allowlist for notes repo (before transcrypt init — prevents ciphertext flagging)
       ansible.builtin.copy:
@@ -101,8 +100,6 @@
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
         notes_transcrypt_inited: "{{ notes_transcrypt_check.rc | default(-1) == 0 }}"
-      when:
-        - notes_transcrypt_available
 
     - name: Initialize transcrypt
       ansible.builtin.command:

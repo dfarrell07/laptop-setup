@@ -340,7 +340,7 @@ packages_brew:
   - python3  # Xcode CLT python3 lags Apple release cadence; needed for pipx toolchain
   - pipx  # needed for yamllint + ansible-lint pinned installs (cycle-41b moved these from brew to pipx)
   - gh
-  - tailscale
+  - tailscale  # formula provides CLI + tailscaled daemon; menubar app requires the cask — consistent with Linux daemon treatment
   - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin
   - gnupg
   # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
@@ -370,4 +370,4 @@ packages_brew_work:
   - transcrypt  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_transcrypt_version pin
   - sops  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_sops_version pin
   - iperf3
-  - wireshark  # brew formula (tshark CLI only); GUI would require the cask (not installed) — mirrors packages_networking_work wireshark-cli
+  - wireshark  # provides tshark + shared libs; GUI app requires the cask (not installed) — mirrors packages_networking_work wireshark-cli
