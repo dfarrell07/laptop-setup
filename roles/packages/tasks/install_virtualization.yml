@@ -42,12 +42,17 @@
 # a manual disable), and the system role has no logic to enable these socket units.
 - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
   block:
+    - name: Reload systemd after libvirt package install
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+      tags: [become]
+      when: not system_is_container
     - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
       ansible.builtin.systemd:
         name: "{{ item }}"
         state: started
         enabled: true
-        daemon_reload: true
       loop:
         - virtqemud.socket
         - virtnetworkd.socket

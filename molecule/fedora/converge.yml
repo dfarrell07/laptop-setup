@@ -104,6 +104,7 @@
         desktop_i3_packages: []
         desktop_deploy_chrome_policies: true
 
+    # Keep in sync: identical block in molecule/rocky/converge.yml and molecule/debian/converge.yml
     - name: Generate CSB compatibility report
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/csb-report-post.yml"
       tags: [always]

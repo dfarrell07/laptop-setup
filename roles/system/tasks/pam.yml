@@ -89,7 +89,7 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: authselect enable-feature with-faillock exited
-      {{ system_authselect_faillock_enable.rc }} — faillock PAM feature may not be active
+      {{ system_authselect_faillock_enable.rc | default('unknown') }} — faillock PAM feature may not be active
   when:
     - system_authselect_faillock_enable.rc | default(0) != 0
 
@@ -169,7 +169,7 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: authselect enable-feature with-pwhistory exited
-      {{ system_authselect_pwhistory_enable.rc }} — pwhistory PAM feature may not be active
+      {{ system_authselect_pwhistory_enable.rc | default('unknown') }} — pwhistory PAM feature may not be active
   when:
     - system_authselect_pwhistory_enable.rc | default(0) != 0
 

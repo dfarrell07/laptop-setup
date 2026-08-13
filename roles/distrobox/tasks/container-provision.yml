@@ -9,6 +9,7 @@
     name: "{{ distrobox_packages }}"
     state: present
   become: true  # distrobox containers have passwordless sudo; without this dnf5 refuses non-root install
+  # intentional: dnf5 may fail first-run (D-Bus unavailable); provisioning summary surfaces rc
   failed_when: false
   when:
     - distrobox_packages | length > 0

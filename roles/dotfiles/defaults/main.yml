@@ -2,8 +2,6 @@
 # --- Task-only vars (referenced in tasks/main.yml, not in any .j2 template) ---
 dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"  # used in tasks/main.yml, not templates
 dotfiles_forgit_version: "26.08.0"  # used in tasks/main.yml, not templates
-dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
-                                    # default guards against undefined-var in template if probe skipped
 dotfiles_oh_my_zsh_theme: gallois
 dotfiles_oh_my_zsh_plugins:
   - git
@@ -29,6 +27,8 @@ dotfiles_tmux_history_limit: 50000  # 50k lines; tmux default 2000 — increase 
 
 
 dotfiles_ssh_agent_timeout: 28800  # 8-hour key lifetime (workday policy); ssh-agent default is 0 = unlimited
+dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
+                                    # default guards against undefined-var in template if probe skipped
 
 dotfiles_homebrew_prefix: /opt/homebrew
 

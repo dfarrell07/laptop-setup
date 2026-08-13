@@ -61,6 +61,7 @@
           - "'net.core.bpf_jit_harden' not in system_sysctl_extra"
           - "'net.ipv6.conf.all.accept_ra' not in system_sysctl_extra"
           - "'net.ipv6.conf.default.accept_ra' not in system_sysctl_extra"
+          - "'kernel.perf_event_paranoid' not in system_sysctl_extra"
         fail_msg: >-
           system_sysctl_extra contains a toggle-managed key. Use the
           corresponding toggle variable instead: system_enable_ip_forward
@@ -75,7 +76,8 @@
           system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
           system_bpf_jit_harden (net.core.bpf_jit_harden),
           system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
-          net.ipv6.conf.default.accept_ra).
+          net.ipv6.conf.default.accept_ra),
+          system_perf_event_paranoid (kernel.perf_event_paranoid).
 
     - name: Assert no toggle-managed sysctl keys in system_sysctl_extra_additional
       ansible.builtin.assert:
@@ -93,6 +95,7 @@
           - "'net.core.bpf_jit_harden' not in system_sysctl_extra_additional"
           - "'net.ipv6.conf.all.accept_ra' not in system_sysctl_extra_additional"
           - "'net.ipv6.conf.default.accept_ra' not in system_sysctl_extra_additional"
+          - "'kernel.perf_event_paranoid' not in system_sysctl_extra_additional"
         fail_msg: >-
           system_sysctl_extra_additional contains a toggle-managed key. Use the
           corresponding toggle variable instead: system_enable_ip_forward
@@ -107,7 +110,8 @@
           system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
           system_bpf_jit_harden (net.core.bpf_jit_harden),
           system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
-          net.ipv6.conf.default.accept_ra).
+          net.ipv6.conf.default.accept_ra),
+          system_perf_event_paranoid (kernel.perf_event_paranoid).
 
     - name: Deploy sysctl hardening config
       ansible.builtin.template:

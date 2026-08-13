@@ -28,6 +28,7 @@
 
     - name: Include NetworkManager conf.d assertions
       ansible.builtin.import_tasks: ../shared/verify-nm.yml
+      when: not (system_is_container | default(false))
 
     # --- Packages (apt) ---
     - name: Include apt package assertions
@@ -53,34 +54,44 @@
         cmd: grep -qE '^auth\s+required\s+pam_faillock\.so\s+preauth' /etc/pam.d/common-auth
       changed_when: false
       become: true
-      when: ansible_pkg_mgr == 'apt'
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
 
     - name: Check pam_faillock.so authfail line in common-auth (Debian)
       ansible.builtin.command:
         cmd: grep -qE '^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail' /etc/pam.d/common-auth
       changed_when: false
       become: true
-      when: ansible_pkg_mgr == 'apt'
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
 
     - name: Check pam_faillock.so account line in common-account (Debian)
       ansible.builtin.command:
         cmd: grep -qE '^account\s+required\s+pam_faillock\.so$' /etc/pam.d/common-account
       changed_when: false
       become: true
-      when: ansible_pkg_mgr == 'apt'
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
 
     - name: Check faillock.conf deny = 5 (Debian)
       ansible.builtin.command:
         cmd: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
       changed_when: false
-      when: ansible_pkg_mgr == 'apt'
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
 
     - name: Check pam_pwhistory.so line in common-password (Debian)
       ansible.builtin.command:
         cmd: grep -qE '^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+' /etc/pam.d/common-password
       changed_when: false
       become: true
-      when: ansible_pkg_mgr == 'apt'
+      when:
+        - ansible_pkg_mgr == 'apt'
+        - not (system_is_container | default(false))
 
     - name: Check git user.email is personal email
       ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module

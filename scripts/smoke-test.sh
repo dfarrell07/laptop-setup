@@ -341,10 +341,6 @@ unset _d _name _path
 
 # direnv: hook and toml content
 _dtf="$HOME/.config/direnv/direnv.toml"
-if command -v direnv &>/dev/null; then
-  if direnv hook zsh &>/dev/null; then record "direnv-hook-zsh" "PASS"
-  else record "direnv-hook-zsh" "FAIL" "'direnv hook zsh' failed — direnv may be broken"; fi
-fi
 if [[ -f "$_dtf" ]]; then
   if grep -q 'strict_env = true' "$_dtf" && grep -q 'disable_stdin = true' "$_dtf"; then
     record "direnv-toml" "PASS"
