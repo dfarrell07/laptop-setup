@@ -305,7 +305,6 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 
 packages_brew_taps:
   - nikitabobko/tap
-  - domt4/autoupdate
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow
 
@@ -336,8 +335,7 @@ packages_brew:
   - zoxide
   - shellcheck
   - shfmt
-  - python3  # Xcode CLT python3 lags Apple release cadence; needed for pipx toolchain
-  - pipx  # needed for yamllint + ansible-lint pinned installs (cycle-41b moved these from brew to pipx)
+  - pipx  # needed for yamllint + ansible-lint pinned installs (cycle-41b moved these from brew to pipx); pulls python3 transitively
   - gh
   - tailscale  # formula provides CLI + tailscaled daemon; menubar app requires the cask — consistent with Linux daemon treatment
   - gitleaks  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_gitleaks_version pin
@@ -354,7 +352,6 @@ packages_brew:
   - neovim
   - zsh-autosuggestions
   - zsh-syntax-highlighting
-  - domt4/autoupdate/autoupdate
 
 packages_brew_personal: []
 

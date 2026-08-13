@@ -114,8 +114,10 @@
 	path = ~/.config/git/config-work
 
 {% endfor %}
+{% if dotfiles_github_user != 'CHANGE_ME' %}
 [includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
 	path = ~/.config/git/config-personal
+{% endif %}
 
 [filter "lfs"]
 	clean = git-lfs clean -- %f

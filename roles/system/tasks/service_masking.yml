@@ -55,7 +55,7 @@
 # --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
 - name: Mask/unmask thermald (Intel-only daemon)
   vars:
-    _intel: "{{ 'Intel' in (ansible_facts['processor'] | join(' ')) }}"
+    _intel: "{{ 'Intel' in (ansible_facts['processor'] | default([]) | join(' ')) }}"
   ansible.builtin.systemd:
     name: thermald
     masked: "{{ not _intel }}"

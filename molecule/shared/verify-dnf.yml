@@ -201,6 +201,7 @@
 
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
+  when: not (system_is_container | default(false))
 
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
 - name: Check authselect with-faillock is active
@@ -443,7 +444,9 @@
     path: /etc/cron.allow
   register: verify_cron_allow
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.allow exists with mode 0600
   ansible.builtin.assert:
@@ -451,27 +454,35 @@
       - verify_cron_allow.stat.exists
       - verify_cron_allow.stat.mode == '0600'
     fail_msg: "/etc/cron.allow missing or wrong permissions"
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Stat /etc/cron.deny
   ansible.builtin.stat:
     path: /etc/cron.deny
   register: verify_cron_deny
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.deny is absent (CIS 5.1.8)
   ansible.builtin.assert:
     that: not verify_cron_deny.stat.exists
     fail_msg: "/etc/cron.deny exists but cron.allow is authoritative"
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Verify /etc/at.allow exists
   ansible.builtin.stat:
     path: /etc/at.allow
   register: verify_at_allow
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/at.allow exists with mode 0600 (CIS 5.1.9)
   ansible.builtin.assert:
@@ -479,27 +490,35 @@
       - verify_at_allow.stat.exists
       - verify_at_allow.stat.mode == '0600'
     fail_msg: "/etc/at.allow missing or wrong permissions"
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Stat /etc/at.deny
   ansible.builtin.stat:
     path: /etc/at.deny
   register: verify_at_deny
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/at.deny is absent (CIS 5.1.9)
   ansible.builtin.assert:
     that: not verify_at_deny.stat.exists
     fail_msg: "/etc/at.deny exists but at.allow is authoritative"
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Stat /etc/cron.d
   ansible.builtin.stat:
     path: /etc/cron.d
   register: verify_crond
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.d has mode 0700 (CIS 5.1.7)
   ansible.builtin.assert:
@@ -507,6 +526,7 @@
     fail_msg: "/etc/cron.d wrong permissions (expected 0700)"
   when:
     - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
     - verify_crond.stat.exists
 
 - name: Stat /etc/cron.daily
@@ -514,7 +534,9 @@
     path: /etc/cron.daily
   register: verify_cron_daily
   become: true
-  when: not (csb_rhel | default(false))
+  when:
+    - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/cron.daily has mode 0700 (CIS 5.1.4)
   ansible.builtin.assert:
@@ -522,4 +544,5 @@
     fail_msg: "/etc/cron.daily wrong permissions (expected 0700)"
   when:
     - not (csb_rhel | default(false))
+    - not (system_is_container | default(false))
     - verify_cron_daily.stat.exists

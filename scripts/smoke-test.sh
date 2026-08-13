@@ -1696,7 +1696,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
   # Integrity lockdown mode locks the value to 2 and makes it read-only (permission denied).
   _bpf_disabled=$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null) || true
-  if [[ "$_bpf_disabled" -ge "1" ]] 2>/dev/null; then record "sysctl-bpf-restrict" "PASS"
+  if [[ -n "$_bpf_disabled" && "$_bpf_disabled" -ge 1 ]]; then record "sysctl-bpf-restrict" "PASS"
   elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
   else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
   _perf_expected=$(awk -F' *= *' '/^kernel\.perf_event_paranoid/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)

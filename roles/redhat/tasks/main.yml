@@ -3,7 +3,6 @@
 # Red Hat-specific: CA certs, VPN. Work profile only.
 
 - name: Stat and deploy Red Hat CA certificates
-  when: is_rhel or csb_detected
   block:
     - name: Stat Red Hat CA certificate files in role
       ansible.builtin.stat:
@@ -135,11 +134,9 @@
     database: passwd
     key: "{{ redhat_splunk_service_account }}"
     fail_key: false
-  when: is_rhel or csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
-    - is_rhel or csb_detected
     - redhat_splunk_service_account in (ansible_facts.getent_passwd | default({}))
   block:
     - name: Set splunk account shell to nologin

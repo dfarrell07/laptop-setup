@@ -2,56 +2,53 @@
 # roles/system/tasks/hardening_core.yml
 # SELinux enforcement + core hardening sub-orchestrator. Included from main.yml.
 # --- SELinux enforcement check ---
-- name: Warn - SELinux is disabled — enforcing mode requires reboot
-  ansible.builtin.debug:
-    msg: >-
-      SELinux is config-disabled on this host. system_selinux_enforcing_required is true
-      but the selinux fact is not a mapping (SELinux disabled in /etc/selinux/config).
-      The enforcement block will be skipped. Set SELINUX=enforcing in /etc/selinux/config
-      and reboot to allow Ansible to enforce the correct mode.
+- name: SELinux enforcement check
   when:
-    - is_dnf
-    - not csb_rhel
-    - not system_is_container
-    - system_selinux_enforcing_required | bool
-    - ansible_facts['selinux'] is not mapping
-
-- name: SELinux enforcement block
-  when:
-    - ansible_facts['selinux'] is mapping
     - is_dnf
     - not csb_rhel
     - not system_is_container
     - system_selinux_enforcing_required | bool
   block:
-    - name: Enforce SELinux enforcing mode
-      ansible.posix.selinux:
-        policy: targeted
-        state: enforcing
-      register: system_selinux_enforce_result
-
-    - name: Refresh SELinux facts after mode change
-      ansible.builtin.setup:
-        filter: ansible_selinux
-      when: system_selinux_enforce_result.changed
-
-    - name: Verify SELinux is enforcing
-      when: not ansible_check_mode and not (system_selinux_enforce_result.reboot_required | default(false))
-      ansible.builtin.assert:
-        that:
-          - ansible_facts['selinux'].status == 'enabled'
-          - ansible_facts['selinux'].mode == 'enforcing'
-          - ansible_facts['selinux'].type == 'targeted'
-        fail_msg: >-
-          SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
-          (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
-          Fix: sudo setenforce 1 && sudo sed -i
-          's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-
-    - name: SELinux reboot required notice
-      when: system_selinux_enforce_result.reboot_required | default(false)
+    - name: Warn - SELinux is disabled — enforcing mode requires reboot
       ansible.builtin.debug:
-        msg: SELinux config set to enforcing — reboot required for change to take effect
+        msg: >-
+          SELinux is config-disabled on this host. system_selinux_enforcing_required is true
+          but the selinux fact is not a mapping (SELinux disabled in /etc/selinux/config).
+          The enforcement block will be skipped. Set SELINUX=enforcing in /etc/selinux/config
+          and reboot to allow Ansible to enforce the correct mode.
+      when: ansible_facts['selinux'] is not mapping
+
+    - name: SELinux enforcement block
+      when: ansible_facts['selinux'] is mapping
+      block:
+        - name: Enforce SELinux enforcing mode
+          ansible.posix.selinux:
+            policy: targeted
+            state: enforcing
+          register: system_selinux_enforce_result
+
+        - name: Refresh SELinux facts after mode change
+          ansible.builtin.setup:
+            filter: ansible_selinux
+          when: system_selinux_enforce_result.changed
+
+        - name: Verify SELinux is enforcing
+          when: not ansible_check_mode and not (system_selinux_enforce_result.reboot_required | default(false))
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['selinux'].status == 'enabled'
+              - ansible_facts['selinux'].mode == 'enforcing'
+              - ansible_facts['selinux'].type == 'targeted'
+            fail_msg: >-
+              SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
+              (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
+              Fix: sudo setenforce 1 && sudo sed -i
+              's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+
+        - name: SELinux reboot required notice
+          when: system_selinux_enforce_result.reboot_required | default(false)
+          ansible.builtin.debug:
+            msg: SELinux config set to enforcing — reboot required for change to take effect
 
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml

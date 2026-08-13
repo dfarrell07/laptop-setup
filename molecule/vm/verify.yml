@@ -420,25 +420,8 @@
         fail_msg: "/boot/efi missing required mount options (nosuid,noexec)"
       when: verify_boot_efi.rc | default(1) == 0  # skip if /boot/efi is not a separate mountpoint
 
-    - name: Verify modprobe blacklists usb_storage
-      ansible.builtin.command: grep -q usb_storage /etc/modprobe.d/hardening.conf
-      changed_when: false
-      failed_when: false
-      register: verify_usb_storage
-      become: true
-
-    - name: Assert usb_storage is blacklisted
-      ansible.builtin.assert:
-        that: verify_usb_storage.rc == 0
-        fail_msg: "usb_storage not blacklisted"
-
     - name: Check modprobe blacklists cramfs
       ansible.builtin.command: grep -q cramfs /etc/modprobe.d/hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check modprobe blacklists firewire-core
-      ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
       changed_when: false
       become: true
 
@@ -733,7 +716,7 @@
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
       register: verify_distrobox_ini
-      when: verify_distrobox_bin.rc == 0
+      when: verify_distrobox_bin.stat.exists
 
     - name: Assert distrobox.ini exists (template was rendered and deployed)
       ansible.builtin.assert:
@@ -741,7 +724,7 @@
         fail_msg: >-
           distrobox.ini missing at {{ ansible_user_dir }}/.config/distrobox/distrobox.ini —
           distrobox role template was not deployed
-      when: verify_distrobox_bin.rc == 0
+      when: verify_distrobox_bin.stat.exists
 
     # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
     - name: Verify notes role

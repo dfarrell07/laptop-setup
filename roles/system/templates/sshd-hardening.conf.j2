@@ -14,7 +14,7 @@ Banner /etc/issue.net
 PasswordAuthentication no
 KbdInteractiveAuthentication no  # 50-redhat.conf also sets this to no; explicit for first-occurrence guard against upstream changes
 PermitRootLogin no
-PermitEmptyPasswords no
+PermitEmptyPasswords no  # OpenSSH compiled default; explicit for first-occurrence guard
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}
 AuthorizedKeysFile .ssh/authorized_keys  # matches main sshd_config; guards against rpmnew replacing that setting (.ssh/authorized_keys2 deprecated since 7.0)
@@ -59,5 +59,5 @@ GSSAPIAuthentication no  # overrides 50-redhat.conf (sets yes)
 # sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
 # 40-redhat-crypto-policies.conf.
 Ciphers {{ ssh_ciphers }}
-MACs {{ ssh_macs }}  # only active for aes*-ctr fallback; AEAD ciphers supply their own authentication
+MACs {{ ssh_macs }}  # applies to CTR-mode ciphers (aes*-ctr); AEAD ciphers (gcm, chacha20) authenticate internally and ignore this list
 KexAlgorithms {{ ssh_kex_algorithms }}

@@ -140,8 +140,8 @@
         fail_msg: "SSH agent launchd plist not deployed"
 
     # --- brew autoupdate (packages role) ---
-    - name: Assert brew autoupdate formula is installed
-      ansible.builtin.command: brew list autoupdate
+    - name: Assert brew autoupdate is available (built-in since v4.4.0)
+      ansible.builtin.command: brew autoupdate status
       changed_when: false
 
     # --- pipx tools: yamllint and ansible-lint (cycle-41b: moved from brew to pipx on macOS) ---
