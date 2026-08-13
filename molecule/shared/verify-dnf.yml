@@ -201,7 +201,6 @@
 
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
-  when: not (system_is_container | default(false))
 
 # --- PAM / authselect / faillock / pwquality / pwhistory ---
 - name: Check authselect with-faillock is active
@@ -353,7 +352,7 @@
   when: not (csb_rhel | default(false))
 
 - name: Check login.defs YESCRYPT_COST_FACTOR=5 (CIS 5.4.1)
-  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR 5' /etc/login.defs
+  ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR {{ system_yescrypt_cost_factor | default(5) }}' /etc/login.defs
   changed_when: false
   become: true
   when: not (csb_rhel | default(false))
@@ -409,6 +408,7 @@
   when:
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
+    - not (system_is_container | default(false))
     - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
 
 - name: Assert ABRT services are masked
@@ -419,6 +419,7 @@
   when:
     - not (csb_rhel | default(false))
     - system_mask_abrt | default(true) | bool
+    - not (system_is_container | default(false))
     - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
     - item.status.UnitFileState | default('') not in ['', 'not-found']
 

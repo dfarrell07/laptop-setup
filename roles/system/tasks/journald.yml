@@ -30,11 +30,11 @@
         group: systemd-journal
         mode: "2755"
 
-    - name: Remove journald hardening config on CSB RHEL
+    - name: Remove journald hardening config on CSB
       ansible.builtin.file:
         path: /etc/systemd/journald.conf.d/99-hardening.conf
         state: absent
-      when: csb_rhel
+      when: csb_detected
       notify: Restart systemd-journald
 
     - name: Deploy journald hardening config
@@ -50,5 +50,5 @@
           RateLimitBurst={{ system_journald_rate_burst }}
         dest: /etc/systemd/journald.conf.d/99-hardening.conf
         mode: "0644"
-      when: not csb_rhel
+      when: not csb_detected
       notify: Restart systemd-journald

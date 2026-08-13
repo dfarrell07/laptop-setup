@@ -116,7 +116,6 @@
           and build infrastructure are unreachable without an active tunnel.
           Blocked workflows: all internal network access when off the
           Red Hat corporate network.
-      when: csb_detected
 
 # --- CSB system account hardening (CIS 5.6) ---
 # splunkforwarder CSB package creates a 'splunk' account with /bin/bash shell.
@@ -130,6 +129,7 @@
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:
+    - csb_detected
     - redhat_splunk_service_account in (ansible_facts.getent_passwd | default({}))
   block:
     - name: Set splunk account shell to nologin

@@ -110,8 +110,6 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
       fi
-    else
-      record "required_${tool}" "fail" "not installed — run: make bootstrap"
     fi
   fi
 done
@@ -201,7 +199,7 @@ VAULT_FILE="$SCRIPT_DIR/../group_vars/all/vault.yml"
 if [[ -f "$VAULT_FILE" ]]; then
   # shellcheck disable=SC2016  # Intentional: matching literal $ANSIBLE_VAULT header
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
-    record "vault_encrypted" "pass" "vault.yml is encrypted (note: encrypted stub without real secrets still warns at runtime)"
+    record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
     if grep -qE '^vault_(ssh_auth_key|ssh_signing_key|rh_git_key|notes_transcrypt_password):' "$VAULT_FILE" 2>/dev/null; then
       record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"

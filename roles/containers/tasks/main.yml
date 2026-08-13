@@ -80,10 +80,10 @@
 - name: Warn if vault registry login did not persist credentials
   ansible.builtin.debug:
     msg: >-
-      WARNING: vault login for {{ item.item.registry }} did not persist credentials
+      WARNING: vault registry auth for {{ item.item.registry }} is not active
       (podman login --get-login returned rc={{ item.rc }}).
-      Check that vault_registry_tokens has correct username/token and
-      the registry is reachable.
+      If login was attempted, credentials may not have persisted; check
+      vault_registry_tokens username/token and registry reachability.
   loop: "{{ containers_vault_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry | default('unknown') }}"

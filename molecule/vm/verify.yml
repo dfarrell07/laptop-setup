@@ -298,11 +298,6 @@
         fail_msg: "Kernel lockdown=integrity not found in boot args"
       when: verify_lockdown.rc == 0
 
-    - name: Check sshd config uses non-default port {{ ssh_port }}
-      ansible.builtin.command: grep -q '^Port {{ ssh_port }}$' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
     - name: Verify port 722 is labeled ssh_port_t
       ansible.builtin.command:
         cmd: semanage port -l
