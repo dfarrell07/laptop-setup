@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.{{ dotfiles_github_user }}.ssh-agent</string>
+  <string>com.{% if dotfiles_github_user != 'CHANGE_ME' %}{{ dotfiles_github_user }}{% else %}local{% endif %}.ssh-agent</string>
   <key>ProgramArguments</key>
   <array>
     <string>{{ dotfiles_homebrew_prefix }}/bin/ssh-agent</string>

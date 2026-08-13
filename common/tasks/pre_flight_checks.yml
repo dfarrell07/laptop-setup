@@ -39,13 +39,6 @@
         - _config_yml_stat.stat.exists
         - _user_config is not defined
       block:
-        - name: Warn when config.yml exists but could not be parsed
-          ansible.builtin.debug:
-            msg: >-
-              WARNING: config.yml exists but could not be parsed (YAML error) —
-              vault-key assertions are being skipped.
-          tags: [always]
-
         - name: Fail when config.yml exists but could not be parsed
           ansible.builtin.fail:
             msg: >-

@@ -13,6 +13,7 @@
   # replicates the same detection so system role tasks that guard on is_dnf/is_apt see the right value.
   ansible.builtin.set_fact:
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+    is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
     is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
     is_rhel: "{{ ansible_facts['distribution'] == 'RedHat' }}"
     is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"

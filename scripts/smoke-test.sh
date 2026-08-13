@@ -1494,7 +1494,7 @@ EOF
   fi
 
   # kernel.core_pattern safety — must begin with | (pipe to handler), never a raw path
-  _core_pattern="$(sysctl -n kernel.core_pattern 2>/dev/null)"
+  _core_pattern="$(sysctl -n kernel.core_pattern 2>/dev/null || echo '?')"
   if [[ "$_core_pattern" == "|"* ]]; then record "core-pattern" "PASS"
   else record "core-pattern" "FAIL" "kernel.core_pattern='$_core_pattern' does not start with | (pipe handler required; raw core files expose data)"; fi
 

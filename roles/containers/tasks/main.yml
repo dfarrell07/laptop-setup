@@ -90,7 +90,6 @@
   when:
     - is_linux
     - registry_tokens | length > 0
-    - item.rc is defined
     - item.rc != 0
 
 - name: Set auth.json permissions after vault auth
@@ -130,7 +129,6 @@
     label: "{{ item.item | default('unknown') }}"
   when:
     - is_linux
-    - item.rc is defined
     - item.rc != 0
 
 - name: Check user group membership

@@ -51,6 +51,18 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Assert system_dot_mode is valid
+  ansible.builtin.assert:
+    that: system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'opportunistic']
+    fail_msg: "system_dot_mode='{{ system_dot_mode }}' is not a valid DNSOverTLS value — use yes, no, or opportunistic"
+  when: not csb_detected and not system_is_container
+
+- name: Assert system_dnssec_mode is valid
+  ansible.builtin.assert:
+    that: system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'allow-downgrade']
+    fail_msg: "system_dnssec_mode='{{ system_dnssec_mode }}' is not a valid DNSSEC value — use yes, no, or allow-downgrade"
+  when: not csb_detected and not system_is_container
+
 # yamllint disable rule:line-length
 - name: Deploy DNS-over-TLS resolved config
   ansible.builtin.copy:

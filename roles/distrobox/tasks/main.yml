@@ -39,7 +39,7 @@
 # rather than relying on any cached Play 1 fact.
 - name: Re-check subuid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_facts['user_id'] }}: /etc/subuid"
+    cmd: "grep -q '^{{ ansible_facts['user_id'] | regex_escape }}:' /etc/subuid"
   register: distrobox_subuid_check
   changed_when: false
   failed_when: false
@@ -48,7 +48,7 @@
 
 - name: Re-check subgid entry for current user
   ansible.builtin.command:
-    cmd: "grep -q ^{{ ansible_facts['user_id'] }}: /etc/subgid"
+    cmd: "grep -q '^{{ ansible_facts['user_id'] | regex_escape }}:' /etc/subgid"
   register: distrobox_subgid_check
   changed_when: false
   failed_when: false

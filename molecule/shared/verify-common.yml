@@ -551,17 +551,17 @@
   ansible.builtin.command: grep -q '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
-    - kernel.dmesg_restrict = 1
-    - kernel.kptr_restrict = 1
+    - kernel.dmesg_restrict = 1  # hardcoded: no system_dmesg_restrict var; matches _system_sysctl_hardening_defaults dict
+    - kernel.kptr_restrict = 1  # hardcoded: no system_kptr_restrict var; matches _system_sysctl_hardening_defaults dict
     - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(2) }}
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
     - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}
     - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
-    - net.bridge.bridge-nf-call-iptables = 1
-    - net.ipv6.conf.all.use_tempaddr = 2
-    - net.ipv4.conf.all.rp_filter = 2
-    - net.ipv4.conf.default.rp_filter = 2
-    - vm.max_map_count = 1048576
+    - net.bridge.bridge-nf-call-iptables = 1  # hardcoded: no system_bridge_nf_call_iptables var; in _system_sysctl_hardening_defaults dict
+    - net.ipv6.conf.all.use_tempaddr = 2  # hardcoded: no system_ipv6_use_tempaddr var; matches _system_sysctl_hardening_defaults dict
+    - net.ipv4.conf.all.rp_filter = 2  # hardcoded: no system_rp_filter var; matches _system_sysctl_hardening_defaults dict
+    - net.ipv4.conf.default.rp_filter = 2  # hardcoded: no system_rp_filter_default var; matches _system_sysctl_hardening_defaults dict
+    - vm.max_map_count = 1048576  # hardcoded: no system_max_map_count var; matches _system_sysctl_hardening_defaults dict
   changed_when: false
   when:
     - ansible_system == 'Linux'

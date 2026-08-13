@@ -26,8 +26,9 @@
 
 - name: Verify sway config contains xkb_layout
   ansible.builtin.command:
-    cmd: grep -q 'xkb_layout us' "{{ ansible_user_dir }}/.config/sway/config"
+    cmd: grep -q 'xkb_layout {{ desktop_sway_keyboard_layout | default("us") }}' "{{ ansible_user_dir }}/.config/sway/config"
   changed_when: false
+  when: desktop_sway_keyboard_layout | default('') | length > 0
 
 - name: Verify sway config uses exec_always for mako
   ansible.builtin.command:

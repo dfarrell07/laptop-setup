@@ -95,11 +95,11 @@
           ansible.builtin.lineinfile:
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
-            create: true
             mode: "0644"
       when: notes_repo_available
 
-    - block:
+    - name: Check transcrypt initialization status
+      block:
         - name: Check if transcrypt is initialized
           ansible.builtin.command:
             cmd: "{{ notes_transcrypt_bin_path }} --display"

@@ -149,6 +149,18 @@
     that: "verify_signingkey.stdout | trim == '~/.ssh/' ~ (ssh_signing_key_basename) ~ '.pub'"
     fail_msg: "git user.signingkey not set to ~/.ssh/{{ ssh_signing_key_basename }}.pub"
 
+- name: Stat SSH signing key pub file
+  ansible.builtin.stat:
+    path: '{{ ansible_user_dir }}/.ssh/{{ ssh_signing_key_basename }}.pub'
+  register: verify_signing_key_pub
+
+- name: Assert SSH signing key pub file exists
+  ansible.builtin.assert:
+    that:
+      - verify_signing_key_pub.stat.exists
+      - verify_signing_key_pub.stat.mode == '0644'
+    fail_msg: '~/.ssh/{{ ssh_signing_key_basename }}.pub missing or wrong mode — ssh role copy task regression'
+
 - name: Verify ~/.config/git/allowed_signers exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/allowed_signers"

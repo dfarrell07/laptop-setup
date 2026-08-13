@@ -6,7 +6,7 @@
 # default (22-wifi-mac-addr.conf sets stable-ssid), which would otherwise present a
 # SSID-hashed MAC and break 802.1X RADIUS auth.
 # Note: NM 1.45+ ships this as a package default via /usr/lib/NetworkManager/conf.d/22-wifi-mac-addr.conf;
-# this task is redundant but harmless on Fedora 44.
+# the non-CSB (stable-ssid) path of this task is redundant on NM 1.45+; the CSB path (preserve) actively overrides the system default.
 - name: Configure WiFi MAC address randomization
   ansible.builtin.copy:
     content: |

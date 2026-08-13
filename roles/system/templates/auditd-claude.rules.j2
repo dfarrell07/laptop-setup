@@ -13,10 +13,6 @@
 -a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
 -a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
 -a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
-# Pre-emptive: current time-change rules already filter auid>=1000, which excludes
-# chronyd (runs as system user, loginuid=-1). This guards against future rules added
-# without auid filtering, not against current noise from chronyd.
--a never,exit -F exe=/usr/sbin/chronyd -k exclude-chronyd
 # Fedora packages Go at /usr/lib/golang (golang-bin RPM), not /usr/local/go (go.dev tarball convention).
 # GOTOOLCHAIN=auto downloads land at ~/go/pkg/mod/golang.org/toolchain@vX.Y.Z/ — version slug changes,
 # so those paths cannot be excluded by exe= without per-toolchain entries.
