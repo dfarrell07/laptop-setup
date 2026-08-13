@@ -4,6 +4,12 @@
 # Included from main.yml; inherits become from the calling play.
 - name: Install oc and kubectl
   block:
+    - name: Assert oc SHA256 is set for pinned version
+      ansible.builtin.assert:
+        that: packages_oc_sha256 | length == 64
+        fail_msg: "packages_oc_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+      when: packages_oc_version != 'stable'
+
     - name: Check if oc is installed
       ansible.builtin.command:
         cmd: /usr/local/bin/oc version --client
@@ -51,12 +57,6 @@
             that: packages_oc_sha256 | length == 64
             fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
           when: packages_oc_version == 'stable'
-
-        - name: Assert oc SHA256 is set for pinned version
-          ansible.builtin.assert:
-            that: packages_oc_sha256 | length == 64
-            fail_msg: "packages_oc_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
-          when: packages_oc_version != 'stable'
 
         - name: Download OpenShift client tarball (SHA256-verified)
           ansible.builtin.get_url:
@@ -130,6 +130,12 @@
 
 - name: Install opm (Operator Package Manager)
   block:
+    - name: Assert opm SHA256 is set for pinned version
+      ansible.builtin.assert:
+        that: packages_opm_sha256 | length == 64
+        fail_msg: "packages_opm_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+      when: packages_oc_version != 'stable'
+
     - name: Check if opm binary exists
       ansible.builtin.command:
         cmd: /usr/local/bin/opm version
@@ -165,12 +171,6 @@
             that: packages_opm_sha256 | length == 64
             fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
           when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
-
-        - name: Assert opm SHA256 is set for pinned version
-          ansible.builtin.assert:
-            that: packages_opm_sha256 | length == 64
-            fail_msg: "packages_opm_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
-          when: packages_oc_version != 'stable'
 
         - name: Fail if stable-mode opm SHA256 could not be loaded from sha256sum.txt
           ansible.builtin.fail:

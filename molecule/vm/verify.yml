@@ -88,15 +88,23 @@
         fail_msg: "google-cloud-cli repo not configured"
       when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
 
+    - name: Stat /etc/sysctl.d/90-hardening.conf (guard for kernel.panic checks)
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/90-hardening.conf
+      register: verify_sysctl_panic_conf
+      become: true
+
     - name: Check sysctl config contains kernel.panic = 0 (workstation default; group_vars default is 0; CIS target is 10)
       ansible.builtin.command: grep -q 'kernel.panic = {{ system_kernel_panic }}' /etc/sysctl.d/90-hardening.conf
       changed_when: false
       become: true
+      when: verify_sysctl_panic_conf.stat.exists
 
     - name: Check sysctl config contains kernel.panic_on_oops = 0 (workstation default; group_vars default is 0; CIS target is 1)
       ansible.builtin.command: grep -q 'kernel.panic_on_oops = {{ system_kernel_panic_on_oops }}' /etc/sysctl.d/90-hardening.conf
       changed_when: false
       become: true
+      when: verify_sysctl_panic_conf.stat.exists
 
     - name: Check fs.inotify.max_user_watches (system role)
       ansible.builtin.command: sysctl -n fs.inotify.max_user_watches

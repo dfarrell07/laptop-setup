@@ -36,24 +36,36 @@
       ansible.builtin.fail:
         msg: "chrony install failed; systemd-timesyncd has been unmasked to restore a time source"
 
-- name: Stop and mask systemd-timesyncd before chrony install (Fedora)
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: true
-    state: stopped
-  failed_when: false
-  when:
-    - is_dnf
-    - system_chrony_service_enabled | bool
-    - not system_is_container
+- block:
+    - name: Stop and mask systemd-timesyncd before chrony install (Fedora)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: true
+        state: stopped
+      failed_when: false
+      when:
+        - is_dnf
+        - system_chrony_service_enabled | bool
+        - not system_is_container
 
-- name: Install chrony (Fedora/RHEL)
-  ansible.builtin.dnf:
-    name: chrony
-    state: present
-  when:
-    - is_dnf
-    - system_chrony_service_enabled | bool
+    - name: Install chrony (Fedora/RHEL)
+      ansible.builtin.dnf:
+        name: chrony
+        state: present
+      when:
+        - is_dnf
+        - system_chrony_service_enabled | bool
+  rescue:
+    - name: Restore timesyncd if chrony install failed (Fedora)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: false
+      failed_when: false
+      when: is_dnf and not system_is_container
+
+    - name: Re-raise chrony install failure
+      ansible.builtin.fail:
+        msg: "chrony install failed; systemd-timesyncd has been unmasked to restore a time source"
 
 - name: Assert NTS server list non-empty when authselectmode=require
   ansible.builtin.assert:
@@ -117,11 +129,9 @@
 - name: "Warn: no time sync available (chrony disabled, timesyncd disabled on Fedora)"
   ansible.builtin.debug:
     msg: >-
-      WARNING: system_chrony_service_enabled=false — host has no active NTP source.
-      On Fedora 44, systemd-timesyncd is installed but disabled (preset: disabled) in favor
-      of chronyd; to restore a time source without chrony, run:
-      systemctl enable --now systemd-timesyncd. On RHEL, timesyncd is not packaged —
-      re-enable chrony: set system_chrony_service_enabled: true.
+      system_chrony_service_enabled=false — systemd-timesyncd has been re-enabled as a
+      fallback time source on Fedora (failed silently on RHEL where timesyncd is not
+      packaged). To restore chrony NTS, set system_chrony_service_enabled: true.
   when:
     - is_dnf
     - not (system_chrony_service_enabled | bool)

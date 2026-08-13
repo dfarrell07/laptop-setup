@@ -202,10 +202,10 @@ if [[ -f "$VAULT_FILE" ]]; then
   if head -1 "$VAULT_FILE" | grep -q '^\$ANSIBLE_VAULT'; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
-    if grep -qE '^vault_(ssh_auth_key|ssh_signing_key|rh_git_key|notes_transcrypt_password):' "$VAULT_FILE" 2>/dev/null; then
-      record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"
-    else
+    if grep -q 'vault_placeholder' "$VAULT_FILE" 2>/dev/null; then
       record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
+    else
+      record "vault_encrypted" "warn" "vault.yml is plaintext but has real secrets — encrypt with: ansible-vault encrypt group_vars/all/vault.yml"
     fi
   fi
 else
@@ -283,7 +283,7 @@ fi
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
-    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
+    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1([[:space:]]*(#.*))?$' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true

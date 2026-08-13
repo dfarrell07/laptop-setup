@@ -717,7 +717,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make system"; fi
 
   # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 0 in default.config.yml)
-  _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-0}" "sysctl-ptrace-scope"
 
   # SELinux
@@ -1697,9 +1697,9 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
 
   _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
-  _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-0}" "sysctl-kexec-disabled"
-  _io_uring_expected=$(awk -F' *= *' '/^kernel\.io_uring_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _io_uring_expected=$(awk -F' *= *' '/^kernel\.io_uring_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.io_uring_disabled" "${_io_uring_expected:-1}" "sysctl-io-uring-disabled"
   _sysctl_check "kernel.dmesg_restrict"              "1" "sysctl-dmesg-restrict"
   # unprivileged_bpf: 1=disabled(write-once), 2=disabled(resettable). Both are valid.
@@ -1708,18 +1708,18 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -n "$_bpf_disabled" && "$_bpf_disabled" -ge 1 ]]; then record "sysctl-bpf-restrict" "PASS"
   elif [[ -z "$_bpf_disabled" && "$EUID" -ne 0 ]]; then record "sysctl-bpf-restrict" "WARN" "unreadable as non-root"
   else record "sysctl-bpf-restrict" "FAIL" "kernel.unprivileged_bpf_disabled=$_bpf_disabled expected >=1"; fi
-  _perf_expected=$(awk -F' *= *' '/^kernel\.perf_event_paranoid/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _perf_expected=$(awk -F' *= *' '/^kernel\.perf_event_paranoid/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.perf_event_paranoid" "${_perf_expected:-1}" "sysctl-perf-paranoid"
   # bpf_jit_harden: read expected from deployed config (system_bpf_jit_harden in config.yml may override default 1).
   # Default is 1 (constant blinding for unprivileged callers only); 2=blind all callers including root.
-  _bpf_jit_harden_expected=$(awk -F' *= *' '/^net\.core\.bpf_jit_harden/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _bpf_jit_harden_expected=$(awk -F' *= *' '/^net\.core\.bpf_jit_harden/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "net.core.bpf_jit_harden" "${_bpf_jit_harden_expected:-1}" "sysctl-bpf-jit-harden"
   _sysctl_check "kernel.randomize_va_space"          "2" "sysctl-aslr"
   _sysctl_check "fs.suid_dumpable"                   "0" "sysctl-suid-dumpable"
   _sysctl_check "net.ipv4.tcp_syncookies"            "1" "sysctl-syncookies"
   # tcp_timestamps: CIS 3.3.9 recommends 0; playbook default is 1 for OVN-K/Submariner RTTM/PAWS on high-BDP links.
   # Override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml to comply with CIS.
-  _ts_expected=$(awk -F' *= *' '/^net\.ipv4\.tcp_timestamps/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _ts_expected=$(awk -F' *= *' '/^net\.ipv4\.tcp_timestamps/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "net.ipv4.tcp_timestamps" "${_ts_expected:-1}" "sysctl-tcp-timestamps"
   if [[ "${_ts_expected:-1}" != "0" ]]; then
     record "sysctl-tcp-timestamps-cis" "WARN" "net.ipv4.tcp_timestamps=${_ts_expected:-1} deviates from CIS 3.3.9 (recommended 0); override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml"
@@ -1797,19 +1797,19 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "fs.protected_regular"                "2" "sysctl-protected-regular"
   # sysrq: read expected value from deployed config (system_sysrq in config.yml may override default 0).
   # Hardcoding 0 here would false-FAIL on machines with system_sysrq: 176 (OVN-K kernel debugging).
-  _sysrq_expected=$(awk -F' *= *' '/^kernel\.sysrq/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _sysrq_expected=$(awk -F' *= *' '/^kernel\.sysrq/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.sysrq" "${_sysrq_expected:-0}" "sysctl-sysrq-disabled"
   # kernel.panic: read expected value from deployed config (system_kernel_panic defaults to 0 in default.config.yml)
-  _panic_expected=$(awk -F' *= *' '/^kernel\.panic /{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _panic_expected=$(awk -F' *= *' '/^kernel\.panic /{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.panic" "${_panic_expected:-0}" "sysctl-panic-reboot"
   # kernel.panic_on_oops: read expected value from deployed config (system_kernel_panic_on_oops may override default 1).
   # Hardcoding 1 here would false-FAIL on machines with system_kernel_panic_on_oops: 0 (OVN-K/bpfman debugging).
-  _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _panic_on_oops_expected=$(awk -F' *= *' '/^kernel\.panic_on_oops/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.panic_on_oops" "${_panic_on_oops_expected:-0}" "sysctl-panic-on-oops"
   # accept_ra: read expected value from deployed config (system_ipv6_accept_ra in config.yml may override default 0).
-  _accept_ra_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _accept_ra_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "net.ipv6.conf.all.accept_ra" "${_accept_ra_expected:-0}" "sysctl-no-accept-ra"
-  _accept_ra_default_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.default\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _accept_ra_default_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.default\.accept_ra/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "net.ipv6.conf.default.accept_ra" "${_accept_ra_default_expected:-0}" "sysctl-no-accept-ra-default"
   _sysctl_check "net.ipv4.conf.all.rp_filter"         "2" "sysctl-rp-filter"
   _sysctl_check "net.ipv4.conf.default.rp_filter"     "2" "sysctl-rp-filter-default"
@@ -1818,7 +1818,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   _sysctl_check "net.ipv4.conf.default.log_martians"        "1" "sysctl-log-martians-default"
   _sysctl_check "net.ipv4.icmp_echo_ignore_broadcasts"      "1" "sysctl-icmp-no-echo-broadcast"
   _sysctl_check "net.ipv4.icmp_ignore_bogus_error_responses" "1" "sysctl-icmp-no-bogus-error"
-  _ip_fwd_expected=$(awk -F' *= *' '/^net\.ipv4\.ip_forward/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
+  _ip_fwd_expected=$(awk -F' *= *' '/^net\.ipv4\.ip_forward/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   if [[ -n "$_ip_fwd_expected" ]]; then
     _sysctl_check "net.ipv4.ip_forward" "$_ip_fwd_expected" "sysctl-ip-forward"
   else

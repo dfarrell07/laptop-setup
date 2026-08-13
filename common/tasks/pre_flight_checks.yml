@@ -165,7 +165,11 @@
 
     - name: Warn and flag when vault stub is not populated
       when:
-        - vault_ssh_auth_key | default('') | length == 0
+        - >-
+          (vault_ssh_auth_key | default('') | length == 0) or
+          (vault_ssh_auth_key_pub | default('') | length == 0) or
+          (vault_ssh_signing_key | default('') | length == 0) or
+          (vault_ssh_signing_key_pub | default('') | length == 0)
         - _vault_stub_warned is not defined
         - not _pf_is_molecule
       block:
@@ -173,9 +177,11 @@
           ansible.builtin.debug:
             msg: >-
               WARNING: vault.yml has not been populated with real secrets
-              (vault_ssh_auth_key is missing). Secret-backed features
-              will silently skip: SSH key deployment, transcrypt, and
-              rh_git_key. See CLAUDE.md step 3 to populate and encrypt the vault.
+              (one or more of vault_ssh_auth_key, vault_ssh_auth_key_pub,
+              vault_ssh_signing_key, vault_ssh_signing_key_pub is missing).
+              Secret-backed features will silently skip: SSH key deployment,
+              transcrypt, and rh_git_key. See CLAUDE.md step 3 to populate
+              and encrypt the vault.
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

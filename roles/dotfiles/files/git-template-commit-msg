@@ -1,6 +1,11 @@
 #!/bin/bash
 # Reject past-tense/gerund first words in commit description (allows noun-phrase subjects per repo convention)
 msg=$(head -1 "$1")
+# Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
+if ! grep -q '^Signed-off-by:' "$1"; then
+  echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
+  exit 1
+fi
 # Allow git autosquash prefixes and merge commits unchanged
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
@@ -49,15 +54,13 @@ if _bad_word "$desc_first"; then
 fi
 # Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')
 # Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
-if [ "$desc_first" != "$first" ]; then
-  IFS='/' read -ra _scope_parts <<< "$first"
-  for _part in "${_scope_parts[@]}"; do
-    if _bad_word "$_part"; then
-      echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
-      exit 1
-    fi
-  done
-fi
+IFS='/' read -ra _scope_parts <<< "$first"
+for _part in "${_scope_parts[@]}"; do
+  if _bad_word "$_part"; then
+    echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
+    exit 1
+  fi
+done
 
 # Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
 # This value must match header-max-length in commitlint.config.js
@@ -70,12 +73,6 @@ fi
 # No trailing period
 if echo "$msg" | grep -qE '\.$'; then
   echo "ERROR: Remove trailing period from subject line" >&2
-  exit 1
-fi
-
-# Require Signed-off-by (enforce 'git commit -s')
-if ! grep -q '^Signed-off-by:' "$1"; then
-  echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
   exit 1
 fi
 

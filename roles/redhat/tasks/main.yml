@@ -79,8 +79,8 @@
         _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
         _csb_ticket_body: >-
           The redhat-internal-cert-install package could not be installed.
-          Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}
-          (deployed to {{ redhat_ca_dest }}).
+          Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}.
+          These are managed by the redhat-internal-cert-install RPM; check repo access and RPM availability.
           Without these certificates, internal HTTPS endpoints fail:
           Jira, Confluence, and internal container registries all require
           the Red Hat internal CA chain.

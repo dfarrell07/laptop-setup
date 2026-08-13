@@ -264,7 +264,7 @@
 
     - name: Enable session lingering for rootless podman socket persistence
       ansible.builtin.command:
-        cmd: loginctl enable-linger {{ real_user_id }}
+        argv: [loginctl, enable-linger, "{{ real_user_id }}"]
         creates: /var/lib/systemd/linger/{{ real_user_id }}
       register: _linger_result
       failed_when: false

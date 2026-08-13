@@ -106,6 +106,7 @@
 # systemctl is-enabled assertion intentionally omitted — systemd is mocked in
 # Podman containers (see usbguard note above); service enablement is verified by
 # the VM scenario which runs a full root smoke-test.
+# verify_sshd_dropin must be registered by verify-common.yml before including this file
 - name: sshd hardening assertions (Linux only)
   when: ansible_system == 'Linux'
   block:
