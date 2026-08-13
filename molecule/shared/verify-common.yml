@@ -957,7 +957,7 @@
     - "MaxRetentionSec={{ system_journald_max_retention | default('6month') }}"
     - "SystemKeepFree={{ system_journald_keep_free | default('1G') }}"
     - "RateLimitIntervalSec={{ system_journald_rate_interval | default('30s') }}"
-    - "RateLimitBurst={{ system_journald_rate_burst | default(20000) }}"
+    - "RateLimitBurst={{ system_journald_rate_burst | default(10000) }}"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel

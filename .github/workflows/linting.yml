@@ -27,9 +27,6 @@ jobs:
       - name: Set up Molecule environment
         uses: ./.github/actions/molecule-setup
 
-      - name: Create vault password script for CI
-        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
-
       - name: Run ansible-lint
         run: ansible-lint
 
@@ -178,9 +175,6 @@ jobs:
       - name: Set up Molecule environment
         uses: ./.github/actions/molecule-setup
 
-      - name: Create vault password script for CI
-        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
-
       - name: Run syntax check
         run: ansible-playbook site.yml --syntax-check
 
@@ -241,7 +235,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
+          failed=0
+          npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA" || failed=1
           # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
           # Sync partner: .githooks/commit-msg — keep this word list identical
           _bad_word() {
@@ -258,7 +253,6 @@ jobs:
               *) return 1 ;;
             esac
           }
-          failed=0
           # shellcheck disable=SC2046
           for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
             subject=$(git log -1 --format=%s "$sha")

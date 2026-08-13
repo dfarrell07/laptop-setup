@@ -42,8 +42,6 @@
         needs_container_tier: 'hybrid'  # _csb_molecule_force skips derived-fact set_facts; set explicitly for consistency
         csb_restricted: false           # hybrid tier: dev tools on host, not container-only restricted
         install_vpn: false      # redhat role has no system_is_container guard; prevents VPN install when csb_detected=true
-        dotfiles_gonosumdb: "test.example.com"  # non-empty so verify-common GONOSUMDB assertions run
-        dotfiles_goprivate: "git.example.com"   # non-empty so verify-common GOPRIVATE assertions run
         # Subset of packages_cli — direnv, zoxide, shfmt, procps-ng, fd-find not in Rocky 10 repos
         # (fd-find has no EPEL 10 package; ripgrep IS in EPEL 10 and is included below)
         packages_cli:

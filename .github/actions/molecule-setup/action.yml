@@ -26,3 +26,7 @@ runs:
         done
         $installed || { echo 'All 3 collection install attempts failed'; exit 1; }
       shell: bash
+
+    - name: Create vault password script for CI
+      run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
+      shell: bash

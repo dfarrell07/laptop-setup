@@ -217,11 +217,20 @@
             fail_msg: "opm-rhel8 not found in opm-linux.tar.gz — check binary name for this OCP release"
           when: packages_opm_download.changed or packages_opm_check.rc != 0
 
-        - name: Rename opm-rhel8 to opm
-          ansible.builtin.command:
-            cmd: mv /usr/local/bin/opm-rhel8 /usr/local/bin/opm
-            removes: /usr/local/bin/opm-rhel8
-          changed_when: true
+        - name: Copy opm-rhel8 to opm
+          ansible.builtin.copy:
+            src: /usr/local/bin/opm-rhel8
+            dest: /usr/local/bin/opm
+            remote_src: true
+            mode: '0755'
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+          become: true
+          tags: [become]
+
+        - name: Remove opm-rhel8 after copy
+          ansible.builtin.file:
+            path: /usr/local/bin/opm-rhel8
+            state: absent
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           become: true
           tags: [become]

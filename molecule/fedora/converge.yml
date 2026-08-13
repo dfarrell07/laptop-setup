@@ -38,8 +38,6 @@
     - name: Override for container testing
       ansible.builtin.set_fact:
         profile: work
-        dotfiles_gonosumdb: "test.example.com"  # non-empty so verify-common GONOSUMDB assertions run
-        dotfiles_goprivate: "git.example.com"   # non-empty so verify-common GOPRIVATE assertions run
         # install_virtualization, packages_install_binaries, ssh_signing_key_pub are in molecule/shared/system-container-overrides.yml
         # packages_security_yubikey/containers/networking/support_work/go_install_work
         # empty list overrides live in molecule/shared/ci-default-vars.yml

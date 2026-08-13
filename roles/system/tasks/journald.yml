@@ -39,16 +39,8 @@
       notify: Restart systemd-journald
 
     - name: Deploy journald hardening config
-      ansible.builtin.copy:
-        content: |
-          # {{ ansible_managed }}
-          [Journal]
-          Storage=persistent
-          SystemMaxUse={{ system_journald_max_use }}
-          MaxRetentionSec={{ system_journald_max_retention }}
-          SystemKeepFree={{ system_journald_keep_free }}
-          RateLimitIntervalSec={{ system_journald_rate_interval }}
-          RateLimitBurst={{ system_journald_rate_burst }}
+      ansible.builtin.template:
+        src: journald-99-hardening.conf.j2
         dest: /etc/systemd/journald.conf.d/99-hardening.conf
         mode: "0644"
       when: not csb_detected

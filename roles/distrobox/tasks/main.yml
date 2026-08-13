@@ -186,7 +186,6 @@
       ansible.builtin.set_fact:
         distrobox_tool: "none"
         distrobox_use_distrobox: false
-        distrobox_use_toolbox: false
 
 - name: Warn if distrobox.ini changed but container already exists
   ansible.builtin.debug:
@@ -252,7 +251,6 @@
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
-        distrobox_use_distrobox: false
         distrobox_use_toolbox: false
 
 # --- Start and register for Play 3 ---

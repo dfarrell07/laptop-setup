@@ -50,7 +50,7 @@
 
 - name: Check fapolicyd config for permissive mode
   ansible.builtin.command:
-    cmd: grep -qiE '^permissive[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/fapolicyd/fapolicyd.conf
+    cmd: grep -qiE '^permissive[[:space:]]*=[[:space:]]*1([[:space:]]|#|$)' /etc/fapolicyd/fapolicyd.conf
   register: _fapolicyd_permissive_grep
   changed_when: false
   failed_when: false

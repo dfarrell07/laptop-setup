@@ -335,7 +335,7 @@ else
 fi
 
 # ~/.cargo/bin in PATH (added by dotfiles role — required for Rust/bpfman toolchain)
-if grep -q '\.cargo/bin' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "cargo-path" "PASS"
+if grep -qE '^[^#]*\.cargo/bin' "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then record "cargo-path" "PASS"
 else record "cargo-path" "FAIL" "$HOME/.cargo/bin not in PATH exports (.zshrc/.bashrc) — Rust toolchain binaries unavailable"; fi
 
 # oh-my-zsh XDG path (dotfiles role clones to ~/.local/share/oh-my-zsh; legacy ~/.oh-my-zsh removed)
