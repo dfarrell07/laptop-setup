@@ -33,7 +33,7 @@ Host gh gist github.com gist.github.com
 
 {% if profile == 'work' %}
 Host code.engineering.redhat.com
-    User {{ real_user_id | default(ansible_facts['user_id']) }}
+    User {{ real_user_id | default(ansible_facts['user_id'], true) }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
 
 Host gitlab.cee.redhat.com

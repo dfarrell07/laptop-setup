@@ -332,7 +332,7 @@ else
 fi
 
 # --- RAM ---
-if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
 else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
 if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GB"
 elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GB — 8GB+ recommended"

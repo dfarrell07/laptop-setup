@@ -61,7 +61,7 @@
       ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: Include Alacritty and Chrome policy assertions
+    - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Redhat role: certs only deployed on actual RHEL, not Rocky ---

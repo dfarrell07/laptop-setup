@@ -34,12 +34,11 @@ elif [ -x ".venv/bin/yamllint" ]; then
   YAMLLINT=".venv/bin/yamllint"
 fi
 if [ -n "$YAMLLINT" ]; then
-  mapfile -d '' yaml_files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml')
-  if (( ${#yaml_files[@]} > 0 )); then
-    if ! "$YAMLLINT" --strict "${yaml_files[@]}"; then
+  while IFS= read -r -d '' f; do
+    if ! git show ":$f" | "$YAMLLINT" --strict -; then
       failed=1
     fi
-  fi
+  done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml')
 else
   echo "WARNING: yamllint not found — YAML lint skipped (run 'make lint' to install)" >&2
 fi

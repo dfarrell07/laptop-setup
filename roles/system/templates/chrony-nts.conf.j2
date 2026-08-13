@@ -14,12 +14,12 @@ authselectmode {{ system_chrony_authselectmode }}
 sourcedir {{ system_chrony_dhcp_sourcedir }}
 
 # Persist NTS cookies across restarts
-ntsdumpdir /var/lib/chrony
+ntsdumpdir {{ system_chrony_ntsdumpdir }}
 
-driftfile /var/lib/chrony/drift
+driftfile {{ system_chrony_driftfile }}
 makestep {{ system_chrony_makestep }}
 rtcsync
 leapseclist {{ system_chrony_leapseclist }}
 leapsecmode {{ system_chrony_leapsecmode }}
 minsources {{ system_chrony_minsources }}
-logdir /var/log/chrony
+logdir {{ system_chrony_logdir }}

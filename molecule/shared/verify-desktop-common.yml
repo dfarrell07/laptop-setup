@@ -14,6 +14,11 @@
     that: verify_alacritty.stat.exists
     fail_msg: "Alacritty config not deployed"
 
+- name: Chrome policy verification skipped in container (VM scenario only)
+  ansible.builtin.debug:
+    msg: "Chrome policy assertions skipped: system_is_container=true. VM scenario is the only CI path that exercises Chrome policy."
+  when: system_is_container | default(false)
+
 - name: Verify Chrome policy deployed
   ansible.builtin.stat:
     path: /etc/opt/chrome/policies/managed/security.json

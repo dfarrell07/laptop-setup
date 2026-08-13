@@ -200,6 +200,17 @@
   loop_control:
     label: "{{ item.item.cis }}"
 
+- name: Warn if any password aging chage command failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: chage {{ item.item.item.flag }} {{ vars[item.item.item.var] }} {{ real_user_id }} exited {{ item.rc }}
+      — {{ item.item.item.cis }} password aging may not be enforced
+  loop: "{{ _chage_set_result.results | default([]) }}"
+  when:
+    - item.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
+
 - name: Check if real user account exists in system passwd database
   ansible.builtin.command:
     argv: [getent, passwd, "{{ real_user_id }}"]

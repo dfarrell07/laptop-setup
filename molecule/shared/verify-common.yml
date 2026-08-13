@@ -663,13 +663,17 @@
   ansible.builtin.stat:
     path: /etc/systemd/resolved.conf.d/98-llmnr.conf
   register: verify_llmnr_conf
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Assert 98-llmnr.conf deployed
   ansible.builtin.assert:
     that: verify_llmnr_conf.stat.exists
     fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
-  when: ansible_system == 'Linux'
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
 
 - name: Stat /etc/systemd/resolved.conf.d/99-dot.conf
   ansible.builtin.stat:
@@ -678,6 +682,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Assert DNS-over-TLS config deployed
   ansible.builtin.assert:
@@ -686,6 +691,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Stat /etc/resolv.conf (symlink check)
   ansible.builtin.stat:
@@ -696,6 +702,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - ansible_distribution != 'Rocky'  # Rocky CI lacks stub-resolv.conf pre-symlink; dns_over_tls.yml skips in containers
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/resolv.conf is symlink to stub-resolv.conf
   ansible.builtin.assert:
@@ -709,6 +716,7 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - ansible_distribution != 'Rocky'  # Rocky CI lacks stub-resolv.conf pre-symlink; dns_over_tls.yml skips in containers
+    - not (system_is_container | default(false))
 
 - name: Stat coredump drop-in (system role must deploy it)
   ansible.builtin.stat:
@@ -1113,7 +1121,7 @@
     - not csb_rhel
 
 - name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
-  ansible.builtin.command: grep -qE '^readonly TMOUT=[0-9]+' /etc/profile.d/tmout.sh
+  ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/profile.d/tmout.sh
   changed_when: false
   when:
     - ansible_system == 'Linux'
@@ -1121,7 +1129,7 @@
     - not (system_is_container | default(false))
 
 - name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
-  ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zshrc
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zshrc
   changed_when: false
   when:
     - ansible_system == 'Linux'
@@ -1129,7 +1137,7 @@
     - system_tmout | int > 0
 
 - name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
-  ansible.builtin.command: grep -qE '^typeset -xr TMOUT=[0-9]+' /etc/zsh/zshrc
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zsh/zshrc
   changed_when: false
   when:
     - ansible_system == 'Linux'

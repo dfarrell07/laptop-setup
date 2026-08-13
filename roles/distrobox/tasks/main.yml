@@ -174,7 +174,7 @@
           machines. Registry access restrictions or disk space may be the cause.
           Re-run 'make container' once the underlying issue is resolved.
         _csb_ticket_priority: "High"
-      when: csb_rhel
+      when: csb_detected
     - name: Warn on distrobox assemble create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
@@ -182,7 +182,7 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
-      when: not csb_rhel
+      when: not csb_detected
     - name: Mark container unavailable after distrobox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"
@@ -230,7 +230,7 @@
           Registry access restrictions or disk space may be the cause.
           Re-run 'make container' once the underlying issue is resolved.
         _csb_ticket_priority: "High"
-      when: csb_rhel
+      when: csb_detected
     - name: Warn on toolbox create failure (non-CSB)
       ansible.builtin.debug:
         msg: >-
@@ -238,7 +238,7 @@
           Error: {{ ansible_failed_result.msg | default("unknown") | truncate(200) }}.
           Check registry connectivity and available disk space.
           Re-run 'make container' once the issue is resolved.
-      when: not csb_rhel
+      when: not csb_detected
     - name: Mark container unavailable after toolbox failure
       ansible.builtin.set_fact:
         distrobox_tool: "none"

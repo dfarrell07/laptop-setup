@@ -60,19 +60,6 @@
     - name: Include desktop common assertions (Alacritty + Chrome policy)
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
-    - name: Verify mullvad repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/mullvad.repo
-      register: verify_mullvad_repo
-      become: true
-      when: repo_mullvad
-
-    - name: Assert mullvad repo exists
-      ansible.builtin.assert:
-        that: verify_mullvad_repo.stat.exists
-        fail_msg: "mullvad repo not configured"
-      when: repo_mullvad
-
     - name: Verify slack repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/slack.repo

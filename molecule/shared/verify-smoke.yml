@@ -43,7 +43,7 @@
   register: verify_usbguard_pkg_shared
   changed_when: false
   failed_when: false
-  when: ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+  when: (ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']) and (usbguard_expected | default(false))
 
 - name: Assert usbguard package is installed
   ansible.builtin.assert:

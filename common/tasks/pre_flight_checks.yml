@@ -23,6 +23,17 @@
         file: config.yml
         name: _user_config
       failed_when: false
+      register: _user_config_load
+      tags: [always]
+
+    - name: Warn when config.yml exists but could not be parsed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: config.yml exists but could not be parsed (YAML error) —
+          vault-key assertions are being skipped.
+      when:
+        - _user_config_load.failed | default(false)
+        - _user_config is not defined
       tags: [always]
 
     - name: Set molecule context flag
@@ -93,7 +104,7 @@
               dotfiles_user_email_personal | default('CHANGE_ME'))]
               | selectattr(1, 'in', ['CHANGE_ME', '']) | map(attribute=0) | list }}.
               Without these, git commits are attributed
-              to 'CHANGE_ME', LaunchAgent plists are misnamed, and the notes clone fails.
+              to 'CHANGE_ME', the macOS SSH agent launchd plist will be named incorrectly, and the notes repo clone fails.
           tags: [always]
 
         - name: Assert work identity vars are not CHANGE_ME placeholders

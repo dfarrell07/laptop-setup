@@ -64,6 +64,7 @@
   when:
     - is_dnf
     - not (system_chrony_service_enabled | bool)
+    - not system_is_container
 
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
