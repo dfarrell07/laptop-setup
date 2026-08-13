@@ -51,7 +51,7 @@ UsePAM yes  # compiled default no; setting no bypasses PAM account/session modul
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100
 RekeyLimit 1G 1h  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window
 Compression no  # OpenSSH 10.2p1 (Fedora 44) compiled default is yes; disabled — no benefit for interactive sessions and reduces protocol complexity
-GSSAPIAuthentication no  # compiled default no; overrides 50-redhat.conf which sets yes on Fedora/RHEL
+GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHEL; without this line the effective value is yes even though the compiled default is no
 
 # CIS 4.2.12 — approved algorithms. NOTE: sshd processes drop-in files lexicographically;
 # 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list

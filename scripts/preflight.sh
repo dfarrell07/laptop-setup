@@ -41,7 +41,9 @@ record() {
 }
 
 # --- OS / CSB / profile detection ---
-OS_FAMILY="unknown" IS_CSB=false fapolicyd_installed=false
+OS_FAMILY="unknown"
+IS_CSB=false
+fapolicyd_installed=false
 if [[ -f /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
@@ -123,7 +125,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (dnf/brew), then: make bootstrap"
       fi
-    # unreachable — all loop tools have explicit branches
+    else
+      record "required_${tool}" "fail" "not installed — BUG: missing elif branch; run make bootstrap and file a bug"
     fi
   fi
 done

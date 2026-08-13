@@ -157,6 +157,14 @@
     - distrobox_check.rc != 0
     - is_linux
 
+- name: Remove stale distrobox config dir when distrobox is not installed
+  ansible.builtin.file:
+    path: "{{ distrobox_ini_path | dirname }}"
+    state: absent
+  when:
+    - distrobox_check.rc != 0
+    - is_linux
+
 - name: Warn container_replace ignored under fapolicyd enforcement
   ansible.builtin.debug:
     msg: >-

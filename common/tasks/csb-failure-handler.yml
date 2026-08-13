@@ -35,11 +35,12 @@
   become: false
   ansible.builtin.assert:
     that:
-      - (_csb_error | default('')) is string
+      - _csb_error is string
     fail_msg: >-
       csb-failure-handler.yml: _csb_error must be a string
       (e.g. ansible_failed_result.msg | default('unknown error')), not a dict.
       truncate() in csb-report.yml will fail if a dict is passed.
+  when: _csb_error is defined
 
 - name: Record CSB failure
   become: false

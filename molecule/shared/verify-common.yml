@@ -651,8 +651,22 @@
 - name: Check modprobe hardening contains unconditional blacklist entries
   ansible.builtin.command: grep -qF '{{ item }}' /etc/modprobe.d/hardening.conf
   loop:
+    - "blacklist jffs2"
+    - "install jffs2 /bin/false"
+    - "install cramfs /bin/false"
+    - "install freevxfs /bin/false"
+    - "blacklist hfs"
+    - "install hfs /bin/false"
+    - "blacklist hfsplus"
+    - "install hfsplus /bin/false"
     - "install dccp /bin/false"
+    - "blacklist rds"
+    - "install rds /bin/false"
+    - "blacklist tipc"
+    - "install tipc /bin/false"
     - "install firewire-core /bin/false"
+    - "blacklist nosy"
+    - "install nosy /bin/false"
     - "install vivid /bin/false"
     - "install n_hdlc /bin/false"
   changed_when: false

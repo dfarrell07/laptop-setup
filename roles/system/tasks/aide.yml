@@ -111,7 +111,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/etc/usbguard\s'
-        line: '/etc/usbguard NORMAL'
+        line: '/etc/usbguard PERMS'
         insertbefore: '^/etc\s'
         state: present
       register: _aide_conf_r5
@@ -286,9 +286,9 @@
         path: /var/lib/aide/aide.db.gz
         state: absent
       ignore_errors: true
-      when:
-        - _aide_init_result is defined
-        - _aide_init_result is failed
+      when: >-
+        (_aide_init_result is defined and _aide_init_result is failed) or
+        (system_aide_reinit_result is defined and system_aide_reinit_result is failed)
 
     - name: Stop and disable aide-check.timer after failed init (prevents spurious check failures)
       ansible.builtin.systemd:

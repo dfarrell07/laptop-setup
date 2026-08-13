@@ -45,9 +45,9 @@ packages_security:
 # Set packages_yubikey_enabled: false in config.yml on machines without a YubiKey.
 packages_yubikey_enabled: true
 
-# LuLu application firewall cask — installed only when packages_brew_cask_lulu_enabled: true (default).
-# Set packages_brew_cask_lulu_enabled: false in config.yml to suppress (avoids system extension approval prompt on macOS upgrades).
-packages_brew_cask_lulu_enabled: true
+# LuLu application firewall cask — opt in by setting packages_brew_cask_lulu_enabled: true in config.yml.
+# Disabled by default: every major macOS upgrade requires interactive system extension approval in System Settings.
+packages_brew_cask_lulu_enabled: false
 
 packages_security_yubikey:
   - yubikey-manager
