@@ -116,7 +116,7 @@
   register: verify_nm_wifi_ps
   become: true
   when:
-    - system_wifi_powersave | default(not csb_rhel) | bool
+    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
     - not (system_is_container | default(false))
 
 - name: Assert 99-wifi-powersave.conf deployed by system role
@@ -124,7 +124,7 @@
     that: verify_nm_wifi_ps.stat.exists
     fail_msg: "99-wifi-powersave.conf missing — Wi-Fi power management not configured"
   when:
-    - system_wifi_powersave | default(not csb_rhel) | bool
+    - system_wifi_powersave_disabled | default(not csb_rhel) | bool
     - not (system_is_container | default(false))
 
 - name: Slurp 99-wifi-powersave.conf for content check

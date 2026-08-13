@@ -225,8 +225,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
 #   system_wifi_mac_rand: "{{ not csb_detected }}"  (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
 #                                        on hybrid Fedora CSB machines to opt in to stable-ssid MAC randomization
-#   system_wifi_powersave: "{{ not csb_rhel }}"  (roles/system/defaults) — defaults true (powersave=2) on non-csb_rhel;
-#                                        set false in config.yml to disable on power-critical machines
+#   system_wifi_powersave_disabled: "{{ not csb_rhel }}"  (roles/system/defaults) — defaults true
+#                                        (disable powersave, wifi.powersave=2) on non-csb_rhel;
+#                                        set false in config.yml to allow power saving on power-critical machines
 #   system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
 #                                        external access
 #   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key

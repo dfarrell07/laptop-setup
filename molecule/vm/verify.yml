@@ -488,7 +488,7 @@
     - name: Assert root account is locked
       ansible.builtin.assert:
         that: "'LK' in verify_root_lock.stdout or 'L ' in verify_root_lock.stdout"
-        fail_msg: "Root account is not locked"
+        fail_msg: "Root account is not locked (passwd -S: '{{ verify_root_lock.stdout }}')"
 
     - name: Verify AIDE timer enabled
       ansible.builtin.systemd:

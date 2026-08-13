@@ -1712,7 +1712,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml to comply with CIS.
   _ts_expected=$(awk -F' *= *' '/^net\.ipv4\.tcp_timestamps/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null)
   _sysctl_check "net.ipv4.tcp_timestamps" "${_ts_expected:-1}" "sysctl-tcp-timestamps"
-  if [[ -n "$_ts_expected" && "$_ts_expected" != "0" ]]; then
+  if [[ "${_ts_expected:-1}" != "0" ]]; then
     record "sysctl-tcp-timestamps-cis" "WARN" "net.ipv4.tcp_timestamps=${_ts_expected:-1} deviates from CIS 3.3.9 (recommended 0); override via system_sysctl_extra: {net.ipv4.tcp_timestamps: 0} in config.yml"
   fi
   _sysctl_check "net.ipv4.conf.all.accept_redirects"        "0" "sysctl-no-accept-redirects"

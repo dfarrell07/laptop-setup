@@ -134,6 +134,7 @@
     database: passwd
     key: "{{ redhat_splunk_service_account }}"
     fail_key: false
+  when: csb_detected
 
 - name: Restrict splunk system account shell (CIS 5.6)
   when:

@@ -191,6 +191,12 @@
       tags: [claude]
 
   post_tasks:
+    - name: Remove stale CSB report
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/csb-report.md"
+        state: absent
+      tags: [always]
+
     - name: Generate CSB compatibility report
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-report.yml"
       tags: [always]

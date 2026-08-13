@@ -65,10 +65,11 @@ fi
 if command -v npx >/dev/null 2>&1; then
   if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then
     npx --no -- commitlint --edit "$1"
+    exit $?
   else
     echo "WARNING: commitlint not installed — run: make bootstrap" >&2
   fi
 else
   echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
 fi
-exit $?
+exit 0

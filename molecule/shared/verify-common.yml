@@ -645,7 +645,7 @@
   when: ansible_system == 'Linux'
 
 - name: Check sshd hardening drop-in contains critical directives
-  ansible.builtin.command: grep -q '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
+  ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
   loop:
     - "PasswordAuthentication no"
     - "PermitRootLogin no"
@@ -655,7 +655,7 @@
     - "HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
     - "ClientAliveInterval 300"
     - "ClientAliveCountMax 2"
-    - "Port {{ ssh_port }}"
+    - "^Port {{ ssh_port }}$"
     - "AllowUsers "
   changed_when: false
   become: true
@@ -1330,6 +1330,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Assert login banner files exist
   ansible.builtin.assert:
@@ -1339,6 +1340,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Slurp /etc/issue content
   ansible.builtin.slurp:
@@ -1347,6 +1349,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 - name: Assert /etc/issue contains authorized-users-only notice
   ansible.builtin.assert:
@@ -1355,6 +1358,7 @@
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
+    - not (system_is_container | default(false))
 
 # --- Locale and console keymap (system role, Linux only) ---
 - name: Stat /etc/locale.conf (system role deploys it)

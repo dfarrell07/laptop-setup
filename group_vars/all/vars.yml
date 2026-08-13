@@ -37,6 +37,10 @@ is_apt: false
 fapolicyd_enforcing: false
 fapolicyd_installed: false
 internal_ca_present: false
+csb_ca_cert_paths:
+  - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+  - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
+  - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
 needs_container_tier: "host-only"
 network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY/HTTP_PROXY env vars
 proxy_url: ''           # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY env var

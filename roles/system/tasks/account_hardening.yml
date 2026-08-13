@@ -54,7 +54,7 @@
       value: "{{ system_umask }}"
     - name: HOME_MODE
       value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
-    - name: INACTIVE
+    - name: INACTIVE  # belt-and-suspenders with useradd -D -f below; both paths must agree
       value: "{{ system_inactive_days }}"
   loop_control:
     label: "{{ item.name }}"

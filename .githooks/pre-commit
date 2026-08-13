@@ -50,7 +50,7 @@ fi
 # Shell lint staged scripts
 if command -v shellcheck >/dev/null 2>&1; then
   sh_files=()
-  while IFS= read -r -d '' _f; do sh_files+=("$_f"); done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
+  while IFS= read -r -d '' _f; do sh_files+=("$_f"); done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-*')
   if (( ${#sh_files[@]} > 0 )); then
     for _f in "${sh_files[@]}"; do
       git show ":$_f" | shellcheck --filename="$_f" -S warning - || failed=1
