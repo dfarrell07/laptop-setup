@@ -70,10 +70,10 @@
       SSH agent not ready (rc={{ git_repos_ssh_agent.rc }} —
       {{ 'no identities loaded' if git_repos_ssh_agent.rc == 1 else 'cannot connect to agent' }}).
       Run 'ssh-add' before 'make repos'. The following filtered repos use SSH and will likely fail:
-      {{ git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | map(attribute='dest') | list | join(', ') }}
+      {{ git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | map(attribute='dest') | list | join(', ') }}
   when:
     - git_repos_ssh_agent.rc in [1, 2]
-    - git_repos_filtered | selectattr('url', 'match', 'ssh://|git@') | list | length > 0
+    - git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | list | length > 0
 
 # Coverage gap: the wait_for task is never invoked in any molecule scenario.
 # Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).

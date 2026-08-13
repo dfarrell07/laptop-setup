@@ -47,17 +47,17 @@
               vault-key assertions are being skipped.
           tags: [always]
 
-        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets _config_parse_warn_shown; Play 2's include then sees it defined.
-        - name: Set config parse warn flag (suppresses duplicate warning in Play 2)
+        # Setting the flag here ensures the fail task below only fires on parse-error runs —
+        # when config.yml loads successfully this block is skipped, the flag stays unset,
+        # and the fail task's when-guard evaluates to false.
+        - name: Set config parse warn flag (gates the fail task below to parse-error runs only)
           ansible.builtin.set_fact:
             _config_parse_warn_shown: true
           tags: [always]
 
     - name: Fail when config.yml exists but could not be parsed
-      ansible.builtin.assert:
-        that: not (_config_yml_stat.stat.exists and _user_config is not defined)
-        fail_msg: >-
+      ansible.builtin.fail:
+        msg: >-
           config.yml exists but failed to parse (YAML error). Fix the syntax error
           before re-running. All user overrides were silently dropped.
       when: _config_parse_warn_shown is defined

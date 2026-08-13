@@ -80,7 +80,7 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  if grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; fi
+  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; fi
 fi
 
 # --- Required tools ---
@@ -346,6 +346,7 @@ fi
 # --- RAM ---
 if [[ "$OS_FAMILY" == "darwin" ]]; then ram_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
 else ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null || echo 0); fi
+ram_gb=${ram_gb:-0}
 if [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
 elif [[ $ram_gb -ge 4 ]]; then record "ram" "warn" "${ram_gb}GiB — 8GiB+ recommended"
 else record "ram" "fail" "${ram_gb}GiB — insufficient"; fi

@@ -465,7 +465,7 @@
 - name: Assert dnf-automatic timer is enabled
   ansible.builtin.assert:
     that: verify_dnf_auto.status.UnitFileState == 'enabled'
-    fail_msg: "dnf-automatic timer not enabled"
+    fail_msg: "dnf-automatic timer UnitFileState is '{{ verify_dnf_auto.status.UnitFileState | default('') }}', expected 'enabled'"
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))

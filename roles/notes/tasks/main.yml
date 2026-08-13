@@ -136,7 +136,7 @@
       when:
         - notes_repo_available
         - notes_transcrypt_available
-        - not (notes_transcrypt_inited)
+        - not notes_transcrypt_inited
         - notes_transcrypt_password | length > 0
         - notes_transcrypt_password != notes_transcrypt_password_sentinel
 
@@ -146,8 +146,9 @@
           notes_transcrypt_password is still set to '{{ notes_transcrypt_password_sentinel }}' — transcrypt not initialized.
           Replace vault_notes_transcrypt_password in vault.yml with the real password.
       when:
+        - notes_repo_available
         - notes_transcrypt_available
-        - not (notes_transcrypt_inited)
+        - not notes_transcrypt_inited
         - notes_transcrypt_password == notes_transcrypt_password_sentinel
 
     - name: Warn if transcrypt initialization failed
@@ -156,6 +157,7 @@
           transcrypt initialization exited {{ notes_transcrypt_init_result.rc | default('unknown') }} —
           notes may not be decrypted. Check the password in vault.yml.
       when:
+        - notes_repo_available
         - notes_transcrypt_available
         - not (notes_transcrypt_init_result.skipped | default(false))
         - notes_transcrypt_init_result.rc | default(-1) != 0
@@ -169,6 +171,7 @@
           cd {{ notes_repo_path }} && transcrypt --flush-credentials &&
           transcrypt -c {{ notes_transcrypt_cipher }} -p <new_password> -y
       when:
+        - notes_repo_available
         - notes_transcrypt_available
         - notes_transcrypt_inited
 
@@ -188,7 +191,7 @@
           ansible.builtin.debug:
             msg: "transcrypt not installed — run 'make packages' first"
           when:
-            - not (notes_transcrypt_available)
+            - not notes_transcrypt_available
       when: notes_repo_available
 
     - name: Warn if transcrypt password not set
@@ -197,6 +200,7 @@
           notes_transcrypt_password is empty — transcrypt not initialized.
           Set vault_notes_transcrypt_password in vault.yml to enable.
       when:
+        - notes_repo_available
         - notes_transcrypt_available
-        - not (notes_transcrypt_inited)
+        - not notes_transcrypt_inited
         - notes_transcrypt_password | length == 0

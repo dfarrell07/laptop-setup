@@ -280,10 +280,29 @@ jobs:
           exit $failed
 
       - name: Verify npm package signatures
+        id: npm_signatures
+        continue-on-error: true
         run: npm audit signatures
 
       - name: Check for known vulnerabilities
+        id: npm_audit
+        if: always()
+        continue-on-error: true
         run: npm audit --audit-level=moderate
+
+      - name: Check npm audit results
+        if: always()
+        run: |
+          failed=0
+          if [ "${{ steps.npm_signatures.outcome }}" != "success" ]; then
+            echo "npm audit signatures failed"
+            failed=1
+          fi
+          if [ "${{ steps.npm_audit.outcome }}" != "success" ]; then
+            echo "npm audit --audit-level=moderate failed"
+            failed=1
+          fi
+          exit $failed
 
   gitleaks:
     name: Secret Detection
@@ -328,9 +347,12 @@ jobs:
           chmod +x actionlint
 
       - name: Run actionlint
+        id: actionlint
+        continue-on-error: true
         run: ./actionlint -color
 
       - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
+        if: always()
         env:
           ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
@@ -340,11 +362,29 @@ jobs:
           chmod +x zizmor
 
       - name: Run zizmor
+        id: zizmor
+        if: always()
+        continue-on-error: true
         run: ./zizmor .github/
+
+      - name: Check security scanner results
+        if: always()
+        run: |
+          failed=0
+          if [ "${{ steps.actionlint.outcome }}" != "success" ]; then
+            echo "actionlint failed or was skipped"
+            failed=1
+          fi
+          if [ "${{ steps.zizmor.outcome }}" != "success" ]; then
+            echo "zizmor failed or was skipped"
+            failed=1
+          fi
+          exit $failed
 
   all-checks-pass:
     name: All Checks Pass
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     if: always()
     needs:
       - ansible-lint

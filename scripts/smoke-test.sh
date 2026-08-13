@@ -45,7 +45,7 @@ record() { # name status [detail]
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _cfg="$SCRIPT_DIR/../config.yml"
 profile="work"
-grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
+grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
 _system_umask="${_system_umask:-027}"
 _notes_enabled=false
@@ -192,8 +192,8 @@ elif run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
-_ssh_add_rc=0; out=$(ssh-add -L 2>&1) || _ssh_add_rc=$?
-if [[ "$out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
+_ssh_add_rc=0; _ssh_add_out=$(ssh-add -L 2>&1) || _ssh_add_rc=$?
+if [[ "$_ssh_add_out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"
 elif [[ "$_ssh_add_rc" -eq 1 ]]; then

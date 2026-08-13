@@ -58,7 +58,7 @@ jobs:
           drift = []
           errors = []
           for fqcn, pinned_ver in sorted(pinned.items()):
-              namespace, name = fqcn.split('.')
+              namespace, name = fqcn.split('.', 1)
               manifest = work_dir / 'ansible_collections' / namespace / name / 'MANIFEST.json'
               if not manifest.exists():
                   print(f'::error::{fqcn}: MANIFEST.json not found after latest install — cannot verify')

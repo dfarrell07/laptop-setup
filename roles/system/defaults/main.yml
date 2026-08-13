@@ -408,7 +408,7 @@ system_chrony_nts_servers:
   - nts.netnod.se
   - ptbtime1.ptb.de
   - ntppool1.time.nl
-system_chrony_fallback_pool: "{{ '2.fedora.pool.ntp.org' if is_dnf else '2.debian.pool.ntp.org' if is_apt else 'pool.ntp.org' }}"
+system_chrony_fallback_pool: "{{ '2.fedora.pool.ntp.org' if is_fedora else '2.centos.pool.ntp.org' if is_dnf else '2.debian.pool.ntp.org' if is_apt else 'pool.ntp.org' }}"  # yamllint disable-line rule:line-length
 system_chrony_minsources: 2
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
 system_chrony_service_enabled: "{{ not system_is_container }}"

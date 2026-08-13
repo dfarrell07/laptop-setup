@@ -58,9 +58,6 @@
     - name: Include Claude work instance directory and settings assertions
       ansible.builtin.import_tasks: ../shared/verify-claude-work.yml
 
-    - name: Include work profile assertions
-      ansible.builtin.import_tasks: ../shared/verify-work-profile.yml
-
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---
     - name: Import Claude queue verification tasks
       ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
