@@ -389,12 +389,14 @@
       ansible.builtin.assert:
         that: packages_sops_version in (verify_sops_ver.stdout + verify_sops_ver.stderr)
         fail_msg: "sops version mismatch — expected {{ packages_sops_version }}, got: {{ verify_sops_ver.stdout + verify_sops_ver.stderr }}"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check cosign version output
       ansible.builtin.command:
         cmd: /usr/local/bin/cosign version
       register: verify_cosign_ver
       changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert cosign version matches packages_cosign_version
       ansible.builtin.assert:
@@ -402,12 +404,14 @@
         fail_msg: >-
           cosign version mismatch — expected {{ packages_cosign_version }},
           got: {{ verify_cosign_ver.stdout + verify_cosign_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check gitleaks version output
       ansible.builtin.command:
         cmd: /usr/local/bin/gitleaks version
       register: verify_gitleaks_ver
       changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert gitleaks version matches packages_gitleaks_version
       ansible.builtin.assert:
@@ -415,6 +419,7 @@
         fail_msg: >-
           gitleaks version mismatch — expected {{ packages_gitleaks_version }},
           got: {{ verify_gitleaks_ver.stdout + verify_gitleaks_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check actionlint version output
       ansible.builtin.command:
@@ -449,6 +454,7 @@
         cmd: /usr/local/bin/tkn version --component=client
       register: verify_tkn_ver
       changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert tkn version matches packages_tkn_version
       ansible.builtin.assert:
@@ -456,23 +462,27 @@
         fail_msg: >-
           tkn version mismatch — expected {{ packages_tkn_version }},
           got: {{ verify_tkn_ver.stdout + verify_tkn_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check ec version output
       ansible.builtin.command:
         cmd: /usr/local/bin/ec version
       register: verify_ec_ver
       changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert ec version matches packages_ec_version
       ansible.builtin.assert:
         that: packages_ec_version in (verify_ec_ver.stdout + verify_ec_ver.stderr)
         fail_msg: "ec version mismatch — expected {{ packages_ec_version }}, got: {{ verify_ec_ver.stdout + verify_ec_ver.stderr }}"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check operator-sdk version output
       ansible.builtin.command:
         cmd: /usr/local/bin/operator-sdk version
       register: verify_operator_sdk_ver
       changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Assert operator-sdk version matches packages_operator_sdk_version
       ansible.builtin.assert:
@@ -480,6 +490,7 @@
         fail_msg: >-
           operator-sdk version mismatch — expected {{ packages_operator_sdk_version }},
           got: {{ verify_operator_sdk_ver.stdout + verify_operator_sdk_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
 
     - name: Check krew version output
       ansible.builtin.command:

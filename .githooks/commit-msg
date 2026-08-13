@@ -7,7 +7,7 @@ case "$msg" in
   Merge\ branch*|Merge\ pull*|Merge\ remote*|'Merge tag'*) exit 0 ;;
   Revert\ *) exit 0 ;;
 esac
-if ! echo "$msg" | grep -q ':'; then
+if ! echo "$msg" | grep -qE '^[A-Za-z][-A-Za-z0-9/]*:'; then
   echo "ERROR: Missing scope separator ':' — format must be 'Scope: description'" >&2
   exit 1
 fi
@@ -18,10 +18,7 @@ first="${first%:}"
 desc_first=$(echo "$msg" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
 desc_first="${desc_first%:}"
 if [ -z "$desc_first" ]; then
-  case "$msg" in
-    *:*) echo "ERROR: Subject has no description after scope colon" >&2 ;;
-    *)   echo "ERROR: Subject line is empty" >&2 ;;
-  esac
+  echo "ERROR: Subject has no description after scope colon" >&2
   exit 1
 fi
 

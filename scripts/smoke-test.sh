@@ -799,7 +799,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
         else record "selinux-ssh-port" "FAIL" "port ${_ssh_port} not labeled ssh_port_t — sshd cannot bind"; fi
       fi
       if [[ -n "$_ssh_port" ]]; then
-        if ss -tlnp 2>/dev/null | grep -q ":${_ssh_port}"; then record "sshd-port-bound" "PASS"
+        if ss -tlnp 2>/dev/null | grep -qE ":${_ssh_port}([^0-9]|$)"; then record "sshd-port-bound" "PASS"
         else record "sshd-port-bound" "FAIL" "sshd not bound on port ${_ssh_port}"; fi
       fi
     fi

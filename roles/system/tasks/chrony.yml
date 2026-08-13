@@ -91,12 +91,14 @@
     - not system_is_container
   failed_when: false
 
-- name: "Warn: no time sync available (chrony disabled, timesyncd absent on Fedora/RHEL)"
+- name: "Warn: no time sync available (chrony disabled, timesyncd disabled on Fedora)"
   ansible.builtin.debug:
     msg: >-
-      WARNING: system_chrony_service_enabled=false and systemd-timesyncd is not installed on
-      Fedora/RHEL — host has no NTP source. Set system_chrony_service_enabled: true
-      (systemd-timesyncd is not packaged on Fedora/RHEL).
+      WARNING: system_chrony_service_enabled=false — host has no active NTP source.
+      On Fedora 44, systemd-timesyncd is installed but disabled (preset: disabled) in favor
+      of chronyd; to restore a time source without chrony, run:
+      systemctl enable --now systemd-timesyncd. On RHEL, timesyncd is not packaged —
+      re-enable chrony: set system_chrony_service_enabled: true.
   when:
     - is_dnf
     - not (system_chrony_service_enabled | bool)

@@ -130,7 +130,7 @@
     permanent: true
     immediate: true
     state: enabled
-  loop: "{{ system_firewall_icmp_types + system_firewall_icmp_extra_types }}"
+  loop: "{{ (system_firewall_icmp_types + system_firewall_icmp_extra_types) | unique }}"
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op

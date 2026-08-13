@@ -257,9 +257,10 @@
     - name: Warn on AIDE initialization failure
       ansible.builtin.debug:
         msg: >-
-          AIDE initialization failed (disk exhaustion, OOM, or signal interruption).
+          AIDE block failed — check the error for the actual cause (config edit, unit deploy,
+          timer enable, or AIDE init failure such as disk exhaustion, OOM, or signal interruption).
           Error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) | default('unknown') | truncate(400) }}.
-          To recover: free disk space, then re-run this playbook — this rescue removes both
+          To recover: address the failure above, then re-run this playbook — this rescue removes both
           aide.db.new.gz (partial) and aide.db.gz (stale/missing baseline) so the next run
           initializes a fresh baseline cleanly.
 

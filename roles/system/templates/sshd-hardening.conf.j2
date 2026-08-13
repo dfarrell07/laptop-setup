@@ -40,11 +40,11 @@ ClientAliveCountMax 2
 {% if system_ssh_channel_timeout %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}
-# system_ssh_unused_connection_timeout: default 600; set to '' (empty string) or 0 in config.yml to omit (both are falsy).
+# system_ssh_unused_connection_timeout: default 600 — directive is always emitted; set '' or 0 in config.yml to disable (both are falsy).
 {% if system_ssh_unused_connection_timeout %} {# '' or 0 to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
 {% endif %}
-TCPKeepAlive no
+TCPKeepAlive no  # OpenSSH compiled default is yes; disabled in favour of encrypted ClientAlive messages (ClientAliveInterval/CountMax above)
 SyslogFacility AUTHPRIV  # explicit; 50-redhat.conf also sets this; first-occurrence guard and self-contained logging config
 LogLevel VERBOSE
 UsePAM yes  # compiled default no; Fedora build does not support UsePAM no; matches 50-redhat.conf; explicit (first-occurrence)

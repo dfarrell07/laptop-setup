@@ -32,6 +32,8 @@
   changed_when: false
   # Keys absent if module not yet loaded (ENOENT) or kernel too old (EINVAL) — tolerate both;
   # write-once keys (EPERM, e.g. kernel.unprivileged_bpf_disabled on Fedora 44) also tolerated
+  # Sole expected EPERM source: kernel.unprivileged_bpf_disabled
+  # (Fedora 44 CONFIG_BPF_UNPRIV_DEFAULT_OFF=y locks this to 2 before sysctl.d runs)
   failed_when: >
     sysctl_system_result.rc != 0 and
     (sysctl_system_result.stderr_lines | length == 0 or

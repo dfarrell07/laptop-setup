@@ -126,6 +126,8 @@
       {{ system_authselect_faillock_enable.rc | default('unknown') }} — faillock PAM feature may not be active
   when:
     - system_authselect_faillock_enable.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
 
 # --- Debian PAM faillock (no authselect; direct PAM stack insertion) ---
 # On Debian, authselect is absent; pam_faillock.so must be added directly to
@@ -206,6 +208,8 @@
       {{ system_authselect_pwhistory_enable.rc | default('unknown') }} — pwhistory PAM feature may not be active
   when:
     - system_authselect_pwhistory_enable.rc | default(0) != 0
+    - not csb_rhel
+    - not system_is_container
 
 - name: Configure pam_pwhistory remember count (CIS 5.3.5)
   community.general.ini_file:
