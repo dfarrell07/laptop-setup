@@ -20,6 +20,7 @@
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
         system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # converge sets this; re-state so verify-claude-queue.yml assertions execute
 
   tasks:
     # --- Shared assertions (all platforms) ---

@@ -96,6 +96,19 @@
     - is_dnf or is_apt
     - not csb_rhel
 
+- name: "Warn: no NTS servers configured — chrony uses unauthenticated pool only"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_nts_servers is empty — chrony has no NTS sources and
+      will use only the unauthenticated fallback pool ({{ system_chrony_fallback_pool }}).
+      Time sync is unauthenticated and vulnerable to on-path NTP spoofing.
+      Set system_chrony_nts_servers in config.yml to restore authenticated time sync.
+  when:
+    - system_chrony_nts_servers | length == 0
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
     src: chrony-nts.conf.j2

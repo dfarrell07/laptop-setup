@@ -22,7 +22,7 @@ export ANSIBLE_DISPLAY_OK_HOSTS = false
 export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 
 help:
-	@echo "Primary:    all minimal offline container container-rebuild update"
+	@echo "Primary:    all minimal offline container container-rebuild update  (distrobox=alias for container)"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
 	@echo "            redhat containers claude"
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"

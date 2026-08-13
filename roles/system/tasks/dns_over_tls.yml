@@ -74,6 +74,7 @@
       DNSOverTLS={{ system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
       DNSSEC={{ system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
       FallbackDNS={{ system_dns_fallback }}
+      # NOTE: FallbackDNS also uses port 853 in strict DNSOverTLS mode; no plain-UDP fallback available
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"
   when:

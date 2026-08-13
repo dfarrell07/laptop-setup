@@ -30,8 +30,8 @@ record() {
   if [[ "$JSON" == false ]]; then
     case "$status" in
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
-      fail) printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail"; FAILURES=$((FAILURES+1)) ;;
-      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "$(tr '[:lower:]' '[:upper:]' <<< "$status")" "$name" "$detail" ;;
+      fail) FAILURES=$((FAILURES+1)); printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail" ;;
+      warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }

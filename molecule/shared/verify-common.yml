@@ -115,7 +115,11 @@
     that:
       - verify_ssh_config.stat.exists
       - verify_ssh_config.stat.mode == '0600'
-    fail_msg: "SSH config missing or wrong permissions"
+    fail_msg: >-
+      SSH config missing or wrong permissions
+      (exists={{ verify_ssh_config.stat.exists }},
+      mode={{ verify_ssh_config.stat.mode | default('absent') }},
+      expected 0600)
 
 - name: Verify SSH directory permissions
   ansible.builtin.stat:
@@ -127,7 +131,7 @@
     that:
       - verify_ssh_dir.stat.exists
       - verify_ssh_dir.stat.mode == '0700'
-    fail_msg: "SSH directory has wrong permissions"
+    fail_msg: "SSH directory has wrong permissions (mode={{ verify_ssh_dir.stat.mode | default('absent') }}, expected 0700)"
 
 - name: Check SSH config has KexAlgorithms directive
   ansible.builtin.command:
@@ -998,7 +1002,10 @@
     that:
       - verify_auditd_rules.stat.exists
       - verify_auditd_rules.stat.mode == '0640'
-    fail_msg: "/etc/audit/rules.d/claude-code.rules not deployed or wrong mode — system role auditd task regression"
+    fail_msg: >-
+      /etc/audit/rules.d/claude-code.rules not deployed or wrong mode
+      (expected 0640, got {{ verify_auditd_rules.stat.mode | default('missing') }})
+      — system role auditd task regression
   when:
     - ansible_system == 'Linux'
     - not csb_rhel

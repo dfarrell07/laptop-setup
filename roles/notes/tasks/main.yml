@@ -99,6 +99,12 @@
             line: ".gitleaks.toml"
             mode: "0600"
             create: true
+
+        - name: Enforce mode on notes repo git exclude
+          ansible.builtin.file:
+            path: "{{ notes_repo_path }}/.git/info/exclude"
+            mode: "0600"
+            state: file
       when: notes_repo_available
 
     - name: Check transcrypt initialization status

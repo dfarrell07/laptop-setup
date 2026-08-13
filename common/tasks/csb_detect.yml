@@ -51,7 +51,7 @@
 
 - name: Check fapolicyd config for permissive mode
   ansible.builtin.command:
-    cmd: grep -qiE '^permissive[[:space:]]*=[[:space:]]*1([[:space:]]|#|$)' /etc/fapolicyd/fapolicyd.conf
+    cmd: grep -qiE '^[[:space:]]*permissive[[:space:]]*=[[:space:]]*1([[:space:]]|#|$)' /etc/fapolicyd/fapolicyd.conf
   register: _fapolicyd_permissive_grep
   changed_when: false
   failed_when: false
@@ -64,7 +64,7 @@
 - name: Set fapolicyd facts
   ansible.builtin.set_fact:
     fapolicyd_installed: >-
-      {{ (is_linux | bool) and (_fapolicyd_unit.rc | default(1) == 0) and ("fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))) }}
+      {{ (_fapolicyd_unit.rc | default(1) == 0) and ("fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))) }}
     fapolicyd_enforcing: >-
       {{
         (is_linux | bool)
@@ -92,10 +92,9 @@
   ansible.builtin.set_fact:
     internal_ca_present: >-
       {{
-        (is_linux | bool)
-        and (_ca_certs.results | default([])
-             | selectattr('stat.exists')
-             | list | length > 0)
+        (_ca_certs.results | default([])
+         | selectattr('stat.exists')
+         | list | length > 0)
       }}
   become: false
   when: is_linux | bool
@@ -184,7 +183,6 @@
       Dev tools will be installed in a container rather than the host.
       Pass -e needs_container_tier=host-only on the ansible-playbook command line to override
       (set_fact outranks config.yml; use -e flag, not config.yml).
-    verbosity: 1
   become: false
   when:
     - not (_csb_molecule_force | default(false))

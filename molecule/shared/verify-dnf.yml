@@ -202,6 +202,7 @@
 # assertions run in fedora/rocky/debian container CI — make test-vm only.
 - name: Include NetworkManager conf.d assertions
   ansible.builtin.import_tasks: verify-nm.yml
+  when: not (system_is_container | default(false))
 
 # CI gap: all PAM, authselect, faillock, pwquality, login.defs, dnf-automatic, ABRT, and cron assertions below
 # are gated on not system_is_container. Fedora and Rocky molecule scenarios set system_is_container=true,

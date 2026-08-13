@@ -81,6 +81,13 @@
       and approve LuLu to activate the application firewall.
   when: is_macos and _packages_brew_casks.changed | default(false)
 
+- name: Stop brew autoupdate before reconfiguring (macOS)
+  ansible.builtin.command:
+    cmd: brew autoupdate stop
+  when: is_macos
+  failed_when: false
+  changed_when: false
+
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --upgrade --cleanup

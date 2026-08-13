@@ -19,6 +19,7 @@
         _csb_molecule_force: true  # prevents csb_detect.yml overriding csb_rhel (Rocky has no RHEL markers)
         system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # converge sets this; re-state so verify-claude-queue.yml assertions execute
 
   tasks:
     # --- Shared assertions (all platforms) ---
