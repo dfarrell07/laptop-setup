@@ -16,7 +16,6 @@
     - name: Set work profile for verify context
       ansible.builtin.set_fact:
         profile: work
-        go_tools_installed: false  # packages_install_binaries: false in container CI skips go install
         system_chrony_service_enabled: false  # default auto-detects false in container; explicit for verify context clarity
         system_disable_usb_storage: false  # converge sets this false; verify must match or usb_storage modprobe check fails
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
@@ -36,12 +35,6 @@
     # --- redhat role: minimal assertions (cert/VPN packages unavailable from public repos in CI) ---
     # Verify the condition logic fired correctly — is_fedora=true triggers cert/VPN install blocks.
     # Full install-success verification requires internal repos (out of scope for Podman CI).
-
-    # --- Fedora-specific: package checks ---
-    - name: Check vim is installed
-      ansible.builtin.command:
-        cmd: vim --version
-      changed_when: false
 
     # --- Notes role ---
     - name: Verify notes role

@@ -151,7 +151,7 @@ diff:
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
 
-lint: .venv shellcheck
+lint: .venv shellcheck markdownlint
 	.venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	$(MAKE) check-vars-sync

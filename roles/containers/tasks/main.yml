@@ -282,8 +282,23 @@
     - containers_prune_enabled | bool
     - containers_prune_service.changed or containers_prune_timer.changed
   # intentional: daemon-reload may fail on fresh provision with no active user session;
-  # enable/warn chain below surfaces the symptom
+  # warn task below surfaces the failure to the operator
   failed_when: false
+  register: _prune_daemon_reload
+
+- name: Warn if systemd user daemon-reload failed after deploying prune units
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: systemd --user daemon-reload failed after deploying prune units.
+      The podman-prune timer/service may not be recognized by systemd.
+      Fix: systemctl --user daemon-reload.
+      Check: systemctl --user status podman-prune.timer; journalctl --user -xe
+      On a fresh provision without an active user session, this is expected — run daemon-reload at first login.
+  when:
+    - is_linux
+    - not (system_is_container)
+    - containers_prune_enabled | bool
+    - _prune_daemon_reload.failed | default(false)
 
 - name: Enable and start podman-prune.timer
   ansible.builtin.systemd:

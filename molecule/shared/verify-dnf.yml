@@ -46,6 +46,10 @@
   ansible.builtin.command: tree --version
   changed_when: false
 
+- name: Check vim is installed
+  ansible.builtin.command: vim --version
+  changed_when: false
+
 - name: Check go is installed
   ansible.builtin.command: go version
   changed_when: false
@@ -423,8 +427,7 @@
   when: verify_crypto.rc == 0
 
 # golangci-lint coverage is provided by molecule/packages-binaries/verify.yml unconditionally.
-# go_tools_installed is always false in all scenarios that include this file (fedora, rocky, vm),
-# so assertions here would be dead code. See packages-binaries scenario for golangci-lint tests.
+# See packages-binaries scenario for golangci-lint tests.
 
 # --- Cron/at access restriction (CIS 5.1.x) ---
 - name: Verify /etc/cron.allow exists

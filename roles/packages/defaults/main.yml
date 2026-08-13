@@ -323,7 +323,7 @@ packages_brew_cask_work:
 
 packages_brew:
   - ansible
-  - git
+  - git  # Xcode CLT git is stale; brew git tracks upstream releases
   - git-lfs
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
   - tmux
@@ -335,7 +335,7 @@ packages_brew:
   - zoxide
   - shellcheck
   - shfmt
-  - python3
+  - python3  # Xcode CLT python3 lags Apple release cadence; needed for pipx toolchain
   - pipx  # needed for yamllint + ansible-lint pinned installs (cycle-41b moved these from brew to pipx)
   - gh
   - tailscale

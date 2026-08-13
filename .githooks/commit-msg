@@ -72,10 +72,12 @@ if ! grep -q '^Signed-off-by:' "$1"; then
 fi
 
 # Run commitlint for remaining rules (body blank line, etc.)
-if command -v npx >/dev/null 2>&1 && [ -x "./node_modules/.bin/commitlint" ]; then
-  npx --no -- commitlint --edit "$1"
-elif command -v npx >/dev/null 2>&1; then
-  echo "WARNING: commitlint not installed — run: make bootstrap" >&2
+if command -v npx >/dev/null 2>&1; then
+  if [ -x "./node_modules/.bin/commitlint" ]; then
+    npx --no -- commitlint --edit "$1"
+  else
+    echo "WARNING: commitlint not installed — run: make bootstrap" >&2
+  fi
 else
   echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
 fi

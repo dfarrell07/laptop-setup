@@ -194,7 +194,7 @@
     - item.stdout | default('') | trim != vars[item.item.var] | string
   changed_when: _chage_set_result.rc == 0
   failed_when: false
-  loop: "{{ system_chage_fields.results }}"
+  loop: "{{ system_chage_fields.results | default([]) }}"
   loop_control:
     label: "{{ item.item.cis }}"
 

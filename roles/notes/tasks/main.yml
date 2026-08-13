@@ -40,8 +40,8 @@
       failed_when: false
       changed_when: notes_lfs_install_result.rc == 0
       when:
-        - notes_lfs_configured.rc | default(-1) != 0
         - notes_lfs_check.rc == 0
+        - notes_lfs_configured.rc | default(-1) != 0
 
     - name: Warn if git-lfs filter registration failed
       ansible.builtin.debug:
@@ -61,6 +61,7 @@
             dest: "{{ notes_repo_path }}"
             accept_hostkey: true
             update: false  # Never auto-pull: transcrypt init required first; do not overwrite plaintext working tree
+            depth: 1
           environment:
             GIT_TERMINAL_PROMPT: "0"
           timeout: 60
@@ -71,11 +72,12 @@
               SSH clone of notes repo failed (is your SSH key loaded?). Trying HTTPS
               fallback — push and signed commits will still require SSH.
 
-        - name: Clone notes repo via HTTPS (SSH fallback)
+        - name: "Clone notes repo via HTTPS (fallback: SSH clone failed)"
           ansible.builtin.git:  # noqa: latest[git]
             repo: "{{ notes_remote_url_https }}"
             dest: "{{ notes_repo_path }}"
             update: false  # Never auto-pull: transcrypt init required first; do not overwrite plaintext working tree
+            depth: 1
           environment:
             GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make all
           failed_when: false

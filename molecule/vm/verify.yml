@@ -20,7 +20,6 @@
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
         system_disable_bluetooth: true       # converge.yml sets this; enables BT masking + blacklist assertions
-        go_tools_installed: false            # converge.yml sets packages_go_install: []; skip golangci-lint verify
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
         system_tmout: 600                    # matches default; parameterizes TMOUT session-timeout assertions
@@ -137,16 +136,6 @@
         fail_msg: "rpmfusion-nonfree repo not configured"
       when: (repo_rpmfusion_nonfree) and ansible_distribution == 'Fedora'
 
-    - name: Check sysctl config contains ptrace scope 1 (group_vars default is 1 (CIS))
-      ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 1' /etc/sysctl.d/90-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sysctl config contains kexec_load_disabled = 1 (group_vars default is 1 (CIS))
-      ansible.builtin.command: grep -q 'kernel.kexec_load_disabled = 1' /etc/sysctl.d/90-hardening.conf
-      changed_when: false
-      become: true
-
     - name: Check sysctl config contains kernel.panic = 0 (workstation default; group_vars default is 0; CIS target is 10)
       ansible.builtin.command: grep -q 'kernel.panic = 0' /etc/sysctl.d/90-hardening.conf
       changed_when: false
@@ -154,11 +143,6 @@
 
     - name: Check sysctl config contains kernel.panic_on_oops = 0 (workstation default; group_vars default is 0; CIS target is 1)
       ansible.builtin.command: grep -q 'kernel.panic_on_oops = 0' /etc/sysctl.d/90-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Check sysctl config contains dmesg restriction
-      ansible.builtin.command: grep -q 'kernel.dmesg_restrict = 1' /etc/sysctl.d/90-hardening.conf
       changed_when: false
       become: true
 

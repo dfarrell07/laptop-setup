@@ -242,9 +242,10 @@ fi
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 [[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+_has_curl=false; command -v curl &>/dev/null && _has_curl=true
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
-  if command -v curl &>/dev/null; then
+  if [[ "$_has_curl" == true ]]; then
     if curl -sSLf --max-time 10 -o /dev/null "$nurl" 2>/dev/null; then
       record "net_${nlabel}" "pass" "$nurl reachable"
     else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
@@ -295,10 +296,16 @@ else
 fi
 
 # --- Transcrypt (for notes repo) ---
+notes_enabled=false
+grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && notes_enabled=true
 if command -v transcrypt &>/dev/null; then
   record "installed_transcrypt" "pass" "$(transcrypt --version 2>&1)"
 else
-  record "installed_transcrypt" "warn" "not installed — needed for encrypted notes repo"
+  if [[ "$notes_enabled" == true ]]; then
+    record "installed_transcrypt" "warn" "not installed — needed for encrypted notes repo"
+  else
+    record "installed_transcrypt" "skip" "not installed — only needed when notes_enabled: true in config.yml"
+  fi
 fi
 
 # --- Sudo scope ---

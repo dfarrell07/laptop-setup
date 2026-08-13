@@ -28,7 +28,7 @@
     - name: Ensure AIDE monitors /usr/local/bin
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/usr/local/bin'
+        regexp: '^/usr/local/bin\s'
         line: '/usr/local/bin NORMAL'
         state: present
       register: _aide_conf_r1
@@ -48,7 +48,7 @@
     - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/etc/tlp\.d'
+        regexp: '^/etc/tlp\.d\s'
         line: '/etc/tlp.d NORMAL'
         insertbefore: '^/etc\s'
         state: present
@@ -58,7 +58,7 @@
     - name: Remove /etc/tlp.d from AIDE monitoring (TLP disabled)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/etc/tlp\.d'
+        regexp: '^/etc/tlp\.d\s'
         state: absent
       when: not system_tlp_enabled | bool
       register: _aide_conf_r3_remove
@@ -84,7 +84,7 @@
     - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/etc/usbguard'
+        regexp: '^/etc/usbguard\s'
         line: '/etc/usbguard NORMAL'
         insertbefore: '^/etc\s'
         state: present
@@ -94,7 +94,7 @@
     - name: Remove /etc/usbguard from AIDE monitoring (USBGuard disabled)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: '^/etc/usbguard'
+        regexp: '^/etc/usbguard\s'
         state: absent
       when: not system_install_usbguard | bool
       register: _aide_conf_r5_remove

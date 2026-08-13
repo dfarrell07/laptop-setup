@@ -647,17 +647,17 @@ fi
 # File is 0644 root-owned; no elevated privilege required. Guard makes this a
 # no-op on macOS and Debian containers where the file is absent.
 if [[ -f /etc/kernel/cmdline ]]; then
-  _kcmd=$(cat /etc/kernel/cmdline)
+  _kcmd=$(<"/etc/kernel/cmdline")
   _kcmd_ok=true
-  echo "$_kcmd" | grep -q "vsyscall=none"       || _kcmd_ok=false
-  echo "$_kcmd" | grep -q "page_alloc.shuffle=1" || _kcmd_ok=false
-  echo "$_kcmd" | grep -q "init_on_free=1"       || _kcmd_ok=false
+  [[ "$_kcmd" == *"vsyscall=none"* ]]       || _kcmd_ok=false
+  [[ "$_kcmd" == *"page_alloc.shuffle=1"* ]] || _kcmd_ok=false
+  [[ "$_kcmd" == *"init_on_free=1"* ]]       || _kcmd_ok=false
   if grep -q "AuthenticAMD" /proc/cpuinfo 2>/dev/null; then
-    echo "$_kcmd" | grep -q "amd_iommu=on"       || _kcmd_ok=false
+    [[ "$_kcmd" == *"amd_iommu=on"* ]]       || _kcmd_ok=false
   elif grep -q "GenuineIntel" /proc/cpuinfo 2>/dev/null; then
-    echo "$_kcmd" | grep -q "intel_iommu=on"     || _kcmd_ok=false
+    [[ "$_kcmd" == *"intel_iommu=on"* ]]     || _kcmd_ok=false
   fi
-  grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { echo "$_kcmd" | grep -q "iommu=pt" || _kcmd_ok=false; }
+  grep -q 'iommu=pt' /proc/cmdline 2>/dev/null && { [[ "$_kcmd" == *"iommu=pt"* ]] || _kcmd_ok=false; }
   if $_kcmd_ok; then record "kernel-cmdline" "PASS"
   else record "kernel-cmdline" "FAIL" "security params missing from /etc/kernel/cmdline — new kernels may lack hardening"; fi
   unset _kcmd _kcmd_ok

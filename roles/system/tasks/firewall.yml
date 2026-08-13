@@ -56,7 +56,7 @@
   vars:
     # wg=WireGuard; wt=wg-quick wt0 alias (Mullvad/custom WireGuard profiles)
     _excl_re: "^(lo|tailscale\\d*|tun.*|w[gt].*|virbr.*|podman.*|cni.*\
-      |br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system|vxlan.*)$"
+      |br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system|vxlan.*|cali.*|lxc.*|cilium.*|flannel.*)$"
   loop: "{{ ansible_facts['interfaces'] | default([]) | reject('match', _excl_re) | list }}"
   when:
     - system_firewalld_running | bool
