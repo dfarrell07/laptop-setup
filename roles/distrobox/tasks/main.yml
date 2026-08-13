@@ -133,6 +133,14 @@
     - distrobox_use_distrobox | bool
     - not (fapolicyd_enforcing)
 
+- name: Remove stale distrobox.ini when not using distrobox
+  ansible.builtin.file:
+    path: "{{ distrobox_ini_path }}"
+    state: absent
+  when:
+    - not (distrobox_use_distrobox | bool)
+    - is_linux
+
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool

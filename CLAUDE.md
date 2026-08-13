@@ -173,7 +173,7 @@ make repos-downstream # downstream repos only
   `Dotfiles`, `Ssh`, `Git-repos`, `Notes`, `Redhat`, `Containers`, `Desktop`,
   `System`, `Distrobox`, `Claude`, `Ci`, `Docs`, `Chore`, `Smoke`, `Molecule`,
   `Multi`, `Sshd`, `Nm`, `Auditd`, `Backup`, `Handlers`, `Security`,
-  `Vault`, `Preflight`
+  `Vault`, `Preflight`, `Simplify`
 
 ## Vault
 

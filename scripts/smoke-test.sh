@@ -49,8 +49,8 @@ _system_umask=$(grep -oP '^system_umask:[[:space:]]*["'"'"']?\K[0-9]+' "$_cfg" 2
 _system_umask="${_system_umask:-027}"
 _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true' "$_cfg" 2>/dev/null && _notes_enabled=true
+_cfg_ssh_port=$(grep -oP '^ssh_port:[[:space:]]*\K[0-9]+' "$_cfg" 2>/dev/null || echo "722")
 unset _cfg
-_cfg_ssh_port=$(grep -oP '^ssh_port:[[:space:]]*\K[0-9]+' "$SCRIPT_DIR/../config.yml" 2>/dev/null || echo "722")
 
 run() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
@@ -303,8 +303,10 @@ if command -v sway &>/dev/null; then
 fi
 
 # vimrc quality (termguicolors + background=dark for correct colors)
-if grep -q 'termguicolors' "$HOME/.vimrc" 2>/dev/null; then record "vimrc-termguicolors" "PASS"
-else record "vimrc-termguicolors" "WARN" "termguicolors not set in ~/.vimrc — 24-bit colors disabled"; fi
+if command -v vim &>/dev/null; then
+  if grep -q 'termguicolors' "$HOME/.vimrc" 2>/dev/null; then record "vimrc-termguicolors" "PASS"
+  else record "vimrc-termguicolors" "WARN" "termguicolors not set in ~/.vimrc — 24-bit colors disabled"; fi
+fi
 
 # ~/tmp must exist and allow exec (GOTMPDIR — go test compiles binaries here, /tmp is noexec)
 if [[ ! -d "$HOME/tmp" ]]; then

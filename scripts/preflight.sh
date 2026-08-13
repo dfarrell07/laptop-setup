@@ -110,6 +110,8 @@ for tool in ansible-playbook git python3 curl make ssh; do
       else
         record "required_${tool}" "fail" "not installed — install make first (see required_make), then run: make bootstrap"
       fi
+    else
+      record "required_${tool}" "fail" "not installed — run: make bootstrap to add this tool"
     fi
   fi
 done
@@ -286,7 +288,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true
-      pl=$(awk -F= '/^pipelining/{gsub(/ /,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+      pl=$(awk -F= '/^\[/{section=$0} /^pipelining/ && section ~ /\[defaults\]/{gsub(/ /,"",$2); print $2}' "$SCRIPT_DIR/../ansible.cfg" 2>/dev/null | tr '[:upper:]' '[:lower:]')
       pl=${pl:-not configured}
       if [[ "$pl" == "true" ]]; then
         record "fapolicyd" "warn" "active and enforcing — mitigated by pipelining=true in ansible.cfg"

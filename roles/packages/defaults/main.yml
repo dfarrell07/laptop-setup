@@ -358,17 +358,17 @@ packages_brew_personal: []
 
 packages_brew_work:
   - golang
-  - kubectl
-  - kind
-  - helm
-  - kustomize
+  - kubectl    # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - kind       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - helm       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - kustomize  # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - socat
   - nmap
   - transcrypt  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_transcrypt_version pin
   - sops  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_sops_version pin
   - iperf3
   - tshark  # CLI-only formula; mirrors packages_networking_work wireshark-cli (no Qt GUI libs)
-  - k9s
+  - k9s   # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - krew
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin

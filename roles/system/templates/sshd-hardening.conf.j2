@@ -14,7 +14,7 @@ Banner /etc/issue.net
 PasswordAuthentication no
 KbdInteractiveAuthentication no  # 50-redhat.conf also sets this to no; explicit for first-occurrence guard against upstream changes
 PermitRootLogin no
-PermitEmptyPasswords no  # OpenSSH compiled default; explicit for first-occurrence guard
+PermitEmptyPasswords no  # OpenSSH compiled default; made explicit for auditability (50-redhat.conf does not set this)
 HostKeyAlgorithms {{ ssh_host_key_algorithms }}
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | join(',') }}  # ed25519 and FIDO2 only; RSA/ECDSA user keys rejected
 AuthorizedKeysFile .ssh/authorized_keys  # matches main sshd_config; guards against rpmnew replacing that setting; default still includes .ssh/authorized_keys2 as of OpenSSH 10.x; explicit single-file list removes the deprecated second path
@@ -27,14 +27,15 @@ LoginGraceTime 30
 X11Forwarding no  # overrides 50-redhat.conf (sets yes)
 AllowAgentForwarding {{ system_ssh_allow_agent_forwarding }}
 AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}
+# NOTE: AcceptEnv is cumulative in sshd — 50-redhat.conf AcceptEnv COLORTERM cannot be
+# overridden from this file regardless of drop-in order. COLORTERM forwarding is always active.
 
 ClientAliveInterval 300
 ClientAliveCountMax 2
 # ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
 # Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
-# OpenSSH 10.3 (bz3827) fixed UnusedConnectionTimeout firing prematurely after a
-# ChannelTimeout; standard ssh(1) clients are unaffected (they exit when all channels
-# close), but API-style clients on OpenSSH < 10.3 may disconnect prematurely.
+# NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed
+# UnusedConnectionTimeout firing prematurely; API-style clients on OpenSSH < 10.3 may disconnect early.
 # To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
 {% if system_ssh_channel_timeout != '' %}
 ChannelTimeout {{ system_ssh_channel_timeout }}

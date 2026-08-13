@@ -65,6 +65,13 @@
           This may be a transient network error or a missing cask.
           Continuing playbook execution.
 
+- name: Remind user to approve LuLu system extension
+  ansible.builtin.debug:
+    msg: >-
+      LuLu installed. Open System Settings > Privacy & Security > System Extensions
+      and approve LuLu to activate the application firewall.
+  when: is_macos
+
 - name: Install ssh-askpass (macOS)
   when: is_macos
   block:

@@ -86,7 +86,7 @@
               - --no-same-owner
               - oc
               - kubectl
-          when: packages_oc_download.changed or packages_oc_check.rc != 0
+          when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
           become: true
           tags: [become]
 
@@ -95,7 +95,7 @@
             path: "/usr/local/bin/{{ item }}"
             mode: "0755"
           loop: [oc, kubectl]
-          when: packages_oc_download.changed or packages_oc_check.rc != 0
+          when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
           become: true
           tags: [become]
 

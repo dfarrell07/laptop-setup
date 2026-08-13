@@ -1,12 +1,5 @@
 ---
 # --- NetworkManager Tailscale unmanaged ---
-- name: Ensure NetworkManager conf.d exists
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d
-    state: directory
-    mode: "0755"
-  when: not system_is_container  # NM watches conf.d via inotify; creating dir triggers NM reload, can crash container
-
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
 # authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
 # break corporate WiFi auth. Skip on CSB (default) and rely on IT's NM configuration.

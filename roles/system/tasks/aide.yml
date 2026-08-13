@@ -192,6 +192,12 @@
         - not (system_aide_db.stat.exists | default(false))
       changed_when: true
 
+    - name: Remove stale aide.db.new.gz when active DB exists
+      ansible.builtin.file:
+        path: /var/lib/aide/aide.db.new.gz
+        state: absent
+      when: system_aide_db.stat.exists | default(false)
+
     # Reached only when aide.conf is already fully configured (zero lineinfile changes above) but no DB exists.
     # Normal first provisions reach this via the _aide_conf_changed=true reinit path at line 159 instead.
     - name: Initialize AIDE database (first run only)

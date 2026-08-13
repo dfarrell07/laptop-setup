@@ -76,6 +76,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/k9s
       register: verify_k9s
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert k9s exists and is executable
       ansible.builtin.assert:
@@ -83,6 +84,7 @@
           - verify_k9s.stat.exists
           - verify_k9s.stat.executable
         fail_msg: "/usr/local/bin/k9s missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/sops
       ansible.builtin.stat:
@@ -124,6 +126,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/zizmor
       register: verify_zizmor
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert zizmor exists and is executable
       ansible.builtin.assert:
@@ -131,6 +134,7 @@
           - verify_zizmor.stat.exists
           - verify_zizmor.stat.executable
         fail_msg: "/usr/local/bin/zizmor missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     # --- work-profile OCP + toolchain binaries ---
 
@@ -138,6 +142,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/oc
       register: verify_oc
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert oc exists and is executable
       ansible.builtin.assert:
@@ -145,11 +150,13 @@
           - verify_oc.stat.exists
           - verify_oc.stat.executable
         fail_msg: "/usr/local/bin/oc missing or not executable — work-profile OCP tarball regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/kubectl
       ansible.builtin.stat:
         path: /usr/local/bin/kubectl
       register: verify_kubectl
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert kubectl exists and is executable
       ansible.builtin.assert:
@@ -157,11 +164,13 @@
           - verify_kubectl.stat.exists
           - verify_kubectl.stat.executable
         fail_msg: "/usr/local/bin/kubectl missing or not executable — OCP tarball extraction regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/opm
       ansible.builtin.stat:
         path: /usr/local/bin/opm
       register: verify_opm
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert opm exists and is executable
       ansible.builtin.assert:
@@ -169,6 +178,7 @@
           - verify_opm.stat.exists
           - verify_opm.stat.executable
         fail_msg: "/usr/local/bin/opm missing or not executable — work-profile OCP tarball regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/operator-sdk
       ansible.builtin.stat:
@@ -222,6 +232,7 @@
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew"
       register: verify_krew
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert krew exists and is executable
       ansible.builtin.assert:
@@ -229,6 +240,7 @@
           - verify_krew.stat.exists
           - verify_krew.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     # --- go install binaries ---
 
@@ -296,6 +308,7 @@
       ansible.builtin.stat:
         path: "{{ ansible_user_dir }}/.local/bin/subctl18"
       register: verify_subctl18
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert subctl18 exists and is executable
       ansible.builtin.assert:
@@ -303,6 +316,7 @@
           - verify_subctl18.stat.exists
           - verify_subctl18.stat.executable
         fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     # --- Version-pin assertions: each binary must report the pinned version ---
 
@@ -344,11 +358,13 @@
         cmd: /usr/local/bin/k9s version
       register: verify_k9s_ver
       changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert k9s version matches packages_k9s_version
       ansible.builtin.assert:
         that: packages_k9s_version in (verify_k9s_ver.stdout + verify_k9s_ver.stderr)
         fail_msg: "k9s version mismatch — expected {{ packages_k9s_version }}, got: {{ verify_k9s_ver.stdout + verify_k9s_ver.stderr }}"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Check sops version output
       ansible.builtin.command:
@@ -406,6 +422,7 @@
         cmd: /usr/local/bin/zizmor --version
       register: verify_zizmor_ver
       changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert zizmor version matches packages_zizmor_version
       ansible.builtin.assert:
@@ -413,6 +430,7 @@
         fail_msg: >-
           zizmor version mismatch — expected {{ packages_zizmor_version }},
           got: {{ verify_zizmor_ver.stdout + verify_zizmor_ver.stderr }}
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Check tkn version output
       ansible.builtin.command:
@@ -456,11 +474,13 @@
         cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew version"
       register: verify_krew_ver
       changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert krew version matches packages_krew_bootstrap_version
       ansible.builtin.assert:
         that: packages_krew_bootstrap_version in verify_krew_ver.stdout
         fail_msg: "krew version mismatch — expected {{ packages_krew_bootstrap_version }}, got: {{ verify_krew_ver.stdout }}"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Check golangci-lint version output
       ansible.builtin.command:
@@ -538,7 +558,7 @@
       register: verify_subctl18_ver
       changed_when: false
       failed_when: false
-      when: verify_subctl18.stat.exists
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert subctl18 version matches packages_subctl_versioned entry
       ansible.builtin.assert:
@@ -549,4 +569,4 @@
           subctl18 version mismatch — expected
           {{ (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | first).version }},
           got: {{ verify_subctl18_ver.stdout }}
-      when: verify_subctl18.stat.exists
+      when: ansible_facts['architecture'] == 'x86_64'

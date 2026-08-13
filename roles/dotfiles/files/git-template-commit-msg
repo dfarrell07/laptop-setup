@@ -40,9 +40,14 @@ if _bad_word "$desc_first"; then
   echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
   exit 1
 fi
-if [ "$desc_first" != "$first" ] && _bad_word "$first"; then
-  echo "ERROR: Scope word '$first' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
-  exit 1
+if [ "$desc_first" != "$first" ]; then
+  IFS='/' read -ra _scope_parts <<< "$first"
+  for _part in "${_scope_parts[@]}"; do
+    if _bad_word "$_part"; then
+      echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
+      exit 1
+    fi
+  done
 fi
 
 len=$(printf '%s' "$msg" | wc -m)

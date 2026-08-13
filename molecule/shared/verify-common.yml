@@ -1003,7 +1003,7 @@
     - not (system_is_container | default(false))
 
 - name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
-  ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file }}' /etc/audit/auditd.conf
+  ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file | default(8) }}' /etc/audit/auditd.conf
   changed_when: false
   become: true
   when:
