@@ -267,4 +267,4 @@
       Container tier     : {{ needs_container_tier }}
       ================================
   become: false
-  when: not (_csb_molecule_force | default(false))
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)

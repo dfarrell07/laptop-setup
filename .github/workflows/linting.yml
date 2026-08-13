@@ -305,7 +305,6 @@ jobs:
 
       - name: Check for known vulnerabilities
         id: npm_audit
-        if: always()
         continue-on-error: true
         run: npm audit --audit-level=moderate
 
@@ -357,6 +356,7 @@ jobs:
           persist-credentials: false
 
       - name: Download actionlint  # Last bumped: 2026-08-05; check https://github.com/rhysd/actionlint/releases
+        continue-on-error: true
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
@@ -367,6 +367,7 @@ jobs:
 
       - name: Run actionlint
         id: actionlint
+        if: always()
         continue-on-error: true
         run: ./actionlint -color
 

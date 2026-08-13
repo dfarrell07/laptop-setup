@@ -86,7 +86,8 @@ system_sysctl_hardening:
   # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
   # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
   # Behaviorally inert in default config (no SLAAC addresses, so no temporary addresses generated);
-  # pre-set here so enabling SLAAC via system_ipv6_accept_ra: 2 activates privacy extensions without re-provisioning.
+  # pre-set here so that running make all once (to set system_ipv6_accept_ra: 2)
+  # simultaneously activates both SLAAC and privacy extensions without a second pass.
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
 

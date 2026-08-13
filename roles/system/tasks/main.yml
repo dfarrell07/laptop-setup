@@ -65,6 +65,7 @@
 
 - name: DNS-over-TLS
   ansible.builtin.import_tasks: dns_over_tls.yml
+  when: not system_is_container
 
 # --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
 - name: "Session timeout"

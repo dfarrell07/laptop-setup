@@ -61,7 +61,7 @@
       subuid/subgid missing for {{ ansible_facts['user_id'] }}.
       Rootless podman will fail. The system role provisions these entries;
       run 'make system' as root to fix, or manually:
-      sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ ansible_facts['user_id'] }}
+      echo "{{ ansible_facts['user_id'] }}:165536:165536" | sudo tee -a /etc/subuid /etc/subgid
   when:
     - distrobox_tool != 'none'
     - (distrobox_subuid_check.rc != 0) or (distrobox_subgid_check.rc != 0)

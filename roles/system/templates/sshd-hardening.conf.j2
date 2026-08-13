@@ -36,7 +36,7 @@ ClientAliveCountMax 2
 # Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
 # NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed
 # UnusedConnectionTimeout firing prematurely; API-style clients on OpenSSH < 10.3 may disconnect early.
-# To re-enable: set system_ssh_channel_timeout (e.g. "global 1h") in config.yml once all targets run OpenSSH >= 10.3.
+# Default: disabled (system_ssh_channel_timeout: ""); set e.g. "global 1h" in config.yml once all targets run OpenSSH >= 10.3.
 {% if system_ssh_channel_timeout %}
 ChannelTimeout {{ system_ssh_channel_timeout }}
 {% endif %}

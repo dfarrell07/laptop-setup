@@ -83,13 +83,17 @@ _sysctl_check() {
 
 # SSH auth to GitHub (bypass run() — host SSH keys and agent are not forwarded into the container; run() would use container key material and always fail)
 _ssh_ret=0
-timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
-if [[ "$_ssh_ret" -eq 1 ]]; then
-  record "github-ssh-auth" "PASS"
-elif [[ "$_ssh_ret" -eq 124 ]]; then
-  record "github-ssh-auth" "WARN" "ssh timed out after 10s — network slow or github.com unreachable; auth status unknown"
+if ! command -v timeout &>/dev/null; then
+  record "github-ssh-auth" "WARN" "timeout not available (install gnu-coreutils on macOS) — skipping GitHub SSH auth check"
 else
-  record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
+  timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
+  if [[ "$_ssh_ret" -eq 1 ]]; then
+    record "github-ssh-auth" "PASS"
+  elif [[ "$_ssh_ret" -eq 124 ]]; then
+    record "github-ssh-auth" "WARN" "ssh timed out after 10s — network slow or github.com unreachable; auth status unknown"
+  else
+    record "github-ssh-auth" "WARN" "ssh auth unconfirmed (exit $_ssh_ret)"
+  fi
 fi
 unset _ssh_ret
 
@@ -192,7 +196,7 @@ elif run tailscale status &>/dev/null; then record "tailscale" "PASS"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
-_ssh_add_rc=0; _ssh_add_out=$(ssh-add -L 2>&1) || _ssh_add_rc=$?
+_ssh_add_rc=0; _ssh_add_out=$(ssh-add -L 2>/dev/null) || _ssh_add_rc=$?
 if [[ "$_ssh_add_out" == *sk-ssh-ed25519* ]]; then record "ssh-agent-key" "PASS"
 elif [[ "$_ssh_add_rc" -eq 2 ]]; then
   record "ssh-agent-key" "WARN" "ssh-agent socket unreachable (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-<unset>} — log out and back in)"

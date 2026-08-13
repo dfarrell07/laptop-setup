@@ -59,6 +59,7 @@
       when: _pf_is_molecule is not defined
       tags: [always]
 
+    # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
     - name: Assert config.yml vault and secret-key constraints
       when: _user_config is defined and _pf_vault_asserted is not defined
       block:
