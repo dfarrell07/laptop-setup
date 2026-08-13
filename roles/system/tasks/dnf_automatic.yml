@@ -51,6 +51,7 @@
     - not system_is_container
   failed_when: false
 
+# NOTE: aide_cleanup.yml removes this drop-in when system_aide_enabled=false
 - name: Deploy AIDE update hook for dnf-automatic
   ansible.builtin.copy:
     # yamllint disable rule:line-length

@@ -32,6 +32,7 @@ record() {
       pass) printf "${GRN}[PASS]${NC} %s\n" "$name" ;;
       fail) FAILURES=$((FAILURES+1)); printf "${RED}[FAIL]${NC} %s — %s\n" "$name" "$detail" ;;
       warn|skip) printf "${YLW}[%s]${NC} %s — %s\n" "${status^^}" "$name" "$detail" ;;
+      *) printf "${RED}[BUG]${NC} unknown status '%s' for check '%s'\n" "$status" "$name" >&2; exit 99 ;;
     esac
   else [[ "$status" == "fail" ]] && FAILURES=$((FAILURES+1)) || true; fi
 }
@@ -80,7 +81,13 @@ if [[ -z "$PROFILE" ]]; then
   PROFILE="work"  # default matches default.config.yml; overridden by macOS detection or config.yml profile: line below
   [[ "$OS_FAMILY" == "darwin" ]] && PROFILE="personal"
   # Apply config.yml profile override in both directions
-  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=work; elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then PROFILE=personal; elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then record "config_profile" "warn" "unrecognized profile value in config.yml — using default: $PROFILE"; fi
+  if grep -qE '^profile:[[:space:]]*["'"'"']?work["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+    PROFILE=work
+  elif grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null; then
+    PROFILE=personal
+  elif grep -qE '^profile:[[:space:]]' "$CONFIG_FILE" 2>/dev/null; then
+    record "config_profile" "warn" "unrecognized profile value in config.yml — using default: $PROFILE"
+  fi
 fi
 
 # --- Required tools ---

@@ -264,7 +264,9 @@ system_enable_ip_forward: true  # set false on terminal-only hosts without Kuber
 # WARNING: system_sysctl_extra is applied second-to-last; system_sysctl_extra_additional (below) has
 # higher precedence and silently overrides any matching key in system_sysctl_hardening. Do not set
 # these security-critical keys here without intent:
-# kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, net.ipv4.conf.all.rp_filter, fs.suid_dumpable.
+# kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, fs.suid_dumpable,
+# net.ipv4.conf.all.rp_filter (ceiling effect: per-iface strict=1 is silently promoted to
+# loose=2 by all.rp_filter=2; lower all.rp_filter to 0 or 1 here to achieve strict mode).
 # Also avoid these dynamically-merged keys (assembled via set_fact in sysctl.yml before the combine
 # chain applies system_sysctl_extra then system_sysctl_extra_additional); setting any of them in
 # system_sysctl_extra_additional silently overrides the corresponding toggle variable and creates an

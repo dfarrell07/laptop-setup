@@ -533,7 +533,11 @@
     that:
       - verify_cron_allow.stat.exists
       - verify_cron_allow.stat.mode == '0600'
-    fail_msg: "/etc/cron.allow missing or wrong permissions"
+    fail_msg: >-
+      /etc/cron.allow missing or wrong mode
+      (exists={{ verify_cron_allow.stat.exists | default(false) }},
+      got={{ verify_cron_allow.stat.mode | default('absent') }},
+      expected 0600)
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
@@ -569,7 +573,11 @@
     that:
       - verify_at_allow.stat.exists
       - verify_at_allow.stat.mode == '0600'
-    fail_msg: "/etc/at.allow missing or wrong permissions"
+    fail_msg: >-
+      /etc/at.allow missing or wrong mode
+      (exists={{ verify_at_allow.stat.exists | default(false) }},
+      got={{ verify_at_allow.stat.mode | default('absent') }},
+      expected 0600)
   when:
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))

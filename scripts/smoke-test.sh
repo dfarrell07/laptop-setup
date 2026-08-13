@@ -522,8 +522,7 @@ for _hook in pre-commit commit-msg prepare-commit-msg pre-push; do
 done
 
 if command -v git-lfs &>/dev/null; then
-  lfs_smudge=$(git config --global filter.lfs.smudge 2>/dev/null || echo "")
-  if [[ -n "$lfs_smudge" ]]; then record "git-lfs-filter" "PASS"
+  if git config --global filter.lfs.smudge &>/dev/null; then record "git-lfs-filter" "PASS"
   else record "git-lfs-filter" "FAIL" "filter.lfs.smudge not in global gitconfig — git lfs install --skip-repo has not run; run: make repos"; fi
 fi
 

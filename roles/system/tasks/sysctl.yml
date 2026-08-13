@@ -26,6 +26,24 @@
         group: root
         mode: "0755"
 
+    - name: Set shared toggle-key list for sysctl assert tasks
+      ansible.builtin.set_fact:
+        _toggle_keys_shared:
+          - net.ipv4.ip_forward
+          - net.ipv6.conf.all.forwarding
+          - kernel.yama.ptrace_scope
+          - kernel.kexec_load_disabled
+          - kernel.io_uring_disabled
+          - kernel.sysrq
+          - kernel.core_pattern
+          - kernel.panic
+          - kernel.panic_on_oops
+          - kernel.unprivileged_bpf_disabled
+          - net.core.bpf_jit_harden
+          - net.ipv6.conf.all.accept_ra
+          - net.ipv6.conf.default.accept_ra
+          - kernel.perf_event_paranoid
+
     - name: Assert no toggle-managed sysctl keys in system_sysctl_extra
       ansible.builtin.assert:
         that:
@@ -49,21 +67,7 @@
           net.ipv6.conf.default.accept_ra),
           system_perf_event_paranoid (kernel.perf_event_paranoid).
       vars:
-        _toggle_keys:
-          - net.ipv4.ip_forward
-          - net.ipv6.conf.all.forwarding
-          - kernel.yama.ptrace_scope
-          - kernel.kexec_load_disabled
-          - kernel.io_uring_disabled
-          - kernel.sysrq
-          - kernel.core_pattern
-          - kernel.panic
-          - kernel.panic_on_oops
-          - kernel.unprivileged_bpf_disabled
-          - net.core.bpf_jit_harden
-          - net.ipv6.conf.all.accept_ra
-          - net.ipv6.conf.default.accept_ra
-          - kernel.perf_event_paranoid
+        _toggle_keys: "{{ _toggle_keys_shared }}"
         _dict: "{{ system_sysctl_extra }}"
 
     - name: Assert no toggle-managed sysctl keys in system_sysctl_extra_additional
@@ -89,21 +93,7 @@
           net.ipv6.conf.default.accept_ra),
           system_perf_event_paranoid (kernel.perf_event_paranoid).
       vars:
-        _toggle_keys:
-          - net.ipv4.ip_forward
-          - net.ipv6.conf.all.forwarding
-          - kernel.yama.ptrace_scope
-          - kernel.kexec_load_disabled
-          - kernel.io_uring_disabled
-          - kernel.sysrq
-          - kernel.core_pattern
-          - kernel.panic
-          - kernel.panic_on_oops
-          - kernel.unprivileged_bpf_disabled
-          - net.core.bpf_jit_harden
-          - net.ipv6.conf.all.accept_ra
-          - net.ipv6.conf.default.accept_ra
-          - kernel.perf_event_paranoid
+        _toggle_keys: "{{ _toggle_keys_shared }}"
         _dict: "{{ system_sysctl_extra_additional }}"
 
     - name: Merge configurable sysctl values into hardening dict

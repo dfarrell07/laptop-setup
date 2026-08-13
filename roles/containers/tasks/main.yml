@@ -90,6 +90,7 @@
   when:
     - is_linux
     - registry_tokens | length > 0
+    - not ansible_check_mode
     - item.rc != 0 or (item.stdout | trim) != item.item.username
 
 - name: Set auth.json permissions after vault auth

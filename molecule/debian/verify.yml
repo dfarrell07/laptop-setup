@@ -17,6 +17,7 @@
         profile: personal
         dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches ci-default-vars.yml value; not re-loaded in verify phase
         real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # converge sets this; re-state so verify-claude-queue.yml assertions execute
 
   tasks:
     # --- Shared assertions (all platforms) ---

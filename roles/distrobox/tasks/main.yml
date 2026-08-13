@@ -142,6 +142,17 @@
     - distrobox_check.rc != 0
     - is_linux
 
+- name: Warn before destroying existing container when container_replace is true
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
+      The existing container will be destroyed and rebuilt. Remove container_replace from config.yml
+      after this run to prevent destruction on every subsequent 'make all' or 'make distrobox' run.
+  when:
+    - distrobox_use_distrobox | bool
+    - distrobox_container_replace | bool
+    - distrobox_container_exists.rc == 0
+
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
