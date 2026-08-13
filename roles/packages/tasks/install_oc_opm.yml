@@ -104,7 +104,6 @@
       loop: [oc, kubectl]
       become: true
       tags: [become]
-      when: packages_oc_download is defined
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)

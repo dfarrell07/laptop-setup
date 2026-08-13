@@ -44,6 +44,10 @@
     - name: Include containers.conf assertions
       ansible.builtin.import_tasks: ../shared/verify-containers.yml
 
+    # --- Claude task queue (converge sets claude_queue_enabled: true) ---
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
+
     # CI gap: all PAM assertions below are gated on not system_is_container; Debian Podman CI sets
     # system_is_container=true so zero assertions run — make test-vm exercises these checks.
     # --- PAM faillock (Debian) ---

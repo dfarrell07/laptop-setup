@@ -78,7 +78,7 @@
       ### {{ loop.index }}. {{ failure.task }}
       - **Role:** {{ failure.role }}
       - **Time:** {{ failure.timestamp }}
-      - **Error:** {{ failure.error }}
+      - **Error:** {{ failure.error | truncate(300) }}
       - **Suggested action:** {{ failure.suggested_action }}
 
       {% endfor %}

@@ -1752,7 +1752,12 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
       fi
     else record "$_label" "FAIL" "$_key=$_val expected 1"; fi
   done
-  _sysctl_check "net.ipv6.conf.all.forwarding"       "1" "sysctl-ipv6-forwarding"
+  _ipv6_fwd_expected=$(awk -F' *= *' '/^net\.ipv6\.conf\.all\.forwarding/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
+  if [[ -n "$_ipv6_fwd_expected" ]]; then
+    _sysctl_check "net.ipv6.conf.all.forwarding" "$_ipv6_fwd_expected" "sysctl-ipv6-forwarding"
+  else
+    record "sysctl-ipv6-forwarding" "WARN" "net.ipv6.conf.all.forwarding not in 90-hardening.conf (system_enable_ip_forward: false — IPv6 forwarding not expected)"
+  fi
 
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"

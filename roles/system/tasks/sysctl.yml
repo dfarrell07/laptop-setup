@@ -131,3 +131,5 @@
         dest: /etc/sysctl.d/90-hardening.conf
         mode: "0644"
       notify: Apply sysctl
+      # EPERM for kernel.unprivileged_bpf_disabled (write-locked on Fedora 44) is
+      # tolerated in the handler's failed_when (handlers/main.yml).

@@ -30,7 +30,10 @@ jobs:
       - name: Run ansible-lint
         run: ansible-lint
 
-  vars-sync:
+      - name: Run yamllint
+        run: yamllint --strict .
+
+  check-vars-sync:
     name: Vars Sync Check
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -49,9 +52,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements-test.lock
-
-      - name: Run yamllint
-        run: yamllint --strict .
 
       - name: Check vars sync
         run: python3 scripts/check-vars-sync.py
@@ -390,7 +390,7 @@ jobs:
             failed=1
           fi
           if [ "${{ steps.zizmor_download.outcome }}" != "success" ]; then
-            echo "zizmor download failed or was skipped"
+            echo "zizmor download failed"
             failed=1
           fi
           if [ "${{ steps.zizmor_download.outcome }}" = "success" ] && [ "${{ steps.zizmor.outcome }}" != "success" ]; then
@@ -406,7 +406,7 @@ jobs:
     if: always()
     needs:
       - ansible-lint
-      - vars-sync
+      - check-vars-sync
       - shell-checks
       - vault-encryption
       - syntax-check
