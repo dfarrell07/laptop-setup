@@ -34,9 +34,9 @@ elif [ -x ".venv/bin/yamllint" ]; then
   YAMLLINT=".venv/bin/yamllint"
 fi
 if [ -n "$YAMLLINT" ]; then
-  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml')
-  if [ -n "$yaml_files" ]; then
-    if ! echo "$yaml_files" | xargs "$YAMLLINT" --strict; then
+  mapfile -d '' yaml_files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml')
+  if (( ${#yaml_files[@]} > 0 )); then
+    if ! "$YAMLLINT" --strict "${yaml_files[@]}"; then
       failed=1
     fi
   fi
@@ -46,9 +46,9 @@ fi
 
 # Shell lint staged scripts
 if command -v shellcheck >/dev/null 2>&1; then
-  sh_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
-  if [ -n "$sh_files" ]; then
-    if ! echo "$sh_files" | xargs shellcheck -S warning; then
+  mapfile -d '' sh_files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.sh' '.githooks/*' 'roles/dotfiles/files/git-template-pre-commit' 'roles/dotfiles/files/git-template-commit-msg' 'roles/dotfiles/files/git-template-prepare-commit-msg' 'roles/dotfiles/files/git-template-pre-push')
+  if (( ${#sh_files[@]} > 0 )); then
+    if ! shellcheck -S warning "${sh_files[@]}"; then
       failed=1
     fi
   fi

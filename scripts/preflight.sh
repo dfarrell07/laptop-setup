@@ -57,7 +57,7 @@ if [[ "$OS_FAMILY" == "rhel" || "$OS_FAMILY" == "fedora" ]]; then
     [[ -f "/etc/pki/ca-trust/source/anchors/$p" ]] && has_certs=true && break
   done
   # Use list-unit-files (installed) not is-active (running) to match Ansible's csb_detect.yml
-  systemctl list-unit-files fapolicyd.service 2>/dev/null | grep -q 'fapolicyd' && fapolicyd_installed=true
+  systemctl list-unit-files fapolicyd.service &>/dev/null && fapolicyd_installed=true
   if [[ "$IS_RHEL" == true ]]; then
     [[ "$has_certs" == true && "$fapolicyd_installed" == true ]] && IS_CSB=true
   else
@@ -83,7 +83,7 @@ if [[ -z "$PROFILE" ]]; then
   grep -qE '^profile:[[:space:]]*work([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="work"
   grep -qE '^profile:[[:space:]]*personal([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null && PROFILE="personal"
 fi
-record "profile" "pass" "$PROFILE"
+record "profile_detected" "pass" "$PROFILE"
 
 # --- Required tools ---
 for tool in ansible-playbook git python3 curl make ssh; do
@@ -113,13 +113,16 @@ done
 if command -v shellcheck &>/dev/null; then
   record "linttools_shellcheck" "pass" "$(shellcheck --version | head -1)"
 else
-  record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: sudo dnf install ShellCheck or: make bootstrap)"
+  if [[ "$OS_FAMILY" == "darwin" ]]; then
+    record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: brew install shellcheck or: make bootstrap)"
+  else
+    record "linttools_shellcheck" "warn" "not installed — needed for make lint/CI (run: sudo dnf install ShellCheck or: make bootstrap)"
+  fi
 fi
 
 # --- Ansible collections ---
 if command -v ansible-galaxy &>/dev/null; then
   missing_cols=()
-  _galaxy_list=$(ansible-galaxy collection list 2>/dev/null)
   for col in community.general containers.podman ansible.posix; do
     [[ -d "${SCRIPT_DIR}/../collections/ansible_collections/${col//.//}" ]] || missing_cols+=("$col")
   done
@@ -271,7 +274,7 @@ fi
 FAPOLICYD_BLOCKING=false
 if [[ "$OS_FAMILY" != "darwin" ]]; then
   if systemctl is-active fapolicyd &>/dev/null; then
-    if grep -qiP '^permissive\s*=\s*1' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
+    if grep -qiE '^permissive[[:space:]]*=[[:space:]]*1' /etc/fapolicyd/fapolicyd.conf 2>/dev/null; then
       record "fapolicyd" "warn" "active but permissive mode (permissive=1 in config) — /tmp execution allowed"
     else
       FAPOLICYD_BLOCKING=true

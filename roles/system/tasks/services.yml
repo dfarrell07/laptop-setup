@@ -56,10 +56,7 @@
     - install_virtualization | bool
     - not system_is_container
   register: _system_libvirt_group_result
-  failed_when: >-
-    _system_libvirt_group_result is failed and
-    not ('group' in (_system_libvirt_group_result.msg | default('')) and
-    'does not exist' in (_system_libvirt_group_result.msg | default('')))
+  failed_when: false  # best-effort pre-add; packages role (install_virtualization.yml) is authoritative and re-runs after groups exist
   # libvirt/kvm groups are created by package install in Play 2 (packages role).
   # On first provision this task runs in Play 1 before the packages exist — usermod
   # fails with "group does not exist". failed_when: false prevents play abort;

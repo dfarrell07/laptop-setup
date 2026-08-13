@@ -158,9 +158,7 @@
           --file {{ distrobox_ini_path }}
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_create_result
-      changed_when: >-
-        'already exists' not in
-        (distrobox_create_result.stdout + distrobox_create_result.stderr)
+      changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change
   rescue:
     - name: Record distrobox create failure for CSB report
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

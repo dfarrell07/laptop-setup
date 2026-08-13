@@ -143,7 +143,7 @@
 
     - name: Set transcrypt initialized fact
       ansible.builtin.set_fact:
-        notes_transcrypt_inited: "{{ notes_transcrypt_check.rc == 0 }}"
+        notes_transcrypt_inited: "{{ notes_transcrypt_check.rc | default(-1) == 0 }}"
       when:
         - notes_transcrypt_available
 

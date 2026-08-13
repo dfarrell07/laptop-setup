@@ -32,7 +32,7 @@
 
 - name: Assert containers.conf sets pids_limit to 65536
   ansible.builtin.command:
-    cmd: grep -q 'pids_limit = 65536' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+    cmd: grep -q 'pids_limit = {{ containers_pids_limit | default(65536) }}' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
 - name: Assert containers.conf sets default_ulimits for nofile

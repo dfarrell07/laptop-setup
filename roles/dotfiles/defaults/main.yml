@@ -1,6 +1,6 @@
 ---
-dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"
-dotfiles_forgit_version: "26.08.0"
+dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"  # used in tasks/main.yml, not templates
+dotfiles_forgit_version: "26.08.0"  # used in tasks/main.yml, not templates
 dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
                                     # default guards against undefined-var in template if probe skipped
 dotfiles_oh_my_zsh_theme: gallois
@@ -11,7 +11,7 @@ dotfiles_oh_my_zsh_plugins:
   - python
   - history-substring-search
 
-dotfiles_gh_editor: vim  # seed-only gh editor (force: false, first provision only); to change: gh config set editor
+dotfiles_gh_editor: vim  # seed-only gh editor (force: false); to change: gh config set editor; used in tasks/main.yml, not templates
 
 dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g. "aws-acm-subm"
 
