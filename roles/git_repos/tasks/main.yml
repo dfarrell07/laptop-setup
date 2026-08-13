@@ -131,6 +131,7 @@
     git_repos_available_dests: >-
       {{ git_repos_clone_results.results | default([])
          | rejectattr('failed', 'equalto', true)
+         | rejectattr('skipped', 'equalto', true)
          | map(attribute='item.dest') | list }}
 
 - name: Warn when all clones failed

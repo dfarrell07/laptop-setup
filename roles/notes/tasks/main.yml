@@ -101,7 +101,6 @@
           ansible.builtin.lineinfile:
             path: "{{ notes_repo_path }}/.git/info/exclude"
             line: ".gitleaks.toml"
-            mode: "0600"
 
         - name: Enforce mode on notes repo git exclude
           # .git/info/exclude pre-exists from git clone; file task is the sole mode enforcement point

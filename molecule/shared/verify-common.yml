@@ -303,7 +303,7 @@
     - "{{ ansible_user_dir }}/.claude/settings.local.json"
     - "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
 
-- name: Verify Claude settings.local.json exists
+- name: Verify Claude personal settings.local.json exists
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
   register: verify_claude_settings

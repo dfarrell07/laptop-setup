@@ -27,7 +27,7 @@
     mode: "0600"
   when:
     - is_linux
-    - containers_auth_stat.stat.exists
+    - containers_auth_stat.stat.exists | default(false)
 
 - name: Check vault registry pre-auth status
   ansible.builtin.command:

@@ -8,9 +8,9 @@
 # jffs2: present in Fedora 44 (jffs2.ko.xz, alias fs-jffs2); blacklisted as unused attack surface.
 blacklist jffs2
 install jffs2 /bin/false
-blacklist cramfs
+# cramfs: CONFIG_CRAMFS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction
 install cramfs /bin/false
-blacklist freevxfs
+# freevxfs: CONFIG_VXFS_FS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction
 install freevxfs /bin/false
 blacklist hfs
 install hfs /bin/false

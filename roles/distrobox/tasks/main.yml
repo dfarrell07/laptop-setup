@@ -153,6 +153,18 @@
     - distrobox_check.rc != 0
     - is_linux
 
+- name: Warn container_replace ignored under fapolicyd enforcement
+  ansible.builtin.debug:
+    msg: >-
+      container_replace=true was requested but fapolicyd enforcement is active — container
+      '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
+      config.yml or disable fapolicyd enforcement before re-running.
+  when:
+    - distrobox_use_distrobox | bool
+    - fapolicyd_enforcing
+    - distrobox_container_replace | bool
+    - distrobox_container_exists.rc == 0
+
 - name: Create container via Distrobox
   when:
     - distrobox_use_distrobox | bool
@@ -220,6 +232,18 @@
     - not (distrobox_container_replace | bool)
 
 # --- Toolbx path ---
+- name: Warn container_replace ignored under fapolicyd enforcement (Toolbx)
+  ansible.builtin.debug:
+    msg: >-
+      container_replace=true was requested but fapolicyd enforcement is active — container
+      '{{ distrobox_container_name }}' will NOT be replaced. Remove container_replace from
+      config.yml or disable fapolicyd enforcement before re-running.
+  when:
+    - distrobox_use_toolbox | bool
+    - fapolicyd_enforcing
+    - distrobox_container_replace | bool
+    - distrobox_container_exists.rc == 0
+
 - name: Create container via Toolbx
   when:
     - distrobox_use_toolbox | bool

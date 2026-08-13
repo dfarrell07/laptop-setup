@@ -103,6 +103,12 @@
       register: packages_oc_stat
       check_mode: false
 
+    - name: Stat kubectl binary (post-download)
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: packages_kubectl_stat_post
+      check_mode: false
+
     - name: Set permissions on oc and kubectl
       ansible.builtin.file:
         path: "/usr/local/bin/{{ item }}"
@@ -112,7 +118,7 @@
       tags: [become]
       when: >-
         (item == 'oc' and packages_oc_stat.stat.exists) or
-        (item == 'kubectl' and packages_kubectl_stat.stat.exists)
+        (item == 'kubectl' and packages_kubectl_stat_post.stat.exists)
 
   rescue:
     - name: Record oc/kubectl download failure (CSB)
