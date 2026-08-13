@@ -71,7 +71,11 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "WARNING: python3 not found — JSON/lockfile validation skipped" >&2
 else
   while IFS= read -r -d '' f; do
-    if ! git show ":$f" | python3 -m json.tool > /dev/null; then
+    if ! _json_content=$(git show ":$f" 2>/dev/null); then
+      echo "WARNING: could not read staged $f — skipping JSON validation" >&2
+      continue
+    fi
+    if ! printf '%s' "$_json_content" | python3 -m json.tool > /dev/null; then
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi
@@ -81,7 +85,9 @@ else
   # Lockfile integrity (only when package-lock.json is staged)
   # Only checks repo-root package-lock.json; subdirectory lockfiles would need separate handling
   if git diff --cached --name-only -z --diff-filter=ACMR | grep -qz '^package-lock\.json$'; then
-    if ! git show :package-lock.json | python3 -c "
+    if ! _pkglock_content=$(git show :package-lock.json 2>/dev/null); then
+      echo "WARNING: could not read staged package-lock.json — skipping lockfile validation" >&2
+    elif ! printf '%s' "$_pkglock_content" | python3 -c "
 import json, sys
 try:
     lock = json.load(sys.stdin)

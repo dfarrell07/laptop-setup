@@ -115,6 +115,15 @@
     - (not (packages_install_binaries | bool)) or fapolicyd_enforcing
     - distrobox_container_exists.rc != 0
 
+- name: Warn container setup disabled (offline or fapolicyd)
+  ansible.builtin.debug:
+    msg: >-
+      Container setup skipped: {{ "fapolicyd enforcement active" if fapolicyd_enforcing else "binary installs disabled" }}
+      and container does not exist.
+  when:
+    - distrobox_tool == 'none'
+    - distrobox_check.rc == 0 or distrobox_toolbox_check.rc == 0
+
 - name: Warn container_replace ignored in offline mode
   ansible.builtin.debug:
     msg: >-

@@ -31,7 +31,7 @@
   failed_when: false
   check_mode: false  # read-only probe — must run even in check mode to avoid false-negative detection
   become: false
-  when: is_linux | bool
+  when: is_linux | bool and (is_rhel | bool or is_fedora | bool)
 
 - name: Check fapolicyd active state  # noqa: command-instead-of-module
   # service_facts loads all services; command is used for a lightweight
@@ -44,7 +44,7 @@
   check_mode: false  # read-only probe — must run even in check mode to avoid false-negative detection
   become: false
   when:
-    - is_linux | bool
+    - is_linux | bool and (is_rhel | bool or is_fedora | bool)
     - _fapolicyd_unit.rc | default(1) == 0
     - '"fapolicyd.service" in (_fapolicyd_unit.stdout | default(""))'
 
@@ -58,7 +58,7 @@
   check_mode: false  # read-only probe — must run even in check mode to avoid false-negative detection
   become: false
   when:
-    - is_linux | bool
+    - is_linux | bool and (is_rhel | bool or is_fedora | bool)
     - _fapolicyd_active.rc | default(1) == 0
 
 - name: Set fapolicyd facts
@@ -71,7 +71,7 @@
         and (_fapolicyd_permissive_grep.rc | default(1) == 1)
       }}
   become: false
-  when: is_linux | bool
+  when: is_linux | bool and (is_rhel | bool or is_fedora | bool)
 
 # sudo probing and usbguard_running sections removed — facts were only
 # consumed in the verbosity=1 debug summary and not by any downstream role task.
@@ -175,6 +175,12 @@
   become: false
   when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
+- name: Derive csb_rhel
+  ansible.builtin.set_fact:
+    csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"
+  become: false
+  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
+
 - name: Warn on bare RHEL hybrid tier
   ansible.builtin.debug:
     msg: >-
@@ -217,8 +223,7 @@
     - not (_csb_molecule_force | default(false))
     - is_linux | bool
     - needs_container_tier == 'hybrid'
-    - csb_detected | bool
-    - is_rhel | bool
+    - csb_rhel | bool
 
 - name: Inform on CSB container tier (fapolicyd enforcing)
   ansible.builtin.debug:
@@ -233,12 +238,6 @@
     - not (_csb_molecule_force | default(false))
     - is_linux | bool
     - needs_container_tier == 'container'
-
-- name: Derive csb_rhel
-  ansible.builtin.set_fact:
-    csb_rhel: "{{ (csb_detected | bool) and (is_rhel | bool) }}"
-  become: false
-  when: not (_csb_molecule_force | default(false)) and (is_linux | bool)
 
 # ---------------------------------------------------------------------------
 # 7. Summary for the user

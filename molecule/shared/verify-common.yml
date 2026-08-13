@@ -566,8 +566,8 @@
   ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
-    - kernel.dmesg_restrict = 1  # hardcoded: no system_dmesg_restrict var; matches _system_sysctl_hardening_defaults dict
-    - kernel.kptr_restrict = 1  # hardcoded: no system_kptr_restrict var; matches _system_sysctl_hardening_defaults dict
+    - kernel.dmesg_restrict = 1  # hardcoded: no system_dmesg_restrict var; see system_sysctl_hardening in defaults/main.yml
+    - kernel.kptr_restrict = 1  # hardcoded: no system_kptr_restrict var; see system_sysctl_hardening in defaults/main.yml
     - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(2) }}
     - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
     - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}

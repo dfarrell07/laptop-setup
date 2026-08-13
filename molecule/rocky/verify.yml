@@ -15,6 +15,7 @@
         profile: work
         dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches ci-default-vars.yml; re-stated here for verify phase
         system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
+        csb_detected: true  # set_fact does not persist across plays; re-state so csb_detect.yml does not reset to false
         csb_rhel: true  # set_fact does not persist across plays; re-state so csb_detect.yml in verify-common.yml does not reset to false
         _csb_molecule_force: true  # prevents csb_detect.yml overriding csb_rhel (Rocky has no RHEL markers)
         system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
