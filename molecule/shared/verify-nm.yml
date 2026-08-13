@@ -3,6 +3,15 @@
 # Assertions for NetworkManager conf.d files deployed by the system role.
 # Include after verify-common.yml (which re-runs csb_detect.yml).
 # Covered scenarios: fedora, rocky, vm, debian.
+# NOTE: All assertions below are gated on `not system_is_container`. Since
+# fedora, rocky, and debian molecule scenarios all set system_is_container=true,
+# this file runs zero effective assertions in those scenarios. Only `make test-vm`
+# (the VM scenario) exercises these checks against a real host.
+
+- name: NM conf.d assertions skipped in container (VM scenario only)
+  ansible.builtin.debug:
+    msg: "NM conf.d assertions skipped: system_is_container=true. Only make test-vm exercises these checks."
+  when: system_is_container | default(false)
 
 - name: Stat /etc/NetworkManager/conf.d/tailscale.conf
   ansible.builtin.stat:

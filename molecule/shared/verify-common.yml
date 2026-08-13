@@ -568,6 +568,7 @@
   changed_when: false
   when:
     - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
     - verify_tmp_hardening.stat.exists
 
 # --- modprobe hardening: file-content assertions (system role, Linux only) ---
@@ -651,7 +652,7 @@
     - "KbdInteractiveAuthentication no"
     - "PermitEmptyPasswords no"
     - "X11Forwarding no"
-    - "HostKeyAlgorithms ssh-ed25519"
+    - "HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
     - "ClientAliveInterval 300"
     - "ClientAliveCountMax 2"
     - "Port {{ ssh_port }}"

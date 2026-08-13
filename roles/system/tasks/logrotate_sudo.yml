@@ -25,3 +25,11 @@
   when:
     - not csb_rhel  # only meaningful when sudoers hardening task below creates /var/log/sudo.log
     - not system_is_container  # logrotate not installed in containers (guarded above); /etc/logrotate.d does not exist
+
+- name: Remove logrotate config for sudo.log on CSB RHEL
+  ansible.builtin.file:
+    path: /etc/logrotate.d/sudo
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container

@@ -41,7 +41,8 @@
   changed_when: ansible_check_mode or ('success' in (_zone_result.stdout | default('')))
   when:
     - system_firewalld_running | bool
-    - (system_firewall_info.firewalld_info.default_zone | default('unknown')) != 'drop' and system_firewall_info is not failed
+    - system_firewall_info.firewalld_info.default_zone is defined
+    - system_firewall_info.firewalld_info.default_zone != 'drop'
     - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
   notify:
     - Apply firewall rules
@@ -75,9 +76,9 @@
     - ssh
     - dhcpv6-client
     - samba-client
-    - cockpit
-  # samba-client: confirmed present in firewalld 2.4.x / Fedora 44 FedoraWorkstation.xml
+  # ssh, dhcpv6-client, samba-client: all confirmed present in firewalld 2.4.x / Fedora 44 FedoraWorkstation.xml
   # mdns is NOT in the Fedora 44 FedoraWorkstation zone (removed by Red Hat); no removal needed.
+  # cockpit is NOT in FedoraWorkstation.xml; its port (9090/tcp) is managed separately via the drop zone task above.
   register: _system_fw_zone_svc_remove
   when:
     - system_firewalld_running | bool

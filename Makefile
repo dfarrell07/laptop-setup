@@ -73,7 +73,7 @@ bootstrap:
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
-	git config --local core.hooksPath .githooks
+	$(MAKE) hooks
 	@echo "Bootstrap complete. Git hooks active."
 
 bootstrap-test:

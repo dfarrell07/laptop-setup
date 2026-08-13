@@ -2,7 +2,7 @@
 [user]
 	name = {{ dotfiles_user_name }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
-{% if ssh_git_signing_pubkey | length > 0 %}
+{% if ssh_git_signing_pubkey | trim | length > 0 %}
 	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 
 [commit]
@@ -19,7 +19,7 @@
 	sort = -committerdate
 
 [tag]
-{% if ssh_git_signing_pubkey | length > 0 %}
+{% if ssh_git_signing_pubkey | trim | length > 0 %}
 	gpgsign = true
 {% endif %}
 	sort = -version:refname

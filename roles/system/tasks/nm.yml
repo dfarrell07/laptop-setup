@@ -56,6 +56,15 @@
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
+- name: Remove NM dns=systemd-resolved config on CSB RHEL
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dns.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
 # On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
 - name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
   ansible.builtin.copy:

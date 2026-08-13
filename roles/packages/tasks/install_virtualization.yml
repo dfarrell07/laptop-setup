@@ -41,26 +41,41 @@
 # are not guaranteed to be in started state on all configurations (e.g. re-runs after
 # a manual disable), and the system role has no logic to enable these socket units.
 - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    state: started
-    enabled: true
-  loop:
-    - virtqemud.socket
-    - virtnetworkd.socket
-  become: true
-  tags: [become]
-  ignore_errors: true
-  register: _virt_socket_result
-  when: not system_is_container
-
-- name: Warn if virtqemud/virtnetworkd socket enable failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: libvirt socket enable failed:
-      {{ _virt_socket_result.results | selectattr('failed', 'equalto', true) |
-      map(attribute='msg') | join(', ') | default('unknown') }}
-  when: _virt_socket_result.results is defined and _virt_socket_result.results | selectattr('failed', 'equalto', true) | list | length > 0
+  block:
+    - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - virtqemud.socket
+        - virtnetworkd.socket
+      become: true
+      tags: [become]
+      when: not system_is_container
+  rescue:
+    - name: Record libvirt socket enable failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "Enable virtqemud/virtnetworkd sockets after libvirt install"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          libvirt socket units could not be enabled; enable manually with
+          systemctl enable --now virtqemud.socket virtnetworkd.socket
+        _csb_ticket_summary: "Cannot enable libvirt socket units on CSB"
+        _csb_ticket_body: >-
+          virtqemud.socket or virtnetworkd.socket could not be enabled after
+          libvirt package install. Virtualization may not function correctly.
+      when: csb_rhel
+    - name: Warn if virtqemud/virtnetworkd socket enable failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: libvirt socket enable failed:
+          {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          Enable manually: systemctl enable --now virtqemud.socket virtnetworkd.socket.
+          Continuing playbook execution.
+      when: not csb_rhel
 
 - name: Refresh /etc/group facts for libvirt/kvm membership check
   ansible.builtin.getent:
