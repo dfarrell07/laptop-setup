@@ -78,7 +78,7 @@ if ! grep -q '^Signed-off-by:' "$1"; then
   exit 1
 fi
 
-# Run commitlint for rules not manually checked above (body-leading-blank, body-max-line-length, type-enum, scope validation) and to re-enforce length/period rules when commitlint is available
+# Run commitlint for rules not manually checked above (body-leading-blank, body-max-line-length, type-enum, scope validation, subject-empty) and to re-enforce length/period rules when commitlint is available
 # Sync partner: roles/dotfiles/files/git-template-commit-msg — keep ENTIRE hook logic identical in both files (not just the commitlint block)
 if command -v npx >/dev/null 2>&1; then
   if [ -x "./node_modules/.bin/commitlint" ] || command -v commitlint >/dev/null 2>&1; then

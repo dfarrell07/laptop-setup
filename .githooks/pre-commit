@@ -43,7 +43,8 @@ fi
 if [ -n "$YAMLLINT" ]; then
   while IFS= read -r -d '' f; do
     git show ":$f" | "$YAMLLINT" --strict - 2>&1 | sed "s|^stdin\b|${f}|"
-    [ "${PIPESTATUS[1]}" -ne 0 ] && failed=1
+    _yl_rc=${PIPESTATUS[1]}
+    [ "$_yl_rc" -ne 0 ] && failed=1
   done < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.yml' '*.yaml' | grep -zEv '(^|/)vault\.yml$' | grep -zv '^\.github/') # .github/ excluded: stdin-mode yamllint ignores the 'ignore:' config; exclude to match .yamllint + make lint behaviour
 else
   echo "WARNING: yamllint not found — YAML lint skipped (run 'make lint' to install)" >&2

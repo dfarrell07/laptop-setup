@@ -1,5 +1,10 @@
 # {{ ansible_managed }}
 # Security hardening sysctl values
 {% for key, value in system_sysctl_hardening.items() %}
+{% if key == 'kernel.unprivileged_bpf_disabled' %}
+# NOTE: EPERM-locked on stock Fedora 44 — kernel enforces 2 at boot via
+# CONFIG_BPF_UNPRIV_DEFAULT_OFF=y before sysctl.d is processed; this entry
+# is a no-op on stock Fedora 44 but retained for portability to custom kernels.
+{% endif %}
 {{ key }} = {{ value }}
 {% endfor %}

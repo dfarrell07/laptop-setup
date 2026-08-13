@@ -3,7 +3,7 @@
 image={{ distrobox_container_image }}
 additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
 
-additional_packages="{{ distrobox_packages | join(' ') }}"
+additional_packages={{ distrobox_packages | join(' ') }}
 
 # Host delegation symlinks
 {% for cmd in distrobox_host_exec_commands %}

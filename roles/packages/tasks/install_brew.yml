@@ -79,7 +79,7 @@
   when: is_macos
   changed_when:
     - _packages_brew_autoupdate.rc == 0
-    - "'already' not in (_packages_brew_autoupdate.stdout | default('')) + (_packages_brew_autoupdate.stderr | default(''))"
+    - "'already' not in ((_packages_brew_autoupdate.stdout | default('')) + (_packages_brew_autoupdate.stderr | default(''))) | lower"
   failed_when: false
   register: _packages_brew_autoupdate
 

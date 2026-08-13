@@ -129,7 +129,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/loader/entries\s'
-        line: '/boot/loader/entries NORMAL'
+        line: '/boot/loader/entries PERMS'
         state: present
       register: _aide_conf_r6b
 
@@ -137,7 +137,7 @@
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/grub2/grub\.cfg\s'
-        line: '/boot/grub2/grub.cfg NORMAL'
+        line: '/boot/grub2/grub.cfg PERMS'
         state: present
       register: _aide_conf_r6c
 

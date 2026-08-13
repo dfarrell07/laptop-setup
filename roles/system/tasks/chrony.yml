@@ -1,6 +1,8 @@
 ---
 # roles/system/tasks/chrony.yml
 # --- Chrony NTS (authenticated time sync) ---
+# Mask timesyncd before the apt install so chrony's postinst does not race
+# for UDP 123 with a still-running timesyncd.
 - name: Stop and mask systemd-timesyncd before chrony install (Debian)
   ansible.builtin.systemd:
     name: systemd-timesyncd
@@ -29,17 +31,6 @@
   when:
     - is_dnf
     - system_chrony_service_enabled | bool
-
-- name: Mask systemd-timesyncd when chrony is active
-  ansible.builtin.systemd:
-    name: systemd-timesyncd
-    masked: true
-    state: stopped
-  when:
-    - is_apt
-    - system_chrony_service_enabled | bool
-    - not system_is_container
-  failed_when: false
 
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:

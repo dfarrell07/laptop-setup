@@ -51,6 +51,8 @@ _notes_enabled=false
 grep -qE '^notes_enabled:[[:space:]]*true([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]]/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null || echo "722")
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
+_system_keymap=$(awk -F': ' '/^system_keymap:/{gsub(/[[:space:]"'"'"']/, "", $2); print $2}' "$_cfg" 2>/dev/null || true)
+_system_keymap="${_system_keymap:-us}"
 unset _cfg
 
 run() { # execute locally or inside container
@@ -1663,8 +1665,8 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   else record "home-mode" "FAIL" "HOME_MODE not set to 0750 in login.defs (CIS: explicit home dir permissions)"; fi
 
   # Console keymap
-  if grep -q '^KEYMAP=us$' /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
-  else record "vconsole-keymap" "WARN" "KEYMAP=us not set in /etc/vconsole.conf"; fi
+  if grep -q "^KEYMAP=${_system_keymap}$" /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
+  else record "vconsole-keymap" "WARN" "KEYMAP=${_system_keymap} not set in /etc/vconsole.conf"; fi
 
   # logind IdleAction=lock (physical security)
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then

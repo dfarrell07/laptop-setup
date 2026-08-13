@@ -37,7 +37,7 @@
   changed_when: git_lfs_install_result.rc == 0 and (git_lfs_configured.rc | default(1) != 0)
   when:
     - git_lfs_check.rc == 0
-    - git_lfs_configured.rc | default(-1) != 0
+    - git_lfs_configured.rc | default(1) != 0
 
 - name: Warn if git-lfs filter registration failed
   ansible.builtin.debug:

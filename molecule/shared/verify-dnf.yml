@@ -393,7 +393,7 @@
     - not (csb_rhel | default(false))
     - not (system_is_container | default(false))
 
-- name: Check login.defs YESCRYPT_COST_FACTOR=5 (CIS 5.4.1)
+- name: Check login.defs YESCRYPT_COST_FACTOR={{ system_yescrypt_cost_factor | default(5) }} (CIS 5.4.1)
   ansible.builtin.command: grep -q '^YESCRYPT_COST_FACTOR {{ system_yescrypt_cost_factor | default(5) }}' /etc/login.defs
   changed_when: false
   become: true

@@ -76,7 +76,7 @@
         - ansible_pkg_mgr == 'apt'
         - not (system_is_container | default(false))
 
-    - name: Check faillock.conf deny = 5 (Debian)
+    - name: Check faillock.conf deny = {{ system_faillock_deny }} (Debian)
       ansible.builtin.command:
         cmd: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
       changed_when: false

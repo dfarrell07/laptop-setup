@@ -258,7 +258,6 @@
       failed_when: false
       when:
         - system_real_user_exists.rc | default(1) == 0
-        - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
       # Without linger, systemd kills the user session (and podman.socket) when the
       # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 
