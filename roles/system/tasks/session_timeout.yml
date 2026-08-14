@@ -62,7 +62,7 @@
     - system_tmout | int > 0
 
 # Cleanup: remove TMOUT artifacts when system_tmout<=0 (operator disables timeout).
-# Without this, readonly TMOUT=600 persists and cannot be overridden in user dotfiles.
+# Without this, a previously deployed readonly TMOUT persists and cannot be overridden in user dotfiles.
 - name: Remove session timeout from profile.d when disabled
   ansible.builtin.file:
     path: /etc/profile.d/tmout.sh
@@ -89,7 +89,7 @@
     - is_apt
     - system_tmout | int <= 0
 
-- name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL)
+- name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL/macOS)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='

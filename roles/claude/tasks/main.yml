@@ -96,9 +96,8 @@
   ansible.builtin.copy:
     content: |
       export CLAUDE_CONFIG_DIR={{ claude_work_config_dir }}
-      # Uncomment after adding companion vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION, GOOGLE_CLOUD_PROJECT):
-      # export CLAUDE_CODE_USE_VERTEX=1
-      # export ANTHROPIC_VERTEX_PROJECT_ID=...
+      # Source Vertex backend env (ANTHROPIC_VERTEX_PROJECT_ID lives outside repo in claude-code-vertex/env.sh)
+      [ -f "${HOME}/.config/claude-code-vertex/env.sh" ] && . "${HOME}/.config/claude-code-vertex/env.sh"
     dest: "{{ claude_queue_runtime_config_dir }}/work-env"
     mode: "0600"
     force: false

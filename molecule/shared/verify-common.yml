@@ -682,7 +682,7 @@
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
     - verify_modprobe_hardening.stat.exists
-    - system_disable_usb_storage | default(true) | bool
+    - system_disable_usb_storage | default(false) | bool
 
 - name: Check modprobe hardening contains udf blacklist entry
   ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf

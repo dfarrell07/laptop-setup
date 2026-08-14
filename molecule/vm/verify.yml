@@ -23,9 +23,10 @@
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
         system_disable_bluetooth: true       # converge.yml sets this; enables BT masking + blacklist assertions
+        system_disable_printing: true        # converge.yml sets this; enables cups masking assertions
+        system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
-        system_tmout: 600                    # matches default; parameterizes TMOUT session-timeout assertions
         system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
         system_dot_mode: opportunistic       # matches role default; parameterizes DNSOverTLS assertions
 
@@ -590,7 +591,9 @@
       ansible.builtin.assert:
         that: verify_cups_socket.status.UnitFileState == 'masked'
         fail_msg: "cups.socket is not masked — Flatpak print dialogs can trigger socket activation to restart CUPS"
-      when: verify_cups_socket.status.UnitFileState | default('') != ''
+      when:
+        - verify_cups_socket.status.UnitFileState | default('') != ''
+        - system_disable_printing | default(false) | bool
 
     - name: Check cups.path state
       ansible.builtin.systemd:
@@ -603,7 +606,9 @@
       ansible.builtin.assert:
         that: verify_cups_path.status.UnitFileState == 'masked'
         fail_msg: "cups.path is not masked — path activation can restart CUPS daemon"
-      when: verify_cups_path.status.UnitFileState | default('') != ''
+      when:
+        - verify_cups_path.status.UnitFileState | default('') != ''
+        - system_disable_printing | default(false) | bool
 
     - name: Check fprintd service state
       ansible.builtin.systemd:

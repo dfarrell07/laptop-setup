@@ -319,3 +319,8 @@ alias ping8="ping 8.8.8.8"
 
 # --- umask ---
 umask 077
+{% if profile == 'work' %}
+
+# --- Claude Code Vertex backend (env.sh holds ANTHROPIC_VERTEX_PROJECT_ID — not in repo) ---
+[[ -f "${HOME}/.config/claude-code-vertex/env.sh" ]] && source "${HOME}/.config/claude-code-vertex/env.sh"
+{% endif %}

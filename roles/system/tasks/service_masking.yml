@@ -192,14 +192,12 @@
         - not system_is_container
       failed_when: false
 
-# --- Mask cups-browsed (RCE entry point: CVE-2024-47176); disable/mask cups ---
-# cups-browsed is masked (not just disabled) because it's an active RCE target.
-# cups.service is disabled/stopped but NOT masked — Flatpak print dialogs rely on
-# cups.socket for activation, and masking cups.service while leaving cups.socket
-# enabled creates a broken half-masked state (socket accepts, activation fails).
-# When system_disable_printing is true (default), cups.socket and cups.path are also
-# masked so socket activation cannot start the CUPS daemon regardless of cups.service
-# state. Set system_disable_printing: false in config.yml if printing is required.
+# --- cups-browsed (CVE-2024-47176) and cups service/socket/path ---
+# system_disable_printing: true  → cups-browsed masked+stopped; cups.service disabled;
+#                                   cups.socket+cups.path masked (no socket/path activation)
+# system_disable_printing: false → cups-browsed unmasked but NOT started (CVE risk only when running);
+#                                   cups.service started+enabled; cups.socket+cups.path unmasked
+# cups.service is never masked (masking it while cups.socket is live breaks Flatpak print dialogs).
 - name: Mask cups-browsed (RCE entry point) when printing disabled
   ansible.builtin.systemd:
     name: cups-browsed

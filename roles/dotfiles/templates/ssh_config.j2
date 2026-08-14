@@ -44,6 +44,8 @@ Host code.engineering.redhat.com
 Host gitlab.cee.redhat.com
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
+    # Server advertises only curve25519-sha256@libssh.org (libssh alias); global KexAlgorithms uses RFC 8731 name only
+    KexAlgorithms curve25519-sha256@libssh.org,curve25519-sha256
 {% endif %}
 {% if profile == 'work' and dotfiles_internal_git_host != '' %}
 

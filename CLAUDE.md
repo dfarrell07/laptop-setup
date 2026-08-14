@@ -25,8 +25,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
    must use SSH, run inside tmux first: `tmux new-session -s provision 'make all'`
 5. After provisioning, see `references/troubleshooting.md` for common surprises:
-   SSH now on port 722, cups-browsed masked (cups.service disabled, not masked; cups.socket/cups.path also masked when system_disable_printing: true — set `system_disable_printing: false` to restore printing),
-   TMOUT=600 in shells, USB storage kernel-blocked,
+   SSH now on port 722, cups-browsed masked when system_disable_printing: true (default: unmasked but not started; CVE-2024-47176),
    AllowTcpForwarding local (set "no" in config.yml to disable; set "yes" for remote forwards too),
    IPv6 SLAAC disabled (set `system_ipv6_accept_ra: 2` in config.yml if home router provides IPv6 via RA; value 1 does not work when forwarding=1),
    kernel lockdown (integrity) applied via grubby on standard and hybrid (CSB-detected) Fedora; RHEL CSB skips this (IT manages boot config)
@@ -141,8 +140,8 @@ make repos-downstream # downstream repos only
   `container_name`, `container_image`, `container_release`, `container_replace`. See
   `default.config.yml` for full defaults; the `Additional toggles` comment block there lists 100+
   role-defaults vars overridable in `config.yml`. Key operational ones: `system_aide_enabled` (false —
-  AIDE disabled by default; enable only with a log consumer), `system_tmout` (600 s inactivity timeout,
-  CIS; set 0 to disable), `system_disable_usb_storage` (true — USB drives kernel-blocked), `system_kernel_lockdown`
+  AIDE disabled by default; enable only with a log consumer), `system_tmout` (0 — disabled; set 1–900 to enforce CIS inactivity timeout),
+  `system_disable_usb_storage` (false — USB drives allowed; set true to kernel-block usb_storage/uas), `system_kernel_lockdown`
   (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging), `system_ipv6_accept_ra`
   (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (local — set "no" to disable port forwarding; "yes" for both -L and -R),
   `system_ssh_allow_agent_forwarding` (no — set 'yes' to forward ssh-agent when SSHing into this machine; prefer ProxyJump for traversal),

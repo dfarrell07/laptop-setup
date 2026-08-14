@@ -73,7 +73,7 @@
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
   when:
     - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']  # arm64 supported but not CI-tested
+    - ansible_facts['architecture'] == 'x86_64'  # aarch64 SHA256 not pinned in defaults; add packages_actionlint_sha256_arm64 to enable
     - profile == 'work'
   ansible.builtin.include_tasks: install_tarball.yml
   vars:

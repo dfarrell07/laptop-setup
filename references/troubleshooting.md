@@ -596,7 +596,7 @@ USB drives are not recognized. `lsblk` shows nothing when a USB drive is plugged
 
 **Root Cause:**
 
-The `system` role blacklists `usb_storage` and `uas` kernel modules at the `/bin/false` level via `/etc/modprobe.d/hardening.conf` when `system_disable_usb_storage: true` (the default). This is a kernel-level block — USBGuard policies cannot override it. Any USB mass-storage device, even one in the USBGuard whitelist, will not mount.
+The `system` role blacklists `usb_storage` and `uas` kernel modules at the `/bin/false` level via `/etc/modprobe.d/hardening.conf` when `system_disable_usb_storage: true`. This is a kernel-level block — USBGuard policies cannot override it. Any USB mass-storage device, even one in the USBGuard whitelist, will not mount.
 
 **Fix:**
 
@@ -869,7 +869,7 @@ bpfman list                          # triggers socket activation; should return
 
 **Symptom:** Print dialogs fail to open, CUPS is not running, `lpq` returns an error.
 
-**Root Cause:** The `system` role disables `cups.service` and masks `cups.socket` and `cups.path` when `system_disable_printing: true` (the default). `cups.service` is disabled but not masked — socket activation is blocked via the masked `cups.socket` rather than by masking the service itself.
+**Root Cause:** The `system` role disables `cups.service` and masks `cups.socket` and `cups.path` when `system_disable_printing: true`. `cups.service` is disabled but not masked — socket activation is blocked via the masked `cups.socket` rather than by masking the service itself.
 
 **Fix:** Set in `config.yml`:
 
@@ -879,7 +879,7 @@ system_disable_printing: false
 
 Then re-run `make system`. This unmasks CUPS and restores printing.
 
-**Note:** `cups-browsed` remains masked regardless (it has CVE-2024-47176 history and no legitimate use on a workstation). Standard printing via `cups.socket` works without it.
+**Note:** `cups-browsed` is unmasked but intentionally not started when `system_disable_printing: false` (CVE-2024-47176 risk only when the service is running). Set `system_disable_printing: true` to also mask `cups-browsed`. Standard printing via `cups.socket` works without it.
 
 ---
 
@@ -919,11 +919,11 @@ Then re-run `make system`. This unmasks both units and restores `.local` mDNS re
 
 ---
 
-## system: Shell Sessions Terminate After 10 Minutes of Inactivity
+## system: Shell Sessions Terminate After Inactivity Timeout
 
-**Symptom:** SSH sessions or terminal emulator shells die after 10 minutes idle. Interactive prompts close unexpectedly. Long-running `ansible-playbook` runs are killed by the shell.
+**Symptom:** SSH sessions or terminal emulator shells die after an idle period. Interactive prompts close unexpectedly. Long-running `ansible-playbook` runs are killed by the shell.
 
-**Root Cause:** The `system` role deploys `TMOUT=600` (600 seconds = 10 minutes) to `/etc/profile.d/tmout.sh` (bash) and `/etc/zshrc` (zsh). This causes the shell to auto-logout when the interactive prompt is idle. Background processes in the shell's job control survive, but the shell itself exits when `TMOUT` fires at the next prompt.
+**Root Cause:** The `system` role deploys a `TMOUT` value (in seconds) to `/etc/profile.d/tmout.sh` (bash) and `/etc/zshrc` (zsh) when `system_tmout > 0`. This causes the shell to auto-logout when the interactive prompt is idle. Background processes in the shell's job control survive, but the shell itself exits when `TMOUT` fires at the next prompt.
 
 **Fix (permanent):** Set in `config.yml`:
 

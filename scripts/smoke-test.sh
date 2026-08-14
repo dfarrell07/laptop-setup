@@ -1046,7 +1046,7 @@ EOF
     fi
   fi
 
-  # USB storage blacklist is conditional on system_disable_usb_storage (default: true)
+  # USB storage blacklist is conditional on system_disable_usb_storage (default: false)
   if grep -q '^blacklist usb_storage' /etc/modprobe.d/hardening.conf 2>/dev/null; then
     record "usb-storage-blocked" "PASS"
   else record "usb-storage-blocked" "WARN" "usb_storage not kernel-blocked — USB drives may mount (expected if system_disable_usb_storage: false)"; fi
@@ -1072,24 +1072,28 @@ EOF
   elif $CSB_HOST; then record "journald-maxuse" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make system"; fi
 
-  # cups-browsed masked (CVE-2024-47176 RCE vector)
+  # cups-browsed: masked when system_disable_printing: true; disabled-but-unmasked when printing enabled
+  # (CVE-2024-47176 risk only when running; disabled = not auto-starting = acceptable in printing-enabled mode)
   _cups_browsed_state=$(systemctl show -p UnitFileState --value cups-browsed.service 2>/dev/null)
   if [[ "$_cups_browsed_state" == "masked" ]]; then record "cups-browsed-masked" "PASS"
   elif [[ -z "$_cups_browsed_state" ]] && grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
     record "cups-browsed-masked" "WARN" "cups-browsed not installed on Debian (cups-filters absent) — no CVE-2024-47176 exposure"
-  else record "cups-browsed-masked" "FAIL" "not masked (state: '$_cups_browsed_state', CVE-2024-47176 RCE vector — must be masked)"; fi
+  elif [[ "$_cups_browsed_state" == "disabled" || "$_cups_browsed_state" == "static" ]]; then
+    record "cups-browsed-masked" "WARN" "cups-browsed not masked (state: '$_cups_browsed_state') — not running; confirm system_disable_printing: false is intentional (CVE-2024-47176 if started)"
+  else record "cups-browsed-masked" "FAIL" "cups-browsed state '$_cups_browsed_state' (CVE-2024-47176 RCE vector — mask with system_disable_printing: true or verify it is not running)"; fi
   unset _cups_browsed_state
 
-  # cups.service disabled; cups.socket and cups.path masked (prevent socket/path activation of CUPS)
-  # Set system_disable_printing: false in config.yml to leave cups.socket unmasked for Flatpak print dialogs
-  _cups_state=$(systemctl show -p UnitFileState --value cups.service 2>/dev/null)
-  if [[ "$_cups_state" == "disabled" ]]; then record "cups-disabled" "PASS"
-  else record "cups-disabled" "WARN" "cups.service state is '$_cups_state', expected 'disabled' (masked breaks Flatpak print)"; fi
-  unset _cups_state
-  if [[ "$(systemctl show -p UnitFileState --value cups.socket 2>/dev/null)" == "masked" ]]; then record "cups-socket-masked" "PASS"
-  else record "cups-socket-masked" "WARN" "cups.socket not masked — socket activation can start CUPS despite cups.service being disabled (expected masked when system_disable_printing: true)"; fi
-  if [[ "$(systemctl show -p UnitFileState --value cups.path 2>/dev/null)" == "masked" ]]; then record "cups-path-masked" "PASS"
-  else record "cups-path-masked" "WARN" "cups.path not masked — path activation can start CUPS despite cups.service being disabled (expected masked when system_disable_printing: true)"; fi
+  # cups.service/socket/path: both disabled+masked (system_disable_printing: true) and
+  # enabled+unmasked (system_disable_printing: false) are valid; flag inconsistent mixed states
+  _cups_svc=$(systemctl show -p UnitFileState --value cups.service 2>/dev/null)
+  _cups_sock=$(systemctl show -p UnitFileState --value cups.socket 2>/dev/null)
+  _cups_path=$(systemctl show -p UnitFileState --value cups.path 2>/dev/null)
+  if [[ "$_cups_svc" == "disabled" && "$_cups_sock" == "masked" && "$_cups_path" == "masked" ]]; then
+    record "cups-printing" "PASS" "cups disabled + socket/path masked (system_disable_printing: true)"
+  elif [[ "$_cups_svc" == "enabled" && "$_cups_sock" != "masked" && "$_cups_path" != "masked" ]]; then
+    record "cups-printing" "PASS" "cups enabled (system_disable_printing: false — set true to harden)"
+  else record "cups-printing" "WARN" "cups in mixed state (service: '$_cups_svc', socket: '$_cups_sock', path: '$_cups_path') — re-run make system"; fi
+  unset _cups_svc _cups_sock _cups_path
 
   # avahi-daemon masked (or intentionally enabled via system_disable_avahi: false)
   _avahi_state=$(systemctl show -p UnitFileState --value avahi-daemon.service 2>/dev/null)

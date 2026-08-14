@@ -29,6 +29,8 @@
         # Exercise even_deny_root=true path (default.config.yml sets false; no other scenario tests true)
         system_faillock_even_deny_root: true
         system_disable_bluetooth: true       # VM scenario exercises BT masking + module blacklist path
+        system_disable_printing: true        # VM scenario exercises cups masking path (cups-browsed/socket/path)
+        system_tmout: 600                    # VM scenario exercises session timeout deployment path
         is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
 
     # Vagrant boxes ship sshd_config with '#Port 22' (commented-out, implicit default).
