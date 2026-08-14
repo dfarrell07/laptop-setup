@@ -12,9 +12,10 @@ Host *
     # KexAlgorithms — intentional choices, do not auto-modify:
     # - sntrup761x25519-sha512: IETF canonical name (OpenSSH 10.0+; @openssh.com-suffixed form is a legacy alias); mlkem768x25519-sha256: 9.9+
     # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
-    # - curve25519-sha256 only: ecdh-sha2-nistp256 excluded (weaker); @libssh.org alias omitted (OpenSSH-only)
+    # - curve25519-sha256@libssh.org included: libssh servers (gitlab.cee.redhat.com) advertise only the @libssh.org alias;
+    #   OpenSSH does not auto-expand it — both forms required for interoperability
     # - mlkem768nistp256/mlkem1024nistp384 excluded: prefer x25519-based hybrid over NIST curve classical component
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256@libssh.org,curve25519-sha256
     ServerAliveInterval 60
     ServerAliveCountMax 5
     ControlMaster auto
@@ -44,8 +45,6 @@ Host code.engineering.redhat.com
 Host gitlab.cee.redhat.com
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
-    # Server advertises only curve25519-sha256@libssh.org (libssh alias); global KexAlgorithms uses RFC 8731 name only
-    KexAlgorithms curve25519-sha256@libssh.org,curve25519-sha256
 {% endif %}
 {% if profile == 'work' and dotfiles_internal_git_host != '' %}
 

@@ -24,6 +24,7 @@
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
         system_disable_bluetooth: true       # converge.yml sets this; enables BT masking + blacklist assertions
         system_disable_printing: true        # converge.yml sets this; enables cups masking assertions
+        system_disable_usb_storage: true     # converge.yml sets this; enables usb_storage blacklist assertions
         system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions
@@ -609,6 +610,22 @@
       when:
         - verify_cups_path.status.UnitFileState | default('') != ''
         - system_disable_printing | default(false) | bool
+
+    - name: Check cups.service state
+      ansible.builtin.systemd:
+        name: cups.service
+      register: verify_cups_service
+      become: true
+      failed_when: false
+      when: system_disable_printing | default(false) | bool
+
+    - name: Assert cups.service is disabled when printing disabled
+      ansible.builtin.assert:
+        that: verify_cups_service.status.UnitFileState == 'disabled'
+        fail_msg: "cups.service UnitFileState is '{{ verify_cups_service.status.UnitFileState }}', expected 'disabled'"
+      when:
+        - system_disable_printing | default(false) | bool
+        - verify_cups_service.status is defined
 
     - name: Check fprintd service state
       ansible.builtin.systemd:

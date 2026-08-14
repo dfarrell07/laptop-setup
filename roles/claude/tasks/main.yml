@@ -100,7 +100,7 @@
       [ -f "${HOME}/.config/claude-code-vertex/env.sh" ] && . "${HOME}/.config/claude-code-vertex/env.sh"
     dest: "{{ claude_queue_runtime_config_dir }}/work-env"
     mode: "0600"
-    force: false
+    force: true
   when: profile == 'work'
 
 - name: Remove Claude work-env file when not work profile
