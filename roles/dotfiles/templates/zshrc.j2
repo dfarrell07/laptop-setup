@@ -306,7 +306,9 @@ alias vpn='netstat -rn | grep -E "utun|wg"'
 {% else %}
 alias vpn='ip route | grep -E "tun|wg"'
 {% endif %}
+{% if repo_tailscale | default(true) %}
 alias ts='tailscale status'
+{% endif %}
 
 # --- General aliases ---
 command -v gvim &>/dev/null && alias gv="gvim -vp"

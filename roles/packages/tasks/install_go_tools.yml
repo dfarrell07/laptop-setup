@@ -18,7 +18,7 @@
   environment:
     GOPATH: "{{ ansible_facts['user_dir'] }}/go"
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-    GOTOOLCHAIN: auto  # gofumpt/govulncheck need Go 1.25+, gopls needs 1.26+; auto downloads on demand
+    GOTOOLCHAIN: "{{ packages_gotoolchain }}"  # auto: downloads newer toolchain on demand; local: installed Go only
     HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
     HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"

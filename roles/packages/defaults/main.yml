@@ -232,6 +232,8 @@ packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09c
 packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
+packages_gotoolchain: auto  # GOTOOLCHAIN env for go install; set 'local' in config.yml on
+  # air-gapped or CSB networks where dl.google.com is blocked
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 packages_golangci_lint_version: "2.12.2"

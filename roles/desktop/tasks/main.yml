@@ -252,6 +252,10 @@
 # that have no /etc/passwd entry. Probe first; for SSSD/LDAP accounts, chsh and
 # usermod both read only /etc/passwd and cannot write to LDAP backends —
 # the correct approach is override_shell in sssd.conf.
+# CI gap: all molecule scenarios use the vagrant/root user which is in /etc/passwd,
+# so the SSSD path (tasks below with _local_user.rc != 0 condition) is never
+# exercised in CI. A real SSSD/LDAP environment cannot be reproduced in Podman-based
+# molecule. The failed_when: false + warn task provides runtime resilience.
 - name: Check if user has a local /etc/passwd entry
   ansible.builtin.command:
     cmd: grep -q "^{{ ansible_facts['user_id'] }}:" /etc/passwd
