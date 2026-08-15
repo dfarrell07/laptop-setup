@@ -28,7 +28,7 @@
   when:
     - system_authselect_bin.stat.exists
     - is_dnf  # authselect is RHEL/Fedora only; avoids spurious changed=1 on Debian
-    - system_authselect_current.stdout | default('') is not search('^sssd( |$)')
+    - system_authselect_current.stdout | default('') is not search('^(sssd|ipa-client|ipa)( |$)')
     - not csb_rhel
     - not csb_detected  # on Fedora hybrid CSB, IT may use a non-sssd base (e.g. ipa) —
       # --force would wipe IT-managed PAM customizations; defer authselect base selection to IT

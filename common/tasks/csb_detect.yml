@@ -88,6 +88,17 @@
   become: false
   when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))
 
+- name: Find Red Hat internal CA certs by glob
+  ansible.builtin.find:
+    paths: /etc/pki/ca-trust/source/anchors
+    patterns:
+      - '*IT*Root*CA*'
+      - '*Eng*CA*'
+    recurse: false
+  register: _ca_certs_glob
+  become: false
+  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))
+
 - name: Set internal CA fact
   ansible.builtin.set_fact:
     internal_ca_present: >-
@@ -95,6 +106,7 @@
         (_ca_certs.results | default([])
          | selectattr('stat.exists')
          | list | length > 0)
+        or ((_ca_certs_glob.files | default([])) | length > 0)
       }}
   become: false
   when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))

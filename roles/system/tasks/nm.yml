@@ -27,7 +27,9 @@
       unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:wt*,interface-name:ovn-k8s-mp0
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
-  when: not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+  when:
+    - not csb_rhel  # IT may use wg* for managed WireGuard VPN; do not mark unmanaged on RHEL CSB
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
 - name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)

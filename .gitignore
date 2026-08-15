@@ -5,6 +5,9 @@ config.yml
 .vault_pass*
 scripts/vault-pass.sh
 
+# GnuPG homedir — contains private keys; never commit
+gpg/
+
 # Installed collections
 collections/
 
@@ -42,6 +45,23 @@ __pycache__/
 .molecule/
 *.src.rpm
 *.rpm
+
+# RPM build/packaging artifacts (tarballs, specs, patches, keys, systemd units)
+# Root-anchored (/foo) to avoid shadowing tracked files in subdirectories.
+/*.patch
+/*.gpg
+/*.tar.gz
+/*.tar.gz.asc
+/*.spec
+/*.sysusers
+/*.pam
+/*.sysconfig
+/openssh-server-systemd-sysusers.conf
+/parallel_test.*
+/ssh-agent.*
+/ssh-host-keys-migration.*
+/sshd*
+
 # Stray system directories (AIDE/package artifacts)
 /etc/
 /usr/

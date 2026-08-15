@@ -16,7 +16,7 @@
 
     - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
       vars:
-        _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
+        _noexec_opt: "{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }}"
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}
@@ -46,7 +46,7 @@
 
 - name: Apply /tmp hardening immediately via remount  # noqa: command-instead-of-module
   vars:
-    _noexec_opt: "{{ ',noexec' if system_tmp_noexec | bool else '' }}"
+    _noexec_opt: "{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }}"
   ansible.builtin.command:
     cmd: "mount -o remount,nosuid,nodev{{ _noexec_opt }} /tmp"
   register: _tmp_remount_result

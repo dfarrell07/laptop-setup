@@ -75,6 +75,7 @@
     state: stopped
   when:
     - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
+    - not csb_rhel  # CSB: IT manages modem hardware policy
     - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
   failed_when: false
 
@@ -84,6 +85,7 @@
     masked: false
   when:
     - not system_is_container  # no WWAN interfaces in containers
+    - not csb_rhel  # CSB: IT manages modem hardware policy
     - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length > 0
   failed_when: false
 
@@ -118,6 +120,7 @@
   check_mode: false
   when:
     - not (system_tlp_enabled | bool)
+    - not csb_rhel  # CSB: IT manages power daemons; do not stop
     - not system_is_container
     - is_dnf
 
@@ -128,6 +131,7 @@
     enabled: false
   when:
     - not (system_tlp_enabled | bool)
+    - not csb_rhel  # CSB: IT manages power daemons; do not stop
     - not system_is_container
     - is_dnf
     - (_system_tlp_disable_check.rc | default(-1)) == 0
