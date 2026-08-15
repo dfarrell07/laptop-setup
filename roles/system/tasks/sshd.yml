@@ -87,10 +87,25 @@
             sudo diff /etc/ssh/sshd_config /etc/ssh/sshd_config.rpmnew
       when: system_sshd_rpmnew.stat.exists | default(false)
 
+- name: Probe FIPS mode
+  ansible.builtin.slurp:
+    src: /proc/sys/crypto/fips_enabled
+  register: _system_fips_probe
+  failed_when: false
+  changed_when: false
+  check_mode: false  # read-only probe
+  when: is_linux | bool
+
+- name: Set system_fips_mode fact
+  ansible.builtin.set_fact:
+    system_fips_mode: "{{ (_system_fips_probe.content | default('MA==') | b64decode | trim) == '1' }}"
+  when: is_linux | bool
+
 - name: Deploy and validate sshd hardening config
   when:
     - ansible_facts.services['sshd.service'] is defined
     - not csb_rhel  # CSB: IT manages sshd via Satellite/SCAP; AllowUsers + non-FIPS algorithms conflict
+    - not (system_fips_mode | default(false) | bool)  # FIPS: chacha20-poly1305 not FIPS-approved; let crypto-policies manage ciphers
   block:
     - name: Deploy sshd hardening config
       ansible.builtin.template:

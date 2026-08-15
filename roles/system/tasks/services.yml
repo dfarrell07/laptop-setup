@@ -211,6 +211,14 @@
         state: present
       notify: Restart usbguard
 
+    - name: Enforce PresentDevicePolicy=keep in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^PresentDevicePolicy='
+        line: 'PresentDevicePolicy=keep'
+        state: present
+      notify: Restart usbguard
+
     - name: Enable USBGuard service
       ansible.builtin.systemd:
         name: usbguard

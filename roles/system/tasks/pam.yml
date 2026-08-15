@@ -123,13 +123,15 @@
   changed_when: system_authselect_faillock_enable.rc | default(1) == 0
   failed_when: false
 
-- name: Warn if authselect enable-feature with-faillock failed
-  ansible.builtin.debug:
+- name: Fail if authselect enable-feature with-faillock did not activate
+  ansible.builtin.fail:
     msg: >-
-      WARNING: authselect enable-feature with-faillock exited
-      {{ system_authselect_faillock_enable.rc | default('unknown') }} — faillock PAM feature may not be active
+      authselect enable-feature with-faillock exited
+      {{ system_authselect_faillock_enable.rc | default('unknown') }} — faillock PAM feature is not active.
+      Silent half-hardened state is worse than a failed run; fix authselect profile and re-run.
   when:
     - system_authselect_faillock_enable.rc | default(0) != 0
+    - system_authselect_faillock_enable is not skipped
     - not csb_rhel
     - not system_is_container
 
@@ -252,13 +254,15 @@
   changed_when: system_authselect_pwhistory_enable.rc | default(1) == 0
   failed_when: false
 
-- name: Warn if authselect enable-feature with-pwhistory failed
-  ansible.builtin.debug:
+- name: Fail if authselect enable-feature with-pwhistory did not activate
+  ansible.builtin.fail:
     msg: >-
-      WARNING: authselect enable-feature with-pwhistory exited
-      {{ system_authselect_pwhistory_enable.rc | default('unknown') }} — pwhistory PAM feature may not be active
+      authselect enable-feature with-pwhistory exited
+      {{ system_authselect_pwhistory_enable.rc | default('unknown') }} — pwhistory PAM feature is not active.
+      Silent half-hardened state is worse than a failed run; fix authselect profile and re-run.
   when:
     - system_authselect_pwhistory_enable.rc | default(0) != 0
+    - system_authselect_pwhistory_enable is not skipped
     - not csb_rhel
     - not system_is_container
 
