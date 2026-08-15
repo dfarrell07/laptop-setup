@@ -249,8 +249,9 @@
 
 # --- Shell ---
 # ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts
-# that have no /etc/passwd entry. Probe first; fall back to chsh (PAM-proxied) for
-# domain accounts so the play does not abort mid-run with a non-zero usermod exit.
+# that have no /etc/passwd entry. Probe first; for SSSD/LDAP accounts, chsh and
+# usermod both read only /etc/passwd and cannot write to LDAP backends —
+# the correct approach is override_shell in sssd.conf.
 - name: Check if user has a local /etc/passwd entry
   ansible.builtin.command:
     cmd: grep -q "^{{ ansible_facts['user_id'] }}:" /etc/passwd
@@ -270,29 +271,59 @@
     - is_linux
     - _zsh_local_user_check.rc | default(1) == 0
 
-- name: Set zsh as default shell (SSSD/LDAP user — chsh via PAM)
-  ansible.builtin.command:
-    cmd: chsh -s /bin/zsh {{ ansible_facts['user_id'] }}
-  become: true
-  tags: [become]
-  register: _zsh_chsh_result
-  changed_when: _zsh_chsh_result.rc == 0
+# For SSSD/LDAP domain accounts, chsh and usermod only modify /etc/passwd
+# and cannot write to LDAP backends. Set override_shell in sssd.conf instead —
+# this takes effect for the domain user on next login after sssd restarts.
+- name: Get SSSD domain section for override_shell
+  ansible.builtin.shell:
+    cmd: awk -F'[][]' '/^\[domain\// {print $2; exit}' /etc/sssd/sssd.conf
+  register: _sssd_domain_section
+  changed_when: false
   failed_when: false
+  become: true
+  check_mode: false  # read-only probe — must run in check mode
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
 
-- name: Warn if setting zsh as default shell failed for SSSD/LDAP user
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: could not set zsh as default shell for {{ ansible_facts['user_id'] }}
-      (chsh returned rc={{ _zsh_chsh_result.rc | default('n/a') }}).
-      The account has no local /etc/passwd entry (SSSD/LDAP-managed).
-      Run manually: chsh -s /bin/zsh {{ ansible_facts['user_id'] }}
+- name: Set zsh via override_shell in sssd.conf (SSSD/LDAP user)
+  community.general.ini_file:
+    path: /etc/sssd/sssd.conf
+    section: "{{ _sssd_domain_section.stdout }}"
+    option: override_shell
+    value: /bin/zsh
+    mode: "0600"
+  become: true
+  tags: [become]
+  register: _sssd_override_shell_result
   when:
     - is_linux
     - _zsh_local_user_check.rc | default(1) != 0
-    - _zsh_chsh_result.rc | default(0) != 0
+    - _sssd_domain_section.stdout | default('') | length > 0
+
+- name: Restart sssd after override_shell change
+  ansible.builtin.systemd:
+    name: sssd
+    state: restarted
+  become: true
+  tags: [become]
+  when:
+    - is_linux
+    - _sssd_override_shell_result is defined
+    - _sssd_override_shell_result is changed
+
+- name: Warn if SSSD domain not found (cannot set shell automatically)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not set zsh as default shell for {{ ansible_facts['user_id'] }}.
+      The account has no local /etc/passwd entry (SSSD/LDAP-managed) and no
+      [domain/...] section was found in /etc/sssd/sssd.conf.
+      Manual fix: add 'override_shell = /bin/zsh' to the [domain/...] stanza
+      in /etc/sssd/sssd.conf, then run 'systemctl restart sssd'.
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+    - _sssd_domain_section.stdout | default('') | length == 0
 
 # --- macOS: AeroSpace config ---
 - name: Deploy AeroSpace configuration (macOS)

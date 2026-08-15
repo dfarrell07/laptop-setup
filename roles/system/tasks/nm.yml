@@ -121,7 +121,9 @@
   when:
     - not system_is_container  # firewalld module crashes privileged Podman containers
     - system_firewalld_running | bool
-  failed_when: false  # tailscale0 doesn't exist on first provision; permanent config succeeds, immediate fails
+  # iifname-based nftables rule succeeds immediately even when tailscale0 does not
+  # exist yet — firewalld uses iifname (name-match) not iif (index-match), so the
+  # rule activates the moment tailscaled creates the interface. No failed_when needed.
   notify:
     - Apply firewall rules
     - Restart tailscaled
@@ -131,8 +133,10 @@
 # (arriving on wt0) is not dropped by the drop zone default. The firewall.yml
 # exclusion regex (w[gt].*) prevents wt0 from being moved to drop, but does
 # not assign a zone — firewalld applies the default (drop) to unzoned interfaces.
-# failed_when: false — wt0 does not exist at provision time; the permanent config
-# succeeds, the immediate flag fails with INVALID_INTERFACE, which is expected.
+# iifname-based nftables rule: succeeds immediately even when wt0 does not exist;
+# the rule activates the moment NetBird creates the interface. No failed_when needed.
+# Note: no 'Restart netbird' handler — NetBird manages its own nftables rules
+# natively; restarting it on zone change would drop active peer connections.
 - name: Warn when wt0 zone assignment will be skipped
   ansible.builtin.debug:
     msg: "system_firewalld_running=false — wt0 zone assignment skipped; run without --tags to configure firewall"
@@ -150,7 +154,6 @@
   when:
     - not system_is_container  # firewalld module crashes privileged Podman containers
     - system_firewalld_running | bool
-  failed_when: false  # wt0 doesn't exist on first provision; permanent config succeeds, immediate fails
   notify:
     - Apply firewall rules
 

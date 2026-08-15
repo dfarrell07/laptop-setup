@@ -1012,7 +1012,7 @@
     - not (system_is_container | default(false))
     - verify_sudoers_conf.stat.exists
 
-- name: Stat auditd rules file (system role deploys it on all non-CSB Linux)
+- name: Stat auditd rules file (system role deploys it on non-RHEL-CSB Linux, including Fedora hybrid CSB)
   ansible.builtin.stat:
     path: /etc/audit/rules.d/claude-code.rules
   register: verify_auditd_rules
@@ -1036,13 +1036,24 @@
     - not csb_rhel
     - not (system_is_container | default(false))
 
-- name: Check auditd rules contain immutability flag -e 2
+- name: Check auditd rules contain immutability flag -e 2 (non-CSB hosts)
   ansible.builtin.command: grep -q '^-e 2$' /etc/audit/rules.d/claude-code.rules
   changed_when: false
   become: true
   when:
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected  # Fedora hybrid CSB (csb_detected=true) deploys -e 1 (mutable); RHEL CSB skips rules entirely
+    - not (system_is_container | default(false))
+    - verify_auditd_rules.stat.exists
+
+- name: Check auditd rules contain mutable flag -e 1 (Fedora hybrid CSB)
+  ansible.builtin.command: grep -q '^-e 1$' /etc/audit/rules.d/claude-code.rules
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - csb_detected | default(false)
+    - not csb_rhel  # RHEL CSB skips rules entirely; only Fedora hybrid CSB gets -e 1
     - not (system_is_container | default(false))
     - verify_auditd_rules.stat.exists
 
@@ -1095,7 +1106,10 @@
     - not (system_is_container | default(false))
     - verify_auditd_rules.stat.exists
 
-# --- auditd.conf coverage (deployed by system role on non-CSB Linux) ---
+# --- auditd.conf coverage (deployed by system role on non-CSB Linux only) ---
+# auditd.conf is NOT deployed on any CSB tier (csb_detected=true): IT owns auditd.conf
+# on both RHEL CSB (csb_rhel=true) and Fedora hybrid CSB (csb_detected=true, csb_rhel=false).
+# Guard is 'not csb_detected' (matches auditd.yml when: not csb_detected).
 - name: Stat /etc/audit/auditd.conf
   ansible.builtin.stat:
     path: /etc/audit/auditd.conf
@@ -1103,7 +1117,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected  # CSB IT owns auditd.conf on all CSB tiers; we do not deploy it
     - not (system_is_container | default(false))
 
 - name: Assert auditd.conf deployed with mode 0640
@@ -1117,7 +1131,7 @@
       — system role auditd deploy regression
   when:
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - not (system_is_container | default(false))
 
 - name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
@@ -1126,7 +1140,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_auditd_conf.stat.exists
     - not (system_is_container | default(false))
 
@@ -1136,7 +1150,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not csb_rhel
+    - not csb_detected
     - verify_auditd_conf.stat.exists
     - not (system_is_container | default(false))
 
