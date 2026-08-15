@@ -9,7 +9,8 @@ server {{ server }} iburst nts
 pool {{ system_chrony_fallback_pool }} iburst
 {% endif %}
 
-# Prefer NTS; fall back to pool only when NTS unavailable
+# prefer: use NTS when available; accept unauthenticated pool and DHCP-sourced NTP as supplements when NTS is unreachable
+# require: reject all unauthenticated sources; time sync fails if NTS-KE (TCP 4460) is blocked (no fallback)
 authselectmode {{ system_chrony_authselectmode }}
 
 {% if system_chrony_dhcp_sourcedir and system_chrony_authselectmode != 'require' %}

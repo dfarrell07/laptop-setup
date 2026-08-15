@@ -63,6 +63,9 @@
         group: root
         mode: "0640"
       notify: Restart auditd
+      when: not csb_detected  # CSB IT owns auditd.conf on all CSB tiers (RHEL and Fedora hybrid);
+        # no drop-in mechanism exists — last writer wins with no merge. Deploying our
+        # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline.
 
     - name: Ensure auditd is enabled and started
       ansible.builtin.systemd:

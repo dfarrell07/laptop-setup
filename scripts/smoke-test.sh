@@ -1005,17 +1005,31 @@ EOF
     record "sshd-banner" "WARN" "sshd drop-in not deployed on CSB — IT manages SSH banner"
   else record "sshd-banner" "FAIL" "sshd drop-in not deployed"; fi
 
-  # auditd rules (verify immutability flag and sentinel watch rule; skipped on RHEL CSB — IT manages audit rules)
+  # auditd rules (verify immutability flag and sentinel watch rule)
+  # RHEL CSB: skipped — IT manages audit rules via Satellite/SIEM pipeline
+  # Fedora hybrid CSB: expect -e 1 (mutable) so CSB Ansible can reload rules without EPERM
+  # Non-CSB: expect -e 2 (immutable) — rules locked until reboot
   if $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
     record "auditd-rules" "WARN" "skipped on RHEL CSB — audit rules managed by IT/SIEM pipeline"
+  elif $CSB_HOST && grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && \
+     grep -q '^-e 1' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
+     grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
+    record "auditd-rules" "PASS"
   elif grep -q '^-e 2' /etc/audit/rules.d/claude-code.rules 2>/dev/null && \
      grep -q ' -k claude-sensitive-write$' /etc/audit/rules.d/claude-code.rules 2>/dev/null; then
     record "auditd-rules" "PASS"
-  else record "auditd-rules" "FAIL" "auditd rules not deployed, missing -e 2, or sentinel rule absent"; fi
-  # auditd kernel state: verify -e 2 is active in running kernel (requires root/CAP_AUDIT_CONTROL)
-  if [[ $EUID -eq 0 ]]; then
-    if auditctl -s 2>/dev/null | grep -q '^enabled 2'; then record "auditd-immutable" "PASS"
-    else record "auditd-immutable" "WARN" "auditd not in immutable mode (may need reboot after initial deploy)"; fi
+  else record "auditd-rules" "FAIL" "auditd rules not deployed, missing immutability flag (-e 2 on non-CSB, -e 1 on Fedora hybrid CSB), or sentinel rule absent"; fi
+  # auditd kernel state: verify audit mode matches deployment (requires root/CAP_AUDIT_CONTROL)
+  if $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null; then
+    record "auditd-immutable" "WARN" "skipped on RHEL CSB — IT manages audit enforcement mode"
+  elif [[ $EUID -eq 0 ]]; then
+    if $CSB_HOST && grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null; then
+      if auditctl -s 2>/dev/null | grep -q '^enabled 1'; then record "auditd-immutable" "PASS"
+      else record "auditd-immutable" "WARN" "expected enabled 1 on Fedora hybrid CSB (may need reboot after initial deploy)"; fi
+    else
+      if auditctl -s 2>/dev/null | grep -q '^enabled 2'; then record "auditd-immutable" "PASS"
+      else record "auditd-immutable" "WARN" "auditd not in immutable mode (may need reboot after initial deploy)"; fi
+    fi
   else
     record "auditd-immutable" "WARN" "auditctl requires root to check kernel state; re-run as root to verify"
   fi

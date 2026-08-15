@@ -24,7 +24,7 @@
     content: |
       # {{ ansible_managed }}
       [keyfile]
-      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:ovn-k8s-mp0
+      unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:wt*,interface-name:ovn-k8s-mp0
     dest: /etc/NetworkManager/conf.d/tailscale.conf
     mode: "0644"
   when: not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
@@ -125,6 +125,34 @@
   notify:
     - Apply firewall rules
     - Restart tailscaled
+
+# wt0 is the NetBird WireGuard interface. Like tailscale0, it is a user-managed
+# VPN interface that must be in the trusted zone so decrypted peer traffic
+# (arriving on wt0) is not dropped by the drop zone default. The firewall.yml
+# exclusion regex (w[gt].*) prevents wt0 from being moved to drop, but does
+# not assign a zone — firewalld applies the default (drop) to unzoned interfaces.
+# failed_when: false — wt0 does not exist at provision time; the permanent config
+# succeeds, the immediate flag fails with INVALID_INTERFACE, which is expected.
+- name: Warn when wt0 zone assignment will be skipped
+  ansible.builtin.debug:
+    msg: "system_firewalld_running=false — wt0 zone assignment skipped; run without --tags to configure firewall"
+  when:
+    - not system_is_container
+    - not system_firewalld_running | bool
+
+- name: Assign wt0 (NetBird) to firewall trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: wt0
+    permanent: true
+    immediate: true
+    state: enabled
+  when:
+    - not system_is_container  # firewalld module crashes privileged Podman containers
+    - system_firewalld_running | bool
+  failed_when: false  # wt0 doesn't exist on first provision; permanent config succeeds, immediate fails
+  notify:
+    - Apply firewall rules
 
 # failed_when: false — on CSB where the Tailscale repo is blocked, the package
 # may not be installed; silently skip rather than fail the play.

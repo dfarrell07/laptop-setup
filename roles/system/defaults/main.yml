@@ -149,6 +149,14 @@ system_journald_rate_burst: 10000  # RateLimitBurst — burst log entries per ra
 system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
 system_usbguard_whitelist:
   - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
+  # Linux Foundation vendor ID (1d6b) for all kernel-generated xHCI root hubs.
+  # Root hubs have connect_type N/A (no port attribute), so they match neither
+  # the hardwired rule below nor any with-connect-type "not used" per-device rule.
+  # Without these, blocking root hubs cascades to block all downstream devices.
+  # These IDs are identical on every Linux system regardless of hardware vendor.
+  - "allow id 1d6b:0001 with-interface one-of { 09:*:* }"  # USB 1.1 root hubs
+  - "allow id 1d6b:0002 with-interface one-of { 09:*:* }"  # USB 2.0 root hubs
+  - "allow id 1d6b:0003 with-interface one-of { 09:*:* }"  # USB 3.0 root hubs
   # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
   # Interface class restriction excludes mass storage (08) and unexpected classes.
   # NOTE: AMD machines (ThinkPad P16v Gen 1) report internal ports as 'not used',
@@ -340,6 +348,7 @@ system_ssh_client_alive_count_max: 2  # unacknowledged probes before server disc
 system_ssh_channel_timeout: ""
 system_ssh_unused_connection_timeout: 600  # seconds before idle connection with no channels is closed ("" to omit directive/disable)
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
+system_ssh_extra_allow_users: []  # users added to AllowUsers beyond real_user_id; set in config.yml for IT accounts
 system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
 system_ssh_rekey_limit: '1G 1h'  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window
 # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability; check-vars-sync.py enforces this mirror
@@ -431,7 +440,8 @@ system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync 
 system_chrony_makestep: "1.0 -1"  # unlimited stepping on startup; override in config.yml for strict environments
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
 system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
-system_chrony_dhcp_sourcedir: ''  # NM-dispatcher DHCP NTP dir; set to /run/chrony-dhcp in config.yml to enable DHCP NTP source injection
+system_chrony_dhcp_sourcedir: /run/chrony-dhcp  # NM-dispatcher DHCP NTP dir; included when non-empty and
+  # authselectmode != require; set '' to opt out (removes corporate DHCP-pushed NTP sources)
 system_chrony_driftfile: "{{ '/var/lib/chrony/chrony.drift' if is_apt else '/var/lib/chrony/drift' }}"  # apt: chrony.drift; dnf: drift
 system_chrony_ntsdumpdir: /var/lib/chrony   # NTS cookie persistence dir; override in config.yml for small /var partitions
 system_chrony_logdir: /var/log/chrony       # chrony log dir; override in config.yml for small /var/log partitions

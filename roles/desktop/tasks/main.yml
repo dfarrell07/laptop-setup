@@ -248,13 +248,51 @@
             - /etc/chromium
 
 # --- Shell ---
-- name: Set zsh as default shell
+# ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts
+# that have no /etc/passwd entry. Probe first; fall back to chsh (PAM-proxied) for
+# domain accounts so the play does not abort mid-run with a non-zero usermod exit.
+- name: Check if user has a local /etc/passwd entry
+  ansible.builtin.command:
+    cmd: grep -q "^{{ ansible_facts['user_id'] }}:" /etc/passwd
+  register: _zsh_local_user_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
+
+- name: Set zsh as default shell (local /etc/passwd user)
   ansible.builtin.user:
     name: "{{ ansible_facts['user_id'] }}"
     shell: /bin/zsh
   become: true
   tags: [become]
-  when: is_linux
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) == 0
+
+- name: Set zsh as default shell (SSSD/LDAP user — chsh via PAM)
+  ansible.builtin.command:
+    cmd: chsh -s /bin/zsh {{ ansible_facts['user_id'] }}
+  become: true
+  tags: [become]
+  register: _zsh_chsh_result
+  changed_when: _zsh_chsh_result.rc == 0
+  failed_when: false
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+
+- name: Warn if setting zsh as default shell failed for SSSD/LDAP user
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not set zsh as default shell for {{ ansible_facts['user_id'] }}
+      (chsh returned rc={{ _zsh_chsh_result.rc | default('n/a') }}).
+      The account has no local /etc/passwd entry (SSSD/LDAP-managed).
+      Run manually: chsh -s /bin/zsh {{ ansible_facts['user_id'] }}
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+    - _zsh_chsh_result.rc | default(0) != 0
 
 # --- macOS: AeroSpace config ---
 - name: Deploy AeroSpace configuration (macOS)

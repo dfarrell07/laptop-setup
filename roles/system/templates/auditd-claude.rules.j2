@@ -240,8 +240,10 @@
 # sudo log watch (CIS 4.1.3.3)
 -w /var/log/sudo.log -p wa -k actions
 
-# Make rules immutable until next reboot.
-# WARNING: after first deployment, manual augenrules --load or auditctl -R
-# will silently fail (EPERM) without a full service restart. Use 'make system'
-# which triggers the auditd handler that does a complete stop+start cycle.
--e 2
+# Set audit enforcement mode.
+# Non-CSB: -e 2 (immutable) — rules locked until reboot; augenrules --load
+#   and auditctl -R return EPERM. Use 'make system' (full stop+start) to reload.
+# Fedora hybrid CSB (csb_detected=true, csb_rhel=false): -e 1 (enabled, mutable)
+#   so CSB Ansible can call augenrules --load without EPERM. Immutable mode on a
+#   CSB-managed machine silently blocks IT audit policy updates until reboot.
+-e {{ csb_detected | ternary('1', '2') }}

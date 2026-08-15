@@ -263,6 +263,9 @@
 - name: Ensure rootless podman prerequisites for user
   when:
     - real_user_id | length > 0
+    - not csb_rhel  # CSB: IT may manage subuid/subgid via Satellite/SCAP with a different UID range;
+      # overwriting IT-managed entries creates a drift loop (matches the not csb_rhel guard pattern
+      # used by every other privileged block in this file)
     - not system_is_container  # subuid/subgid writes + loginctl enable-linger crash Debian 13 container PID 1
   block:
     - name: Ensure subuid entry exists for user
