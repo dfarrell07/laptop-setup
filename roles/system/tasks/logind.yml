@@ -3,7 +3,11 @@
 # Write to a drop-in so package upgrades can't clobber the settings.
 # inotify on /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
 - name: Configure logind session policy
-  when: not system_is_container
+  # csb_rhel guard: IT manages session policy via Satellite/SCAP on RHEL CSB; the 99-prefix
+  # would win lexicographically over IT-deployed drop-ins. Fedora hybrid (csb_rhel=false) runs.
+  when:
+    - not system_is_container
+    - not csb_rhel
   block:
     - name: Ensure logind drop-in directory exists
       ansible.builtin.file:

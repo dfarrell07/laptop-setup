@@ -280,7 +280,14 @@
 # this takes effect for the domain user on next login after sssd restarts.
 - name: Get SSSD domain section for override_shell
   ansible.builtin.shell:
-    cmd: awk -F'[][]' '/^\[domain\// {print $2; exit}' /etc/sssd/sssd.conf
+    cmd: |
+      result=$(awk -F'[][]' '/^\[domain\// {print $2; exit}' /etc/sssd/sssd.conf 2>/dev/null)
+      if [ -z "$result" ]; then
+        result=$(find /etc/sssd/conf.d/ -name '*.conf' 2>/dev/null |
+          xargs -r awk -F'[][]' '/^\[domain\// {print $2; exit}' 2>/dev/null |
+          head -1)
+      fi
+      echo "$result"
   register: _sssd_domain_section
   changed_when: false
   failed_when: false
@@ -296,6 +303,7 @@
     section: "{{ _sssd_domain_section.stdout }}"
     option: override_shell
     value: /bin/zsh
+    no_extra_spaces: true
     mode: "0600"
   become: true
   tags: [become]

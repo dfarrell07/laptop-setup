@@ -157,12 +157,16 @@
   notify:
     - Apply firewall rules
 
-# failed_when: false — on CSB where the Tailscale repo is blocked, the package
-# may not be installed; silently skip rather than fail the play.
+# On CSB where the Tailscale repo is blocked, tailscaled may not be installed.
+# Ignore only "Could not find the requested service" (unit absent); propagate
+# all other errors (D-Bus failures, permission denials, etc.).
 - name: Enable and start tailscaled
   ansible.builtin.systemd:
     name: tailscaled
     state: started
     enabled: true
-  failed_when: false
+  register: _tailscaled_enable_result
+  failed_when:
+    - _tailscaled_enable_result.failed | default(false)
+    - "'Could not find the requested service' not in (_tailscaled_enable_result.msg | default(''))"
   when: not system_is_container

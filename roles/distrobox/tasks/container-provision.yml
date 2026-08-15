@@ -122,7 +122,7 @@
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
-    GOTOOLCHAIN: auto
+    GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
   register: container_golangci_lint_result
   changed_when: container_golangci_lint_result.rc == 0
   timeout: 300
@@ -146,7 +146,7 @@
   environment:
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
-    GOTOOLCHAIN: auto
+    GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
   register: container_subctl_result
   changed_when: container_subctl_result.rc == 0
   timeout: 600

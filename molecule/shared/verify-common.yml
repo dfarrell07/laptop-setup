@@ -917,6 +917,16 @@
     - not (system_is_container | default(false))
     - verify_logind_conf.stat.exists
 
+- name: Check logind drop-in has HandlePowerKey setting
+  ansible.builtin.command: >-
+    grep -q '^HandlePowerKey={{ system_power_key | default("lock") }}'
+    /etc/systemd/logind.conf.d/99-hardening.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_logind_conf.stat.exists
+
 - name: Stat sudoers go-env drop-in (system role must deploy it on non-CSB)
   ansible.builtin.stat:
     path: /etc/sudoers.d/go-env

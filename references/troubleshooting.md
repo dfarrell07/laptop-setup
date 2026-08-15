@@ -221,6 +221,37 @@ In the Ansible role:
 
 ---
 
+## desktop: Login Shell Stays /bin/bash on SSSD-Managed Account
+
+**Symptom:**
+After `make all` completes successfully, `echo $SHELL` still returns `/bin/bash` and oh-my-zsh does not load on new login sessions. The smoke-test login-shell check reports FAIL.
+
+**Cause:**
+The desktop role sets zsh by writing `override_shell = /bin/zsh` to the `[domain/...]` section of `/etc/sssd/sssd.conf`. On machines where IT manages SSSD without a local `sssd.conf` (common on RHEL CSB), the file may be absent entirely — even though SSSD is active and the account is reachable via `getent passwd`. The role probe tries `/etc/sssd/sssd.conf` first, then falls back to `/etc/sssd/conf.d/*.conf`. If neither contains a `[domain/...]` section, the override cannot be written and the warning task fires instead.
+
+**Diagnosis:**
+```bash
+# Check whether sssd.conf or conf.d contain a domain section (run as root):
+sudo awk -F'[][]' '/^\[domain\// {print $2; exit}' /etc/sssd/sssd.conf 2>/dev/null
+sudo find /etc/sssd/conf.d/ -name '*.conf' 2>/dev/null | \
+  xargs -r awk -F'[][]' '/^\[domain\// {print $2; exit}' 2>/dev/null
+# Check current login shell:
+getent passwd "$USER" | cut -d: -f7
+```
+
+**Fix:**
+If SSSD config is IT-managed and no writable sssd.conf exists, set zsh manually:
+```bash
+chsh -s /bin/zsh
+```
+This requires PAM/LDAP to permit `chsh` for domain users. If `chsh` is blocked, request IT to add `override_shell = /bin/zsh` to the SSSD domain stanza or set the `loginShell` LDAP attribute.
+
+Once a local `/etc/sssd/sssd.conf` or `/etc/sssd/conf.d/*.conf` with a `[domain/...]` section exists, re-running `make desktop` will write `override_shell` automatically.
+
+**CSB IT ticket:** Possibly. Request that `override_shell = /bin/zsh` be added to the SSSD domain configuration, or that `chsh` is permitted for domain users.
+
+---
+
 ## desktop: i3 Not in RHEL Repos
 
 **Symptom:**

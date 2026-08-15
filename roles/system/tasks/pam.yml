@@ -11,6 +11,7 @@
     section: null
     option: "{{ item.key }}"
     value: "{{ item.value }}"
+    no_extra_spaces: true
     mode: "0644"
   loop:
     - key: deny
@@ -29,6 +30,7 @@
     section: null
     option: audit
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - system_faillock_audit | bool
@@ -53,6 +55,7 @@
     section: null
     option: local_users_only  # prevent double-lockout with SSSD/IPA domain users
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - system_faillock_local_users_only | bool
@@ -77,6 +80,7 @@
     section: null
     option: even_deny_root
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - system_faillock_even_deny_root | bool
@@ -186,6 +190,7 @@
     section: null
     option: "{{ item.key }}"
     value: "{{ item.value }}"
+    no_extra_spaces: true
     mode: "0644"
   loop:
     - key: minlen
@@ -216,6 +221,7 @@
     section: null
     option: enforce_for_root
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - is_apt
@@ -262,6 +268,7 @@
     section: null
     option: remember
     value: "{{ system_pwhistory_remember }}"
+    no_extra_spaces: true
     mode: "0644"
   when:
     - (system_authselect_bin.stat | default({})).exists | default(false)
@@ -275,6 +282,7 @@
     section: null
     option: enforce_for_root
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - (system_authselect_bin.stat | default({})).exists | default(false)
@@ -289,6 +297,7 @@
     section: null
     option: "{{ item.key }}"
     value: "{{ item.value }}"
+    no_extra_spaces: true
     mode: "0644"
   loop:
     - key: minlen
@@ -320,6 +329,7 @@
     section: null
     option: enforce_for_root
     allow_no_value: true
+    no_extra_spaces: true
     mode: "0644"
   when:
     - not csb_rhel

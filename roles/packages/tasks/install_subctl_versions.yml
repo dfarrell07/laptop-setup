@@ -23,7 +23,7 @@
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
         GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
-        GOTOOLCHAIN: auto
+        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
         HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
         HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
       vars:
