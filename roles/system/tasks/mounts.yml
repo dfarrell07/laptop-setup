@@ -2,6 +2,10 @@
 # --- Harden /tmp mount options (CIS 1.1.2.x) ---
 # Writing to /etc/systemd/system/ triggers inotify → /tmp remount → clears Ansible temp files
 - name: Harden /tmp mount options (CIS 1.1.2.x)
+  # CSB posture: safe to deploy on RHEL CSB — the drop-in adds nosuid/nodev to /tmp (matching
+  # IT's SCAP baseline). Unlike /boot and /dev/shm, /tmp uses a pure drop-in (no boot service
+  # workaround needed) because systemd merges tmp.mount.d/*.conf at mount time, not at boot,
+  # so there is no fstab conflict with IT-managed entries.
   when: not system_is_container
   block:
     - name: Ensure tmp.mount drop-in directory exists

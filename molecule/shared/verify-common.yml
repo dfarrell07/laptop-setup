@@ -911,6 +911,8 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
 - name: Check logind drop-in has IdleAction=lock
@@ -919,6 +921,8 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_logind_conf is not skipped
     - verify_logind_conf.stat.exists
 
 - name: Check logind drop-in has HandlePowerKey setting
@@ -929,6 +933,8 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_logind_conf is not skipped
     - verify_logind_conf.stat.exists
 
 - name: Stat sudoers go-env drop-in (system role must deploy it on non-CSB)
@@ -1024,6 +1030,8 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
 - name: Stat auditd rules file (system role deploys it on non-RHEL-CSB Linux, including Fedora hybrid CSB)

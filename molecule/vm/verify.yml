@@ -22,9 +22,10 @@
         usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
         system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
         system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
-        system_disable_bluetooth: true       # converge.yml sets this; enables BT masking + blacklist assertions
+        system_disable_bluetooth: true        # converge.yml sets this; enables BT masking + blacklist assertions
         system_disable_printing: true        # converge.yml sets this; enables cups masking assertions
         system_disable_usb_storage: true     # converge.yml sets this; enables usb_storage blacklist assertions
+        system_disable_fingerprint: true     # converge.yml sets this (role default=true); verify asserts fprintd masked
         system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
         profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
         ssh_port: 722                        # matches default; parameterizes sshd port assertions

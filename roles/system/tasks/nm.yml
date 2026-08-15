@@ -77,6 +77,13 @@
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
+- name: Remove stale 99-dhcp-no-hostname.conf (renamed to 99-dhcp-privacy.conf)
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dhcp-no-hostname.conf
+    state: absent
+  when: not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
 - name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
   ansible.builtin.copy:
     content: |
@@ -137,6 +144,10 @@
 # the rule activates the moment NetBird creates the interface. No failed_when needed.
 # Note: no 'Restart netbird' handler — NetBird manages its own nftables rules
 # natively; restarting it on zone change would drop active peer connections.
+# Side effect: all NetBird peers can reach any listening port on this machine.
+# Services are masked separately (see service_masking.yml). Dev servers bound to
+# 0.0.0.0 are reachable from NetBird peers — bind to 127.0.0.1 or use
+# firewall-cmd --zone=trusted --add-rich-rule for port-specific restrictions if needed.
 - name: Warn when wt0 zone assignment will be skipped
   ansible.builtin.debug:
     msg: "system_firewalld_running=false — wt0 zone assignment skipped; run without --tags to configure firewall"

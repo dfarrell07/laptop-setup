@@ -61,7 +61,10 @@
     masked: "{{ not _intel }}"
     enabled: "{{ _intel | bool }}"
     state: "{{ 'stopped' if not _intel else 'started' }}"
-  when: not system_is_container and is_dnf  # thermald not present in containers; mask/stop crash container systemd
+  when:
+    - not system_is_container  # thermald not present in containers; mask/stop crash container systemd
+    - not csb_rhel  # CSB: IT manages power management daemons
+    - is_dnf
   failed_when: false
 
 # --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
@@ -205,6 +208,7 @@
     state: stopped
   when:
     - system_disable_printing | bool
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
 
@@ -215,6 +219,7 @@
     # intentionally not started: CVE-2024-47176 RCE risk; start manually if network discovery required
   when:
     - not (system_disable_printing | bool)
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -225,6 +230,7 @@
     enabled: false
   when:
     - system_disable_printing | bool
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
   failed_when: false
 
@@ -235,6 +241,7 @@
     enabled: true
   when:
     - not (system_disable_printing | bool)
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -248,6 +255,7 @@
     - cups.path
   when:
     - system_disable_printing | bool
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
   failed_when: false
 
@@ -262,6 +270,7 @@
     - cups.path
   when:
     - not (system_disable_printing | bool)
+    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -336,7 +345,9 @@
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
-  when: not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
+  when:
+    - not csb_rhel  # CSB: IT manages mDNS/avahi policy
+    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
 
 # --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
@@ -394,6 +405,7 @@
     - cockpit.service
     - cockpit.socket
   when:
+    - not csb_rhel  # CSB: IT manages cockpit access; do not mask
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
     - _cockpit_stat.stat.exists
   failed_when: false
@@ -407,6 +419,7 @@
     - cockpit.service
     - cockpit.socket
   when:
+    - not csb_rhel  # CSB: IT manages cockpit access; do not mask
     - not system_is_container
     - _cockpit_stat.stat.exists
   failed_when: false

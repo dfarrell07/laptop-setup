@@ -62,6 +62,11 @@
 -w {{ real_user_home }}/.config/acli/ -p r -k claude-sensitive-read
 -w {{ real_user_home }}/.docker/config.json -p r -k claude-sensitive-read
 -w {{ real_user_home }}/.netrc -p r -k claude-sensitive-read
+# Claude Code settings — write-watch detects sandbox policy tampering, malicious MCP server injection,
+# or tool permission escalation via settings.json/settings.local.json/CLAUDE.md
+-w {{ real_user_home }}/.claude/ -p wa -k claude-settings
+# Vertex auth env (ANTHROPIC_VERTEX_PROJECT_ID) — sourced by claude role for all instances
+-w {{ real_user_home }}/.config/claude-code-vertex/ -p r -k claude-sensitive-read
 -w /etc/sudoers -p wa -k privilege-escalation
 -w /etc/sudoers.d/ -p wa -k privilege-escalation
 -w /etc/ssh/sshd_config -p wa -k privilege-escalation

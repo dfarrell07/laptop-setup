@@ -11,6 +11,7 @@
     mode: "0644"
   when:
     - system_tmout | int > 0
+    - not csb_rhel  # CSB: IT manages TMOUT via SCAP session policy; avoid duplicate readonly assignment
     - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
     - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
 
@@ -48,6 +49,7 @@
     mode: "0644"
   when:
     - not is_apt
+    - not csb_rhel  # CSB: IT manages TMOUT via SCAP session policy; avoid duplicate readonly assignment
     - system_tmout | int > 0
 
 - name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
@@ -69,6 +71,7 @@
     state: absent
   when:
     - system_tmout | int <= 0
+    - not csb_rhel  # CSB: IT manages TMOUT; we never write tmout.sh on RHEL CSB so nothing to clean up
     - not is_apt  # Debian does not use profile.d for TMOUT; avoid spurious no-op on Debian hosts
 
 - name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
@@ -96,6 +99,7 @@
     state: absent
   when:
     - not is_apt
+    - not csb_rhel  # CSB: IT manages TMOUT; we never write /etc/zshrc TMOUT on RHEL CSB so nothing to clean up
     - system_tmout | int <= 0
 
 - name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)

@@ -103,7 +103,7 @@
     # (when: not csb_rhel) is skipped because csb_rhel=true. The RPM-based
     # install path (when: csb_rhel) also fails silently — no internal RHEL
     # repos in CI. Certs are absent regardless.
-    - name: Stat Red Hat internal CA certs (must be absent on Rocky — redhat role skipped)
+    - name: Stat Red Hat internal CA certs (must be absent on Rocky — cert-copy block skipped, not csb_rhel)
       ansible.builtin.stat:
         path: "/etc/pki/ca-trust/source/anchors/{{ item }}"
       loop:
@@ -111,10 +111,10 @@
         - Eng-CA.crt
       register: verify_rhit_ca_rocky
 
-    - name: Assert Red Hat CA certs absent on Rocky (is_rhel=false → redhat role skipped)
+    - name: Assert Red Hat CA certs absent on Rocky (is_rhel=false → cert-copy block skipped, not csb_rhel)
       ansible.builtin.assert:
         that: not item.stat.exists
-        fail_msg: "{{ item.item }} deployed on Rocky — redhat role should skip cert when is_rhel=false"
+        fail_msg: "{{ item.item }} deployed on Rocky — cert-copy block should skip when is_rhel=false (csb_rhel=true required)"
       loop: "{{ verify_rhit_ca_rocky.results }}"
 
     # --- Claude task queue (converge sets claude_queue_enabled: true) ---

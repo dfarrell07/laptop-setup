@@ -2,6 +2,10 @@
 # roles/system/tasks/kernel_modules_blacklist.yml
 # --- Kernel module blacklist ---
 - name: Deploy kernel module blacklist (non-container)
+  # CSB posture: safe to deploy on RHEL CSB — blacklisted modules (hfs, cramfs, vivid, n_hdlc,
+  # etc.) are not used by IT workflows and do not conflict with SCAP baselines. The SCAP RHEL9
+  # profile independently blacklists most of the same modules (CIS 3.x); deploying this file
+  # is additive and does not override IT-managed modprobe.d entries.
   when: not system_is_container  # modprobe.d is not applied in containers; skip to avoid template failures
   block:
     - name: Ensure /etc/modprobe.d exists
