@@ -44,6 +44,27 @@
         that: not verify_sshd_dropin_rocky.stat.exists
         fail_msg: "00-hardening.conf deployed on Rocky (csb_rhel=true) — sshd.yml not csb_rhel guard regressed"
 
+    - name: Stat logind hardening drop-in (must be absent on Rocky — logind.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/systemd/logind.conf.d/99-hardening.conf
+      register: verify_logind_dropin_rocky
+
+    - name: Assert logind hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_logind_dropin_rocky.stat.exists
+        fail_msg: "99-hardening.conf deployed on Rocky (csb_rhel=true) — logind.yml not csb_rhel guard regressed"
+
+    - name: Stat sudoers hardening drop-in (must be absent on Rocky — account_hardening.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/99-hardening
+      register: verify_sudoers_dropin_rocky
+      become: true
+
+    - name: Assert sudoers hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_sudoers_dropin_rocky.stat.exists
+        fail_msg: "/etc/sudoers.d/99-hardening deployed on Rocky (csb_rhel=true) — account_hardening.yml not csb_rhel guard regressed"
+
     - name: Include smoke-test verification
       ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 

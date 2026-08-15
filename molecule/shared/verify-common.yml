@@ -874,6 +874,7 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
 
 - name: Assert logind hardening drop-in deployed
   ansible.builtin.assert:
@@ -882,6 +883,7 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
 
 - name: Stat sudoers hardening drop-in (system role must deploy it)
   ansible.builtin.stat:
@@ -891,6 +893,7 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
 
 - name: Assert sudoers hardening drop-in deployed
   ansible.builtin.assert:
@@ -899,6 +902,7 @@
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
+    - not csb_rhel
 
 - name: Assert sudoers drop-in is mode 0440
   ansible.builtin.assert:
