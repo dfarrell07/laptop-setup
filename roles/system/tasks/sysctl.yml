@@ -15,8 +15,10 @@
 # net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
 # recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
 # (OVN-K, Submariner). No conditional override is applied.
-- name: Apply sysctl hardening (non-container)
-  when: not system_is_container
+- name: Apply sysctl hardening (non-container, non-CSB-RHEL)
+  when:
+    - not system_is_container
+    - not csb_rhel  # CSB: IT manages sysctl via SCAP; 90-hardening.conf would conflict
   block:
     - name: Ensure /etc/sysctl.d exists
       ansible.builtin.file:
@@ -99,3 +101,18 @@
       notify: Apply sysctl
       # EPERM for kernel.unprivileged_bpf_disabled (write-locked on Fedora 44) is
       # tolerated in the handler's failed_when (handlers/main.yml).
+
+- name: Set ip_forward on RHEL CSB (Tailscale/kind require it; SCAP does not set it)
+  ansible.builtin.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value | string }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop:
+    - {key: net.ipv4.ip_forward, value: "{{ system_enable_ip_forward | bool | int }}"}
+    - {key: net.ipv6.conf.all.forwarding, value: "{{ system_enable_ip_forward | bool | int }}"}
+  when:
+    - csb_rhel
+    - system_enable_ip_forward | bool
+    - not system_is_container
