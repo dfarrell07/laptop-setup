@@ -121,6 +121,7 @@ system_disable_udf: true
 system_install_usbguard: true
 system_tmp_noexec: false
 system_bluetooth_privacy: device
+system_journald_compress: "yes"
 # install/start bolt; false on VMs and containers
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"

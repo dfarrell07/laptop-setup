@@ -219,6 +219,7 @@ REQUIRED_KEYS = {
     "system_disable_udf": bool,
     "system_install_usbguard": bool,
     "system_tmp_noexec": bool,
+    "system_journald_compress": str,
     "system_kernel_panic": int,
     "system_kernel_panic_on_oops": int,
     "system_kexec_load_disabled": int,

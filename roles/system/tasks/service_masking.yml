@@ -144,6 +144,7 @@
     state: started
   loop:
     - tuned-ppd
+    - power-profiles-daemon
   when:
     - not (system_tlp_enabled | bool)
     - not csb_rhel
@@ -177,6 +178,7 @@
       loop:
         - tuned-ppd
         - tuned
+        - power-profiles-daemon
       when:
         - is_dnf
         - not system_is_container
@@ -433,5 +435,7 @@
   ansible.builtin.systemd:
     name: ctrl-alt-del.target
     masked: true
-  when: not system_is_container  # target masking can trigger daemon-reload in privileged containers
+  when:
+    - not csb_rhel  # CSB: IT manages Ctrl+Alt+Delete policy via Satellite
+    - not system_is_container  # target masking can trigger daemon-reload in privileged containers
   failed_when: false
