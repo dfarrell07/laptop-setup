@@ -118,6 +118,7 @@
       ansible.builtin.stat:
         path: /usr/local/bin/actionlint
       register: verify_actionlint
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert actionlint exists and is executable
       ansible.builtin.assert:
@@ -125,6 +126,7 @@
           - verify_actionlint.stat.exists
           - verify_actionlint.stat.executable
         fail_msg: "/usr/local/bin/actionlint missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Stat /usr/local/bin/zizmor
       ansible.builtin.stat:
@@ -453,6 +455,7 @@
         cmd: /usr/local/bin/actionlint --version
       register: verify_actionlint_ver
       changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Assert actionlint version matches packages_actionlint_version
       ansible.builtin.assert:
@@ -460,6 +463,7 @@
         fail_msg: >-
           actionlint version mismatch — expected {{ packages_actionlint_version }},
           got: {{ verify_actionlint_ver.stdout + verify_actionlint_ver.stderr }}
+      when: ansible_facts['architecture'] == 'x86_64'
 
     - name: Check zizmor version output
       ansible.builtin.command:

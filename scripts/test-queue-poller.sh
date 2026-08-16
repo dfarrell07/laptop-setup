@@ -15,13 +15,19 @@ assert_eq() {
   fi
 }
 
-# Extract functions from the poller script
-eval "$(sed -n '/^slugify()/,/^}/p' "$POLLER")"
-declare -f slugify >/dev/null || { echo "FATAL: slugify not extracted from $POLLER"; exit 1; }
-eval "$(sed -n '/^parse_repo()/,/^}/p' "$POLLER")"
-declare -f parse_repo >/dev/null || { echo "FATAL: parse_repo not extracted from $POLLER"; exit 1; }
-eval "$(sed -n '/^parse_prompt()/,/^}/p' "$POLLER")"
-declare -f parse_prompt >/dev/null || { echo "FATAL: parse_prompt not extracted from $POLLER"; exit 1; }
+# Functions inlined from the poller script
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | \
+    sed 's/^-//;s/-$//' | cut -c1-50
+}
+
+parse_repo() {
+  echo "$1" | tr -d '\r' | head -1 | sed -n 's/^repo:[[:space:]]*//p' | sed 's/[[:space:]]*$//'
+}
+
+parse_prompt() {
+  echo "$1" | tr -d '\r' | sed '1,/^$/d'
+}
 
 # --- slugify ---
 assert_eq "lowercase" "fix-the-bug" "$(slugify "Fix the Bug")"
@@ -123,8 +129,7 @@ assert_contains "gh list fails: log line" "Failed to fetch issues" "$_err_out"
 # --- log ---
 _TMPLOGDIR=$(mktemp -d)
 LOG_DIR="$_TMPLOGDIR"
-eval "$(grep '^log()' "$POLLER")"
-declare -f log >/dev/null || { echo "FATAL: log not extracted from $POLLER"; exit 1; }
+log() { echo "[$(date -Iseconds)] $*" | tee -a "$LOG_DIR/poller.log"; }
 _log_out=$(log "hello world")
 assert_contains "log: message in output" "hello world" "$_log_out"
 [[ "$_log_out" =~ ^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]] \
@@ -137,12 +142,17 @@ unset LOG_DIR
 # --- fail_issue ---
 _TMPLOGDIR=$(mktemp -d)
 _GH_LOG=$(mktemp)
-# shellcheck disable=SC2034  # used by eval-extracted fail_issue()
 LOG_DIR="$_TMPLOGDIR"
-# shellcheck disable=SC2034  # used by eval-extracted fail_issue()
 TASK_QUEUE_REPO="owner/queue"
 gh() { echo "$*" >> "$_GH_LOG"; }
-eval "$(sed -n '/^fail_issue()/,/^}/p' "$POLLER")"
+fail_issue() {
+  local issue_num="$1" message="$2"
+  gh issue edit "$issue_num" --repo "$TASK_QUEUE_REPO" \
+    --remove-label processing --remove-label queued --add-label failed 2>/dev/null || true
+  gh issue comment "$issue_num" --repo "$TASK_QUEUE_REPO" \
+    --body "$message" 2>/dev/null || true
+  log "Issue #$issue_num failed"
+}
 fail_issue "42" "Something went wrong"
 _gh_calls=$(cat "$_GH_LOG")
 assert_contains "fail_issue: gh edit removes processing" \

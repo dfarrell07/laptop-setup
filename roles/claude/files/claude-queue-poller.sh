@@ -11,6 +11,7 @@ MAX_TURNS="${CLAUDE_QUEUE_MAX_TURNS:-50}"
 TIMEOUT_SECONDS="${CLAUDE_QUEUE_TIMEOUT:-1800}"
 HOST_LABEL="${CLAUDE_QUEUE_HOST_LABEL:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
+MAX_ISSUES_PER_RUN="${CLAUDE_QUEUE_MAX_ISSUES_PER_RUN:-5}"
 
 # --- Repo maps (loaded from config file) ---
 REPO_CONFIG="${HOME}/.config/claude/queue-repos.conf"
@@ -20,8 +21,18 @@ if [[ ! -f "$REPO_CONFIG" ]]; then
 fi
 
 declare -A REPO_PATH REPO_REMOTE REPO_ALLOWED_TOOLS REPO_DEFAULT_BRANCH
-# shellcheck source=/dev/null
-source "$REPO_CONFIG"
+while IFS= read -r _conf_line; do
+  if [[ "$_conf_line" =~ ^(REPO_PATH|REPO_REMOTE|REPO_ALLOWED_TOOLS|REPO_DEFAULT_BRANCH)\[([^]]+)\]=(.*)$ ]]; then
+    _conf_val="${BASH_REMATCH[3]#\"}"
+    _conf_val="${_conf_val%\"}"
+    case "${BASH_REMATCH[1]}" in
+      REPO_PATH)           REPO_PATH["${BASH_REMATCH[2]}"]="$_conf_val" ;;
+      REPO_REMOTE)         REPO_REMOTE["${BASH_REMATCH[2]}"]="$_conf_val" ;;
+      REPO_ALLOWED_TOOLS)  REPO_ALLOWED_TOOLS["${BASH_REMATCH[2]}"]="$_conf_val" ;;
+      REPO_DEFAULT_BRANCH) REPO_DEFAULT_BRANCH["${BASH_REMATCH[2]}"]="$_conf_val" ;;
+    esac
+  fi
+done < "$REPO_CONFIG"
 
 # --- Functions ---
 log() { echo "[$(date -Iseconds)] $*" | tee -a "$LOG_DIR/poller.log"; }
@@ -108,7 +119,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   TARGET_DIR="${REPO_PATH[$REPO_SHORT]}"
   TARGET_REMOTE="${REPO_REMOTE[$REPO_SHORT]}"
-  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git *)}"
+  TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git diff *),Bash(git fetch *),Bash(git checkout *),Bash(git log *),Bash(git status),Bash(git pull *)}"
   DEFAULT_BRANCH="${REPO_DEFAULT_BRANCH[$REPO_SHORT]:-main}"
   PROMPT=$(parse_prompt "$ISSUE_BODY")
 
@@ -122,7 +133,19 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     continue
   fi
 
-  # Re-fetch labels to reduce multi-host race window before claiming the issue.
+  # Re-fetch labels to reduce (not eliminate) the multi-host race window.
+  # Residual TOCTOU: two pollers that both observed "queued" in the initial
+  # list (line 78) can both pass this check and both call --add-label
+  # processing below if neither has written it yet.  Closing the window
+  # requires host-specific claim labels (e.g. claiming-<HOST_LABEL>) and a
+  # deterministic tiebreak, which in turn requires those labels to already
+  # exist in the target repo and cleanup on every exit path — too invasive
+  # for a minimal fix.  Practical worst-case: the slower host's subshell
+  # fails at git push --force-with-lease and calls fail_issue on an already-
+  # closed issue; fail_issue uses || true on all gh calls so concurrent
+  # invocation is safe (cosmetic label noise only).  The stale-recovery
+  # threshold (TIMEOUT_SECONDS+300) cannot fire on a closed issue because
+  # --state open filters it out.
   # Skipped on empty/error output (network failure or test stub) — fail open.
   _REFETCH_LABELS=$(gh issue view "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --json labels --jq '[.labels[].name]' 2>/dev/null) || true
@@ -137,6 +160,12 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     fi
   fi
 
+  _ISSUE_COUNT=$(( ${_ISSUE_COUNT:-0} + 1 ))
+  if (( _ISSUE_COUNT > MAX_ISSUES_PER_RUN )); then
+    log "MAX_ISSUES_PER_RUN ($MAX_ISSUES_PER_RUN) reached; deferring remaining issues to next run"
+    break
+  fi
+
   gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --remove-label queued --add-label processing \
     || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping"; continue; }
@@ -146,6 +175,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   BRANCH_NAME="claude/${ISSUE_NUM}-$(slugify "$ISSUE_TITLE")"
   START_TIME=$(date +%s)
   TMPFILE=$(mktemp)
+  chmod 0600 "$TMPFILE"
   echo "$PROMPT" > "$TMPFILE"
 
   (

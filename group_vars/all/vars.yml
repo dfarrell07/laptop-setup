@@ -119,6 +119,8 @@ system_disable_sctp: false  # OVN-K kind/Submariner use SCTP; set true for stric
 system_disable_usb_storage: false
 system_disable_udf: true
 system_install_usbguard: true
+system_tmp_noexec: false
+system_bluetooth_privacy: device
 # install/start bolt; false on VMs and containers
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"

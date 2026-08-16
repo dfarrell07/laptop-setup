@@ -7,11 +7,13 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 TimeoutStopSec={{ claude_queue_timeout | int + 300 }}
+RuntimeMaxSec={{ (claude_queue_max_issues_per_run | int) * (claude_queue_timeout | int) + 300 }}
 ExecStart={{ claude_queue_poller_path }}
 Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo }}
 Environment=CLAUDE_BIN={{ claude_bin_path }}
 Environment=CLAUDE_QUEUE_MAX_TURNS={{ claude_queue_max_turns }}
 Environment=CLAUDE_QUEUE_TIMEOUT={{ claude_queue_timeout }}
+Environment=CLAUDE_QUEUE_MAX_ISSUES_PER_RUN={{ claude_queue_max_issues_per_run }}
 Environment=CLAUDE_QUEUE_HOST_LABEL={{ claude_queue_host_label }}
 Environment=CLAUDE_CONFIG_DIR={{ claude_queue_config_dir }}
 Environment=CLAUDE_QUEUE_LOG_DIR={{ claude_log_dir }}

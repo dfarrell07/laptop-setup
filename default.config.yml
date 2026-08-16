@@ -391,7 +391,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     override only to pin a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
 #   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
 #   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
-#     set in config.yml, e.g. [gitlab.example.com, code.example.com]; empty = no work host keyscan
+#     set in config.yml as dicts with optional fingerprint pinning, e.g.:
+#       [{host: gitlab.example.com, fingerprint: "SHA256:..."}, {host: code.example.com}]
+#     plain strings also accepted (TOFU, no pinning): [gitlab.example.com, code.example.com]
+#     empty = no work host keyscan
 #   ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
 #     (group_vars/all/vars.yml) — key types accepted for SSH auth and SSHD PubkeyAcceptedAlgorithms;
 #     add ssh-rsa or ecdsa-sha2-nistp256 to support legacy or non-FIDO2 keys

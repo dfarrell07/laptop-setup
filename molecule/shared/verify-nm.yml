@@ -30,13 +30,23 @@
   become: true
   when: verify_nm_tailscale.stat.exists
 
-- name: Assert tailscale.conf contains tailscale, podman, and kind unmanaged entries
+- name: Assert tailscale.conf contains all expected unmanaged interface patterns
   ansible.builtin.assert:
     that:
       - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:tailscale\*')
       - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:podman\*')
       - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:kind\*')
-    fail_msg: "tailscale.conf missing tailscale*, podman*, or kind* unmanaged entry — Tailscale routing or OVN-K/kind networking will break"
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:br-\*')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:virbr\*')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:ovs-system')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:br-int')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:br-ex')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:br-local')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:genev_sys_\*')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:wg\*')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:wt\*')
+      - (verify_nm_tailscale_content.content | b64decode) is search('interface-name:ovn-k8s-mp0')
+    fail_msg: "tailscale.conf missing one or more unmanaged interface entries — Tailscale/OVN-K/VPN routing will break"
   when: verify_nm_tailscale.stat.exists
 
 - name: Stat /etc/NetworkManager/conf.d/99-dns.conf
@@ -134,3 +144,48 @@
   when:
     - system_wifi_powersave_disabled | default(not csb_rhel) | bool
     - verify_nm_wifi_ps.stat.exists
+
+- name: Stat /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+  ansible.builtin.stat:
+    path: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+  register: verify_nm_dhcp_privacy
+  become: true
+  when:
+    - not csb_detected
+
+- name: Assert 99-dhcp-privacy.conf deployed by system role
+  ansible.builtin.assert:
+    that: verify_nm_dhcp_privacy.stat.exists
+    fail_msg: "99-dhcp-privacy.conf missing — hostname leaked to DHCP servers"
+  when:
+    - not csb_detected
+
+- name: Slurp 99-dhcp-privacy.conf for content check
+  ansible.builtin.slurp:
+    src: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+  register: verify_nm_dhcp_privacy_content
+  become: true
+  when:
+    - not csb_detected
+    - verify_nm_dhcp_privacy.stat.exists
+
+- name: Assert 99-dhcp-privacy.conf suppresses DHCP hostname advertisement
+  ansible.builtin.assert:
+    that:
+      - (verify_nm_dhcp_privacy_content.content | b64decode) is search('ipv4\.dhcp-send-hostname=false')
+      - (verify_nm_dhcp_privacy_content.content | b64decode) is search('ipv6\.dhcp-send-hostname=false')
+    fail_msg: "99-dhcp-privacy.conf exists but does not contain ipv4/ipv6 dhcp-send-hostname=false"
+  when:
+    - not csb_detected
+    - verify_nm_dhcp_privacy.stat.exists
+
+- name: Stat /etc/NetworkManager/conf.d/99-dhcp-no-hostname.conf
+  ansible.builtin.stat:
+    path: /etc/NetworkManager/conf.d/99-dhcp-no-hostname.conf
+  register: verify_nm_dhcp_no_hostname
+  become: true
+
+- name: Assert 99-dhcp-no-hostname.conf absent (renamed to 99-dhcp-privacy.conf)
+  ansible.builtin.assert:
+    that: not verify_nm_dhcp_no_hostname.stat.exists
+    fail_msg: "99-dhcp-no-hostname.conf still present — stale file removal failed"

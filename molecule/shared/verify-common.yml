@@ -198,6 +198,11 @@
     that: verify_known_hosts_github.rc == 0
     fail_msg: "github.com is not present in ~/.ssh/known_hosts — known_hosts seeding regression?"
 
+# CI gap: ssh_work_keyscan_hosts is empty in all molecule scenarios — keyscan_host.yml
+# (including fingerprint verification added in roles/ssh/tasks/keyscan_host.yml) is not
+# exercised in container CI; fingerprint pinning is only verified during real provisioning
+# when ssh_work_keyscan_hosts entries include a fingerprint field.
+
 # --- Git security ---
 - name: Git security checks
   ansible.builtin.include_tasks: verify-git-security.yml

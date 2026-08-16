@@ -44,6 +44,7 @@ claude_queue_memory_max: '4G'
 claude_queue_cpu_quota: '80%'
 claude_queue_max_turns: 50    # --max-turns passed to claude; limits runaway sessions
 claude_queue_timeout: 1800    # seconds before SIGTERM is sent to claude process
+claude_queue_max_issues_per_run: 5    # max issues processed per poller invocation; caps lock hold time
 claude_queue_host_label: ""   # optional human-readable label posted in issue comments; leave empty to omit host identity
 claude_queue_config_dir: "{{ claude_work_config_dir if profile == 'work' else claude_default_config_dir }}"  # config dir for queue daemon
 claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warning only, no unit; run claude --remote-control manually
@@ -101,4 +102,5 @@ claude_deny_write_only:
   - "~/.config/autostart/**"
   - "~/Library/LaunchAgents/**"
   - "~/.config/git/template/hooks/**"  # Git hooks deployed by dotfiles; must not be overwritten by Claude
+  - "**/.git/hooks/**"  # Per-repo hook files; Write + git config --local core.hooksPath enables hook injection
   - "~/.config/environment.d/**"  # DOCKER_HOST + KIND_EXPERIMENTAL_PROVIDER; overwrite breaks Makefile-based kind/Podman workflows

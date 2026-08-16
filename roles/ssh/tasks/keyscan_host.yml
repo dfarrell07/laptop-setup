@@ -1,11 +1,17 @@
 ---
 # Fetch SSH host keys and seed known_hosts.
 # Called via include_tasks with loop_var: _keyscan_host.
-- name: Pre-seed known_hosts for {{ _keyscan_host }}
+# _keyscan_host may be a plain hostname string or a dict:
+#   {host: hostname, fingerprint: "SHA256:..."}  (fingerprint is optional;
+#   when set, the scanned key fingerprint is asserted before known_hosts is seeded)
+- name: Pre-seed known_hosts for {{ _keyscan_host.host | default(_keyscan_host) }}
+  vars:
+    _ks_host: "{{ _keyscan_host.host | default(_keyscan_host) }}"
+    _ks_fingerprint: "{{ _keyscan_host.fingerprint | default('') }}"
   block:
-    - name: Fetch SSH host keys for {{ _keyscan_host }}
+    - name: Fetch SSH host keys for {{ _ks_host }}
       ansible.builtin.command:
-        cmd: ssh-keyscan -t ed25519,ecdsa -T 10 {{ _keyscan_host }}
+        cmd: ssh-keyscan -t ed25519,ecdsa -T 10 {{ _ks_host }}
       register: ssh_keyscan_result
       check_mode: false
       timeout: 15
@@ -14,30 +20,40 @@
       delay: 5
       until: ssh_keyscan_result.rc == 0 and ssh_keyscan_result.stdout | length > 0
 
-    - name: Seed known_hosts entries for {{ _keyscan_host }}
+    - name: Verify host key fingerprint for {{ _ks_host }}
+      ansible.builtin.command:
+        cmd: ssh-keygen -lf /dev/stdin
+        stdin: "{{ ssh_keyscan_result.stdout }}"
+      register: _ks_fp_result
+      check_mode: false
+      changed_when: false
+      failed_when: _ks_fingerprint not in _ks_fp_result.stdout
+      when: _ks_fingerprint | length > 0
+
+    - name: Seed known_hosts entries for {{ _ks_host }}
       ansible.builtin.known_hosts:
-        name: "{{ _keyscan_host }}"
+        name: "{{ _ks_host }}"
         key: "{{ item }}"
         state: present
         hash_host: true
       loop: >-
         {{ ssh_keyscan_result.stdout_lines
-           | select('match', '^' + (_keyscan_host | regex_escape))
+           | select('match', '^' + (_ks_host | regex_escape))
            | list }}
       loop_control:
         label: "{{ item.split()[1] | default('key') }}"
 
-    - name: Warn — keyscan returned no matching lines for {{ _keyscan_host }}
+    - name: Warn — keyscan returned no matching lines for {{ _ks_host }}
       ansible.builtin.debug:
         msg: >
-          WARNING: ssh-keyscan output contained no lines starting with '{{ _keyscan_host }}'.
+          WARNING: ssh-keyscan output contained no lines starting with '{{ _ks_host }}'.
           known_hosts was not pre-seeded — git clone will prompt on first connection.
-      when: (ssh_keyscan_result.stdout_lines | select('match', '^' + (_keyscan_host | regex_escape)) | list | length) == 0
+      when: (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0
 
   rescue:
-    - name: Warn — could not fetch host keys for {{ _keyscan_host }}
+    - name: Warn — could not fetch host keys for {{ _ks_host }}
       ansible.builtin.debug:
         msg: >-
-          WARNING: Could not fetch {{ _keyscan_host }} SSH host keys
+          WARNING: Could not fetch {{ _ks_host }} SSH host keys
           (VPN may be required). known_hosts not pre-seeded — git clone
-          for {{ _keyscan_host }} repos will prompt on first connection.
+          for {{ _ks_host }} repos will prompt on first connection.

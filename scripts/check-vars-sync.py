@@ -208,6 +208,7 @@ REQUIRED_KEYS = {
     "system_umask": str,
     "system_bolt_enabled": str,
     "system_is_container": str,
+    "system_bluetooth_privacy": str,
     "system_disable_avahi": bool,
     "system_mask_nfs_server": bool,
     "system_mask_iscsi": bool,
@@ -217,6 +218,7 @@ REQUIRED_KEYS = {
     "system_disable_usb_storage": bool,
     "system_disable_udf": bool,
     "system_install_usbguard": bool,
+    "system_tmp_noexec": bool,
     "system_kernel_panic": int,
     "system_kernel_panic_on_oops": int,
     "system_kexec_load_disabled": int,
@@ -531,6 +533,16 @@ def main():
         f"OK: {len(REQUIRED_KEYS)} security hardening keys present and matching in"
         " roles/system/defaults/main.yml (molecule mirror)"
     )
+
+    uncovered = sorted(k for k in defaults_data if k.startswith("system_") and k not in REQUIRED_KEYS)
+    if uncovered:
+        print(
+            f"WARNING: {len(uncovered)} system_* key(s) in roles/system/defaults/main.yml"
+            " not in REQUIRED_KEYS — add to REQUIRED_KEYS+vars.yml or document exclusion:",
+            file=sys.stderr,
+        )
+        for k in uncovered:
+            print(f"  {k}", file=sys.stderr)
 
     ssh_defaults_data = load_yaml(SSH_DEFAULTS_FILE)
     ssh_defaults_errors = []

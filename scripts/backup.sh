@@ -131,6 +131,13 @@ _backup_array() {
 }
 
 _backup_array "${DOTFILES[@]}"
+
+_vault_yml="${SCRIPT_DIR}/../group_vars/all/vault.yml"
+if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT'; then
+  echo "ERROR: vault.yml is not encrypted; run: ansible-vault encrypt group_vars/all/vault.yml" >&2
+  exit 1
+fi
+
 _backup_array "${OPTIONAL_FILES[@]}"
 
 # Catch-all: any private key in ~/.ssh/ not explicitly listed above
