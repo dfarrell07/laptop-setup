@@ -75,7 +75,27 @@ bootstrap:
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
 	$(MAKE) hooks
+	@echo ""
 	@echo "Bootstrap complete. Git hooks active."
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Create config.yml (REQUIRED before make all — do not skip):"
+	@echo "       cp default.config.yml config.yml"
+	@echo "     Then set at minimum in config.yml:"
+	@echo "       desktop_environment: sway   # or i3 / gnome"
+	@echo "       dotfiles_github_user: 'yourusername'"
+	@echo "       dotfiles_user_name: 'Your Name'"
+	@echo "       dotfiles_user_email_work: 'you@company.com'"
+	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
+	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
+	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
+	@echo "       desktop_sway_hidpi_scale: \"1.5\""
+	@echo "  2. Populate group_vars/all/vault.yml with SSH keys, then encrypt:"
+	@echo "       ansible-vault encrypt group_vars/all/vault.yml"
+	@echo "     (For a first provision without real secrets, vault.yml plaintext stub is fine.)"
+	@echo "  3. make preflight   # validate all pre-conditions before provisioning"
+	@echo "  4. make all         # full provisioning (run at local console or inside tmux)"
+	@echo ""
 
 bootstrap-test: guard-not-root
 	sudo dnf install -y libvirt vagrant vagrant-libvirt

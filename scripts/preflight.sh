@@ -256,6 +256,17 @@ elif ! grep -qE '^desktop_environment:[[:space:]]*["'"'"']?(sway|i3|gnome)["'"'"
   record "config_yml" "fail" "desktop_environment must be sway, i3, or gnome — got: $(grep '^desktop_environment:' "$CONFIG_FILE")"
 else
   record "config_yml" "pass" "desktop_environment is set"
+  # HiDPI warning: Sway on a HiDPI display without scale set produces microscopic fonts.
+  # No assertion can know the display resolution, but if sway is chosen and scale is absent/1.0
+  # we remind the user to check. This is a WARN not a FAIL — non-HiDPI users are unaffected.
+  if grep -qE '^desktop_environment:[[:space:]]*["'"'"']?sway["'"'"']?' "$CONFIG_FILE"; then
+    if ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?[^1]' "$CONFIG_FILE" && \
+       ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?1\.[1-9]' "$CONFIG_FILE"; then
+      record "config_sway_hidpi" "warn" "desktop_sway_hidpi_scale not set above 1.0 — if this is a HiDPI display (e.g. ThinkPad P16v 2560x1600) add 'desktop_sway_hidpi_scale: \"1.5\"' to config.yml to avoid microscopic fonts"
+    else
+      record "config_sway_hidpi" "pass" "desktop_sway_hidpi_scale set"
+    fi
+  fi
 fi
 
 # --- Identity vars CHANGE_ME check ---
