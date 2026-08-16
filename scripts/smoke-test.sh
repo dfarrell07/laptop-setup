@@ -150,6 +150,16 @@ for _b in "cosign:cosign version" "tkn:tkn version --component=client" \
     else record "$_bname" "FAIL" "$_bname binary present but version command failed"; fi
   fi
 done
+# gcloud minimum-version floor (guards against repomd.xml suppression — repo_gpgcheck disabled upstream)
+if command -v gcloud &>/dev/null; then
+  _gcloud_ver=$(gcloud version 2>/dev/null | awk '/^Google Cloud SDK/ {print $4}')
+  _gcloud_major=${_gcloud_ver%%.*}
+  if [[ -n "$_gcloud_major" ]] && (( _gcloud_major >= 500 )); then
+    record "gcloud-version-floor" "PASS"
+  else
+    record "gcloud-version-floor" "FAIL" "gcloud ${_gcloud_ver} below minimum floor 500 — check for repo metadata suppression (repo_gpgcheck disabled)"
+  fi
+fi
 
 # GitHub CLI authenticated (skip when gh binary is absent — tools loop already records FAIL)
 if command -v gh &>/dev/null; then

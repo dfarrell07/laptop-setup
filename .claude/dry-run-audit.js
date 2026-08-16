@@ -172,6 +172,7 @@ if (deduped.length > 0) {
     (verdict, issue) => {
       if (!verdict || !verdict.confirmed || !verdict.safe_to_fix) return null
       const fix = verdict.revised_fix || issue.proposed_fix
+      log(`Applying fix [${issue.severity}]: ${issue.title}\n  File: ${issue.file}\n  Fix: ${fix}`)
       return agent(
         `${MACHINE}\n\nRepo: ${REPO}\n\nApply this confirmed fix to the automation code:\nTitle: ${issue.title}\nFile: ${issue.file}\nFix to apply: ${fix}\n\nStrict rules:\n1. Read the file first with the Read tool\n2. Make the MINIMAL targeted change — touch nothing unrelated\n3. Preserve all existing indentation, formatting, and comments\n4. If adding a config.yml knob, add it to ${REPO}/default.config.yml with an inline comment\n5. Return one sentence: what you changed and in which file`,
         { label: `fix:${issue.title.slice(0, 28)}`, phase: 'Fix' }

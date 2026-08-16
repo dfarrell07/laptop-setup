@@ -99,6 +99,12 @@
              | default(playbook_dir, true) }}
       tags: [always]
 
+    - name: Set OS family facts (is_macos, is_linux)
+      ansible.builtin.set_fact:
+        is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+        is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+      tags: [always]
+
     # CSB detection facts (csb_detected, needs_container_tier, etc.) are not re-run here;
     # they carry over from Play 1 set_fact via host-var cache. If Play 1 did not run
     # csb_detect.yml, group_vars defaults apply.

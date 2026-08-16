@@ -86,18 +86,18 @@
   register: _ca_certs
   loop: "{{ csb_ca_cert_paths }}"
   become: false
-  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))
+  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and (_is_csb_hostname | bool or fapolicyd_installed | bool)))
 
 - name: Find Red Hat internal CA certs by glob
   ansible.builtin.find:
     paths: /etc/pki/ca-trust/source/anchors
     patterns:
       - '*IT*Root*CA*'
-      - '*Eng*CA*'
+      - '*RH*Eng*CA*'
     recurse: false
   register: _ca_certs_glob
   become: false
-  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))
+  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and (_is_csb_hostname | bool or fapolicyd_installed | bool)))
 
 - name: Set internal CA fact
   ansible.builtin.set_fact:
@@ -109,7 +109,7 @@
         or ((_ca_certs_glob.files | default([])) | length > 0)
       }}
   become: false
-  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and _is_csb_hostname | bool))
+  when: is_linux | bool and (is_rhel | bool or (is_fedora | bool and (_is_csb_hostname | bool or fapolicyd_installed | bool)))
 
 # ---------------------------------------------------------------------------
 # 4. CSB heuristic: RHEL + fapolicyd + internal CA
@@ -122,7 +122,7 @@
     csb_detected: >-
       {{
         ((is_rhel | bool) and (fapolicyd_installed | bool) and (internal_ca_present | bool))
-        or ((is_fedora | bool) and (_is_csb_hostname | bool) and (internal_ca_present | bool))
+        or ((is_fedora | bool) and ((_is_csb_hostname | bool) or (fapolicyd_installed | bool)) and (internal_ca_present | bool))
       }}
   become: false
   when: not (_csb_molecule_force | default(false)) and (is_linux | bool) and (is_rhel | bool or is_fedora | bool)

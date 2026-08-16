@@ -8,6 +8,12 @@
     - name: Run common DNF system play pre-tasks
       ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/dnf-system-play-pre-tasks.yml"
 
+    - name: Set RHEL CSB facts for system role (Rocky = RHEL CSB path)
+      ansible.builtin.set_fact:
+        csb_rhel: true
+        csb_detected: true
+        _csb_molecule_force: true
+
     - name: Gather package facts
       ansible.builtin.package_facts:
         manager: auto

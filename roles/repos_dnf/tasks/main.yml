@@ -145,6 +145,14 @@
         gpgcheck: false
         repo_gpgcheck: false
         enabled: true
+    - name: Install dnf versionlock plugin for Slack pin
+      ansible.builtin.dnf:
+        name: python3-dnf-plugin-versionlock
+        state: present
+    - name: Pin slack version to limit unauthenticated update exposure
+      community.general.dnf_versionlock:
+        name: slack
+        state: present
   rescue:
     - name: Record Slack repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

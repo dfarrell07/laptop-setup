@@ -156,6 +156,14 @@
               If you are using a personal profile, set `profile: personal` in config.yml to bypass this check.
           tags: [always]
 
+        - name: Assert desktop_environment is a valid value
+          ansible.builtin.assert:
+            that: desktop_environment in ['sway', 'i3', 'gnome', 'auto']
+            fail_msg: >-
+              desktop_environment must be one of: sway, i3, gnome, auto.
+              Got: '{{ desktop_environment }}'. Check config.yml for typos.
+          tags: [always]
+
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
         # Play 1's include of this file sets _pf_assertions_checked; Play 2's include then sees it defined.
         - name: Set assertions checked flag (suppresses duplicate assertions in Play 2)
