@@ -33,6 +33,7 @@ dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -
 dotfiles_laptop_tailscale_host: ''  # set in config.yml; e.g. 'laptop.tail'
 dotfiles_mac_tailscale_host: ''     # set in config.yml; e.g. 'mac-desktop.tail'
 dotfiles_github_user: 'CHANGE_ME'  # override in config.yml
+dotfiles_ssh_agent_label: "com.{% if dotfiles_github_user != 'CHANGE_ME' %}{{ dotfiles_github_user }}{% else %}local{% endif %}.ssh-agent"
 # GitHub repo slug for cq() alias; override in config.yml if queue repo name differs
 dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
 

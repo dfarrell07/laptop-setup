@@ -1,6 +1,13 @@
 #!/bin/sh
 # Chain to per-repo pre-push hook if one exists (core.hooksPath replaces .git/hooks/ lookup). Positional args and stdin are forwarded to the per-repo hook via exec.
 _repo_hook="$(git rev-parse --git-dir 2>/dev/null)/hooks/pre-push"
+_stdin=$(cat)
+printf '%s\n' "$_stdin" | while IFS=' ' read -r _lref _lsha _rref _rsha; do
+  case "$_rref" in refs/heads/main|refs/heads/master)
+    [ "$_rsha" != "0000000000000000000000000000000000000000" ] && ! git merge-base --is-ancestor "$_rsha" "$_lsha" 2>/dev/null && printf 'WARNING: force push to %s\n' "$_rref" >&2
+  esac
+done
 if [ -x "$_repo_hook" ]; then
-  exec "$_repo_hook" "$@"
+  printf '%s\n' "$_stdin" | "$_repo_hook" "$@"
+  exit $?
 fi

@@ -13,7 +13,7 @@
 - name: Reload ssh-agent launchd bootout (macOS)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: >-
-      launchctl bootout gui/{{ ansible_facts['user_uid'] }}/com.{{ dotfiles_github_user }}.ssh-agent
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}/{{ dotfiles_ssh_agent_label }}
   listen: Reload ssh-agent launchd (macOS)
   when: is_macos
   failed_when: false
@@ -23,7 +23,7 @@
   ansible.builtin.command:
     cmd: >-
       launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
-      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
+      {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/{{ dotfiles_ssh_agent_label }}.plist
   listen: Reload ssh-agent launchd (macOS)
   when: is_macos
   failed_when: false

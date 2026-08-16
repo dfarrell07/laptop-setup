@@ -8,7 +8,7 @@
 # and (b) RLIMIT_CORE=0 via limits.d. Req b (limits.d) is only applied when storage: none.
 # Full CIS 1.5.1 compliance requires setting system_coredump_storage: none in config.yml.
 - name: Configure coredumps (skip in containers)
-  when: not system_is_container
+  when: not system_is_container and not csb_rhel
   block:
     # NOTE: fs.suid_dumpable=0 is set unconditionally in system_sysctl_hardening (defaults/main.yml),
     # overriding Fedora's 50-coredump.conf fs.suid_dumpable=2. This prevents SUID process crashes
