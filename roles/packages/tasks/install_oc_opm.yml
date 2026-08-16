@@ -33,6 +33,11 @@
         (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
         not packages_kubectl_stat.stat.exists
       block:
+        # WARNING: stable track fetches sha256sum.txt from the same server as the binary
+        # (mirror.openshift.com) with no GPG verification — a compromised server can serve a
+        # matching (malicious binary + hash) pair and this check will pass. Use a pinned
+        # packages_oc_version with a hardcoded packages_oc_sha256 in defaults/main.yml for
+        # stronger supply-chain integrity guarantees.
         - name: Fetch OpenShift client sha256sum.txt
           ansible.builtin.uri:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"

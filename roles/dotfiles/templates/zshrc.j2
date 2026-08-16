@@ -47,7 +47,7 @@ export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
 # SSH_AUTH_SOCK fallback for shells that bypass systemd user session (sudo -s, su -)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
-export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+[[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]] && export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 # Wayland-native rendering for Qt and Electron when running under Sway
 [[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export QT_QPA_PLATFORM=wayland

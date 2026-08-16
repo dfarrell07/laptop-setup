@@ -8,6 +8,7 @@
   when:
     - repo_gh_cli
     - not is_fedora
+    - not csb_rhel  # CSB: external repo write succeeds silently; gh available in container
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
@@ -47,6 +48,7 @@
   when:
     - repo_google_chrome
     - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   block:
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
@@ -86,6 +88,7 @@
   when:
     - repo_google_cloud_sdk
     - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   block:
     - name: Add google-cloud-cli repo
       vars:
@@ -128,6 +131,7 @@
   when:
     - repo_slack
     - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel
   block:
     - name: Add slack repo
       ansible.builtin.yum_repository:
@@ -196,7 +200,9 @@
           Continuing playbook execution.
 
 - name: Add Docker CE repo
-  when: repo_docker_ce
+  when:
+    - repo_docker_ce
+    - not csb_rhel  # CSB: Podman is the corporate standard; Docker CE repo not permitted on RHEL CSB
   block:
     - name: Add docker-ce repo
       ansible.builtin.yum_repository:
@@ -283,6 +289,10 @@
     - profile == 'work'
     - repos_dnf_redhat_baseurl is defined
   block:
+    - name: Assert Red Hat internal repo GPG key is defined
+      ansible.builtin.assert:
+        that: repos_dnf_redhat_gpgkey is defined
+        fail_msg: "repos_dnf_redhat_baseurl is set but repos_dnf_redhat_gpgkey is not — repo will have gpgcheck disabled"
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
@@ -358,7 +368,9 @@
           transient network error (DNS timeout, connectivity). Continuing playbook execution.
 
 - name: Add Tailscale repo
-  when: repo_tailscale
+  when:
+    - repo_tailscale
+    - not csb_rhel
   block:
     - name: Add Tailscale stable repo
       vars:

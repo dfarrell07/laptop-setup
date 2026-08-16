@@ -2,6 +2,14 @@
 # roles/packages/tasks/install_go_tools.yml
 # Install Go tools via `go install` (extracted from main.yml)
 
+- name: Validate GONOSUMDB contains only private module domains
+  ansible.builtin.assert:
+    that:
+      - "dotfiles_gonosumdb | default('') | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io)(,|$)') is none"
+    fail_msg: >-
+      dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
+      verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
+
 - name: Install Go tools
   # No 'creates:' guard — version bumps in packages_go_install_work would be silently
   # ignored if the binary already exists. 'go install' with a pinned version is

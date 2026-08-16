@@ -424,6 +424,9 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     entry here will shadow the vault-backed value without any warning.
 #   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
 #     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
+#     NOTE: packages_oc_version: 'stable' uses a co-located sha256sum.txt (no GPG verification);
+#     a compromised mirror.openshift.com can serve a matching malicious binary+hash pair.
+#     Prefer a pinned version with a hardcoded packages_oc_sha256 in defaults/main.yml.
 #     packages_subctl_version: "<see roles/packages/defaults/main.yml>"  (single source of truth; governs distrobox container)
 #     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
 #     packages_subctl_rh_versions: [{tag, image, suffix}]  (RH downstream via oc image extract)

@@ -18,7 +18,7 @@ command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --f
 export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
 {% if _system == 'Linux' %}
 export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
-export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+[[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]] && export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
 {% else %}

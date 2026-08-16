@@ -17,6 +17,27 @@
     - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
     - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
 
+- name: Stat legacy ~/.zsh_history (pre-XDG location)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.zsh_history"
+  register: _dotfiles_legacy_zsh_history
+
+- name: Stat XDG zsh history (new location)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/state/zsh/history"
+  register: _dotfiles_xdg_zsh_history
+
+- name: Move ~/.zsh_history to XDG location (one-time migration)
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ ansible_facts['user_dir'] }}/.zsh_history"
+      - "{{ ansible_facts['user_dir'] }}/.local/state/zsh/history"
+  when:
+    - _dotfiles_legacy_zsh_history.stat.exists
+    - not _dotfiles_xdg_zsh_history.stat.exists
+  changed_when: true
+
 - name: Stat oh-my-zsh .git directory
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
@@ -166,7 +187,7 @@
     dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
 - name: Disable GNOME Keyring SSH agent (legacy autostart + GNOME 50+ systemd)
-  when: is_linux and needs_container_tier != 'container' and not system_is_container
+  when: is_linux and needs_container_tier != 'container' and not system_is_container and not csb_rhel
   block:
     - name: Ensure autostart directory exists
       ansible.builtin.file:

@@ -142,6 +142,7 @@
         shell: "{{ redhat_splunk_nologin_shell }}"
       become: true
       tags: [become]
+      register: _splunk_shell_result
   rescue:
     - name: Record splunk account hardening failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -164,3 +165,15 @@
           to set shell=/sbin/nologin at install time.
           Blocked workflows: CIS 5.6 compliance cannot be achieved while
           the CSB splunk package sets an interactive shell.
+
+- name: Warn on splunk shell drift after package upgrade
+  ansible.builtin.debug:
+    msg: >-
+      Splunk account shell was reset and re-hardened to /sbin/nologin.
+      A Satellite/IT-managed splunkforwarder upgrade likely reset the shell.
+      Long-term fix: request IT/CSB modify the splunk-managed package to set
+      shell=/sbin/nologin at install time (see rescue block above for ticket text).
+  when:
+    - csb_rhel
+    - _splunk_shell_result is defined
+    - _splunk_shell_result.changed
