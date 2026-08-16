@@ -273,8 +273,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
 #   containers_nofile_hard_limit: '{{ containers_nofile_limit | int * 8 }}'  (roles/containers/defaults) — hard-limit override;
 #                                        change only when the 8x ratio is wrong
-#   containers_prune_enabled: true  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
-#                                        set false to keep all cached layers
+#   containers_prune_enabled: false  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
+#                                        set true to remove stopped non-distrobox containers and unused images/volumes weekly
 #   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
 #                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
 #   DO NOT override containers_registries directly — use containers_registries_extra to append

@@ -109,6 +109,7 @@
     state: present
     sysctl_set: true
     reload: true
+    sysctl_file: /etc/sysctl.d/91-ansible-ipforward.conf
   loop:
     - {key: net.ipv4.ip_forward, value: "{{ system_enable_ip_forward | bool | int }}"}
     - {key: net.ipv6.conf.all.forwarding, value: "{{ system_enable_ip_forward | bool | int }}"}
