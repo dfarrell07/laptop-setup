@@ -42,15 +42,16 @@
     list | length > 0)
   when: not system_is_container
 
-- name: Warn if br_netfilter failed (bridge-nf-call-iptables sysctl would not apply)
+- name: Warn if any kernel module failed to load
   ansible.builtin.debug:
     msg: >-
-      WARNING: br_netfilter module failed to load. net.bridge.bridge-nf-call-iptables
-      will not be applied — Kubernetes/kind networking (NetworkPolicy) may be broken.
-  when: >-
-    not csb_rhel and
-    (system_modprobe_results.results | default([])
-    | selectattr('item', 'equalto', 'br_netfilter')
-    | selectattr('rc', 'defined')
-    | selectattr('rc', 'ne', 0)
-    | list | length > 0)
+      WARNING: kernel module '{{ item.item }}' failed to load (rc={{ item.rc }}).
+      kind/Kubernetes networking or storage may be broken.
+  loop: >-
+    {{ system_modprobe_results.results | default([])
+       | selectattr('rc', 'defined')
+       | selectattr('rc', 'ne', 0)
+       | list }}
+  loop_control:
+    label: "{{ item.item }}"
+  when: not csb_rhel

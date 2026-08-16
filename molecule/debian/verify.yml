@@ -68,6 +68,16 @@
       when:
         - not (system_is_container | default(false))
 
+    - name: Check pam_faillock.so ordering in common-auth (Debian)
+      ansible.builtin.shell:
+        cmd: >-
+          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
     - name: Check pam_faillock.so account line in common-account (Debian)
       ansible.builtin.command:
         cmd: grep -qE '^account\s+required\s+pam_faillock\.so$' /etc/pam.d/common-account

@@ -1,3 +1,5 @@
+import path from 'path'
+
 export const meta = {
   name: 'laptop-dry-run-audit',
   description: 'Rotating multi-agent dry-run audit of laptop-setup Ansible automation — find and fix bad/unnecessary changes',
@@ -10,7 +12,7 @@ export const meta = {
   ],
 }
 
-const REPO  = '/home/dfarrell/laptop-setup'
+const REPO  = process.env.LAPTOP_SETUP_REPO ?? path.resolve(new URL('..', import.meta.url).pathname)
 const STATE = `${REPO}/.dry-run-audit-state.json`
 
 const AREAS = [

@@ -1,3 +1,9 @@
+[[rules]]
+  id = "claude-skill-sensitive-path"
+  description = "Sensitive path reference in Claude skill file"
+  regex = '''(~/\.(ssh|aws|gnupg|kube|vault_pass)|/etc/shadow|private_key)'''
+  paths = ['''\.claude/.*\.js$''']
+
 [allowlist]
   description = "Suppress dummy CI vault password string in vault-pass-ci.sh"
   condition = "AND"

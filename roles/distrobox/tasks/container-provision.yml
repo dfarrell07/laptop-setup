@@ -106,6 +106,12 @@
       ansible.builtin.set_fact:
         container_oc_installed: false
 
+    - name: Write rescue sentinel for offline verify
+      ansible.builtin.copy:
+        dest: /tmp/oc_rescue_fired
+        content: "1"
+        mode: "0644"
+
 # --- Go tools (not in Fedora repos) ---
 - name: Check golangci-lint version
   ansible.builtin.command:

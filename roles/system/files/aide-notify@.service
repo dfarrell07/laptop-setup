@@ -1,7 +1,6 @@
 # Ansible managed — do not edit
 [Unit]
 Description=AIDE failure notification for %i
-After=network.target
 
 [Service]
 Type=oneshot
@@ -9,3 +8,12 @@ Type=oneshot
 ExecStart=/usr/bin/wall "AIDE ALERT: File integrity violations detected. Run: systemctl status %i"
 # Also log a prominent journal entry so it appears in 'journalctl -p warning'.
 ExecStart=/usr/bin/logger -p auth.warning -t aide-notify "AIDE file integrity violations detected — check: systemctl status %i or /var/log/aide/aide.log"
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictRealtime=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native

@@ -293,6 +293,7 @@
           - verify_gofumpt.stat.exists
           - verify_gofumpt.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Stat golangci-lint binary
       ansible.builtin.stat:
@@ -308,6 +309,7 @@
           golangci-lint missing at ~/go/bin/golangci-lint —
           packages_go_install_work empty or go install failed
           (check install_go_tools.yml loop)
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Stat govulncheck binary
       ansible.builtin.stat:
@@ -320,6 +322,7 @@
           - verify_govulncheck.stat.exists
           - verify_govulncheck.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Stat gci binary
       ansible.builtin.stat:
@@ -332,6 +335,7 @@
           - verify_gci.stat.exists
           - verify_gci.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Stat gopls binary
       ansible.builtin.stat:
@@ -344,6 +348,7 @@
           - verify_gopls.stat.exists
           - verify_gopls.stat.executable
         fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Stat subctl18 binary
       ansible.builtin.stat:
@@ -541,7 +546,7 @@
         cmd: "{{ ansible_user_dir }}/go/bin/golangci-lint --version"
       register: verify_golangci_lint_ver
       changed_when: false
-      when: verify_golangci_lint.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Assert golangci-lint version matches packages_golangci_lint_version
       ansible.builtin.assert:
@@ -549,20 +554,20 @@
         fail_msg: >-
           golangci-lint version mismatch — expected {{ packages_golangci_lint_version }},
           got: {{ verify_golangci_lint_ver.stdout }}
-      when: verify_golangci_lint.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check gofumpt version output
       ansible.builtin.command:
         cmd: "{{ ansible_user_dir }}/go/bin/gofumpt --version"
       register: verify_gofumpt_ver
       changed_when: false
-      when: verify_gofumpt.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Assert gofumpt version matches packages_gofumpt_version
       ansible.builtin.assert:
         that: packages_gofumpt_version in verify_gofumpt_ver.stdout
         fail_msg: "gofumpt version mismatch — expected {{ packages_gofumpt_version }}, got: {{ verify_gofumpt_ver.stdout }}"
-      when: verify_gofumpt.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check govulncheck version output
       ansible.builtin.command:
@@ -570,7 +575,7 @@
       register: verify_govulncheck_ver
       changed_when: false
       failed_when: false
-      when: verify_govulncheck.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Assert govulncheck version matches packages_govulncheck_version
       ansible.builtin.assert:
@@ -578,33 +583,33 @@
         fail_msg: >-
           govulncheck version mismatch — expected {{ packages_govulncheck_version }},
           got: {{ verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr }}
-      when: verify_govulncheck.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check gci version output
       ansible.builtin.command:
         cmd: "{{ ansible_user_dir }}/go/bin/gci --version"
       register: verify_gci_ver
       changed_when: false
-      when: verify_gci.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Assert gci version matches packages_gci_version
       ansible.builtin.assert:
         that: packages_gci_version in verify_gci_ver.stdout
         fail_msg: "gci version mismatch — expected {{ packages_gci_version }}, got: {{ verify_gci_ver.stdout }}"
-      when: verify_gci.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check gopls version output
       ansible.builtin.command:
         cmd: "{{ ansible_user_dir }}/go/bin/gopls version"
       register: verify_gopls_ver
       changed_when: false
-      when: verify_gopls.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Assert gopls version matches packages_gopls_version
       ansible.builtin.assert:
         that: packages_gopls_version in verify_gopls_ver.stdout
         fail_msg: "gopls version mismatch — expected {{ packages_gopls_version }}, got: {{ verify_gopls_ver.stdout }}"
-      when: verify_gopls.stat.exists
+      when: packages_go_install_work | default([]) | length > 0
 
     - name: Check subctl18 version output
       ansible.builtin.command:

@@ -46,6 +46,19 @@
           /usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec.
           The distrobox branch (symlink) must be active, not the flatpak-spawn wrapper path.
 
+    - name: Stat rescue sentinel /tmp/oc_rescue_fired
+      ansible.builtin.stat:
+        path: /tmp/oc_rescue_fired
+      register: verify_rescue_sentinel
+
+    - name: Assert rescue sentinel exists — rescue block executed
+      ansible.builtin.assert:
+        that: verify_rescue_sentinel.stat.exists
+        fail_msg: >-
+          /tmp/oc_rescue_fired is absent. The rescue block did not execute — either the
+          download block was silently skipped (when: condition false) or the rescue path
+          was bypassed. The offline scenario must trigger the rescue block.
+
     - name: Stat oc host wrapper at ~/.local/bin/oc
       ansible.builtin.stat:
         path: "{{ ansible_env.HOME }}/.local/bin/oc"
