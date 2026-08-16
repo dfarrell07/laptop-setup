@@ -123,7 +123,6 @@
       DNS will not work unless the VPN is integrated with NetworkManager or pushes
       per-link routing domains to resolved via resolvectl.
   when:
-    - _dot_conf_result is changed
     - system_dns_domains == '~.'
     - not csb_detected
     - not system_is_container
@@ -136,7 +135,6 @@
       transport (typically plain UDP 53). system_dot_mode: yes does not encrypt
       per-link DNS.
   when:
-    - _dot_conf_result is changed
     - not csb_detected
     - not system_is_container
     - system_dot_mode | string | lower not in ['no', 'false', '0']

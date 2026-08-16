@@ -48,12 +48,15 @@
   changed_when: false
   failed_when: false
   check_mode: false  # read-only probe — must run in check mode
-  when: not system_is_container  # fwupdmgr activates fwupd D-Bus service, crashing privileged Podman container systemd
+  when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
+    - not system_is_container  # fwupdmgr activates fwupd D-Bus service, crashing privileged Podman container systemd
 
 - name: Report available firmware updates
   ansible.builtin.debug:
     msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
   when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
     - not system_is_container
     - system_fwupd_check_result.rc == 0
     - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"

@@ -192,6 +192,29 @@ Then re-run `make system` to apply idempotently.
 
 ---
 
+## system: Hibernate Fails With EPERM (lockdown=integrity)
+
+**Symptom:**
+`systemctl hibernate` returns immediately with an error. `journalctl -xe` shows a generic EPERM but no message identifying lockdown as the cause. The machine does not hibernate.
+
+**Cause:**
+The Linux kernel lockdown LSM (since 5.4) includes `LOCKDOWN_HIBERNATION` in its integrity-level restriction array. `lockdown=integrity` is applied via `grubby` by the system role on Fedora and hybrid CSB hosts. Because the hibernate image could be used to subvert kernel integrity (swsusp writes raw memory to disk), the kernel refuses it unconditionally while lockdown is active. S3 and S2idle suspend are unaffected — only hibernate-to-disk is blocked.
+
+**Fix:**
+Set in `config.yml`:
+
+```yaml
+system_kernel_lockdown: ''   # disable lockdown; default is 'integrity'
+```
+
+Then re-run `make system` and reboot. After the reboot, `systemctl hibernate` will succeed.
+
+**Not affected:**
+- **Suspend (S3/S2idle):** unaffected by `lockdown=integrity`
+- **RHEL CSB hosts** (`csb_rhel=true`): `grubby` tasks are skipped — IT manages boot config; lockdown state depends on IT policy
+
+---
+
 ## system: SELinux Blocks Non-Default SSH Port
 
 **Symptom:**

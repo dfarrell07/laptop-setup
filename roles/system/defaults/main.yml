@@ -322,11 +322,13 @@ system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d
 system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
 # Non-root apps using io_uring directly (tokio, libuv, some DB clients) will receive ENOSYS or
 # fall back to epoll — test affected workloads before applying on dev machines
-# Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules and some
-# debug interfaces (debugfs under lockdown). Set '' to disable, or 'confidentiality'
-# for stronger (but more restrictive) mode. bpfman core unaffected; bpftrace requires
-# 'integrity' or '' (not 'confidentiality'). Set '' in config.yml if lockdown breaks
-# debugging workflows (KGDB, /sys/kernel/debug access, etc.).
+# Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules, some
+# debug interfaces (debugfs under lockdown), and hibernate-to-disk
+# (LOCKDOWN_HIBERNATION — `systemctl hibernate` returns EPERM; S3/S2idle suspend
+# is unaffected). Set '' to disable, or 'confidentiality' for stronger (but more
+# restrictive) mode. bpfman core unaffected; bpftrace requires 'integrity' or ''
+# (not 'confidentiality'). Set '' in config.yml if lockdown breaks debugging
+# workflows (KGDB, /sys/kernel/debug access, hibernate, etc.).
 system_kernel_lockdown: integrity
 
 # Identity fallbacks — site.yml always sets these via set_fact from env,
