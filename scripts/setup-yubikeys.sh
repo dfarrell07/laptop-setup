@@ -4,14 +4,15 @@
 #
 # Usage:  scripts/setup-yubikeys.sh
 #
-# Requires: ykpersonalize, ykchalresp (ykpers package — installed by 'make all')
-# Run after: make all (installs ykpers + yubikey-manager)
+# Requires: ykman (yubikey-manager — installed by 'make all')
+# Run after: make all (installs yubikey-manager)
 # Run before: ansible-vault encrypt group_vars/all/vault.yml
 #
 # Design:
 #   - Generates a random 20-byte HMAC secret; programs every YubiKey with it
-#   - Secret is delivered to ykpersonalize via stdin (-a with no argument reads
-#     from stdin per the man page), avoiding /proc/<pid>/cmdline exposure
+#   - Secret is delivered to ykman via stdin (ykman has no stdin placeholder;
+#     piped without --force to avoid /proc/<pid>/cmdline exposure; fragile —
+#     relies on Click reading key prompt then confirm prompt sequentially from stdin)
 #   - Secret is NOT written to disk
 #   - EXIT-trap zeroization is best-effort (bash heap; old allocation not zeroed);
 #     effective suppression requires system_coredump_storage: none (not system_mask_abrt)
@@ -25,6 +26,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VAULT_PASS_SH="$SCRIPT_DIR/vault-pass.sh"
 CHALLENGE="ansible-vault-laptop-setup"
+# ykman otp calculate requires hex-encoded challenge (ykchalresp accepted raw ASCII)
+_CHALRESP_HEX=$(printf '%s' "$CHALLENGE" | od -An -tx1 | tr -d ' \n')
 CHALRESP_TIMEOUT=20  # seconds to wait for YubiKey touch
 RED='\033[0;31m' GRN='\033[0;32m' YLW='\033[0;33m' NC='\033[0m'
 
@@ -63,8 +66,8 @@ elif command -v gtimeout &>/dev/null; then
 else
   die "'timeout' not found. On macOS: brew install coreutils"
 fi
-for cmd in ykman ykpersonalize ykchalresp openssl; do
-  command -v "$cmd" &>/dev/null || die "'$cmd' not found. Run 'make all' first (installs ykpers)."
+for cmd in ykman openssl; do
+  command -v "$cmd" &>/dev/null || die "'$cmd' not found. Run 'make all' first (installs yubikey-manager)."
 done
 [[ -t 0 ]] || die "stdin is not a terminal — this script must be run interactively"
 
@@ -106,7 +109,7 @@ while true; do
     break
   fi
 
-  # Reject duplicate-key reprogramming by comparing serials before ykpersonalize
+  # Reject duplicate-key reprogramming by comparing serials before programming
   _current_serial=$("$_timeout" 10 ykman list --serials 2>/dev/null | head -n1) \
     || die "ykman timed out or failed listing devices — check USB connection"
   [[ -n "$_current_serial" ]] \
@@ -126,17 +129,32 @@ while true; do
     [[ "${SLOT2_CONFIRM,,}" == "y" ]] || die "Aborted."
   fi
 
-  # Program slot 2 — secret delivered via stdin to avoid /proc/<pid>/cmdline exposure
+  # Program slot 2 — secret delivered via stdin to avoid /proc/<pid>/cmdline exposure.
+  # ykman otp chalresp has no stdin placeholder for the key. Using --force requires
+  # the key as a positional arg (visible in /proc/<pid>/cmdline and ps output). Instead
+  # we pipe without --force: ykman reads the key from stdin (click_prompt), then reads
+  # the confirmation from stdin (click.confirm uses err=True — prompt text goes to
+  # stderr, but the answer is still read from stdin). Input order: <key>\n<y>\n.
+  # This relies on Click's undocumented stdin behaviour and may break if ykman changes
+  # its prompt order. The alternative is Option A: ykman otp chalresp --touch --force 2
+  # "$HMAC_SECRET" — key in argv, /proc exposure accepted.
+  #
+  # Flag mapping from ykpersonalize:
+  #   -ochal-resp/-ochal-hmac  → implicit (chalresp subcommand always sets these)
+  #   -ohmac-lt64              → always on in ykman (not configurable, cannot be disabled)
+  #   -ochal-btn-trig          → --touch
+  #   -oserial-api-visible     → dropped (not exposed in ykman otp chalresp)
+  #   -2                       → positional slot argument 2
+  #   -y                       → --force (requires key in argv; avoided here via stdin)
   _prog_err=$(mktemp)
-  if ! printf '%s\n' "$HMAC_SECRET" | \
-       ykpersonalize -2 -y -ochal-resp -ochal-hmac -ohmac-lt64 \
-                     -oserial-api-visible -ochal-btn-trig -a 2>"$_prog_err"; then
+  if ! printf '%s\ny\n' "$HMAC_SECRET" | \
+       ykman otp chalresp --touch 2 2>"$_prog_err"; then
     _err_msg=$(cat "$_prog_err")
     rm -f "$_prog_err"
     if printf '%s' "$_err_msg" | grep -qiE 'BACKEND_ERROR|write error|access.?code'; then
-      _err_msg="${_err_msg} — Slot 2 may have an access code set. Clear it with: ykman otp delete 2  (or supply the current access code to ykpersonalize via -c<hex_code>)"
+      _err_msg="${_err_msg} — Slot 2 may have an access code set. Clear it with: ykman otp delete 2"
     fi
-    die_loop "ykpersonalize failed on YubiKey #$KEY_COUNT: ${_err_msg:-no error output — is a YubiKey inserted?}"
+    die_loop "ykman otp chalresp failed on YubiKey #$KEY_COUNT: ${_err_msg:-no error output — is a YubiKey inserted?}"
   fi
   rm -f "$_prog_err"
   ok "YubiKey #$KEY_COUNT: slot 2 programmed"
@@ -147,7 +165,7 @@ while true; do
   ACTUAL_OUTPUT=""
   _ykcr_err=$(mktemp)
   _ykcr_rc=0
-  ACTUAL_OUTPUT=$("$_timeout" "$CHALRESP_TIMEOUT" ykchalresp -2 "$CHALLENGE" 2>"$_ykcr_err") || _ykcr_rc=$?
+  ACTUAL_OUTPUT=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_ykcr_err") || _ykcr_rc=$?
   if [[ $_ykcr_rc -ne 0 ]]; then
     printf "\n"
     if [[ $_ykcr_rc -eq 124 ]]; then
@@ -156,14 +174,14 @@ while true; do
     else
       _ykcr_msg=$(cat "$_ykcr_err")
       rm -f "$_ykcr_err"
-      die_loop "ykchalresp failed on YubiKey #$KEY_COUNT (rc=$_ykcr_rc)${_ykcr_msg:+: $_ykcr_msg} — is the key still inserted?"
+      die_loop "ykman otp calculate failed on YubiKey #$KEY_COUNT (rc=$_ykcr_rc)${_ykcr_msg:+: $_ykcr_msg} — is the key still inserted?"
     fi
   fi
   rm -f "$_ykcr_err"
   printf "\n"
 
   # Guard: empty output means programming failure even with rc=0
-  [[ -n "$ACTUAL_OUTPUT" ]] || die_loop "ykchalresp returned empty output on YubiKey #$KEY_COUNT — slot 2 programming may have failed"
+  [[ -n "$ACTUAL_OUTPUT" ]] || die_loop "ykman otp calculate returned empty output on YubiKey #$KEY_COUNT — slot 2 programming may have failed"
 
   if [[ $KEY_COUNT -eq 1 ]]; then
     EXPECTED_OUTPUT="$ACTUAL_OUTPUT"
@@ -215,10 +233,11 @@ if $_write_vault_pass; then
   cat > "$_tmp" << 'VAULTPASS'
 #!/bin/bash
 # scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
-# Requires: ykchalresp (ykpers package)  Touch YubiKey when its light blinks.
+# Requires: ykman (yubikey-manager)  Touch YubiKey when its light blinks.
+# ykman otp calculate requires hex-encoded challenge; pre-computed from ASCII.
 set -euo pipefail
-CHALLENGE="ansible-vault-laptop-setup"
-timeout 20 ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
+_CHALRESP_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
+timeout 20 ykman otp calculate 2 "$_CHALRESP_HEX" 2>/dev/null || {
   echo "ERROR: YubiKey not available or touch timed out — insert YubiKey and retry" >&2
   exit 1
 }
@@ -272,7 +291,11 @@ else
 fi
 printf "  4. Deploy the keys:\n"
 printf "       make ssh\n\n"
-printf "  5. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
+printf "  5. Optional: Set up PIV key for age-plugin-yubikey (EC P-384; stronger encryption):\n"
+printf "       ykman piv keys generate --algorithm ECCP384 9a\n"
+printf "       ykman piv certificates generate --subject 'age-yubikey' 9a\n"
+printf "       age-plugin-yubikey  # follow prompts to get recipient string\n\n"
+printf "  6. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
 warn "Store each YubiKey in a different physical location."
 warn "The HMAC secret was NOT saved. If all keys are lost: re-provision the machine."
 printf "\n"
