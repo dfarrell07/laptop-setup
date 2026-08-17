@@ -12,8 +12,8 @@ for arg in "$@"; do
 done
 
 # Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
-GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || echo "dfarrell07")"
-[[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER="dfarrell07"
+GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || true)"
+[[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER=""
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 if [[ "$DRY_RUN" = false ]]; then
@@ -78,10 +78,16 @@ DOTFILES=(
   .config/user-tmpfiles.d/ssh-sockets.conf
   .config/user-tmpfiles.d/tmux-sockets.conf
   .config/user-tmpfiles.d/claude-privacy.conf
-  "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
-  "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
-  "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
 )
+if [[ -n "$GITHUB_USER" ]]; then
+  DOTFILES+=(
+    "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
+    "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
+    "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
+  )
+else
+  echo "[warn] dotfiles_github_user not set; skipping macOS LaunchAgent plists" >&2
+fi
 
 # Machine-specific overrides and secrets (gitignored — not in the repo)
 OPTIONAL_FILES=(

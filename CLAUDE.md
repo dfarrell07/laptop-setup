@@ -7,20 +7,16 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)
-2. Create `config.yml` with at minimum `desktop_environment: sway` (or `i3`/`gnome`) and
-   your identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
-   `dotfiles_user_email_personal`). Without `desktop_environment`, auto-detection fails before
-   any WM is installed. Without the identity vars, commits are attributed to the `CHANGE_ME`
-   placeholder user and the notes repo clone fails. To provision notes (requires a GitHub repo
-   named `notes` under `dotfiles_github_user`), add `notes_enabled: true` to `config.yml` (disabled by default).
-   For HiDPI displays (e.g. ThinkPad P16v 2560x1600), also add
-   `desktop_sway_hidpi_scale: 1.5` — without it, Sway defaults to 1.0 scale and fonts
-   are microscopic on a 16-inch screen.
-   Also set `system_timezone` (e.g. `America/Chicago`) — the default is a `CHANGE_ME` sentinel that will fail the system role (`timedatectl set-timezone CHANGE_ME` is invalid); run `timedatectl list-timezones` to find yours.
+2. Copy `default.config.yml` to `config.yml` (`cp default.config.yml config.yml`) and replace
+   each `CHANGE_ME` sentinel — at minimum `desktop_environment` (sway/i3/gnome), the four
+   identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
+   `dotfiles_user_email_personal`), and `system_timezone`. Copying preserves the full
+   optional-toggle comment block for reference.
 3. Replace `scripts/vault-pass.sh` with your YubiKey HMAC-SHA1 implementation, then populate
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
+3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
@@ -179,6 +175,7 @@ make repos-downstream # downstream repos only
 - Single vault file: `group_vars/all/vault.yml`
 - Password via YubiKey HMAC-SHA1: `scripts/vault-pass.sh`
 - Edit: `make vault-edit`
+- vault-pass.sh implementation templates: see `SECURITY.md` § "Setting Up vault-pass.sh"
 - **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 17) outranks
   `group_vars` (4-5), so any `vault_*` key in `config.yml` silently shadows the vault-encrypted
   value. A runtime `assert` in `common/tasks/pre_flight_checks.yml` (included by `site.yml`) enforces this.

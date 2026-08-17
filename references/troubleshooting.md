@@ -555,21 +555,21 @@ The sshd hardening drop-in restricts `AllowUsers` to the current Ansible user. I
 
 ---
 
-## notes: Clone Fails with Permission Denied (Not the dfarrell07 Account)
+## notes: Clone Fails with Permission Denied
 
-**Symptom:** Notes role fails with `Permission denied (publickey)` or `Repository not found` cloning `git@github.com:dfarrell07/notes`.
+**Symptom:** Notes role fails with `Permission denied (publickey)` or `Repository not found` cloning the configured notes repo.
 
-**Cause:** The notes repo (`dfarrell07/notes`) is private. If you are not `dfarrell07`, your SSH keys have no access to it.
+**Cause:** The configured notes repo (set via `notes_remote_url` in `config.yml`, defaulting to `dfarrell07/notes`) is private. If your SSH keys do not have access to it, the clone will fail.
 
-**Fix:** Add to `config.yml`:
+**Fix:** If you have your own notes repo, set `notes_remote_url: git@github.com:<you>/notes.git` (and optionally `notes_remote_url_https: https://github.com/<you>/notes.git`) in `config.yml` and ensure transcrypt is initialized, then re-run `make notes`.
+
+If you do not want notes provisioned, add to `config.yml`:
 
 ```yaml
 notes_enabled: false  # or remove `notes_enabled: true` from config.yml (false is now the default)
 ```
 
 Then re-run `make notes` (or `make all`). The notes role will skip entirely.
-
-If you want your own private notes repo, set `notes_remote_url: git@github.com:<you>/notes.git` (and optionally `notes_remote_url_https: https://github.com/<you>/notes.git`) in `config.yml` and ensure transcrypt is initialized.
 
 ---
 

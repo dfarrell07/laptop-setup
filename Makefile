@@ -99,7 +99,8 @@ bootstrap: guard-not-root
 	@echo "     Want notes provisioned? also add: notes_enabled: true  # opt-in; requires a GitHub repo named \"notes\" accessible as dotfiles_github_user/notes"
 	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
 	@echo "       desktop_sway_hidpi_scale: \"1.5\""
-	@echo "  2. Replace scripts/vault-pass.sh with your YubiKey HMAC-SHA1 implementation,"
+	@echo "  2. Replace scripts/vault-pass.sh with your YubiKey HMAC-SHA1 implementation"
+	@echo "     (see SECURITY.md §'Setting Up vault-pass.sh' for ready-to-use Linux/macOS scripts),"
 	@echo "     then populate group_vars/all/vault.yml with SSH keys and encrypt:"
 	@echo "       ansible-vault encrypt group_vars/all/vault.yml"
 	@echo "     (For a first provision without real secrets, vault.yml plaintext stub is fine,"
@@ -114,6 +115,7 @@ bootstrap: guard-not-root
 	@echo "       gh auth login                # GitHub CLI auth (required for HTTPS git credential helper)"
 	@echo "       podman login registry.redhat.io  # work profile only, if oc is installed"
 	@echo "       Log out and back in for libvirt/kvm group membership changes"
+	@echo "       make container               # CSB/hybrid machines only: provision distrobox dev container"
 	@echo "     See CLAUDE.md §6 for full details."
 	@echo ""
 
