@@ -57,18 +57,26 @@ backup-dry-run: guard-not-root
 
 # --- Bootstrap ---
 # Fedora/RHEL: if make is not yet installed: sudo dnf install -y make ShellCheck
+# macOS: Xcode CLT + Homebrew required first: xcode-select --install && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-bootstrap:
+bootstrap: guard-not-root
+	@# macOS: brew openssh links libfido2; system ssh (LibreSSL) lacks sk-ssh-ed25519/FIDO2 support
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		brew install ansible git openssh libfido2 ykman ykpers make; \
+		brew install ansible git openssh libfido2 ykman ykpers make shellcheck; \
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
 	else \
-		sudo dnf install -y ansible-core git ykpers make ShellCheck; \
+		sudo dnf install -y ansible-core git make; \
+		sudo dnf install -y ykpers ShellCheck || echo 'WARN: ykpers/ShellCheck unavailable — install EPEL or install manually'; \
 	fi
+	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
-	ansible-galaxy collection install -r requirements.yml -p ./collections
+	@if ! curl -sf --max-time 10 https://galaxy.ansible.com >/dev/null 2>&1; then \
+		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap"; \
+		exit 1; \
+	fi
+	ansible-galaxy collection install --upgrade -r requirements.yml -p ./collections
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \
@@ -88,13 +96,18 @@ bootstrap:
 	@echo "       dotfiles_user_email_work: 'you@company.com'"
 	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
 	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
+	@echo "     Personal machine? also add: profile: personal  # skips work tooling; work email then optional"
 	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
 	@echo "       desktop_sway_hidpi_scale: \"1.5\""
-	@echo "  2. Populate group_vars/all/vault.yml with SSH keys, then encrypt:"
+	@echo "  2. Replace scripts/vault-pass.sh with your YubiKey HMAC-SHA1 implementation,"
+	@echo "     then populate group_vars/all/vault.yml with SSH keys and encrypt:"
 	@echo "       ansible-vault encrypt group_vars/all/vault.yml"
-	@echo "     (For a first provision without real secrets, vault.yml plaintext stub is fine.)"
+	@echo "     (For a first provision without real secrets, vault.yml plaintext stub is fine,"
+	@echo "      but SSH authorized_keys, notes clone, and registry auth are skipped until"
+	@echo "      real keys are added and vault is encrypted.)"
 	@echo "  3. make preflight   # validate all pre-conditions before provisioning"
 	@echo "  4. make all         # full provisioning (run at local console or inside tmux)"
+	@echo "  5. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
 	@echo ""
 
 bootstrap-test: guard-not-root

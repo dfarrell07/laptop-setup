@@ -6,6 +6,7 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
+   (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)
 2. Create `config.yml` with at minimum `desktop_environment: sway` (or `i3`/`gnome`) and
    your identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
    `dotfiles_user_email_personal`). Without `desktop_environment`, auto-detection fails before
@@ -16,9 +17,9 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    `desktop_sway_hidpi_scale: 1.5` — without it, Sway defaults to 1.0 scale and fonts
    are microscopic on a 16-inch screen.
    Also set `system_timezone` (e.g. `America/Chicago`) — the default is a `CHANGE_ME` sentinel that will fail the system role (`timedatectl set-timezone CHANGE_ME` is invalid); run `timedatectl list-timezones` to find yours.
-3. Populate `group_vars/all/vault.yml` with real SSH keys (see Vault section below)
-   *then* `ansible-vault encrypt group_vars/all/vault.yml` and replace `scripts/vault-pass.sh`
-   with your YubiKey HMAC-SHA1 implementation. For a first provision without real secrets,
+3. Replace `scripts/vault-pass.sh` with your YubiKey HMAC-SHA1 implementation, then populate
+   `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
+   `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
