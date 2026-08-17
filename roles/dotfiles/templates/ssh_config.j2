@@ -27,6 +27,7 @@ Host *
     ControlPath /run/user/%i/ssh/%r@%h-%p
 {% else %}
     ControlPath ~/.ssh/sockets/%r@%h-%p
+    UseKeychain yes
 {% endif %}
     ControlPersist 600
     StrictHostKeyChecking accept-new

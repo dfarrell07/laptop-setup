@@ -37,7 +37,7 @@ guard-not-root:
 all: guard-not-root preflight
 	ansible-playbook site.yml --ask-become-pass
 	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
-		npm install --ignore-scripts; \
+		npm ci --ignore-scripts; \
 	fi
 
 minimal: guard-not-root
@@ -81,7 +81,7 @@ bootstrap: guard-not-root
 		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
 		collections-dist/containers-podman-1.20.2.tar.gz
 	@if command -v npm >/dev/null 2>&1; then \
-		npm install --ignore-scripts; \
+		npm ci --ignore-scripts; \
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
@@ -131,7 +131,7 @@ hooks:
 
 npm:
 	@if command -v npm >/dev/null 2>&1; then \
-		npm install --ignore-scripts; \
+		npm ci --ignore-scripts; \
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
@@ -141,7 +141,7 @@ setup-yubikeys: guard-not-root
 
 update: guard-not-root preflight
 	@if command -v npm >/dev/null 2>&1; then \
-		npm install --ignore-scripts; \
+		npm ci --ignore-scripts; \
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
@@ -243,11 +243,11 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/* roles/dotfiles/files/git-template-*
 
 markdownlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm install --ignore-scripts"; exit 0; }
+	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
 	npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
 
 commitlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm install --ignore-scripts"; exit 0; }
+	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
 	npx --no -- commitlint --from origin/main --to HEAD
 
 # Container-based molecule tests + script tests (Podman, no libvirt required).

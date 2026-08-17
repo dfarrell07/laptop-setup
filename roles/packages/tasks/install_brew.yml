@@ -85,6 +85,112 @@
       and approve LuLu to activate the application firewall.
   when: is_macos and packages_brew_cask_lulu_enabled | bool and _packages_brew_casks.changed | default(false)
 
+- name: Install AeroSpace window manager (SHA256-verified direct download)
+  # Downloads the upstream GitHub Release zip and verifies against packages_aerospace_sha256,
+  # an independent integrity anchor in our own repo. This eliminates the supply chain risk
+  # on fresh provisioning that existed when the nikitabobko/tap cask was used: a tap owner
+  # compromise can update both the binary URL and the formula SHA256 simultaneously, making
+  # Homebrew's checksum pass while delivering a malicious binary. Direct download with our
+  # own pinned hash breaks that attack for fresh machines.
+  when:
+    - is_macos
+    - profile == 'work'
+    - packages_install_binaries | bool
+  block:
+    - name: Version check — aerospace
+      ansible.builtin.command:
+        cmd: aerospace --version
+      register: _aerospace_version_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Download and install AeroSpace
+      when: packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
+      block:
+        - name: Create AeroSpace extract directory
+          ansible.builtin.file:
+            path: /tmp/aerospace-extract
+            state: directory
+            mode: "0755"
+
+        - name: Download AeroSpace zip (SHA256-verified)
+          ansible.builtin.get_url:
+            url: >-
+              https://github.com/nikitabobko/AeroSpace/releases/download/v{{ packages_aerospace_version
+              }}/AeroSpace-v{{ packages_aerospace_version }}.zip
+            dest: /tmp/AeroSpace.zip
+            checksum: "sha256:{{ packages_aerospace_sha256 }}"
+            mode: "0644"
+            timeout: 120
+          register: _aerospace_download
+          retries: 3
+          delay: 10
+          until: _aerospace_download is succeeded
+
+        - name: Extract AeroSpace zip
+          ansible.builtin.unarchive:
+            src: /tmp/AeroSpace.zip
+            dest: /tmp/aerospace-extract
+            remote_src: true
+
+        - name: Remove existing AeroSpace.app (version update)
+          ansible.builtin.file:
+            path: /Applications/AeroSpace.app
+            state: absent
+          become: true
+          tags: [become]
+
+        - name: Install AeroSpace.app to /Applications  # noqa: command-instead-of-module
+          # cp -r used instead of copy module to preserve symlinks inside the .app bundle
+          ansible.builtin.command:
+            cmd: >-
+              cp -r /tmp/aerospace-extract/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
+              /Applications/
+          become: true
+          tags: [become]
+          changed_when: true
+
+        - name: Install aerospace binary to /usr/local/bin
+          ansible.builtin.copy:
+            src: "/tmp/aerospace-extract/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
+            dest: /usr/local/bin/aerospace
+            mode: "0755"
+            remote_src: true
+          become: true
+          tags: [become]
+
+        - name: Remove quarantine from AeroSpace.app
+          ansible.builtin.command:
+            cmd: xattr -rd com.apple.quarantine /Applications/AeroSpace.app
+          changed_when: false
+          failed_when: false
+
+        - name: Remove quarantine from aerospace binary
+          ansible.builtin.command:
+            cmd: xattr -d com.apple.quarantine /usr/local/bin/aerospace
+          changed_when: false
+          failed_when: false
+
+      always:
+        - name: Remove AeroSpace temp files
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/AeroSpace.zip
+            - /tmp/aerospace-extract
+
+  rescue:
+    - name: Warn AeroSpace install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: AeroSpace download in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          Install manually from
+          https://github.com/nikitabobko/AeroSpace/releases/tag/v{{ packages_aerospace_version }}.
+          Continuing playbook execution.
+
 - name: Stop brew autoupdate before reconfiguring (macOS)
   ansible.builtin.command:
     cmd: brew autoupdate stop

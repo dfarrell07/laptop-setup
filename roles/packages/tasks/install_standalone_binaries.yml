@@ -146,6 +146,68 @@
       github.com/operator-framework/operator-sdk.
       Install manually from https://github.com/operator-framework/operator-sdk/releases
 
+# --- Cosign pre-install self-verification (second trust root on re-provisioning) ---
+# On first install, bootstrapping is impossible; SHA256 (packages_cosign_sha256) is the
+# sole anchor. On re-provisioning, the existing binary verifies the new download against
+# the .sigstore.json bundle — a Sigstore transparency log entry that is a different trust
+# root from the GitHub release SHA256.
+
+- name: Stat existing cosign binary (pre-install; enables bundle verification on re-provision)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.stat:
+    path: /usr/local/bin/cosign
+  register: _cosign_pre_stat
+
+- name: Download cosign binary to temp path for bundle verification (re-provision only)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
+    dest: /tmp/cosign-new
+    checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
+    mode: "0755"
+    timeout: 300
+
+- name: Download cosign sigstore bundle for self-verification (re-provision only)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.sigstore.json
+    dest: /tmp/cosign.sigstore.json
+    mode: "0600"
+
+- name: Verify new cosign binary via bundle using existing cosign (second trust root; re-provision only)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - /tmp/cosign-new
+      - --bundle
+      - /tmp/cosign.sigstore.json
+      - --certificate-identity-regexp
+      - https://github.com/sigstore/cosign/
+      - --certificate-oidc-issuer
+      - https://token.actions.githubusercontent.com
+  changed_when: false
+
 - name: Install cosign (image signing and verification for Konflux pipelines)
   when:
     - is_linux
@@ -170,10 +232,8 @@
       Install manually from https://github.com/sigstore/cosign/releases
 
 # --- Post-install cosign signature verification ---
-# Independent trust anchor beyond SHA256. Cosign is installed above;
-# bootstrapping limit: cosign itself cannot be self-verified on first install.
-# cosign verify-blob --bundle is offline-capable: the bundle embeds the
-# certificate, signature, and Rekor inclusion proof.
+# cosign verify-blob --bundle is offline-capable: the bundle embeds the certificate,
+# signature, and Rekor inclusion proof.
 # Gates on profile == 'work' because cosign is only installed for that profile.
 
 - name: Download sops cosign bundle for post-install verification

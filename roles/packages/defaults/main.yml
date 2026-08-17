@@ -65,7 +65,6 @@ packages_apt_yubikey:
 # setup-yubikeys.sh uses ykman for all operations
 packages_brew_yubikey:
   - ykman
-  - theseal/ssh-askpass/ssh-askpass
 
 # RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
 # capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
@@ -313,11 +312,21 @@ packages_subctl_rh_versions: []
 packages_k9s_version: "0.51.0"
 packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
 
+packages_aerospace_version: "0.21.3-Beta"
+packages_aerospace_sha256: "bdbd3fedb3a41bdd3987d241dd5cc1d8b74a56fdbc0d76a98e6925c5cfef4ce4"  # macOS universal zip; bump with version
+
 packages_krew_bootstrap_version: "0.5.0"  # Initial tarball bootstrap; SHA256-verified (packages_krew_sha256)
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
 packages_krew_version: "0.5.0"  # Pinned upgrade target; bump deliberately to advance krew
 packages_krew_plugin_ctx_version: "v0.11.0"  # kubectx krew plugin pinned version; bump deliberately
 packages_krew_plugin_ns_version: "v0.11.0"   # kubens krew plugin pinned version; bump deliberately
+# Post-install checksums for krew plugins (compensating control: krew index has no cryptographic
+# signing; these pin the known-good script SHA256 independent of the live index).
+# SHA256 of kubectx/kubens scripts at packages_krew_plugin_ctx/ns_version, extracted from the
+# kubectx tarball (sha256: 1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907).
+# Update both version and sha256 vars together when bumping plugin versions.
+packages_krew_plugin_ctx_sha256: "1905c04422efe305d5b27f7526c3573a8c00b9e291e825dba6dd8a5350d59037"
+packages_krew_plugin_ns_sha256: "bf81b4a515e96bfb1878e3b85950bd5742d96a5d6b398e737495ab1b3972ef70"
 
 packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
 install_virtualization: true  # fallback; authoritative value in group_vars/all/vars.yml
@@ -335,19 +344,9 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 
 packages_brew_taps: []
 
-packages_brew_taps_yubikey:
-  # SECURITY NOTE: theseal/ssh-askpass is a third-party tap trusted at latest HEAD
-  # with no commit-hash pinning. Homebrew_tap does not support per-commit locking.
-  # Threat model: a compromised or renamed tap formula would be pulled on next provision.
-  # Mitigating: autoupdate runs brew update only (no --upgrade); upgrades require explicit action.
-  - theseal/ssh-askpass
+packages_brew_taps_yubikey: []
 
-packages_brew_taps_work:
-  # SECURITY NOTE: nikitabobko/tap is a third-party tap trusted at latest HEAD
-  # with no commit-hash pinning. Homebrew_tap does not support per-commit locking.
-  # Threat model: a compromised or renamed tap formula (e.g. aerospace cask) would be
-  # pulled on next provision. Mitigating: autoupdate runs brew update only (no --upgrade).
-  - nikitabobko/tap
+packages_brew_taps_work: []  # AeroSpace removed from tap; installed via direct SHA256-verified download (see install_brew.yml)
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow
 packages_brew_autoupdate_interval: 86400  # seconds per autoupdate cycle; run 'brew autoupdate stop' before changing (idempotency guard)
@@ -356,7 +355,6 @@ packages_brew_cask:
   - alacritty
 
 packages_brew_cask_work:
-  - nikitabobko/tap/aerospace
   - google-chrome
   - slack
   - keepassxc
