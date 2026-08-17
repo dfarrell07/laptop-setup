@@ -174,13 +174,13 @@ else
 fi
 if [[ "$yk_found" == true ]]; then
   record "yubikey_present" "pass" "detected"
-  if command -v ykchalresp &>/dev/null; then
+  if command -v ykman &>/dev/null; then
     if [[ "$JSON" == false ]]; then
       if ! command -v timeout &>/dev/null; then
         record "yubikey_chalresp" "skip" "timeout not available (install gnu-coreutils on macOS)"
       else
         echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-        if timeout 15 ykchalresp -2 "preflight-test" &>/dev/null; then
+        if timeout 15 ykman otp calculate 2 "$(printf '%s' 'preflight-test' | od -An -tx1 | tr -d ' \n')" &>/dev/null; then
           record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
         else
           record "yubikey_chalresp" "warn" "Slot 2 no response within 15s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
@@ -190,7 +190,7 @@ if [[ "$yk_found" == true ]]; then
       record "yubikey_chalresp" "skip" "skipped in --json mode (interactive)"
     fi
   else
-    record "yubikey_chalresp" "skip" "ykchalresp not installed (need ykpers)"
+    record "yubikey_chalresp" "skip" "ykman not installed"
   fi
 else
   if [[ "$yk_detect_possible" == false ]]; then

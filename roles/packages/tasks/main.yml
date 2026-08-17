@@ -81,6 +81,27 @@
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
 
+- name: Install apt YubiKey packages (Debian/Ubuntu)
+  when:
+    - is_apt
+    - packages_yubikey_enabled | bool
+    - not system_is_container
+  block:
+    - name: Install apt YubiKey packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        name: "{{ packages_apt_yubikey }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt YubiKey package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install apt YubiKey packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+
 - name: Install Homebrew packages and configure autoupdate (macOS)
   ansible.builtin.include_tasks: install_brew.yml
   when: is_macos

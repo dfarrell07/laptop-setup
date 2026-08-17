@@ -56,18 +56,18 @@ backup-dry-run: guard-not-root
 	scripts/backup.sh --dry-run
 
 # --- Bootstrap ---
-# Fedora/RHEL: if make is not yet installed: sudo dnf install -y make ShellCheck
+# Fedora/RHEL: if make is not yet installed: sudo dnf install -y make
 # macOS: Xcode CLT + Homebrew required first: xcode-select --install && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 bootstrap: guard-not-root
 	@# macOS: brew openssh links libfido2; system ssh (LibreSSL) lacks sk-ssh-ed25519/FIDO2 support
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		brew install ansible git openssh libfido2 ykman ykpers make shellcheck; \
+		brew install ansible git openssh libfido2 ykman make shellcheck; \
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
 	else \
 		sudo dnf install -y ansible-core git make; \
-		sudo dnf install -y ykpers ShellCheck || echo 'WARN: ykpers/ShellCheck unavailable — install EPEL or install manually'; \
+		sudo dnf install -y ykpers ShellCheck || echo 'WARN: ykpers/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools'; \
 	fi
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
@@ -97,6 +97,7 @@ bootstrap: guard-not-root
 	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
 	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
 	@echo "     Personal machine? also add: profile: personal  # skips work tooling; work email then optional"
+	@echo "     Want notes provisioned? also add: notes_enabled: true  # dfarrell07 account only"
 	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
 	@echo "       desktop_sway_hidpi_scale: \"1.5\""
 	@echo "  2. Replace scripts/vault-pass.sh with your YubiKey HMAC-SHA1 implementation,"
@@ -108,6 +109,13 @@ bootstrap: guard-not-root
 	@echo "  3. make preflight   # validate all pre-conditions before provisioning"
 	@echo "  4. make all         # full provisioning (run at local console or inside tmux)"
 	@echo "  5. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
+	@echo "  6. After reboot — required manual steps:"
+	@echo "       make smoke-test              # verify provisioning succeeded"
+	@echo "       tailscale up                 # authenticate Tailscale (browser step)"
+	@echo "       gh auth login                # GitHub CLI auth (required for HTTPS git credential helper)"
+	@echo "       podman login registry.redhat.io  # work profile only, if oc is installed"
+	@echo "       Log out and back in for libvirt/kvm group membership changes"
+	@echo "     See CLAUDE.md §6 for full details."
 	@echo ""
 
 bootstrap-test: guard-not-root
