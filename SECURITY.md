@@ -102,7 +102,6 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 identical output, and writes `vault-pass.sh` automatically:
 
 ```bash
-make all          # installs ykpers + yubikey-manager first
 make setup-yubikeys
 ```
 
@@ -110,31 +109,16 @@ The script (`scripts/setup-yubikeys.sh`) generates a fresh HMAC secret, programs
 each YubiKey slot 2, verifies outputs match, and writes `vault-pass.sh`. The HMAC
 secret never touches disk — keep all YubiKeys in separate physical locations.
 
-**If you need to write vault-pass.sh manually** (Fedora/RHEL):
+**If you need to write vault-pass.sh manually**:
 
 ```bash
 #!/bin/bash
 # scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
-# Requires: ykchalresp (ykpers package)
+# Requires: ykman (yubikey-manager package on Fedora/RHEL; brew install ykman on macOS)
 set -euo pipefail
-CHALLENGE="ansible-vault-laptop-setup"
-ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
-  echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
-  exit 1
-}
-```
-
-For macOS (`ykpers`/`ykchalresp` unavailable on Homebrew; use `ykman`):
-
-```bash
-#!/bin/bash
-# scripts/vault-pass.sh — YubiKey vault password derivation (macOS)
-# Requires: ykman (brew install ykman)
-set -euo pipefail
-CHALLENGE=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
-ykman otp calculate 2 "$CHALLENGE" 2>/dev/null || {
-  echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
-  exit 1
+_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
+timeout 20 ykman otp calculate 2 "$_HEX" 2>/dev/null || {
+  echo "ERROR: YubiKey not available or touch timed out" >&2; exit 1
 }
 ```
 
@@ -165,13 +149,8 @@ back from a YubiKey after programming, so retroactive backup is impossible.
 **Password manager fallback** — store the literal output of
 
 ```bash
-ykchalresp -2 "ansible-vault-laptop-setup"
-```
-
-On macOS (`ykchalresp` is unavailable; use `ykman`):
-
-```bash
-CHALLENGE=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n') && ykman otp calculate 2 "$CHALLENGE"
+_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
+ykman otp calculate 2 "$_HEX"
 ```
 
 in a hardware-backed password manager (e.g., Bitwarden) as a plaintext emergency

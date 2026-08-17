@@ -12,7 +12,9 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
    `dotfiles_user_email_personal`), and `system_timezone`. Copying preserves the full
    optional-toggle comment block for reference.
-3. Replace `scripts/vault-pass.sh` with your YubiKey HMAC-SHA1 implementation, then populate
+3. Run `make setup-yubikeys` — programs your YubiKeys, writes `vault-pass.sh`, and guides next
+   steps (FIDO2 PIN, SSH key generation, vault population). See `SECURITY.md` § "Setting Up
+   vault-pass.sh" for the manual vault-pass.sh template if needed. Then populate
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
@@ -176,7 +178,7 @@ make repos-downstream # downstream repos only
 ## Vault
 
 - Single vault file: `group_vars/all/vault.yml`
-- Password via YubiKey HMAC-SHA1: `scripts/vault-pass.sh`
+- Password via YubiKey HMAC-SHA1 via ykman: `make setup-yubikeys`
 - Edit: `make vault-edit`
 - vault-pass.sh implementation templates: see `SECURITY.md` § "Setting Up vault-pass.sh"
 - **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 17) outranks

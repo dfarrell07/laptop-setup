@@ -53,12 +53,16 @@ packages_brew_cask_lulu_enabled: false
 
 packages_security_yubikey:
   - yubikey-manager
-  - ykpers  # provides ykchalresp; vault-pass.sh may use ykchalresp on Fedora/RHEL
+  - ykpers  # legacy: provides ykchalresp; setup-yubikeys.sh uses ykman only (ykpersonalize EOL Feb 2026);
+            # keep for existing vault-pass.sh scripts written before 2026 migration
 
 packages_apt_yubikey:
   - yubikey-manager
-  - yubikey-personalization  # provides ykchalresp; vault-pass.sh may use ykchalresp
+  - yubikey-personalization  # legacy: provides ykpersonalize (EOL Feb 2026);
+                              # setup-yubikeys.sh uses yubikey-manager only
 
+# macOS: ykpers/ykpersonalize not available on Homebrew (EOL Feb 2026);
+# setup-yubikeys.sh uses ykman for all operations
 packages_brew_yubikey:
   - ykman
   - theseal/ssh-askpass/ssh-askpass

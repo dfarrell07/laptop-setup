@@ -189,6 +189,11 @@ if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
       record "vault-pass-stub" "WARN" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
     else
       record "vault-pass-stub" "PASS"
+      if grep -q 'ykchalresp' "$_vp" 2>/dev/null; then
+        record "vault-pass-tooling" "WARN" "vault-pass.sh uses deprecated ykchalresp — run: make setup-yubikeys"
+      else
+        record "vault-pass-tooling" "PASS"
+      fi
     fi
     unset _vp_out
   fi
@@ -243,7 +248,7 @@ _gc="$HOME/.config/git/config"
 if [[ ! -f "$_gc" ]]; then record "dotfile-gitconfig" "FAIL" "missing — run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc"; then record "dotfile-gitconfig" "FAIL" "present but not Ansible-managed (manually overwritten?) — inspect and re-run: make dotfiles"
 else record "dotfile-gitconfig" "PASS"; fi
-if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "~/.gitconfig exists alongside XDG config — run: make dotfiles"; else record "legacy-gitconfig" "PASS"; fi
+if [[ -f "$HOME/.gitconfig" ]]; then record "legacy-gitconfig" "FAIL" "$HOME/.gitconfig exists alongside XDG config — run: make dotfiles"; else record "legacy-gitconfig" "PASS"; fi
 # git identity must be set to non-placeholder values
 _git_name=$(git config --global user.name 2>/dev/null || echo "")
 _git_email=$(git config --global user.email 2>/dev/null || echo "")
@@ -255,10 +260,10 @@ unset _gc _git_name _git_email
 # git identity files and includeIf routing
 _gc_work="$HOME/.config/git/config-work"
 _gc_personal="$HOME/.config/git/config-personal"
-if [[ ! -f "$_gc_work" ]]; then record "dotfile-gitconfig-work" "WARN" "~/.config/git/config-work missing — work identity not deployed; run: make dotfiles"
+if [[ ! -f "$_gc_work" ]]; then record "dotfile-gitconfig-work" "WARN" "$HOME/.config/git/config-work missing — work identity not deployed; run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc_work"; then record "dotfile-gitconfig-work" "WARN" "config-work present but not Ansible-managed — manual overwrite?"
 else record "dotfile-gitconfig-work" "PASS"; fi
-if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "~/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
+if [[ ! -f "$_gc_personal" ]]; then record "dotfile-gitconfig-personal" "WARN" "$HOME/.config/git/config-personal missing — personal identity not deployed; run: make dotfiles"
 elif ! grep -q 'Ansible managed' "$_gc_personal"; then record "dotfile-gitconfig-personal" "WARN" "config-personal present but not Ansible-managed — manual overwrite?"
 else record "dotfile-gitconfig-personal" "PASS"; fi
 if [[ "$profile" == "work" ]]; then
@@ -351,7 +356,7 @@ else record "cargo-path" "FAIL" "$HOME/.cargo/bin not exported in .zshrc or .bas
 
 # oh-my-zsh XDG path (dotfiles role clones to ~/.local/share/oh-my-zsh; legacy ~/.oh-my-zsh removed)
 if [[ -f "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh" ]]; then record "omz-xdg-dir" "PASS"
-else record "omz-xdg-dir" "FAIL" "~/.local/share/oh-my-zsh/oh-my-zsh.sh missing — zsh plugins unavailable; run: make dotfiles"; fi
+else record "omz-xdg-dir" "FAIL" "$HOME/.local/share/oh-my-zsh/oh-my-zsh.sh missing — zsh plugins unavailable; run: make dotfiles"; fi
 
 # Required user directories (dotfiles + git_repos roles)
 for _d in "bin:$HOME/bin" ".local-bin:$HOME/.local/bin" "src:$HOME/src"; do
@@ -515,7 +520,7 @@ if dirs=$(run git config --global --get-all safe.directory 2>/dev/null | grep -E
 else record "git-safe-directory" "PASS"; fi
 
 # git hooksPath configured to correct path (git returns tilde-literal, not expanded $HOME)
-_expected_hooks="~/.config/git/template/hooks"
+_expected_hooks="$HOME/.config/git/template/hooks"
 hp=$(run git config --global core.hooksPath 2>/dev/null || echo "")
 if [[ "$hp" == "$_expected_hooks" ]]; then
   record "git-hooks-path" "PASS"
@@ -655,12 +660,12 @@ if $IS_LINUX; then
         else record "sway-idle-lock" "FAIL" "swayidle not configured in sway config — screen will not lock; run: make desktop"; fi
       else record "sway-config" "WARN" "present but not Ansible-managed"; fi
     else
-      record "sway-config" "FAIL" "~/.config/sway/config not deployed — run: make desktop"
+      record "sway-config" "FAIL" "$HOME/.config/sway/config not deployed — run: make desktop"
     fi
     if [[ -f "$HOME/.config/swaylock/config" ]]; then
       record "swaylock-config" "PASS"
     else
-      record "swaylock-config" "FAIL" "~/.config/swaylock/config not deployed — run: make desktop"
+      record "swaylock-config" "FAIL" "$HOME/.config/swaylock/config not deployed — run: make desktop"
     fi
   fi
 fi
@@ -1577,13 +1582,13 @@ EOF
   fi
   # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
   if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
-    _bat_end=$(<"/sys/class/power_supply/BAT0/charge_control_end_threshold" 2>/dev/null || echo "?")
+    _bat_end=$(cat "/sys/class/power_supply/BAT0/charge_control_end_threshold" 2>/dev/null || echo "?")
     if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
     else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
     unset _bat_end
   fi
   if [[ -f /sys/class/power_supply/BAT0/charge_control_start_threshold ]]; then
-    _bat_start=$(<"/sys/class/power_supply/BAT0/charge_control_start_threshold" 2>/dev/null || echo "?")
+    _bat_start=$(cat "/sys/class/power_supply/BAT0/charge_control_start_threshold" 2>/dev/null || echo "?")
     if [[ "$_bat_start" != "?" && "$_bat_start" -gt 0 && "$_bat_start" -lt 100 ]] 2>/dev/null; then
       record "tlp-bat-start-threshold" "PASS"
     else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi

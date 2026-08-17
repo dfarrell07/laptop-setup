@@ -216,7 +216,7 @@ elif [[ -x "$vscript" ]]; then
   len=${#output}
   if [[ $len -ge 8 ]]; then
     if [[ "$output" == *ci-dummy-vault-password* ]]; then
-      record "vault" "warn" "vault-pass.sh is still the CI dummy stub — replace with YubiKey HMAC-SHA1 implementation before encrypting vault.yml (see SECURITY.md 'Setting Up vault-pass.sh')"
+      record "vault" "warn" "vault-pass.sh is still the CI dummy stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
     else
       record "vault" "pass" "script returned valid password"
     fi
