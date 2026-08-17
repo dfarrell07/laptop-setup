@@ -13,6 +13,8 @@
 #   - Secret is delivered to ykpersonalize via stdin (-a with no argument reads
 #     from stdin per the man page), avoiding /proc/<pid>/cmdline exposure
 #   - Secret is NOT written to disk
+#   - EXIT-trap zeroization is best-effort (bash heap; old allocation not zeroed);
+#     effective suppression requires system_coredump_storage: none (not system_mask_abrt)
 #   - Verifies each key produces identical challenge-response output
 #   - Writes scripts/vault-pass.sh atomically with 700 permissions
 #   - Prompts to add more keys until you say no
@@ -34,6 +36,8 @@ die_loop() {
 }
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
+# Zero-reassignment is best-effort: bash allocates a new string; the old heap
+# allocation is not zeroed. Effective mitigation: system_coredump_storage: none.
 _tmp='' _prog_err='' _ykcr_err=''
 trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"
       HMAC_SECRET="0000000000000000000000000000000000000000"; unset HMAC_SECRET
@@ -124,7 +128,7 @@ while true; do
   _prog_err=$(mktemp)
   if ! printf '%s\n' "$HMAC_SECRET" | \
        ykpersonalize -2 -y -ochal-resp -ochal-hmac -ohmac-lt64 \
-                     -oserial-api-visible -a 2>"$_prog_err"; then
+                     -oserial-api-visible -ochal-btn-trig -a 2>"$_prog_err"; then
     _err_msg=$(cat "$_prog_err")
     rm -f "$_prog_err"
     if printf '%s' "$_err_msg" | grep -qiE 'BACKEND_ERROR|write error|access.?code'; then
@@ -161,10 +165,10 @@ while true; do
 
   if [[ $KEY_COUNT -eq 1 ]]; then
     EXPECTED_OUTPUT="$ACTUAL_OUTPUT"
-    ok "YubiKey #1 verified (baseline: ${ACTUAL_OUTPUT:0:8}…)"
+    ok "YubiKey #1 verified"
   else
     if [[ "$ACTUAL_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
-      die_loop "YubiKey #$KEY_COUNT output (${ACTUAL_OUTPUT:0:8}…) differs from YubiKey #1 (${EXPECTED_OUTPUT:0:8}…) — programming failed"
+      die_loop "YubiKey #$KEY_COUNT output differs from YubiKey #1 — programming failed"
     fi
     ok "YubiKey #$KEY_COUNT verified (matches YubiKey #1)"
   fi
