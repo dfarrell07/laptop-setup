@@ -34,9 +34,9 @@ die_loop() {
 }
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
-_tmp='' _prog_err='' _interrupted=false
-trap 'rm -f "$_tmp" "$_prog_err"' EXIT
-trap '_interrupted=true; printf "\n\nInterrupted.\n" >&2
+_tmp='' _prog_err='' _ykcr_err=''
+trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"' EXIT
+trap 'printf "\n\nInterrupted.\n" >&2
       printf "Any YubiKeys already programmed in this run have the new secret.\n" >&2
       printf "Re-run setup-yubikeys.sh to program remaining keys with the SAME secret.\n" >&2
       printf "(You will not see the secret again — re-run will generate a NEW one,\n" >&2
