@@ -93,8 +93,11 @@
   changed_when: false
 
 - name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
+  # --upgrade intentionally omitted: autoupdate only refreshes the formula database.
+  # Upgrading installed packages (especially from third-party taps) requires an explicit
+  # 'brew upgrade' or 'make all', preventing continuous silent upgrades between provisions.
   ansible.builtin.command:
-    cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --upgrade --cleanup
+    cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --cleanup
   when: is_macos
   changed_when: false
   failed_when: false

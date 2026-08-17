@@ -218,3 +218,12 @@ make repos-downstream # downstream repos only
 - Branch protection on main: 5 required checks (Ansible Lint, Vault Encryption
   Check, Secret Detection, Ansible Syntax Check, Vars Sync Check), force push blocked, linear history
 - GitHub secret scanning + push protection enabled
+- **Ansible Galaxy collections (accepted TOFU risk)**: `requirements.yml` pins versions but no
+  artifact hash verification is performed. `ansible-galaxy collection install` fetches both the
+  artifact and its hash from the same origin (galaxy.ansible.com), so version pinning alone does
+  not protect against a compromised origin substituting a malicious artifact. The `collections/`
+  directory is gitignored and re-downloaded on every CI run with no `--keyring` flag (GPG-signed
+  manifests are not published by community.general or the other collections used here). This is
+  a conscious TOFU (trust-on-first-use) decision: the collections are well-known community
+  packages from a reputable registry. Upgrade path: vendor `collections/` into git and disable
+  Galaxy fetch in CI, or add out-of-band artifact hash checks when Galaxy adds signed manifests.

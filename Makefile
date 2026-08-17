@@ -74,11 +74,12 @@ bootstrap: guard-not-root
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
-	@if ! curl -sf --max-time 10 https://galaxy.ansible.com >/dev/null 2>&1; then \
-		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap; if behind a corporate proxy, set HTTPS_PROXY=http://<proxy>:<port> and retry"; \
-		exit 1; \
-	fi
-	ansible-galaxy collection install --upgrade -r requirements.yml -p ./collections
+	cd collections-dist && sha256sum -c SHA256SUMS
+	ansible-galaxy collection install -p ./collections \
+		collections-dist/ansible-posix-2.2.2.tar.gz \
+		collections-dist/community-general-13.2.0.tar.gz \
+		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
+		collections-dist/containers-podman-1.20.2.tar.gz
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \
@@ -144,7 +145,12 @@ update: guard-not-root preflight
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
-	ansible-galaxy collection install -r requirements.yml -p ./collections
+	cd collections-dist && sha256sum -c SHA256SUMS
+	ansible-galaxy collection install -p ./collections \
+		collections-dist/ansible-posix-2.2.2.tar.gz \
+		collections-dist/community-general-13.2.0.tar.gz \
+		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
+		collections-dist/containers-podman-1.20.2.tar.gz
 	ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---

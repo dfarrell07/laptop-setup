@@ -68,19 +68,6 @@
     - name: Include desktop common assertions (Alacritty + Chrome policy)
       ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
-    - name: Verify slack repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/slack.repo
-      register: verify_slack_repo
-      become: true
-      when: (repo_slack) and ansible_architecture == 'x86_64'
-
-    - name: Assert slack repo exists
-      ansible.builtin.assert:
-        that: verify_slack_repo.stat.exists
-        fail_msg: "slack repo not configured"
-      when: (repo_slack) and ansible_architecture == 'x86_64'
-
     - name: Verify google-cloud-cli repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/google-cloud-cli.repo

@@ -41,7 +41,7 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   repo_google_cloud_sdk: false       (group_vars/all/vars.yml) — opt in when gcloud needed; GCP repo adds dnf metadata overhead
 #   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
 #   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
-#   repo_slack: false                  (group_vars/all/vars.yml) — packagecloud RPM has gpgcheck=false; opt in or use Flatpak
+#   # repo_slack removed — packagecloud repo had gpgcheck=false (no RPM signing); use Flatpak: flatpak install flathub com.slack.Slack
 #   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
 #   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true to unmask docker.socket
 #   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
@@ -49,8 +49,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_install_usbguard: true      (group_vars/all/vars.yml) — USBGuard USB device authorization; set false on VM/USB-less machines
 #   system_bolt_enabled: true/false    (group_vars/all/vars.yml) — auto-detected on VMs/containers; override only if misidentified
 #   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
-#   packages_gotoolchain: auto         (roles/packages/defaults) — GOTOOLCHAIN env for go install; set 'local'
-#                                        on air-gapped or CSB networks where dl.google.com is blocked
+#   packages_gotoolchain: local        (roles/packages/defaults) — GOTOOLCHAIN env for go install; default
+#                                        'local' prevents runtime toolchain downloads (aligns with SHA256-pinned
+#                                        pattern). Set 'auto' in config.yml only when intentionally allowing
+#                                        toolchain self-replacement; update the golang DNF/apt package instead
 #   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; may want 32–64 MB for
 #                                        kind clusters or bpfman workloads. NOTE: silently ignored when
 #                                        csb_detected=true (auditd.conf deploy skipped; IT owns the file)

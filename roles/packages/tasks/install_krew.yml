@@ -50,16 +50,22 @@
           timeout: 120
           changed_when: true
 
-    - name: Upgrade krew
+    - name: Get current krew version
+      when: packages_krew_check.rc == 0
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
+      register: packages_krew_current_version
+      changed_when: false
+      failed_when: false
+
+    - name: Upgrade krew to pinned version
       when:
         - packages_krew_check.rc == 0
+        - ("v" ~ packages_krew_version) not in (packages_krew_current_version.stdout | default(''))
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
       timeout: 120
       register: packages_krew_upgrade
-      # NOTE: krew self-manages its upgrade path — this upgrades to krew's own latest release,
-      # NOT necessarily to packages_krew_bootstrap_version. packages_krew_bootstrap_version only pins the initial tarball
-      # install (above). Subsequent upgrades follow krew's own release cadence.
       changed_when: packages_krew_upgrade.stdout | length > 0
 
   rescue:

@@ -52,7 +52,7 @@
             dest: /usr/local/bin
             remote_src: true
             extra_opts: >-
-              {{ ['--no-same-owner']
+              {{ ['--no-same-owner', '--no-absolute-names']
                  + (['--strip-components=' ~ strip_components] if strip_components is defined else [])
                  + ([binary_in_archive] if binary_in_archive is defined else []) }}
           become: true

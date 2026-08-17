@@ -25,20 +25,48 @@
     fail_msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
 
+- name: Warn when claude_pinned_version is unset (supply chain advisory)
+  ansible.builtin.debug:
+    msg: >-
+      SUPPLY CHAIN ADVISORY: claude_pinned_version is not set in config.yml.
+      Downloading the latest installer from {{ claude_install_url }} installs
+      whatever version the CDN currently serves. Set claude_pinned_version
+      (e.g. "1.0.3") in config.yml to pin to a specific release.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_pinned_version | length == 0
+
 - name: Install Claude Code via native binary
   when:
     - _claude_needs_install
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:
+    # NOTE (accepted risk): No checksum on install.sh — Anthropic does not publish
+    # per-release SHA256 hashes for install.sh, so the download-verify-execute pattern
+    # cannot be completed today. TLS guards against passive interception; CDN compromise
+    # or a BGP+rogue-cert attack remains undetected. Review when Anthropic publishes
+    # installer checksums and add `checksum: sha256:<hex>` to the get_url task.
+    - name: Download Claude Code install script
+      ansible.builtin.get_url:
+        url: "{{ claude_install_url }}"
+        dest: /tmp/claude-install.sh
+        mode: "0700"
+        timeout: 60
+        checksum: "{{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 else omit }}"
+
     - name: Run Claude Code install script
-      ansible.builtin.shell:  # noqa: risky-shell-pipe command-instead-of-module no-changed-when
-        cmd: >-
-          set -o pipefail && curl --max-time 120 --connect-timeout 15 -fsSL
-          {{ claude_install_url }} |
-          {% if claude_pinned_version %}CLAUDE_VERSION={{ claude_pinned_version }} {% endif %}bash
-        executable: /bin/bash
+      ansible.builtin.command:  # noqa: no-changed-when
+        cmd: bash /tmp/claude-install.sh
+        chdir: /tmp
+      environment: "{{ {'CLAUDE_VERSION': claude_pinned_version} if claude_pinned_version else {} }}"
       timeout: 150
+
+    - name: Remove Claude Code install script
+      ansible.builtin.file:
+        path: /tmp/claude-install.sh
+        state: absent
   rescue:
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -48,18 +76,18 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
           Install Claude Code manually after provisioning:
-          curl -fsSL {{ claude_install_url }} | bash
-        _csb_ticket_summary: "Cannot install Claude Code on CSB (fapolicyd blocks curl | bash)"
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+        _csb_ticket_summary: "Cannot install Claude Code on CSB (fapolicyd blocks installer)"
         _csb_ticket_body: >-
           The Claude Code installer could not run ({{ claude_install_url }} may be blocked
           by fapolicyd). Install manually after provisioning:
-          curl -fsSL {{ claude_install_url }} | bash
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
       when: csb_rhel
     - name: Fail — Claude Code install failed on non-CSB machine
       ansible.builtin.fail:
         msg: >-
           Claude Code install failed ({{ claude_install_url }} may be blocked).
-          Install manually: curl -fsSL {{ claude_install_url }} | bash
+          Install manually: curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
       when: not csb_rhel
 
 # --- Instance isolation directories and settings ---

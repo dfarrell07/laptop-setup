@@ -35,6 +35,52 @@ jobs:
         # and also lints .github/ (excluded from ansible-lint)
         run: yamllint --strict .
 
+      - name: Check lock file drift
+        # Verify requirements-test.lock satisfies the version bounds in requirements-test.txt.
+        # Dependabot bumps bounds in .txt but does NOT regenerate .lock; this catches that gap.
+        # Uses `packaging` which is already installed by ci-setup from requirements-test.lock.
+        run: |
+          python3 - <<'PYEOF'
+          import re, sys
+          from packaging.requirements import Requirement
+          from packaging.version import Version
+
+          def normalize(name):
+              return re.sub(r'[-_.]+', '-', name).lower()
+
+          reqs = {}
+          with open('requirements-test.txt') as f:
+              for line in f:
+                  line = line.strip()
+                  if line and not line.startswith('#'):
+                      req = Requirement(line)
+                      reqs[normalize(req.name)] = req
+
+          locked = {}
+          with open('requirements-test.lock') as f:
+              for line in f:
+                  # Strip optional extras (e.g. molecule-plugins[podman,vagrant]==x.y.z)
+                  m = re.match(r'^([A-Za-z0-9][-A-Za-z0-9._]*)(?:\[[^\]]*\])?==([^\s\\]+)', line)
+                  if m:
+                      locked[normalize(m.group(1))] = Version(m.group(2))
+
+          drift = []
+          for key, req in reqs.items():
+              if key not in locked:
+                  drift.append(f'{req.name}: not found in requirements-test.lock')
+              elif not req.specifier.contains(locked[key]):
+                  drift.append(
+                      f'{req.name}: locked at {locked[key]}, but {req.specifier} required'
+                  )
+
+          if drift:
+              for d in drift:
+                  print(f'::error::{d}')
+              print('Run `make pip-lock` and commit the updated lockfile.')
+              sys.exit(1)
+          print(f'Lock file satisfies all {len(reqs)} direct requirements.')
+          PYEOF
+
   check-vars-sync:
     name: Vars Sync Check
     runs-on: ubuntu-24.04

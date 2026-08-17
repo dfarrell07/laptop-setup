@@ -222,6 +222,9 @@ packages_tkn_sha256: "4a69c3884b40a370bf6faff620ee719adb3a4b4c1820c2edba93520e54
 packages_tkn_sha256_arm64: "1aecaf783da733feccaab84240581529a62f91df11596ab536717d92a0a9c8a2"
 
 # enterprise-contract/ec-cli moved to github.com/conforma/cli (permanent redirect)
+# conforma = Red Hat Konflux team's upstream org.  Releases ship only plain .sha256 files —
+# no Sigstore-signed attestations yet; cosign verify-blob cannot be added until .bundle/.sig
+# assets appear in releases.  SHA256 below is the primary integrity control.
 packages_ec_version: "0.9.96"
 packages_ec_sha256: "4c1b3d66afedafe1e5aefc2f77226f853a87795840192dd208e7592fbce9ce01"
 packages_ec_sha256_arm64: "3b828381befb917db1a626f449cc6464b94371b765ea0f650f52170178b57e5b"
@@ -243,9 +246,13 @@ packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09c
 packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
-packages_gotoolchain: auto  # GOTOOLCHAIN env for go install; set 'local' in config.yml to
-  # prevent toolchain binary self-replacement (blocks dl.google.com); note: module downloads
-  # still occur via GOPROXY — a full air-gap also needs GOPROXY=off or an internal proxy
+packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain
+  # downloads from dl.google.com and aligns with the SHA256-pinned pattern used for all other
+  # binary downloads. If a go install tool requires a newer Go than the system package provides,
+  # update the golang DNF/apt package first, then re-run. Set 'auto' in config.yml only when
+  # intentionally allowing toolchain self-replacement (e.g. on a developer workstation with
+  # unrestricted internet and an older distro Go). Note: module downloads still occur via
+  # GOPROXY — a full air-gap also needs GOPROXY=off or an internal proxy
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 packages_golangci_lint_version: "2.12.2"
@@ -306,8 +313,11 @@ packages_subctl_rh_versions: []
 packages_k9s_version: "0.51.0"
 packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
 
-packages_krew_bootstrap_version: "0.5.0"  # Initial tarball only; upgrades self-manage to krew latest
+packages_krew_bootstrap_version: "0.5.0"  # Initial tarball bootstrap; SHA256-verified (packages_krew_sha256)
 packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
+packages_krew_version: "0.5.0"  # Pinned upgrade target; bump deliberately to advance krew
+packages_krew_plugin_ctx_version: "v0.11.0"  # kubectx krew plugin pinned version; bump deliberately
+packages_krew_plugin_ns_version: "v0.11.0"   # kubens krew plugin pinned version; bump deliberately
 
 packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
 install_virtualization: true  # fallback; authoritative value in group_vars/all/vars.yml
@@ -326,9 +336,17 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 packages_brew_taps: []
 
 packages_brew_taps_yubikey:
+  # SECURITY NOTE: theseal/ssh-askpass is a third-party tap trusted at latest HEAD
+  # with no commit-hash pinning. Homebrew_tap does not support per-commit locking.
+  # Threat model: a compromised or renamed tap formula would be pulled on next provision.
+  # Mitigating: autoupdate runs brew update only (no --upgrade); upgrades require explicit action.
   - theseal/ssh-askpass
 
 packages_brew_taps_work:
+  # SECURITY NOTE: nikitabobko/tap is a third-party tap trusted at latest HEAD
+  # with no commit-hash pinning. Homebrew_tap does not support per-commit locking.
+  # Threat model: a compromised or renamed tap formula (e.g. aerospace cask) would be
+  # pulled on next provision. Mitigating: autoupdate runs brew update only (no --upgrade).
   - nikitabobko/tap
 
 packages_brew_update: false  # autoupdate daemon handles background upgrades; updating on every provision is slow

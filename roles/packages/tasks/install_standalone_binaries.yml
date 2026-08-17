@@ -169,6 +169,90 @@
       cosign binary could not be downloaded from github.com/sigstore/cosign.
       Install manually from https://github.com/sigstore/cosign/releases
 
+# --- Post-install cosign signature verification ---
+# Independent trust anchor beyond SHA256. Cosign is installed above;
+# bootstrapping limit: cosign itself cannot be self-verified on first install.
+# cosign verify-blob --bundle is offline-capable: the bundle embeds the
+# certificate, signature, and Rekor inclusion proof.
+# Gates on profile == 'work' because cosign is only installed for that profile.
+
+- name: Download sops cosign bundle for post-install verification
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+      }}/sops-v{{ packages_sops_version }}.linux.{{
+      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.bundle
+    dest: /tmp/sops-cosign.bundle
+    mode: "0600"
+
+- name: Verify sops keyless cosign signature
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - /usr/local/bin/sops
+      - --bundle
+      - /tmp/sops-cosign.bundle
+      - --certificate-identity-regexp
+      - https://github.com/getsops/sops/
+      - --certificate-oidc-issuer
+      - https://token.actions.githubusercontent.com
+  changed_when: false
+
+- name: Download gitleaks checksums file for cosign verification
+  # gitleaks signs the checksums file (not each arch tarball directly).
+  # Verifying the checksums bundle establishes that the SHA256 values in
+  # packages_gitleaks_sha256 / packages_gitleaks_sha256_arm64 (defaults/main.yml)
+  # originated from a legitimate gitleaks release workflow.
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
+      }}/gitleaks_{{ packages_gitleaks_version }}_checksums.txt
+    dest: /tmp/gitleaks-checksums.txt
+    mode: "0600"
+
+- name: Download gitleaks checksums cosign bundle for verification
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
+      }}/gitleaks_{{ packages_gitleaks_version }}_checksums.txt.bundle
+    dest: /tmp/gitleaks-checksums-cosign.bundle
+    mode: "0600"
+
+- name: Verify gitleaks checksums keyless cosign signature
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - /tmp/gitleaks-checksums.txt
+      - --bundle
+      - /tmp/gitleaks-checksums-cosign.bundle
+      - --certificate-identity-regexp
+      - https://github.com/gitleaks/gitleaks/
+      - --certificate-oidc-issuer
+      - https://token.actions.githubusercontent.com
+  changed_when: false
+
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   when:
     - is_linux
@@ -199,6 +283,14 @@
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
   # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
+  # (conforma = Red Hat Konflux team's upstream org; permanent redirect in place)
+  # cosign is installed by this same playbook (install_standalone_binaries.yml) but
+  # conforma/cli releases do NOT yet publish Sigstore-signed attestations — only plain
+  # .sha256 files ship alongside each binary.  Until cosign .bundle/.sig assets appear
+  # in the release, a post-install `cosign verify-blob` step cannot be added.
+  # The SHA256 in packages_ec_sha256 / packages_ec_sha256_arm64 (defaults/main.yml) is
+  # the primary integrity control; a compromised release requires both a tampered GitHub
+  # release AND an independent SHA256 update to this repo.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']

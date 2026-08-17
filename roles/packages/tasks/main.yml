@@ -154,7 +154,10 @@
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
-    cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew install ctx ns"
+    cmd: >-
+      {{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew install
+      ctx@{{ packages_krew_plugin_ctx_version }}
+      ns@{{ packages_krew_plugin_ns_version }}
   timeout: 120
   register: packages_krew_plugins_result
   changed_when: '"Installed plugin" in packages_krew_plugins_result.stdout'

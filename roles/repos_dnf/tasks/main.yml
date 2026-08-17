@@ -100,9 +100,21 @@
         description: Google Cloud CLI
         baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if _gcloud_use_el10 else 'el9' }}-x86_64"
         gpgcheck: true
-        repo_gpgcheck: false  # packages.cloud.google.com does not sign repomd.xml
+        repo_gpgcheck: false  # packages.cloud.google.com does not sign repomd.xml;
+          # residual risk: MITM can manipulate repo metadata (version list, package
+          # names) without detection — e.g. downgrade to a vulnerable version.
+          # RPM-level gpgcheck above remains the effective guard against malicious
+          # payload delivery. Monitor Google's repo for future metadata signing support.
         gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 else 'rpm-package-key.gpg' }}"  # yamllint disable-line rule:line-length
         enabled: true
+    - name: Install dnf versionlock plugin for google-cloud-cli pin
+      ansible.builtin.dnf:
+        name: python3-dnf-plugin-versionlock
+        state: present
+    - name: Pin google-cloud-cli version to limit MITM downgrade exposure
+      community.general.dnf_versionlock:
+        name: google-cloud-cli
+        state: present
   rescue:
     - name: Record Google Cloud SDK repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -122,57 +134,6 @@
       ansible.builtin.debug:
         msg: >-
           REPO SETUP FAILED: Add Google Cloud SDK repository in role repos_dnf.
-          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-          This is likely a transient network error (DNS timeout, expired GPG key).
-          Continuing playbook execution.
-      when: not csb_rhel
-
-- name: Add Slack repo
-  when:
-    - repo_slack
-    - ansible_facts['architecture'] == 'x86_64'
-    - not csb_rhel
-  block:
-    - name: Add slack repo
-      ansible.builtin.yum_repository:
-        name: slack
-        description: Slack Desktop
-        # packagecloud uses fedora/21 as a static bucket for all Fedora versions — intentional, not stale
-        baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
-        # packagecloud Slack repo does not sign individual RPMs; repo_gpgcheck also unsafe
-        # (packagecloud metadata signing inconsistent). Not a dnf-automatic risk: packagecloud repos
-        # publish no updateinfo.xml, so upgrade_type=security never matches Slack (no advisory metadata).
-        gpgcheck: false
-        repo_gpgcheck: false
-        enabled: true
-    - name: Install dnf versionlock plugin for Slack pin
-      ansible.builtin.dnf:
-        name: python3-dnf-plugin-versionlock
-        state: present
-    - name: Pin slack version to limit unauthenticated update exposure
-      community.general.dnf_versionlock:
-        name: slack
-        state: present
-  rescue:
-    - name: Record Slack repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Slack repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install Slack via Flatpak or download RPM directly"
-        _csb_ticket_summary: "Exception request: Slack RPM repository"
-        _csb_ticket_body: >-
-          Slack Desktop is the primary team communication client used across Red Hat engineering.
-          Repo URL: https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64.
-          Flatpak Slack has degraded screen sharing on Wayland and missing system tray integration;
-          the browser app lacks desktop notifications and file-upload drag-and-drop.
-          Blocked workflows: team communication, incident response, meeting coordination.
-      when: csb_rhel
-    - name: Warn Slack repo failed (non-CSB network error)
-      ansible.builtin.debug:
-        msg: >-
-          REPO SETUP FAILED: Add Slack repository in role repos_dnf.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
@@ -254,10 +215,18 @@
 - name: Add acli repo
   # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
   # (not a repo_X boolean, because the URL is an internal secret)
+  # Risk acceptance: gpgcheck and repo_gpgcheck are disabled — this internal Red Hat repo
+  # publishes no GPG key or signed metadata. Mitigations: opt-in only (explicit baseurl in
+  # config.yml), profile==work scoped, URL assert enforces *.redhat.com domain, and
+  # versionlock pin below limits unauthenticated-update blast radius (mirrors Slack pattern).
   when:
     - profile == 'work'
     - repos_dnf_acli_baseurl is defined
   block:
+    - name: Assert acli baseurl targets expected internal domain
+      ansible.builtin.assert:
+        that: repos_dnf_acli_baseurl is match('^https://.*\.redhat\.com/.*')
+        fail_msg: "repos_dnf_acli_baseurl must be an internal Red Hat URL (https://*.redhat.com/...)"
     - name: Add acli repo
       ansible.builtin.yum_repository:
         name: acli
@@ -266,6 +235,14 @@
         gpgcheck: false  # Internal Red Hat repo does not publish a GPG key
         repo_gpgcheck: false  # metadata also unsigned — same limitation as gpgcheck above
         enabled: true
+    - name: Install dnf versionlock plugin for acli pin
+      ansible.builtin.dnf:
+        name: python3-dnf-plugin-versionlock
+        state: present
+    - name: Pin acli version to limit unauthenticated update exposure
+      community.general.dnf_versionlock:
+        name: acli
+        state: present
   rescue:
     - name: Record acli repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -344,6 +321,19 @@
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
         disable_gpg_check: true
+    - name: Check RPM Fusion free release signing key  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-free-release
+      changed_when: false
+      register: _rpmfusion_free_sig
+    - name: Assert RPM Fusion free release signed by expected key  # compensating control for disable_gpg_check bootstrap
+      ansible.builtin.assert:
+        that: "'4c7033ea' in _rpmfusion_free_sig.stdout | lower"
+        fail_msg: >-
+          RPM Fusion free release signing key mismatch (expected Key ID 4C7033EA /
+          fingerprint 79BD B887 4A06 8716 9073 25C6 64A4 849E 4C70 33EA).
+          Got: {{ _rpmfusion_free_sig.stdout }}.
+          Possible supply-chain compromise — remove rpmfusion-free-release and investigate.
   rescue:
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
@@ -365,6 +355,19 @@
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
         disable_gpg_check: true
+    - name: Check RPM Fusion nonfree release signing key  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-nonfree-release
+      changed_when: false
+      register: _rpmfusion_nonfree_sig
+    - name: Assert RPM Fusion nonfree release signed by expected key  # compensating control for disable_gpg_check bootstrap
+      ansible.builtin.assert:
+        that: "'4c7033ea' in _rpmfusion_nonfree_sig.stdout | lower"
+        fail_msg: >-
+          RPM Fusion nonfree release signing key mismatch (expected Key ID 4C7033EA /
+          fingerprint 79BD B887 4A06 8716 9073 25C6 64A4 849E 4C70 33EA).
+          Got: {{ _rpmfusion_nonfree_sig.stdout }}.
+          Possible supply-chain compromise — remove rpmfusion-nonfree-release and investigate.
   rescue:
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:

@@ -8,8 +8,9 @@ system_is_container: false  # fallback; authoritative value in group_vars/all/va
 distrobox_enabled: true  # set false in config.yml to skip Play 3; site.yml role when-guard
 
 distrobox_fedora_release: '44'
+distrobox_container_digest: "sha256:27dc67339a01d10400322b1a008387cc24a85d1b092e6f56867732a0cd96da00"  # yamllint disable-line rule:line-length
 distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
-distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ distrobox_container_release) }}"  # yamllint disable-line rule:line-length
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ distrobox_container_release ~ '@' ~ distrobox_container_digest) }}"  # yamllint disable-line rule:line-length
 distrobox_container_replace: "{{ container_replace | default(false) }}"
 distrobox_container_release: "{{ container_release | default(distrobox_fedora_release) }}"
 

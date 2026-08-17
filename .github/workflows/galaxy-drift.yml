@@ -34,7 +34,21 @@ jobs:
           python-version: '3.14'
 
       - name: Install Ansible
-        run: pip install ansible==14.2.0 pyyaml==6.0.3
+        run: |
+          pip install --require-hashes -r <(awk '
+            /^ansible==|^ansible-core==|^cffi==|^cryptography==|^jinja2==|^markupsafe==|^packaging==|^pycparser==|^pyyaml==|^resolvelib==/ {
+              in_pkg=1; line=$0
+              sub(/[[:space:]]*\\[[:space:]]*$/, "", line)
+              printf "%s", line; next
+            }
+            in_pkg && /--hash=sha256:/ {
+              line=$0
+              sub(/^[[:space:]]*/, "", line)
+              sub(/[[:space:]]*\\[[:space:]]*$/, "", line)
+              printf "\n    %s", line; next
+            }
+            in_pkg {printf "\n"; in_pkg=0}
+          ' requirements-test.lock)
 
       - name: Install latest collection versions
         run: |
