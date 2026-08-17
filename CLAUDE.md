@@ -16,6 +16,9 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
+   **WARNING**: if vault is unpopulated, no authorized_keys is written; after reboot sshd
+   moves to port 722 and SSH login fails unless an out-of-band authorized_keys entry already
+   exists. Populate the vault (or manually add your public key) before rebooting.
 3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
@@ -101,7 +104,7 @@ make distrobox        # alias for make container (backwards compatibility)
 # runs git_repos role with repo_category=<group>; any category name is valid
 make repos-ovnk       # OVN-Kubernetes repos only
 make repos-konflux    # Konflux repos only
-make repos-personal   # personal repos only
+make repos-personal   # personal repos only (SSH-only; requires ssh-add before running)
 make repos-bpfman     # bpfman repos only
 make repos-downstream # downstream repos only
 ```

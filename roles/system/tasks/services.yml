@@ -215,7 +215,15 @@
       ansible.builtin.lineinfile:
         path: /etc/usbguard/usbguard-daemon.conf
         regexp: '^PresentDevicePolicy='
-        line: 'PresentDevicePolicy=keep'
+        line: 'PresentDevicePolicy={{ system_usbguard_present_device_policy }}'
+        state: present
+      notify: Restart usbguard
+
+    - name: Enforce InsertedDevicePolicy in usbguard-daemon.conf
+      ansible.builtin.lineinfile:
+        path: /etc/usbguard/usbguard-daemon.conf
+        regexp: '^InsertedDevicePolicy='
+        line: 'InsertedDevicePolicy={{ system_usbguard_inserted_device_policy }}'
         state: present
       notify: Restart usbguard
 

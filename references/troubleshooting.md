@@ -516,12 +516,12 @@ The npm ecosystem has repeated supply chain compromises. The Bitwarden CLI publi
 YubiKey stops responding after USBGuard is enabled. External keyboard (Moonlander) is not recognized. Devices work after `usbguard allow-device`.
 
 **Cause:**
-USBGuard blocks all USB devices not in the whitelist (`/etc/usbguard/rules.conf`). The default deployed rules whitelist YubiKey (`1050:*`), Moonlander (`3297:1969`), and hardwired devices, but a new device or firmware update may change the device ID.
+USBGuard blocks all USB devices not in the whitelist (`/etc/usbguard/rules.conf`). The default deployed rules whitelist YubiKey (`1050:*`) and Linux root hubs (`1d6b:*`). Hardwired devices are covered on Intel hardware via connect-type. Devices not in the base list (Moonlander, fingerprint reader, webcam, Bluetooth adapter, AMD internal ports) must be added to `system_usbguard_extra_rules` in `config.yml`.
 
 **Fix:**
 - List blocked devices: `usbguard list-devices --blocked`
 - Temporarily allow: `usbguard allow-device <id>`
-- Permanently add to whitelist: update `system_usbguard_whitelist` in `roles/system/defaults/main.yml` and re-run `make system`
+- Permanently add to whitelist: add a rule to `system_usbguard_extra_rules` in `config.yml` (gitignored, per-machine) and re-run `make system`. Only add to `roles/system/defaults/main.yml` if the rule should apply to all machines (e.g., a new YubiKey model).
 - Generate a fresh policy from current devices: `usbguard generate-policy -P`
 
 **CSB IT ticket:** USBGuard may already be managed by IT. Check before modifying rules.

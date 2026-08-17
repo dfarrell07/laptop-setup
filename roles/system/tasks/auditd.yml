@@ -72,6 +72,16 @@
         # no drop-in mechanism exists — last writer wins with no merge. Deploying our
         # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline.
 
+    - name: Warn that auditd.conf disk-space vars are not applied on hybrid Fedora CSB
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_auditd_max_log_file and system_auditd_num_logs are set in config.yml
+          but are NOT applied on hybrid Fedora CSB (csb_detected=true, csb_rhel=false).
+          IT owns /etc/audit/auditd.conf on all CSB tiers; adjust disk-space settings there manually.
+      when:
+        - csb_detected
+        - not csb_rhel
+
     - name: Ensure auditd is enabled and started
       ansible.builtin.systemd:
         name: auditd
