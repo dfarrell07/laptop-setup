@@ -75,7 +75,7 @@ bootstrap: guard-not-root
 		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap; if behind a corporate proxy, set HTTPS_PROXY=http://<proxy>:<port> and retry"; \
 		exit 1; \
 	fi
-	ansible-galaxy collection install --upgrade -r requirements.yml -p ./collections
+	ansible-galaxy collection install --force -r requirements.yml -p ./collections
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \

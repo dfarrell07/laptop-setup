@@ -10,9 +10,9 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 2. Create `config.yml` with at minimum `desktop_environment: sway` (or `i3`/`gnome`) and
    your identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
    `dotfiles_user_email_personal`). Without `desktop_environment`, auto-detection fails before
-   any WM is installed. Without the identity vars, commits are attributed to `dfarrell07` and
-   the notes repo clone fails (private repo). If this IS the `dfarrell07` account and you want
-   notes provisioned, add `notes_enabled: true` to `config.yml` (disabled by default).
+   any WM is installed. Without the identity vars, commits are attributed to the `CHANGE_ME`
+   placeholder user and the notes repo clone fails. To provision notes (requires a GitHub repo
+   named `notes` under `dotfiles_github_user`), add `notes_enabled: true` to `config.yml` (disabled by default).
    For HiDPI displays (e.g. ThinkPad P16v 2560x1600), also add
    `desktop_sway_hidpi_scale: 1.5` — without it, Sway defaults to 1.0 scale and fonts
    are microscopic on a 16-inch screen.

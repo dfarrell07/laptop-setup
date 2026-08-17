@@ -115,6 +115,13 @@ for tool in ansible-playbook git python3 curl make ssh; do
       ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
     fi
     record "required_${tool}" "pass" "$ver"
+    if [[ "$tool" == "ssh" && "$OS_FAMILY" == "darwin" ]]; then
+      _ssh_path=$(command -v ssh)
+      _brew_prefix=$(brew --prefix 2>/dev/null || true)
+      if [[ -n "$_brew_prefix" && "$_ssh_path" != "$_brew_prefix"* ]]; then
+        record "required_ssh_brew_path" "warn" "ssh resolves to $_ssh_path (not brew openssh at $_brew_prefix/bin/ssh) — LibreSSL build lacks FIDO2/sk-ssh-ed25519 support; ensure \$(brew --prefix)/bin precedes /usr/bin in PATH (add eval \"\$(brew shellenv)\" to ~/.zprofile)"
+      fi
+    fi
     [[ "$tool" == "curl" ]] && _curl_ok=true
   else
     # Keep this elif chain in sync with the for-loop tools list above; else at the bottom catches any tool added without an explicit branch
