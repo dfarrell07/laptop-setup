@@ -35,19 +35,29 @@ die_loop() {
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
 _tmp='' _prog_err='' _ykcr_err=''
-trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"' EXIT
-trap 'printf "\n\nInterrupted.\n" >&2
-      printf "Any YubiKeys already programmed in this run have the new secret.\n" >&2
-      printf "Re-run setup-yubikeys.sh to program remaining keys with the SAME secret.\n" >&2
-      printf "(You will not see the secret again — re-run will generate a NEW one,\n" >&2
-      printf " requiring you to re-program ALL keys from scratch.)\n" >&2
+trap 'rm -f "$_tmp" "$_prog_err" "$_ykcr_err"
       HMAC_SECRET="0000000000000000000000000000000000000000"; unset HMAC_SECRET
       EXPECTED_OUTPUT="0000000000000000000000000000000000000000"; unset EXPECTED_OUTPUT
-      ACTUAL_OUTPUT="0000000000000000000000000000000000000000"; unset ACTUAL_OUTPUT
-      exit 130' INT TERM
+      ACTUAL_OUTPUT="0000000000000000000000000000000000000000"; unset ACTUAL_OUTPUT' EXIT
+_cleanup_msg() {
+  printf "\n\nInterrupted.\n" >&2
+  printf "Any YubiKeys already programmed in this run have the new secret.\n" >&2
+  printf "Re-run setup-yubikeys.sh to program remaining keys with the SAME secret.\n" >&2
+  printf "(You will not see the secret again — re-run will generate a NEW one,\n" >&2
+  printf " requiring you to re-program ALL keys from scratch.)\n" >&2
+}
+trap '_cleanup_msg; exit 130' INT
+trap '_cleanup_msg; exit 143' TERM
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
-for cmd in ykman ykpersonalize ykchalresp openssl timeout; do
+if command -v timeout &>/dev/null; then
+  _timeout=timeout
+elif command -v gtimeout &>/dev/null; then
+  _timeout=gtimeout
+else
+  die "'timeout' not found. On macOS: brew install coreutils"
+fi
+for cmd in ykman ykpersonalize ykchalresp openssl; do
   command -v "$cmd" &>/dev/null || die "'$cmd' not found. Run 'make all' first (installs ykpers)."
 done
 [[ -t 0 ]] || die "stdin is not a terminal — this script must be run interactively"
@@ -91,14 +101,24 @@ while true; do
   fi
 
   # Reject duplicate-key reprogramming by comparing serials before ykpersonalize
-  _current_serial=$(ykman list --serials 2>/dev/null | head -n1)
+  _current_serial=$("$_timeout" 10 ykman list --serials 2>/dev/null | head -n1) \
+    || die "ykman timed out or failed listing devices — check USB connection"
   [[ -n "$_current_serial" ]] \
     || die "No YubiKey detected — insert YubiKey #$KEY_COUNT and retry"
+  _key_count=$(ykman list --serials 2>/dev/null | wc -l)
+  [[ "$_key_count" -le 1 ]] || die "Multiple YubiKeys detected ($_key_count) — remove extras and connect only one at a time"
   case ":$SEEN_SERIALS:" in
     *":$_current_serial:"*)
       die "Same YubiKey still inserted (serial $_current_serial) — remove it before programming key #$KEY_COUNT" ;;
   esac
   SEEN_SERIALS="${SEEN_SERIALS:+$SEEN_SERIALS:}$_current_serial"
+
+  if ykman otp info 2>/dev/null | grep -q 'Slot 2: Programmed'; then
+    warn "Slot 2 is already programmed on YubiKey #$KEY_COUNT — this will permanently overwrite it."
+    printf "Overwrite slot 2? [y/N] "
+    read -r SLOT2_CONFIRM
+    [[ "${SLOT2_CONFIRM,,}" == "y" ]] || die "Aborted."
+  fi
 
   # Program slot 2 — secret delivered via stdin to avoid /proc/<pid>/cmdline exposure
   _prog_err=$(mktemp)
@@ -107,6 +127,9 @@ while true; do
                      -oserial-api-visible -a 2>"$_prog_err"; then
     _err_msg=$(cat "$_prog_err")
     rm -f "$_prog_err"
+    if printf '%s' "$_err_msg" | grep -qiE 'BACKEND_ERROR|write error|access.?code'; then
+      _err_msg="${_err_msg} — Slot 2 may have an access code set. Clear it with: ykman otp delete 2  (or supply the current access code to ykpersonalize via -c<hex_code>)"
+    fi
     die_loop "ykpersonalize failed on YubiKey #$KEY_COUNT: ${_err_msg:-no error output — is a YubiKey inserted?}"
   fi
   rm -f "$_prog_err"
@@ -118,7 +141,7 @@ while true; do
   ACTUAL_OUTPUT=""
   _ykcr_err=$(mktemp)
   _ykcr_rc=0
-  ACTUAL_OUTPUT=$(timeout "$CHALRESP_TIMEOUT" ykchalresp -2 "$CHALLENGE" 2>"$_ykcr_err") || _ykcr_rc=$?
+  ACTUAL_OUTPUT=$("$_timeout" "$CHALRESP_TIMEOUT" ykchalresp -2 "$CHALLENGE" 2>"$_ykcr_err") || _ykcr_rc=$?
   if [[ $_ykcr_rc -ne 0 ]]; then
     printf "\n"
     if [[ $_ykcr_rc -eq 124 ]]; then
@@ -183,12 +206,12 @@ if $_write_vault_pass; then
   # has wrong content or wrong permissions)
   _tmp=$(mktemp "${VAULT_PASS_SH}.XXXXXX")
   chmod 700 "$_tmp"
-  cat > "$_tmp" << VAULTPASS
+  cat > "$_tmp" << 'VAULTPASS'
 #!/bin/bash
 # scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
 # Requires: ykchalresp (ykpers package)  Touch YubiKey when its light blinks.
 set -euo pipefail
-CHALLENGE="$CHALLENGE"
+CHALLENGE="ansible-vault-laptop-setup"
 ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
   echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
   exit 1
@@ -200,7 +223,7 @@ VAULTPASS
   # Verify vault-pass.sh works (requires a key still inserted)
   printf "       Touch YubiKey to verify vault-pass.sh (%ds)... " "$CHALRESP_TIMEOUT"
   VERIFY_OUTPUT=""
-  if VERIFY_OUTPUT=$(timeout "$CHALRESP_TIMEOUT" "$VAULT_PASS_SH" 2>/dev/null) \
+  if VERIFY_OUTPUT=$("$_timeout" "$CHALRESP_TIMEOUT" "$VAULT_PASS_SH" 2>/dev/null) \
      && [[ -n "$VERIFY_OUTPUT" ]] \
      && [[ "$VERIFY_OUTPUT" == "$EXPECTED_OUTPUT" ]]; then
     printf "\n"
@@ -209,6 +232,7 @@ VAULTPASS
     printf "\n"
     warn "vault-pass.sh verification failed (YubiKey not inserted or removed?)"
     warn "vault-pass.sh was written correctly — verify manually with: scripts/vault-pass.sh"
+    warn "If manual verify fails, re-run scripts/setup-yubikeys.sh to re-program all keys"
   fi
 else
   warn "vault-pass.sh not updated. Update it manually (see SECURITY.md)."
@@ -227,16 +251,16 @@ printf "       ssh-keygen -t ed25519-sk -O resident -f ~/.ssh/id_ed25519_sk\n"
 printf "     Add the public key to GitHub:\n"
 printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n\n"
 printf "  2. Populate group_vars/all/vault.yml with your keys:\n"
-printf "       ansible-vault encrypt group_vars/all/vault.yml   # encrypt first\n"
-printf "       ansible-vault edit group_vars/all/vault.yml      # then paste keys\n\n"
+if grep -qF "\$ANSIBLE_VAULT" "$SCRIPT_DIR/../group_vars/all/vault.yml" 2>/dev/null; then
+  printf "       ansible-vault rekey group_vars/all/vault.yml    # re-setup: old YubiKey must still be available\n"
+  printf "       ansible-vault edit group_vars/all/vault.yml\n\n"
+else
+  printf "       ansible-vault encrypt group_vars/all/vault.yml  # encrypt first\n"
+  printf "       ansible-vault edit group_vars/all/vault.yml     # then paste keys\n\n"
+fi
 printf "  3. Deploy the keys:\n"
 printf "       make ssh\n\n"
 printf "  4. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
 warn "Store each YubiKey in a different physical location."
 warn "The HMAC secret was NOT saved. If all keys are lost: re-provision the machine."
 printf "\n"
-
-# ── Zeroize sensitive variables ───────────────────────────────────────────────
-HMAC_SECRET='0000000000000000000000000000000000000000'; unset HMAC_SECRET
-EXPECTED_OUTPUT='0000000000000000000000000000000000000000'; unset EXPECTED_OUTPUT
-ACTUAL_OUTPUT='0000000000000000000000000000000000000000'; unset ACTUAL_OUTPUT
