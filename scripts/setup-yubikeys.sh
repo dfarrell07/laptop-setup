@@ -10,11 +10,8 @@
 #
 # Design:
 #   - Generates a random 20-byte HMAC secret; programs every YubiKey with it
-#   - Secret is passed as a CLI arg to ykpersonalize (inherent limitation of
-#     ykpersonalize's API — no stdin/file input for the key). It is briefly
-#     visible in /proc/<pid>/cmdline during the ykpersonalize call. On a
-#     single-user machine this is low risk; on a shared machine run with no
-#     other users logged in.
+#   - Secret is delivered to ykpersonalize via stdin (-a with no argument reads
+#     from stdin per the man page), avoiding /proc/<pid>/cmdline exposure
 #   - Secret is NOT written to disk
 #   - Verifies each key produces identical challenge-response output
 #   - Writes scripts/vault-pass.sh atomically with 700 permissions
@@ -31,20 +28,29 @@ die()  { printf "${RED}ERROR: %s${NC}\n" "$*" >&2; exit 1; }
 ok()   { printf "${GRN}OK:    %s${NC}\n" "$*"; }
 warn() { printf "${YLW}WARN:  %s${NC}\n" "$*"; }
 info() { printf "       %s\n" "$*"; }
+die_loop() {
+  warn "($((KEY_COUNT - 1)) key(s) verified before this failure; the secret is gone — re-run to start over with a new secret and re-program ALL keys)"
+  die "$@"
+}
 
 # ── Ctrl+C / signal cleanup ───────────────────────────────────────────────────
-_interrupted=false
+_tmp='' _prog_err='' _interrupted=false
+trap 'rm -f "$_tmp" "$_prog_err"' EXIT
 trap '_interrupted=true; printf "\n\nInterrupted.\n" >&2
       printf "Any YubiKeys already programmed in this run have the new secret.\n" >&2
       printf "Re-run setup-yubikeys.sh to program remaining keys with the SAME secret.\n" >&2
       printf "(You will not see the secret again — re-run will generate a NEW one,\n" >&2
       printf " requiring you to re-program ALL keys from scratch.)\n" >&2
+      HMAC_SECRET="0000000000000000000000000000000000000000"; unset HMAC_SECRET
+      EXPECTED_OUTPUT="0000000000000000000000000000000000000000"; unset EXPECTED_OUTPUT
+      ACTUAL_OUTPUT="0000000000000000000000000000000000000000"; unset ACTUAL_OUTPUT
       exit 130' INT TERM
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
-for cmd in ykpersonalize ykchalresp openssl timeout; do
+for cmd in ykman ykpersonalize ykchalresp openssl timeout; do
   command -v "$cmd" &>/dev/null || die "'$cmd' not found. Run 'make all' first (installs ykpers)."
 done
+[[ -t 0 ]] || die "stdin is not a terminal — this script must be run interactively"
 
 printf "\n%s\n" "═══════════════════════════════════════════════"
 printf "%s\n"   " YubiKey HMAC-SHA1 Setup"
@@ -62,6 +68,8 @@ HMAC_SECRET=$(openssl rand -hex 20) || die "openssl rand failed"
 
 EXPECTED_OUTPUT=""
 KEY_COUNT=0
+SEEN_SERIALS=""
+PROGRAMMED_COUNT=0
 
 # ── Program loop ──────────────────────────────────────────────────────────────
 while true; do
@@ -82,38 +90,58 @@ while true; do
     break
   fi
 
-  # Program slot 2
-  # NOTE: HMAC_SECRET is briefly visible in /proc/<pid>/cmdline during this call.
-  # ykpersonalize has no stdin or file-based key input; this is a CLI API limitation.
+  # Reject duplicate-key reprogramming by comparing serials before ykpersonalize
+  _current_serial=$(ykman list --serials 2>/dev/null | head -n1)
+  [[ -n "$_current_serial" ]] \
+    || die "No YubiKey detected — insert YubiKey #$KEY_COUNT and retry"
+  case ":$SEEN_SERIALS:" in
+    *":$_current_serial:"*)
+      die "Same YubiKey still inserted (serial $_current_serial) — remove it before programming key #$KEY_COUNT" ;;
+  esac
+  SEEN_SERIALS="${SEEN_SERIALS:+$SEEN_SERIALS:}$_current_serial"
+
+  # Program slot 2 — secret delivered via stdin to avoid /proc/<pid>/cmdline exposure
   _prog_err=$(mktemp)
-  if ! ykpersonalize -2 -y -ochal-resp -ochal-hmac -ohmac-lt64 \
-                     -oserial-api-visible \
-                     -a "$HMAC_SECRET" 2>"$_prog_err"; then
+  if ! printf '%s\n' "$HMAC_SECRET" | \
+       ykpersonalize -2 -y -ochal-resp -ochal-hmac -ohmac-lt64 \
+                     -oserial-api-visible -a 2>"$_prog_err"; then
     _err_msg=$(cat "$_prog_err")
     rm -f "$_prog_err"
-    die "ykpersonalize failed: ${_err_msg:-no error output — is a YubiKey inserted?}"
+    die_loop "ykpersonalize failed on YubiKey #$KEY_COUNT: ${_err_msg:-no error output — is a YubiKey inserted?}"
   fi
   rm -f "$_prog_err"
   ok "YubiKey #$KEY_COUNT: slot 2 programmed"
+  PROGRAMMED_COUNT=$((PROGRAMMED_COUNT + 1))
 
   # Verify — with timeout so we don't hang if key is not touched
   printf "       Touch your YubiKey to verify (%ds timeout)... " "$CHALRESP_TIMEOUT"
   ACTUAL_OUTPUT=""
-  if ! ACTUAL_OUTPUT=$(timeout "$CHALRESP_TIMEOUT" ykchalresp -2 "$CHALLENGE" 2>/dev/null); then
+  _ykcr_err=$(mktemp)
+  _ykcr_rc=0
+  ACTUAL_OUTPUT=$(timeout "$CHALRESP_TIMEOUT" ykchalresp -2 "$CHALLENGE" 2>"$_ykcr_err") || _ykcr_rc=$?
+  if [[ $_ykcr_rc -ne 0 ]]; then
     printf "\n"
-    die "ykchalresp timed out or failed on YubiKey #$KEY_COUNT. Touch the key when its light blinks."
+    if [[ $_ykcr_rc -eq 124 ]]; then
+      rm -f "$_ykcr_err"
+      die_loop "Timed out waiting for YubiKey #$KEY_COUNT touch — touch the key when its light blinks."
+    else
+      _ykcr_msg=$(cat "$_ykcr_err")
+      rm -f "$_ykcr_err"
+      die_loop "ykchalresp failed on YubiKey #$KEY_COUNT (rc=$_ykcr_rc)${_ykcr_msg:+: $_ykcr_msg} — is the key still inserted?"
+    fi
   fi
+  rm -f "$_ykcr_err"
   printf "\n"
 
   # Guard: empty output means programming failure even with rc=0
-  [[ -n "$ACTUAL_OUTPUT" ]] || die "ykchalresp returned empty output on YubiKey #$KEY_COUNT — slot 2 programming may have failed"
+  [[ -n "$ACTUAL_OUTPUT" ]] || die_loop "ykchalresp returned empty output on YubiKey #$KEY_COUNT — slot 2 programming may have failed"
 
   if [[ $KEY_COUNT -eq 1 ]]; then
     EXPECTED_OUTPUT="$ACTUAL_OUTPUT"
     ok "YubiKey #1 verified (baseline: ${ACTUAL_OUTPUT:0:8}…)"
   else
     if [[ "$ACTUAL_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
-      die "YubiKey #$KEY_COUNT output (${ACTUAL_OUTPUT:0:8}…) differs from YubiKey #1 (${EXPECTED_OUTPUT:0:8}…) — programming failed"
+      die_loop "YubiKey #$KEY_COUNT output (${ACTUAL_OUTPUT:0:8}…) differs from YubiKey #1 (${EXPECTED_OUTPUT:0:8}…) — programming failed"
     fi
     ok "YubiKey #$KEY_COUNT verified (matches YubiKey #1)"
   fi
@@ -128,7 +156,7 @@ while true; do
 done
 
 # ── Require at least 2 keys ───────────────────────────────────────────────────
-if [[ $KEY_COUNT -lt 2 ]]; then
+if [[ $PROGRAMMED_COUNT -lt 2 ]]; then
   warn "Only 1 key was programmed. A backup key is strongly recommended."
   printf "Continue with just 1 key? [y/N] "
   read -r CONTINUE
@@ -155,12 +183,12 @@ if $_write_vault_pass; then
   # has wrong content or wrong permissions)
   _tmp=$(mktemp "${VAULT_PASS_SH}.XXXXXX")
   chmod 700 "$_tmp"
-  cat > "$_tmp" << 'VAULTPASS'
+  cat > "$_tmp" << VAULTPASS
 #!/bin/bash
 # scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
 # Requires: ykchalresp (ykpers package)  Touch YubiKey when its light blinks.
 set -euo pipefail
-CHALLENGE="ansible-vault-laptop-setup"
+CHALLENGE="$CHALLENGE"
 ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
   echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
   exit 1
@@ -188,7 +216,7 @@ fi
 
 # ── Next steps ────────────────────────────────────────────────────────────────
 printf "\n%s\n" "═══════════════════════════════════════════════"
-printf " Done — %d YubiKey(s) programmed\n" "$KEY_COUNT"
+printf " Done — %d YubiKey(s) programmed\n" "$PROGRAMMED_COUNT"
 printf "%s\n\n" "═══════════════════════════════════════════════"
 printf "Next steps:\n\n"
 printf "  1. Generate your hardware SSH key (YubiKey must be inserted):\n"
@@ -207,3 +235,8 @@ printf "  4. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n
 warn "Store each YubiKey in a different physical location."
 warn "The HMAC secret was NOT saved. If all keys are lost: re-provision the machine."
 printf "\n"
+
+# ── Zeroize sensitive variables ───────────────────────────────────────────────
+HMAC_SECRET='0000000000000000000000000000000000000000'; unset HMAC_SECRET
+EXPECTED_OUTPUT='0000000000000000000000000000000000000000'; unset EXPECTED_OUTPUT
+ACTUAL_OUTPUT='0000000000000000000000000000000000000000'; unset ACTUAL_OUTPUT
