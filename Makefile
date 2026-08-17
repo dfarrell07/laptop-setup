@@ -7,7 +7,7 @@
        test-scripts test-poller test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm
+       pip-lock pip-sync npm setup-yubikeys
 
 CONTAINER ?= fedora-dev
 
@@ -25,7 +25,7 @@ help:
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
-	@echo "Setup:      bootstrap bootstrap-test hooks npm"
+	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -137,6 +137,9 @@ npm:
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
+
+setup-yubikeys: guard-not-root
+	scripts/setup-yubikeys.sh
 
 update: guard-not-root preflight
 	@if command -v npm >/dev/null 2>&1; then \

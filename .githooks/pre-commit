@@ -61,7 +61,7 @@ if command -v shellcheck >/dev/null 2>&1; then
   if (( ${#sh_files[@]} > 0 )); then
     for _f in "${sh_files[@]}"; do
       _sc_content=$(git show ":$_f") || { echo "WARNING: could not read staged $_f — skipping shellcheck" >&2; continue; }
-      printf '%s' "$_sc_content" | shellcheck --filename="$_f" -S warning - || failed=1
+      printf '%s' "$_sc_content" | shellcheck -S warning - || failed=1
     done
   fi
 else

@@ -98,34 +98,47 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 
 ### Setting Up vault-pass.sh
 
-The real vault password script (gitignored) should derive the password
-from YubiKey HMAC-SHA1 challenge-response:
+**Use the script** — programs all YubiKeys in one run, verifies each produces
+identical output, and writes `vault-pass.sh` automatically:
+
+```bash
+make all          # installs ykpers + yubikey-manager first
+make setup-yubikeys
+```
+
+The script (`scripts/setup-yubikeys.sh`) generates a fresh HMAC secret, programs
+each YubiKey slot 2, verifies outputs match, and writes `vault-pass.sh`. The HMAC
+secret never touches disk — keep all YubiKeys in separate physical locations.
+
+**If you need to write vault-pass.sh manually** (Fedora/RHEL):
 
 ```bash
 #!/bin/bash
-# scripts/vault-pass.sh — YubiKey vault password derivation
-# Requires: ykpers package (ykchalresp command)
+# scripts/vault-pass.sh — YubiKey HMAC-SHA1 vault password derivation
+# Requires: ykchalresp (ykpers package)
+set -euo pipefail
 CHALLENGE="ansible-vault-laptop-setup"
 ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
-  echo "ERROR: YubiKey not available" >&2
+  echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
   exit 1
 }
 ```
 
-For macOS, use `ykman` instead (`ykpers`/`ykchalresp` is not available on Homebrew):
+For macOS (`ykpers`/`ykchalresp` unavailable on Homebrew; use `ykman`):
 
 ```bash
 #!/bin/bash
 # scripts/vault-pass.sh — YubiKey vault password derivation (macOS)
 # Requires: ykman (brew install ykman)
+set -euo pipefail
 CHALLENGE=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
 ykman otp calculate 2 "$CHALLENGE" 2>/dev/null || {
-  echo "ERROR: YubiKey not available" >&2
+  echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
   exit 1
 }
 ```
 
-Create this file, then encrypt the vault:
+After writing vault-pass.sh, encrypt the vault:
 
 ```bash
 chmod 700 scripts/vault-pass.sh
@@ -134,9 +147,11 @@ ansible-vault encrypt group_vars/all/vault.yml
 
 ### Lost or Compromised YubiKey
 
-**Backup YubiKey programming** — must be done at initial setup time, before the
-original YubiKey is ever lost. Program a second YubiKey with the same HMAC-SHA1
-secret using the original 40-character hex key:
+**Backup YubiKey** — `make setup-yubikeys` programs all keys in one session with
+the same secret. Run it with 2+ YubiKeys before storing backups separately.
+
+**Manual re-programming** — if you have the original 40-character hex key from
+a previous run, program a replacement YubiKey:
 
 ```bash
 ykpersonalize -2 -ochal-resp -ochal-hmac -ohmac-lt64 -oserial-api-visible \
