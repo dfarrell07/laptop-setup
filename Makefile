@@ -72,7 +72,7 @@ bootstrap: guard-not-root
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@if ! curl -sf --max-time 10 https://galaxy.ansible.com >/dev/null 2>&1; then \
-		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap"; \
+		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap; if behind a corporate proxy, set HTTPS_PROXY=http://<proxy>:<port> and retry"; \
 		exit 1; \
 	fi
 	ansible-galaxy collection install --upgrade -r requirements.yml -p ./collections
@@ -88,7 +88,7 @@ bootstrap: guard-not-root
 	@echo "Next steps:"
 	@echo "  1. Create config.yml (REQUIRED before make all — do not skip):"
 	@echo "       cp default.config.yml config.yml"
-	@echo "     Then set at minimum in config.yml:"
+	@echo "     Edit config.yml and replace each CHANGE_ME sentinel value — at minimum:"
 	@echo "       desktop_environment: sway   # or i3 / gnome"
 	@echo "       dotfiles_github_user: 'yourusername'"
 	@echo "       dotfiles_user_name: 'Your Name'"

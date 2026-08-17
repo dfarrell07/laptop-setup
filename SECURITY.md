@@ -153,6 +153,12 @@ back from a YubiKey after programming, so retroactive backup is impossible.
 ykchalresp -2 "ansible-vault-laptop-setup"
 ```
 
+On macOS (`ykchalresp` is unavailable; use `ykman`):
+
+```bash
+CHALLENGE=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n') && ykman otp calculate 2 "$CHALLENGE"
+```
+
 in a hardware-backed password manager (e.g., Bitwarden) as a plaintext emergency
 copy. This is the most practical single-YubiKey recovery path.
 
