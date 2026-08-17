@@ -7,7 +7,7 @@
        test-scripts test-poller test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync
+       pip-lock pip-sync npm
 
 CONTAINER ?= fedora-dev
 
@@ -25,7 +25,7 @@ help:
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
-	@echo "Setup:      bootstrap bootstrap-test hooks"
+	@echo "Setup:      bootstrap bootstrap-test hooks npm"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -36,6 +36,9 @@ guard-not-root:
 
 all: guard-not-root preflight
 	ansible-playbook site.yml --ask-become-pass
+	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
+		npm install --ignore-scripts; \
+	fi
 
 minimal: guard-not-root
 	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
@@ -75,7 +78,7 @@ bootstrap: guard-not-root
 		echo "ERROR: galaxy.ansible.com is unreachable — ensure outbound HTTPS is allowed before running bootstrap; if behind a corporate proxy, set HTTPS_PROXY=http://<proxy>:<port> and retry"; \
 		exit 1; \
 	fi
-	ansible-galaxy collection install --force -r requirements.yml -p ./collections
+	ansible-galaxy collection install --upgrade -r requirements.yml -p ./collections
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \
@@ -128,13 +131,20 @@ hooks:
 	git config --local core.hooksPath .githooks
 	@echo "Git hooks installed (core.hooksPath = .githooks)"
 
+npm:
+	@if command -v npm >/dev/null 2>&1; then \
+		npm install --ignore-scripts; \
+	else \
+		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
+	fi
+
 update: guard-not-root preflight
 	@if command -v npm >/dev/null 2>&1; then \
 		npm install --ignore-scripts; \
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
-	ansible-galaxy collection install -r requirements.yml --force -p ./collections
+	ansible-galaxy collection install -r requirements.yml -p ./collections
 	ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---

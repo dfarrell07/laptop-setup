@@ -78,3 +78,10 @@
   when:
     - csb_rhel | bool
     - _packages_go_failed | length > 0
+
+- name: Fail on Go tool install errors (non-CSB)
+  ansible.builtin.fail:
+    msg: "Go tool install failed: {{ _packages_go_failed | join(', ') }}"
+  when:
+    - not csb_rhel | bool
+    - _packages_go_failed | length > 0
