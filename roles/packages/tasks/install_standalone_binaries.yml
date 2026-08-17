@@ -202,10 +202,10 @@
       - /tmp/cosign-new
       - --bundle
       - /tmp/cosign.sigstore.json
-      - --certificate-identity-regexp
-      - https://github.com/sigstore/cosign/
+      - --certificate-identity
+      - keyless@projectsigstore.iam.gserviceaccount.com
       - --certificate-oidc-issuer
-      - https://token.actions.githubusercontent.com
+      - https://accounts.google.com
   changed_when: false
 
 - name: Install cosign (image signing and verification for Konflux pipelines)
@@ -236,7 +236,11 @@
 # signature, and Rekor inclusion proof.
 # Gates on profile == 'work' because cosign is only installed for that profile.
 
-- name: Download sops cosign bundle for post-install verification
+- name: Download sops checksums file for cosign verification
+  # sops v3.13.0+ signs only the checksums file (not per-arch binaries).
+  # Verifying this file proves the SHA256 pins in packages_sops_sha256 originate from the
+  # legitimate release workflow; the binary's own SHA256 (checked by install_binary.yml)
+  # is then confirmed against this attested checksums file below.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -244,12 +248,23 @@
   ansible.builtin.get_url:
     url: >-
       https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
-      }}/sops-v{{ packages_sops_version }}.linux.{{
-      'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.bundle
+      }}/sops-v{{ packages_sops_version }}.checksums.txt
+    dest: /tmp/sops-checksums.txt
+    mode: "0600"
+
+- name: Download sops checksums cosign bundle
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
+      }}/sops-v{{ packages_sops_version }}.checksums.sigstore.json
     dest: /tmp/sops-cosign.bundle
     mode: "0600"
 
-- name: Verify sops keyless cosign signature
+- name: Verify sops checksums file via cosign bundle
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -258,59 +273,27 @@
     argv:
       - /usr/local/bin/cosign
       - verify-blob
-      - /usr/local/bin/sops
+      - /tmp/sops-checksums.txt
       - --bundle
       - /tmp/sops-cosign.bundle
-      - --certificate-identity-regexp
-      - https://github.com/getsops/sops/
+      - --certificate-identity
+      - "https://github.com/getsops/sops/.github/workflows/release.yml@refs/tags/v{{ packages_sops_version }}"
       - --certificate-oidc-issuer
       - https://token.actions.githubusercontent.com
   changed_when: false
 
-- name: Download gitleaks checksums file for cosign verification
-  # gitleaks signs the checksums file (not each arch tarball directly).
-  # Verifying the checksums bundle establishes that the SHA256 values in
-  # packages_gitleaks_sha256 / packages_gitleaks_sha256_arm64 (defaults/main.yml)
-  # originated from a legitimate gitleaks release workflow.
+- name: Verify installed sops binary SHA256 against attested checksums file
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
-      }}/gitleaks_{{ packages_gitleaks_version }}_checksums.txt
-    dest: /tmp/gitleaks-checksums.txt
-    mode: "0600"
-
-- name: Download gitleaks checksums cosign bundle for verification
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
-      }}/gitleaks_{{ packages_gitleaks_version }}_checksums.txt.bundle
-    dest: /tmp/gitleaks-checksums-cosign.bundle
-    mode: "0600"
-
-- name: Verify gitleaks checksums keyless cosign signature
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.command:
-    argv:
-      - /usr/local/bin/cosign
-      - verify-blob
-      - /tmp/gitleaks-checksums.txt
-      - --bundle
-      - /tmp/gitleaks-checksums-cosign.bundle
-      - --certificate-identity-regexp
-      - https://github.com/gitleaks/gitleaks/
-      - --certificate-oidc-issuer
-      - https://token.actions.githubusercontent.com
+  ansible.builtin.shell: |
+    set -o pipefail
+    sha256sum /usr/local/bin/sops | awk '{print $1}' | \
+      grep -qF "$(grep "sops-v{{ packages_sops_version }}.linux.{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}" \
+        /tmp/sops-checksums.txt | awk '{print $1}')"
+  args:
+    executable: /bin/bash
   changed_when: false
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)

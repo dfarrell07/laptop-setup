@@ -7,7 +7,7 @@
        test-scripts test-poller test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys
+       pip-lock pip-sync npm setup-yubikeys vendor-collections
 
 CONTAINER ?= fedora-dev
 
@@ -25,7 +25,7 @@ help:
 	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
-	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys"
+	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
 	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -135,6 +135,14 @@ npm:
 	else \
 		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
 	fi
+
+vendor-collections: guard-not-root
+	@mkdir -p collections-dist
+	@# Download collection tarballs from Galaxy and regenerate SHA256SUMS.
+	@# Run when bumping versions in requirements.yml, then git add + commit collections-dist/.
+	ansible-galaxy collection download -r requirements.yml -p collections-dist/
+	cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
+	@echo "Tarballs downloaded. Review, then: git add collections-dist/ && git commit"
 
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
