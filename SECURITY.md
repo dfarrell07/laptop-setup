@@ -112,6 +112,19 @@ ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
 }
 ```
 
+For macOS, use `ykman` instead (`ykpers`/`ykchalresp` is not available on Homebrew):
+
+```bash
+#!/bin/bash
+# scripts/vault-pass.sh — YubiKey vault password derivation (macOS)
+# Requires: ykman (brew install ykman)
+CHALLENGE=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
+ykman otp calculate 2 "$CHALLENGE" 2>/dev/null || {
+  echo "ERROR: YubiKey not available" >&2
+  exit 1
+}
+```
+
 Create this file, then encrypt the vault:
 
 ```bash

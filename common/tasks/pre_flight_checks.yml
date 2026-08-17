@@ -161,7 +161,9 @@
             that: desktop_environment in ['sway', 'i3', 'gnome', 'auto']
             fail_msg: >-
               desktop_environment must be one of: sway, i3, gnome, auto.
-              Got: '{{ desktop_environment }}'. Check config.yml for typos.
+              Got: '{{ desktop_environment }}'.
+              {% if desktop_environment == 'CHANGE_ME' %}This is the CHANGE_ME sentinel — set sway, i3, or gnome in
+              config.yml.{% else %}Check config.yml for typos.{% endif %}
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

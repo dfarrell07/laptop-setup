@@ -66,8 +66,7 @@ bootstrap: guard-not-root
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
 	else \
-		sudo dnf install -y ansible-core git make; \
-		sudo dnf install -y ykpers ShellCheck || echo 'WARN: ykpers/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools'; \
+		sudo bash -c 'dnf install -y ansible-core git make; dnf install -y ykpers ShellCheck || echo "WARN: ykpers/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"'; \
 	fi
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
@@ -97,7 +96,7 @@ bootstrap: guard-not-root
 	@echo "       dotfiles_user_email_personal: 'you@personal.com'"
 	@echo "       system_timezone: America/Chicago   # timedatectl list-timezones"
 	@echo "     Personal machine? also add: profile: personal  # skips work tooling; work email then optional"
-	@echo "     Want notes provisioned? also add: notes_enabled: true  # dfarrell07 account only"
+	@echo "     Want notes provisioned? also add: notes_enabled: true  # opt-in; requires a GitHub repo named \"notes\" accessible as dotfiles_github_user/notes"
 	@echo "     HiDPI display (e.g. ThinkPad P16v 2560x1600):"
 	@echo "       desktop_sway_hidpi_scale: \"1.5\""
 	@echo "  2. Replace scripts/vault-pass.sh with your YubiKey HMAC-SHA1 implementation,"
