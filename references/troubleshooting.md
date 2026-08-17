@@ -317,6 +317,7 @@ fapolicyd uses fanotify, which operates below container namespace boundaries. It
 - Remove `tmpfs` from the `watch_fs` list in `/etc/fapolicyd/fapolicyd.conf` and restart fapolicyd. This requires root.
 - If Distrobox was installed via curl (to `~/.local/bin/`), the Distrobox binary itself is blocked. Use Toolbx (`dnf install toolbox`) as the fallback -- it is RPM-installed and trusted by fapolicyd.
 - Distrobox is available in EPEL 10 (`dnf install distrobox`) -- the RPM-installed version is fapolicyd-trusted.
+- On CSB Fedora hybrid where EPEL is unavailable, the distrobox role falls back to Toolbx automatically. After `make all`, run `make container` to create the Toolbx container; verify with `toolbox list`.
 
 **CSB IT ticket:** Yes. Request modification of `watch_fs` in `/etc/fapolicyd/fapolicyd.conf` to exclude `tmpfs`. This is the single biggest risk to the Distrobox workflow on CSB.
 

@@ -29,6 +29,8 @@ packages_cli:
   - bat
   - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
   - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
+  - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
+  - npm                # package manager for commitlint/markdownlint node_modules
 
 packages_languages:
   - python3-pip  # pipx runtime dep; Fedora pipx RPM omits python3-pip as RPM dep
@@ -148,6 +150,8 @@ packages_apt:
   - fd-find
   - bat
   - shfmt
+  - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
+  - npm                # package manager for commitlint/markdownlint node_modules
   # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
   # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
   # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
