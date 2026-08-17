@@ -731,6 +731,15 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     record "dns-over-tls" "WARN" "not deployed — expected on CSB (Cloudflare blocked; DHCP DNS in use)"
   else record "dns-over-tls" "FAIL" "99-dot.conf not deployed — run: make system"; fi
 
+  # DNSSEC: WARN-level observability check consistent with DoT "opportunistic" pattern
+  if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
+    _dnssec_cfg=$(awk -F'=' '/^DNSSEC/{print $2}' /etc/systemd/resolved.conf.d/99-dot.conf 2>/dev/null | tr -d '[:space:]')
+    if resolvectl status 2>/dev/null | grep -qE 'DNSSEC.*yes'; then
+      record "dnssec-active" "PASS"
+    else record "dnssec-active" "WARN" "DNSSEC not active on current network (config: ${_dnssec_cfg:-unknown} — allow-downgrade tolerates this)"; fi
+    unset _dnssec_cfg
+  fi
+
   # ptrace scope — read expected value from deployed config (system_ptrace_scope defaults to 0 in default.config.yml)
   _ptrace_expected=$(awk -F' *= *' '/^kernel\.yama\.ptrace_scope/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.yama.ptrace_scope" "${_ptrace_expected:-0}" "sysctl-ptrace-scope"

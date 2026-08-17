@@ -184,7 +184,8 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #   system_bluetooth_name: "Bluetooth"  (roles/system/defaults) — BlueZ Name= shown to Bluetooth scanners; set to hostname
 #                                        or team alias to avoid broadcasting the machine's FQDN
 #   system_crypto_policy_target: DEFAULT:NO-SHA1  (roles/system/defaults) — crypto policy applied by update-crypto-policies;
-#                                        override in config.yml e.g. DEFAULT:NO-SHA1:NO-RSASSA-PSS for stricter SHA-1 removal
+#                                        override in config.yml e.g. DEFAULT:NO-SHA1:NO-RSASSA-PSS for stricter SHA-1 removal;
+#                                        use FUTURE for TLS 1.3-only enforcement system-wide (removes TLS 1.2 — may break non-TLS-1.3 apps)
 #   system_disable_usb_storage: false  (group_vars/all/vars.yml) — set true to kernel-block usb_storage/uas (no override via USBGuard)
 #   system_disable_udf: true             (group_vars/all/vars.yml) — true to kernel-block the udf module (CIS);
 #                                        set false if UDF media (optical discs, UDF-formatted drives) is needed
@@ -198,7 +199,10 @@ system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedate
 #     closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
 #     value or "" if they hold idle control masters between commands for more than 600 s)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
-#   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks)
+#   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks);
+#                                        for full enforcement set BOTH system_dot_mode: yes AND system_dnssec_mode: yes together
+#   system_dnssec_mode: allow-downgrade (roles/system/defaults) — DNSSEC validation; 'yes' for strict (pairs with system_dot_mode: yes;
+#                                        opportunistic DoT + allow-downgrade allows silent strip of both TLS and DNSSEC by on-path attacker)
 #   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
 #   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
 #   system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"  (roles/system/defaults) — fallback DoT (IP#hostname)
