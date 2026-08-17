@@ -18,6 +18,8 @@
 #   - Verifies each key produces identical challenge-response output
 #   - Writes scripts/vault-pass.sh atomically with 700 permissions
 #   - Prompts to add more keys until you say no
+#   - HMAC-SHA1 vault derivation: 80-bit post-quantum security (Grover);
+#     acceptable for 2025, monitor for HMAC-SHA256 YubiKey OTP support
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -216,8 +218,8 @@ if $_write_vault_pass; then
 # Requires: ykchalresp (ykpers package)  Touch YubiKey when its light blinks.
 set -euo pipefail
 CHALLENGE="ansible-vault-laptop-setup"
-ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
-  echo "ERROR: YubiKey not available — insert YubiKey and retry" >&2
+timeout 20 ykchalresp -2 "$CHALLENGE" 2>/dev/null || {
+  echo "ERROR: YubiKey not available or touch timed out — insert YubiKey and retry" >&2
   exit 1
 }
 VAULTPASS
@@ -247,14 +249,16 @@ printf "\n%s\n" "═════════════════════
 printf " Done — %d YubiKey(s) programmed\n" "$PROGRAMMED_COUNT"
 printf "%s\n\n" "═══════════════════════════════════════════════"
 printf "Next steps:\n\n"
-printf "  1. Generate your hardware SSH key (YubiKey must be inserted):\n"
+printf "  1. Set a FIDO2 PIN (prevents unauthorized use if YubiKey is stolen):\n"
+printf "       ykman fido access change-pin\n\n"
+printf "  2. Generate your hardware SSH key (YubiKey must be inserted):\n"
 printf "       # Without -O resident (portable; key stored as file referencing YubiKey):\n"
-printf "       ssh-keygen -t ed25519-sk -f ~/.ssh/id_ed25519_sk\n"
+printf "       ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk\n"
 printf "       # With -O resident (discoverable credential stored on YubiKey itself):\n"
-printf "       ssh-keygen -t ed25519-sk -O resident -f ~/.ssh/id_ed25519_sk\n"
+printf "       ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk\n"
 printf "     Add the public key to GitHub:\n"
 printf "       gh ssh-key add ~/.ssh/id_ed25519_sk.pub --title 'YubiKey'\n\n"
-printf "  2. Populate group_vars/all/vault.yml with your keys:\n"
+printf "  3. Populate group_vars/all/vault.yml with your keys:\n"
 if grep -qF "\$ANSIBLE_VAULT" "$SCRIPT_DIR/../group_vars/all/vault.yml" 2>/dev/null; then
   printf "       ansible-vault rekey group_vars/all/vault.yml    # re-setup: old YubiKey must still be available\n"
   printf "       ansible-vault edit group_vars/all/vault.yml\n\n"
@@ -262,9 +266,9 @@ else
   printf "       ansible-vault encrypt group_vars/all/vault.yml  # encrypt first\n"
   printf "       ansible-vault edit group_vars/all/vault.yml     # then paste keys\n\n"
 fi
-printf "  3. Deploy the keys:\n"
+printf "  4. Deploy the keys:\n"
 printf "       make ssh\n\n"
-printf "  4. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
+printf "  5. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
 warn "Store each YubiKey in a different physical location."
 warn "The HMAC secret was NOT saved. If all keys are lost: re-provision the machine."
 printf "\n"

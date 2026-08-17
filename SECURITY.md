@@ -205,3 +205,56 @@ ansible-vault rekey group_vars/all/vault.yml
    is automatically removed from this machine's `authorized_keys`).
 5. Remove the old public key from `authorized_keys` on every other
    machine that previously trusted it.
+
+## FIDO2 SSH Key Best Practices
+
+Always generate `ed25519-sk` keys with `-O verify-required`:
+
+```bash
+# Set FIDO2 PIN first (prevents silent use if key is stolen):
+ykman fido access change-pin
+
+# Generate auth key — verify-required = PIN + touch on every use:
+ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk
+# Or as a resident/discoverable credential:
+ssh-keygen -t ed25519-sk -O resident -O verify-required -f ~/.ssh/id_ed25519_sk
+
+# Same for signing key:
+ssh-keygen -t ed25519-sk -O verify-required -f ~/.ssh/id_ed25519_sk_signing
+```
+
+`-O verify-required` (user-verification flag) gates every SSH operation on
+PIN + touch. Without it, physical touch alone is sufficient — a stolen,
+unpinned YubiKey silently authenticates. A FIDO2 PIN with at least 8
+characters provides the second factor; `ykman fido info` shows current PIN
+state.
+
+**SSH key rotation** should also add `-O verify-required` to both keygen
+commands in the SSH Key Rotation section above.
+
+## Quantum Security Posture
+
+| Component | Algorithm | Quantum status | Effective security |
+|---|---|---|---|
+| SSH key exchange | mlkem768x25519-sha256 | **Quantum-safe** (hybrid ML-KEM + X25519) | 128-bit post-quantum |
+| SSH auth keys | ed25519-sk (FIDO2) | **Classical only** — no PQ hardware key support yet | 128-bit classical |
+| Vault encryption | AES-256-CTR (ansible-vault) | **Quantum-safe** — Grover halves bits: 128-bit effective | 128-bit post-quantum |
+| Vault password | HMAC-SHA1 (YubiKey OTP slot) | **Marginal** — Grover: 80-bit effective security | 80-bit post-quantum |
+| Git commit signing | ed25519-sk (SSH signing) | **Classical only** | 128-bit classical |
+
+**SSH key exchange is already quantum-safe** — `mlkem768x25519-sha256` is
+first in `KexAlgorithms`. Data in transit is protected against harvest-now/
+decrypt-later attacks today.
+
+**The vault password (HMAC-SHA1) is the weakest link at 80-bit post-quantum
+security.** YubiKey OTP slots are hardware-limited to HMAC-SHA1; HMAC-SHA256
+is not available in firmware. 80-bit security is currently considered
+sufficient (the largest quantum computers in 2025 have ~2,000 noisy qubits,
+far short of the millions needed for Grover attacks). Monitor Yubico's
+roadmap for HMAC-SHA256 support.
+
+**Migration path when hardware PQ support arrives:**
+1. Yubico ships a YubiKey with HMAC-SHA256 (or ML-DSA) support
+2. Re-run `make setup-yubikeys` (new secret; new algorithm)
+3. `ansible-vault rekey group_vars/all/vault.yml`
+4. Regenerate SSH keys with PQ hardware key if available
