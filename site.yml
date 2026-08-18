@@ -105,9 +105,14 @@
         is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
       tags: [always]
 
-    # CSB detection facts (csb_detected, needs_container_tier, etc.) are not re-run here;
-    # they carry over from Play 1 set_fact via host-var cache. If Play 1 did not run
-    # csb_detect.yml, group_vars defaults apply.
+    - name: Re-run CSB detection to refresh fapolicyd_enforcing and dependent facts
+      become: false
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
+      tags: [always]
+      block:
+        - name: Include CSB detection
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+
     - name: Run pre-flight checks
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
       tags: [always]
