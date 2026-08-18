@@ -167,6 +167,21 @@ else
   record "ansible_collections" "fail" "missing: ${missing_cols[*]} — run: make bootstrap"
 fi
 
+# --- GitHub CLI authentication (required for attestation verification) ---
+if [[ "$PROFILE" == "work" ]]; then
+  if command -v gh &>/dev/null; then
+    if gh auth status &>/dev/null 2>&1; then
+      record "gh_cli_auth" "pass" "GitHub CLI authenticated"
+    else
+      record "gh_cli_auth" "warn" "GitHub CLI installed but not authenticated — run 'gh auth login'"
+    fi
+  else
+    record "gh_cli_auth" "warn" "GitHub CLI not installed — needed for actionlint/zizmor attestation verification"
+  fi
+else
+  record "gh_cli_auth" "skip" "not required for profile=personal"
+fi
+
 # --- YubiKey presence ---
 yk_found=false
 yk_detect_possible=true
