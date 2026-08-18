@@ -17,6 +17,7 @@
         cmd: scripts/verify-collections.sh
       become: false
       changed_when: false
+      check_mode: false  # always run even in --check mode; collection integrity must be verified
 
     - name: Gather facts (explicit become:false so check mode works without sudo)
       ansible.builtin.gather_facts:

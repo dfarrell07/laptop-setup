@@ -13,7 +13,7 @@ CONTAINER ?= fedora-dev
 
 # Verify collections integrity before ansible-playbook execution
 # REQUIRED: guard against supply chain tampering (CVE-mitigation)
-VERIFY_AND_RUN := scripts/verify-collections.sh &&
+override VERIFY_AND_RUN := scripts/verify-collections.sh &&
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
