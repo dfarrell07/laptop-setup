@@ -3,21 +3,26 @@
 # System hardening: firewall, sysctl, kernel lockdown, auditd, services.
 # All tasks require become (Play 1 has become: true at play level).
 
-# --- SECURITY: Input validation for sysctl key format ---
-# Prevents injection attacks via newlines or special characters in sysctl keys.
+# --- SECURITY: Input validation for sysctl key and value format ---
+# Prevents injection attacks via newlines, shell metacharacters in sysctl keys and values.
 # This assertion runs before any hardening tasks to catch malformed input early.
-- name: "SECURITY: Validate sysctl key format in all extra dicts"
+- name: "SECURITY: Validate sysctl key and value format in all extra dicts"
   ansible.builtin.assert:
     that:
       - "(_sysctl_keys | map('regex_search', '^[a-zA-Z0-9._-]+$') | all)"
+      - "(_sysctl_values_invalid | length == 0)"
     fail_msg: >-
-      Invalid sysctl key format: contains non-alphanumeric characters, newlines, or spaces.
+      Invalid sysctl key or value format.
       Sysctl keys must match [a-zA-Z0-9._-]+ only.
-      Found invalid keys:
-      {{ _sysctl_keys | select('not', 'regex_search', '^[a-zA-Z0-9._-]+$') | list }}
+      Sysctl values must be alphanumeric, dots, slashes, hyphens, underscores only (no shell metacharacters).
+      Found invalid keys: {{ _sysctl_keys | select('not', 'regex_search', '^[a-zA-Z0-9._-]+$') | list }}
+      Found invalid values: {{ _sysctl_values_invalid }}
   vars:
     _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
+    _sysctl_all_dicts: "{{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] }}"
+    _sysctl_values_invalid: "{{ _sysctl_all_dicts | map('dict2items') | flatten | map(attribute='value') | map('string') | select('not', 'regex_search', '^[a-zA-Z0-9._/\\-_]+$') | list }}"
   when: not (system_is_container or csb_rhel)
+  tags: [security, preflight, always]
 
 # --- SECURITY: Enforce collections-dist integrity against supply chain tampering ---
 # Detects commits created with `git commit --no-verify` that bypass pre-commit SHA256SUMS
@@ -37,6 +42,7 @@
 
       To fix: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
       Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
+  tags: [security, preflight, always]
 
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
