@@ -375,7 +375,7 @@
     - _cosign_pre_stat.stat.exists
     - _cosign_verify_result.rc == 0
   ansible.builtin.copy:
-    src: "{{ _cosign_tmpdir }}/cosign-new"
+    src: "{{ _cosign_tmpdir.path }}/cosign-new"
     dest: /usr/local/bin/cosign
     remote_src: true
     mode: "0755"
@@ -383,7 +383,7 @@
   become: true
   tags: [become]
 
-- name: Clean up secure cosign temporary directory
+- name: Clean up atomic cosign temporary directory
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -391,7 +391,7 @@
     - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.file:
-    path: "{{ _cosign_tmpdir }}"
+    path: "{{ _cosign_tmpdir.path }}"
     state: absent
 
 - name: Install cosign (first install; bootstrap - bundle verification not possible)
