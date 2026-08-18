@@ -3,15 +3,29 @@
 # Galaxy does not publish platform-level GPG or Sigstore signatures for community collections,
 # so no upstream signature verification was possible at download time.
 #
-# SECURITY LIMITATION — Verification NOT Independent:
-#   The vendor-collections Makefile verifies downloads against Galaxy API artifact.sha256,
-#   which appears independent (separate service path) but is NOT — both the CDN tarball AND
-#   the API metadata are controlled by the same galaxy.ansible.com infrastructure.
-#   KNOWN VULNERABILITY: If Galaxy maintainer credentials are compromised, attacker controls
-#   both CDN and API, making hash verification pass while deploying malicious code.
-#   REQUIRED MITIGATION: Collection updates require mandatory code review and approval BEFORE
-#   committing to collections-dist/. See CLAUDE.md § "Ansible Galaxy Collections —
-#   Verification Limitation and Code Review Requirement" for the review procedure.
+# SECURITY: Maintainer Identity Verification & Mitigations
+# =========================================================
+# Galaxy does not publish GPG signatures, Sigstore certificates, or SLSA provenance for community
+# collections. If a collection maintainer's Galaxy account is compromised (phishing, credential
+# theft, 2FA bypass), attacker can publish malicious versions with valid API hashes, defeating
+# hash-based verification. Both the CDN tarball and Galaxy API artifact.sha256 are controlled
+# by the same galaxy.ansible.com infrastructure.
+#
+# Mitigations Implemented (defense-in-depth):
+#   1. VERSION PINNING: All collections pinned in requirements.yml (no auto-updates)
+#   2. MANDATORY CODE REVIEW: CHANGELOG + new tasks reviewed before committing
+#   3. CI INTEGRITY: Pre-commit hook, collections-integrity CI job, bootstrap verification
+#   4. GALAXY API CROSS-VERIFICATION: Hash verified against separate Galaxy API service path
+#   5. AUDIT TRAIL: Tarballs committed to git (not gitignored) for forensic analysis
+#
+# See SECURITY.md § "Ansible Collections Supply Chain" for complete vulnerability details,
+# attack scenario, and code review procedure.
+# See CLAUDE.md § "Ansible Galaxy Collections" for mandatory upgrade checklist.
+#
+# KNOWN VULNERABILITY (Galaxy account compromise):
+# If Galaxy maintainer credentials are compromised, attacker can deploy malicious code that
+# defeats hash verification (attacker controls both tarball and API hash). MITIGATION:
+# Version pinning + mandatory code review. Report compromises: https://galaxy.ansible.com/security
 #
 # Cross-verification status against upstream sources:
 #   None of these collections publish their built collection tarball as a GitHub release asset;
