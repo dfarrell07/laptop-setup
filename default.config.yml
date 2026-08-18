@@ -67,8 +67,13 @@ system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: 
 #   system_aide_check_calendar: '*-*-* 05:00:00'  (roles/system/defaults) — OnCalendar for aide-check.timer
 #   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
 #   system_usbguard_whitelist: [...]  (roles/system/defaults) — base USB allow-rules (YubiKey,
-#                                        Moonlander, hardwired ports); REPLACES list on override;
-#                                        prefer system_usbguard_extra_rules to append
+#                                        Moonlander, hardwired ports); REPLACES the entire base list
+#                                        on override (config.yml precedence beats role defaults);
+#                                        prefer system_usbguard_extra_rules to append per-machine
+#                                        rules without discarding the base set; each entry must
+#                                        start with 'allow', 'block', or 'reject' followed by a
+#                                        device selector — bare catch-alls and embedded newlines
+#                                        are rejected by pre_flight_checks.yml
 #   packages_install_binaries: true    (group_vars/all/vars.yml)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
 #   packages_brew: [ansible, git, git-lfs, openssh, tmux, mosh, jq, yq, direnv, fzf, zoxide, ...]  (roles/packages/defaults) —

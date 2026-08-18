@@ -359,6 +359,26 @@
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
       tags: [always]
 
+    - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
+          - _raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+        fail_msg: >-
+          SECURITY: ssh_host_key_algorithms, ssh_ciphers, ssh_macs, or ssh_kex_algorithms
+          in config.yml contains unsafe characters. These values are rendered verbatim into
+          HostKeyAlgorithms, Ciphers, MACs, and KexAlgorithms in sshd_config.d/00-hardening.conf;
+          embedded newlines inject arbitrary sshd directives before GSSAPIAuthentication no and
+          AllowUsers, overriding hardened settings. sshd -t does not catch semantically valid
+          injected duplicates, so the rescue block will not remove the file.
+          Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
+      tags: [always]
+
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -393,6 +413,22 @@
           all subsequent unwhitelisted devices. Entries must not contain embedded newlines
           (YAML block scalars inject multiple rule lines into the rendered rules.conf).
           Invalid entries: {{ _usbguard_extra | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
+      tags: [always]
+
+    - name: Assert system_usbguard_whitelist entries are well-formed (USBGuard injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _usbguard_wl: "{{ _raw.get('system_usbguard_whitelist', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _usbguard_wl | map('string') | select('search', '\n') | list | length == 0
+          - _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list | length == 0
+        fail_msg: >-
+          SECURITY: system_usbguard_whitelist in config.yml contains invalid entries.
+          Each entry must begin with 'allow', 'block', or 'reject' followed by a device
+          selector. Bare catch-all rules and embedded newlines are rejected.
+          Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
       tags: [always]
 
     - name: Set molecule context flag
