@@ -258,40 +258,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify critical preflight assertions are not removed
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-test.lock
+
+      - name: Install PyYAML for YAML validation
         run: |
-          failed=0
+          pip install pyyaml
 
-          # Check that include_tasks for pre_flight_checks.yml is present in Play 2 pre_tasks
-          if ! grep -q 'include_tasks.*pre_flight_checks.yml' site.yml; then
-            echo "::error::Critical assertion include_tasks removed from site.yml pre_tasks"
-            failed=1
+      - name: Verify critical preflight assertions with YAML-aware validation
+        run: |
+          python3 .github/scripts/verify-critical-assertions.py
+          if [ $? -ne 0 ]; then
+            echo "::error::Critical assertions verification failed"
+            exit 1
           fi
 
-          # Verify the identity vars assertion exists with correct structure
-          if ! grep -q 'Assert identity vars are not CHANGE_ME' site.yml; then
-            echo "::error::Critical identity vars assertion removed from site.yml"
-            failed=1
-          fi
-
-          # Verify the assertion contains the dotfiles_user_name CHANGE_ME check
-          if ! grep -A 5 'Assert identity vars are not CHANGE_ME' site.yml | \
-               grep -q 'dotfiles_user_name.*CHANGE_ME'; then
-            echo "::error::Identity vars assertion logic removed or modified (dotfiles_user_name check missing)"
-            failed=1
-          fi
-
-          # Verify the when condition is present
-          if ! grep -B 2 -A 10 'Assert identity vars are not CHANGE_ME' site.yml | \
-               grep -q 'when: not _pf_is_molecule'; then
-            echo "::error::Identity vars assertion lost its when: not _pf_is_molecule condition"
-            failed=1
-          fi
-
-          # Final syntax validation ensures the assertion is in the execution plan
-          ansible-playbook site.yml --syntax-check || failed=1
-
-          exit $failed
+      - name: Verify site.yml syntax (ensures assertion is executable)
+        run: ansible-playbook site.yml --syntax-check || exit 1
 
   node-lint:
     name: Node Lint

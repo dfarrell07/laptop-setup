@@ -176,7 +176,7 @@ alias notes="cd {{ notes_repo_path }}"
 # --- Task queue ---
 cq() {
   [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
-  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace('`', '') }}" --title "$1" --body "$2"
+  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace(';', '') | replace('`', '') }}" --title "$1" --body "$2"
 }
 
 # --- Kubernetes ---
