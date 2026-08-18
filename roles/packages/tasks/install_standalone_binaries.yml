@@ -161,6 +161,17 @@
       Install manually from https://github.com/operator-framework/operator-sdk/releases
 
 # --- Cosign pre-install self-verification (second trust root on re-provisioning) ---
+# TRUST MODEL: cosign uses Sigstore (Google OIDC keyless signing). The verification below
+# depends on trusting:
+#   1. Google's OIDC issuer (accounts.google.com) to issue valid tokens to the cosign release bot
+#   2. Sigstore's public root CA to have signed the cosign release bot's certificate
+# No certificate fingerprints are pinned in cosign verify-blob commands because the
+# Sigstore transparency log entry (sigstore.json bundle) embeds the full certificate chain.
+# ALTERNATIVE VERIFICATION: For high-security environments that cannot trust Google OIDC
+# or Sigstore infrastructure, disable cosign installation via config.yml and manually verify
+# with the upstream cosign GitHub releases, which publish GPG signatures (though the signing
+# key is not currently pinned in this playbook either).
+#
 # On first install, bootstrapping is impossible; SHA256 (packages_cosign_sha256) is the
 # sole anchor. On re-provisioning, the existing binary verifies the new download against
 # the .sigstore.json bundle — a Sigstore transparency log entry that is a different trust
@@ -222,11 +233,26 @@
       - https://accounts.google.com
   changed_when: false
 
-- name: Install cosign (image signing and verification for Konflux pipelines)
+- name: Install verified cosign binary from bundle verification (re-provision only)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.copy:
+    src: /tmp/cosign-new
+    dest: /usr/local/bin/cosign
+    remote_src: true
+    mode: "0755"
+  become: true
+  tags: [become]
+
+- name: Install cosign (first install; bootstrap - bundle verification not possible)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - not _cosign_pre_stat.stat.exists
   ansible.builtin.include_tasks: install_binary.yml
   vars:
     binary_name: cosign
