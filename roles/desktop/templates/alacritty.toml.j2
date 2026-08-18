@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 
 [font]
-size = {{ desktop_alacritty_font_size }}
+size = {{ desktop_alacritty_font_size | float }}
 
 [font.normal]
 family = "{{ desktop_alacritty_font_family }}"
@@ -11,7 +11,7 @@ padding = { x = 4, y = 4 }
 decorations = "None"
 
 [scrolling]
-history = {{ desktop_alacritty_scrollback_lines }}
+history = {{ desktop_alacritty_scrollback_lines | int }}
 
 [env]
 # Override TERM so remote SSH hosts without alacritty terminfo still work correctly.

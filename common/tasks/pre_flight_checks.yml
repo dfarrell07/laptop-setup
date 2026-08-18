@@ -170,6 +170,66 @@
           non-negative integers (systemd timer directive injection guard).
       tags: [always]
 
+    - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('claude_queue_repo', '') | string is match('^[A-Za-z0-9_./-]*$')
+          - _raw.get('claude_queue_host_label', '') | string is match('^[a-zA-Z0-9 ._-]*$')
+          - _raw.get('claude_queue_max_turns', 50) | int >= 0
+          - _raw.get('claude_queue_timeout', 1800) | int >= 0
+          - _raw.get('claude_queue_max_issues_per_run', 5) | int >= 0
+        fail_msg: >-
+          SECURITY: claude_queue_repo must be alphanumeric/slash/dot/hyphen/underscore
+          (GitHub owner/repo format). claude_queue_host_label must be alphanumeric/space/
+          dot/hyphen/underscore. claude_queue_max_turns, claude_queue_timeout,
+          claude_queue_max_issues_per_run must be non-negative integers. These values are
+          rendered into systemd unit Environment= directives and macOS launchd plist
+          <string> tags; newlines or XML metacharacters allow directive/plist injection.
+      tags: [always]
+
+    - name: Assert alacritty color/font vars in config.yml are safe (TOML injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _color_keys:
+          - desktop_alacritty_color_bg
+          - desktop_alacritty_color_fg
+          - desktop_alacritty_color_normal_black
+          - desktop_alacritty_color_normal_red
+          - desktop_alacritty_color_normal_green
+          - desktop_alacritty_color_normal_yellow
+          - desktop_alacritty_color_normal_blue
+          - desktop_alacritty_color_normal_magenta
+          - desktop_alacritty_color_normal_cyan
+          - desktop_alacritty_color_normal_white
+          - desktop_alacritty_color_bright_black
+          - desktop_alacritty_color_bright_white
+          - desktop_bar_bg
+          - desktop_bar_fg
+          - desktop_bar_separator
+          - desktop_bar_focused_ws_bg
+          - desktop_wm_lock_color
+      ansible.builtin.assert:
+        that:
+          - _color_keys | map('extract', _raw) | select('defined') | list |
+            map('string') | select() | list |
+            reject('match', '^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$') | list | length == 0
+          - _raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
+          - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
+        fail_msg: >-
+          SECURITY: desktop_alacritty_color_* values must be 3- or 6-digit hex colors
+          (#RGB or #RRGGBB). desktop_alacritty_font_family must use only alphanumeric/space/
+          underscore/hyphen. desktop_alacritty_font_size must be a positive number. These
+          values are rendered into quoted TOML strings; a value containing a double-quote
+          or newline allows alacritty TOML section injection (e.g. a [shell] override that
+          changes what binary alacritty executes). containers_log_driver must be one of
+          k8s-file/journald/json-file/syslog/none.
+      tags: [always]
+
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
       vars:
