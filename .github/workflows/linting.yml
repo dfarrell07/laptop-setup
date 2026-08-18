@@ -262,23 +262,34 @@ jobs:
         run: |
           failed=0
 
-          # Check that include_tasks for pre_flight_checks.yml is present at line 112
-          if ! sed -n '111,113p' site.yml | grep -q 'include_tasks.*pre_flight_checks.yml'; then
-            echo "::error::Critical assertion include_tasks removed or moved from site.yml line 112"
+          # Check that include_tasks for pre_flight_checks.yml is present in Play 2 pre_tasks
+          if ! grep -q 'include_tasks.*pre_flight_checks.yml' site.yml; then
+            echo "::error::Critical assertion include_tasks removed from site.yml pre_tasks"
             failed=1
           fi
 
-          # Check that duplicate guard for identity vars assertion is present at lines 139-163
-          if ! sed -n '139,163p' site.yml | grep -q 'Assert identity vars are not CHANGE_ME'; then
-            echo "::error::Critical duplicate guard (identity vars assertion) removed from site.yml lines 139-163"
+          # Verify the identity vars assertion exists with correct structure
+          if ! grep -q 'Assert identity vars are not CHANGE_ME' site.yml; then
+            echo "::error::Critical identity vars assertion removed from site.yml"
             failed=1
           fi
 
-          # Verify the duplicate guard still has the when: not _pf_is_molecule condition
-          if ! sed -n '139,163p' site.yml | grep -q 'when: not _pf_is_molecule'; then
-            echo "::error::Duplicate guard lost its when: not _pf_is_molecule condition"
+          # Verify the assertion contains the dotfiles_user_name CHANGE_ME check
+          if ! grep -A 5 'Assert identity vars are not CHANGE_ME' site.yml | \
+               grep -q 'dotfiles_user_name.*CHANGE_ME'; then
+            echo "::error::Identity vars assertion logic removed or modified (dotfiles_user_name check missing)"
             failed=1
           fi
+
+          # Verify the when condition is present
+          if ! grep -B 2 -A 10 'Assert identity vars are not CHANGE_ME' site.yml | \
+               grep -q 'when: not _pf_is_molecule'; then
+            echo "::error::Identity vars assertion lost its when: not _pf_is_molecule condition"
+            failed=1
+          fi
+
+          # Final syntax validation ensures the assertion is in the execution plan
+          ansible-playbook site.yml --syntax-check || failed=1
 
           exit $failed
 

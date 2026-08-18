@@ -203,7 +203,7 @@
 
 # Post-install checksum verification: krew index has no cryptographic signing (no Sigstore/GPG),
 # so we pin known-good SHA256 values and assert the installed scripts match.
-# Skipped when the plugin is absent (offline/CSB environments where install was skipped).
+# Missing plugins must fail loudly to detect network errors or incomplete installations.
 - name: Stat ctx krew plugin binary for checksum verification
   ansible.builtin.stat:
     path: "{{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx"
@@ -212,18 +212,29 @@
   register: _krew_ctx_stat
   when: _packages_linux_x86_work
 
+- name: Fail if ctx krew plugin is missing
+  ansible.builtin.fail:
+    msg: >-
+      ctx plugin installation failed — file missing at
+      {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx.
+      This may indicate a network error during plugin download.
+      Re-run provisioning or install manually.
+  when:
+    - _packages_linux_x86_work
+    - not _krew_ctx_stat.stat.exists
+
 - name: Assert ctx krew plugin binary checksum
   ansible.builtin.assert:
     that:
+      - _krew_ctx_stat.stat.exists | bool
       - _krew_ctx_stat.stat.checksum == packages_krew_plugin_ctx_sha256
     fail_msg: >-
-      ctx plugin checksum mismatch at
+      ctx plugin verification failed at
       {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx:
-      expected {{ packages_krew_plugin_ctx_sha256 }},
+      file exists={{ _krew_ctx_stat.stat.exists | default(false) }},
+      expected checksum {{ packages_krew_plugin_ctx_sha256 }},
       got {{ _krew_ctx_stat.stat.checksum | default('MISSING') }}
-  when:
-    - _packages_linux_x86_work
-    - _krew_ctx_stat.stat.exists
+  when: _packages_linux_x86_work
 
 - name: Stat ns krew plugin binary for checksum verification
   ansible.builtin.stat:
@@ -232,6 +243,17 @@
     checksum_algorithm: sha256
   register: _krew_ns_stat
   when: _packages_linux_x86_work
+
+- name: Fail if ns krew plugin is missing
+  ansible.builtin.fail:
+    msg: >-
+      ns plugin installation failed — file missing at
+      {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens.
+      This may indicate a network error during plugin download.
+      Re-run provisioning or install manually.
+  when:
+    - _packages_linux_x86_work
+    - not _krew_ns_stat.stat.exists
 
 - name: Assert ns krew plugin binary checksum
   ansible.builtin.assert:
@@ -242,6 +264,4 @@
       {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens:
       expected {{ packages_krew_plugin_ns_sha256 }},
       got {{ _krew_ns_stat.stat.checksum | default('MISSING') }}
-  when:
-    - _packages_linux_x86_work
-    - _krew_ns_stat.stat.exists
+  when: _packages_linux_x86_work
