@@ -4,8 +4,10 @@
 
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always) ---
 - name: SECURITY assert ssh_work_keyscan_hosts entries are safe hostnames (SSH role guard)
-  # NOTE: tags: [always] ensures this assertion runs even with --start-at-task.
-  # Defense-in-depth against role-level bypass of preflight validation.
+  # NOTE: deliberately NO tags — tasks with no tags survive --skip-tags always.
+  # tasks tagged [always] are SKIPPED by --skip-tags always, defeating the purpose.
+  # Primary bypass protection comes from Play 0 in site.yml (runs before any role).
+  # This provides defense-in-depth against --skip-tags always on individual role runs.
   vars:
     _keyscan_hosts: "{{ ssh_work_keyscan_hosts | default([]) }}"
     _hostnames: >-
@@ -16,10 +18,9 @@
       - _hostnames | select('search', '[^a-zA-Z0-9._-]') | list | length == 0
     fail_msg: >-
       SECURITY: ssh_work_keyscan_hosts in play namespace contains unsafe hostname characters.
-      This check provides defense-in-depth against --start-at-task bypass of preflight
-      play-namespace validation. Hostnames must match ^[a-zA-Z0-9._-]+$.
+      This check provides defense-in-depth against --skip-tags always bypass.
+      Hostnames must match ^[a-zA-Z0-9._-]+$.
   when: ssh_work_keyscan_hosts | default([]) | length > 0
-  tags: [always]
 
 - name: Ensure SSH directory exists
   ansible.builtin.file:
