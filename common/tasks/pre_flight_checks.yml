@@ -550,25 +550,30 @@
           (e.g., root, service-account, bin_user).
       tags: [always]
 
-    - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (SSH hardening guard)
+    - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (command injection guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
         _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
-        _unsafe_hosts: "{{ _keyscan_hosts | map('string') | select('search', '[^a-zA-Z0-9._-]') | list }}"
+        # Handle both string entries and dict entries with 'host' field
+        _hostnames_to_check: >-
+          {{ _keyscan_hosts | map(attribute='host', default='') | map('string') | select() | list +
+             (_keyscan_hosts | selectattr('host', 'undefined') | map('string') | select() | list) }}
+        _unsafe_hosts: "{{ _hostnames_to_check | select('search', '[^a-zA-Z0-9._-]') | list }}"
       ansible.builtin.assert:
         that:
           - _unsafe_hosts | length == 0
         fail_msg: >-
           SECURITY: ssh_work_keyscan_hosts in config.yml contains entries with unsafe
-          characters. Each hostname must match ^[a-zA-Z0-9._-]+$ (alphanumeric, dot,
-          underscore, hyphen only). These entries are passed directly to ssh-keyscan in
-          roles/ssh/tasks/main.yml; shell metacharacters or spaces can escape the argument
-          list and inject arbitrary commands executed during provisioning.
-          Example attack: ssh_work_keyscan_hosts: ['github.com; rm -rf /'] would execute
-          the rm command during keyscan. Unsafe entries found: {{ _unsafe_hosts }}.
-          Use only valid hostname characters (e.g., github.com, internal.example.com,
-          git-server-001).
+          characters. Each hostname (plain string or dict 'host' field) must match
+          ^[a-zA-Z0-9._-]+$ (alphanumeric, dot, underscore, hyphen only). These entries
+          are passed directly to ssh-keyscan in roles/ssh/tasks/keyscan_host.yml; shell
+          metacharacters or spaces can escape the command and inject arbitrary shell
+          commands executed during provisioning. Example attack: ssh_work_keyscan_hosts:
+          ['github.com; rm -rf /'] would execute the rm command. Allowed: plain hostname
+          strings or dicts with 'host' field (e.g., ssh_work_keyscan_hosts: ['github.com']
+          or [{'host': 'git.internal.com', 'fingerprint': 'SHA256:...'}]).
+          Unsafe entries found: {{ _unsafe_hosts }}.
       tags: [always]
 
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
