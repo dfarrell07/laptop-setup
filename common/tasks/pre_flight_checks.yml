@@ -715,6 +715,26 @@
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
       tags: [always]
 
+    - name: Assert system_resolved_* DNS config vars are safe (systemd conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_resolved_llmnr', 'no') | string in ['yes', 'no', 'resolve']
+          - _raw.get('system_resolved_multicast_dns', 'no') | string in ['yes', 'no', 'resolve']
+        fail_msg: >-
+          SECURITY: system_resolved_llmnr or system_resolved_multicast_dns in config.yml
+          contains an invalid value. These control /etc/systemd/resolved.conf.d/98-llmnr.conf
+          KEY=VALUE directives; invalid values (including those with embedded newlines)
+          are rendered verbatim and bypass systemd parsing safety. systemd.conf uses
+          last-wins semantics for duplicate keys, allowing newline injection to override
+          hardening (e.g., LLMNR=no followed by LLMNR=yes re-enables LLMNR).
+          Allowed values: 'yes', 'no', 'resolve' (listen-only).
+          Current values: system_resolved_llmnr={{ _raw.get('system_resolved_llmnr', 'no') }},
+          system_resolved_multicast_dns={{ _raw.get('system_resolved_multicast_dns', 'no') }}
+      tags: [always]
+
     - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
