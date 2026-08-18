@@ -119,6 +119,19 @@
     dest: "{{ ansible_facts['user_dir'] }}/.config/git/config"
     mode: "0644"
 
+- name: Assert ssh_git_signing_pubkey contains no newlines or control characters
+  ansible.builtin.assert:
+    that:
+      - ssh_git_signing_pubkey | regex_search('[\n\r\x00-\x1f]') is none
+      - ssh_git_signing_pubkey is regex('^[a-zA-Z0-9\s\-_=.+/]*$')
+    fail_msg: >-
+      ssh_git_signing_pubkey='{{ ssh_git_signing_pubkey }}' contains newlines,
+      control characters, or disallowed characters. SSH public keys must be single-line
+      and contain only alphanumerics, spaces, hyphens, underscores, equals, plus, slash,
+      and periods. A newline would inject arbitrary entries into ~/.config/git/allowed_signers,
+      allowing arbitrary signers (e.g., 'root') to forge commits. Correct config.yml or vault.yml.
+  when: ssh_git_signing_pubkey | trim | length > 0
+
 - name: Deploy allowed signers file
   ansible.builtin.template:
     src: allowed_signers.j2
