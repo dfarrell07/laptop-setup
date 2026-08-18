@@ -257,7 +257,7 @@ diff: guard-not-root
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
 
 lint: .venv shellcheck markdownlint check-vars-sync
-	.venv/bin/ansible-lint
+	$(VERIFY_AND_RUN) .venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	@if command -v actionlint >/dev/null 2>&1; then actionlint -color; else echo "SKIP: actionlint not installed (run: make packages)"; fi
 	@if command -v zizmor >/dev/null 2>&1; then zizmor .github/; else echo "SKIP: zizmor not installed (run: make packages)"; fi
