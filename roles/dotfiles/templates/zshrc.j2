@@ -156,12 +156,12 @@ cstatus() {
 
 # --- Device access (Tailscale + mosh) ---
 {% if dotfiles_laptop_tailscale_host %}
-alias laptop='mosh {{ dotfiles_laptop_tailscale_host }}'
-laptop-claude() { mosh {{ dotfiles_laptop_tailscale_host }} -- tmux new-session -A -s "${1:-work}"; }
+alias laptop='mosh "{{ dotfiles_laptop_tailscale_host }}"'
+laptop-claude() { mosh "{{ dotfiles_laptop_tailscale_host }}" -- tmux new-session -A -s "${1:-work}"; }
 {% endif %}
 {% if dotfiles_mac_tailscale_host %}
-alias mac='mosh {{ dotfiles_mac_tailscale_host }}'
-mac-claude() { mosh {{ dotfiles_mac_tailscale_host }} -- tmux new-session -A -s "${1:-personal}"; }
+alias mac='mosh "{{ dotfiles_mac_tailscale_host }}"'
+mac-claude() { mosh "{{ dotfiles_mac_tailscale_host }}" -- tmux new-session -A -s "${1:-personal}"; }
 {% endif %}
 alias rc='claude --remote-control'
 
@@ -176,7 +176,7 @@ alias notes="cd {{ notes_repo_path }}"
 # --- Task queue ---
 cq() {
   [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
-  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') }}" --title "$1" --body "$2"
+  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace('`', '') }}" --title "$1" --body "$2"
 }
 
 # --- Kubernetes ---
