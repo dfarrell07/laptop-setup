@@ -1555,6 +1555,7 @@
         - name: Assert identity/gitconfig vars contain safe characters (gitconfig injection guard, play namespace)
           ansible.builtin.assert:
             that:
+              - dotfiles_user_name | default('') | string is not search('[\n\r\x00-\x1f]')
               - dotfiles_github_user | default('') | string is match('^[a-zA-Z0-9-]*$')
               - dotfiles_internal_git_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
               - dotfiles_internal_ca_path | default('') | string is match('^[a-zA-Z0-9./_-]*$')
