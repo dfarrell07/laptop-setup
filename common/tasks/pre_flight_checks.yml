@@ -4,6 +4,7 @@
 # Play 1 (become: true at play level) without privilege escalation.
 - name: Pre-flight checks (no privilege escalation)
   become: false
+  tags: [always]
   block:
     - name: Load configuration
       ansible.builtin.include_vars: default.config.yml
@@ -1613,6 +1614,28 @@
               {"kernel.x=0\nnet.y": "0"} renders two directives). Keys must match
               ^[a-zA-Z0-9._/-]+$ (no newlines, spaces, or special characters); values
               must not contain newlines. Unsafe keys: {{ _extra_keys_unsafe + _additional_keys_unsafe }}.
+          tags: [always]
+
+        - name: Assert kernel.core_pattern in extra dicts contains no shell metacharacters (RCE guard)
+          vars:
+            _extra_core_patterns: "{{ system_sysctl_extra | default({}) | dict2items
+                | selectattr('key', 'equalto', 'kernel.core_pattern')
+                | map(attribute='value') | map('string') | select() | list }}"
+            _additional_core_patterns: "{{ system_sysctl_extra_additional | default({}) | dict2items
+                | selectattr('key', 'equalto', 'kernel.core_pattern')
+                | map(attribute='value') | map('string') | select() | list }}"
+            _all_core_patterns: "{{ _extra_core_patterns + _additional_core_patterns }}"
+            _unsafe_patterns: "{{ _all_core_patterns | select('search', '[|;&$`()]') | list }}"
+          ansible.builtin.assert:
+            that:
+              - _unsafe_patterns | length == 0
+            fail_msg: >-
+              SECURITY: kernel.core_pattern in system_sysctl_extra or system_sysctl_extra_additional
+              contains pipe (|) or other shell metacharacters. The kernel interprets | as a directive
+              to execute a program when any process crashes, executing arbitrary code as root.
+              Unsafe values: {{ _unsafe_patterns }}.
+              Allowed: regular file paths only, e.g. /var/lib/systemd/coredump, /var/crash/core.%e.%p
+              (no |, ;, &, $, `, or parentheses).
           tags: [always]
 
 
