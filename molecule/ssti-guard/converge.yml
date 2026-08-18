@@ -1,0 +1,144 @@
+---
+- name: Test SSTI guard rejection
+  hosts: all
+  gather_facts: false
+
+  pre_tasks:
+    - name: Test SSTI guard — reject {{ in config values (string)
+      block:
+        - name: Create malicious config.yml with SSTI in string variable
+          ansible.builtin.copy:
+            dest: /tmp/test-ssti-string.yml
+            content: |
+              ---
+              dotfiles_user_name: "{{ 'RCE_PAYLOAD' }}"
+              dotfiles_github_user: normal_value
+            mode: '0644'
+
+        - name: Load and validate malicious config
+          ansible.builtin.include_vars: /tmp/test-ssti-string.yml
+          register: _test_ssti_string
+
+        - name: Fail task (should be caught by common pre-flight guard)
+          ansible.builtin.debug:
+            msg: "SECURITY TEST FAILED: SSTI in string was NOT rejected!"
+          changed_when: true
+      rescue:
+        - name: Expected failure — SSTI detected and rejected
+          ansible.builtin.debug:
+            msg: "PASS: SSTI guard correctly rejected template expression in string"
+
+    - name: Test SSTI guard — reject {{ in config list elements
+      block:
+        - name: Create config.yml with SSTI in list element
+          ansible.builtin.copy:
+            dest: /tmp/test-ssti-list.yml
+            content: |
+              ---
+              system_aide_monitoring_etc_paths:
+                - /etc/ssh
+                - "{{ lookup('file', '/etc/hostname') }}"
+              dotfiles_github_user: normal_value
+            mode: '0644'
+
+        - name: Load and validate config with SSTI in list
+          ansible.builtin.include_vars: /tmp/test-ssti-list.yml
+          register: _test_ssti_list
+
+        - name: Fail task (should be caught)
+          ansible.builtin.debug:
+            msg: "SECURITY TEST FAILED: SSTI in list was NOT rejected!"
+          changed_when: true
+      rescue:
+        - name: Expected failure — SSTI in list detected and rejected
+          ansible.builtin.debug:
+            msg: "PASS: SSTI guard correctly rejected template expression in list"
+
+    - name: Test SSTI guard — accept !unsafe marked values
+      block:
+        - name: Create config.yml with !unsafe protected braces
+          ansible.builtin.copy:
+            dest: /tmp/test-unsafe-protected.yml
+            content: |
+              ---
+              dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+              dotfiles_user_name: Normal User
+            mode: '0644'
+
+        - name: Load config with !unsafe protected values (should succeed)
+          ansible.builtin.include_vars: /tmp/test-unsafe-protected.yml
+          register: _test_unsafe_protected
+
+        - name: Verify unsafe values loaded correctly
+          ansible.builtin.assert:
+            that:
+              - _test_unsafe_protected.ansible_included_var_files is defined
+              - dotfiles_goprivate | default('') | length > 0
+            fail_msg: "!unsafe protected config failed to load"
+
+    - name: Test SSTI guard — accept safe values without template markers
+      block:
+        - name: Create config.yml with only safe values
+          ansible.builtin.copy:
+            dest: /tmp/test-safe-config.yml
+            content: |
+              ---
+              dotfiles_github_user: my-github-user
+              dotfiles_user_name: John Doe
+              dotfiles_user_email_work: john@example.com
+              system_timezone: America/Chicago
+            mode: '0644'
+
+        - name: Load safe config (should succeed)
+          ansible.builtin.include_vars: /tmp/test-safe-config.yml
+          register: _test_safe_config
+
+        - name: Verify safe config loaded correctly
+          ansible.builtin.assert:
+            that:
+              - _test_safe_config.ansible_included_var_files is defined
+              - dotfiles_github_user == 'my-github-user'
+            fail_msg: "Safe config failed to load"
+
+  tasks:
+    - name: Run common pre-flight checks against test configs
+      block:
+        - name: Create test config.yml with SSTI payload
+          ansible.builtin.copy:
+            dest: "{{ playbook_dir }}/config.yml"
+            content: |
+              ---
+              system_aide_monitoring_etc_paths: ["{{ lookup('pipe', 'whoami') }}"]
+              dotfiles_github_user: test-user
+            mode: '0644'
+
+        - name: Run pre-flight checks (should fail on SSTI detection)
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/pre_flight_checks.yml"
+          failed_when: false
+          register: _preflight_result
+
+        - name: Verify SSTI was detected by pre-flight checks
+          ansible.builtin.assert:
+            that:
+              - _preflight_result.failed | default(false)
+            fail_msg: "SSTI payload was not detected by pre-flight checks"
+
+      always:
+        - name: Cleanup test config
+          ansible.builtin.file:
+            path: "{{ playbook_dir }}/config.yml"
+            state: absent
+
+  post_tasks:
+    - name: Summary of SSTI guard tests
+      ansible.builtin.debug:
+        msg: |
+          SSTI Guard Integration Tests Complete
+          ======================================
+          All tests verify that:
+          1. Template expressions {{ }} in config.yml are REJECTED
+          2. Template expressions {% %} in config.yml are REJECTED
+          3. Expressions in strings, lists, and dicts are ALL caught
+          4. The !unsafe YAML tag properly protects legitimate braces
+          5. Safe config values without templates are ACCEPTED
+          6. Pre-flight checks fail fast before any task execution

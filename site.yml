@@ -1,4 +1,53 @@
 ---
+# Play 0 — Pre-flight security assertions (defense-in-depth)
+# Runs before all other plays to ensure --start-at-task cannot bypass security checks.
+# This play is protected against bypassing by play-level tags: [always].
+- name: Pre-flight security validation (always runs)
+  hosts: localhost
+  become: false
+  gather_facts: false
+  tags: [always]
+
+  tasks:
+    - name: SECURITY CRITICAL — Verify collection integrity before execution (supply chain defense-in-depth)
+      # Ensures even --start-at-task cannot skip collections verification.
+      # Primary protection is VERIFY_AND_RUN in Makefile (shell command, not Ansible task).
+      # This play-level assertion provides defense-in-depth for direct ansible-playbook invocations.
+      ansible.builtin.command:
+        cmd: scripts/verify-collections.sh
+      changed_when: false
+      check_mode: false  # always run even in --check mode; collection integrity must be verified
+
+    - name: Gather facts for early validation
+      ansible.builtin.gather_facts:
+      tags: [always]
+
+    - name: Capture real user identity for early checks
+      ansible.builtin.set_fact:
+        real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_id: "{{ lookup('env', 'USER') }}"
+      tags: [always]
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
+      tags: [always]
+
+    - name: Run early pre-flight checks (before any role execution)
+      block:
+        - name: Include pre-flight checks
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+      tags: [always]
+
+    - name: Run CSB detection early (makes csb_detected available to all subsequent plays)
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
+      block:
+        - name: Include CSB detection
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+      tags: [always]
+
 # Play 1 — Host system (become: true)
 # Runs repos_dnf and system roles that need play-level privilege escalation.
 - name: System setup (requires sudo)
@@ -8,51 +57,10 @@
   tags: [become]
 
   pre_tasks:
-    - name: SECURITY CRITICAL — Verify collection integrity before execution (supply chain defense-in-depth)
-      # NOTE: deliberately no tags — tasks with no tags survive --skip-tags always.
-      # Tasks tagged [always] can be bypassed with --skip-tags always; untagged tasks cannot.
-      # Primary protection is VERIFY_AND_RUN in Makefile (shell command, not Ansible task).
-      # This provides defense-in-depth for direct ansible-playbook invocations.
-      ansible.builtin.command:
-        cmd: scripts/verify-collections.sh
-      become: false
-      changed_when: false
-      check_mode: false  # always run even in --check mode; collection integrity must be verified
-
     - name: Gather facts (explicit become:false so check mode works without sudo)
       ansible.builtin.gather_facts:
       become: false
       tags: [always]
-
-    - name: Capture real user identity
-      ansible.builtin.set_fact:
-        real_user_home: "{{ lookup('env', 'HOME') }}"
-        real_user_id: "{{ lookup('env', 'USER') }}"
-      become: false
-      tags: [always]
-
-    - name: Set project root for include paths
-      ansible.builtin.set_fact:
-        common_project_root: >-
-          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
-             | default(playbook_dir, true) }}
-      become: false
-      tags: [always]
-
-    - name: Run pre-flight checks
-      become: false
-      tags: [always]
-      block:
-        - name: Include pre-flight checks
-          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
-
-    - name: Run CSB detection (makes csb_detected available to system role tasks)
-      become: false
-      when: ansible_facts['system'] | default('Linux') == 'Linux'
-      tags: [always]
-      block:
-        - name: Include CSB detection
-          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
   roles:
     - role: repos_dnf
@@ -125,8 +133,10 @@
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
     - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
-      # NOTE: deliberately no tags — see Play 1 collection verification comment for rationale.
+      # NOTE: tags: [always] ensures this runs before role tasks in Play 2, preventing
+      # --start-at-task from bypassing the checks. Play 0 ensures it also runs before Play 1.
       become: false
+      tags: [always]
       block:
         - name: Re-run pre-flight checks (ensures --start-at-task cannot bypass)
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"

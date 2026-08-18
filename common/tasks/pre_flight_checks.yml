@@ -1922,6 +1922,25 @@
           tags: [always]
       tags: [always]
 
+    - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          # system_core_pattern is a sysctl VALUE, not a key; allows pipe and paths but blocks newlines
+          # Pattern: pipe (for piped target) or path chars, but NOT newlines or other shell metacharacters
+          - _raw.get('system_core_pattern', '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %e') | string is match('^[^\n\r]*$')
+          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9|/_-]*$|^$')
+        fail_msg: >-
+          SECURITY: system_core_pattern in config.yml contains unsafe characters.
+          This value is set as a sysctl (kernel parameter) via kernel.core_pattern; embedded
+          newlines inject additional sysctl directives or break the kernel parameter parser.
+          Allowed: alphanumeric, pipe (|), slash, underscore, hyphen for the core_pattern
+          (e.g., '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %e' or
+          '|/bin/false'). No spaces, newlines, or shell metacharacters.
+      tags: [always]
+
     - name: Warn and flag when vault stub is not populated
       when:
         - >-

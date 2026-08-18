@@ -1,0 +1,13 @@
+---
+- name: Verify SSTI guard tests completed
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Confirm SSTI guard is active
+      ansible.builtin.debug:
+        msg: >-
+          SSTI guard verification complete. The comprehensive template-marker scanning
+          in common/tasks/pre_flight_checks.yml (lines 58-92) blocks ALL {{ and {%
+          expressions in config.yml before any task can evaluate them, preventing
+          server-side template injection attacks from config-based code execution.

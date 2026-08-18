@@ -1,0 +1,25 @@
+---
+driver:
+  name: podman
+
+lint: |
+  set -e
+  ansible-lint --profile production .
+
+platforms:
+  - name: instance
+    image: ghcr.io/geerlingguy/docker-fedora44-ansible:latest
+    pre_build_image: true
+    privileged: true
+    override_command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rshared
+    cgroupns_mode: private
+    networks:
+      - name: default
+
+provisioner:
+  name: ansible
+  playbooks:
+    converge: converge.yml
+  lint: ansible-lint
