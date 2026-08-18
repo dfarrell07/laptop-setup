@@ -242,6 +242,15 @@
           - desktop_bar_fg
           - desktop_bar_separator
           - desktop_bar_focused_ws_bg
+          - desktop_bar_focused_ws_text
+          - desktop_bar_active_ws_bg
+          - desktop_bar_active_ws_text
+          - desktop_bar_inactive_ws_bg
+          - desktop_bar_inactive_ws_text
+          - desktop_bar_urgent_ws_bg
+          - desktop_bar_urgent_ws_text
+          - desktop_bar_binding_mode_bg
+          - desktop_bar_binding_mode_text
       ansible.builtin.assert:
         that:
           - _color_keys | map('extract', _raw) | select('defined') | list |
@@ -710,6 +719,23 @@
           roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
           allow arbitrary command injection during kernel parameter setup. Allowed values:
           'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
+      tags: [always]
+
+    - name: Assert system_crypto_policy_target and packages_brew_autoupdate_interval are safe (CLI arg injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_crypto_policy_target', 'DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
+          - _raw.get('packages_brew_autoupdate_interval', 86400) | int >= 0
+        fail_msg: >-
+          SECURITY: system_crypto_policy_target must contain only uppercase alphanumeric
+          characters, colons, underscores, plus signs, and hyphens (no spaces). Spaces
+          allow CLI argument injection into 'update-crypto-policies --set' via shlex.split()
+          — e.g. 'DEFAULT --force' passes --force as an extra arg. Valid example:
+          DEFAULT:NO-SHA1. packages_brew_autoupdate_interval must be a non-negative integer
+          (seconds); non-integer values allow extra flag injection into 'brew autoupdate start'.
       tags: [always]
 
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)

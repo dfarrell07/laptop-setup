@@ -203,7 +203,7 @@
   # Upgrading installed packages (especially from third-party taps) requires an explicit
   # 'brew upgrade' or 'make all', preventing continuous silent upgrades between provisions.
   ansible.builtin.command:
-    cmd: brew autoupdate start {{ packages_brew_autoupdate_interval }} --cleanup
+    cmd: brew autoupdate start {{ packages_brew_autoupdate_interval | int }} --cleanup
   when: is_macos
   changed_when: false
   failed_when: false
