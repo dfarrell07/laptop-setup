@@ -58,15 +58,42 @@
       changed_when: false
       failed_when: false
 
-    - name: Upgrade krew to pinned version
+    # Upgrade uses the same SHA256-pinned tarball as bootstrap rather than
+    # `kubectl-krew upgrade krew`, which trusts krew's own index and is not
+    # independently verified by this playbook.
+    - name: Upgrade krew via SHA256-verified tarball
       when:
         - packages_krew_check.rc == 0
-        - ("v" ~ packages_krew_version) not in (packages_krew_current_version.stdout | default(''))
-      ansible.builtin.command:
-        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew upgrade krew"
-      timeout: 120
-      register: packages_krew_upgrade
-      changed_when: packages_krew_upgrade.stdout | length > 0
+        - ("v" ~ packages_krew_bootstrap_version) not in (packages_krew_current_version.stdout | default(''))
+      block:
+        - name: Download krew tarball for upgrade
+          ansible.builtin.get_url:
+            url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
+            dest: /tmp/krew.tar.gz
+            checksum: "sha256:{{ packages_krew_sha256 }}"
+            mode: "0644"
+            timeout: 120
+          register: packages_krew_upgrade_download
+          retries: 3
+          delay: 10
+          until: packages_krew_upgrade_download is succeeded
+
+        - name: Extract krew installer for upgrade
+          ansible.builtin.unarchive:
+            src: /tmp/krew.tar.gz
+            dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
+            remote_src: true
+
+        - name: Set krew installer executable for upgrade
+          ansible.builtin.file:
+            path: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
+            mode: "0755"
+
+        - name: Run krew installer for upgrade
+          ansible.builtin.command:
+            cmd: "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64 install krew"
+          timeout: 120
+          changed_when: true
 
   rescue:
     - name: Record krew installation failure (CSB)
@@ -93,7 +120,6 @@
 
   always:
     - name: Clean up krew installer files
-      when: packages_krew_check.rc != 0
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent

@@ -71,6 +71,11 @@
       Install manually from https://github.com/gitleaks/gitleaks/releases
 
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
+  # actionlint uses GitHub attestations (actions/attest-build-provenance) for the checksums
+  # file — not cosign bundles. No .bundle files appear in release assets; verification
+  # requires: gh attestation verify <file> --repo rhysd/actionlint
+  # (--signer-workflow rhysd/actionlint/.github/workflows/release.yaml)
+  # cosign verify-blob cannot be used here.
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'  # aarch64: needs sha256_arm64 default + guard extension
@@ -96,6 +101,11 @@
       Install manually from https://github.com/rhysd/actionlint/releases
 
 - name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
+  # zizmor uses GitHub attestations (actions/attest) — not cosign bundles. No .bundle files
+  # appear in release assets; verification requires:
+  #   gh attestation verify <binary> --repo zizmorcore/zizmor
+  # (--signer-workflow zizmorcore/zizmor/.github/workflows/release-binaries.yml)
+  # cosign verify-blob cannot be used here.
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'  # no arm64 release; x86_64-only CI pin
@@ -120,6 +130,10 @@
       Install manually from https://github.com/zizmorcore/zizmor/releases
 
 - name: Install operator-sdk
+  # operator-sdk releases are GPG/PGP signed (checksums.txt.asc) — not cosign/Sigstore.
+  # No .bundle files are published; cosign verify-blob cannot be used here.
+  # GPG verification requires the release team's public key from
+  # https://github.com/operator-framework/operator-sdk/releases.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -297,6 +311,10 @@
   changed_when: false
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
+  # tektoncd/cli releases provide only checksums.txt (plain SHA256 hashes); no cosign
+  # bundles, .sig files, or Sigstore attestations are published. SHA256 pinned in
+  # packages_tkn_sha256 / packages_tkn_sha256_arm64 is the sole integrity control.
+  # cosign verify-blob cannot be used here.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
