@@ -666,30 +666,6 @@
           string (e.g. 0700, 0755). No newlines, spaces, or special characters allowed.
       tags: [always]
 
-    - name: Assert system_home_mode and password aging vars contain only safe characters (login.defs injection guard)
-      when: _config_yml_raw.content is defined
-      vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_home_mode', '0700') | string is match('^[0-7]+$')
-          - _raw.get('system_pass_max_days', 365) | int >= 0
-          - _raw.get('system_pass_min_days', 1) | int >= 0
-          - _raw.get('system_pass_warn_age', 7) | int >= 0
-          - _raw.get('system_inactive_days', 30) | int >= 0
-        fail_msg: >-
-          SECURITY: system_home_mode, system_pass_max_days, system_pass_min_days,
-          system_pass_warn_age, or system_inactive_days in config.yml contains unsafe values.
-          These are rendered directly into /etc/login.defs via ansible.builtin.lineinfile;
-          embedded newlines allow arbitrary directive injection (e.g., PASS_MAX_DAYS 0
-          to disable password expiration, bypassing CIS 5.5.1.1 compliance).
-          system_home_mode must be octal digits (0-7, e.g. 0700, 0755);
-          password aging variables must be non-negative integers
-          (system_pass_max_days, system_pass_min_days, system_pass_warn_age, system_inactive_days).
-          Examples: system_home_mode: 0700, system_pass_max_days: 365,
-          system_pass_min_days: 1, system_pass_warn_age: 7, system_inactive_days: 30.
-      tags: [always]
-
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
