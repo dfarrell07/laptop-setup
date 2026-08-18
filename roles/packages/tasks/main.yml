@@ -140,6 +140,24 @@
   ansible.builtin.include_tasks: install_krew.yml
   when: _packages_linux_x86_work
 
+- name: Assert krew binary exists after installation
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
+  register: _krew_binary_stat
+  when: _packages_linux_x86_work
+
+- name: Fail if krew binary is missing
+  ansible.builtin.fail:
+    msg: >-
+      krew installation completed but binary is missing at
+      {{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew.
+      Installation may have failed silently. Verify network connectivity and
+      re-run provisioning, or install manually from
+      https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+  when:
+    - _packages_linux_x86_work
+    - not _krew_binary_stat.stat.exists
+
 - name: Install subctl multi-version binaries
   ansible.builtin.include_tasks: install_subctl_versions.yml
   when: _packages_linux_x86_work
@@ -149,8 +167,18 @@
     cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew update"
   timeout: 60
   changed_when: false
-  failed_when: false
+  register: _krew_index_update
   when: _packages_linux_x86_work
+
+- name: Fail if krew plugin index update failed
+  ansible.builtin.fail:
+    msg: >-
+      Failed to update krew plugin index.
+      Error: {{ _krew_index_update.stderr | default('unknown error') }}.
+      This may indicate a transient network error or a corrupted krew installation.
+  when:
+    - _packages_linux_x86_work
+    - _krew_index_update.rc | default(0) != 0
 
 - name: Bootstrap essential krew plugins (ctx, ns) for kind/OVN-K context switching
   ansible.builtin.command:
@@ -161,8 +189,17 @@
   timeout: 120
   register: packages_krew_plugins_result
   changed_when: '"Installed plugin" in packages_krew_plugins_result.stdout'
-  failed_when: false
   when: _packages_linux_x86_work
+
+- name: Fail if krew plugin installation failed
+  ansible.builtin.fail:
+    msg: >-
+      Failed to install essential krew plugins (ctx, ns).
+      Error: {{ packages_krew_plugins_result.stderr | default('unknown error') }}.
+      This may indicate a transient network error or invalid plugin versions.
+  when:
+    - _packages_linux_x86_work
+    - packages_krew_plugins_result.rc | default(0) != 0
 
 # Post-install checksum verification: krew index has no cryptographic signing (no Sigstore/GPG),
 # so we pin known-good SHA256 values and assert the installed scripts match.

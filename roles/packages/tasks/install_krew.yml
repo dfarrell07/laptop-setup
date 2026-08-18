@@ -111,11 +111,19 @@
           github.com/kubernetes-sigs/krew.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
       when: csb_rhel
-    - name: Warn krew installation failed
+    - name: Warn krew installation failed (non-CSB, will fail play)
       ansible.builtin.debug:
         msg: >-
           Failed to install krew: {{ ansible_failed_result.msg | default('unknown error') }}.
           Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/.
+      when: not csb_rhel
+    - name: Fail the play after non-CSB krew installation failure
+      ansible.builtin.fail:
+        msg: >-
+          krew installation failed and is required for this provisioning profile.
+          Error: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+          and re-run this playbook.
       when: not csb_rhel
 
   always:

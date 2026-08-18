@@ -16,13 +16,17 @@
       async: 600
       poll: 10
   rescue:
-    - name: Warn Homebrew tap add failed
+    - name: Warn Homebrew tap add failed (will fail play)
       ansible.builtin.debug:
         msg: >-
           PACKAGE INSTALL FAILED: Add Homebrew taps in role packages.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or an invalid tap.
-          Continuing playbook execution.
+    - name: Fail the play after Homebrew tap installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew tap installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and tap configuration, then re-run provisioning.
 
 - name: Install Homebrew packages (macOS)
   when: is_macos
@@ -40,13 +44,17 @@
       poll: 10
       register: _packages_brew_formulas
   rescue:
-    - name: Warn Homebrew package install failed
+    - name: Warn Homebrew package install failed (will fail play)
       ansible.builtin.debug:
         msg: >-
           PACKAGE INSTALL FAILED: Install Homebrew packages in role packages.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or a missing formula.
-          Continuing playbook execution.
+    - name: Fail the play after Homebrew package installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and formula names, then re-run provisioning.
 
 - name: Remind user mtr requires sudo for ICMP on macOS
   ansible.builtin.debug:
@@ -70,13 +78,17 @@
       poll: 10
       register: _packages_brew_casks
   rescue:
-    - name: Warn Homebrew cask package install failed
+    - name: Warn Homebrew cask package install failed (will fail play)
       ansible.builtin.debug:
         msg: >-
           PACKAGE INSTALL FAILED: Install Homebrew cask packages in role packages.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or a missing cask.
-          Continuing playbook execution.
+    - name: Fail the play after Homebrew cask installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew cask installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and cask names, then re-run provisioning.
 
 - name: Remind user to approve LuLu system extension
   ansible.builtin.debug:
@@ -182,14 +194,18 @@
             - /tmp/aerospace-extract
 
   rescue:
-    - name: Warn AeroSpace install failed
+    - name: Warn AeroSpace install failed (will fail play)
       ansible.builtin.debug:
         msg: >-
           PACKAGE INSTALL FAILED: AeroSpace download in role packages.
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           Install manually from
           https://github.com/nikitabobko/AeroSpace/releases/tag/v{{ packages_aerospace_version }}.
-          Continuing playbook execution.
+    - name: Fail the play after AeroSpace installation failure
+      ansible.builtin.fail:
+        msg: >-
+          AeroSpace installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and version configuration, then re-run provisioning.
 
 - name: Stop brew autoupdate before reconfiguring (macOS)
   ansible.builtin.command:
