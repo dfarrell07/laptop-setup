@@ -44,7 +44,7 @@
     - name: Add /etc paths to AIDE monitoring
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
-        regexp: "^{{ item | replace('.', '\\.') }}[$]?\\s"  # [$]? matches AIDE $ suffix; \s prevents matching /path.bak
+        regexp: "^{{ item | regex_escape }}[$]?\\s"  # [$]? matches AIDE $ suffix; \s prevents matching /path.bak
         line: "{{ item }} NORMAL"
         insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (first-match ordering)
         state: present

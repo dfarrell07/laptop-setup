@@ -1081,6 +1081,30 @@
           faillock injection via deny=5\neven_deny_root bypassing faillock_even_deny_root: false policy).
       tags: [always]
 
+    - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
+        _unsafe_entries: "{{ _aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: system_aide_monitoring_etc_paths in config.yml contains entries with
+          unsafe characters. Each path must contain only alphanumeric characters, dots,
+          underscores, hyphens, and slashes (standard filesystem path characters).
+          Regex metacharacters like brackets, parentheses, asterisks, plus signs, pipes, or
+          carets can break the AIDE lineinfile regexp pattern, bypassing integrity monitoring
+          for critical system files.
+          Example attack: system_aide_monitoring_etc_paths: ['/etc/[sshd_config]'] converts
+          to regexp '^/etc/[sshd_config][$]?\\s' where [sshd_config] becomes a character class
+          matching any single character, not the literal string. The regexp fails to match
+          '/etc/sshd_config NORMAL', preventing the monitoring entry from being inserted.
+          Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
+          Unsafe entries found: {{ _unsafe_entries }}.
+      tags: [always]
+
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
       vars:
