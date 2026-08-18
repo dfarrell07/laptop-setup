@@ -182,6 +182,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
   ansible.builtin.stat:
     path: /usr/local/bin/cosign
   register: _cosign_pre_stat
@@ -191,6 +192,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.get_url:
     url: >-
@@ -206,6 +208,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.get_url:
     url: >-
@@ -219,6 +222,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.command:
     argv:
@@ -231,6 +235,8 @@
       - keyless@projectsigstore.iam.gserviceaccount.com
       - --certificate-oidc-issuer
       - https://accounts.google.com
+      - --certificate-oidc-issuer-regexp
+      - "^https://accounts\\.google\\.com$"
   changed_when: false
 
 - name: Install verified cosign binary from bundle verification (re-provision only)
@@ -238,6 +244,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
   ansible.builtin.copy:
     src: /tmp/cosign-new
@@ -252,6 +259,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
     - not _cosign_pre_stat.stat.exists
   ansible.builtin.include_tasks: install_binary.yml
   vars:
@@ -285,6 +293,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
   ansible.builtin.get_url:
     url: >-
       https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
@@ -297,6 +306,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
   ansible.builtin.get_url:
     url: >-
       https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
@@ -309,6 +319,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
   ansible.builtin.command:
     argv:
       - /usr/local/bin/cosign
@@ -320,6 +331,8 @@
       - "https://github.com/getsops/sops/.github/workflows/release.yml@refs/tags/v{{ packages_sops_version }}"
       - --certificate-oidc-issuer
       - https://token.actions.githubusercontent.com
+      - --certificate-oidc-issuer-regexp
+      - "^https://token\\.actions\\.githubusercontent\\.com$"
   changed_when: false
 
 - name: Verify installed sops binary SHA256 against attested checksums file
@@ -327,6 +340,7 @@
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
+    - packages_cosign_install_enabled
   ansible.builtin.shell: |
     set -o pipefail
     sha256sum /usr/local/bin/sops | awk '{print $1}' | \

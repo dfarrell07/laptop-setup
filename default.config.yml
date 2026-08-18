@@ -75,6 +75,8 @@ system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: 
 #                                        device selector — bare catch-alls and embedded newlines
 #                                        are rejected by pre_flight_checks.yml
 #   packages_install_binaries: true    (group_vars/all/vars.yml)
+#   packages_cosign_install_enabled: true  (roles/packages/defaults) — set false to skip cosign installation
+#     (requires manual installation with alternative verification method, e.g. GPG signature verification from GitHub releases)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
 #   packages_brew: [ansible, git, git-lfs, openssh, tmux, mosh, jq, yq, direnv, fzf, zoxide, ...]  (roles/packages/defaults) —
 #     universal Homebrew packages (all profiles on macOS); override in config.yml to add/remove packages

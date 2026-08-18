@@ -664,6 +664,31 @@
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
       tags: [always]
 
+    - name: Warn when cosign installation is disabled without alternative verification plan
+      when:
+        - _config_yml_raw.content is defined
+        - _cosign_alt_verification_warned is not defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      block:
+        - name: Warn if cosign is disabled in config.yml
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: cosign installation is disabled (packages_cosign_install_enabled: false).
+              cosign verification depends on trusting Google's OIDC infrastructure and Sigstore's
+              certificate issuance. If you need cosign for Konflux image signing but want to use
+              an alternative verification method (e.g., GPG signature verification from GitHub releases),
+              you must install and configure it manually. See
+              https://github.com/sigstore/cosign/releases for available signature formats and
+              verification options. This warning is informational only — cosign will not be installed.
+          when: _raw.get('packages_cosign_install_enabled', true) == false
+          tags: [always]
+
+        - name: Set cosign alternative verification warned flag
+          ansible.builtin.set_fact:
+            _cosign_alt_verification_warned: true
+          tags: [always]
+
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
