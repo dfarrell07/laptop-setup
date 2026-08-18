@@ -153,6 +153,23 @@
           slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
       tags: [always]
 
+    - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _raw.get('claude_remote_control_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _raw.get('claude_queue_boot_delay_sec', 60) | int >= 0
+          - _raw.get('claude_queue_poll_interval_sec', 120) | int >= 0
+        fail_msg: >-
+          SECURITY: claude_bin_path, claude_remote_control_config_dir must contain only
+          alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection guard).
+          claude_queue_boot_delay_sec and claude_queue_poll_interval_sec must be
+          non-negative integers (systemd timer directive injection guard).
+      tags: [always]
+
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
       vars:

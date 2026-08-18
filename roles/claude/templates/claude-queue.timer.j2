@@ -3,8 +3,8 @@
 Description=Claude Code Task Queue Timer
 
 [Timer]
-OnBootSec={{ claude_queue_boot_delay_sec }}
-OnUnitInactiveSec={{ claude_queue_poll_interval_sec }}
+OnBootSec={{ claude_queue_boot_delay_sec | int }}
+OnUnitInactiveSec={{ claude_queue_poll_interval_sec | int }}
 AccuracySec=30s
 
 [Install]

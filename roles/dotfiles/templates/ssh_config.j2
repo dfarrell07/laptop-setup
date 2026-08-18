@@ -7,8 +7,8 @@ Host *
     IdentitiesOnly yes
     AddKeysToAgent confirm
     ForwardAgent no
-    Ciphers {{ ssh_ciphers }}
-    MACs {{ ssh_macs }}
+    Ciphers {{ ssh_ciphers | regex_replace('[^\x20-\x7e]', '') }}
+    MACs {{ ssh_macs | regex_replace('[^\x20-\x7e]', '') }}
     # KexAlgorithms — intentional choices, do not auto-modify:
     # - sntrup761x25519-sha512: IETF canonical name (OpenSSH 10.0+; @openssh.com-suffixed form is a legacy alias); mlkem768x25519-sha256: 9.9+
     # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)

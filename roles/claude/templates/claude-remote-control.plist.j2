@@ -7,7 +7,7 @@
   <string>com.{{ dotfiles_github_user }}.claude-remote-control</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{ claude_bin_path }}</string>
+    <string>{{ claude_bin_path | e }}</string>
     <string>--remote-control</string>
   </array>
   <key>RunAtLoad</key>
@@ -19,9 +19,9 @@
     <key>HOME</key>
     <string>{{ ansible_facts['user_dir'] }}</string>
     <key>PATH</key>
-    <string>{{ ansible_facts['user_dir'] }}/.local/bin:{{ dotfiles_homebrew_prefix }}/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <string>{{ ansible_facts['user_dir'] }}/.local/bin:{{ dotfiles_homebrew_prefix | e }}/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>CLAUDE_CONFIG_DIR</key>
-    <string>{{ claude_remote_control_config_dir }}</string>
+    <string>{{ claude_remote_control_config_dir | e }}</string>
   </dict>
   <key>StandardOutPath</key>
   <string>{{ claude_log_dir }}/claude-remote-control.log</string>

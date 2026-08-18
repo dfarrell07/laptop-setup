@@ -7,7 +7,7 @@
   <string>{{ dotfiles_ssh_agent_label | e }}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{ dotfiles_homebrew_prefix }}/bin/ssh-agent</string>
+    <string>{{ dotfiles_homebrew_prefix | e }}/bin/ssh-agent</string>
     <string>-D</string>
     <string>-a</string>
     <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
