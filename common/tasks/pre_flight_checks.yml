@@ -82,6 +82,14 @@
           - ('{' ~ '%') not in (_raw.get('dotfiles_goprivate', '') | string)
           - ('{' ~ '{') not in (_raw.get('dotfiles_aws_profile', '') | string)
           - ('{' ~ '%') not in (_raw.get('dotfiles_aws_profile', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_ssh_hardware_key_basename', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_ssh_hardware_key_basename', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_ssh_redhat_key_basename', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_ssh_redhat_key_basename', '') | string)
+          - ('{' ~ '{') not in (_raw.get('ssh_signing_key_basename', '') | string)
+          - ('{' ~ '%') not in (_raw.get('ssh_signing_key_basename', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_claude_queue_repo', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_claude_queue_repo', '') | string)
         fail_msg: >-
           SECURITY: config.yml contains a Jinja2 template expression in one or more
           identity variables. Ansible loads these with trusted_as_template=True and
@@ -91,7 +99,9 @@
           Checked: dotfiles_user_name, dotfiles_user_email_work, dotfiles_user_email_personal,
           dotfiles_github_user, system_timezone, dotfiles_internal_git_host,
           dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host,
-          dotfiles_gonosumdb, dotfiles_goprivate, dotfiles_aws_profile.
+          dotfiles_gonosumdb, dotfiles_goprivate, dotfiles_aws_profile,
+          dotfiles_ssh_hardware_key_basename, dotfiles_ssh_redhat_key_basename,
+          ssh_signing_key_basename, dotfiles_claude_queue_repo.
           Markers checked: '{{' and '{%'.
       tags: [always]
 
@@ -136,6 +146,28 @@
           dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host — matches hostname rules).
       tags: [always]
 
+    - name: Assert SSH key basenames and claude_queue_repo in config.yml contain only safe characters (ssh_config injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_ssh_hardware_key_basename', 'id_ed25519_sk') | string is match('^[a-zA-Z0-9._-]+$')
+          - _raw.get('dotfiles_ssh_redhat_key_basename', 'id_rsa_redhat') | string is match('^[a-zA-Z0-9._-]+$')
+          - _raw.get('ssh_signing_key_basename', 'id_ed25519_sk_signing') | string is match('^[a-zA-Z0-9._-]+$')
+          - _raw.get('dotfiles_claude_queue_repo', '') | string is match('^[a-zA-Z0-9._/-]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_ssh_hardware_key_basename, dotfiles_ssh_redhat_key_basename,
+          ssh_signing_key_basename, or dotfiles_claude_queue_repo in config.yml contains
+          unsafe characters. These values are rendered verbatim into ssh_config IdentityFile
+          directives and the cq() shell alias; newlines, spaces, or shell metacharacters
+          allow arbitrary ssh_config directive injection (ProxyCommand → arbitrary command
+          execution on every ssh connection) or shell command injection in the cq alias.
+          Allowed: alphanumeric, dot, underscore, hyphen (key basenames — matches SSH key
+          filename conventions); alphanumeric, dot, underscore, hyphen, slash
+          (dotfiles_claude_queue_repo — matches GitHub owner/repo format).
+      tags: [always]
+
     - name: Assert email identity vars in config.yml are valid email addresses (allowed_signers injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -170,6 +202,21 @@
           These values are embedded in zshrc as shell case patterns; unsafe characters
           cause command injection when ccp() is called. Use only alphanumeric characters,
           hyphens, and underscores in dotfiles_work_src_dirs (e.g. my-org, not my-org$(id)).
+      tags: [always]
+
+    - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_claude_queue_repo', 'CHANGE_ME/CHANGE_ME') | string is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+        fail_msg: >-
+          SECURITY: dotfiles_claude_queue_repo in config.yml contains unsafe characters.
+          This value is rendered into the cq() shell function in .zshrc; unsafe characters
+          (e.g. spaces, $(), backticks) allow command injection when cq() is called.
+          Allowed: alphanumeric, dot, underscore, hyphen on each side of exactly one slash
+          (e.g. owner/repo).
       tags: [always]
 
     - name: Set molecule context flag

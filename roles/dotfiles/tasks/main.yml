@@ -126,6 +126,19 @@
     mode: "0644"
   when: ssh_git_signing_pubkey | trim | length > 0
 
+- name: Find files in git hooks directory
+  ansible.builtin.find:
+    paths: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks"
+    file_type: file
+  register: _git_hooks_found
+
+- name: Remove unmanaged files from git hooks directory
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _git_hooks_found.files }}"
+  when: item.path | basename not in ['pre-commit', 'commit-msg', 'prepare-commit-msg', 'pre-push']
+
 - name: Deploy git template hooks
   ansible.builtin.copy:
     src: "{{ item }}"
