@@ -75,6 +75,8 @@ bootstrap: guard-not-root
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
+	@# Verify vault-pass.sh integrity after creation/update
+	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "⚠ vault-pass.sh failed integrity check (expected after make setup-yubikeys — update hash with: sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256)"; true; }
 	cd collections-dist && sha256sum -c SHA256SUMS
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
