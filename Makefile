@@ -167,7 +167,8 @@ vendor-collections: guard-not-root
 			| python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null); \
 		dl_hash=$$(sha256sum "collections-dist/$${file}" | awk '{print $$1}'); \
 		if [ -z "$$api_hash" ]; then \
-			echo "  WARN: $${file} — could not fetch Galaxy API hash; manual verification required" >&2; \
+			echo "  FAIL $${file}: could not fetch Galaxy API hash; manual verification required" >&2; \
+			_fail=1; \
 		elif [ "$$api_hash" = "$$dl_hash" ]; then \
 			echo "  PASS $${file}"; \
 		else \
