@@ -132,7 +132,7 @@ jobs:
         run: |
           shellcheck -S warning scripts/*.sh
           shellcheck -S warning roles/claude/files/*.sh
-          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg
+          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg .githooks/pre-push
           shellcheck -S warning roles/dotfiles/files/git-template-*
 
       - name: Validate git hooks — prevent malicious exfiltration patterns
@@ -140,7 +140,7 @@ jobs:
           # SECURITY: Behavioral validation of hook changes to prevent key exfiltration attacks.
           # This complements shellcheck (syntax validation) with intent/behavior checks.
           failed=0
-          for hook in .githooks/pre-commit .githooks/commit-msg; do
+          for hook in .githooks/pre-commit .githooks/commit-msg .githooks/pre-push; do
             # Prohibit common exfiltration methods: curl, wget, nc with URLs
             if grep -E 'curl\s|wget\s|nc\s' "$hook" | grep -qE 'https?://|::[0-9]+'; then
               echo "::error::$hook: curl/wget/nc with network URLs detected (potential exfiltration)" >&2
@@ -375,6 +375,49 @@ jobs:
             echo "::error::core.hooksPath overridden to: $hookspath (must be .githooks or unset)"
             exit 1
           fi
+
+      - name: Validate hook files for git config modifications
+        run: |
+          # SECURITY: Prevent hook-disabling patterns (git config core.hooksPath writes)
+          # that could bypass hook enforcement at development time.
+          failed=0
+          for hook in .githooks/*; do
+            # Reject git config modifications that could disable hooks
+            if grep -qE 'git\s+config\s+(--local\s+)?core\.hooksPath|git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath' "$hook"; then
+              echo "::error::$hook: git config core.hooksPath modification detected (hook disabling risk)" >&2
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Validate commit history for git config hook-disabling patterns
+        if: github.event_name == 'pull_request'
+        run: |
+          # SECURITY: Check PR commit history for attempts to disable hooks via git config.
+          # An attacker could write git config --local core.hooksPath /dev/null in a hook,
+          # then unset it afterward to restore config. This check searches commit diffs
+          # for such patterns in .githooks/* changes.
+          failed=0
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Check if any commit modifies .githooks/* with git config write patterns
+          commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+          for commit in $commits; do
+            # Look for git config core.hooksPath modifications in .githooks/ diff
+            if git show "$commit" -- .githooks/ | \
+               grep -qE '^\+.*git\s+config\s+(--local\s+)?core\.hooksPath'; then
+              echo "::error::Commit $commit modifies .githooks/ with git config core.hooksPath write (hook disabling risk)" >&2
+              failed=1
+            fi
+            # Also check for config unset patterns
+            if git show "$commit" -- .githooks/ | \
+               grep -qE '^\+.*git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath'; then
+              echo "::error::Commit $commit modifies .githooks/ with git config --unset core.hooksPath (hook disabling risk)" >&2
+              failed=1
+            fi
+          done
+          exit $failed
 
   node-lint:
     name: Node Lint
