@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
 [user]
-	name = {{ dotfiles_user_name }}
+	name = {{ dotfiles_user_name | trim }}
 	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
 {% if ssh_git_signing_pubkey | trim | length > 0 %}
 	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
@@ -107,7 +107,7 @@
 	helper = !gh auth git-credential
 {% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
 
-[http "https://{{ dotfiles_internal_git_host }}"]
+[http "https://{{ dotfiles_internal_git_host | trim }}"]
 	sslCAInfo = {{ dotfiles_internal_ca_path }}
 {% endif %}
 
@@ -117,7 +117,7 @@
 
 {% endfor %}{% endif %}
 {% if dotfiles_github_user != 'CHANGE_ME' %}
-[includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
+[includeIf "gitdir:~/src/{{ dotfiles_github_user | trim }}/"]
 	path = ~/.config/git/config-personal
 {% endif %}
 

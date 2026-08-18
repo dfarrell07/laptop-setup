@@ -335,6 +335,11 @@
           Got: {{ _rpmfusion_free_sig.stdout }}.
           Possible supply-chain compromise — remove rpmfusion-free-release and investigate.
   rescue:
+    - name: Remove rpmfusion-free-release after signing check failure
+      ansible.builtin.dnf:
+        name: rpmfusion-free-release
+        state: absent
+      failed_when: false
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -369,6 +374,11 @@
           Got: {{ _rpmfusion_nonfree_sig.stdout }}.
           Possible supply-chain compromise — remove rpmfusion-nonfree-release and investigate.
   rescue:
+    - name: Remove rpmfusion-nonfree-release after signing check failure
+      ansible.builtin.dnf:
+        name: rpmfusion-nonfree-release
+        state: absent
+      failed_when: false
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-

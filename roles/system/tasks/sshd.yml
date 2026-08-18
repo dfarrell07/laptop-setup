@@ -50,6 +50,22 @@
           system_ssh_allow_agent_forwarding='{{ system_ssh_allow_agent_forwarding }}' is not
           a valid AllowAgentForwarding value. Accepted: yes, no.
 
+    - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set
+      ansible.builtin.assert:
+        that:
+          - >-
+            system_ssh_extra_allow_users | default([])
+            | map('regex_search', '^[a-z_][a-z0-9_.@-]{0,31}$')
+            | list | difference([none]) | length
+            == (system_ssh_extra_allow_users | default([]) | length)
+        fail_msg: >-
+          system_ssh_extra_allow_users contains an entry that fails validation.
+          Each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username,
+          32 chars max). Entries with spaces, newlines, or special characters would
+          inject arbitrary directives into AllowUsers in sshd. Offending list:
+          {{ system_ssh_extra_allow_users | default([]) | to_json }}
+      when: system_ssh_extra_allow_users | default([]) | length > 0
+
     - name: Ensure sshd config drop-in directory
       ansible.builtin.file:
         path: /etc/ssh/sshd_config.d

@@ -93,6 +93,7 @@
     user: "{{ ansible_facts['user_id'] }}"
     key: "{{ ssh_auth_key_pub }}"
     state: present
+    exclusive: true
   when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH signing key

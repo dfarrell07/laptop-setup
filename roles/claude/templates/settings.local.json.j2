@@ -1,7 +1,7 @@
 {
   "env": {
 {% for key, value in claude_telemetry_env.items() %}
-    "{{ key }}": "{{ value }}"{{ "," if not loop.last else "" }}
+    {{ key | to_json }}: {{ value | to_json }}{{ "," if not loop.last else "" }}
 {% endfor %}
   },
   "sandbox": {{ claude_sandbox_config | to_json }},
@@ -26,7 +26,7 @@
 {% set _ = deny_entries.append("Write(" + path + ")") %}
 {% endfor %}
 {% for entry in deny_entries %}
-      "{{ entry }}"{{ "," if not loop.last else "" }}
+      {{ entry | to_json }}{{ "," if not loop.last else "" }}
 {% endfor %}
     ]
   }

@@ -12,6 +12,7 @@ TIMEOUT_SECONDS="${CLAUDE_QUEUE_TIMEOUT:-1800}"
 HOST_LABEL="${CLAUDE_QUEUE_HOST_LABEL:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
 MAX_ISSUES_PER_RUN="${CLAUDE_QUEUE_MAX_ISSUES_PER_RUN:-5}"
+ALLOWED_AUTHORS="${CLAUDE_QUEUE_ALLOWED_AUTHORS:-}"  # Comma-separated GitHub logins; empty = allow all (insecure)
 
 # --- Repo maps (loaded from config file) ---
 REPO_CONFIG="${HOME}/.config/claude/queue-repos.conf"
@@ -88,7 +89,7 @@ log "Polling for queued issues..."
 
 ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
   --label queued --state open \
-  --json number,title,body \
+  --json number,title,body,author \
   --jq 'sort_by(.number) | .[]' 2>/dev/null) || {
   log "Failed to fetch issues (network error?), exiting"
   exit 0
@@ -103,6 +104,17 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   ISSUE_NUM=$(echo "$ISSUE" | jq -r '.number')
   ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
   ISSUE_BODY=$(echo "$ISSUE" | jq -r '.body')
+  ISSUE_AUTHOR=$(echo "$ISSUE" | jq -r '.author.login // empty')
+
+  # Author allowlist: if CLAUDE_QUEUE_ALLOWED_AUTHORS is set (comma-separated
+  # GitHub logins), reject issues from any principal not in the list before any
+  # prompt content is parsed or executed.  Empty = allow all (insecure default).
+  if [[ -n "$ALLOWED_AUTHORS" ]]; then
+    if ! printf '%s' "$ALLOWED_AUTHORS" | tr ',' '\n' | grep -qx "$ISSUE_AUTHOR"; then
+      fail_issue "$ISSUE_NUM" "Unauthorized author: \`$ISSUE_AUTHOR\` is not in the allowed-authors list."
+      continue
+    fi
+  fi
 
   log "Processing issue #$ISSUE_NUM: $ISSUE_TITLE"
 

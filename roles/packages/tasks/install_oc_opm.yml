@@ -83,6 +83,8 @@
           retries: 3
           delay: 10
           until: packages_oc_download is succeeded
+          become: true
+          tags: [become]
 
         - name: Extract oc and kubectl
           # Idempotency guard: skip re-extraction when get_url reports the tarball
@@ -111,6 +113,8 @@
             path: /tmp/openshift-client-linux.tar.gz
             state: absent
           when: packages_oc_download is defined
+          become: true
+          tags: [become]
 
     - name: Stat oc binary
       ansible.builtin.stat:
@@ -224,6 +228,8 @@
           retries: 3
           delay: 10
           until: packages_opm_download is succeeded
+          become: true
+          tags: [become]
 
         - name: Assert opm binary name exists in tarball
           ansible.builtin.command: tar -tzf /tmp/opm-linux.tar.gz
@@ -285,6 +291,8 @@
             path: /tmp/opm-linux.tar.gz
             state: absent
           when: packages_opm_download is defined
+          become: true
+          tags: [become]
 
         - name: Remove source opm binary artifact (safety cleanup)
           ansible.builtin.file:

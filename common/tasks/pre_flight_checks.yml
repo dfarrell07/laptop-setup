@@ -44,6 +44,41 @@
           before re-running. All user overrides were silently dropped.
       tags: [always]
 
+    # SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
+    # and check that identity variables do not contain Jinja2 expressions before any template
+    # task can trigger lazy evaluation of the injected value.
+    - name: Slurp config.yml for SSTI guard (raw bytes, bypasses include_vars trusted_as_template)
+      ansible.builtin.slurp:
+        src: "{{ playbook_dir }}/config.yml"
+      register: _config_yml_raw
+      failed_when: false
+      tags: [always]
+
+    - name: Assert identity vars in config.yml contain no Jinja2 template expressions (SSTI guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - ('{' ~ '{') not in (_raw.get('dotfiles_user_name', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_user_email_work', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_user_email_personal', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_github_user', '') | string)
+          - ('{' ~ '{') not in (_raw.get('system_timezone', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_internal_git_host', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_laptop_tailscale_host', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_mac_tailscale_host', '') | string)
+        fail_msg: >-
+          SECURITY: config.yml contains a Jinja2 template expression in one or more
+          identity variables. Ansible loads these with trusted_as_template=True and
+          evaluates them as live templates (SSTI — arbitrary code execution). Use plain
+          string values. If the value legitimately contains braces, prefix it with !unsafe
+          in config.yml, e.g.: dotfiles_user_name: !unsafe 'Your Name'.
+          Checked: dotfiles_user_name, dotfiles_user_email_work, dotfiles_user_email_personal,
+          dotfiles_github_user, system_timezone, dotfiles_internal_git_host,
+          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host.
+      tags: [always]
+
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"

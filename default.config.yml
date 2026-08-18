@@ -23,11 +23,16 @@ desktop_environment: CHANGE_ME  # set sway, i3, or gnome; auto detection fails b
 # the config owner's full name, aliases pointing to dotfiles_github_user's repos, and a
 # notes clone that fails (private repo).
 #
-dotfiles_github_user: 'CHANGE_ME'
-dotfiles_user_name: 'CHANGE_ME'
-dotfiles_user_email_work: 'CHANGE_ME'
-dotfiles_user_email_personal: 'CHANGE_ME'
-system_timezone: CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
+# !unsafe: Ansible include_vars loads config.yml with trusted_as_template=True, so any
+# Jinja2 expression ({{ ... }}) in a string value executes as a template (SSTI risk).
+# !unsafe marks these strings as non-template data, preventing execution.
+# Use !unsafe for these vars in your config.yml overrides too when the value
+# contains braces; plain strings (names, emails) do not need it but it is harmless.
+dotfiles_github_user: !unsafe 'CHANGE_ME'
+dotfiles_user_name: !unsafe 'CHANGE_ME'
+dotfiles_user_email_work: !unsafe 'CHANGE_ME'
+dotfiles_user_email_personal: !unsafe 'CHANGE_ME'
+system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
 # Additional toggles (authoritative source in parentheses; override in config.yml):
 #   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE

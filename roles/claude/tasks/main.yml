@@ -37,6 +37,19 @@
     - packages_install_binaries | bool
     - claude_pinned_version | length == 0
 
+- name: Warn when claude_install_sha256 is unset (integrity advisory)
+  ansible.builtin.debug:
+    msg: >-
+      INTEGRITY ADVISORY: claude_install_sha256 is not set in config.yml.
+      The installer downloaded from {{ claude_install_url }} will be executed
+      without checksum verification — CDN-layer compromise would be undetected.
+      Set claude_install_sha256 to the SHA256 of install.sh in config.yml to
+      enable integrity verification before execution.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_install_sha256 | length == 0
+
 - name: Install Claude Code via native binary
   when:
     - _claude_needs_install
@@ -151,12 +164,12 @@
   loop_control:
     label: "{{ item | basename }}"
 
-- name: Deploy instance CLAUDE.md (preserve local edits, force false)
+- name: Deploy instance CLAUDE.md (managed by Ansible, use CLAUDE.local.md for local edits)
   ansible.builtin.template:
     src: CLAUDE.md.j2
     dest: "{{ item }}/CLAUDE.md"
     mode: "0600"
-    force: false
+    force: true
   loop: "{{ _claude_instances }}"
   loop_control:
     label: "{{ item | basename }}"

@@ -45,6 +45,8 @@
           retries: 3
           delay: 10
           until: _install_tarball_download is succeeded
+          become: true
+          tags: [become]
 
         - name: "Binary extraction: {{ binary_name }}"
           ansible.builtin.unarchive:
@@ -70,6 +72,8 @@
           ansible.builtin.file:
             path: "{{ tarball }}"
             state: absent
+          become: true
+          tags: [become]
 
   rescue:
     - name: "CSB failure record: {{ binary_name }}"
