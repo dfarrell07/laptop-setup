@@ -153,6 +153,22 @@
           slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
       tags: [always]
 
+    - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('claude_install_url', 'https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
+          - _raw.get('claude_pinned_version', '') | string is match('^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9]+)*$|^$')
+        fail_msg: >-
+          SECURITY: claude_install_url in config.yml must start with https:// and use the
+          claude.ai or anthropic.com domain. Setting an arbitrary URL causes the installer
+          to download and execute an arbitrary shell script during provisioning (RCE).
+          claude_pinned_version must be a semantic version string (e.g. "1.0.3") or empty.
+          Allowed: https://claude.ai/* or https://anthropic.com/*.
+      tags: [always]
+
     - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
       when: _config_yml_raw.content is defined
       vars:
