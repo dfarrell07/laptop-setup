@@ -308,6 +308,7 @@ test-scripts:
 	bash -n scripts/verify-collections.sh
 	bash -n scripts/test-hooks-security.sh
 	bash scripts/test-hooks-security.sh
+	bash scripts/test-hooks-security.sh
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:
