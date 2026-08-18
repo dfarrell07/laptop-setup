@@ -260,8 +260,12 @@ make repos-downstream # downstream repos only
   `collections-dist/SHA256SUMS` records hashes computed from Galaxy downloads at the time of
   initial vendoring; `make bootstrap` verifies these hashes before installation. Galaxy does not
   publish platform-level GPG or Sigstore signatures for community collections, so no upstream
-  signature was available at download time. Remaining gap: the committed hashes have not yet been
-  cross-verified against the upstream GitHub release assets for each collection (see
-  `collections-dist/SHA256SUMS` for per-collection verification status and upgrade instructions).
-  At next version bump, download the new tarball, compute `sha256sum`, update SHA256SUMS, and
-  cross-check against the GitHub release asset, recording the result in the SHA256SUMS comment block.
+  signature was available at download time.
+  
+  **SECURITY: Maintainer compromise vulnerability** — The `make vendor-collections` target verifies
+  against Galaxy API `artifact.sha256`, which appears independent but is NOT. Both CDN and API are
+  controlled by galaxy.ansible.com. If maintainer credentials are compromised, attacker controls both
+  artifact and hash. **REQUIRED MITIGATION**: Collection updates require mandatory code review of
+  CHANGELOG and new tasks/modules BEFORE staging collections-dist/ changes. Branch protection enforces
+  approval from designated reviewers. See "Ansible Galaxy Collections — Verification Limitation and
+  Code Review Requirement" section below for complete procedure and mitigations.

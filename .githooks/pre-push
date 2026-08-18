@@ -1,0 +1,27 @@
+#!/bin/bash
+# Pre-push hook: enforce vault encryption before push completes
+# SECURITY: Blocks push if any vault.yml file is unencrypted, preventing secrets exposure in git history
+
+failed=0
+
+# Iterate through vault files in the push
+while IFS= read -r -d '' f; do
+  if [ ! -f "$f" ]; then
+    continue
+  fi
+
+  # Check if file starts with $ANSIBLE_VAULT (encrypted marker)
+  if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
+    # Allow plaintext stub (no real secrets)
+    if grep -q 'vault_placeholder' "$f" && \
+       [ "$(grep -E '^vault_' "$f" | grep -Ev '^vault_placeholder:|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
+      echo "NOTE: $f is a plaintext stub — OK" >&2
+      continue
+    fi
+    echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
+    echo "ERROR: Unencrypted vault files cannot be pushed to prevent secrets exposure." >&2
+    failed=1
+  fi
+done < <(git ls-files -z -- '*vault.yml')
+
+exit $failed

@@ -3,6 +3,16 @@
 # Galaxy does not publish platform-level GPG or Sigstore signatures for community collections,
 # so no upstream signature verification was possible at download time.
 #
+# SECURITY LIMITATION — Verification NOT Independent:
+#   The vendor-collections Makefile verifies downloads against Galaxy API artifact.sha256,
+#   which appears independent (separate service path) but is NOT — both the CDN tarball AND
+#   the API metadata are controlled by the same galaxy.ansible.com infrastructure.
+#   KNOWN VULNERABILITY: If Galaxy maintainer credentials are compromised, attacker controls
+#   both CDN and API, making hash verification pass while deploying malicious code.
+#   REQUIRED MITIGATION: Collection updates require mandatory code review and approval BEFORE
+#   committing to collections-dist/. See CLAUDE.md § "Ansible Galaxy Collections —
+#   Verification Limitation and Code Review Requirement" for the review procedure.
+#
 # Cross-verification status against upstream sources:
 #   None of these collections publish their built collection tarball as a GitHub release asset;
 #   only auto-generated source archives are available from GitHub. Cross-verification was performed

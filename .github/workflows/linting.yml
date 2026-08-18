@@ -180,9 +180,9 @@ jobs:
               # Require PR description or explicit commit message keyword for hook changes
               msg=$(git log -1 --format=%B "$commit")
               if ! printf '%s' "$msg" | \
-                 grep -qiE '(SECURITY|hook.*change|gitHook|integrity|behavioral)'; then
+                 grep -qiE '(SECURITY|hook.*change|gitHook|integrity|behavioral|vault|pre.push)'; then
                 echo "::notice::Commit $commit modifies .githooks/ — commit message lacks"
-                echo "  security/behavioral keywords (SECURITY, hook, integrity, etc.)"
+                echo "  security/behavioral keywords (SECURITY, hook, integrity, vault, pre-push, etc.)"
               fi
             fi
           done
@@ -368,13 +368,28 @@ jobs:
 
       - name: Verify core.hooksPath not overridden
         run: |
-          hookspath=$(git config core.hooksPath || true)
-          if [ -z "$hookspath" ] || [ "$hookspath" = ".githooks" ]; then
-            echo "✓ core.hooksPath verified: $hookspath or unset (will default to .githooks)"
-          else
-            echo "::error::core.hooksPath overridden to: $hookspath (must be .githooks or unset)"
-            exit 1
+          failed=0
+          # Check local repo config
+          local_hookspath=$(git config --local core.hooksPath || true)
+          if [ -n "$local_hookspath" ] && [ "$local_hookspath" != ".githooks" ]; then
+            echo "::error::Local core.hooksPath overridden to: $local_hookspath (must be .githooks or unset)"
+            failed=1
           fi
+          # Check system/global config (defensive against system-level tampering)
+          global_hookspath=$(git config --global core.hooksPath || true)
+          if [ -n "$global_hookspath" ] && [ "$global_hookspath" != ".githooks" ]; then
+            echo "::error::Global core.hooksPath set to: $global_hookspath (should be unset)"
+            failed=1
+          fi
+          system_hookspath=$(git config --system core.hooksPath || true)
+          if [ -n "$system_hookspath" ]; then
+            echo "::error::System core.hooksPath set to: $system_hookspath (should be unset)"
+            failed=1
+          fi
+          if [ "$failed" -eq 0 ]; then
+            echo "✓ core.hooksPath verified: correctly configured (local unset or .githooks, global/system unset)"
+          fi
+          exit $failed
 
       - name: Validate hook files for git config modifications
         run: |

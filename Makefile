@@ -144,12 +144,13 @@ npm:
 
 vendor-collections: guard-not-root
 	@mkdir -p collections-dist
-	@# Download collection tarballs from Galaxy and cross-verify sha256 against the
-	@# Galaxy API metadata endpoint (artifact.sha256 field — independent of CDN download
-	@# path, guards against CDN-level substitution). None of these collections publish
-	@# built tarballs to GitHub releases; Galaxy API metadata is the best available
-	@# independent source. Run when bumping versions in requirements.yml, then update
-	@# SHA256SUMS comments and git add + commit collections-dist/.
+	@# SECURITY: Download collection tarballs from Galaxy and cross-verify SHA256 against
+	@# the Galaxy API metadata endpoint (artifact.sha256 field). NOTE: This is NOT independent
+	@# verification — both CDN tarball and API metadata are galaxy.ansible.com infrastructure.
+	@# If Galaxy is compromised, attacker controls both CDN and API, defeating this check.
+	@# Mitigations: version pinning, mandatory code review, CI integrity checks, runtime verification.
+	@# See SECURITY.md § "Ansible Collections Maintainer Identity Verification" for details.
+	@# Run when bumping versions in requirements.yml, then update SHA256SUMS and git commit.
 	ansible-galaxy collection download -r requirements.yml -p collections-dist/
 	@echo "Cross-verifying downloads against Galaxy API artifact.sha256 metadata..."; \
 	GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"; \
