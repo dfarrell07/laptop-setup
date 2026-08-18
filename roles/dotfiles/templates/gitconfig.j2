@@ -1,8 +1,8 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
 [user]
-	name = {{ dotfiles_user_name | trim }}
-	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
+	name = {{ dotfiles_user_name | trim | regex_replace('[\r\n].*', '') }}
+	email = {{ (dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal) | regex_replace('[\r\n].*', '') }}
 {% if ssh_git_signing_pubkey | trim | length > 0 %}
 	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 
