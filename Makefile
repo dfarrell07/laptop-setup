@@ -283,7 +283,7 @@ syntax-check:
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --syntax-check
 
 shellcheck:
-	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/* roles/dotfiles/files/git-template-*
+	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg roles/dotfiles/files/git-template-*
 
 markdownlint:
 	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
@@ -306,6 +306,8 @@ test-scripts:
 	bash -n scripts/vault-pass-ci.sh
 	bash -n scripts/test-queue-poller.sh
 	bash -n scripts/verify-collections.sh
+	bash -n scripts/test-hooks-security.sh
+	bash scripts/test-hooks-security.sh
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:
