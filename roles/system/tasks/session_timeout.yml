@@ -5,7 +5,7 @@
     content: |
       # {{ ansible_managed }}
       # Auto-logout after inactivity (CIS 5.5.5 requires <=900s). Override system_tmout in config.yml.
-      readonly TMOUT={{ system_tmout }}
+      readonly TMOUT={{ system_tmout | int }}
       export TMOUT
     dest: /etc/profile.d/tmout.sh
     mode: "0644"
@@ -18,7 +18,7 @@
 - name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
   ansible.builtin.lineinfile:
     path: /etc/bash.bashrc
-    line: "readonly TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    line: "readonly TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
     regexp: '^\s*(readonly\s+)?TMOUT='
   when:
     - is_apt
@@ -43,7 +43,7 @@
 - name: Deploy session timeout to /etc/zshrc (Fedora/RHEL/macOS zsh)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
-    line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     create: true  # system role runs before packages; zsh may not be installed yet on first provision
     mode: "0644"
@@ -55,7 +55,7 @@
 - name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
   ansible.builtin.lineinfile:
     path: /etc/zsh/zshrc
-    line: "typeset -xr TMOUT={{ system_tmout }}  # CIS 5.5.5"
+    line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
     create: true
     mode: "0644"

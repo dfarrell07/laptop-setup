@@ -510,6 +510,53 @@
           Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
       tags: [always]
 
+    - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+        _subctl_versioned_entries: "{{ _raw.get('packages_subctl_versioned', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _subctl_versioned_entries | map(attribute='version') | map('string') | select() |
+            reject('match', _semver_pattern) | list | length == 0
+          - _subctl_versioned_entries | map(attribute='suffix') | map('string') | select() |
+            reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
+        fail_msg: >-
+          SECURITY: packages_subctl_versioned in config.yml contains unsafe version or suffix strings.
+          Each version must match semantic versioning (e.g. "0.18.0", "1.2.3-beta").
+          Each suffix must be alphanumeric only (e.g. "18", "22").
+          These values are interpolated directly into go install commands and file paths;
+          spaces or special characters allow argument injection (e.g. "0.18.0 --help" injects the --help flag).
+          Invalid entries: {{ _subctl_versioned_entries | rejectattr('version', 'match', _semver_pattern) | list }}.
+          Remove spaces and special characters from version and suffix fields.
+      tags: [always]
+
+    - name: Assert packages_subctl_rh_versions entries have safe version strings (oc image extract injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+        _subctl_rh_entries: "{{ _raw.get('packages_subctl_rh_versions', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _subctl_rh_entries | map(attribute='tag') | map('string') | select() |
+            reject('match', _semver_pattern) | list | length == 0
+          - _subctl_rh_entries | map(attribute='image') | map('string') | select() |
+            reject('match', '^[a-zA-Z0-9._-]+$') | list | length == 0
+          - _subctl_rh_entries | map(attribute='suffix') | map('string') | select() |
+            reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
+        fail_msg: >-
+          SECURITY: packages_subctl_rh_versions in config.yml contains unsafe version/image/suffix strings.
+          Each tag must match semantic versioning with optional leading 'v' (e.g. "v0.18", "0.22.0").
+          Each image must be alphanumeric/dot/hyphen only (e.g. "subctl-rhel8").
+          Each suffix must be alphanumeric only (e.g. "RH18").
+          These values are interpolated directly into oc image extract commands and shell globs;
+          spaces or special characters allow command injection via shlex tokenization or glob expansion.
+          Invalid entries: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern) | list }}.
+          Remove spaces and special characters from tag, image, and suffix fields.
+      tags: [always]
+
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -521,10 +568,45 @@
           - _raw.get('ssh_port', 722) | int <= 65535
         fail_msg: >-
           SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535).
-          Newlines, spaces, or text after the port number inject arbitrary directives
-          into /etc/ssh/sshd_config.d/00-hardening.conf. sshd -t does not catch
-          syntactically valid injected directives (e.g. PermitRootLogin yes),
-          so the rescue block would not remove the file.
+          Newlines, spaces, regex metacharacters (|*+?.^$[]{}()\), or text after the port number
+          inject arbitrary directives into /etc/ssh/sshd_config.d/00-hardening.conf or cause
+          shell injection in smoke-test.sh grep patterns. sshd -t does not catch syntactically
+          valid injected directives (e.g. PermitRootLogin yes), so the rescue block would not
+          remove the file. smoke-test.sh grep patterns with unquoted values allow metacharacters
+          to be interpreted as regex operators (e.g. "722|8080" filters both ports instead of just 722).
+      tags: [always]
+
+    - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_umask', '027') | string is match('^[0-7]+$')
+          - _raw.get('system_keymap', 'us') | string is match('^[a-zA-Z0-9_-]+$')
+        fail_msg: >-
+          SECURITY: system_umask or system_keymap in config.yml contains unsafe characters.
+          system_umask is rendered into /etc/login.defs with grep -F matching; regex
+          metacharacters (.*+?[]{}()^$|) embedded in the value can escape literal matching.
+          system_keymap is rendered into /etc/vconsole.conf; shell metacharacters allow
+          injection of arbitrary configuration directives.
+          Allowed: system_umask must be octal digits (0-7, e.g. 027, 077, 022);
+          system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
+      tags: [always]
+
+    - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_tmout', '0') | string is match('^[0-9]*$')
+        fail_msg: >-
+          SECURITY: system_tmout in config.yml must be a non-negative integer (seconds).
+          This value is rendered verbatim into /etc/profile.d/tmout.sh, /etc/bash.bashrc,
+          /etc/zshrc, and /etc/zsh/zshrc; shell metacharacters allow command injection
+          when the shell sources these files on session start. Allowed: zero or a positive
+          integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
       tags: [always]
 
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
@@ -634,6 +716,46 @@
           the rescue block will not remove the file.
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
       tags: [always]
+
+    - name: Assert ansible.cfg pipelining value is a valid boolean (fapolicyd bypass guard)
+      when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
+      block:
+        - name: Read ansible.cfg pipelining value for validation
+          ansible.builtin.slurp:
+            src: "{{ playbook_dir }}/../ansible.cfg"
+          register: _ansible_cfg_raw
+          failed_when: false
+          tags: [always]
+
+        - name: Validate ansible.cfg pipelining value matches safe format
+          when: _ansible_cfg_raw.content is defined
+          vars:
+            _cfg_content: "{{ _ansible_cfg_raw.content | b64decode }}"
+            # Extract pipelining from [defaults] section, strip whitespace and comments
+            _pipelining_line: >-
+              {{ _cfg_content | regex_search('(?m)^\\s*pipelining\\s*=\\s*([^#\\n]+)') }}
+            # Strip all whitespace, comments, and normalize to lowercase
+            _pipelining_normalized: >-
+              {{ (_pipelining_line | default('') | regex_replace('.*=\\s*', '')
+              | regex_replace('\\s*#.*', '')
+              | regex_replace('^\\s+|\\s+$', '') | lower) }}
+          ansible.builtin.assert:
+            that:
+              - _pipelining_normalized is match('^(true|false|yes|no|on|off|1|0|)$')
+            fail_msg: >-
+              SECURITY: ansible.cfg pipelining value contains invalid characters or formatting.
+              The pipelining value must be a valid boolean: true, false, yes, no, on, off, 1,
+              or 0 (case-insensitive). The value must not contain embedded spaces (e.g., 't rue'
+              bypasses the preflight check but fails at runtime, causing fapolicyd to block /tmp
+              execution despite the check reporting success). If pipelining is set, ensure it uses
+              valid boolean syntax with no internal spacing. Current raw value:
+              '{{ (_pipelining_line | default('not found')) }}'.
+          tags: [always]
+
+        - name: Set ansible.cfg checked flag (suppresses duplicate assertion in Play 2)
+          ansible.builtin.set_fact:
+            _pf_ansiblecfg_checked: true
+          tags: [always]
 
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
@@ -968,6 +1090,28 @@
           ansible.builtin.set_fact:
             _pf_assertions_checked: true
           tags: [always]
+
+    - name: Assert sysctl extra dicts contain no newline-injected values (sysctl injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _extra: "{{ _raw.get('system_sysctl_extra', {}) }}"
+        _extra_additional: "{{ _raw.get('system_sysctl_extra_additional', {}) }}"
+        _extra_has_newlines: "{{ _extra | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
+        _additional_has_newlines: "{{ _extra_additional | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
+      ansible.builtin.assert:
+        that:
+          - not _extra_has_newlines
+          - not _additional_has_newlines
+        fail_msg: >-
+          SECURITY: system_sysctl_extra or system_sysctl_extra_additional in config.yml contains
+          values with embedded newlines. These are rendered verbatim into /etc/sysctl.d/90-hardening.conf
+          (sysctl.yml template); embedded newlines inject additional sysctl directives, allowing
+          bypass of security toggles. Example: kernel.kptr_restrict: "0\nnet.ipv4.ip_forward = 1"
+          would inject net.ipv4.ip_forward despite system_enable_ip_forward policy.
+          Remove newlines from all sysctl value strings. Allowed: alphanumeric, dot, slash, hyphen,
+          underscore (sysctl key/value format per sysctl(5)).
+      tags: [always]
 
     - name: Warn and flag when vault stub is not populated
       when:
