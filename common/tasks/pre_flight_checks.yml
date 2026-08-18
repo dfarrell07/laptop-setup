@@ -347,6 +347,34 @@
           lifetime limit (unlimited).
       tags: [always]
 
+    - name: Assert proxy_url contains only safe URL characters (dnf-automatic injection guard)
+      when: >-
+        (ansible_facts['env']['http_proxy'] | default('') | length > 0)
+        or (ansible_facts['env']['HTTP_PROXY'] | default('') | length > 0)
+        or (ansible_facts['env']['https_proxy'] | default('') | length > 0)
+        or (ansible_facts['env']['HTTPS_PROXY'] | default('') | length > 0)
+      vars:
+        _proxy_env_vars:
+          - "{{ ansible_facts['env'].get('https_proxy', '') }}"
+          - "{{ ansible_facts['env'].get('HTTPS_PROXY', '') }}"
+          - "{{ ansible_facts['env'].get('http_proxy', '') }}"
+          - "{{ ansible_facts['env'].get('HTTP_PROXY', '') }}"
+        _proxy_value: "{{ _proxy_env_vars | select | first | default('') }}"
+      ansible.builtin.assert:
+        that:
+          - _proxy_value | string is match('^https?://[a-zA-Z0-9._:/%-]*$')
+        fail_msg: >-
+          SECURITY: proxy_url (set via HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy environment
+          variable) contains unsafe characters. This value is rendered verbatim into /etc/dnf/automatic.conf
+          [main] section; embedded newlines inject arbitrary configuration directives (e.g.
+          import_gpgkey=False to disable GPG verification). Attacker can then perform MITM via
+          the proxy URL to inject malicious packages installed as root by dnf-automatic.timer.
+          Allowed: alphanumeric, dot, underscore, colon, slash, hyphen, percent (standard URL
+          characters). Must start with http:// or https://. Current value: '{{ _proxy_value }}'.
+          Alternatively, unset HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy in the environment
+          where ansible-playbook runs.
+      tags: [always]
+
     - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -447,6 +475,21 @@
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
       tags: [always]
 
+    - name: Assert system_kernel_lockdown contains only safe kernel parameters (kernel injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|none|)$')
+        fail_msg: >-
+          SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
+          This value is rendered directly into bash code in kernel_lockdown.yml and passed to grubby;
+          special characters can inject arbitrary shell commands or grubby arguments.
+          Allowed values: 'integrity', 'confidentiality', 'none', or empty string '' (to disable).
+          Remove system_kernel_lockdown from config.yml to use the safe default (integrity).
+      tags: [always]
+
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -483,6 +526,25 @@
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
       tags: [always]
 
+    - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_coredump_storage', 'external') | string is match('^(none|external|journal)$')
+          - _raw.get('system_coredump_process_size_max', '2G') | string is match('^[0-9]+[KMG]?$')
+        fail_msg: >-
+          SECURITY: system_coredump_storage or system_coredump_process_size_max in config.yml
+          contains invalid characters. These values are rendered verbatim into
+          /etc/systemd/coredump.conf.d/coredump.conf (INI format); embedded newlines inject
+          arbitrary keys (MaxUse, KeepFree, JournalSizeMax, ExternalSizeMax, etc.) that
+          override hardened settings and cause disk DoS (unlimited storage, no free-space preservation).
+          system_coredump_storage must be one of: none, external, journal.
+          system_coredump_process_size_max must be a non-negative integer with optional K/M/G suffix
+          (e.g. 2G, 1000M, 0). No spaces, newlines, or other characters allowed.
+      tags: [always]
+
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -505,6 +567,21 @@
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
       tags: [always]
 
+    - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|)?$')
+        fail_msg: >-
+          SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
+          This value is interpolated directly into a bash shell script context in
+          roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
+          allow arbitrary command injection during kernel parameter setup. Allowed values:
+          'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
+      tags: [always]
+
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -520,6 +597,22 @@
           Embedded newlines inject arbitrary keys into direnv.toml [global], allowing
           bash_path override to execute an attacker-controlled shell on every direnv
           evaluation (every cd into a managed directory).
+      tags: [always]
+
+    - name: Assert proxy_url from environment contains no unsafe characters (DNF INI injection guard)
+      when: _config_yml_raw.content is defined or (proxy_url | default('') | length > 0)
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _proxy: "{{ proxy_url | default('') }}"
+      ansible.builtin.assert:
+        that:
+          - _proxy is match('^(https?://[a-zA-Z0-9@:%._+~#=\-/]*)?$')
+        fail_msg: >-
+          SECURITY: proxy_url='{{ _proxy }}' contains unsafe characters (newlines, shell metacharacters).
+          The proxy URL is rendered directly into dnf-automatic.conf; embedded newlines inject
+          arbitrary INI directives that alter DNF behavior undetected. Allowed characters: alphanumeric,
+          @:%.+~#=-/ (standard URI characters). No newlines, quotes, or shell metacharacters.
+          Ensure HTTPS_PROXY/HTTP_PROXY environment variables contain valid proxy URLs before running make all.
       tags: [always]
 
     - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)
@@ -555,6 +648,50 @@
           Each entry must begin with 'allow', 'block', or 'reject' followed by a device
           selector. Bare catch-all rules and embedded newlines are rejected.
           Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
+      tags: [always]
+
+    - name: Assert system_chrony_fallback_pool contains only safe characters (chrony config injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_chrony_fallback_pool', '') | string is match('^[a-zA-Z0-9.-]*$')
+        fail_msg: >-
+          SECURITY: system_chrony_fallback_pool in config.yml contains unsafe characters.
+          This value is rendered verbatim into the pool directive in chrony.conf; embedded
+          newlines inject arbitrary chrony directives. The 'allow all' directive would open
+          the NTP service to all source IPs, enabling NTP amplification attacks.
+          Allowed: alphanumeric, dot, hyphen only (e.g. 2.fedora.pool.ntp.org).
+      tags: [always]
+
+    - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _raw.get('system_chrony_driftfile', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _raw.get('system_chrony_ntsdumpdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _raw.get('system_chrony_leapsecmode', '') | string is match('^[a-zA-Z0-9-]*$')
+          - _raw.get('system_chrony_makestep', '') | string is match('^[0-9. -]*$')
+          - _raw.get('system_chrony_authselectmode', '') | string is match('^(prefer|require)$|^$')
+          - _raw.get('system_chrony_leapseclist', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _raw.get('system_chrony_dhcp_sourcedir', '') | string is match('^[a-zA-Z0-9/._-]*$')
+          - _raw.get('system_chrony_fallback_pool', '') | string is match('^[a-zA-Z0-9._-]*$')
+          - _raw.get('system_chrony_minsources', '') | string is match('^[0-9]*$')
+          - _raw.get('system_chrony_nts_servers', []) | map('string') | select('search', '[^a-zA-Z0-9._:-]') | list | length == 0
+        fail_msg: >-
+          SECURITY: system_chrony_logdir, system_chrony_driftfile, system_chrony_ntsdumpdir,
+          system_chrony_leapsecmode, system_chrony_makestep, system_chrony_authselectmode,
+          system_chrony_leapseclist, system_chrony_dhcp_sourcedir, system_chrony_fallback_pool,
+          system_chrony_minsources, or system_chrony_nts_servers in config.yml contains unsafe
+          characters. These values are rendered verbatim into /etc/chrony/chrony.conf (Debian) or
+          /etc/chrony.conf (Fedora); embedded newlines can inject arbitrary chrony directives
+          (e.g. run-shell for RCE). Allowed: alphanumeric, dot, slash, underscore, hyphen (paths);
+          prefer/require (authselectmode); 0-9 (minsources); NTP pool/server hostnames and ports only
+          (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
       tags: [always]
 
     - name: Set molecule context flag
