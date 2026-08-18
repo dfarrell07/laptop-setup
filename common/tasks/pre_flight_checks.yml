@@ -926,6 +926,45 @@
           Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
       tags: [always]
 
+    - name: Assert container_release and container_image contain only safe characters (distrobox tag injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$')
+          - _raw.get('container_image', '') | string is match('^[a-zA-Z0-9:/@._-]*$')
+        fail_msg: >-
+          SECURITY: container_release or container_image in config.yml contains unsafe
+          characters. These values are interpolated directly into distrobox_container_image
+          and rendered into distrobox.ini (INI format) and shell commands without additional
+          escaping; embedded newlines break INI syntax or shell argument parsing.
+          container_release must be alphanumeric/dot/hyphen (e.g. 44, f39, custom).
+          container_image must match OCI image reference format (alphanumeric/colon/slash/at/
+          dot/hyphen only, no spaces or shell metacharacters). Allowed: alphanumeric, dot,
+          underscore, hyphen (container_release); alphanumeric, colon, slash, at, dot,
+          hyphen (container_image).
+      tags: [always]
+
+    - name: Assert bluetooth config vars in config.yml contain only safe characters (BlueZ config injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_bluetooth_privacy', 'device') | string is match('^[a-zA-Z0-9-]+$')
+          - _raw.get('system_bluetooth_name', 'Bluetooth') | string is match('^[a-zA-Z0-9 _()-]*$')
+        fail_msg: >-
+          SECURITY: system_bluetooth_privacy or system_bluetooth_name in config.yml contains
+          unsafe characters. These values are rendered verbatim into /etc/bluetooth/main.conf
+          via ansible.builtin.lineinfile; embedded newlines allow injection of arbitrary BlueZ
+          configuration directives and sections (e.g., ControllerMode, [GATT] sections) that
+          alter Bluetooth radio mode or crash the bluetoothd daemon.
+          system_bluetooth_privacy: alphanumeric and hyphen only (e.g., 'device', 'off')
+          system_bluetooth_name: alphanumeric, space, underscore, hyphen, parentheses only
+          (typical Bluetooth device names; no newlines, quotes, or special shell/config metacharacters)
+      tags: [always]
+
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:

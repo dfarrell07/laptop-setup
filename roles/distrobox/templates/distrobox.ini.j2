@@ -1,11 +1,11 @@
 # {{ ansible_managed }}
-[{{ distrobox_container_name | regex_replace('\n', '_') }}]
-image={{ distrobox_container_image }}
+[{{ distrobox_container_name | regex_replace('\n', '') }}]
+image={{ distrobox_container_image | regex_replace('\n', '') }}
 additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
 
 additional_packages={{ distrobox_packages | join(' ') }}
 
 # Host delegation symlinks
 {% for cmd in distrobox_host_exec_commands %}
-init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }} || true;
+init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd | quote }} || true;
 {% endfor %}
