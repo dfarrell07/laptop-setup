@@ -32,5 +32,5 @@ emit_no_updates = no
 
 {% if network_proxied %}
 [main]
-proxy = {{ proxy_url }}
+proxy = {{ proxy_url | regex_replace('[\r\n].*', '') }}
 {% endif %}

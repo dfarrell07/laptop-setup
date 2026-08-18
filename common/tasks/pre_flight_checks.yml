@@ -1654,18 +1654,35 @@
         _extra_additional: "{{ _raw.get('system_sysctl_extra_additional', {}) }}"
         _extra_has_newlines: "{{ _extra | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
         _additional_has_newlines: "{{ _extra_additional | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
+        _extra_keys_unsafe: "{{ _extra | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
+        _additional_keys_unsafe: "{{ _extra_additional | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
       ansible.builtin.assert:
         that:
           - not _extra_has_newlines
           - not _additional_has_newlines
+          - _extra_keys_unsafe | length == 0
+          - _additional_keys_unsafe | length == 0
         fail_msg: >-
           SECURITY: system_sysctl_extra or system_sysctl_extra_additional in config.yml contains
-          values with embedded newlines. These are rendered verbatim into /etc/sysctl.d/90-hardening.conf
-          (sysctl.yml template); embedded newlines inject additional sysctl directives, allowing
-          bypass of security toggles. Example: kernel.kptr_restrict: "0\nnet.ipv4.ip_forward = 1"
-          would inject net.ipv4.ip_forward despite system_enable_ip_forward policy.
-          Remove newlines from all sysctl value strings. Allowed: alphanumeric, dot, slash, hyphen,
-          underscore (sysctl key/value format per sysctl(5)).
+          values or keys with embedded newlines or unsafe characters. These are rendered verbatim
+          into /etc/sysctl.d/90-hardening.conf (sysctl.yml template); embedded newlines in a KEY
+          inject additional sysctl directives (e.g. {"net.x = 1\nkernel.y": "0"} renders two
+          directives). Keys must match ^[a-zA-Z0-9._/-]+$; values must not contain newlines.
+      tags: [always]
+
+    - name: Assert system_ssh_allow_agent_forwarding and system_ssh_allow_tcp_forwarding are safe (sshd injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_ssh_allow_agent_forwarding', 'no') | string in ['yes', 'no']
+          - _raw.get('system_ssh_allow_tcp_forwarding', 'local') | string in ['yes', 'no', 'local', 'all', 'remote']
+        fail_msg: >-
+          SECURITY: system_ssh_allow_agent_forwarding must be 'yes' or 'no'.
+          system_ssh_allow_tcp_forwarding must be one of 'yes', 'no', 'local', 'all', 'remote'.
+          These values are rendered directly into sshd_config without inline escaping; newlines
+          or unexpected values could inject additional sshd directives (e.g. PermitRootLogin yes).
       tags: [always]
 
     - name: Assert gh CLI is available for attestation verification (attestation verification guard)

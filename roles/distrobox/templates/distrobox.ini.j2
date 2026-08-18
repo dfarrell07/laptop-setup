@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
-[{{ distrobox_container_name | regex_replace('\n', '') }}]
-image={{ distrobox_container_image | regex_replace('\n', '') }}
+[{{ distrobox_container_name | regex_replace('[\r\n]', '') }}]
+image={{ distrobox_container_image | regex_replace('[\r\n]', '') }}
 additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
 
 additional_packages={{ distrobox_packages | join(' ') }}

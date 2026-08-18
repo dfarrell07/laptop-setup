@@ -1,4 +1,4 @@
 # {{ ansible_managed }}
 [Coredump]
-Storage={{ system_coredump_storage }}
-ProcessSizeMax={{ system_coredump_process_size_max }}
+Storage={{ system_coredump_storage | regex_replace('[\r\n].*', '') }}
+ProcessSizeMax={{ system_coredump_process_size_max | regex_replace('[\r\n].*', '') }}
