@@ -633,6 +633,82 @@ jobs:
           fi
           exit $failed
 
+  galaxy-recheck:
+    name: Galaxy Collections Runtime Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Re-verify collections against Galaxy API at CI time
+        run: |
+          # SECURITY: Detect supply chain drift by re-verifying SHA256SUMS against Galaxy API.
+          # This job runs at CI time (pull_request + main push) and guards against:
+          #   1. SHA256SUMS files modified to match malicious artifacts
+          #   2. Galaxy API changes (collection yanked, version replaced, hash updated)
+          #   3. Network-level tampering (DNS hijacking, MITM, CDN replacement)
+          # Note: This does NOT protect against simultaneous galaxy.ansible.com compromise
+          # (both CDN and API compromised in sync), but catches most supply chain attacks.
+          set -euo pipefail
+
+          GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"
+          FAIL=0
+
+          # Specs: namespace/name/version/filename
+          for spec in \
+            "ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
+            "community/general/13.2.0/community-general-13.2.0.tar.gz" \
+            "community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
+            "containers/podman/1.20.2/containers-podman-1.20.2.tar.gz"; do
+
+            ns=$(echo "$spec" | cut -d/ -f1)
+            name=$(echo "$spec" | cut -d/ -f2)
+            ver=$(echo "$spec" | cut -d/ -f3)
+            file=$(echo "$spec" | cut -d/ -f4)
+
+            # Fetch Galaxy API hash
+            api_hash=$(curl -sf "${GALAXY_API}/${ns}/${name}/versions/${ver}/" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
+
+            # Compute local file hash
+            local_hash=$(sha256sum "collections-dist/${file}" 2>/dev/null | awk '{print $1}' || echo "")
+
+            if [ -z "$api_hash" ]; then
+              echo "WARN: ${file} — could not fetch Galaxy API hash (network issue or collection removed)"
+              continue
+            elif [ -z "$local_hash" ]; then
+              echo "ERROR: ${file} — local file missing or unreadable"
+              FAIL=1
+            elif [ "$api_hash" = "$local_hash" ]; then
+              echo "PASS: ${file} matches Galaxy API (${api_hash:0:16}...)"
+            else
+              echo "ERROR: ${file} — MISMATCH"
+              echo "  Galaxy API hash: ${api_hash}"
+              echo "  Local file hash: ${local_hash}"
+              echo "  ACTION: If expected (manual collection update), run: make vendor-collections"
+              FAIL=1
+            fi
+          done
+
+          if [ "$FAIL" -eq 1 ]; then
+            echo ""
+            echo "Collection verification failed. This may indicate:"
+            echo "  - Collections were updated but SHA256SUMS not re-generated (run: make vendor-collections)"
+            echo "  - Galaxy removed/replaced a collection version (uncommon, contact maintainer)"
+            echo "  - Supply chain tampering detected (audit git log, review CI logs, contact maintainers)"
+            exit 1
+          fi
+          echo ""
+          echo "All collections verified against Galaxy API."
+
   all-checks-pass:
     name: All Checks Pass
     runs-on: ubuntu-24.04
@@ -650,6 +726,7 @@ jobs:
       - node-lint
       - gitleaks
       - workflow-security
+      - galaxy-recheck
     steps:
       - name: Verify no required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
