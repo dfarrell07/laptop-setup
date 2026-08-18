@@ -16,13 +16,20 @@
       loop_control:
         label: "subctl{{ item.suffix }}"
 
+    - name: Create secure temp directory for subctl binary (TOCTOU mitigation)
+      ansible.builtin.command:
+        cmd: mktemp -d --tmpdir={{ ansible_facts['user_dir'] }}/.cache
+      register: _subctl_tmpdir
+      changed_when: false
+      check_mode: false
+
     - name: Install subctl version with temp GOBIN
       ansible.builtin.command:
         cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
       timeout: 600
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "/tmp/subctl-v{{ item.version }}-bin"
+        GOBIN: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin"
         GOTOOLCHAIN: "{{ packages_gotoolchain }}"
         HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
         HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
@@ -53,12 +60,21 @@
       loop_control:
         label: "subctl{{ item.item.suffix }}"
 
-    - name: Copy versioned subctl to ~/.local/bin/subctlXX
-      ansible.builtin.copy:
-        src: "/tmp/subctl-v{{ item.version }}-bin/subctl"
-        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
-        mode: "0755"
-        remote_src: true
+    - name: Verify no symlinks in destination path (symlink attack prevention)
+      ansible.builtin.assert:
+        that:
+          - not ((ansible_facts['user_dir'] ~ '/.local/bin/subctl' ~ item.suffix) is symlink)
+        fail_msg: "Symlink detected in destination path {{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
+      loop: "{{ packages_subctl_versioned }}"
+      loop_control:
+        label: "subctl{{ item.suffix }}"
+
+    - name: Verify subctl binary exists and compute SHA256
+      ansible.builtin.stat:
+        path: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin/subctl"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: _subctl_binary_stat
       when: >-
         (packages_subctl_version_check.results[loop_idx].rc != 0 or
         item.version not in (packages_subctl_version_check.results[loop_idx].stdout +
@@ -69,13 +85,28 @@
         label: "subctl{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Clean up temp GOBIN directories
-      ansible.builtin.file:
-        path: "/tmp/subctl-v{{ item.version }}-bin"
-        state: absent
+    - name: Copy versioned subctl to ~/.local/bin/subctlXX
+      ansible.builtin.copy:
+        src: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin/subctl"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
+        mode: "0755"
+        remote_src: true
+      when: >-
+        (packages_subctl_version_check.results[loop_idx].rc != 0 or
+        item.version not in (packages_subctl_version_check.results[loop_idx].stdout +
+        packages_subctl_version_check.results[loop_idx].stderr)) and
+        (packages_subctl_install_results.results[loop_idx].rc | default(0)) == 0 and
+        _subctl_binary_stat.results[loop_idx].stat.exists | default(false)
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
         label: "subctl{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Clean up temp GOBIN directory
+      ansible.builtin.file:
+        path: "{{ _subctl_tmpdir.stdout }}"
+        state: absent
+      when: _subctl_tmpdir.stdout is defined
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
   when: _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
