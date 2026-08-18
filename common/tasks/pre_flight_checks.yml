@@ -659,6 +659,45 @@
           the file. Remove any non-digit characters from the value.
       tags: [always]
 
+    - name: Assert ansible.cfg pipelining value is valid boolean (fapolicyd bypass guard)
+      when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
+      block:
+        - name: Read ansible.cfg for pipelining validation
+          ansible.builtin.slurp:
+            src: "{{ playbook_dir }}/../ansible.cfg"
+          register: _ansible_cfg_raw
+          failed_when: false
+          tags: [always]
+
+        - name: Validate ansible.cfg pipelining matches boolean format
+          when: _ansible_cfg_raw.content is defined
+          vars:
+            _cfg_content: "{{ _ansible_cfg_raw.content | b64decode }}"
+            # Extract pipelining line from [defaults] section
+            _pipelining_line: >-
+              {{ _cfg_content | regex_search('(?m)^\\s*pipelining\\s*=\\s*([^#\\n]+)') }}
+            # Normalize: strip whitespace, comments, and convert to lowercase
+            _pipelining_normalized: >-
+              {{ (_pipelining_line | default('') | regex_replace('.*=\\s*', '')
+              | regex_replace('\\s*#.*', '')
+              | regex_replace('^\\s+|\\s+$', '') | lower) }}
+          ansible.builtin.assert:
+            that:
+              - _pipelining_normalized is match('^(true|false|yes|no|on|off|1|0|)$')
+            fail_msg: >-
+              SECURITY: ansible.cfg pipelining value is malformed or contains invalid
+              characters. Valid booleans: true, false, yes, no, on, off, 1, 0
+              (case-insensitive). Embedded spaces (e.g., 't rue') bypass preflight checks
+              while failing at runtime, causing fapolicyd to block /tmp execution despite
+              a successful preflight report. Ensure pipelining uses standard boolean syntax
+              without internal spacing. Found: '{{ _pipelining_line | default('not set') }}'.
+          tags: [always]
+
+        - name: Set ansible.cfg checked flag
+          ansible.builtin.set_fact:
+            _pf_ansiblecfg_checked: true
+          tags: [always]
+
     - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
