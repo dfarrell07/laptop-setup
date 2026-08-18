@@ -1489,6 +1489,119 @@
             _pf_profile_asserted: true
           tags: [always]
 
+    # Validate critical security variables in the PLAY NAMESPACE (after -e overrides applied)
+    # This complements slurp-based file validation by catching -e override attacks that bypass file checks
+    - name: Validate gitconfig/ssh_config vars in play namespace (catch -e overrides)
+      when: _pf_namespace_validated is not defined
+      block:
+        - name: Assert identity/gitconfig vars contain safe characters (gitconfig injection guard, play namespace)
+          ansible.builtin.assert:
+            that:
+              - dotfiles_github_user | default('') | string is match('^[a-zA-Z0-9-]*$')
+              - dotfiles_internal_git_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
+              - dotfiles_internal_ca_path | default('') | string is match('^[a-zA-Z0-9./_-]*$')
+              - dotfiles_laptop_tailscale_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
+              - dotfiles_mac_tailscale_host | default('') | string is match('^[a-zA-Z0-9._-]*$')
+            fail_msg: >-
+              SECURITY: One or more identity variables in the play namespace (set via -e overrides
+              or config.yml) contain unsafe characters. These must match file-based validation:
+              dotfiles_github_user={{ dotfiles_github_user | default('NOTSET') }},
+              dotfiles_internal_git_host={{ dotfiles_internal_git_host | default('NOTSET') }},
+              dotfiles_internal_ca_path={{ dotfiles_internal_ca_path | default('NOTSET') }},
+              dotfiles_laptop_tailscale_host={{ dotfiles_laptop_tailscale_host | default('NOTSET') }},
+              dotfiles_mac_tailscale_host={{ dotfiles_mac_tailscale_host | default('NOTSET') }}.
+              These values are interpolated directly into .gitconfig section headers and
+              ssh_config Host stanzas; newlines or spaces break out of the stanza and allow
+              arbitrary config injection (gitconfig: core.hooksPath → code execution;
+              ssh_config: ProxyCommand → arbitrary command execution).
+              Allowed: alphanumeric, hyphen (dotfiles_github_user); alphanumeric, dot,
+              underscore, hyphen (others — matches hostname rules); alphanumeric, dot,
+              slash, hyphen (dotfiles_internal_ca_path — filesystem path).
+          tags: [always]
+
+        - name: Assert SSH key basenames in play namespace contain safe characters (ssh_config injection guard)
+          ansible.builtin.assert:
+            that:
+              - dotfiles_ssh_hardware_key_basename | default('id_ed25519_sk') | string is match('^[a-zA-Z0-9._-]+$')
+              - dotfiles_ssh_redhat_key_basename | default('id_rsa_redhat') | string is match('^[a-zA-Z0-9._-]+$')
+              - ssh_signing_key_basename | default('id_ed25519_sk_signing') | string is match('^[a-zA-Z0-9._-]+$')
+            fail_msg: >-
+              SECURITY: SSH key basename variables in the play namespace contain unsafe characters:
+              dotfiles_ssh_hardware_key_basename={{ dotfiles_ssh_hardware_key_basename | default('NOTSET') }},
+              dotfiles_ssh_redhat_key_basename={{ dotfiles_ssh_redhat_key_basename | default('NOTSET') }},
+              ssh_signing_key_basename={{ ssh_signing_key_basename | default('NOTSET') }}.
+              These values are rendered verbatim into ssh_config IdentityFile directives; newlines
+              or spaces allow arbitrary ssh_config directive injection (ProxyCommand → arbitrary
+              command execution on every ssh connection). Allowed: alphanumeric, dot, underscore,
+              hyphen only (e.g., id_ed25519_sk, id_rsa_redhat, id_ed25519_sk_signing).
+          tags: [always]
+
+        - name: Assert environment vars in play namespace are safe (shell injection guard)
+          ansible.builtin.assert:
+            that:
+              - dotfiles_gonosumdb | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
+              - dotfiles_goprivate | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
+              - dotfiles_aws_profile | default('') | string is match('^[a-zA-Z0-9_-]*$')
+            fail_msg: >-
+              SECURITY: Environment variables in the play namespace contain unsafe characters:
+              dotfiles_gonosumdb={{ dotfiles_gonosumdb | default('NOTSET') }},
+              dotfiles_goprivate={{ dotfiles_goprivate | default('NOTSET') }},
+              dotfiles_aws_profile={{ dotfiles_aws_profile | default('NOTSET') }}.
+              These values are written directly into shell export statements; unsafe characters
+              can escape the double-quoted context to inject arbitrary commands.
+              Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
+              (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
+              (dotfiles_aws_profile).
+          tags: [always]
+
+        - name: Assert USBGuard whitelist/extra_rules in play namespace contain no newlines (USBGuard injection guard)
+          ansible.builtin.assert:
+            that:
+              - system_usbguard_whitelist | default([]) | map('string') | select('search', '\n') | list | length == 0
+              - system_usbguard_extra_rules | default([]) | map('string') | select('search', '\n') | list | length == 0
+            fail_msg: >-
+              SECURITY: USBGuard rules in the play namespace contain embedded newlines:
+              system_usbguard_whitelist={{ system_usbguard_whitelist | default([]) }},
+              system_usbguard_extra_rules={{ system_usbguard_extra_rules | default([]) }}.
+              Embedded newlines allow INI directive injection into /etc/usbguard/rules.conf,
+              bypassing ImplicitPolicyTarget=block. Newline-injected entries become separate
+              rules that can allow unwhitelisted devices.
+          tags: [always]
+
+        - name: Assert Go/Krew SHA256 variables in play namespace match strict pattern (verification bypass guard)
+          vars:
+            _sha256_pattern: '^[a-f0-9]{64}$'
+            _go_tool_sha256_vars:
+              - packages_gofumpt_sha256
+              - packages_govulncheck_sha256
+              - packages_gci_sha256
+              - packages_gopls_sha256
+              - packages_golangci_lint_sha256
+              - packages_controller_gen_sha256
+              - packages_code_generator_version_sha256
+              - packages_subctl_version_sha256
+              - packages_stern_sha256
+          ansible.builtin.assert:
+            that:
+              - _go_tool_sha256_vars | map('extract', vars()) | select('defined') | list |
+                map('string') | select() | list |
+                reject('match', _sha256_pattern) | list | length == 0
+            fail_msg: >-
+              SECURITY: One or more Go tool SHA256 variables in the play namespace
+              (set via -e overrides or config.yml) contain invalid values. These must be
+              64 lowercase hexadecimal characters (standard SHA256 hash format).
+              Invalid entries: {{ _go_tool_sha256_vars | map('extract', vars()) | select('defined') | list |
+              map('string') | select() | list | reject('match', _sha256_pattern) | list }}.
+              These hashes verify Go tool binaries after 'go install'; non-matching hashes
+              bypass verification and allow TOFU (trust on first use) attacks via
+              compromised GOPROXY or MITM interception.
+          tags: [always]
+
+        - name: Set namespace validation flag
+          ansible.builtin.set_fact:
+            _pf_namespace_validated: true
+          tags: [always]
+
     - name: Non-molecule pre-flight assertions
       when: not _pf_is_molecule and _pf_assertions_checked is not defined
       block:
