@@ -4,7 +4,7 @@ Description=OpenSSH Agent
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket -t {{ dotfiles_ssh_agent_timeout }}
+ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket -t {{ dotfiles_ssh_agent_timeout | int }}
 Restart=on-failure
 NoNewPrivileges=true
 CapabilityBoundingSet=

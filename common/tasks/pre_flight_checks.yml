@@ -254,6 +254,53 @@
           dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b).
       tags: [always]
 
+    - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_ssh_agent_timeout', '28800') | string is match('^[0-9]+$')
+        fail_msg: >-
+          SECURITY: dotfiles_ssh_agent_timeout in config.yml must be a non-negative integer
+          (seconds). This value is rendered verbatim into the systemd ssh-agent.service ExecStart
+          line; a non-integer (e.g. a value containing a newline) injects arbitrary systemd
+          ExecStart arguments, which systemd executes as the ssh-agent binary on service start.
+          Allowed: zero or a positive integer (e.g. 28800). A value of 0 disables the key
+          lifetime limit (unlimited).
+      tags: [always]
+
+    - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_oh_my_zsh_theme', 'gallois') | string is match('^[a-zA-Z0-9_-]+$')
+        fail_msg: >-
+          SECURITY: dotfiles_oh_my_zsh_theme in config.yml contains unsafe characters.
+          This value is rendered verbatim as the ZSH_THEME assignment in .zshrc; an embedded
+          newline closes the quoted string and injects arbitrary shell commands executed in
+          every interactive shell. Allowed: alphanumeric, underscore, hyphen
+          (e.g. gallois, robbyrussell, agnoster).
+      tags: [always]
+
+    - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_ssh_agent_label', '') | string is match('^[a-zA-Z0-9._-]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_ssh_agent_label in config.yml contains unsafe characters.
+          This value is rendered verbatim into the launchd plist <string> Label element on
+          macOS; unsafe characters (spaces, angle brackets, ampersands) break XML structure
+          or inject additional XML elements, potentially causing launchd to execute an
+          attacker-controlled program path. Allowed: alphanumeric, dot, underscore, hyphen
+          (e.g. com.username.ssh-agent). Leave unset to use the safe computed default.
+      tags: [always]
+
     - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -369,13 +416,15 @@
           - _raw.get('ssh_ciphers', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
           - _raw.get('ssh_macs', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
           - _raw.get('ssh_kex_algorithms', '') | string is match('^[a-zA-Z0-9@.,_-]*$')
+          - _raw.get('ssh_pubkey_accepted_algorithms', []) | map('string') | join(',') is match('^[a-zA-Z0-9@.,_-]*$')
         fail_msg: >-
-          SECURITY: ssh_host_key_algorithms, ssh_ciphers, ssh_macs, or ssh_kex_algorithms
-          in config.yml contains unsafe characters. These values are rendered verbatim into
-          HostKeyAlgorithms, Ciphers, MACs, and KexAlgorithms in sshd_config.d/00-hardening.conf;
-          embedded newlines inject arbitrary sshd directives before GSSAPIAuthentication no and
-          AllowUsers, overriding hardened settings. sshd -t does not catch semantically valid
-          injected duplicates, so the rescue block will not remove the file.
+          SECURITY: ssh_host_key_algorithms, ssh_ciphers, ssh_macs, ssh_kex_algorithms, or
+          ssh_pubkey_accepted_algorithms in config.yml contains unsafe characters. These values
+          are rendered verbatim into HostKeyAlgorithms, Ciphers, MACs, KexAlgorithms, and
+          PubkeyAcceptedAlgorithms in sshd_config.d/00-hardening.conf; embedded newlines inject
+          arbitrary sshd directives before GSSAPIAuthentication no and AllowUsers, overriding
+          hardened settings. sshd -t does not catch semantically valid injected duplicates, so
+          the rescue block will not remove the file.
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
       tags: [always]
 

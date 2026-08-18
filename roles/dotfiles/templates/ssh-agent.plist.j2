@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>{{ dotfiles_ssh_agent_label }}</string>
+  <string>{{ dotfiles_ssh_agent_label | e }}</string>
   <key>ProgramArguments</key>
   <array>
     <string>{{ dotfiles_homebrew_prefix }}/bin/ssh-agent</string>
@@ -12,7 +12,7 @@
     <string>-a</string>
     <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
     <string>-t</string>
-    <string>{{ dotfiles_ssh_agent_timeout }}</string>
+    <string>{{ dotfiles_ssh_agent_timeout | int }}</string>
   </array>
   <key>RunAtLoad</key>
   <true/>

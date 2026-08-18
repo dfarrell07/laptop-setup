@@ -236,6 +236,15 @@
         - gcr-ssh-agent.service
       failed_when: false
 
+- name: Assert dotfiles_ssh_agent_timeout is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - dotfiles_ssh_agent_timeout | string is regex('^[0-9]+$')
+    fail_msg: >-
+      dotfiles_ssh_agent_timeout='{{ dotfiles_ssh_agent_timeout }}' must be a
+      non-negative integer (seconds). A non-numeric value would be coerced to 0
+      (unlimited lifetime) by ssh-agent. Correct config.yml.
+
 - name: SSH agent systemd user service
   when: is_linux and not system_is_container  # containers lack ~/.config/systemd/user; user systemd scope unused
   block:
