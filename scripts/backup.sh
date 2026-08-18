@@ -14,6 +14,11 @@ done
 # Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
 GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || true)"
 [[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER=""
+# Validate GitHub username: alphanumeric, hyphens, underscores only (prevents directory traversal)
+if [[ -n "$GITHUB_USER" && ! "$GITHUB_USER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "[warn] Invalid GitHub username (contains invalid characters), skipping macOS LaunchAgent plists" >&2
+  GITHUB_USER=""
+fi
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
 if [[ "$DRY_RUN" = false ]]; then
