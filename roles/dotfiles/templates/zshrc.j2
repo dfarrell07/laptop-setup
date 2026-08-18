@@ -16,13 +16,13 @@ export EDITOR=vim
 export VISUAL=vim
 {% if profile == 'work' %}
 {% if dotfiles_aws_profile %}
-export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+export AWS_PROFILE="{{ dotfiles_aws_profile | replace('"', '') | replace(';', '') | replace('`', '') }}"
 {% endif %}
 {% if dotfiles_gonosumdb %}
-export GONOSUMDB="{{ dotfiles_gonosumdb }}"
+export GONOSUMDB="{{ dotfiles_gonosumdb | replace('"', '') | replace(';', '') | replace('`', '') }}"
 {% endif %}
 {% if dotfiles_goprivate %}
-export GOPRIVATE="{{ dotfiles_goprivate }}"
+export GOPRIVATE="{{ dotfiles_goprivate | replace('"', '') | replace(';', '') | replace('`', '') }}"
 {% endif %}
 {% endif %}
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
@@ -122,9 +122,12 @@ ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
 {% if dotfiles_work_src_dirs %}
-  if [[ {{ dotfiles_work_src_dirs | map('regex_replace', '^(.*)$', '"$phys" == */src/\\1 || "$phys" == */src/\\1/*') | join(' || ') }} ]]; then
-    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
-  fi
+  case "$phys" in
+{% for d in dotfiles_work_src_dirs %}
+  */src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}|*/src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}/*)
+    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1;;
+{% endfor %}
+  esac
 {% endif %}
   _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"

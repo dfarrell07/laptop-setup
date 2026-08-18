@@ -68,6 +68,20 @@
           - ('{' ~ '{') not in (_raw.get('dotfiles_internal_git_host', '') | string)
           - ('{' ~ '{') not in (_raw.get('dotfiles_laptop_tailscale_host', '') | string)
           - ('{' ~ '{') not in (_raw.get('dotfiles_mac_tailscale_host', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_user_name', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_user_email_work', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_user_email_personal', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_github_user', '') | string)
+          - ('{' ~ '%') not in (_raw.get('system_timezone', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_internal_git_host', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_laptop_tailscale_host', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_mac_tailscale_host', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_gonosumdb', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_gonosumdb', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_goprivate', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_goprivate', '') | string)
+          - ('{' ~ '{') not in (_raw.get('dotfiles_aws_profile', '') | string)
+          - ('{' ~ '%') not in (_raw.get('dotfiles_aws_profile', '') | string)
         fail_msg: >-
           SECURITY: config.yml contains a Jinja2 template expression in one or more
           identity variables. Ansible loads these with trusted_as_template=True and
@@ -76,7 +90,44 @@
           in config.yml, e.g.: dotfiles_user_name: !unsafe 'Your Name'.
           Checked: dotfiles_user_name, dotfiles_user_email_work, dotfiles_user_email_personal,
           dotfiles_github_user, system_timezone, dotfiles_internal_git_host,
-          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host.
+          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host,
+          dotfiles_gonosumdb, dotfiles_goprivate, dotfiles_aws_profile.
+          Markers checked: '{{' and '{%'.
+      tags: [always]
+
+    - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_gonosumdb', '') | string is match('^[a-zA-Z0-9.,*/_-]*$')
+          - _raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,*/_-]*$')
+          - _raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_gonosumdb, dotfiles_goprivate, or dotfiles_aws_profile in config.yml
+          contains unsafe characters. These values are written directly into shell export statements;
+          unsafe characters can escape the double-quoted context to inject arbitrary commands.
+          Allowed: alphanumeric, dot, comma, asterisk, slash, underscore, hyphen
+          (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
+          (dotfiles_aws_profile).
+      tags: [always]
+
+    - name: Assert dotfiles_work_src_dirs entries contain only safe characters (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _work_src_dirs: "{{ _raw.get('dotfiles_work_src_dirs', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _work_src_dirs | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
+        fail_msg: >-
+          SECURITY: dotfiles_work_src_dirs contains entries with shell metacharacters.
+          Each entry must match ^[a-zA-Z0-9_-]+$ (letters, digits, hyphens, underscores only).
+          Dangerous entries: {{ _work_src_dirs | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}.
+          These values are embedded in zshrc as shell case patterns; unsafe characters
+          cause command injection when ccp() is called. Use only alphanumeric characters,
+          hyphens, and underscores in dotfiles_work_src_dirs (e.g. my-org, not my-org$(id)).
       tags: [always]
 
     - name: Set molecule context flag
@@ -114,6 +165,20 @@
               'ssh_signing_key_pub', 'rh_git_key', 'notes_transcrypt_password',
               'registry_tokens']) | list }}. Use group_vars/all/vault.yml for these secrets instead.
               (ssh_git_signing_pubkey is exempt — it is a documented config.yml override.)
+          tags: [always]
+
+        - name: Assert config.yml contains no security-policy key overrides
+          ansible.builtin.assert:
+            that: >-
+              (_user_config.keys() | select('in', ['claude_deny_sensitive',
+               'claude_sandbox_config', 'claude_deny_write_only']) | list | length == 0)
+            fail_msg: >-
+              config.yml must not override claude_deny_sensitive, claude_sandbox_config,
+              or claude_deny_write_only — these variables control the Claude settings.local.json
+              deny-list and sandbox policy. include_vars (precedence 18) outranks role defaults
+              (precedence 2), so defining them in config.yml silently empties deny-lists or
+              degrades sandbox enforcement. Remove them from config.yml; set them in
+              roles/claude/defaults/main.yml if policy change is intentional.
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

@@ -36,6 +36,7 @@ claude_cleanup_period_days: 7
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
+claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty = auth disabled
 claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
 claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_queue_repo: ""
@@ -63,6 +64,7 @@ claude_deny_sensitive:
   - "~/.docker/config.json"
   - "~/.local/share/keyrings/**"
   - "~/.config/helm/**"
+  - "~/.config/claude/**"  # queue-repos.conf and work-env — read denied (defense-in-depth; write also blocked via claude_deny_write_only)
   - "~/.azure/**"
   - "~/.gitconfig"
   - "~/.config/git/config"
@@ -92,7 +94,7 @@ claude_deny_sensitive:
   - "/etc/sudoers.d/**"
 
 claude_deny_write_only:
-  - "~/.config/claude/**"  # Claude-the-agent only; Ansible still writes queue-repos.conf here
+  - "~/.config/claude/**"  # Write/Edit denied; Read also denied via claude_deny_sensitive entry below — defense-in-depth
   - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
   - "~/.bashrc"
   - "~/.zshrc"

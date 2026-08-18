@@ -160,6 +160,7 @@
     src: settings.local.json.j2
     dest: "{{ item }}/settings.local.json"
     mode: "0600"
+    force: false
   loop: "{{ _claude_instances }}"
   loop_control:
     label: "{{ item | basename }}"
@@ -210,6 +211,16 @@
     that:
       - claude_queue_repo | length > 0
     fail_msg: "claude_queue_repo must be set in config.yml when claude_queue_enabled=true"
+  when: claude_queue_enabled | bool
+
+- name: Assert claude_queue_allowed_authors is non-empty when queue is enabled
+  ansible.builtin.assert:
+    that:
+      - claude_queue_allowed_authors | length > 0
+    fail_msg: >-
+      claude_queue_allowed_authors must be set in config.yml when claude_queue_enabled=true.
+      Empty list disables author allowlist, allowing any GitHub user to trigger provisioning.
+      Set to a list of trusted GitHub logins, e.g.: claude_queue_allowed_authors: [myuser]
   when: claude_queue_enabled | bool
 
 - name: Assert dotfiles_github_user is set for macOS launchd agent naming
