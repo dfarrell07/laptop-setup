@@ -253,6 +253,14 @@
       containers_pids_limit must be a non-negative integer, got: {{ containers_pids_limit }}
   when: is_linux
 
+- name: Assert containers_nofile_limit is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - containers_nofile_limit | string | regex_search('^[0-9]+$')
+    fail_msg: >
+      containers_nofile_limit must be a non-negative integer, got: {{ containers_nofile_limit }}
+  when: is_linux
+
 # The default (8x the soft limit) always satisfies this; only fails when
 # config.yml overrides containers_nofile_hard_limit below containers_nofile_limit.
 - name: Assert overridden nofile hard limit is not below soft limit

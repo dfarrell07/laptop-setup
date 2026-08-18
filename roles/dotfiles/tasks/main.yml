@@ -181,6 +181,15 @@
     mode: "0644"
     # seed-only — user edits not overwritten
     force: false
+- name: Assert dotfiles_tmux_prefix contains no newlines or shell metacharacters
+  ansible.builtin.assert:
+    that:
+      - dotfiles_tmux_prefix | length > 0
+      - dotfiles_tmux_prefix is regex('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      dotfiles_tmux_prefix='{{ dotfiles_tmux_prefix }}' contains characters outside
+      the allowed set [A-Za-z0-9-]. A newline or special character would inject
+      arbitrary directives (e.g. run-shell) into tmux.conf. Correct config.yml.
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2

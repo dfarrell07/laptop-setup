@@ -138,6 +138,21 @@
           /usr/local).
       tags: [always]
 
+    - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('claude_log_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+        fail_msg: >-
+          SECURITY: claude_log_dir in config.yml contains unsafe characters. This value is
+          rendered verbatim into /etc/logrotate.d/claude-queue-poller (become: true); a
+          value with embedded newlines can inject a postrotate block that executes arbitrary
+          commands as root when the logrotate systemd timer fires. Allowed: alphanumeric,
+          slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
+      tags: [always]
+
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -222,6 +237,23 @@
           hyphens, and underscores in dotfiles_work_src_dirs (e.g. my-org, not my-org$(id)).
       tags: [always]
 
+    - name: Assert tmux vars in config.yml are safe (newline injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_tmux_history_limit', '50000') | string is match('^[1-9][0-9]*$')
+          - _raw.get('dotfiles_tmux_prefix', 'C-a') | string is match('^[CM]-[a-zA-Z]$')
+        fail_msg: >-
+          SECURITY: dotfiles_tmux_history_limit or dotfiles_tmux_prefix in config.yml
+          contains an unsafe value. These values are rendered verbatim into tmux.conf;
+          newlines inject additional tmux commands (run-shell allows arbitrary shell
+          execution on tmux start or prefix-r reload).
+          dotfiles_tmux_history_limit must be a positive integer (e.g. 50000).
+          dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b).
+      tags: [always]
+
     - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -256,6 +288,23 @@
           a standard user home prefix (/home/<user>, /root, /Users/<user>) followed by /
           and alphanumeric, dot, underscore, hyphen (notes_repo_path, if set).
           Leave notes_repo_path unset to use the safe computed default.
+      tags: [always]
+
+    - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('ssh_port', '722') | string is match('^[0-9]{1,5}$')
+          - _raw.get('ssh_port', 722) | int >= 1
+          - _raw.get('ssh_port', 722) | int <= 65535
+        fail_msg: >-
+          SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535).
+          Newlines, spaces, or text after the port number inject arbitrary directives
+          into /etc/ssh/sshd_config.d/00-hardening.conf. sshd -t does not catch
+          syntactically valid injected directives (e.g. PermitRootLogin yes),
+          so the rescue block would not remove the file.
       tags: [always]
 
     - name: Set molecule context flag

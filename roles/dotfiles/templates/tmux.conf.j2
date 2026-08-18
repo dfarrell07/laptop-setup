@@ -3,8 +3,8 @@
 
 # Prefix
 unbind C-b
-set -g prefix {{ dotfiles_tmux_prefix }}
-bind {{ dotfiles_tmux_prefix }} send-prefix
+set -g prefix {{ dotfiles_tmux_prefix | regex_replace('[^A-Za-z0-9-]', '') }}
+bind {{ dotfiles_tmux_prefix | regex_replace('[^A-Za-z0-9-]', '') }} send-prefix
 
 # Terminal — 256-color + true-color passthrough
 set -g default-terminal "tmux-256color"
@@ -25,7 +25,7 @@ set -s escape-time 10
 setw -g mode-keys vi
 
 # History
-set -g history-limit {{ dotfiles_tmux_history_limit }}
+set -g history-limit {{ dotfiles_tmux_history_limit | int }}
 set -g renumber-windows on       # close middle window → no gaps in numbering
 set -g focus-events on           # allows vim/neovim autoread and focus autocommands inside tmux
 setw -g monitor-activity on     # flag panes with output while you're elsewhere
