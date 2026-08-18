@@ -15,6 +15,10 @@ CONTAINER ?= fedora-dev
 # REQUIRED: guard against supply chain tampering (CVE-mitigation)
 override VERIFY_AND_RUN := scripts/verify-collections.sh &&
 
+# Explicitly set ANSIBLE_COLLECTIONS_PATH to prevent environment variable override (CWE-426)
+# REQUIRED: guard against ANSIBLE_COLLECTIONS_PATH environment variable injection
+export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:/usr/share/ansible/collections
+
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
 export ANSIBLE_DISPLAY_OK_HOSTS = false
