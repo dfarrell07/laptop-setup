@@ -954,6 +954,7 @@
           - _raw.get('system_tlp_platform_profile_bat', '') | string is match('^(performance|balanced|low-power|)$')
           - _raw.get('system_tlp_cpu_energy_policy_ac', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
           - _raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
+          - _raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
           - _raw.get('system_pwhistory_remember', 24) | int >= 0
         fail_msg: >-
           SECURITY: journald/auditd/aide-check timer/TLP/PAM vars in config.yml contain
