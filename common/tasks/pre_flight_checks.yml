@@ -995,6 +995,30 @@
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
       tags: [always]
 
+    - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_dns_primary', '1.1.1.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
+          - _raw.get('system_dns_fallback', '1.0.0.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
+          - _raw.get('system_dns_domains', '~.') | string is match('^[a-zA-Z0-9:.~-]*$')
+        fail_msg: >-
+          SECURITY: system_dns_primary, system_dns_fallback, or system_dns_domains in
+          config.yml contains unsafe characters. These values are rendered verbatim into
+          /etc/systemd/resolved.conf.d/99-dot.conf [Resolve] section via Jinja2 string
+          interpolation; embedded newlines inject arbitrary systemd-resolved directives
+          (e.g. LLMNR=yes to override hardening from 98-llmnr.conf via duplicate-key
+          last-wins semantics). Injecting LLMNR=yes, MulticastDNS=yes, or
+          DNSStubListener=no bypasses CIS hardening and creates compliance violations.
+          Allowed: alphanumeric, colon, dot, slash, hash, comma, hyphen (DNS server
+          addresses and FQDN domains; e.g. 1.1.1.1#cloudflare-dns.com,
+          2606:4700:4700::1111, ~., example.com). Forbidden: newlines, spaces (use DNS
+          list format per systemd.resolved(5)), square brackets, parentheses, and INI
+          metacharacters. Remove any prohibited characters from config.yml.
+      tags: [always]
+
     - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
