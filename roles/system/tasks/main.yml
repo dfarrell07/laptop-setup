@@ -20,9 +20,10 @@
   vars:
     _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
     _sysctl_all_dicts: "{{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] }}"
+    # yamllint disable-line rule:line-length
     _sysctl_values_invalid: "{{ _sysctl_all_dicts | map('dict2items') | flatten | map(attribute='value') | map('string') | select('not', 'regex_search', '^[a-zA-Z0-9._/\\-_]+$') | list }}"
   when: not (system_is_container or csb_rhel)
-  tags: [security, preflight, always]
+  # NOTE: no tags — tasks with no tags survive --skip-tags always (tagged [always] tasks don't).
 
 # --- SECURITY: Enforce collections-dist integrity against supply chain tampering ---
 # Detects commits created with `git commit --no-verify` that bypass pre-commit SHA256SUMS
@@ -42,7 +43,7 @@
 
       To fix: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
       Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
-  tags: [security, preflight, always]
+  # NOTE: no tags — survives --skip-tags always bypass.
 
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
