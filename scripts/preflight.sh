@@ -386,6 +386,26 @@ else
   record "sudo" "warn" "no passwordless sudo — will need --ask-become-pass"
 fi
 
+# --- Desktop X11 trackpoint configuration (XDG template injection guard) ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  if grep -qE '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" 2>/dev/null; then
+    trackpoint_value=$(grep '^desktop_i3_trackpoint_id:' "$CONFIG_FILE" | cut -d: -f2- | sed "s/^[[:space:]]*//;s/[[:space:]]*$//" | tr -d "'" | tr -d '"')
+    if [[ -n "$trackpoint_value" ]]; then
+      if [[ "$trackpoint_value" =~ [^a-zA-Z0-9\ \-_] ]]; then
+        record "config_trackpoint_id" "fail" "desktop_i3_trackpoint_id contains unsafe characters — alphanumeric, spaces, hyphens, underscores only"
+      else
+        record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is safe"
+      fi
+    else
+      record "config_trackpoint_id" "pass" "desktop_i3_trackpoint_id is empty (safe)"
+    fi
+  else
+    record "config_trackpoint_id" "skip" "desktop_i3_trackpoint_id not set in config.yml"
+  fi
+else
+  record "config_trackpoint_id" "skip" "config.yml absent"
+fi
+
 # --- Disk space (need 5GB free in $HOME) ---
 avail_kb=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}'); if [[ -z "$avail_kb" ]]; then
   record "disk_space" "warn" "df failed on $HOME — cannot measure free space"

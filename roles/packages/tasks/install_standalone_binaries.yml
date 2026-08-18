@@ -129,6 +129,102 @@
       zizmor binary could not be downloaded from github.com/zizmorcore/zizmor.
       Install manually from https://github.com/zizmorcore/zizmor/releases
 
+# --- GitHub attestation verification for actionlint and zizmor ---
+# Both tools use GitHub Actions attestations (actions/attest-build-provenance and actions/attest)
+# for the released binaries. Unlike cosign bundles (.sigstore.json), attestations require the
+# GitHub CLI (gh attestation verify) to validate. These tasks verify the downloaded binaries
+# against the public attestation transparency log (rekor) via Sigstore infrastructure.
+
+- name: Verify actionlint binary via GitHub attestation (OIDC keyless signing via GitHub Actions)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] == 'x86_64'
+    - profile == 'work'
+    - ansible_facts.get('packages_gh_available', false)
+  block:
+    - name: Verify actionlint binary attestation via gh CLI
+      ansible.builtin.command:
+        argv:
+          - gh
+          - attestation
+          - verify
+          - /usr/local/bin/actionlint
+          - --repo
+          - rhysd/actionlint
+          - --signer-workflow
+          - rhysd/actionlint/.github/workflows/release.yaml
+      changed_when: false
+      failed_when: false
+      register: _actionlint_attest_result
+
+    - name: Assert actionlint attestation verification succeeded
+      ansible.builtin.assert:
+        that:
+          - _actionlint_attest_result.rc == 0
+        fail_msg: >-
+          actionlint binary attestation verification failed (rc={{ _actionlint_attest_result.rc }}).
+          The binary at /usr/local/bin/actionlint could not be verified against the GitHub
+          attestation (OIDC keyless signing via rhysd/actionlint/.github/workflows/release.yaml).
+          This indicates the binary may not have been signed by the official release workflow.
+          Reinstall actionlint: rm /usr/local/bin/actionlint and re-run 'make packages'.
+          If attestation verification is not yet implemented upstream, verify manually via:
+          'gh attestation verify /usr/local/bin/actionlint --repo rhysd/actionlint'
+  rescue:
+    - name: Warn about actionlint attestation verification failure
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: actionlint attestation verification failed or gh CLI is unavailable.
+          The binary was installed via SHA256 checksum verification (acceptable but less
+          robust than cryptographic attestation). For maximum security, ensure GitHub CLI is
+          installed and authenticated ('gh auth login'), then re-run 'make packages' to
+          re-verify the installed binary via attestation. Continuing without attestation is safe
+          but not ideal for work profiles where supply-chain integrity is important.
+
+- name: Verify zizmor binary via GitHub attestation (OIDC keyless signing via GitHub Actions)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] == 'x86_64'
+    - profile == 'work'
+    - ansible_facts.get('packages_gh_available', false)
+  block:
+    - name: Verify zizmor binary attestation via gh CLI
+      ansible.builtin.command:
+        argv:
+          - gh
+          - attestation
+          - verify
+          - /usr/local/bin/zizmor
+          - --repo
+          - zizmorcore/zizmor
+          - --signer-workflow
+          - zizmorcore/zizmor/.github/workflows/release-binaries.yml
+      changed_when: false
+      failed_when: false
+      register: _zizmor_attest_result
+
+    - name: Assert zizmor attestation verification succeeded
+      ansible.builtin.assert:
+        that:
+          - _zizmor_attest_result.rc == 0
+        fail_msg: >-
+          zizmor binary attestation verification failed (rc={{ _zizmor_attest_result.rc }}).
+          The binary at /usr/local/bin/zizmor could not be verified against the GitHub
+          attestation (OIDC keyless signing via zizmorcore/zizmor/.github/workflows/release-binaries.yml).
+          This indicates the binary may not have been signed by the official release workflow.
+          Reinstall zizmor: rm /usr/local/bin/zizmor and re-run 'make packages'.
+          If attestation verification is not yet implemented upstream, verify manually via:
+          'gh attestation verify /usr/local/bin/zizmor --repo zizmorcore/zizmor'
+  rescue:
+    - name: Warn about zizmor attestation verification failure
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: zizmor attestation verification failed or gh CLI is unavailable.
+          The binary was installed via SHA256 checksum verification (acceptable but less
+          robust than cryptographic attestation). For maximum security, ensure GitHub CLI is
+          installed and authenticated ('gh auth login'), then re-run 'make packages' to
+          re-verify the installed binary via attestation. Continuing without attestation is safe
+          but not ideal for work profiles where supply-chain integrity is important.
+
 - name: Install operator-sdk
   # operator-sdk releases are GPG/PGP signed (checksums.txt.asc) — not cosign/Sigstore.
   # No .bundle files are published; cosign verify-blob cannot be used here.
@@ -351,10 +447,11 @@
   changed_when: false
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
-  # tektoncd/cli releases provide only checksums.txt (plain SHA256 hashes); no cosign
-  # bundles, .sig files, or Sigstore attestations are published. SHA256 pinned in
-  # packages_tkn_sha256 / packages_tkn_sha256_arm64 is the sole integrity control.
-  # cosign verify-blob cannot be used here.
+  # VERIFICATION: NOT IMPLEMENTED. tektoncd/cli releases provide only checksums.txt
+  # (plain SHA256 hashes); no cosign bundles, .sig files, or Sigstore attestations
+  # are published. SHA256 pinned in packages_tkn_sha256 / packages_tkn_sha256_arm64
+  # is the sole integrity control. cosign verify-blob cannot be used here.
+  # TODO: Add post-install cosign verification once tektoncd/cli publishes Sigstore attestations.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -383,15 +480,15 @@
       Install manually from https://github.com/tektoncd/cli/releases
 
 - name: Install ec CLI (Enterprise Contract policy enforcement for Konflux releases)
-  # ec-cli moved from github.com/enterprise-contract/ec-cli to github.com/conforma/cli
-  # (conforma = Red Hat Konflux team's upstream org; permanent redirect in place)
-  # cosign is installed by this same playbook (install_standalone_binaries.yml) but
-  # conforma/cli releases do NOT yet publish Sigstore-signed attestations — only plain
-  # .sha256 files ship alongside each binary.  Until cosign .bundle/.sig assets appear
-  # in the release, a post-install `cosign verify-blob` step cannot be added.
+  # VERIFICATION: NOT IMPLEMENTED. ec-cli moved from github.com/enterprise-contract/ec-cli
+  # to github.com/conforma/cli (conforma = Red Hat Konflux team's upstream org; permanent
+  # redirect in place). conforma/cli releases do NOT yet publish Sigstore-signed attestations
+  # — only plain .sha256 files ship alongside each binary. Until cosign .bundle/.sig assets
+  # appear in the release, a post-install `cosign verify-blob` step cannot be added.
   # The SHA256 in packages_ec_sha256 / packages_ec_sha256_arm64 (defaults/main.yml) is
   # the primary integrity control; a compromised release requires both a tampered GitHub
   # release AND an independent SHA256 update to this repo.
+  # TODO: Add post-install cosign verification once conforma/cli publishes Sigstore attestations.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']

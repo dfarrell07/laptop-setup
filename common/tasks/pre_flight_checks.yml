@@ -221,7 +221,7 @@
           <string> tags; newlines or XML metacharacters allow directive/plist injection.
       tags: [always]
 
-    - name: Assert alacritty color/font vars in config.yml are safe (TOML injection guard)
+    - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -267,6 +267,7 @@
           - _raw.get('desktop_sway_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ._\-]*$')
         fail_msg: >-
           SECURITY: desktop_alacritty_color_* and desktop_bar_* values must be 3- or 6-digit
           hex colors (#RGB or #RRGGBB). desktop_wm_lock_color must be a 6-digit hex color
@@ -276,8 +277,11 @@
           desktop_gtk_theme and desktop_gtk_icon_theme must be alphanumeric/space/dash/underscore.
           desktop_wm_browser, desktop_sway_polkit_agent, desktop_i3_polkit_agent, desktop_terminal
           must be safe executable paths (alphanumeric/slash/dot/dash/underscore only — no shell
-          metacharacters). These values are rendered into WM exec directives; shell metacharacters
-          or newlines allow command injection when the WM starts.
+          metacharacters). desktop_i3_trackpoint_id must be alphanumeric/space/dot/underscore/hyphen
+          (Xorg device name characters). These values are rendered into WM exec directives or Xorg
+          config; shell metacharacters, newlines, or special Xorg syntax (EndSection, MatchProduct)
+          allow command injection when the WM/Xorg starts (e.g., desktop_i3_trackpoint_id='device\nEndSection\nSection'
+          breaks Xorg parsing and injects arbitrary Xorg directives).
           containers_log_driver must be one of k8s-file/journald/json-file/syslog/none.
       tags: [always]
 
@@ -1316,6 +1320,43 @@
           'go install <module@version> && sha256sum ~/.local/bin/<binary>'
       tags: [always]
 
+    - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
+      when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _profile: "{{ _raw.get('profile', 'work') }}"
+      block:
+        - name: Check GitHub CLI in PATH
+          ansible.builtin.command: which gh
+          changed_when: false
+          failed_when: false
+          check_mode: false
+          register: _gh_which_check
+          tags: [always]
+
+        - name: Set packages_gh_available fact
+          ansible.builtin.set_fact:
+            packages_gh_available: "{{ _gh_which_check.rc == 0 }}"
+          tags: [always]
+
+        - name: Warn if GitHub CLI is not installed on work profile (attestation verification prerequisite)
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: GitHub CLI (gh) is not installed or not in PATH on this work profile machine.
+              Attestation verification for actionlint and zizmor binaries requires GitHub CLI
+              and authentication ('gh auth login'). Without gh CLI, these binaries will be
+              verified only by SHA256 checksums. For maximum supply-chain security on work
+              profiles, install GitHub CLI: https://cli.github.com/
+          when:
+            - _profile == 'work'
+            - not packages_gh_available
+          tags: [always]
+
+        - name: Set gh check done flag
+          ansible.builtin.set_fact:
+            _pf_gh_check_done: true
+          tags: [always]
+
     - name: Warn when cosign installation is disabled without alternative verification plan
       when:
         - _config_yml_raw.content is defined
@@ -1609,6 +1650,40 @@
           would inject net.ipv4.ip_forward despite system_enable_ip_forward policy.
           Remove newlines from all sysctl value strings. Allowed: alphanumeric, dot, slash, hyphen,
           underscore (sysctl key/value format per sysctl(5)).
+      tags: [always]
+
+    - name: Assert gh CLI is available for attestation verification (attestation verification guard)
+      when:
+        - profile == 'work'
+        - _pf_attestation_gh_checked is not defined
+      block:
+        - name: Check gh CLI availability
+          ansible.builtin.command: which gh
+          changed_when: false
+          failed_when: false
+          check_mode: false
+          register: _gh_cli_check
+          tags: [always]
+
+        - name: Assert gh CLI is installed
+          ansible.builtin.assert:
+            that:
+              - _gh_cli_check.rc == 0
+            fail_msg: >-
+              SECURITY: 'gh' CLI is not installed or not in PATH. The provisioning playbook
+              uses 'gh attestation verify' to cryptographically verify downloaded binaries
+              (actionlint, zizmor) against GitHub's attestation infrastructure. This is a
+              critical security check: without it, SHA256 checksums alone cannot detect
+              compromises of the release artifacts or the distribution infrastructure.
+              Install gh CLI (GitHub CLI): https://cli.github.com or via your package manager
+              (e.g., 'dnf install gh' on Fedora/RHEL, 'brew install gh' on macOS).
+              After installation, authenticate with: gh auth login
+          tags: [always]
+
+        - name: Set gh CLI checked flag
+          ansible.builtin.set_fact:
+            _pf_attestation_gh_checked: true
+          tags: [always]
       tags: [always]
 
     - name: Warn and flag when vault stub is not populated

@@ -2,5 +2,5 @@
 # Git commit signing allowed signers
 # See: https://git-scm.com/docs/gitformat-signature
 {% if ssh_git_signing_pubkey | trim | length > 0 %}
-{{ dotfiles_user_email_work }},{{ dotfiles_user_email_personal }} namespaces="git" {{ ssh_git_signing_pubkey }}
+{{ dotfiles_user_email_work | regex_replace("[\\n\\r].*", "") }},{{ dotfiles_user_email_personal | regex_replace("[\\n\\r].*", "") }} namespaces="git" {{ ssh_git_signing_pubkey | regex_replace("[\\n\\r].*", "") }}
 {% endif %}
