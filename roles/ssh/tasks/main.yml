@@ -72,6 +72,7 @@
       Accepted: {{ ssh_pubkey_accepted_algorithms | join(', ') }}. Writing an incompatible key would cause SSH lockout —
       sshd silently rejects non-accepted types at login time.
   when: ssh_auth_key_pub | trim | length > 0
+  tags: [always]
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
@@ -80,17 +81,6 @@
     mode: "0600"
   no_log: true
   when: ssh_auth_key | trim | length > 0
-
-- name: SECURITY assert SSH auth public key type is accepted (pre-deployment check)
-  ansible.builtin.assert:
-    that:
-      - ssh_auth_key_pub.split()[0] in ssh_pubkey_accepted_algorithms
-    fail_msg: >-
-      ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
-      which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).
-      Accepted: {{ ssh_pubkey_accepted_algorithms | join(', ') }}. Writing an incompatible key would cause SSH lockout —
-      sshd silently rejects non-accepted types at login time.
-  when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
