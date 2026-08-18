@@ -493,6 +493,84 @@
           Leave notes_repo_path unset to use the safe computed default.
       tags: [always]
 
+    - name: Assert notes_remote_url and notes_remote_url_https are valid git URLs (path traversal guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _notes_ssh_url: "{{ _raw.get('notes_remote_url', '') }}"
+        _notes_https_url: "{{ _raw.get('notes_remote_url_https', '') }}"
+        # SSH format: git@host:user/repo.git (no traversal sequences)
+        _notes_ssh_pattern: '^git@[a-zA-Z0-9._-]+:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'
+        # HTTPS format: https://host/user/repo.git (no traversal sequences)
+        _notes_https_pattern: '^https://[a-zA-Z0-9._-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'
+      ansible.builtin.assert:
+        that:
+          - >-
+            _notes_ssh_url == ''
+            or _notes_ssh_url is match(_notes_ssh_pattern)
+          - >-
+            _notes_https_url == ''
+            or _notes_https_url is match(_notes_https_pattern)
+        fail_msg: >-
+          SECURITY: notes_remote_url or notes_remote_url_https in config.yml contains an invalid
+          or malicious URL. These values are passed directly to 'git clone' via the ansible.builtin.git
+          task; path traversal sequences ('..', './', etc.) can bypass the notes_repo_name validation
+          and clone arbitrary repositories from the Git server or self-hosted Git systems.
+          notes_remote_url (SSH) must match: git@host:user/repo.git (alphanumeric/underscore/hyphen/dot
+          for domain and user/repo; no consecutive slashes, no '..', no './', no special paths).
+          notes_remote_url_https (HTTPS) must match: https://host/user/repo.git (alphanumeric/underscore/
+          hyphen/dot for domain and user/repo; no traversal sequences).
+          Disallowed: path traversal sequences ('..'), relative paths ('./'), URL escape sequences
+          ('%2e%2e'), or any characters not explicitly in the whitelist.
+          Leave both unset to use the safe computed defaults based on dotfiles_github_user and notes_repo_name.
+          Current values: notes_remote_url='{{ _notes_ssh_url }}', notes_remote_url_https='{{ _notes_https_url }}'.
+      tags: [always]
+
+    - name: Assert system_gid0_allowed_accounts entries are safe usernames (account hardening guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _gid0_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) }}"
+        _unsafe_accounts: "{{ _gid0_accounts | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unsafe_accounts | length == 0
+        fail_msg: >-
+          SECURITY: system_gid0_allowed_accounts in config.yml contains entries with unsafe
+          characters. Each account name must match ^[a-zA-Z0-9_-]+$ (alphanumeric, underscore,
+          hyphen only). These entries are rendered verbatim into a grep regex pattern in
+          roles/system/tasks/account_hardening.yml; regex metacharacters (brackets, pipes,
+          dots, asterisks, plus signs, question marks, carets, dollar signs) can break the
+          pattern matching and allow accounts with GID=0 to bypass the hardening check.
+          Example attack: system_gid0_allowed_accounts: ['root|bin'] matches ANY account
+          whose name contains 'root' or 'bin' (including 'rabbit', 'bin2'), defeating the
+          intent to restrict GID-0 primary group to root only.
+          Unsafe entries found: {{ _unsafe_accounts }}.
+          Use only alphanumeric characters, underscores, and hyphens in account names
+          (e.g., root, service-account, bin_user).
+      tags: [always]
+
+    - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (SSH hardening guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
+        _unsafe_hosts: "{{ _keyscan_hosts | map('string') | select('search', '[^a-zA-Z0-9._-]') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unsafe_hosts | length == 0
+        fail_msg: >-
+          SECURITY: ssh_work_keyscan_hosts in config.yml contains entries with unsafe
+          characters. Each hostname must match ^[a-zA-Z0-9._-]+$ (alphanumeric, dot,
+          underscore, hyphen only). These entries are passed directly to ssh-keyscan in
+          roles/ssh/tasks/main.yml; shell metacharacters or spaces can escape the argument
+          list and inject arbitrary commands executed during provisioning.
+          Example attack: ssh_work_keyscan_hosts: ['github.com; rm -rf /'] would execute
+          the rm command during keyscan. Unsafe entries found: {{ _unsafe_hosts }}.
+          Use only valid hostname characters (e.g., github.com, internal.example.com,
+          git-server-001).
+      tags: [always]
+
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -595,25 +673,34 @@
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-        _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+        # Enforce FULL semantic versioning (v0.18.0 format required) to prevent glob ambiguity
+        # when item.tag="v0.18" matches both v0.18.0 and v0.18.1 tarballs in /tmp.
+        # Three-part versioning (major.minor.patch) prevents filesystem ordering attacks where
+        # ls+head selects the wrong file based on inode traversal order.
+        _semver_pattern_strict: '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'
         _subctl_rh_entries: "{{ _raw.get('packages_subctl_rh_versions', []) }}"
       ansible.builtin.assert:
         that:
           - _subctl_rh_entries | map(attribute='tag') | map('string') | select() |
-            reject('match', _semver_pattern) | list | length == 0
+            reject('match', _semver_pattern_strict) | list | length == 0
           - _subctl_rh_entries | map(attribute='image') | map('string') | select() |
             reject('match', '^[a-zA-Z0-9._-]+$') | list | length == 0
           - _subctl_rh_entries | map(attribute='suffix') | map('string') | select() |
             reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
         fail_msg: >-
           SECURITY: packages_subctl_rh_versions in config.yml contains unsafe version/image/suffix strings.
-          Each tag must match semantic versioning with optional leading 'v' (e.g. "v0.18", "0.22.0").
+          Each tag MUST be a COMPLETE semantic version with major.minor.patch format
+          (e.g. "v0.18.0", "0.22.1", not partial versions like "v0.18" or "0.22").
+          Partial versions cause glob expansion ambiguity: when tag="v0.18" matches multiple
+          tarballs in /tmp (v0.18.0, v0.18.1), filesystem ordering (inode traversal) may cause
+          selection of an attacker-controlled file instead of the legitimate extraction.
+          Complete three-part versions prevent this attack via exact-match tarball lookup.
           Each image must be alphanumeric/dot/hyphen only (e.g. "subctl-rhel8").
           Each suffix must be alphanumeric only (e.g. "RH18").
           These values are interpolated directly into oc image extract commands and shell globs;
           spaces or special characters allow command injection via shlex tokenization or glob expansion.
-          Invalid entries: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern) | list }}.
-          Remove spaces and special characters from tag, image, and suffix fields.
+          Invalid entries: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern_strict) | list }}.
+          Update all tag values to use complete semantic versioning (major.minor.patch).
       tags: [always]
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
@@ -1169,6 +1256,26 @@
           Unsafe entries: {{ _unsafe_entries }}.
           Remove any spaces, semicolons, dollar signs, backticks, pipes, or other shell
           metacharacters from distrobox_host_exec_commands entries.
+      tags: [always]
+
+    - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('containers_prune_schedule', 'weekly') | string is match('^[a-zA-Z0-9:*,.\\-/~ ]+$')
+        fail_msg: >-
+          SECURITY: containers_prune_schedule in config.yml contains unsafe characters.
+          This value is rendered verbatim into the [Timer] OnCalendar= directive of the user
+          systemd timer unit; embedded newlines inject additional timer directives (AccuracySec,
+          Persistent, Unit section keys) that systemd parses as INI key-value pairs. An attacker
+          can inject AccuracySec=1us to force microsecond-precision wakeups (CPU/power DoS),
+          or inject additional OnCalendar directives to change the timer schedule.
+          Allowed: alphanumeric, colon, asterisk, comma, dot, hyphen, slash, tilde, space
+          (systemd calendar specification format per systemd.time(7),
+          e.g. weekly, daily, *-*-* 00:00:00, Mon,Wed,Fri *-*-* 10:00:00).
+          No newlines or other special characters allowed.
       tags: [always]
 
     - name: Warn when cosign installation is disabled without alternative verification plan

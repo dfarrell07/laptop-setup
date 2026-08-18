@@ -248,6 +248,40 @@ jobs:
       - name: Run syntax check
         run: ansible-playbook site.yml --syntax-check
 
+  critical-assertions-guard:
+    name: Critical Assertions Guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify critical preflight assertions are not removed
+        run: |
+          failed=0
+
+          # Check that include_tasks for pre_flight_checks.yml is present at line 112
+          if ! sed -n '111,113p' site.yml | grep -q 'include_tasks.*pre_flight_checks.yml'; then
+            echo "::error::Critical assertion include_tasks removed or moved from site.yml line 112"
+            failed=1
+          fi
+
+          # Check that duplicate guard for identity vars assertion is present at lines 139-163
+          if ! sed -n '139,163p' site.yml | grep -q 'Assert identity vars are not CHANGE_ME'; then
+            echo "::error::Critical duplicate guard (identity vars assertion) removed from site.yml lines 139-163"
+            failed=1
+          fi
+
+          # Verify the duplicate guard still has the when: not _pf_is_molecule condition
+          if ! sed -n '139,163p' site.yml | grep -q 'when: not _pf_is_molecule'; then
+            echo "::error::Duplicate guard lost its when: not _pf_is_molecule condition"
+            failed=1
+          fi
+
+          exit $failed
+
   node-lint:
     name: Node Lint
     runs-on: ubuntu-24.04
@@ -458,6 +492,7 @@ jobs:
       - shell-checks
       - vault-encryption
       - syntax-check
+      - critical-assertions-guard
       - node-lint
       - gitleaks
       - workflow-security
