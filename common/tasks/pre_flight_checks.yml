@@ -475,19 +475,19 @@
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
       tags: [always]
 
-    - name: Assert system_kernel_lockdown contains only safe kernel parameters (kernel injection guard)
+    - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|none|)$')
+          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|)?$')
         fail_msg: >-
           SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
-          This value is rendered directly into bash code in kernel_lockdown.yml and passed to grubby;
-          special characters can inject arbitrary shell commands or grubby arguments.
-          Allowed values: 'integrity', 'confidentiality', 'none', or empty string '' (to disable).
-          Remove system_kernel_lockdown from config.yml to use the safe default (integrity).
+          This value is interpolated directly into a bash shell script context in
+          roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
+          allow arbitrary command injection during kernel parameter setup. Allowed values:
+          'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
       tags: [always]
 
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
@@ -567,21 +567,6 @@
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
       tags: [always]
 
-    - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
-      when: _config_yml_raw.content is defined
-      vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|)?$')
-        fail_msg: >-
-          SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
-          This value is interpolated directly into a bash shell script context in
-          roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
-          allow arbitrary command injection during kernel parameter setup. Allowed values:
-          'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
-      tags: [always]
-
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -648,21 +633,6 @@
           Each entry must begin with 'allow', 'block', or 'reject' followed by a device
           selector. Bare catch-all rules and embedded newlines are rejected.
           Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
-      tags: [always]
-
-    - name: Assert system_chrony_fallback_pool contains only safe characters (chrony config injection guard)
-      when: _config_yml_raw.content is defined
-      vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-      ansible.builtin.assert:
-        that:
-          - _raw.get('system_chrony_fallback_pool', '') | string is match('^[a-zA-Z0-9.-]*$')
-        fail_msg: >-
-          SECURITY: system_chrony_fallback_pool in config.yml contains unsafe characters.
-          This value is rendered verbatim into the pool directive in chrony.conf; embedded
-          newlines inject arbitrary chrony directives. The 'allow all' directive would open
-          the NTP service to all source IPs, enabling NTP amplification attacks.
-          Allowed: alphanumeric, dot, hyphen only (e.g. 2.fedora.pool.ntp.org).
       tags: [always]
 
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
