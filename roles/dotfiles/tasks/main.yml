@@ -389,6 +389,16 @@
       loop: [ssh, tmux]
       failed_when: false
 
+- name: Assert dotfiles_direnv_warn_timeout is a valid direnv timeout
+  ansible.builtin.assert:
+    that:
+      - dotfiles_direnv_warn_timeout is regex('^[0-9]+[smh]$')
+    fail_msg: >-
+      dotfiles_direnv_warn_timeout='{{ dotfiles_direnv_warn_timeout }}' must be
+      a valid direnv timeout format (e.g. '10s', '5m', '1h'). Invalid characters
+      would break the direnv.toml TOML syntax and prevent direnv from loading.
+      Correct config.yml.
+
 - name: Deploy safe direnv config
   ansible.builtin.template:
     src: direnv.toml.j2
