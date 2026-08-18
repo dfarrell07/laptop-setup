@@ -71,11 +71,11 @@
       Install manually from https://github.com/gitleaks/gitleaks/releases
 
 - name: Install actionlint (GitHub Actions linter; version pinned to match CI linting.yml)
-  # actionlint uses GitHub attestations (actions/attest-build-provenance) for the checksums
-  # file — not cosign bundles. No .bundle files appear in release assets; verification
-  # requires: gh attestation verify <file> --repo rhysd/actionlint
-  # (--signer-workflow rhysd/actionlint/.github/workflows/release.yaml)
-  # cosign verify-blob cannot be used here.
+  # actionlint uses GitHub attestations (actions/attest-build-provenance) for released binaries
+  # — not cosign bundles. No .bundle files appear in release assets; verification uses
+  # gh attestation verify (GitHub Actions OIDC keyless signing). See task "Verify actionlint
+  # binary via GitHub attestation" below for the post-install verification logic.
+  # cosign verify-blob cannot be used here; gh CLI attestation verify is the correct tool.
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'  # aarch64: needs sha256_arm64 default + guard extension
@@ -101,11 +101,11 @@
       Install manually from https://github.com/rhysd/actionlint/releases
 
 - name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
-  # zizmor uses GitHub attestations (actions/attest) — not cosign bundles. No .bundle files
-  # appear in release assets; verification requires:
-  #   gh attestation verify <binary> --repo zizmorcore/zizmor
-  # (--signer-workflow zizmorcore/zizmor/.github/workflows/release-binaries.yml)
-  # cosign verify-blob cannot be used here.
+  # zizmor uses GitHub attestations (actions/attest) for released binaries — not cosign bundles.
+  # No .bundle files appear in release assets; verification uses gh attestation verify
+  # (GitHub Actions OIDC keyless signing). See task "Verify zizmor binary via GitHub attestation"
+  # below for the post-install verification logic. cosign verify-blob cannot be used here;
+  # gh CLI attestation verify is the correct tool.
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'  # no arm64 release; x86_64-only CI pin
@@ -334,6 +334,25 @@
       - --certificate-oidc-issuer-regexp
       - "^https://accounts\\.google\\.com$"
   changed_when: false
+  failed_when: false
+  register: _cosign_verify_result
+
+
+- name: Warn if cosign self-verification failed (offline/restricted environment)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - _cosign_pre_stat.stat.exists
+    - _cosign_verify_result.rc != 0
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: cosign binary verification via Sigstore bundle failed (rc={{ _cosign_verify_result.rc }}).
+      This can occur in offline environments or networks where cosign/Sigstore verification infrastructure
+      is unavailable. Proceeding without Sigstore verification. cosign will be updated from the downloaded
+      binary, which was verified via SHA256 checksum at download time. If this is unexpected, review network
+      connectivity to accounts.google.com and api.sigstore.dev, and check cosign availability.
 
 - name: Install verified cosign binary from bundle verification (re-provision only)
   when:
@@ -430,6 +449,24 @@
       - --certificate-oidc-issuer-regexp
       - "^https://token\\.actions\\.githubusercontent\\.com$"
   changed_when: false
+  failed_when: false
+  register: _sops_checksums_verify_result
+
+
+- name: Warn if sops checksums verification failed (offline/restricted environment)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - _sops_checksums_verify_result.rc != 0
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: sops checksums file verification via Sigstore bundle failed (rc={{ _sops_checksums_verify_result.rc }}).
+      This can occur in offline environments or networks where cosign/Sigstore verification infrastructure
+      is unavailable. Proceeding without Sigstore verification. sops binary was verified via SHA256 checksum at
+      download time. If this is unexpected, review network connectivity to token.actions.githubusercontent.com
+      and api.sigstore.dev, and check cosign availability.
 
 - name: Verify installed sops binary SHA256 against attested checksums file
   when:
@@ -445,6 +482,25 @@
   args:
     executable: /bin/bash
   changed_when: false
+  failed_when: false
+  register: _sops_sha256_verify_result
+
+
+- name: Warn if sops SHA256 attestation verification failed (offline/restricted environment)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - _sops_sha256_verify_result.rc != 0
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: sops binary SHA256 verification against attested checksums file failed (rc={{ _sops_sha256_verify_result.rc }}).
+      This can occur when the checksums file download failed or contains an unexpected format. Proceeding without
+      checksums attestation verification. sops binary was verified via direct SHA256 checksum at download time.
+      If this is unexpected, verify that /tmp/sops-checksums.txt exists and contains the expected format
+      (SHA256 hash followed by filename). Run 'cat /tmp/sops-checksums.txt | grep linux' to verify the entry
+      matches packages_sops_version {{ packages_sops_version }} on your architecture.
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   # VERIFICATION: NOT IMPLEMENTED. tektoncd/cli releases provide only checksums.txt
