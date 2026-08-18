@@ -26,6 +26,21 @@ ansible-playbook site.yml --start-at-task "Download Claude Code install script" 
 3. Never use `--start-at-task` except during active debugging, and only after confirming the
    running host is trusted and config.yml has not been modified.
 
+**⚠️ Internal SSH Git Hosts (Work Profile)**
+
+If your work profile clones repos from internal SSH git servers, configure `ssh_work_keyscan_hosts`
+in `config.yml` with optional fingerprint pinning to prevent SSH MITM attacks:
+
+```yaml
+ssh_work_keyscan_hosts:
+  - {host: internal-git.example.com, fingerprint: "SHA256:..."}
+  - {host: gitlab.internal, fingerprint: "SHA256:..."}
+```
+
+Obtain fingerprints from internal IT via secure out-of-band channel. See `SECURITY.md` §
+"Internal SSH Git Host Setup" for details. Omit `fingerprint` to use TOFU (first-use trust,
+no pinning). GitHub SSH keys are auto-seeded via API; this step is only needed for internal hosts.
+
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)

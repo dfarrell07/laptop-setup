@@ -190,6 +190,41 @@ new password source:
 ansible-vault rekey group_vars/all/vault.yml
 ```
 
+## Internal SSH Git Host Setup
+
+When cloning repositories from internal SSH git servers (not GitHub), pre-seed SSH host keys
+with optional fingerprint pinning to prevent MITM attacks at first connection. Configure
+`ssh_work_keyscan_hosts` in `config.yml` (work profile only):
+
+```yaml
+ssh_work_keyscan_hosts:
+  - {host: internal-git.example.com, fingerprint: "SHA256:..."}
+  - {host: gitlab.internal, fingerprint: "SHA256:..."}
+```
+
+**Obtaining fingerprints:**
+
+1. Contact internal IT via a secure out-of-band channel (phone, in-person, verified email)
+   and request the SSH host key fingerprint for each internal git server.
+2. Verify the fingerprint matches:
+   ```bash
+   ssh-keyscan -t ed25519 internal-git.example.com | ssh-keygen -lf /dev/stdin
+   ```
+3. Add to `config.yml` with the `fingerprint: "SHA256:..."` field.
+
+**TOFU (Trust On First Use) mode** — omit the `fingerprint` field to accept the key without
+pinning. This is less secure but acceptable if out-of-band fingerprint verification is
+unavailable.
+
+**Technical details:**
+
+- `ssh_work_keyscan_hosts` triggers `roles/ssh/tasks/keyscan_host.yml` during provisioning,
+  which pre-seeds `~/.ssh/known_hosts` with SSH host keys for internal git servers.
+- The `git_repos` role automatically pre-seeds host keys for SSH-based repo URLs
+  (git@host:repo.git) before cloning, ensuring `known_hosts` is populated before the git
+  client attempts connection.
+- GitHub SSH keys are automatically pre-seeded via the GitHub API (no manual configuration needed).
+
 ## SSH Key Rotation
 
 1. Generate a new auth key pair:
