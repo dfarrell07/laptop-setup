@@ -105,6 +105,25 @@
           Markers checked: '{{' and '{%'.
       tags: [always]
 
+    - name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_user_name in config.yml contains newlines or control characters.
+          This value is rendered verbatim into the [user] name field in .gitconfig (INI format);
+          embedded newlines break the INI section parsing and allow injection of arbitrary git
+          configuration directives. An attacker-controlled dotfiles_user_name like
+          'Attacker\n[core]\nbare=true' causes git to parse additional INI sections and set
+          core.bare=true, which transforms the repository into a bare repository. This can
+          alter git behavior or override security settings. Allowed: any printable characters
+          except newlines (LF/CR) and control characters (0x00-0x1F). Remove any embedded
+          newlines or control characters from dotfiles_user_name in config.yml.
+      tags: [always]
+
     - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -347,6 +366,24 @@
           verbatim into the git allowed_signers file; newlines or spaces in the value produce
           additional syntactically complete allowed_signers entries, allowing an attacker-controlled
           key to be trusted by git for arbitrary principals without consent.
+          Allowed: alphanumeric, dot, underscore, percent, plus, hyphen (local part);
+          alphanumeric, dot, hyphen (domain); must contain exactly one @ symbol.
+          A blank value is permitted when the variable is not yet configured.
+      tags: [always]
+
+    - name: Assert email identity vars from -e flag (gitconfig INI injection guard)
+      vars:
+        _email_pattern: '^([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})?$'
+      ansible.builtin.assert:
+        that:
+          - dotfiles_user_email_work | string is match(_email_pattern)
+          - dotfiles_user_email_personal | string is match(_email_pattern)
+        fail_msg: >-
+          SECURITY: dotfiles_user_email_work or dotfiles_user_email_personal
+          (from environment or config.yml) contains characters that are not valid in an email
+          address. These values are rendered into gitconfig; newlines in the value can inject
+          INI sections (e.g., via -e flag bypass of file-based validation). This guard validates
+          both file-based and environment variable sources.
           Allowed: alphanumeric, dot, underscore, percent, plus, hyphen (local part);
           alphanumeric, dot, hyphen (domain); must contain exactly one @ symbol.
           A blank value is permitted when the variable is not yet configured.
