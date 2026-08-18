@@ -255,20 +255,27 @@ make repos-downstream # downstream repos only
 - Branch protection on main: 5 required checks (Ansible Lint, Vault Encryption
   Check, Secret Detection, Ansible Syntax Check, Vars Sync Check), force push blocked, linear history
 - GitHub secret scanning + push protection enabled
-- **Ansible Galaxy collections (vendored + SHA256-verified)**: All four collections are vendored
+- **Ansible Galaxy collections (vendored + SHA256-verified + Python manifest)**: All four collections are vendored
   in `collections-dist/` and installed from there — CI and provisioning never contact Galaxy.
   `collections-dist/SHA256SUMS` records hashes computed from Galaxy downloads at the time of
   initial vendoring; `make bootstrap` verifies these hashes before installation. Galaxy does not
   publish platform-level GPG or Sigstore signatures for community collections, so no upstream
   signature was available at download time.
   
+  **Python Manifest Verification**: `collections-dist/PYTHON_MANIFEST.json` records all Python 
+  modules, module_utils, and roles from each collection at vendoring time. During `make bootstrap` 
+  and any ansible-playbook run, `verify-collections.sh` compares extracted collection content 
+  against the baseline manifest to detect transitive Python code additions or modifications 
+  (TOCTOU attack mitigation). This catches supply chain attacks where tarballs are modified 
+  after SHA256 verification.
+  
   **SECURITY: Maintainer compromise vulnerability** — The `make vendor-collections` target verifies
   against Galaxy API `artifact.sha256`, which appears independent but is NOT. Both CDN and API are
   controlled by galaxy.ansible.com. If maintainer credentials are compromised, attacker controls both
   artifact and hash. **REQUIRED MITIGATION**: Collection updates require mandatory code review of
-  CHANGELOG and new tasks/modules BEFORE staging collections-dist/ changes. Branch protection enforces
-  approval from designated reviewers. See "Ansible Galaxy Collections — Verification Limitation and
-  Code Review Requirement" section below for complete procedure and mitigations.
+  CHANGELOG, manifest diff, and new tasks/modules BEFORE staging collections-dist/ changes. Branch 
+  protection enforces approval from designated reviewers. See "Ansible Galaxy Collections — Verification 
+  Limitation and Code Review Requirement" section below for complete procedure and mitigations.
 
 ## Ansible Galaxy Collections — Verification Limitation and Code Review Requirement
 
@@ -299,22 +306,27 @@ because both the artifact and its hash are controlled by the same compromised se
    # 1. Download and verify via Galaxy API (basic consistency check)
    make vendor-collections
    
-   # 2. Review upstream CHANGELOG
+   # 2. Regenerate Python manifest for supply chain verification
+   scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
+   # Review manifest diff to ensure only expected modules added
+   git diff collections-dist/PYTHON_MANIFEST.json
+   
+   # 3. Review upstream CHANGELOG
    tar -xzOf collections-dist/community-general-*.tar.gz CHANGELOG.rst | head -100
    # Look for: new tasks, plugins, external service calls, privilege escalation
    
-   # 3. Compare old vs. new version for behavioral changes
+   # 4. Compare old vs. new version for behavioral changes
    mkdir /tmp/old /tmp/new
    tar -xzf collections-dist/COLLECTION-old-version.tar.gz -C /tmp/old
    tar -xzf collections-dist/COLLECTION-new-version.tar.gz -C /tmp/new
    diff -r /tmp/old/*/plugins /tmp/new/*/plugins | head -50
    diff -r /tmp/old/*/roles /tmp/new/*/roles | head -50
    
-   # 4. Create PR, request approval from security reviewer
-   git add requirements.yml collections-dist/SHA256SUMS collections-dist/*.tar.gz
+   # 5. Create PR, request approval from security reviewer
+   git add requirements.yml collections-dist/SHA256SUMS collections-dist/PYTHON_MANIFEST.json collections-dist/*.tar.gz
    git commit -s -m "Collections: update community.general to 13.2.1
    
-   Changes reviewed: CHANGELOG checked, no behavioral changes detected."
+   Manifest diff reviewed. CHANGELOG checked, no behavioral changes detected."
    git push origin feature-branch
    # Wait for code review approval before merging
    ```

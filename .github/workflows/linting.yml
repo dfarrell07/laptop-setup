@@ -206,6 +206,67 @@ jobs:
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh
 
+  collections-manifest:
+    name: Collection Manifest Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: contains(github.event.pull_request.files.*.filename, 'requirements.yml') || contains(github.event.pull_request.files.*.filename, 'PYTHON_MANIFEST.json')
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Validate Python manifest is well-formed JSON
+        run: |
+          python3 -c "import json; json.load(open('collections-dist/PYTHON_MANIFEST.json'))"
+
+      - name: Verify manifest contains all pinned collections
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import yaml
+
+          with open('requirements.yml') as f:
+              reqs = yaml.safe_load(f)
+          with open('collections-dist/PYTHON_MANIFEST.json') as f:
+              manifest = json.load(f)
+
+          pinned_collections = {c['name']: c['version'] for c in reqs.get('collections', [])}
+          manifest_entries = set(manifest.keys())
+
+          # Convert collection names to tarball format (community.general -> community-general)
+          expected_entries = {name.replace('.', '-') + '-' + version for name, version in pinned_collections.items()}
+
+          missing = expected_entries - manifest_entries
+          if missing:
+              print(f'ERROR: Manifest missing entries for: {missing}')
+              exit(1)
+
+          print(f'✓ Manifest contains all {len(expected_entries)} pinned collections')
+          PYEOF
+
+      - name: Ensure requirements.yml and PYTHON_MANIFEST.json are both updated
+        if: github.event_name == 'pull_request'
+        run: |
+          # If PR modifies requirements.yml, PYTHON_MANIFEST.json must also be updated
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          req_modified=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" | grep -c 'requirements.yml' || echo 0)
+          manifest_modified=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" | grep -c 'PYTHON_MANIFEST.json' || echo 0)
+
+          if [ "$req_modified" -eq 1 ] && [ "$manifest_modified" -eq 0 ]; then
+              echo "::error::PR modifies requirements.yml but PYTHON_MANIFEST.json is not updated"
+              echo "  Run: scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json"
+              exit 1
+          fi
+
   vault-encryption:
     name: Vault Encryption Check
     runs-on: ubuntu-24.04

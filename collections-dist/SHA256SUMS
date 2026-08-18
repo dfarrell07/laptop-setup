@@ -27,6 +27,27 @@
 # defeats hash verification (attacker controls both tarball and API hash). MITIGATION:
 # Version pinning + mandatory code review. Report compromises: https://galaxy.ansible.com/security
 #
+# Python Manifest Verification:
+# ==============================
+# PYTHON_MANIFEST.json records all Python modules, module_utils, and roles from each
+# collection tarball at the time of vendoring. The verify-collections.sh script compares
+# extracted collection content against this baseline to detect:
+#   - Transitive Python code additions (new modules/plugins not in the original tarball)
+#   - Modified Python files (content tampering after extraction)
+#
+# Methodology: After SHA256 tarball verification, verify-collections.sh:
+#   1. Re-extracts all verified tarballs to a temporary directory
+#   2. Compares extracted Python files (plugins/*.py, module_utils/*.py, roles/*/*/files/*.py)
+#   3. Detects additions, modifications, or removals vs. baseline
+#   4. Fails with TOCTOU details if any mismatch found
+#
+# When bumping a collection version:
+#   1. Run make vendor-collections (downloads new tarball, verifies via Galaxy API)
+#   2. Run: scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
+#   3. Review manifest diff: git diff collections-dist/PYTHON_MANIFEST.json
+#   4. Ensure only expected modules added (see CHANGELOG)
+#   5. Commit requirements.yml, PYTHON_MANIFEST.json, and SHA256SUMS together
+#
 # Cross-verification status against upstream sources:
 #   None of these collections publish their built collection tarball as a GitHub release asset;
 #   only auto-generated source archives are available from GitHub. Cross-verification was performed
