@@ -1494,6 +1494,27 @@
     # NOTE: This block has no condition guard — assertions ALWAYS run to prevent bypass attacks
     - name: Validate gitconfig/ssh_config vars in play namespace (catch -e overrides)
       block:
+        - name: Assert identity vars are not CHANGE_ME placeholder (play namespace catch)
+          ansible.builtin.assert:
+            that:
+              - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_user_name | default('') | length > 0)
+              - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_github_user | default('') | length > 0)
+              - >-
+                (dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME') and
+                (dotfiles_user_email_personal | default('') | length > 0)
+            fail_msg: >-
+              SECURITY: One or more identity placeholder values (CHANGE_ME) detected in the
+              play namespace. These critical variables were not configured in config.yml:
+              dotfiles_user_name={{ dotfiles_user_name | default('NOTSET') }},
+              dotfiles_github_user={{ dotfiles_github_user | default('NOTSET') }},
+              dotfiles_user_email_personal={{ dotfiles_user_email_personal | default('NOTSET') }}.
+              This is a critical security catch-all; git commits will be attributed to
+              'CHANGE_ME' and email notifications will go to wrong addresses. This assertion
+              should have been caught in site.yml Play 2 pre_tasks. If you see this error,
+              the critical assertion in site.yml may have been removed or replaced.
+              To fix: Set all three variables in config.yml to actual values before running provisioning.
+          tags: [always]
+
         - name: Assert identity/gitconfig vars contain safe characters (gitconfig injection guard, play namespace)
           ansible.builtin.assert:
             that:
