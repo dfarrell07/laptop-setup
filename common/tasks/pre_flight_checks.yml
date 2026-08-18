@@ -1795,9 +1795,12 @@
               - real_user_home | length > 0
               - real_user_home != '/'
               - real_user_home is regex('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9_. -]+)*$')
+              - real_user_home is not search('\.\.')
+              - real_user_home is not search('\\./')
             fail_msg: >-
               real_user_home='{{ real_user_home }}' does not look like a user home directory.
               Ensure HOME is set correctly before running make all.
+              real_user_home must not contain '..' or './' path traversal sequences.
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

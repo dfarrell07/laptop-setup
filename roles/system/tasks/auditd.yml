@@ -41,12 +41,15 @@
     - name: Assert real_user_home is a valid absolute path before deploying auditd rules
       ansible.builtin.assert:
         that:
-          - real_user_home is regex('^/[a-zA-Z0-9_/.-]{1,254}$')
+          - real_user_home is regex('^/[a-zA-Z0-9_/.:@-]+$')
           - real_user_home != '/'
+          - real_user_home is not search('\.\.')
+          - real_user_home is not search('\\./')
         fail_msg: >-
           real_user_home='{{ real_user_home }}' is not a valid absolute path.
           A newline or special character in HOME would inject arbitrary directives into
           the auditd rules file. Ensure HOME is set correctly before running.
+          real_user_home must not contain '..' or './' path traversal sequences.
 
     - name: Deploy auditd rules
       # File sorts as 'c' — before 'd'–'z' and digit-prefixed files. augenrules merges
