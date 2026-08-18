@@ -14,6 +14,7 @@ Validates:
 5. include_tasks for pre_flight_checks.yml is present in Play 2 pre_tasks
 """
 
+import re
 import sys
 import yaml
 
@@ -79,23 +80,38 @@ def verify_identity_assertion(play2):
             )
             return found_task, errors
 
-        # Check 3: Assertions must mention dotfiles_user_name, dotfiles_github_user, dotfiles_user_email_personal
-        required_assertions = {
-            'dotfiles_user_name': False,
-            'dotfiles_github_user': False,
-            'dotfiles_user_email_personal': False,
+        # Check 3: Assertions must contain proper value comparisons (not just existence checks)
+        # Patterns ensure each variable appears with actual comparison operators (!=, ==, |, default)
+        # NOT just 'is defined' or bare variable existence checks
+        required_patterns = {
+            'dotfiles_user_name': r"dotfiles_user_name\s*(\||!=|==|not in|is not|default\()",
+            'dotfiles_github_user': r"dotfiles_github_user\s*(\||!=|==|not in|is not|default\()",
+            'dotfiles_user_email_personal': r"dotfiles_user_email_personal\s*(\||!=|==|not in|is not|default\()",
         }
+        found_vars = set()
 
-        # Convert that_clause to string for pattern matching
-        that_str = str(that_clause)
-        for var_name in required_assertions.keys():
-            if var_name in that_str:
-                required_assertions[var_name] = True
+        for condition in that_clause:
+            condition_str = str(condition)
 
-        missing = [v for v, found in required_assertions.items() if not found]
+            # Reject string literals (quoted text with no logic operators)
+            # Simple heuristic: if it's wrapped in quotes with no | or comparison operators, reject it
+            if condition_str.strip().startswith(('"""', "'''", '"', "'")) and '|' not in condition_str and '!=' not in condition_str:
+                errors.append(
+                    f"::error::Task '{task_name}' assertion contains string literal instead of logic: {condition_str}"
+                )
+                return found_task, errors
+
+            # Check for each required variable in actual value comparison context
+            # Must have comparison operators like !=, ==, |, or default() filter - not just 'is defined'
+            for var_name, pattern in required_patterns.items():
+                if var_name not in found_vars:
+                    if re.search(pattern, condition_str):
+                        found_vars.add(var_name)
+
+        missing = [v for v in required_patterns.keys() if v not in found_vars]
         if missing:
             errors.append(
-                f"::error::Task '{task_name}' 'that' clause missing assertions for: {', '.join(missing)}"
+                f"::error::Task '{task_name}' 'that' clause must include proper value comparisons for: {', '.join(missing)}"
             )
             return found_task, errors
 
