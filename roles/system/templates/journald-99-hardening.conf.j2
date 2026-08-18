@@ -1,9 +1,9 @@
 # {{ ansible_managed }}
 [Journal]
-Storage={{ system_journald_storage }}
-SystemMaxUse={{ system_journald_max_use }}
-MaxRetentionSec={{ system_journald_max_retention }}
-SystemKeepFree={{ system_journald_keep_free }}
-RateLimitIntervalSec={{ system_journald_rate_interval }}
-RateLimitBurst={{ system_journald_rate_burst }}
-Compress={{ system_journald_compress }}
+Storage={{ system_journald_storage | regex_replace('[\r\n].*', '') }}
+SystemMaxUse={{ system_journald_max_use | regex_replace('[\r\n].*', '') }}
+MaxRetentionSec={{ system_journald_max_retention | regex_replace('[\r\n].*', '') }}
+SystemKeepFree={{ system_journald_keep_free | regex_replace('[\r\n].*', '') }}
+RateLimitIntervalSec={{ system_journald_rate_interval | regex_replace('[\r\n].*', '') }}
+RateLimitBurst={{ system_journald_rate_burst | int }}
+Compress={{ system_journald_compress | regex_replace('[\r\n].*', '') }}

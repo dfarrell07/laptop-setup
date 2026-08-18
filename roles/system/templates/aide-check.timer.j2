@@ -3,10 +3,10 @@
 Description=Daily AIDE file integrity check
 
 [Timer]
-OnCalendar={{ system_aide_check_calendar }}
+OnCalendar={{ system_aide_check_calendar | regex_replace('[\r\n].*', '') }}
 # Run missed check on next boot if system was off at scheduled time
 Persistent=true
-RandomizedDelaySec={{ system_aide_check_random_delay }}
+RandomizedDelaySec={{ system_aide_check_random_delay | regex_replace('[\r\n].*', '') }}
 
 [Install]
 WantedBy=timers.target

@@ -12,10 +12,10 @@ TLP_ENABLE=1
 # Battery charge thresholds (uses thinkpad_acpi — no extra kernel modules needed)
 # BAT0 = main battery. BAT1 entries use the same thresholds as BAT0 (harmless on
 # single-battery models like the P16v; silently ignored for absent battery slots).
-START_CHARGE_THRESH_BAT0={{ system_tlp_bat0_start }}
-STOP_CHARGE_THRESH_BAT0={{ system_tlp_bat0_stop }}
-START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start }}
-STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop }}
+START_CHARGE_THRESH_BAT0={{ system_tlp_bat0_start | int }}
+STOP_CHARGE_THRESH_BAT0={{ system_tlp_bat0_stop | int }}
+START_CHARGE_THRESH_BAT1={{ system_tlp_bat0_start | int }}
+STOP_CHARGE_THRESH_BAT1={{ system_tlp_bat0_stop | int }}
 
 # WiFi power: explicitly disable to match NM's 99-wifi-powersave.conf setting.
 # TLP fires on every AC→BAT udev event after NM sets the interface, overriding NM's
@@ -41,13 +41,13 @@ RUNTIME_PM_ON_BAT=auto
 # while still reducing peak TDP. Use 'low-power' for aggressive power reduction.
 # Requires kernel >= 5.18 + platform_profile sysfs (present on Fedora 44 + P16v).
 # Without this, UEFI defaults after PPD is masked are undefined.
-PLATFORM_PROFILE_ON_AC={{ system_tlp_platform_profile_ac }}
-PLATFORM_PROFILE_ON_BAT={{ system_tlp_platform_profile_bat }}
+PLATFORM_PROFILE_ON_AC={{ system_tlp_platform_profile_ac | regex_replace('[\r\n].*', '') }}
+PLATFORM_PROFILE_ON_BAT={{ system_tlp_platform_profile_bat | regex_replace('[\r\n].*', '') }}
 
 # CPU power (AMD Ryzen PRO 6950HX — amd-pstate-epp active mode)
 # With amd-pstate-epp active mode, the scaling_governor is locked to 'powersave'
 # on BOTH AC and BAT; CPU_SCALING_GOVERNOR_ON_AC and CPU_SCALING_GOVERNOR_ON_BAT
 # are both ignored. EPP (CPU_ENERGY_PERF_POLICY_ON_*) is the only effective CPU power knob.
 # balance_power on battery reduces CPU power draw at the cost of burst performance.
-CPU_ENERGY_PERF_POLICY_ON_AC={{ system_tlp_cpu_energy_policy_ac }}
-CPU_ENERGY_PERF_POLICY_ON_BAT={{ system_tlp_cpu_energy_policy_bat }}
+CPU_ENERGY_PERF_POLICY_ON_AC={{ system_tlp_cpu_energy_policy_ac | regex_replace('[\r\n].*', '') }}
+CPU_ENERGY_PERF_POLICY_ON_BAT={{ system_tlp_cpu_energy_policy_bat | regex_replace('[\r\n].*', '') }}

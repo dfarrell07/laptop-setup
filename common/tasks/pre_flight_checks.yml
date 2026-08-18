@@ -716,6 +716,44 @@
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
       tags: [always]
 
+    - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_journald_storage', '') | string is match('^(persistent|volatile|auto|none|)$')
+          - _raw.get('system_journald_max_use', '') | string is match('^[0-9]+[KMGTP]?$|^$')
+          - _raw.get('system_journald_keep_free', '') | string is match('^[0-9]+[KMGTP]?$|^$')
+          - _raw.get('system_journald_max_retention', '') | string is match('^[0-9a-zA-Z]+$|^$')
+          - _raw.get('system_journald_rate_interval', '') | string is match('^[0-9]+[smhd]?$|^$')
+          - _raw.get('system_journald_rate_burst', 10000) | int >= 0
+          - _raw.get('system_journald_compress', '') | string is match('^(yes|no|true|false|1|0|)$')
+          - _raw.get('system_auditd_max_log_file', 8) | int >= 0
+          - _raw.get('system_auditd_num_logs', 5) | int >= 0
+          - _raw.get('system_aide_check_calendar', '') | string is match('^[a-zA-Z0-9:* _-]*$')
+          - _raw.get('system_aide_check_random_delay', '') | string is match('^[0-9]+[smhd]?$|^$')
+          - _raw.get('system_tlp_bat0_start', 20) | int is defined
+          - _raw.get('system_tlp_bat0_stop', 80) | int is defined
+          - _raw.get('system_tlp_platform_profile_ac', '') | string is match('^(performance|balanced|low-power|)$')
+          - _raw.get('system_tlp_platform_profile_bat', '') | string is match('^(performance|balanced|low-power|)$')
+          - _raw.get('system_tlp_cpu_energy_policy_ac', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
+          - _raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
+          - _raw.get('system_pwhistory_remember', 24) | int >= 0
+        fail_msg: >-
+          SECURITY: journald/auditd/aide-check timer/TLP/PAM vars in config.yml contain
+          unsafe values. system_journald_storage must be persistent/volatile/auto/none.
+          system_journald_max_use/keep_free must be digits+optional K/M/G/T/P suffix.
+          system_journald_rate_burst and system_auditd_max_log_file/num_logs must be
+          non-negative integers. system_aide_check_calendar must use safe calendar chars.
+          system_tlp_platform_profile must be performance/balanced/low-power.
+          system_tlp_cpu_energy_policy must be performance/balance_performance/balance_power/power.
+          system_pwhistory_remember must be a non-negative integer.
+          These values are rendered verbatim into system config files; embedded newlines
+          allow directive injection (log erasure via MaxRetentionSec=1s, audit dispatcher
+          hijack via dispatcher=/tmp/evil, PAM policy bypass via extra pam_deny.so line).
+      tags: [always]
+
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
       vars:
