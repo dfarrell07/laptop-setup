@@ -113,6 +113,25 @@
           (dotfiles_aws_profile).
       tags: [always]
 
+    - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_github_user', '') | string is match('^[a-zA-Z0-9-]*$')
+          - _raw.get('dotfiles_internal_git_host', '') | string is match('^[a-zA-Z0-9._-]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_github_user or dotfiles_internal_git_host in config.yml
+          contains unsafe characters. These values are interpolated directly into .gitconfig
+          section headers (e.g. [includeIf "gitdir:~/src/<user>/"] and [http "https://<host>"]);
+          newlines, quotes, or brackets in the value break out of the section header and allow
+          arbitrary gitconfig injection — including setting core.hooksPath to an attacker-controlled
+          path, which results in arbitrary code execution on every git operation.
+          Allowed: alphanumeric, hyphen (dotfiles_github_user — matches GitHub username rules);
+          alphanumeric, dot, underscore, hyphen (dotfiles_internal_git_host — matches hostname rules).
+      tags: [always]
+
     - name: Assert dotfiles_work_src_dirs entries contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -179,6 +198,22 @@
               (precedence 2), so defining them in config.yml silently empties deny-lists or
               degrades sandbox enforcement. Remove them from config.yml; set them in
               roles/claude/defaults/main.yml if policy change is intentional.
+          tags: [always]
+
+        - name: Assert redhat_splunk_nologin_shell is a non-login shell when overridden (CIS 5.6 guard)
+          when: "'redhat_splunk_nologin_shell' in (_user_config | default({}))"
+          ansible.builtin.assert:
+            that:
+              - redhat_splunk_nologin_shell in ['/sbin/nologin', '/usr/sbin/nologin', '/bin/false']
+            fail_msg: >-
+              SECURITY: redhat_splunk_nologin_shell is set to '{{ redhat_splunk_nologin_shell }}'
+              in config.yml. This variable controls the shell assigned to the splunk service account
+              (CIS Benchmark 5.6). It must be a non-login shell. Allowed values:
+              /sbin/nologin, /usr/sbin/nologin, /bin/false.
+              Setting it to an interactive shell (e.g. /bin/bash) defeats CIS 5.6 hardening and
+              leaves the splunk service account available for interactive login.
+              Remove redhat_splunk_nologin_shell from config.yml (the default /sbin/nologin is
+              correct for all supported platforms) or set it to one of the allowed values.
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).

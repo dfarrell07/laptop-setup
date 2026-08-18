@@ -160,7 +160,7 @@
     src: settings.local.json.j2
     dest: "{{ item }}/settings.local.json"
     mode: "0600"
-    force: false
+    force: true
   loop: "{{ _claude_instances }}"
   loop_control:
     label: "{{ item | basename }}"
