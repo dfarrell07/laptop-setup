@@ -9,11 +9,14 @@
 
   pre_tasks:
     - name: SECURITY CRITICAL — Verify collection integrity before execution (supply chain defense-in-depth)
+      # NOTE: deliberately no tags — tasks with no tags survive --skip-tags always.
+      # Tasks tagged [always] can be bypassed with --skip-tags always; untagged tasks cannot.
+      # Primary protection is VERIFY_AND_RUN in Makefile (shell command, not Ansible task).
+      # This provides defense-in-depth for direct ansible-playbook invocations.
       ansible.builtin.command:
         cmd: scripts/verify-collections.sh
       become: false
       changed_when: false
-      tags: [always]
 
     - name: Gather facts (explicit become:false so check mode works without sudo)
       ansible.builtin.gather_facts:
@@ -121,8 +124,8 @@
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
     - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
+      # NOTE: deliberately no tags — see Play 1 collection verification comment for rationale.
       become: false
-      tags: [always]
       block:
         - name: Re-run pre-flight checks (ensures --start-at-task cannot bypass)
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
