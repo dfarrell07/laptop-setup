@@ -113,13 +113,13 @@
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
   when: git_repos_filtered | length > 0
 
-- name: Clone repositories  # noqa: latest[git]
+- name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:
     repo: "{{ item.url }}"
     dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
     update: false
     depth: "{{ item.depth | default(omit) }}"
-    accept_newhostkey: true
+    accept_newhostkey: true  # TOFU: pre-seed ssh_work_keyscan_hosts in config.yml with optional fingerprint pinning
   environment:
     GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos
   loop: "{{ git_repos_filtered }}"
