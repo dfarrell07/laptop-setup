@@ -307,6 +307,94 @@
           so the rescue block would not remove the file.
       tags: [always]
 
+    - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
+        fail_msg: >-
+          SECURITY: system_ssh_rekey_limit in config.yml contains unsafe characters.
+          This value is rendered into RekeyLimit in sshd_config.d/00-hardening.conf;
+          embedded newlines inject arbitrary sshd directives and can silently override
+          hardened settings such as Ciphers or GSSAPIAuthentication.
+          Allowed: '<bytes>[K|M|G] [time[s|m|h|d|w]]' (e.g. '1G 1h'), 'none', or 'default'.
+          No spaces, letters, or punctuation other than the unit suffixes are permitted.
+      tags: [always]
+
+    - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
+          - _raw.get('system_ssh_client_alive_interval', '300') | string is match('^[0-9]+$')
+          - _raw.get('system_ssh_client_alive_count_max', '2') | string is match('^[0-9]+$')
+          - _raw.get('system_ssh_unused_connection_timeout', '600') | string is match('^[0-9]*$')
+        fail_msg: >-
+          SECURITY: system_ssh_max_sessions, system_ssh_client_alive_interval,
+          system_ssh_client_alive_count_max, or system_ssh_unused_connection_timeout
+          in config.yml must be a plain non-negative integer. Newlines inject arbitrary
+          directives into sshd_config.d/00-hardening.conf; sshd -t does not catch
+          semantically valid injected directives, so the rescue block will not remove
+          the file. Remove any non-digit characters from the value.
+      tags: [always]
+
+    - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_ssh_channel_timeout', '') | string is match('^[a-zA-Z0-9=, *hms]*$')
+        fail_msg: >-
+          SECURITY: system_ssh_channel_timeout in config.yml contains unsafe characters.
+          This value is rendered verbatim into ChannelTimeout in sshd_config.d/00-hardening.conf;
+          embedded newlines inject arbitrary sshd directives. sshd -t does not catch
+          syntactically valid injected directives (e.g. PermitRootLogin yes), so the
+          rescue block would not remove the file.
+          Allowed: alphanumeric, equals, comma, space, asterisk, h/m/s time suffixes
+          (e.g. "global=1h" or "session=30m direct-tcpip=1h").
+      tags: [always]
+
+    - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _allowed: ['true', 'false', 'yes', 'no', 'on', 'off', '1', '0', true, false]
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_direnv_strict_env', 'false') | string | lower in _allowed
+          - _raw.get('dotfiles_direnv_disable_stdin', 'false') | string | lower in _allowed
+        fail_msg: >-
+          SECURITY: dotfiles_direnv_strict_env and dotfiles_direnv_disable_stdin in
+          config.yml must be plain booleans (true/false/yes/no/on/off/1/0).
+          Embedded newlines inject arbitrary keys into direnv.toml [global], allowing
+          bash_path override to execute an attacker-controlled shell on every direnv
+          evaluation (every cd into a managed directory).
+      tags: [always]
+
+    - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _usbguard_extra: "{{ _raw.get('system_usbguard_extra_rules', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _usbguard_extra | map('string') | select('search', '\n') | list | length == 0
+          - _usbguard_extra | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list | length == 0
+        fail_msg: >-
+          SECURITY: system_usbguard_extra_rules in config.yml contains invalid entries.
+          Each entry must begin with 'allow', 'block', or 'reject' followed by a device
+          selector (e.g. 'allow id 1234:5678'). Bare 'allow', 'block', or 'reject' without
+          a selector creates a catch-all rule that bypasses ImplicitPolicyTarget=block for
+          all subsequent unwhitelisted devices. Entries must not contain embedded newlines
+          (YAML block scalars inject multiple rule lines into the rendered rules.conf).
+          Invalid entries: {{ _usbguard_extra | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
+      tags: [always]
+
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"

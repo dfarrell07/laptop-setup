@@ -21,7 +21,7 @@ AuthorizedKeysFile .ssh/authorized_keys  # Fedora's sshd_config already restrict
 
 AllowUsers {{ ([real_user_id] + (system_ssh_extra_allow_users | default([]))) | join(' ') }}
 MaxAuthTries 3
-MaxSessions {{ system_ssh_max_sessions }}  # OpenSSH default is 10; explicit so value is auditable and config.yml overrides are visible in the drop-in
+MaxSessions {{ system_ssh_max_sessions | int }}  # OpenSSH default is 10; explicit so value is auditable and config.yml overrides are visible in the drop-in
 LoginGraceTime 30
 
 X11Forwarding no  # compiled default no; overrides 50-redhat.conf which sets yes on Fedora/RHEL
@@ -30,28 +30,26 @@ AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding }}
 # NOTE: AcceptEnv is cumulative in sshd — 50-redhat.conf AcceptEnv COLORTERM cannot be
 # overridden from this file regardless of drop-in order. COLORTERM forwarding is always active.
 
-ClientAliveInterval {{ system_ssh_client_alive_interval }}
-ClientAliveCountMax {{ system_ssh_client_alive_count_max }}  # compiled default 3; tightened to 2 — disconnect after 2 unacknowledged keepalive probes (10 min with ClientAliveInterval 300)
+ClientAliveInterval {{ system_ssh_client_alive_interval | int }}
+ClientAliveCountMax {{ system_ssh_client_alive_count_max | int }}  # compiled default 3; tightened to 2 — disconnect after 2 unacknowledged keepalive probes (10 min with ClientAliveInterval 300)
 # ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
 # Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
 # NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed
 # UnusedConnectionTimeout firing prematurely; API-style clients on OpenSSH < 10.3 may disconnect early.
 # Default: disabled (system_ssh_channel_timeout: ""); set e.g. "global 1h" in config.yml once all targets run OpenSSH >= 10.3.
 {% if system_ssh_channel_timeout %}
-ChannelTimeout {{ system_ssh_channel_timeout }}
+ChannelTimeout {{ system_ssh_channel_timeout | regex_replace('[\r\n].*', '') }}
 {% endif %}
 # system_ssh_unused_connection_timeout: default 600 — directive is always emitted; set '' in config.yml to omit directive; integer 0 is also falsy and omits it (not emitted as UnusedConnectionTimeout 0).
 {% if system_ssh_unused_connection_timeout %} {# '' or 0 to omit/disable #}
-UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout }}
+UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout | int }}
 {% endif %}
 TCPKeepAlive no  # OpenSSH compiled default is yes; disabled in favour of encrypted ClientAlive messages (ClientAliveInterval/CountMax above)
 SyslogFacility AUTHPRIV  # compiled default is AUTH; explicit here to guarantee AUTHPRIV regardless of 50-redhat.conf presence or order
 LogLevel VERBOSE
 UsePAM yes  # compiled default no; setting no bypasses PAM account/session modules (faillock lockout, audit, MOTD); matches 50-redhat.conf; explicit (first-occurrence)
 MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100
-RekeyLimit {{ system_ssh_rekey_limit }}  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window
-Compression no  # OpenSSH 10.2p1 (Fedora 44) compiled default is yes (delayed is a legacy synonym); disabled — no benefit for interactive sessions and reduces protocol complexity
-GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHEL; without this line the effective value is yes even though the compiled default is no
+GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHEL; without this line the effective value is yes even though the compiled default is no; placed before RekeyLimit so first-occurrence semantics protect this directive even if system_ssh_rekey_limit contains injected text
 
 # CIS 4.2.12 — approved algorithms. NOTE: sshd processes drop-in files lexicographically;
 # 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list
@@ -60,6 +58,10 @@ GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHE
 # configures sshd via 40-redhat-crypto-policies.conf, but this file takes precedence:
 # sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
 # 40-redhat-crypto-policies.conf.
+# Ciphers/MACs/KexAlgorithms placed before RekeyLimit: first-occurrence semantics mean
+# an injected duplicate (e.g. via system_ssh_rekey_limit newline injection) is silently ignored.
 Ciphers {{ ssh_ciphers }}
 MACs {{ ssh_macs }}  # MACs controls the MAC algorithm negotiation for all connections; for AEAD ciphers (gcm, chacha20) the negotiated MAC algorithm is not applied for packet authentication — the cipher provides authentication intrinsically
 KexAlgorithms {{ ssh_kex_algorithms }}
+RekeyLimit {{ system_ssh_rekey_limit | regex_replace('[\r\n].*', '') }}  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window; regex_replace strips any newline suffix to prevent sshd config injection
+Compression no  # OpenSSH 10.2p1 (Fedora 44) compiled default is yes (delayed is a legacy synonym); disabled — no benefit for interactive sessions and reduces protocol complexity
