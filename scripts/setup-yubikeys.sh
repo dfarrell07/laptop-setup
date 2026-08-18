@@ -245,6 +245,10 @@ VAULTPASS
   mv "$_tmp" "$VAULT_PASS_SH"
   ok "vault-pass.sh written (mode 700, atomic rename)"
 
+  # Update the SHA256 integrity reference to match the new YubiKey version
+  sha256sum "$VAULT_PASS_SH" > "$SCRIPT_DIR/vault-pass.sh.sha256"
+  ok "Updated vault-pass.sh.sha256 with new YubiKey version hash"
+
   # Verify vault-pass.sh works (requires a key still inserted)
   printf "       Touch YubiKey to verify vault-pass.sh (%ds)... " "$CHALRESP_TIMEOUT"
   VERIFY_OUTPUT=""
