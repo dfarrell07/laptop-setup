@@ -269,6 +269,9 @@
 # sole anchor. On re-provisioning, the existing binary verifies the new download against
 # the .sigstore.json bundle — a Sigstore transparency log entry that is a different trust
 # root from the GitHub release SHA256.
+#
+# SECURITY: TOCTOU vulnerability remediated — temporary files use per-run random directory
+# (mode 0700) to prevent TOCTOU attacks during bundle verification window.
 
 - name: Stat existing cosign binary (pre-install; enables bundle verification on re-provision)
   when:
@@ -280,7 +283,19 @@
     path: /usr/local/bin/cosign
   register: _cosign_pre_stat
 
-- name: Download cosign binary to temp path for bundle verification (re-provision only)
+- name: Create atomic temporary directory for cosign bundle verification (TOCTOU mitigation)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "ansible_cosign_"
+  register: _cosign_tmpdir
+
+- name: Download cosign binary to atomic temp path for bundle verification (re-provision only)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -291,7 +306,7 @@
     url: >-
       https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
       }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}
-    dest: /tmp/cosign-new
+    dest: "{{ _cosign_tmpdir.path }}/cosign-new"
     checksum: "sha256:{{ packages_cosign_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_cosign_sha256 }}"
     mode: "0755"
     timeout: 300
@@ -307,7 +322,7 @@
     url: >-
       https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
       }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.sigstore.json
-    dest: /tmp/cosign.sigstore.json
+    dest: "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
     mode: "0600"
 
 - name: Verify new cosign binary via bundle using existing cosign (second trust root; re-provision only)
@@ -321,9 +336,9 @@
     argv:
       - /usr/local/bin/cosign
       - verify-blob
-      - /tmp/cosign-new
+      - "{{ _cosign_tmpdir.path }}/cosign-new"
       - --bundle
-      - /tmp/cosign.sigstore.json
+      - "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
       - --certificate-identity
       - keyless@projectsigstore.iam.gserviceaccount.com
       - --certificate-oidc-issuer
@@ -358,13 +373,26 @@
     - profile == 'work'
     - packages_cosign_install_enabled
     - _cosign_pre_stat.stat.exists
+    - _cosign_verify_result.rc == 0
   ansible.builtin.copy:
-    src: /tmp/cosign-new
+    src: "{{ _cosign_tmpdir }}/cosign-new"
     dest: /usr/local/bin/cosign
     remote_src: true
     mode: "0755"
+    follow_symlinks: false
   become: true
   tags: [become]
+
+- name: Clean up secure cosign temporary directory
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - _cosign_pre_stat.stat.exists
+  ansible.builtin.file:
+    path: "{{ _cosign_tmpdir }}"
+    state: absent
 
 - name: Install cosign (first install; bootstrap - bundle verification not possible)
   when:
@@ -396,6 +424,17 @@
 # signature, and Rekor inclusion proof.
 # Gates on profile == 'work' because cosign is only installed for that profile.
 
+- name: Create secure temp directory for sops verification
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: _sops_verify
+  register: _sops_tmpdir
+
 - name: Download sops checksums file for cosign verification
   # sops v3.13.0+ signs only the checksums file (not per-arch binaries).
   # Verifying this file proves the SHA256 pins in packages_sops_sha256 originate from the
@@ -410,7 +449,7 @@
     url: >-
       https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
       }}/sops-v{{ packages_sops_version }}.checksums.txt
-    dest: /tmp/sops-checksums.txt
+    dest: "{{ _sops_tmpdir.path }}/sops-checksums.txt"
     mode: "0600"
 
 - name: Download sops checksums cosign bundle
@@ -423,7 +462,7 @@
     url: >-
       https://github.com/getsops/sops/releases/download/v{{ packages_sops_version
       }}/sops-v{{ packages_sops_version }}.checksums.sigstore.json
-    dest: /tmp/sops-cosign.bundle
+    dest: "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
     mode: "0600"
 
 - name: Verify sops checksums file via cosign bundle
@@ -436,9 +475,9 @@
     argv:
       - /usr/local/bin/cosign
       - verify-blob
-      - /tmp/sops-checksums.txt
+      - "{{ _sops_tmpdir.path }}/sops-checksums.txt"
       - --bundle
-      - /tmp/sops-cosign.bundle
+      - "{{ _sops_tmpdir.path }}/sops-cosign.bundle"
       - --certificate-identity
       - "https://github.com/getsops/sops/.github/workflows/release.yml@refs/tags/v{{ packages_sops_version }}"
       - --certificate-oidc-issuer
@@ -475,7 +514,7 @@
     set -o pipefail
     sha256sum /usr/local/bin/sops | awk '{print $1}' | \
       grep -qF "$(grep "sops-v{{ packages_sops_version }}.linux.{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}" \
-        /tmp/sops-checksums.txt | awk '{print $1}')"
+        {{ _sops_tmpdir.path }}/sops-checksums.txt | awk '{print $1}')"
   args:
     executable: /bin/bash
   changed_when: false
@@ -495,9 +534,19 @@
       WARNING: sops binary SHA256 verification against attested checksums file failed (rc={{ _sops_sha256_verify_result.rc }}).
       This can occur when the checksums file download failed or contains an unexpected format. Proceeding without
       checksums attestation verification. sops binary was verified via direct SHA256 checksum at download time.
-      If this is unexpected, verify that /tmp/sops-checksums.txt exists and contains the expected format
-      (SHA256 hash followed by filename). Run 'cat /tmp/sops-checksums.txt | grep linux' to verify the entry
-      matches packages_sops_version {{ packages_sops_version }} on your architecture.
+      If this is unexpected, verify that the checksums file exists and contains the expected format
+      (SHA256 hash followed by filename). Check that the entry matches packages_sops_version {{ packages_sops_version }}
+      on your architecture.
+
+- name: Clean up secure sops verification temporary directory
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+  ansible.builtin.file:
+    path: "{{ _sops_tmpdir.path }}"
+    state: absent
 
 - name: Install tkn (Tekton CLI for Konflux pipeline inspection)
   # VERIFICATION: NOT IMPLEMENTED. tektoncd/cli releases provide only checksums.txt

@@ -72,10 +72,18 @@
             fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
           when: packages_oc_version == 'stable'
 
-        - name: Download OpenShift client tarball (SHA256-verified)
+        - name: Create temporary directory for oc download
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: oc_
+          register: packages_oc_tempdir
+          become: true
+          tags: [become]
+
+        - name: Download OpenShift client tarball (SHA256-verified, randomized tempdir)
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
-            dest: /tmp/openshift-client-linux.tar.gz
+            dest: "{{ packages_oc_tempdir.path }}/openshift-client-linux.tar.gz"
             checksum: "sha256:{{ packages_oc_sha256 }}"
             mode: "0644"
             timeout: 300
@@ -86,16 +94,31 @@
           become: true
           tags: [become]
 
+        - name: Verify oc tarball is not a symlink
+          ansible.builtin.stat:
+            path: "{{ packages_oc_download.dest }}"
+            follow: false
+          register: packages_oc_tarball_stat
+          become: true
+          tags: [become]
+
+        - name: Fail if oc tarball is a symlink (TOCTOU attack detected)
+          ansible.builtin.fail:
+            msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+          when: packages_oc_tarball_stat.stat.islnk
+          become: true
+          tags: [become]
+
         - name: Extract oc and kubectl
           # Idempotency guard: skip re-extraction when get_url reports the tarball
-          # is unchanged (sha256 matches the cached /tmp copy).  Still extracts
+          # is unchanged (sha256 matches the cached copy).  Still extracts
           # when oc is absent from disk (rc != 0) even if the tarball is cached,
           # covering the edge case of a manually deleted binary.  This matters
           # most for packages_oc_version == 'stable', where the outer when-clause
           # always fires and creates: /usr/local/bin/oc would wrongly prevent
           # upgrades when the stable pointer advances to a new release.
           ansible.builtin.unarchive:
-            src: /tmp/openshift-client-linux.tar.gz
+            src: "{{ packages_oc_download.dest }}"
             dest: /usr/local/bin
             remote_src: true
             extra_opts:
@@ -108,11 +131,11 @@
           tags: [become]
 
       always:
-        - name: Clean up oc tarball
+        - name: Clean up oc temporary directory
           ansible.builtin.file:
-            path: /tmp/openshift-client-linux.tar.gz
+            path: "{{ packages_oc_tempdir.path }}"
             state: absent
-          when: packages_oc_download is defined
+          when: packages_oc_tempdir is defined
           become: true
           tags: [become]
 
@@ -217,10 +240,18 @@
             - packages_oc_version == 'stable'
             - not (packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums)
 
-        - name: Download opm tarball (SHA256-verified)
+        - name: Create temporary directory for opm download
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: opm_
+          register: packages_opm_tempdir
+          become: true
+          tags: [become]
+
+        - name: Download opm tarball (SHA256-verified, randomized tempdir)
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"
-            dest: /tmp/opm-linux.tar.gz
+            dest: "{{ packages_opm_tempdir.path }}/opm-linux.tar.gz"
             checksum: "sha256:{{ packages_opm_sha256 }}"
             mode: "0644"
             timeout: 300
@@ -231,19 +262,36 @@
           become: true
           tags: [become]
 
+        - name: Verify opm tarball is not a symlink
+          ansible.builtin.stat:
+            path: "{{ packages_opm_download.dest }}"
+            follow: false
+          register: packages_opm_tarball_stat
+          become: true
+          tags: [become]
+
+        - name: Fail if opm tarball is a symlink (TOCTOU attack detected)
+          ansible.builtin.fail:
+            msg: "SECURITY: opm tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+          when: packages_opm_tarball_stat.stat.islnk
+          become: true
+          tags: [become]
+
         - name: Assert opm binary name exists in tarball
-          ansible.builtin.command: tar -tzf /tmp/opm-linux.tar.gz
+          ansible.builtin.command: tar -tzf {{ packages_opm_download.dest | quote }}
           register: packages_opm_tarball_list
           changed_when: false
           failed_when: packages_opm_tarball_list.stdout_lines | select('equalto', packages_opm_binary_name) | list | length == 0
           when: packages_opm_download.changed or packages_opm_check.rc != 0
+          become: true
+          tags: [become]
 
         - name: Extract and install opm binary
           when: packages_opm_download.changed or packages_opm_check.rc != 0
           block:
             - name: Extract opm binary
               ansible.builtin.unarchive:
-                src: /tmp/opm-linux.tar.gz
+                src: "{{ packages_opm_download.dest }}"
                 dest: /usr/local/bin
                 remote_src: true
                 extra_opts:
@@ -286,11 +334,11 @@
           tags: [become]
 
       always:
-        - name: Clean up opm tarball
+        - name: Clean up opm temporary directory
           ansible.builtin.file:
-            path: /tmp/opm-linux.tar.gz
+            path: "{{ packages_opm_tempdir.path }}"
             state: absent
-          when: packages_opm_download is defined
+          when: packages_opm_tempdir is defined
           become: true
           tags: [become]
 
