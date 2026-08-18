@@ -55,55 +55,47 @@
       failed_when: false
       tags: [always]
 
-    - name: Assert identity vars in config.yml contain no Jinja2 template expressions (SSTI guard)
+    - name: Comprehensively scan all config.yml values for Jinja2 template expressions (SSTI guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        # Serialize entire config dict to JSON for unified template marker scanning
+        # This detects {{ or {% in ANY value (string, list element, dict value)
+        _config_json: "{{ _raw | to_nice_json }}"
       ansible.builtin.assert:
         that:
-          - ('{' ~ '{') not in (_raw.get('dotfiles_user_name', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_user_email_work', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_user_email_personal', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_github_user', '') | string)
-          - ('{' ~ '{') not in (_raw.get('system_timezone', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_internal_git_host', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_laptop_tailscale_host', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_mac_tailscale_host', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_user_name', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_user_email_work', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_user_email_personal', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_github_user', '') | string)
-          - ('{' ~ '%') not in (_raw.get('system_timezone', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_internal_git_host', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_laptop_tailscale_host', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_mac_tailscale_host', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_gonosumdb', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_gonosumdb', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_goprivate', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_goprivate', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_aws_profile', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_aws_profile', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_ssh_hardware_key_basename', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_ssh_hardware_key_basename', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_ssh_redhat_key_basename', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_ssh_redhat_key_basename', '') | string)
-          - ('{' ~ '{') not in (_raw.get('ssh_signing_key_basename', '') | string)
-          - ('{' ~ '%') not in (_raw.get('ssh_signing_key_basename', '') | string)
-          - ('{' ~ '{') not in (_raw.get('dotfiles_claude_queue_repo', '') | string)
-          - ('{' ~ '%') not in (_raw.get('dotfiles_claude_queue_repo', '') | string)
+          # Reject {{ and {% in the entire serialized config
+          # The combination of both checks prevents SSTI in all config variables
+          - ('{' ~ '{') not in _config_json
+          - ('{' ~ '%') not in _config_json
         fail_msg: >-
-          SECURITY: config.yml contains a Jinja2 template expression in one or more
-          identity variables. Ansible loads these with trusted_as_template=True and
-          evaluates them as live templates (SSTI — arbitrary code execution). Use plain
-          string values. If the value legitimately contains braces, prefix it with !unsafe
-          in config.yml, e.g.: dotfiles_user_name: !unsafe 'Your Name'.
-          Checked: dotfiles_user_name, dotfiles_user_email_work, dotfiles_user_email_personal,
-          dotfiles_github_user, system_timezone, dotfiles_internal_git_host,
-          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host,
-          dotfiles_gonosumdb, dotfiles_goprivate, dotfiles_aws_profile,
-          dotfiles_ssh_hardware_key_basename, dotfiles_ssh_redhat_key_basename,
-          ssh_signing_key_basename, dotfiles_claude_queue_repo.
-          Markers checked: '{{' and '{%'.
+          SECURITY: config.yml contains a Jinja2 template expression ({{ or {%}).
+          Ansible loads config.yml with trusted_as_template=True, meaning any
+          {{ ... }} or {% ... %} expressions will be evaluated as live templates,
+          allowing arbitrary code execution (SSTI). This applies to ALL variables,
+          not just identity fields: strings, list elements, dict values, etc.
+
+          EXPLOIT: An attacker who can commit to default.config.yml or influence
+          your config.yml can execute arbitrary Ansible code with the privilege
+          level of the provisioning play (become: true in Play 1).
+
+          SOLUTION: If your config value legitimately contains braces (e.g., regex,
+          Go nosum database list, template snippet), mark it with the !unsafe YAML tag:
+
+              dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+              system_aide_monitoring_etc_paths: !unsafe ['/etc/[file]']
+
+          The !unsafe tag prevents Ansible from evaluating the string as a template.
+
+          INVESTIGATION: Search config.yml for {{ and {% patterns. To isolate
+          which variables are affected, check the raw config.yml file for these
+          strings. Common variables that might accidentally contain braces:
+          - dotfiles_goprivate, dotfiles_gonosumdb (comma-separated lists)
+          - system_aide_monitoring_etc_paths (filesystem paths)
+          - Any regex or shell patterns in system_* configuration
+          - desktop_alacritty_color_*, desktop_bar_* (hex color codes starting with #)
+
+          Remove all {{ and {%  markers from config.yml, or wrap values with !unsafe.
 
     - name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
       when: _config_yml_raw.content is defined
