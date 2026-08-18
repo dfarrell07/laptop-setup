@@ -656,6 +656,22 @@
           Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
       tags: [always]
 
+    - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('packages_opm_binary_name', 'opm-rhel8') | string is match('^[a-zA-Z0-9._-]+$')
+        fail_msg: >-
+          SECURITY: packages_opm_binary_name in config.yml contains path traversal characters
+          (slashes or dots in leading position). This variable is used in become:true file/copy
+          tasks as path: /usr/local/bin/{{ packages_opm_binary_name }}; a value like
+          "../../../etc/cron.d/evil" resolves to /etc/cron.d/evil and allows writing a
+          root-owned cron job during provisioning (LPE). Allowed: alphanumeric, dot, underscore,
+          hyphen only (e.g. "opm-rhel8", "opm.v0.22.0"). No slashes or path separators.
+      tags: [always]
+
     - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
       when: _config_yml_raw.content is defined
       vars:
