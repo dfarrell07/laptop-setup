@@ -20,6 +20,36 @@
     - not system_is_container
     - not csb_rhel  # CSB: IT manages sysctl via SCAP; 90-hardening.conf would conflict
   block:
+    - name: Parse system_sysctl_extra if passed as JSON string
+      ansible.builtin.set_fact:
+        system_sysctl_extra: >-
+          {{ system_sysctl_extra | from_json
+             if system_sysctl_extra is string
+             else system_sysctl_extra }}
+      when: system_sysctl_extra is defined and system_sysctl_extra | length > 0
+
+    - name: Parse system_sysctl_extra_additional if passed as JSON string
+      ansible.builtin.set_fact:
+        system_sysctl_extra_additional: >-
+          {{ system_sysctl_extra_additional | from_json
+             if system_sysctl_extra_additional is string
+             else system_sysctl_extra_additional }}
+      when: system_sysctl_extra_additional is defined and system_sysctl_extra_additional | length > 0
+
+    - name: Validate system_sysctl_extra is a dict
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_extra is mapping
+        fail_msg: "system_sysctl_extra must be a dict, not {{ system_sysctl_extra | type_debug }}"
+      when: system_sysctl_extra is defined
+
+    - name: Validate system_sysctl_extra_additional is a dict
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_extra_additional is mapping
+        fail_msg: "system_sysctl_extra_additional must be a dict, not {{ system_sysctl_extra_additional | type_debug }}"
+      when: system_sysctl_extra_additional is defined
+
     - name: Ensure /etc/sysctl.d exists
       ansible.builtin.file:
         path: /etc/sysctl.d
@@ -71,6 +101,54 @@
           dict: "{{ system_sysctl_extra }}"
         - name: system_sysctl_extra_additional
           dict: "{{ system_sysctl_extra_additional }}"
+      loop_control:
+        loop_var: _item
+
+    - name: Assert no hardening-critical keys in extra_additional
+      ansible.builtin.assert:
+        that:
+          - "(_item.keys() | intersect(_hardening_critical_keys)) | length == 0"
+        fail_msg: >-
+          Hardening-critical keys
+          {{ _item.keys() | intersect(_hardening_critical_keys) | join(', ') }}
+          found in system_sysctl_extra_additional. These keys enforce
+          CIS/STIG security requirements and cannot be overridden via
+          system_sysctl_extra_additional. Document security exception with
+          your security team before attempting to modify these keys.
+      vars:
+        _hardening_critical_keys:
+          - kernel.kptr_restrict
+          - kernel.dmesg_restrict
+          - fs.suid_dumpable
+          - kernel.randomize_va_space
+          - net.ipv4.conf.all.send_redirects
+          - net.ipv4.conf.default.send_redirects
+          - net.ipv4.conf.all.accept_redirects
+          - net.ipv4.conf.default.accept_redirects
+          - net.ipv6.conf.all.accept_redirects
+          - net.ipv6.conf.default.accept_redirects
+          - net.ipv4.conf.all.accept_source_route
+          - net.ipv4.conf.default.accept_source_route
+          - net.ipv6.conf.all.accept_source_route
+          - net.ipv6.conf.default.accept_source_route
+          - net.ipv4.conf.all.rp_filter
+          - net.ipv4.conf.default.rp_filter
+          - net.ipv4.conf.all.log_martians
+          - net.ipv4.conf.default.log_martians
+          - net.ipv4.conf.all.secure_redirects
+          - net.ipv4.conf.default.secure_redirects
+          - net.ipv4.icmp_echo_ignore_broadcasts
+          - net.ipv4.icmp_ignore_bogus_error_responses
+          - fs.protected_regular
+          - fs.protected_hardlinks
+          - fs.protected_symlinks
+          - fs.protected_fifos
+          - net.ipv4.tcp_syncookies
+          - net.ipv4.tcp_rfc1337
+          - net.ipv6.conf.all.use_tempaddr
+          - net.ipv6.conf.default.use_tempaddr
+      with_items:
+        - "{{ system_sysctl_extra_additional }}"
       loop_control:
         loop_var: _item
 
