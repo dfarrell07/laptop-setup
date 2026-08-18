@@ -103,7 +103,6 @@
           dotfiles_ssh_hardware_key_basename, dotfiles_ssh_redhat_key_basename,
           ssh_signing_key_basename, dotfiles_claude_queue_repo.
           Markers checked: '{{' and '{%'.
-      tags: [always]
 
     - name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
       when: _config_yml_raw.content is defined
@@ -122,7 +121,6 @@
           alter git behavior or override security settings. Allowed: any printable characters
           except newlines (LF/CR) and control characters (0x00-0x1F). Remove any embedded
           newlines or control characters from dotfiles_user_name in config.yml.
-      tags: [always]
 
     - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -140,7 +138,6 @@
           Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
           (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
           (dotfiles_aws_profile).
-      tags: [always]
 
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -155,7 +152,6 @@
           in .zshrc (macOS); shell metacharacters allow command injection on every shell
           open. Allowed: alphanumeric, slash, underscore, hyphen (e.g. /opt/homebrew or
           /usr/local).
-      tags: [always]
 
     - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
       when: _config_yml_raw.content is defined
@@ -170,7 +166,6 @@
           value with embedded newlines can inject a postrotate block that executes arbitrary
           commands as root when the logrotate systemd timer fires. Allowed: alphanumeric,
           slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
-      tags: [always]
 
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
       when: _config_yml_raw.content is defined
@@ -186,7 +181,6 @@
           to download and execute an arbitrary shell script during provisioning (RCE).
           claude_pinned_version must be a semantic version string (e.g. "1.0.3") or empty.
           Allowed: https://claude.ai/* or https://anthropic.com/*.
-      tags: [always]
 
     - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
       when: _config_yml_raw.content is defined
@@ -203,7 +197,6 @@
           alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection guard).
           claude_queue_boot_delay_sec and claude_queue_poll_interval_sec must be
           non-negative integers (systemd timer directive injection guard).
-      tags: [always]
 
     - name: Assert container_name contains only safe characters (INI injection guard)
       when: _config_yml_raw.content is defined
@@ -218,7 +211,6 @@
           embedded newlines inject arbitrary INI directives including init_hooks that
           execute arbitrary shell commands during container creation. Allowed: alphanumeric,
           underscore, hyphen (e.g., fedora-dev, my-dev-container).
-      tags: [always]
 
     - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
       when: _config_yml_raw.content is defined
@@ -238,7 +230,6 @@
           claude_queue_max_issues_per_run must be non-negative integers. These values are
           rendered into systemd unit Environment= directives and macOS launchd plist
           <string> tags; newlines or XML metacharacters allow directive/plist injection.
-      tags: [always]
 
     - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
       when: _config_yml_raw.content is defined
@@ -302,7 +293,6 @@
           allow command injection when the WM/Xorg starts (e.g., desktop_i3_trackpoint_id='device\nEndSection\nSection'
           breaks Xorg parsing and injects arbitrary Xorg directives).
           containers_log_driver must be one of k8s-file/journald/json-file/syslog/none.
-      tags: [always]
 
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
@@ -328,7 +318,6 @@
           alphanumeric, dot, underscore, hyphen (dotfiles_internal_git_host,
           dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host — matches hostname rules);
           alphanumeric, dot, slash, hyphen (dotfiles_internal_ca_path — filesystem path).
-      tags: [always]
 
     - name: Assert SSH key basenames and claude_queue_repo in config.yml contain only safe characters (ssh_config injection guard)
       when: _config_yml_raw.content is defined
@@ -350,7 +339,6 @@
           Allowed: alphanumeric, dot, underscore, hyphen (key basenames — matches SSH key
           filename conventions); alphanumeric, dot, underscore, hyphen, slash
           (dotfiles_claude_queue_repo — matches GitHub owner/repo format).
-      tags: [always]
 
     - name: Assert email identity vars in config.yml are valid email addresses (allowed_signers injection guard)
       when: _config_yml_raw.content is defined
@@ -369,7 +357,6 @@
           Allowed: alphanumeric, dot, underscore, percent, plus, hyphen (local part);
           alphanumeric, dot, hyphen (domain); must contain exactly one @ symbol.
           A blank value is permitted when the variable is not yet configured.
-      tags: [always]
 
     - name: Assert email identity vars from -e flag (gitconfig INI injection guard)
       vars:
@@ -387,7 +374,6 @@
           Allowed: alphanumeric, dot, underscore, percent, plus, hyphen (local part);
           alphanumeric, dot, hyphen (domain); must contain exactly one @ symbol.
           A blank value is permitted when the variable is not yet configured.
-      tags: [always]
 
     - name: Assert dotfiles_work_src_dirs entries contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -404,7 +390,6 @@
           These values are embedded in zshrc as shell case patterns; unsafe characters
           cause command injection when ccp() is called. Use only alphanumeric characters,
           hyphens, and underscores in dotfiles_work_src_dirs (e.g. my-org, not my-org$(id)).
-      tags: [always]
 
     - name: Assert tmux vars in config.yml are safe (newline injection guard)
       when: _config_yml_raw.content is defined
@@ -421,7 +406,6 @@
           execution on tmux start or prefix-r reload).
           dotfiles_tmux_history_limit must be a positive integer (e.g. 50000).
           dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b).
-      tags: [always]
 
     - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
       when: _config_yml_raw.content is defined
@@ -437,7 +421,6 @@
           ExecStart arguments, which systemd executes as the ssh-agent binary on service start.
           Allowed: zero or a positive integer (e.g. 28800). A value of 0 disables the key
           lifetime limit (unlimited).
-      tags: [always]
 
     - name: Assert proxy_url contains only safe URL characters (dnf-automatic injection guard)
       when: >-
@@ -465,7 +448,6 @@
           characters). Must start with http:// or https://. Current value: '{{ _proxy_value }}'.
           Alternatively, unset HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy in the environment
           where ansible-playbook runs.
-      tags: [always]
 
     - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
       when: _config_yml_raw.content is defined
@@ -480,7 +462,6 @@
           newline closes the quoted string and injects arbitrary shell commands executed in
           every interactive shell. Allowed: alphanumeric, underscore, hyphen
           (e.g. gallois, robbyrussell, agnoster).
-      tags: [always]
 
     - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
       when: _config_yml_raw.content is defined
@@ -496,7 +477,6 @@
           or inject additional XML elements, potentially causing launchd to execute an
           attacker-controlled program path. Allowed: alphanumeric, dot, underscore, hyphen
           (e.g. com.username.ssh-agent). Leave unset to use the safe computed default.
-      tags: [always]
 
     - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -511,7 +491,6 @@
           (e.g. spaces, $(), backticks) allow command injection when cq() is called.
           Allowed: alphanumeric, dot, underscore, hyphen on each side of exactly one slash
           (e.g. owner/repo).
-      tags: [always]
 
     - name: Assert notes_repo_name and notes_repo_path in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -532,7 +511,6 @@
           a standard user home prefix (/home/<user>, /root, /Users/<user>) followed by /
           and alphanumeric, dot, underscore, hyphen (notes_repo_path, if set).
           Leave notes_repo_path unset to use the safe computed default.
-      tags: [always]
 
     - name: Assert notes_remote_url and notes_remote_url_https are valid git URLs (path traversal guard)
       when: _config_yml_raw.content is defined
@@ -565,7 +543,6 @@
           ('%2e%2e'), or any characters not explicitly in the whitelist.
           Leave both unset to use the safe computed defaults based on dotfiles_github_user and notes_repo_name.
           Current values: notes_remote_url='{{ _notes_ssh_url }}', notes_remote_url_https='{{ _notes_https_url }}'.
-      tags: [always]
 
     - name: Assert system_gid0_allowed_accounts entries are safe usernames (account hardening guard)
       when: _config_yml_raw.content is defined
@@ -589,7 +566,6 @@
           Unsafe entries found: {{ _unsafe_accounts }}.
           Use only alphanumeric characters, underscores, and hyphens in account names
           (e.g., root, service-account, bin_user).
-      tags: [always]
 
     - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (command injection guard)
       when: _config_yml_raw.content is defined
@@ -615,7 +591,6 @@
           strings or dicts with 'host' field (e.g., ssh_work_keyscan_hosts: ['github.com']
           or [{'host': 'git.internal.com', 'fingerprint': 'SHA256:...'}]).
           Unsafe entries found: {{ _unsafe_hosts }}.
-      tags: [always]
 
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
@@ -634,7 +609,6 @@
           in the container initialization phase before image verification or other security controls.
           Allowed: alphanumeric, underscore, hyphen (e.g. fedora-dev, mycontainer, work_env).
           No spaces, newlines, or special characters allowed.
-      tags: [always]
 
     - name: Assert binary version variables match semantic versioning (URL path injection guard)
       when: _config_yml_raw.content is defined
@@ -691,7 +665,6 @@
           Invalid version variables: {{ _version_vars | map('extract', _raw) | select('defined') | list |
           map('string') | select() | list | reject('match', _semver_pattern) | list }}.
           Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
-      tags: [always]
 
     - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
       when: _config_yml_raw.content is defined
@@ -707,7 +680,6 @@
           "../../../etc/cron.d/evil" resolves to /etc/cron.d/evil and allows writing a
           root-owned cron job during provisioning (LPE). Allowed: alphanumeric, dot, underscore,
           hyphen only (e.g. "opm-rhel8", "opm.v0.22.0"). No slashes or path separators.
-      tags: [always]
 
     - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
       when: _config_yml_raw.content is defined
@@ -729,7 +701,6 @@
           spaces or special characters allow argument injection (e.g. "0.18.0 --help" injects the --help flag).
           Invalid entries: {{ _subctl_versioned_entries | rejectattr('version', 'match', _semver_pattern) | list }}.
           Remove spaces and special characters from version and suffix fields.
-      tags: [always]
 
     - name: Assert packages_subctl_rh_versions entries have safe version strings (oc image extract injection guard)
       when: _config_yml_raw.content is defined
@@ -763,7 +734,6 @@
           spaces or special characters allow command injection via shlex tokenization or glob expansion.
           Invalid entries: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern_strict) | list }}.
           Update all tag values to use complete semantic versioning (major.minor.patch).
-      tags: [always]
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       when: _config_yml_raw.content is defined
@@ -782,7 +752,6 @@
           valid injected directives (e.g. PermitRootLogin yes), so the rescue block would not
           remove the file. smoke-test.sh grep patterns with unquoted values allow metacharacters
           to be interpreted as regex operators (e.g. "722|8080" filters both ports instead of just 722).
-      tags: [always]
 
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
       when: _config_yml_raw.content is defined
@@ -800,7 +769,6 @@
           injection of arbitrary configuration directives.
           Allowed: system_umask must be octal digits (0-7, e.g. 027, 077, 022);
           system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
-      tags: [always]
 
     - name: Assert password aging and home mode vars safe (login.defs injection guard)
       when: _config_yml_raw.content is defined
@@ -822,7 +790,6 @@
           change). Allowed: system_pass_*_days and system_inactive_days must be non-negative
           integers (e.g. 365, 1, 7, 30). system_home_mode must be a 4-digit octal permission
           string (e.g. 0700, 0755). No newlines, spaces, or special characters allowed.
-      tags: [always]
 
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -837,7 +804,6 @@
           /etc/zshrc, and /etc/zsh/zshrc; shell metacharacters allow command injection
           when the shell sources these files on session start. Allowed: zero or a positive
           integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
-      tags: [always]
 
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
       when: _config_yml_raw.content is defined
@@ -853,7 +819,6 @@
           hardened settings such as Ciphers or GSSAPIAuthentication.
           Allowed: '<bytes>[K|M|G] [time[s|m|h|d|w]]' (e.g. '1G 1h'), 'none', or 'default'.
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
-      tags: [always]
 
     - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -868,7 +833,6 @@
           roles/system/tasks/kernel_lockdown.yml line 208; shell metacharacters or spaces
           allow arbitrary command injection during kernel parameter setup. Allowed values:
           'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
-      tags: [always]
 
     - name: Assert system_crypto_policy_target and packages_brew_autoupdate_interval are safe (CLI arg injection guard)
       when: _config_yml_raw.content is defined
@@ -885,7 +849,6 @@
           — e.g. 'DEFAULT --force' passes --force as an extra arg. Valid example:
           DEFAULT:NO-SHA1. packages_brew_autoupdate_interval must be a non-negative integer
           (seconds); non-integer values allow extra flag injection into 'brew autoupdate start'.
-      tags: [always]
 
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
       when: _config_yml_raw.content is defined
@@ -904,7 +867,6 @@
           directives into sshd_config.d/00-hardening.conf; sshd -t does not catch
           semantically valid injected directives, so the rescue block will not remove
           the file. Remove any non-digit characters from the value.
-      tags: [always]
 
     - name: Assert ansible.cfg pipelining value is valid boolean (fapolicyd bypass guard)
       when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
@@ -960,7 +922,6 @@
           rescue block would not remove the file.
           Allowed: alphanumeric, equals, comma, space, asterisk, h/m/s time suffixes
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
-      tags: [always]
 
     - name: Assert system_resolved_* DNS config vars are safe (systemd conf injection guard)
       when: _config_yml_raw.content is defined
@@ -980,7 +941,6 @@
           Allowed values: 'yes', 'no', 'resolve' (listen-only).
           Current values: system_resolved_llmnr={{ _raw.get('system_resolved_llmnr', 'no') }},
           system_resolved_multicast_dns={{ _raw.get('system_resolved_multicast_dns', 'no') }}
-      tags: [always]
 
     - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
       when: _config_yml_raw.content is defined
@@ -999,7 +959,6 @@
           system_coredump_storage must be one of: none, external, journal.
           system_coredump_process_size_max must be a non-negative integer with optional K/M/G suffix
           (e.g. 2G, 1000M, 0). No spaces, newlines, or other characters allowed.
-      tags: [always]
 
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
       when: _config_yml_raw.content is defined
@@ -1021,7 +980,6 @@
           hardened settings. sshd -t does not catch semantically valid injected duplicates, so
           the rescue block will not remove the file.
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
-      tags: [always]
 
     - name: Assert ansible.cfg pipelining value is a valid boolean (fapolicyd bypass guard)
       when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
@@ -1078,7 +1036,6 @@
           Embedded newlines inject arbitrary keys into direnv.toml [global], allowing
           bash_path override to execute an attacker-controlled shell on every direnv
           evaluation (every cd into a managed directory).
-      tags: [always]
 
     - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)
       when: _config_yml_raw.content is defined
@@ -1097,7 +1054,6 @@
           all subsequent unwhitelisted devices. Entries must not contain embedded newlines
           (YAML block scalars inject multiple rule lines into the rendered rules.conf).
           Invalid entries: {{ _usbguard_extra | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
-      tags: [always]
 
     - name: Assert system_usbguard_whitelist entries are well-formed (USBGuard injection guard)
       when: _config_yml_raw.content is defined
@@ -1113,7 +1069,6 @@
           Each entry must begin with 'allow', 'block', or 'reject' followed by a device
           selector. Bare catch-all rules and embedded newlines are rejected.
           Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
-      tags: [always]
 
     - name: Assert container_release and container_image contain only safe characters (distrobox tag injection guard)
       when: _config_yml_raw.content is defined
@@ -1133,7 +1088,6 @@
           dot/hyphen only, no spaces or shell metacharacters). Allowed: alphanumeric, dot,
           underscore, hyphen (container_release); alphanumeric, colon, slash, at, dot,
           hyphen (container_image).
-      tags: [always]
 
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
       when: _config_yml_raw.content is defined
@@ -1153,7 +1107,6 @@
           semantics for duplicate keys). Allowed: any printable characters except newlines
           (alphanumeric, spaces, hyphens, underscores are typical for device names).
           Disallowed: embedded literal newlines from YAML block/folded scalars.
-      tags: [always]
 
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
       when: _config_yml_raw.content is defined
@@ -1182,7 +1135,6 @@
           (e.g. run-shell for RCE). Allowed: alphanumeric, dot, slash, underscore, hyphen (paths);
           prefer/require (authselectmode); 0-9 (minsources); NTP pool/server hostnames and ports only
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
-      tags: [always]
 
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
       when: _config_yml_raw.content is defined
@@ -1206,7 +1158,6 @@
           2606:4700:4700::1111, ~., example.com). Forbidden: newlines, spaces (use DNS
           list format per systemd.resolved(5)), square brackets, parentheses, and INI
           metacharacters. Remove any prohibited characters from config.yml.
-      tags: [always]
 
     - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
       when: _config_yml_raw.content is defined
@@ -1254,7 +1205,6 @@
           embedded newlines allow directive injection (log erasure via MaxRetentionSec=1s, audit
           dispatcher hijack via dispatcher=/tmp/evil, PAM policy bypass via extra pam_deny.so line,
           faillock injection via deny=5\neven_deny_root bypassing faillock_even_deny_root: false policy).
-      tags: [always]
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       when: _config_yml_raw.content is defined
@@ -1278,7 +1228,6 @@
           '/etc/sshd_config NORMAL', preventing the monitoring entry from being inserted.
           Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
           Unsafe entries found: {{ _unsafe_entries }}.
-      tags: [always]
 
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
@@ -1298,7 +1247,6 @@
           at compile time (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z
           (semantic version required; reject @latest, @v1 without minor/patch).
           Unsafe entries: {{ _unsafe_entries }}.
-      tags: [always]
 
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -1318,7 +1266,6 @@
           Unsafe entries: {{ _unsafe_entries }}.
           Remove any spaces, semicolons, dollar signs, backticks, pipes, or other shell
           metacharacters from distrobox_host_exec_commands entries.
-      tags: [always]
 
     - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
       when: _config_yml_raw.content is defined
@@ -1338,7 +1285,6 @@
           (systemd calendar specification format per systemd.time(7),
           e.g. weekly, daily, *-*-* 00:00:00, Mon,Wed,Fri *-*-* 10:00:00).
           No newlines or other special characters allowed.
-      tags: [always]
 
     - name: Assert packages_go_tools_*_sha256 are well-formed SHA256 hashes (go install verification guard)
       when: _config_yml_raw.content is defined
@@ -1371,7 +1317,6 @@
           'a7f8d1c6b2e5d4c3a1f8e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7').
           If you need to override default hashes, recompute them via:
           'go install <module@version> && sha256sum ~/.local/bin/<binary>'
-      tags: [always]
 
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
       when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
@@ -1828,7 +1773,6 @@
           Allowed: alphanumeric, dot, underscore, hyphen, slash, colon, @-sign
           (container_image — registry URL format); alphanumeric, underscore, hyphen
           (container_name, container_release).
-      tags: [always]
 
     - name: Assert pwquality variables are non-negative integers (pwquality.conf injection guard)
       when: _config_yml_raw.content is defined
@@ -1858,7 +1802,6 @@
           Allowed: non-negative integers for minlen/difok/maxrepeat/maxsequence;
           -1 or greater for credit variables (e.g., -1=disabled, 0+=required count).
           Examples: system_pwquality_minlen: 14, system_pwquality_dcredit: -1.
-      tags: [always]
 
     - name: Assert login.defs password aging variables are non-negative integers (login.defs injection guard)
       when: _config_yml_raw.content is defined
@@ -1887,9 +1830,8 @@
           Allowed: non-negative integers for password aging (e.g., 365, 1, 7, 30);
           octal digits for system_home_mode (e.g., 0700, 0755, 0750).
           Examples: system_pass_max_days: 365, system_pass_min_days: 1, system_home_mode: '0700'.
-      tags: [always]
 
-    - name: Assert sysctl extra dicts contain no newline-injected values (sysctl injection guard)
+    - name: Assert sysctl extra dicts contain no shell metacharacters (sysctl injection guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -1899,19 +1841,23 @@
         _additional_has_newlines: "{{ _extra_additional | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
         _extra_keys_unsafe: "{{ _extra | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
         _additional_keys_unsafe: "{{ _extra_additional | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
+        _extra_vals_unsafe: "{{ _extra | dict2items | map(attribute='value') | map('string') | select('search', '[&|;<>$()` \t]') | list }}"  # yamllint disable-line rule:line-length
+        _additional_vals_unsafe: "{{ _extra_additional | dict2items | map(attribute='value') | map('string') | select('search', '[&|;<>$()` \t]') | list }}"  # yamllint disable-line rule:line-length
       ansible.builtin.assert:
         that:
           - not _extra_has_newlines
           - not _additional_has_newlines
           - _extra_keys_unsafe | length == 0
           - _additional_keys_unsafe | length == 0
+          - _extra_vals_unsafe | length == 0
+          - _additional_vals_unsafe | length == 0
         fail_msg: >-
           SECURITY: system_sysctl_extra or system_sysctl_extra_additional in config.yml contains
-          values or keys with embedded newlines or unsafe characters. These are rendered verbatim
+          values or keys with embedded newlines or shell metacharacters. These are rendered verbatim
           into /etc/sysctl.d/90-hardening.conf (sysctl.yml template); embedded newlines in a KEY
           inject additional sysctl directives (e.g. {"net.x = 1\nkernel.y": "0"} renders two
-          directives). Keys must match ^[a-zA-Z0-9._/-]+$; values must not contain newlines.
-      tags: [always]
+          directives). Keys must match ^[a-zA-Z0-9._/-]+$; values must not contain newlines or
+          shell metacharacters (&, |, ;, >, <, $, (, ), backtick, space, tab).
 
     - name: Assert system_ssh_allow_agent_forwarding and system_ssh_allow_tcp_forwarding are safe (sshd injection guard)
       when: _config_yml_raw.content is defined
@@ -1926,7 +1872,6 @@
           system_ssh_allow_tcp_forwarding must be one of 'yes', 'no', 'local', 'all', 'remote'.
           These values are rendered directly into sshd_config without inline escaping; newlines
           or unexpected values could inject additional sshd directives (e.g. PermitRootLogin yes).
-      tags: [always]
 
     - name: Assert gh CLI is available for attestation verification (attestation verification guard)
       when:
