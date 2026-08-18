@@ -8,6 +8,13 @@
   tags: [become]
 
   pre_tasks:
+    - name: SECURITY CRITICAL — Verify collection integrity before execution (supply chain defense-in-depth)
+      ansible.builtin.command:
+        cmd: scripts/verify-collections.sh
+      become: false
+      changed_when: false
+      tags: [always]
+
     - name: Gather facts (explicit become:false so check mode works without sudo)
       ansible.builtin.gather_facts:
       become: false

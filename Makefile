@@ -45,16 +45,16 @@ all: guard-not-root preflight
 	fi
 
 minimal: guard-not-root
-	ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles,ssh,repos --skip-tags become
 
 offline: guard-not-root
-	ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
-	ansible-playbook site.yml --tags common,distrobox
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox
 
 container-rebuild: guard-not-root
-	ansible-playbook site.yml --tags common,distrobox -e container_replace=true
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true
 
 backup: guard-not-root
 	scripts/backup.sh
@@ -194,48 +194,48 @@ update: guard-not-root preflight
 		collections-dist/community-general-13.2.0.tar.gz \
 		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
 		collections-dist/containers-podman-1.20.2.tar.gz
-	ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---
 
 dotfiles: guard-not-root
-	ansible-playbook site.yml --tags common,dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles
 
 packages: guard-not-root
-	ansible-playbook site.yml --tags common,packages --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,packages --ask-become-pass
 
 repos: guard-not-root
-	ansible-playbook site.yml --tags common,repos
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos
 
 notes: guard-not-root
-	ansible-playbook site.yml --tags common,notes
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes
 
 repos-%: guard-not-root
-	ansible-playbook site.yml --tags common,repos -e repo_category=$*
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$*
 
 ssh: guard-not-root
-	ansible-playbook site.yml --tags common,ssh
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh
 
 desktop: guard-not-root
-	ansible-playbook site.yml --tags common,desktop --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,desktop --ask-become-pass
 
 system: guard-not-root
-	ansible-playbook site.yml --tags common,system --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,system --ask-become-pass
 
 repos-dnf:
 	@echo 'ERROR: Did you mean: make repos_dnf (underscore) -- manages DNF package repositories' >&2 && exit 1
 
 repos_dnf: guard-not-root
-	ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos_dnf --ask-become-pass
 
 redhat: guard-not-root
-	ansible-playbook site.yml --tags common,redhat --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,redhat --ask-become-pass
 
 containers: guard-not-root
-	ansible-playbook site.yml --tags common,containers --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,containers --ask-become-pass
 
 claude: guard-not-root
-	ansible-playbook site.yml --tags common,claude --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 distrobox: container  # alias for backwards compatibility
 
@@ -245,13 +245,13 @@ preflight:
 	scripts/preflight.sh
 
 csb-audit: guard-not-root preflight
-	ansible-playbook site.yml --tags common --check -v
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v
 
 check: guard-not-root
-	ansible-playbook site.yml --check --diff --ask-become-pass
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
-	ansible-playbook site.yml --check --diff --tags dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
@@ -280,7 +280,7 @@ pip-sync: .venv
 	.venv/bin/pip-sync requirements-test.lock
 
 syntax-check:
-	ansible-playbook site.yml --syntax-check
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --syntax-check
 
 shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/* roles/dotfiles/files/git-template-*

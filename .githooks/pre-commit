@@ -1,6 +1,29 @@
 #!/bin/bash
-# Pre-commit checks: vault encryption, secrets, YAML, shell, JSON
+# Pre-commit checks: vault encryption, secrets, YAML, shell, JSON, collections integrity
 failed=0
+
+# SECURITY GUARD: Block commits that modify collections-dist/ without updating SHA256SUMS
+# Protects against supply chain tampering (modified tarballs without hash update)
+_modified_tarballs=0
+_modified_hashes=0
+while IFS= read -r -d '' f; do
+  _modified_tarballs=$(((_modified_tarballs + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/*.tar.gz')
+while IFS= read -r -d '' f; do
+  _modified_hashes=$(((_modified_hashes + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS')
+
+if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -eq 0 ]; then
+  echo "ERROR: collections-dist/*.tar.gz modified but SHA256SUMS not updated" >&2
+  echo "       Possible supply chain tampering or accidental modification" >&2
+  echo "       Run: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS && git add SHA256SUMS" >&2
+  failed=1
+fi
+
+if [ "$_modified_hashes" -gt 0 ] && [ "$_modified_tarballs" -eq 0 ]; then
+  echo "WARN: SHA256SUMS modified but no collections-dist/*.tar.gz changes detected" >&2
+  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- collections-dist/SHA256SUMS" >&2
+fi
 
 # Block unencrypted vault files
 while IFS= read -r -d '' f; do
