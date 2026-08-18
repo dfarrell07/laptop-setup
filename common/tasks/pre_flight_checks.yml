@@ -170,6 +170,21 @@
           non-negative integers (systemd timer directive injection guard).
       tags: [always]
 
+    - name: Assert container_name contains only safe characters (INI injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
+        fail_msg: >-
+          SECURITY: container_name in config.yml contains unsafe characters.
+          This value is rendered verbatim into the [section] header of distrobox.ini;
+          embedded newlines inject arbitrary INI directives including init_hooks that
+          execute arbitrary shell commands during container creation. Allowed: alphanumeric,
+          underscore, hyphen (e.g., fedora-dev, my-dev-container).
+      tags: [always]
+
     - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -451,6 +466,25 @@
           a standard user home prefix (/home/<user>, /root, /Users/<user>) followed by /
           and alphanumeric, dot, underscore, hyphen (notes_repo_path, if set).
           Leave notes_repo_path unset to use the safe computed default.
+      tags: [always]
+
+    - name: Assert container_name contains only safe characters (distrobox INI injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
+        fail_msg: >-
+          SECURITY: container_name in config.yml contains unsafe characters.
+          This value is rendered verbatim into the [section] header of distrobox.ini;
+          embedded newlines can inject arbitrary init_hooks directives that execute as root
+          when distrobox-assemble creates the container. Newlines break the INI section header,
+          allowing arbitrary init_hooks= keys to be parsed as separate directives (distrobox
+          uses AWK line-based parsing, not a full INI parser). These injected commands execute
+          in the container initialization phase before image verification or other security controls.
+          Allowed: alphanumeric, underscore, hyphen (e.g. fedora-dev, mycontainer, work_env).
+          No spaces, newlines, or special characters allowed.
       tags: [always]
 
     - name: Assert binary version variables match semantic versioning (URL path injection guard)
@@ -955,6 +989,26 @@
           Unsafe entries: {{ _unsafe_entries }}.
       tags: [always]
 
+    - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
+        _unsafe_entries: "{{ _host_exec_commands | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: distrobox_host_exec_commands in config.yml contains unsafe command names.
+          These values are interpolated into the distrobox.ini init_hooks line, which executes
+          during container startup. Shell metacharacters or special characters allow arbitrary
+          command injection (e.g. 'podman; rm -rf /' would execute as 'rm -rf /' in the init hook).
+          Allowed: alphanumeric, underscore, hyphen only (e.g. 'podman', 'flatpak', 'kind', 'my-tool').
+          Unsafe entries: {{ _unsafe_entries }}.
+          Remove any spaces, semicolons, dollar signs, backticks, pipes, or other shell
+          metacharacters from distrobox_host_exec_commands entries.
+      tags: [always]
+
     - name: Warn when cosign installation is disabled without alternative verification plan
       when:
         - _config_yml_raw.content is defined
@@ -1149,6 +1203,25 @@
           ansible.builtin.set_fact:
             _pf_assertions_checked: true
           tags: [always]
+
+    - name: Assert container_* vars contain only safe characters (INI injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('container_image', '') | string is match('^[a-zA-Z0-9._/:@-]*$|^$')
+          - _raw.get('container_name', '') | string is match('^[a-zA-Z0-9_-]*$|^$')
+          - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$|^$')
+        fail_msg: >-
+          SECURITY: container_image, container_name, or container_release in config.yml
+          contains unsafe characters. These values are rendered verbatim into distrobox.ini;
+          embedded newlines inject additional INI keys, allowing init_hooks injection and
+          arbitrary command execution during container creation (distrobox assemble create).
+          Allowed: alphanumeric, dot, underscore, hyphen, slash, colon, @-sign
+          (container_image — registry URL format); alphanumeric, underscore, hyphen
+          (container_name, container_release).
+      tags: [always]
 
     - name: Assert sysctl extra dicts contain no newline-injected values (sysctl injection guard)
       when: _config_yml_raw.content is defined
