@@ -111,14 +111,14 @@
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('dotfiles_gonosumdb', '') | string is match('^[a-zA-Z0-9.,*/_-]*$')
-          - _raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,*/_-]*$')
+          - _raw.get('dotfiles_gonosumdb', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
+          - _raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
           - _raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
           SECURITY: dotfiles_gonosumdb, dotfiles_goprivate, or dotfiles_aws_profile in config.yml
           contains unsafe characters. These values are written directly into shell export statements;
           unsafe characters can escape the double-quoted context to inject arbitrary commands.
-          Allowed: alphanumeric, dot, comma, asterisk, slash, underscore, hyphen
+          Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
           (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
           (dotfiles_aws_profile).
       tags: [always]
@@ -453,6 +453,63 @@
           Leave notes_repo_path unset to use the safe computed default.
       tags: [always]
 
+    - name: Assert binary version variables match semantic versioning (URL path injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        # Semantic version pattern: major.minor.patch with optional prerelease
+        _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+        # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
+        _version_vars:
+          - packages_kind_version
+          - packages_helm_version
+          - packages_kustomize_version
+          - packages_k9s_version
+          - packages_transcrypt_version
+          - packages_sops_version
+          - packages_gitleaks_version
+          - packages_actionlint_version
+          - packages_zizmor_version
+          - packages_operator_sdk_version
+          - packages_cosign_version
+          - packages_tkn_version
+          - packages_ec_version
+          - packages_oc_version
+          - packages_yamllint_version
+          - packages_ansible_lint_version
+          - packages_golangci_lint_version
+          - packages_gofumpt_version
+          - packages_govulncheck_version
+          - packages_gci_version
+          - packages_gopls_version
+          - packages_controller_gen_version
+          - packages_stern_version
+          - packages_code_generator_version
+          - packages_subctl_version
+          - packages_aerospace_version
+          - packages_krew_bootstrap_version
+          - packages_krew_plugin_ctx_version
+          - packages_krew_plugin_ns_version
+      ansible.builtin.assert:
+        that:
+          # Each version variable must match semantic versioning pattern or be empty
+          - _version_vars | map('extract', _raw) | select('defined') | list |
+            map('string') | select() | list |
+            reject('match', _semver_pattern) | list | length == 0
+        fail_msg: >-
+          SECURITY: One or more binary version variables in config.yml do not match
+          semantic versioning format (e.g. "1.2.3" or "1.2.3-alpha"). Version variables
+          are directly interpolated into download URLs without additional validation. An
+          attacker-controlled version string like "0.32.0/../../evil" could perform URL
+          path traversal, accessing unintended paths on the same host or exploiting
+          upstream path-traversal bugs.
+          Allowed pattern: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
+          (e.g. "0.32.0", "1.0.0-beta", "2.3.4-rc1")
+          Invalid version variables: {{ _version_vars | map('extract', _raw) | select('defined') | list |
+          map('string') | select() | list | reject('match', _semver_pattern) | list }}.
+          Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
+      tags: [always]
+
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -657,6 +714,26 @@
           (e.g. run-shell for RCE). Allowed: alphanumeric, dot, slash, underscore, hyphen (paths);
           prefer/require (authselectmode); 0-9 (minsources); NTP pool/server hostnames and ports only
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
+      tags: [always]
+
+    - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _go_packages: "{{ _raw.get('packages_go_install', []) }}"
+        # Regex: module.path/cmd@vX.Y.Z with optional pre-release/build metadata
+        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
+        _unsafe_entries: "{{ _go_packages | map('string') | reject('match', _go_module_regex) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _go_packages | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: packages_go_install in config.yml contains unsafe Go module paths.
+          These values are passed directly to 'go install'; init() functions execute
+          at compile time (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z
+          (semantic version required; reject @latest, @v1 without minor/patch).
+          Unsafe entries: {{ _unsafe_entries }}.
       tags: [always]
 
     - name: Warn when cosign installation is disabled without alternative verification plan
