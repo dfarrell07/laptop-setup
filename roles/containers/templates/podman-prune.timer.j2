@@ -3,7 +3,7 @@
 Description={{ containers_prune_schedule | capitalize }} podman storage cleanup
 
 [Timer]
-OnCalendar={{ containers_prune_schedule }}
+OnCalendar={{ containers_prune_schedule | regex_replace('\n', '') }}
 Persistent=true
 
 [Install]

@@ -116,14 +116,18 @@
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
-          TARBALL=$(ls /tmp/subctl-{{ item.tag }}*-linux-amd64.tar.xz 2>/dev/null | head -1)
+          # Use find+sort to enforce version precedence over arbitrary filesystem ordering
+          TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}*-linux-amd64.tar.xz" \
+            -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
           [[ -z "$TARBALL" ]] && exit 0
           TMPDIR=$(mktemp -d)
           tar -C "$TMPDIR" -xf "$TARBALL"
           BINARY=$(find "$TMPDIR" -name "subctl-{{ item.tag }}*-linux-amd64" -type f | head -1)
           [[ -z "$BINARY" ]] && exit 0
           install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
-          rm -rf "$TMPDIR" "$TARBALL"
+          rm -rf "$TMPDIR"
+          # Clean up all matching extracted tarballs to prevent orphans
+          rm -f /tmp/subctl-{{ item.tag }}*-linux-amd64.tar.xz
           echo "INSTALLED"
         executable: /bin/bash
       register: _pkg_subctl_install
