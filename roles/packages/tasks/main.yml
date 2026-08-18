@@ -226,13 +226,11 @@
 - name: Assert ctx krew plugin binary checksum
   ansible.builtin.assert:
     that:
-      - _krew_ctx_stat.stat.exists | bool
       - _krew_ctx_stat.stat.checksum == packages_krew_plugin_ctx_sha256
     fail_msg: >-
-      ctx plugin verification failed at
+      ctx plugin checksum mismatch at
       {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx:
-      file exists={{ _krew_ctx_stat.stat.exists | default(false) }},
-      expected checksum {{ packages_krew_plugin_ctx_sha256 }},
+      expected {{ packages_krew_plugin_ctx_sha256 }},
       got {{ _krew_ctx_stat.stat.checksum | default('MISSING') }}
   when: _packages_linux_x86_work
 
@@ -258,10 +256,12 @@
 - name: Assert ns krew plugin binary checksum
   ansible.builtin.assert:
     that:
+      - _krew_ns_stat.stat.exists | bool
       - _krew_ns_stat.stat.checksum == packages_krew_plugin_ns_sha256
     fail_msg: >-
-      ns plugin checksum mismatch at
+      ns plugin verification failed at
       {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens:
-      expected {{ packages_krew_plugin_ns_sha256 }},
+      file exists={{ _krew_ns_stat.stat.exists | default(false) }},
+      expected checksum {{ packages_krew_plugin_ns_sha256 }},
       got {{ _krew_ns_stat.stat.checksum | default('MISSING') }}
   when: _packages_linux_x86_work
