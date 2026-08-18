@@ -1,5 +1,5 @@
 # {{ ansible_managed }}
 [containers]
 log_driver = "{{ containers_log_driver }}"
-pids_limit = {{ containers_pids_limit }}
+pids_limit = {{ containers_pids_limit | int }}
 default_ulimits = ["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]

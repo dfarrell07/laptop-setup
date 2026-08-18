@@ -108,7 +108,7 @@
 {% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
 
 [http "https://{{ dotfiles_internal_git_host | trim }}"]
-	sslCAInfo = {{ dotfiles_internal_ca_path }}
+	sslCAInfo = {{ dotfiles_internal_ca_path | regex_replace('\n', '') | trim }}
 {% endif %}
 
 {% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}

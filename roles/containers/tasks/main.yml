@@ -245,6 +245,14 @@
     - containers_docker_mask.failed | default(false)
 
 # --- workstation-wide rootless Podman settings (also required for kind nodes) ---
+- name: Assert containers_pids_limit is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - containers_pids_limit | string | regex_search('^[0-9]+$')
+    fail_msg: >
+      containers_pids_limit must be a non-negative integer, got: {{ containers_pids_limit }}
+  when: is_linux
+
 # The default (8x the soft limit) always satisfies this; only fails when
 # config.yml overrides containers_nofile_hard_limit below containers_nofile_limit.
 - name: Assert overridden nofile hard limit is not below soft limit
@@ -255,6 +263,15 @@
       containers_nofile_hard_limit ({{ containers_nofile_hard_limit }}) must be >=
       containers_nofile_limit ({{ containers_nofile_limit }}) or Podman will reject the config.
       Note: the default containers_nofile_hard_limit is auto-scaled to 8x the soft limit.
+  when: is_linux
+
+- name: Assert containers_log_driver is a known safe value
+  ansible.builtin.assert:
+    that:
+      - containers_log_driver in ['k8s-file', 'journald', 'none', 'passthrough']
+    fail_msg: >
+      containers_log_driver must be one of: k8s-file, journald, none, passthrough.
+      Got: {{ containers_log_driver }}
   when: is_linux
 
 - name: Set containers.conf workstation options (user-scope; logging and kind compatibility)

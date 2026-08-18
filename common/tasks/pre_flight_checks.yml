@@ -123,6 +123,21 @@
           (dotfiles_aws_profile).
       tags: [always]
 
+    - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('dotfiles_homebrew_prefix', '/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
+        fail_msg: >-
+          SECURITY: dotfiles_homebrew_prefix in config.yml contains unsafe characters.
+          This value is interpolated directly into shell file-test and source expressions
+          in .zshrc (macOS); shell metacharacters allow command injection on every shell
+          open. Allowed: alphanumeric, slash, underscore, hyphen (e.g. /opt/homebrew or
+          /usr/local).
+      tags: [always]
+
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -131,19 +146,22 @@
         that:
           - _raw.get('dotfiles_github_user', '') | string is match('^[a-zA-Z0-9-]*$')
           - _raw.get('dotfiles_internal_git_host', '') | string is match('^[a-zA-Z0-9._-]*$')
+          - _raw.get('dotfiles_internal_ca_path', '') | string is match('^[a-zA-Z0-9./_-]*$')
           - _raw.get('dotfiles_laptop_tailscale_host', '') | string is match('^[a-zA-Z0-9._-]*$')
           - _raw.get('dotfiles_mac_tailscale_host', '') | string is match('^[a-zA-Z0-9._-]*$')
         fail_msg: >-
           SECURITY: dotfiles_github_user, dotfiles_internal_git_host,
-          dotfiles_laptop_tailscale_host, or dotfiles_mac_tailscale_host in config.yml
-          contains unsafe characters. These values are interpolated directly into .gitconfig
-          section headers or ssh_config Host stanzas; newlines or spaces break out of the
-          stanza and allow arbitrary config injection (gitconfig: core.hooksPath → arbitrary
-          code execution on git ops; ssh_config: ProxyCommand → arbitrary command execution
-          on every ssh connection to that host).
+          dotfiles_internal_ca_path, dotfiles_laptop_tailscale_host, or
+          dotfiles_mac_tailscale_host in config.yml contains unsafe characters.
+          These values are interpolated directly into .gitconfig section headers or
+          ssh_config Host stanzas; newlines or spaces break out of the stanza and
+          allow arbitrary config injection (gitconfig: core.hooksPath → arbitrary
+          code execution on git ops; ssh_config: ProxyCommand → arbitrary command
+          execution on every ssh connection to that host).
           Allowed: alphanumeric, hyphen (dotfiles_github_user — matches GitHub username rules);
           alphanumeric, dot, underscore, hyphen (dotfiles_internal_git_host,
-          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host — matches hostname rules).
+          dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host — matches hostname rules);
+          alphanumeric, dot, slash, hyphen (dotfiles_internal_ca_path — filesystem path).
       tags: [always]
 
     - name: Assert SSH key basenames and claude_queue_repo in config.yml contain only safe characters (ssh_config injection guard)
@@ -217,6 +235,27 @@
           (e.g. spaces, $(), backticks) allow command injection when cq() is called.
           Allowed: alphanumeric, dot, underscore, hyphen on each side of exactly one slash
           (e.g. owner/repo).
+      tags: [always]
+
+    - name: Assert notes_repo_name and notes_repo_path in config.yml contain only safe characters (shell injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('notes_repo_name', 'notes') | string is match('^[a-zA-Z0-9_-]+$')
+          - >-
+            _raw.get('notes_repo_path', '') == ''
+            or _raw.get('notes_repo_path', '') | string is match('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)/[a-zA-Z0-9._-]*$')
+        fail_msg: >-
+          SECURITY: notes_repo_name or notes_repo_path in config.yml contains unsafe characters.
+          notes_repo_path is rendered verbatim into the 'notes' shell alias in .zshrc; shell
+          metacharacters (single-quotes, semicolons, $(), backticks) break out of the alias
+          definition and execute arbitrary commands in every new interactive shell.
+          Allowed: alphanumeric, underscore, hyphen (notes_repo_name);
+          a standard user home prefix (/home/<user>, /root, /Users/<user>) followed by /
+          and alphanumeric, dot, underscore, hyphen (notes_repo_path, if set).
+          Leave notes_repo_path unset to use the safe computed default.
       tags: [always]
 
     - name: Set molecule context flag
