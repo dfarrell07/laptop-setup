@@ -1647,6 +1647,29 @@
               Invalid extra_rules entries: {{ _er_invalid }}.
           tags: [always]
 
+        - name: Assert sysctl extra dicts in play namespace contain safe keys (sysctl injection guard)
+          vars:
+            _extra_val_has_newlines: "{{ system_sysctl_extra | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
+            _additional_val_has_newlines: "{{ system_sysctl_extra_additional | default({}) | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
+            _extra_keys_unsafe: "{{ system_sysctl_extra | default({}) | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
+            _additional_keys_unsafe: "{{ system_sysctl_extra_additional | default({}) | dict2items | map(attribute='key') | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"  # yamllint disable-line rule:line-length
+          ansible.builtin.assert:
+            that:
+              - not _extra_val_has_newlines
+              - not _additional_val_has_newlines
+              - _extra_keys_unsafe | length == 0
+              - _additional_keys_unsafe | length == 0
+            fail_msg: >-
+              SECURITY: sysctl extra dicts in the play namespace (set via -e
+              overrides) contain unsafe keys or values. These are rendered verbatim into
+              /etc/sysctl.d/90-hardening.conf via sysctl-hardening.conf.j2; embedded
+              newlines in a KEY inject additional sysctl directives (e.g.
+              {"kernel.x=0\nnet.y": "0"} renders two directives). Keys must match
+              ^[a-zA-Z0-9._/-]+$ (no newlines, spaces, or special characters); values
+              must not contain newlines. Unsafe keys: {{ _extra_keys_unsafe + _additional_keys_unsafe }}.
+          tags: [always]
+
+
         - name: Assert Go/Krew SHA256 variables in play namespace match strict pattern (verification bypass guard)
           vars:
             _sha256_pattern: '^[a-f0-9]{64}$'
