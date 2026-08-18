@@ -2,6 +2,20 @@
 # roles/claude/tasks/main.yml
 # Claude Code install, instance isolation, settings.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task bypass) ---
+- name: SECURITY assert claude_install_url is constrained to known-safe domains (defense-in-depth)
+  ansible.builtin.assert:
+    that:
+      - claude_install_url | default('https://claude.ai/install.sh') is match('^https://(claude\.ai|anthropic\.com)/')
+    fail_msg: >-
+      SECURITY: claude_install_url must start with https:// and use claude.ai or
+      anthropic.com domain. An arbitrary URL would cause the installer to download
+      and execute an arbitrary shell script during provisioning (RCE).
+      This check is duplicated in pre_flight_checks.yml; it runs again here to protect
+      against --start-at-task flag bypassing play-level pre_tasks. Allowed:
+      https://claude.ai/* or https://anthropic.com/*.
+  tags: [always]
+
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed
   ansible.builtin.command:

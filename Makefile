@@ -35,6 +35,7 @@ guard-not-root:
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
 all: guard-not-root preflight
+	scripts/verify-collections.sh
 	ansible-playbook site.yml --ask-become-pass
 	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
 		npm ci --ignore-scripts; \
@@ -299,6 +300,7 @@ test-scripts:
 	bash -n scripts/backup.sh
 	bash -n scripts/vault-pass-ci.sh
 	bash -n scripts/test-queue-poller.sh
+	bash -n scripts/verify-collections.sh
 
 # Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers.
 test-poller:

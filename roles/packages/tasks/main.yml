@@ -2,6 +2,58 @@
 # roles/packages/tasks/main.yml
 # Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task bypass) ---
+- name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
+  vars:
+    _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+    # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
+    _version_vars:
+      - packages_kind_version
+      - packages_helm_version
+      - packages_kustomize_version
+      - packages_k9s_version
+      - packages_transcrypt_version
+      - packages_sops_version
+      - packages_gitleaks_version
+      - packages_actionlint_version
+      - packages_zizmor_version
+      - packages_operator_sdk_version
+      - packages_cosign_version
+      - packages_tkn_version
+      - packages_ec_version
+      - packages_oc_version
+      - packages_yamllint_version
+      - packages_ansible_lint_version
+      - packages_golangci_lint_version
+      - packages_gofumpt_version
+      - packages_govulncheck_version
+      - packages_gci_version
+      - packages_gopls_version
+      - packages_controller_gen_version
+      - packages_stern_version
+      - packages_code_generator_version
+      - packages_subctl_version
+      - packages_aerospace_version
+      - packages_krew_bootstrap_version
+      - packages_krew_plugin_ctx_version
+      - packages_krew_plugin_ns_version
+  ansible.builtin.assert:
+    that:
+      # Each version variable must match semantic versioning pattern or be empty
+      - _version_vars | map('extract', vars) | select('defined') | list |
+        map('string') | select() | list |
+        reject('match', _semver_pattern) | list | length == 0
+    fail_msg: >-
+      SECURITY: One or more binary version variables contain path traversal characters
+      (slashes, double-dots, etc.) or non-semantic-version format. Version variables
+      are directly interpolated into download URLs without additional validation.
+      An attacker-controlled version string like "0.32.0/../../evil" could perform URL
+      path traversal. This check is duplicated in pre_flight_checks.yml; it runs again
+      here to protect against --start-at-task flag bypassing play-level pre_tasks.
+      Allowed pattern: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
+      (e.g. "0.32.0", "1.0.0-beta", "2.3.4-rc1")
+  tags: [always]
+
 # On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
 # outside dnf won't be in fapolicyd's trust database and will be blocked at runtime.
 # Downloads would succeed but every invocation would fail with EPERM.

@@ -113,9 +113,12 @@
         - name: Include CSB detection
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
-    - name: Run pre-flight checks
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+    - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
+      become: false
       tags: [always]
+      block:
+        - name: Re-run pre-flight checks (ensures --start-at-task cannot bypass)
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
 
     - name: Vault healthcheck — assert required SSH key variables are defined and non-empty
       ansible.builtin.assert:
