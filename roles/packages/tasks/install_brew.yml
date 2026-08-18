@@ -120,30 +120,30 @@
     - name: Download and install AeroSpace
       when: packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
       block:
-        - name: Create AeroSpace extract directory
-          ansible.builtin.file:
-            path: /tmp/aerospace-extract
+        - name: Create secure AeroSpace temp directory (TOCTOU guard)
+          ansible.builtin.tempfile:
             state: directory
-            mode: "0755"
+            prefix: aerospace_
+          register: _aerospace_tmpdir
 
         - name: Download AeroSpace zip (SHA256-verified)
           ansible.builtin.get_url:
             url: >-
               https://github.com/nikitabobko/AeroSpace/releases/download/v{{ packages_aerospace_version
               }}/AeroSpace-v{{ packages_aerospace_version }}.zip
-            dest: /tmp/AeroSpace.zip
+            dest: "{{ _aerospace_tmpdir.path }}/AeroSpace.zip"
             checksum: "sha256:{{ packages_aerospace_sha256 }}"
-            mode: "0644"
+            mode: "0600"
             timeout: 120
           register: _aerospace_download
           retries: 3
           delay: 10
           until: _aerospace_download is succeeded
 
-        - name: Extract AeroSpace zip
+        - name: Extract AeroSpace zip into secure temp directory
           ansible.builtin.unarchive:
-            src: /tmp/AeroSpace.zip
-            dest: /tmp/aerospace-extract
+            src: "{{ _aerospace_tmpdir.path }}/AeroSpace.zip"
+            dest: "{{ _aerospace_tmpdir.path }}"
             remote_src: true
 
         - name: Remove existing AeroSpace.app (version update)
@@ -157,7 +157,7 @@
           # cp -r used instead of copy module to preserve symlinks inside the .app bundle
           ansible.builtin.command:
             cmd: >-
-              cp -r /tmp/aerospace-extract/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
+              cp -r {{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
               /Applications/
           become: true
           tags: [become]
@@ -165,7 +165,7 @@
 
         - name: Install aerospace binary to /usr/local/bin
           ansible.builtin.copy:
-            src: "/tmp/aerospace-extract/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
+            src: "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
             dest: /usr/local/bin/aerospace
             mode: "0755"
             remote_src: true
@@ -185,13 +185,11 @@
           failed_when: false
 
       always:
-        - name: Remove AeroSpace temp files
+        - name: Remove AeroSpace secure temp directory
           ansible.builtin.file:
-            path: "{{ item }}"
+            path: "{{ _aerospace_tmpdir.path | default('') }}"
             state: absent
-          loop:
-            - /tmp/AeroSpace.zip
-            - /tmp/aerospace-extract
+          when: _aerospace_tmpdir is defined and _aerospace_tmpdir.path is defined
 
   rescue:
     - name: Warn AeroSpace install failed (will fail play)
