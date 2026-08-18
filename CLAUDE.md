@@ -4,11 +4,37 @@ Ansible workstation provisioning playbook for Fedora, RHEL CSB, and macOS.
 
 ## Quick Reference
 
+**⚠️ SECURITY WARNING: Config.yml Template Expression Injection (SSTI)**
+
+Ansible loads `config.yml` with `trusted_as_template=True`, allowing Jinja2 template expressions
+(e.g., `{{ ... }}` and `{% ... %}`) to be evaluated as arbitrary code. The playbook's
+`common/tasks/pre_flight_checks.yml` (lines 58-92) comprehensively scans ALL config.yml values—
+strings, list elements, dict values—and rejects any containing template markers before any task executes.
+
+**Risk**: If you inadvertently include a Jinja2 expression in config.yml, it will be evaluated
+with the privilege level of the provisioning play (become: true in Play 1). For example:
+```yaml
+# DANGEROUS — do NOT use:
+system_aide_monitoring_etc_paths: ["{{ lookup('pipe', 'whoami') }}"]  # RCE as root
+dotfiles_goprivate: "{{ lookup('file', '/etc/shadow') }}"  # file disclosure
+```
+
+**Solution**: Use the YAML `!unsafe` tag to mark legitimate braces as literal text:
+```yaml
+# SAFE — uses !unsafe for values with braces:
+dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+system_aide_monitoring_etc_paths: !unsafe ['/etc/ssh/sshd_config.d']
+```
+
+The `!unsafe` tag prevents Ansible from interpreting the value as a template, treating it as
+literal text instead. For plain values without braces (names, emails, paths), the `!unsafe` tag
+is unnecessary but harmless.
+
 **⚠️ SECURITY WARNING: Do NOT use `--start-at-task` to resume provisioning**
 
 The playbook's security architecture depends on pre_tasks validations running before all roles
 execute. Using Ansible's `--start-at-task` flag skips play-level pre_tasks, bypassing critical
-security checks (URL validation, version format validation, identity variable assertions).
+security checks (SSTI guard, URL validation, version format validation, identity variable assertions).
 
 **Risk**: An attacker can use `--start-at-task` to inject malicious config values that would
 normally be caught by pre_flight_checks.yml. For example:
