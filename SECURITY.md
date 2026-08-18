@@ -204,6 +204,96 @@ Defense-in-depth: the `claude` role re-validates `claude_install_url` before
 download (line 6-17 in roles/claude/tasks/main.yml), so even `--start-at-task`
 bypasses cannot reach RCE without also modifying the role's validation.
 
+## Ansible Collections Supply Chain
+
+**Known Vulnerability**: Ansible Galaxy does not publish GPG signatures, Sigstore certificates,
+or SLSA provenance for community collections. If a collection maintainer's Galaxy account is
+compromised (phishing, credential theft, 2FA bypass), attacker can publish malicious code that
+defeats hash-based verification: the attacker controls both the CDN tarball and the Galaxy API
+`artifact.sha256` field simultaneously.
+
+**Affected collections** (vendored in `collections-dist/`):
+- ansible.posix-2.2.2
+- community.general-13.2.0
+- community-library_inventory_filtering_v1-1.1.5
+- containers.podman-1.20.2
+
+**Attack scenario**:
+1. Attacker obtains Galaxy maintainer credentials (phishing, password reuse, session hijack)
+2. Attacker publishes malicious collection version (e.g., community.general-13.2.1) to Galaxy CDN
+3. Attacker updates Galaxy API `artifact.sha256` field to match the malicious tarball
+4. User runs `make vendor-collections` — downloads malicious tarball
+5. Hash verification passes because both CDN and API are attacker-controlled
+6. Malicious code is committed to `collections-dist/` and executed during `make all`
+
+**Mitigations Implemented** (defense-in-depth):
+
+1. **VERSION PINNING** — All collections pinned to specific versions in `requirements.yml`.
+   Prevents silent upstream updates. Requires deliberate version bump review.
+
+2. **MANDATORY CODE REVIEW** — Collection updates require human review BEFORE committing:
+   - Download new version via `make vendor-collections` (Galaxy API verification only catches
+     CDN corruption, not account compromise)
+   - Review upstream CHANGELOG for suspicious changes
+   - Compare old vs. new collection tasks/modules for behavioral changes (network calls, file
+     operations, privilege escalation)
+   - Create PR; require approval from designated reviewer (branch protection enforces this)
+   - Only merge after approval from human reviewer
+
+3. **CI INTEGRITY ENFORCEMENT**:
+   - Pre-commit hook: blocks `collections-dist/*.tar.gz` modifications without `SHA256SUMS` update
+   - CI `collections-integrity` job: validates `sha256sum -c SHA256SUMS` on every PR
+   - Bootstrap: verifies hashes before Ansible execution
+   - `verify-collections.sh`: re-verifies at runtime (TOCTOU tampering guard)
+
+4. **GALAXY API CROSS-VERIFICATION** — Each hash verified against Galaxy API `artifact.sha256`
+   field (different service path than CDN). Limitation: Both controlled by Galaxy infrastructure;
+   does NOT prevent maintainer account compromise attacks.
+
+5. **AUDIT TRAIL** — Collection tarballs committed to git (not gitignored), enabling post-incident
+   forensic analysis and creating public record of supply chain decisions.
+
+**Code Review Procedure** (when updating a collection version):
+
+```bash
+# 1. Download and verify via Galaxy API (basic consistency check)
+make vendor-collections
+
+# 2. Review upstream CHANGELOG for suspicious changes
+tar -xzOf collections-dist/community-general-*.tar.gz CHANGELOG.rst | head -100
+# Look for: new tasks, plugins, external service calls, privilege escalation
+
+# 3. Compare old vs. new version for behavioral differences
+mkdir /tmp/old /tmp/new
+tar -xzf collections-dist/community-general-OLD.tar.gz -C /tmp/old
+tar -xzf collections-dist/community-general-NEW.tar.gz -C /tmp/new
+diff -r /tmp/old/*/plugins /tmp/new/*/plugins | head -50
+
+# 4. Commit with signoff and clear message (audit trail)
+git add requirements.yml collections-dist/SHA256SUMS collections-dist/*.tar.gz
+git commit -s -m "Collections: upgrade community.general to 13.2.1
+
+Changelog reviewed: no suspicious changes detected. New tasks/modules
+compared against previous version — no behavioral changes."
+
+# 5. Create PR and request approval from security reviewer
+git push origin feature-branch
+# Wait for approval before merging
+```
+
+**Future Mitigations** (when available):
+- When maintainers publish GPG-signed tarballs or SLSA provenance, add GitHub release URLs +
+  maintainer GPG key fingerprints to `collections-dist/SHA256SUMS` and integrate GPG verification
+  in `make bootstrap`.
+- SLSA provenance via Sigstore/Cosign (when upstream support arrives) — validate supply chain
+  attestation in CI `collections-integrity` job.
+
+**Reporting Compromise**: If you suspect a collection maintainer's Galaxy account has been
+compromised, report immediately to Galaxy security team: https://galaxy.ansible.com/security
+
+See also: `CLAUDE.md` § "Ansible Galaxy Collections — Verification Limitation and Code Review
+Requirement" for the complete upgrade procedure and mandatory review checklist.
+
 ## Known Limitations
 
 - **Bluetooth enabled (CIS RHEL 9 2.1.5)** — CIS 2.1.5 recommends disabling
