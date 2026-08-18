@@ -6,7 +6,6 @@
 # Required vars (pass via include_tasks vars:):
 #   binary_name        — display name, e.g. "helm"
 #   url                — download URL
-#   tarball            — temp file path, e.g. /tmp/helm.tar.gz
 #   dest               — install path, e.g. /usr/local/bin/helm
 #   checksum           — e.g. "sha256:{{ computed_sha }}"
 #   version_check_cmd  — shell command to test installed version
@@ -14,6 +13,8 @@
 #   csb_action         — manual install instructions
 #   csb_ticket_summary — CSB ticket one-liner
 #   csb_ticket_body    — CSB ticket detail
+#
+# Note: tarball path is now created atomically via tempfile (no longer required as input var)
 #
 # Optional vars:
 #   strip_components      — integer; adds --strip-components=N to tar (default: omit)
@@ -34,10 +35,18 @@
     - name: "Download and extract {{ binary_name }}"
       when: version_string not in (_install_tarball_check.stdout + _install_tarball_check.stderr)
       block:
+        - name: "Create atomic temporary directory for {{ binary_name }}"
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: "ansible_{{ binary_name }}_"
+          register: _install_tarball_tmpdir
+          become: true
+          tags: [become]
+
         - name: "Tarball download: {{ binary_name }}"
           ansible.builtin.get_url:
             url: "{{ url }}"
-            dest: "{{ tarball }}"
+            dest: "{{ _install_tarball_tmpdir.path }}/{{ binary_name }}.tar.gz"
             checksum: "{{ checksum }}"
             mode: "0644"
             timeout: "{{ download_timeout | default(120) }}"
@@ -50,7 +59,7 @@
 
         - name: "Binary extraction: {{ binary_name }}"
           ansible.builtin.unarchive:
-            src: "{{ tarball }}"
+            src: "{{ _install_tarball_tmpdir.path }}/{{ binary_name }}.tar.gz"
             dest: /usr/local/bin
             remote_src: true
             extra_opts: >-
@@ -68,12 +77,13 @@
           tags: [become]
 
       always:
-        - name: "Tarball cleanup: {{ binary_name }}"
+        - name: "Temporary directory cleanup: {{ binary_name }}"
           ansible.builtin.file:
-            path: "{{ tarball }}"
+            path: "{{ _install_tarball_tmpdir.path }}"
             state: absent
           become: true
           tags: [become]
+          when: _install_tarball_tmpdir is defined
 
   rescue:
     - name: "CSB failure record: {{ binary_name }}"

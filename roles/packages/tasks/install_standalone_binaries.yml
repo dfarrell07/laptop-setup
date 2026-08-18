@@ -55,7 +55,6 @@
       https://github.com/gitleaks/gitleaks/releases/download/v{{ packages_gitleaks_version
       }}/gitleaks_{{ packages_gitleaks_version }}_linux_{{
       'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}.tar.gz
-    tarball: /tmp/gitleaks.tar.gz
     dest: /usr/local/bin/gitleaks
     checksum: >-
       sha256:{{ packages_gitleaks_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
@@ -87,7 +86,6 @@
       https://github.com/rhysd/actionlint/releases/download/v{{ packages_actionlint_version
       }}/actionlint_{{ packages_actionlint_version }}_linux_{{
       'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.tar.gz
-    tarball: /tmp/actionlint.tar.gz
     dest: /usr/local/bin/actionlint
     checksum: "sha256:{{ packages_actionlint_sha256_arm64 if ansible_facts['architecture'] == 'aarch64' else packages_actionlint_sha256 }}"
     version_check_cmd: /usr/local/bin/actionlint --version
@@ -116,7 +114,6 @@
     url: >-
       https://github.com/zizmorcore/zizmor/releases/download/v{{ packages_zizmor_version
       }}/zizmor-x86_64-unknown-linux-gnu.tar.gz
-    tarball: /tmp/zizmor.tar.gz
     dest: /usr/local/bin/zizmor
     checksum: "sha256:{{ packages_zizmor_sha256 }}"
     version_check_cmd: /usr/local/bin/zizmor --version
@@ -519,7 +516,6 @@
       https://github.com/tektoncd/cli/releases/download/v{{ packages_tkn_version
       }}/tkn_{{ packages_tkn_version }}_Linux_{{
       'aarch64' if ansible_facts['architecture'] == 'aarch64' else 'x86_64' }}.tar.gz
-    tarball: /tmp/tkn.tar.gz
     dest: /usr/local/bin/tkn
     checksum: >-
       sha256:{{ packages_tkn_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
