@@ -1491,8 +1491,8 @@
 
     # Validate critical security variables in the PLAY NAMESPACE (after -e overrides applied)
     # This complements slurp-based file validation by catching -e override attacks that bypass file checks
+    # NOTE: This block has no condition guard — assertions ALWAYS run to prevent bypass attacks
     - name: Validate gitconfig/ssh_config vars in play namespace (catch -e overrides)
-      when: _pf_namespace_validated is not defined
       block:
         - name: Assert identity/gitconfig vars contain safe characters (gitconfig injection guard, play namespace)
           ansible.builtin.assert:
@@ -1542,30 +1542,51 @@
               - dotfiles_gonosumdb | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
               - dotfiles_goprivate | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
               - dotfiles_aws_profile | default('') | string is match('^[a-zA-Z0-9_-]*$')
+              - dotfiles_claude_queue_repo | default('') | string is match('^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$|^$')
             fail_msg: >-
               SECURITY: Environment variables in the play namespace contain unsafe characters:
               dotfiles_gonosumdb={{ dotfiles_gonosumdb | default('NOTSET') }},
               dotfiles_goprivate={{ dotfiles_goprivate | default('NOTSET') }},
-              dotfiles_aws_profile={{ dotfiles_aws_profile | default('NOTSET') }}.
-              These values are written directly into shell export statements; unsafe characters
-              can escape the double-quoted context to inject arbitrary commands.
+              dotfiles_aws_profile={{ dotfiles_aws_profile | default('NOTSET') }},
+              dotfiles_claude_queue_repo={{ dotfiles_claude_queue_repo | default('NOTSET') }}.
+              These values are written directly into shell export statements or commands; unsafe characters
+              can escape the double-quoted context to inject arbitrary commands (shell code injection via
+              semicolon, backtick, dollar-paren, etc.; command chaining via pipe/logical operators).
               Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
               (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
-              (dotfiles_aws_profile).
+              (dotfiles_aws_profile); owner/repo format only (dotfiles_claude_queue_repo).
           tags: [always]
 
-        - name: Assert USBGuard whitelist/extra_rules in play namespace contain no newlines (USBGuard injection guard)
+        - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed
+            (USBGuard injection guard)
+          vars:
+            _wl_invalid: >-
+              {{ system_usbguard_whitelist | default([]) | map('string')
+              | reject('match', '^(allow|block|reject)\\s+.+') | list }}
+            _er_invalid: >-
+              {{ system_usbguard_extra_rules | default([]) | map('string')
+              | reject('match', '^(allow|block|reject)\\s+.+') | list }}
           ansible.builtin.assert:
             that:
               - system_usbguard_whitelist | default([]) | map('string') | select('search', '\n') | list | length == 0
               - system_usbguard_extra_rules | default([]) | map('string') | select('search', '\n') | list | length == 0
+              - _wl_invalid | length == 0
+              - _er_invalid | length == 0
             fail_msg: >-
-              SECURITY: USBGuard rules in the play namespace contain embedded newlines:
+              SECURITY: USBGuard rules in the play namespace are malformed:
               system_usbguard_whitelist={{ system_usbguard_whitelist | default([]) }},
               system_usbguard_extra_rules={{ system_usbguard_extra_rules | default([]) }}.
+
               Embedded newlines allow INI directive injection into /etc/usbguard/rules.conf,
               bypassing ImplicitPolicyTarget=block. Newline-injected entries become separate
               rules that can allow unwhitelisted devices.
+
+              Bare 'allow', 'block', or 'reject' without a device selector creates a catch-all
+              rule that allows ALL unwhitelisted devices. Each rule must include a selector
+              (e.g. 'allow id 1234:5678', 'allow serial "abc123"').
+
+              Invalid whitelist entries: {{ _wl_invalid }}.
+              Invalid extra_rules entries: {{ _er_invalid }}.
           tags: [always]
 
         - name: Assert Go/Krew SHA256 variables in play namespace match strict pattern (verification bypass guard)
@@ -1597,10 +1618,11 @@
               compromised GOPROXY or MITM interception.
           tags: [always]
 
-        - name: Set namespace validation flag
+        - name: Set namespace validation flag (internal, cannot be pre-set)
           ansible.builtin.set_fact:
-            _pf_namespace_validated: true
+            _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"
           tags: [always]
+          when: _pf_namespace_validated_internal is not defined
 
     - name: Non-molecule pre-flight assertions
       when: not _pf_is_molecule and _pf_assertions_checked is not defined
