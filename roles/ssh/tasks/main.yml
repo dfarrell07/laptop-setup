@@ -2,6 +2,24 @@
 # roles/ssh/tasks/main.yml
 # Deploy SSH keys from vault + pre-seed known_hosts.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always) ---
+- name: SECURITY assert ssh_work_keyscan_hosts entries are safe hostnames (SSH role guard)
+  # NOTE: deliberately no tags — tasks with no tags survive --skip-tags always.
+  # See roles/claude/tasks/main.yml for full explanation.
+  vars:
+    _keyscan_hosts: "{{ ssh_work_keyscan_hosts | default([]) }}"
+    _hostnames: >-
+      {{ _keyscan_hosts | map(attribute='host', default='') | map('string') | select() | list +
+         (_keyscan_hosts | selectattr('host', 'undefined') | map('string') | select() | list) }}
+  ansible.builtin.assert:
+    that:
+      - _hostnames | select('search', '[^a-zA-Z0-9._-]') | list | length == 0
+    fail_msg: >-
+      SECURITY: ssh_work_keyscan_hosts in play namespace contains unsafe hostname characters.
+      This check provides defense-in-depth against --start-at-task bypass of preflight
+      play-namespace validation. Hostnames must match ^[a-zA-Z0-9._-]+$.
+  when: ssh_work_keyscan_hosts | default([]) | length > 0
+
 - name: Ensure SSH directory exists
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/.ssh"
