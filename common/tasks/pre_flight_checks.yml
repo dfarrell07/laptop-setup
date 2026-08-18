@@ -1683,6 +1683,7 @@
               - claude_install_url | default('https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
               - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
               - system_crypto_policy_target | default('DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
+              - dotfiles_work_src_dirs | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
             fail_msg: >-
               SECURITY: High-risk variable in play namespace contains unsafe value (possibly set
               via -e command-line override, bypassing config.yml-based preflight validation):
@@ -1693,7 +1694,9 @@
               distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
                 entries must be alphanumeric/underscore/hyphen (shell injection in init_hooks);
               system_crypto_policy_target={{ system_crypto_policy_target | default('DEFAULT') }} --
-                must be ^[A-Z0-9:_+-]+$ (no spaces; CLI arg injection via shlex.split).
+                must be ^[A-Z0-9:_+-]+$ (no spaces; CLI arg injection via shlex.split);
+              dotfiles_work_src_dirs={{ dotfiles_work_src_dirs | default([]) }} --
+                entries must be alphanumeric/hyphen/underscore (gitconfig includeIf injection).
           tags: [always]
 
         - name: Set namespace validation flag (internal, cannot be pre-set)

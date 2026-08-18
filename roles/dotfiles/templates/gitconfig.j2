@@ -107,17 +107,17 @@
 	helper = !gh auth git-credential
 {% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
 
-[http "https://{{ dotfiles_internal_git_host | trim }}"]
+[http "https://{{ dotfiles_internal_git_host | trim | regex_replace('[^a-zA-Z0-9._-]', '') }}"]
 	sslCAInfo = {{ dotfiles_internal_ca_path | regex_replace('\n', '') | trim }}
 {% endif %}
 
 {% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}
-[includeIf "gitdir:~/src/{{ org }}/"]
+[includeIf "gitdir:~/src/{{ org | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-work
 
 {% endfor %}{% endif %}
 {% if dotfiles_github_user != 'CHANGE_ME' %}
-[includeIf "gitdir:~/src/{{ dotfiles_github_user | trim }}/"]
+[includeIf "gitdir:~/src/{{ dotfiles_github_user | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-personal
 {% endif %}
 

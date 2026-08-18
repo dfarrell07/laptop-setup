@@ -6,4 +6,4 @@
 [global]
 strict_env = {{ "true" if dotfiles_direnv_strict_env | bool else "false" }}
 disable_stdin = {{ "true" if dotfiles_direnv_disable_stdin | bool else "false" }}
-warn_timeout = "{{ dotfiles_direnv_warn_timeout }}"
+warn_timeout = "{{ dotfiles_direnv_warn_timeout | regex_replace('[^0-9smh]', '') }}"
