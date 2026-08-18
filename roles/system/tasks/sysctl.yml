@@ -50,6 +50,18 @@
         fail_msg: "system_sysctl_extra_additional must be a dict, not {{ system_sysctl_extra_additional | type_debug }}"
       when: system_sysctl_extra_additional is defined
 
+    - name: Validate system_core_pattern format (prevent arbitrary code execution via pipe)
+      ansible.builtin.assert:
+        that:
+          - system_core_pattern is string
+          - system_core_pattern | regex_search('^(\||[a-zA-Z0-9._/%\- ]+)$')
+        fail_msg: >-
+          system_core_pattern contains invalid characters or shell metacharacters.
+          Only pipe (|) prefix, alphanumeric chars, dots, underscores, slashes, percent signs,
+          hyphens, and spaces are allowed. Pipe character is only valid at the start to enable
+          core_pattern piping to a handler program.
+      when: system_core_pattern is defined and system_core_pattern | length > 0
+
     - name: Ensure /etc/sysctl.d exists
       ansible.builtin.file:
         path: /etc/sysctl.d
@@ -117,6 +129,7 @@
           your security team before attempting to modify these keys.
       vars:
         _hardening_critical_keys:
+          - kernel.core_pattern
           - kernel.kptr_restrict
           - kernel.dmesg_restrict
           - fs.suid_dumpable
