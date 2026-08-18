@@ -50,6 +50,11 @@ _notes_enabled=false
 grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
+# Validate ssh_port matches decimal format to prevent regex injection in grep patterns
+if ! [[ "$_cfg_ssh_port" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: ssh_port in config.yml must be a plain decimal integer, got: $_cfg_ssh_port" >&2
+  _cfg_ssh_port="722"
+fi
 unset _cfg
 
 run() { # execute locally or inside container
@@ -1673,15 +1678,26 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # Unexpected listening ports (non-loopback)
   if ! command -v ss &>/dev/null; then record "no-open-ports" "WARN" "ss not installed — cannot check for unexpected listeners"
   else
-    listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":${_ssh_port:-$_cfg_ssh_port}([^0-9]|$)" | tail -n +2 || true)
+    listeners=$(ss -tulnp 2>/dev/null | grep -vE "127\.[0-9]+\.[0-9]+\.[0-9]+|::1" | grep -vE ":(22|${_ssh_port:-$_cfg_ssh_port})([^0-9]|$)" | tail -n +2 || true)
     if [[ -z "$listeners" ]]; then record "no-open-ports" "PASS"
     else record "no-open-ports" "WARN" "$listeners"; fi
   fi
 
   _system_umask=$(awk -F': ' '/^system_umask:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   _system_umask="${_system_umask:-027}"
+  # Validate: system_umask must contain only octal digits (0-7) to prevent regex injection in grep -F
+  if ! [[ "$_system_umask" =~ ^[0-7]+$ ]]; then
+    record "system-umask-validation" "FAIL" "system_umask='$_system_umask' contains invalid characters (must be octal digits 0-7)"
+    _system_umask="027"
+  fi
+
   _system_keymap=$(awk -F': ' '/^system_keymap:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$SCRIPT_DIR/../config.yml" 2>/dev/null || true)
   _system_keymap="${_system_keymap:-us}"
+  # Validate: system_keymap must contain only alphanumeric characters, hyphens, and underscores
+  if ! [[ "$_system_keymap" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    record "system-keymap-validation" "FAIL" "system_keymap='$_system_keymap' contains invalid characters (alphanumeric/hyphen/underscore only)"
+    _system_keymap="us"
+  fi
 
   # login.defs password aging (CIS 5.4.x)
   # Skipped on CSB — login.defs is not modified on CSB; IPA/SSSD + IT group policy governs local
@@ -1691,7 +1707,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   if [[ -n "$_pass_max_days" && "$_pass_max_days" -ge 1 && "$_pass_max_days" -le 365 ]]; then record "pass-max-days" "PASS"
   elif $CSB_HOST; then record "pass-max-days" "WARN" "skipped on CSB — login.defs not modified; IT group policy governs password aging"
   else record "pass-max-days" "FAIL" "PASS_MAX_DAYS=${_pass_max_days:-unset} not in CIS range 1-365 in login.defs"; fi
-  if grep -qE "^UMASK[[:space:]]+${_system_umask}$" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
+  if grep -qF "UMASK ${_system_umask}" /etc/login.defs 2>/dev/null; then record "umask-login-defs" "PASS"
   elif $CSB_HOST; then record "umask-login-defs" "WARN" "skipped on CSB — login.defs not modified"
   else record "umask-login-defs" "FAIL" "UMASK not set to ${_system_umask} in login.defs"; fi
   _inactive_logindefs=$(awk '/^INACTIVE[[:space:]]/{print $2}' /etc/login.defs 2>/dev/null || echo "")
