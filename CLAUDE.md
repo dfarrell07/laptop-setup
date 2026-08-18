@@ -269,3 +269,72 @@ make repos-downstream # downstream repos only
   CHANGELOG and new tasks/modules BEFORE staging collections-dist/ changes. Branch protection enforces
   approval from designated reviewers. See "Ansible Galaxy Collections — Verification Limitation and
   Code Review Requirement" section below for complete procedure and mitigations.
+
+## Ansible Galaxy Collections — Verification Limitation and Code Review Requirement
+
+**Vulnerability**: If a Galaxy collection maintainer's credentials are compromised (phishing, 
+credential theft, 2FA bypass), an attacker can publish malicious code to both CDN and Galaxy API 
+simultaneously. The `make vendor-collections` verification (Galaxy API hash check) cannot detect this 
+because both the artifact and its hash are controlled by the same compromised service.
+
+**Attack scenario**:
+1. Attacker compromises maintainer credentials for community.general (phishing/credential theft)
+2. Attacker publishes malicious community.general-13.2.1 to Galaxy CDN
+3. Attacker updates the Galaxy API artifact.sha256 field to match the malicious tarball
+4. `make vendor-collections` downloads the malicious tarball
+5. Hash verification passes because both CDN and API are controlled by attacker
+6. Malicious code is committed to collections-dist/ and executed by ansible-playbook
+
+**Mitigations Implemented** (defense-in-depth):
+
+1. **Mandatory Code Review (REQUIRED)** — All collection updates require human review BEFORE committing:
+   - Download new version: `make vendor-collections` (Galaxy API verification only catches CDN corruption, not maintainer compromise)
+   - Review upstream CHANGELOG for suspicious changes
+   - Compare old vs. new collection tasks/modules for behavioral changes (network calls, file ops, privilege escalation)
+   - Create PR with changes; require approval from designated reviewer (branch protection enforces this)
+   - After approval, update requirements.yml, commit with `-s` flag
+
+2. **Code Review Procedure** (when updating a collection version):
+   ```bash
+   # 1. Download and verify via Galaxy API (basic consistency check)
+   make vendor-collections
+   
+   # 2. Review upstream CHANGELOG
+   tar -xzOf collections-dist/community-general-*.tar.gz CHANGELOG.rst | head -100
+   # Look for: new tasks, plugins, external service calls, privilege escalation
+   
+   # 3. Compare old vs. new version for behavioral changes
+   mkdir /tmp/old /tmp/new
+   tar -xzf collections-dist/COLLECTION-old-version.tar.gz -C /tmp/old
+   tar -xzf collections-dist/COLLECTION-new-version.tar.gz -C /tmp/new
+   diff -r /tmp/old/*/plugins /tmp/new/*/plugins | head -50
+   diff -r /tmp/old/*/roles /tmp/new/*/roles | head -50
+   
+   # 4. Create PR, request approval from security reviewer
+   git add requirements.yml collections-dist/SHA256SUMS collections-dist/*.tar.gz
+   git commit -s -m "Collections: update community.general to 13.2.1
+   
+   Changes reviewed: CHANGELOG checked, no behavioral changes detected."
+   git push origin feature-branch
+   # Wait for code review approval before merging
+   ```
+
+3. **Branch Protection Enforcement** (GitHub branch rules):
+   - Require approval from 1+ designated reviewer for PRs modifying `collections-dist/` or `requirements.yml`
+   - Dismiss stale reviews: disabled (ensure compromised credentials cannot flip approval)
+   - Require branches up to date with main: enabled (enforce reviewers always see latest version)
+
+4. **Audit Trail** — All collection tarballs committed to git (not gitignored):
+   - Enables post-incident forensic analysis
+   - Creates public record of supply chain decisions
+   - CI/CD pipeline pins specific versions (no auto-upgrade)
+
+**Current Collections** (ansible.posix-2.2.2, community.general-13.2.0, 
+community-library_inventory_filtering_v1-1.1.5, containers.podman-1.20.2):
+
+- Next updates: Obtain CHANGELOG review before bumping version
+- Maintain approval record in PR description
+- Document surprising changes in git commit message for future audits
+
+**Reporting Compromise**: If you suspect a Galaxy maintainer's account has been compromised, 
+report to Galaxy security team: https://galaxy.ansible.com/security
