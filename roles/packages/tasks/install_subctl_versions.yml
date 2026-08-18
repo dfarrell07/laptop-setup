@@ -93,10 +93,13 @@
 
     - name: Extract downstream subctl tarball from registry image
       ansible.builtin.command:
-        cmd: >-
-          oc image extract registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}
-          --path="/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz":/tmp/
-          --confirm
+        argv:
+          - oc
+          - image
+          - extract
+          - "registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}"
+          - "--path=/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz:/tmp/"
+          - "--confirm"
       timeout: 300
       register: _pkg_subctl_extract
       changed_when: _pkg_subctl_extract.rc == 0
