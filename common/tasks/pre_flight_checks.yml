@@ -1639,6 +1639,26 @@
               compromised GOPROXY or MITM interception.
           tags: [always]
 
+        - name: Assert high-risk vars in play namespace have safe values (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - packages_opm_binary_name | default('opm-rhel8') | string is match('^[a-zA-Z0-9._-]+$')
+              - claude_install_url | default('https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
+              - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
+              - system_crypto_policy_target | default('DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
+            fail_msg: >-
+              SECURITY: High-risk variable in play namespace contains unsafe value (possibly set
+              via -e command-line override, bypassing config.yml-based preflight validation):
+              packages_opm_binary_name={{ packages_opm_binary_name | default('DEFAULT') }} --
+                must be ^[a-zA-Z0-9._-]+$ (no slashes; path traversal -> root LPE via become:true);
+              claude_install_url={{ claude_install_url | default('DEFAULT') }} --
+                must start with https://claude.ai/ or https://anthropic.com/ (arbitrary URL -> RCE);
+              distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
+                entries must be alphanumeric/underscore/hyphen (shell injection in init_hooks);
+              system_crypto_policy_target={{ system_crypto_policy_target | default('DEFAULT') }} --
+                must be ^[A-Z0-9:_+-]+$ (no spaces; CLI arg injection via shlex.split).
+          tags: [always]
+
         - name: Set namespace validation flag (internal, cannot be pre-set)
           ansible.builtin.set_fact:
             _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"
