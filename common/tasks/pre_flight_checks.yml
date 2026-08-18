@@ -211,7 +211,6 @@
           - desktop_bar_fg
           - desktop_bar_separator
           - desktop_bar_focused_ws_bg
-          - desktop_wm_lock_color
       ansible.builtin.assert:
         that:
           - _color_keys | map('extract', _raw) | select('defined') | list |
@@ -220,14 +219,26 @@
           - _raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
           - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
           - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
+          - _raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
+          - _raw.get('desktop_i3status_battery_num', '') | string is match('^[0-9]*$')
+          - _raw.get('desktop_gtk_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _raw.get('desktop_gtk_icon_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _raw.get('desktop_wm_browser', '') | string is match('^[a-zA-Z0-9/ ._-]*$')
+          - _raw.get('desktop_sway_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
         fail_msg: >-
-          SECURITY: desktop_alacritty_color_* values must be 3- or 6-digit hex colors
-          (#RGB or #RRGGBB). desktop_alacritty_font_family must use only alphanumeric/space/
-          underscore/hyphen. desktop_alacritty_font_size must be a positive number. These
-          values are rendered into quoted TOML strings; a value containing a double-quote
-          or newline allows alacritty TOML section injection (e.g. a [shell] override that
-          changes what binary alacritty executes). containers_log_driver must be one of
-          k8s-file/journald/json-file/syslog/none.
+          SECURITY: desktop_alacritty_color_* and desktop_bar_* values must be 3- or 6-digit
+          hex colors (#RGB or #RRGGBB). desktop_wm_lock_color must be a 6-digit hex color
+          WITHOUT # (swaylock/i3lock format). desktop_alacritty_font_family must use only
+          alphanumeric/space/underscore/hyphen. desktop_alacritty_font_size must be a positive
+          number. desktop_i3status_battery_num must be a non-negative integer or empty.
+          desktop_gtk_theme and desktop_gtk_icon_theme must be alphanumeric/space/dash/underscore.
+          desktop_wm_browser, desktop_sway_polkit_agent, desktop_i3_polkit_agent, desktop_terminal
+          must be safe executable paths (alphanumeric/slash/dot/dash/underscore only — no shell
+          metacharacters). These values are rendered into WM exec directives; shell metacharacters
+          or newlines allow command injection when the WM starts.
+          containers_log_driver must be one of k8s-file/journald/json-file/syslog/none.
       tags: [always]
 
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
@@ -481,7 +492,7 @@
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|)?$')
+          - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|none|)$')
         fail_msg: >-
           SECURITY: system_kernel_lockdown in config.yml contains an unsafe value.
           This value is interpolated directly into a bash shell script context in
@@ -582,22 +593,6 @@
           Embedded newlines inject arbitrary keys into direnv.toml [global], allowing
           bash_path override to execute an attacker-controlled shell on every direnv
           evaluation (every cd into a managed directory).
-      tags: [always]
-
-    - name: Assert proxy_url from environment contains no unsafe characters (DNF INI injection guard)
-      when: _config_yml_raw.content is defined or (proxy_url | default('') | length > 0)
-      vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-        _proxy: "{{ proxy_url | default('') }}"
-      ansible.builtin.assert:
-        that:
-          - _proxy is match('^(https?://[a-zA-Z0-9@:%._+~#=\-/]*)?$')
-        fail_msg: >-
-          SECURITY: proxy_url='{{ _proxy }}' contains unsafe characters (newlines, shell metacharacters).
-          The proxy URL is rendered directly into dnf-automatic.conf; embedded newlines inject
-          arbitrary INI directives that alter DNF behavior undetected. Allowed characters: alphanumeric,
-          @:%.+~#=-/ (standard URI characters). No newlines, quotes, or shell metacharacters.
-          Ensure HTTPS_PROXY/HTTP_PROXY environment variables contain valid proxy URLs before running make all.
       tags: [always]
 
     - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)

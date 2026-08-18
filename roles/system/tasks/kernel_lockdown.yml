@@ -205,7 +205,7 @@
           new="$current"
           # Append each missing hardening param (check by key prefix only)
           _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
-          {{ '_add "lockdown=' ~ system_kernel_lockdown ~ '"' if system_kernel_lockdown | length > 0 else '' }}
+          {% if system_kernel_lockdown in ['integrity', 'confidentiality', 'none'] %}_add "lockdown={{ system_kernel_lockdown }}"{% endif %}
           _add "vsyscall=none"
           {{ '_add "init_on_free=1"' if system_init_on_free | bool else '' }}
           _add "page_alloc.shuffle=1"
