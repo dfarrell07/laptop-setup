@@ -1,0 +1,22 @@
+#!/bin/bash
+# Prepare-commit-msg hook: Detect if core.hooksPath has been disabled
+# SECURITY: Detects local override attempts via git config --local core.hooksPath /dev/null
+# This hook runs even if pre-commit was skipped, catching misconfigurations.
+set -euo pipefail
+
+# Check if core.hooksPath is set and points to a non-existent or disabled path
+_hookspath=$(git config --local core.hooksPath || true)
+
+if [ -n "$_hookspath" ]; then
+  # hooksPath is explicitly set locally (non-default)
+  if ! [ -d "$_hookspath" ]; then
+    # Directory doesn't exist — indicates deliberate disabling (e.g., /dev/null, /nonexistent)
+    echo "ERROR: core.hooksPath is set to non-existent directory: $_hookspath" >&2
+    echo "       This indicates hooks have been disabled (possible security bypass attempt)." >&2
+    echo "       Restore with: git config --local --unset core.hooksPath" >&2
+    echo "       Then run: make hooks" >&2
+    exit 1
+  fi
+fi
+
+exit 0

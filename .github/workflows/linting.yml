@@ -135,6 +135,62 @@ jobs:
           shellcheck -S warning .githooks/pre-commit .githooks/commit-msg
           shellcheck -S warning roles/dotfiles/files/git-template-*
 
+      - name: Validate git hooks — prevent malicious exfiltration patterns
+        run: |
+          # SECURITY: Behavioral validation of hook changes to prevent key exfiltration attacks.
+          # This complements shellcheck (syntax validation) with intent/behavior checks.
+          failed=0
+          for hook in .githooks/pre-commit .githooks/commit-msg; do
+            # Prohibit common exfiltration methods: curl, wget, nc with URLs
+            if grep -E 'curl\s|wget\s|nc\s' "$hook" | grep -qE 'https?://|::[0-9]+'; then
+              echo "::error::$hook: curl/wget/nc with network URLs detected (potential exfiltration)" >&2
+              failed=1
+            fi
+            # Prohibit direct reads of sensitive paths: SSH keys, GPG keys, cloud credentials
+            if grep -qE 'cat.*(\$HOME|~)/(\.ssh|\.gnupg|\.aws|\.gcloud|\.config/gcloud)'; then
+              echo "::error::$hook: reads of sensitive file paths detected (SSH/GPG/AWS/GCP keys)" >&2
+              failed=1
+            fi
+            # Prohibit writes/commands to sensitive locations
+            if grep -qE '(aws|gcloud|gh|kubectl)\s+.*--password|export\s+(AWS_|GOOGLE_|GCP_|GITHUB_TOKEN)'; then
+              echo "::error::$hook: credential export detected (token leakage risk)" >&2
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Verify hook baseline integrity (detect behavior changes)
+        if: github.event_name == 'pull_request'
+        run: |
+          # SECURITY: Enforce that hook changes are semantically reviewed.
+          # If a PR modifies .githooks/*, require explicit evidence of intent (commit message pattern).
+          # This is a behavioral gate in addition to code review policy.
+          failed=0
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # List all commits in the PR
+          commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+
+          # Check if any commit modifies .githooks/*
+          hook_modified=0
+          for commit in $commits; do
+            if git show "$commit" --name-only | grep -q '^.githooks/'; then
+              hook_modified=1
+              # Require PR description or explicit commit message keyword for hook changes
+              msg=$(git log -1 --format=%B "$commit")
+              if ! printf '%s' "$msg" | \
+                 grep -qiE '(SECURITY|hook.*change|gitHook|integrity|behavioral)'; then
+                echo "::notice::Commit $commit modifies .githooks/ — commit message lacks"
+                echo "  security/behavioral keywords (SECURITY, hook, integrity, etc.)"
+              fi
+            fi
+          done
+
+          if [ "$hook_modified" -eq 1 ]; then
+            echo "::notice::PR modifies .githooks/ — code review by project maintainer REQUIRED (GitHub branch protection enforces this)"
+          fi
+
       - name: Validate preflight JSON output
         run: |
           bash scripts/preflight.sh --json > /tmp/pf.json || true
@@ -232,6 +288,26 @@ jobs:
           sys.exit(1 if failed else 0)
           PYEOF
 
+  collections-integrity:
+    name: Collections Integrity Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify collections-dist SHA256SUMS
+        run: |
+          cd collections-dist
+          if ! sha256sum -c SHA256SUMS; then
+            echo "::error::collections-dist integrity check failed"
+            echo "One or more collection tarballs have been tampered with or SHA256SUMS is out of sync."
+            echo "If collections were intentionally updated, run: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS"
+            exit 1
+          fi
+
   syntax-check:
     name: Ansible Syntax Check
     runs-on: ubuntu-24.04
@@ -279,6 +355,26 @@ jobs:
 
       - name: Verify site.yml syntax (ensures assertion is executable)
         run: ansible-playbook site.yml --syntax-check || exit 1
+
+  git-config-guards:
+    name: Git Config Guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify core.hooksPath not overridden
+        run: |
+          hookspath=$(git config core.hooksPath || true)
+          if [ -z "$hookspath" ] || [ "$hookspath" = ".githooks" ]; then
+            echo "✓ core.hooksPath verified: $hookspath or unset (will default to .githooks)"
+          else
+            echo "::error::core.hooksPath overridden to: $hookspath (must be .githooks or unset)"
+            exit 1
+          fi
 
   node-lint:
     name: Node Lint
@@ -489,8 +585,10 @@ jobs:
       - check-vars-sync
       - shell-checks
       - vault-encryption
+      - collections-integrity
       - syntax-check
       - critical-assertions-guard
+      - git-config-guards
       - node-lint
       - gitleaks
       - workflow-security

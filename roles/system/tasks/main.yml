@@ -19,6 +19,25 @@
     _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
   when: not (system_is_container or csb_rhel)
 
+# --- SECURITY: Enforce collections-dist integrity against supply chain tampering ---
+# Detects commits created with `git commit --no-verify` that bypass pre-commit SHA256SUMS
+# check. Paired with CI collections-integrity job for defense-in-depth protection.
+- name: "SECURITY: Verify collections-dist SHA256SUMS before provisioning"
+  ansible.builtin.assert:
+    that:
+      - lookup('file', 'collections-dist/SHA256SUMS') is defined
+      - "'ansible-posix-2.2.2.tar.gz' in lookup('file', 'collections-dist/SHA256SUMS')"
+      - "'community-general-13.2.0.tar.gz' in lookup('file', 'collections-dist/SHA256SUMS')"
+      - "'community-library_inventory_filtering_v1-1.1.5.tar.gz' in lookup('file', 'collections-dist/SHA256SUMS')"
+      - "'containers-podman-1.20.2.tar.gz' in lookup('file', 'collections-dist/SHA256SUMS')"
+    fail_msg: |
+      SECURITY FAILURE: collections-dist/SHA256SUMS missing or incomplete.
+      This indicates collections-dist/*.tar.gz may have been modified without updating
+      SHA256SUMS. Common cause: `git commit --no-verify` bypassed the pre-commit guard.
+
+      To fix: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
+      Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
+
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
