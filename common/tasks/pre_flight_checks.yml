@@ -628,6 +628,28 @@
           system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
       tags: [always]
 
+    - name: Assert password aging and home mode vars safe (login.defs injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_pass_max_days', '365') | string is match('^[0-9]+$')
+          - _raw.get('system_pass_min_days', '1') | string is match('^[0-9]+$')
+          - _raw.get('system_pass_warn_age', '7') | string is match('^[0-9]+$')
+          - _raw.get('system_home_mode', '0700') | string is match('^[0-7]{4}$')
+          - _raw.get('system_inactive_days', '30') | string is match('^[0-9]+$')
+        fail_msg: >-
+          SECURITY: system_pass_max_days, system_pass_min_days, system_pass_warn_age,
+          system_home_mode, or system_inactive_days in config.yml contains unsafe characters.
+          These values are rendered verbatim into /etc/login.defs via Ansible lineinfile;
+          embedded newlines inject arbitrary directives (e.g. UMASK 000 overrides hardening-
+          intended UMASK 027, or PASS_MIN_DAYS 0 allows immediate password reuse after forced
+          change). Allowed: system_pass_*_days and system_inactive_days must be non-negative
+          integers (e.g. 365, 1, 7, 30). system_home_mode must be a 4-digit octal permission
+          string (e.g. 0700, 0755). No newlines, spaces, or special characters allowed.
+      tags: [always]
+
     - name: Assert system_home_mode and password aging vars contain only safe characters (login.defs injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -1044,6 +1066,11 @@
           - _raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
           - _raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
           - _raw.get('system_pwhistory_remember', 24) | int >= 0
+          - _raw.get('system_faillock_deny', 5) | string is match('^[0-9]+$')
+          - _raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
+          - _raw.get('system_faillock_audit', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
+          - _raw.get('system_faillock_local_users_only', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
+          - _raw.get('system_faillock_even_deny_root', false) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
         fail_msg: >-
           SECURITY: journald/auditd/aide-check timer/TLP/PAM vars in config.yml contain
           unsafe values. system_journald_storage must be persistent/volatile/auto/none.
@@ -1053,9 +1080,13 @@
           system_tlp_platform_profile must be performance/balanced/low-power.
           system_tlp_cpu_energy_policy must be performance/balance_performance/balance_power/power.
           system_pwhistory_remember must be a non-negative integer.
-          These values are rendered verbatim into system config files; embedded newlines
-          allow directive injection (log erasure via MaxRetentionSec=1s, audit dispatcher
-          hijack via dispatcher=/tmp/evil, PAM policy bypass via extra pam_deny.so line).
+          system_faillock_deny and system_faillock_unlock_time must be digits only (no
+          newlines or special characters that allow faillock.conf directive injection).
+          system_faillock_audit, system_faillock_local_users_only, and system_faillock_even_deny_root
+          must be plain booleans. These values are rendered verbatim into system config files;
+          embedded newlines allow directive injection (log erasure via MaxRetentionSec=1s, audit
+          dispatcher hijack via dispatcher=/tmp/evil, PAM policy bypass via extra pam_deny.so line,
+          faillock injection via deny=5\neven_deny_root bypassing faillock_even_deny_root: false policy).
       tags: [always]
 
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
@@ -1310,6 +1341,65 @@
           Allowed: alphanumeric, dot, underscore, hyphen, slash, colon, @-sign
           (container_image — registry URL format); alphanumeric, underscore, hyphen
           (container_name, container_release).
+      tags: [always]
+
+    - name: Assert pwquality variables are non-negative integers (pwquality.conf injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_pwquality_minlen', '14') | int >= 0
+          - _raw.get('system_pwquality_dcredit', '-1') | int >= -1
+          - _raw.get('system_pwquality_ucredit', '-1') | int >= -1
+          - _raw.get('system_pwquality_lcredit', '-1') | int >= -1
+          - _raw.get('system_pwquality_ocredit', '-1') | int >= -1
+          - _raw.get('system_pwquality_difok', '5') | int >= 0
+          - _raw.get('system_pwquality_maxrepeat', '0') | int >= 0
+          - _raw.get('system_pwquality_maxsequence', '0') | int >= 0
+        fail_msg: >-
+          SECURITY: pwquality variables in config.yml must be integers only. These values
+          are rendered verbatim into /etc/security/pwquality.conf via community.general.ini_file;
+          embedded newlines (e.g. "14\nminlen 100") inject additional pwquality directives,
+          overriding intended password complexity settings (last-wins semantics).
+          Attack scenario: system_pwquality_minlen: "6\ndifok -1" weakens password requirements
+          or disables character-difference enforcement. All pwquality variables must be parsed
+          as integers only — no newlines, spaces, letters, or special characters allowed.
+          Affected vars: system_pwquality_minlen, system_pwquality_dcredit, system_pwquality_ucredit,
+          system_pwquality_lcredit, system_pwquality_ocredit, system_pwquality_difok,
+          system_pwquality_maxrepeat, system_pwquality_maxsequence.
+          Allowed: non-negative integers for minlen/difok/maxrepeat/maxsequence;
+          -1 or greater for credit variables (e.g., -1=disabled, 0+=required count).
+          Examples: system_pwquality_minlen: 14, system_pwquality_dcredit: -1.
+      tags: [always]
+
+    - name: Assert login.defs password aging variables are non-negative integers (login.defs injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_pass_max_days', '365') | int >= 0
+          - _raw.get('system_pass_min_days', '1') | int >= 0
+          - _raw.get('system_pass_warn_age', '7') | int >= 0
+          - _raw.get('system_inactive_days', '30') | int >= 0
+          - _raw.get('system_home_mode', '0700') | string is match('^[0-7]+$')
+        fail_msg: >-
+          SECURITY: login.defs variables in config.yml must be integers only
+          (except system_home_mode which must be octal digits). These values are rendered
+          verbatim into /etc/login.defs via ansible.builtin.lineinfile; embedded newlines
+          (e.g. "99\nPASS_MIN_DAYS 0") inject additional login.defs directives, overriding
+          hardened account management policy. Attack scenario: system_pass_max_days: "1\nPASS_MIN_DAYS 999"
+          locks accounts by enforcing password change every day AND prevents password reuse forever.
+          system_home_mode: "0700\nPASS_MAX_DAYS 999" weakens password expiration while appearing
+          to set secure home permissions. All password aging variables must be parsed as non-negative
+          integers only — no newlines, spaces, letters, or special characters allowed.
+          system_home_mode must be octal digits (0-7 only, e.g. 0700, 0755).
+          Affected vars: system_pass_max_days, system_pass_min_days, system_pass_warn_age,
+          system_inactive_days, system_home_mode.
+          Allowed: non-negative integers for password aging (e.g., 365, 1, 7, 30);
+          octal digits for system_home_mode (e.g., 0700, 0755, 0750).
+          Examples: system_pass_max_days: 365, system_pass_min_days: 1, system_home_mode: '0700'.
       tags: [always]
 
     - name: Assert sysctl extra dicts contain no newline-injected values (sysctl injection guard)

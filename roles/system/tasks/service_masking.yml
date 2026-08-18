@@ -34,7 +34,7 @@
       ansible.builtin.lineinfile:
         path: /etc/bluetooth/main.conf
         regexp: '^#?Privacy\s*='
-        line: 'Privacy = {{ system_bluetooth_privacy }}'
+        line: 'Privacy = {{ system_bluetooth_privacy | regex_replace("\n", "") }}'
         insertafter: '^\[General\]'
         create: false
       when: system_bluetooth_conf_stat.stat.exists
@@ -44,7 +44,7 @@
       ansible.builtin.lineinfile:
         path: /etc/bluetooth/main.conf
         regexp: '^#?Name\s*='
-        line: 'Name = {{ system_bluetooth_name }}'
+        line: 'Name = {{ system_bluetooth_name | regex_replace("\n", "") }}'
         insertafter: '^\[General\]'
         create: false
       when:
