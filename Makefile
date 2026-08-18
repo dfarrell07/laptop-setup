@@ -321,7 +321,7 @@ test-poller:
 	scripts/test-queue-poller.sh
 
 test-%: .venv
-	.venv/bin/molecule test -s $*
+	$(VERIFY_AND_RUN) .venv/bin/molecule test -s $*
 
 smoke-test:
 	scripts/smoke-test.sh
