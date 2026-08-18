@@ -115,6 +115,7 @@
   when:
     - real_user_home | length > 0
     - real_user_home != '/'
+    - real_user_home is regex('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9_. -]+)*$')
     - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
     - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
   ignore_errors: true

@@ -138,11 +138,40 @@ npm:
 
 vendor-collections: guard-not-root
 	@mkdir -p collections-dist
-	@# Download collection tarballs from Galaxy and regenerate SHA256SUMS.
-	@# Run when bumping versions in requirements.yml, then git add + commit collections-dist/.
+	@# Download collection tarballs from Galaxy and cross-verify sha256 against the
+	@# Galaxy API metadata endpoint (artifact.sha256 field — independent of CDN download
+	@# path, guards against CDN-level substitution). None of these collections publish
+	@# built tarballs to GitHub releases; Galaxy API metadata is the best available
+	@# independent source. Run when bumping versions in requirements.yml, then update
+	@# SHA256SUMS comments and git add + commit collections-dist/.
 	ansible-galaxy collection download -r requirements.yml -p collections-dist/
+	@echo "Cross-verifying downloads against Galaxy API artifact.sha256 metadata..."; \
+	GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"; \
+	_fail=0; \
+	for spec in \
+		"ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
+		"community/general/13.2.0/community-general-13.2.0.tar.gz" \
+		"community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
+		"containers/podman/1.20.2/containers-podman-1.20.2.tar.gz"; do \
+		ns=$$(echo "$$spec" | cut -d/ -f1); \
+		name=$$(echo "$$spec" | cut -d/ -f2); \
+		ver=$$(echo "$$spec" | cut -d/ -f3); \
+		file=$$(echo "$$spec" | cut -d/ -f4); \
+		api_hash=$$(curl -sf "$${GALAXY_API}/$${ns}/$${name}/versions/$${ver}/" \
+			| python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null); \
+		dl_hash=$$(sha256sum "collections-dist/$${file}" | awk '{print $$1}'); \
+		if [ -z "$$api_hash" ]; then \
+			echo "  WARN: $${file} — could not fetch Galaxy API hash; manual verification required" >&2; \
+		elif [ "$$api_hash" = "$$dl_hash" ]; then \
+			echo "  PASS $${file}"; \
+		else \
+			echo "  FAIL $${file}: CDN hash ($$dl_hash) != Galaxy API hash ($$api_hash)" >&2; \
+			_fail=1; \
+		fi; \
+	done; \
+	[ "$$_fail" = "0" ] || exit 1
 	cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
-	@echo "Tarballs downloaded. Review, then: git add collections-dist/ && git commit"
+	@echo "Tarballs downloaded and API-verified. Update SHA256SUMS comments, then: git add collections-dist/ && git commit"
 
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
