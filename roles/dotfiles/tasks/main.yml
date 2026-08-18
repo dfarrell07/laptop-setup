@@ -2,6 +2,22 @@
 # roles/dotfiles/tasks/main.yml
 # Deploy configuration files (copy + template), OS-conditional.
 
+- name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
+  vars:
+    _user_name_pattern: '^[^\n\r\x00-\x1f]*$'
+  ansible.builtin.assert:
+    that:
+      - dotfiles_user_name | string is match(_user_name_pattern)
+    fail_msg: >-
+      SECURITY: dotfiles_user_name (from environment, -e flag, or config.yml) contains
+      newlines or control characters. This value is rendered verbatim into the [user] name field
+      in .gitconfig (INI format); embedded newlines break INI section parsing and allow injection
+      of arbitrary git configuration directives. An attacker-controlled dotfiles_user_name like
+      'Attacker\n[core]\nbare=true' causes git to parse additional INI sections and set core.bare=true,
+      which transforms the repository into a bare repository. This can alter git behavior or override
+      security settings. Allowed: any printable characters except newlines (LF/CR) and control
+      characters (0x00-0x1F). Remove any embedded newlines or control characters from dotfiles_user_name.
+
 - name: Ensure user config directories exist
   ansible.builtin.file:
     path: "{{ item.path }}"

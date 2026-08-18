@@ -3,6 +3,22 @@
 # System hardening: firewall, sysctl, kernel lockdown, auditd, services.
 # All tasks require become (Play 1 has become: true at play level).
 
+# --- SECURITY: Input validation for sysctl key format ---
+# Prevents injection attacks via newlines or special characters in sysctl keys.
+# This assertion runs before any hardening tasks to catch malformed input early.
+- name: "SECURITY: Validate sysctl key format in all extra dicts"
+  ansible.builtin.assert:
+    that:
+      - "(_sysctl_keys | map('regex_search', '^[a-zA-Z0-9._-]+$') | all)"
+    fail_msg: >-
+      Invalid sysctl key format: contains non-alphanumeric characters, newlines, or spaces.
+      Sysctl keys must match [a-zA-Z0-9._-]+ only.
+      Found invalid keys:
+      {{ _sysctl_keys | select('not', 'regex_search', '^[a-zA-Z0-9._-]+$') | list }}
+  vars:
+    _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
+  when: not (system_is_container or csb_rhel)
+
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
