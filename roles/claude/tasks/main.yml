@@ -4,6 +4,9 @@
 
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task bypass) ---
 - name: SECURITY assert claude_install_url is constrained to known-safe domains (defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always
+  # (only --tags something would skip this, but that's acceptable). Do NOT add tags: [always]
+  # as that would allow --skip-tags always to bypass this defense-in-depth check.
   ansible.builtin.assert:
     that:
       - claude_install_url | default('https://claude.ai/install.sh') is match('^https://(claude\.ai|anthropic\.com)/')
@@ -14,7 +17,6 @@
       This check is duplicated in pre_flight_checks.yml; it runs again here to protect
       against --start-at-task flag bypassing play-level pre_tasks. Allowed:
       https://claude.ai/* or https://anthropic.com/*.
-  tags: [always]
 
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed

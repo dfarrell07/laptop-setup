@@ -52,7 +52,8 @@
       here to protect against --start-at-task flag bypassing play-level pre_tasks.
       Allowed pattern: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
       (e.g. "0.32.0", "1.0.0-beta", "2.3.4-rc1")
-  tags: [always]
+  # NOTE: no tags — see roles/claude/tasks/main.yml for explanation of why tags: [always]
+  # is deliberately omitted here (to survive --skip-tags always bypass attempts).
 
 # On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
 # outside dnf won't be in fapolicyd's trust database and will be blocked at runtime.
