@@ -1883,7 +1883,6 @@
       ansible.builtin.assert:
         that:
           - _config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
-          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int >= 0
           - _config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
         fail_msg: >-
           SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
