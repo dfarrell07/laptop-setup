@@ -30,6 +30,22 @@
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
 
+- name: SECURITY assert distrobox_host_exec_commands are in known-safe allowlist (host-exec escape guard, defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
+  # Duplicates the allowlist check in pre_flight_checks.yml as defense-in-depth.
+  vars:
+    _allowed_exec_commands: [podman, flatpak, kind, docker]
+    _unlisted_exec: "{{ distrobox_host_exec_commands | default([]) | map('string') | difference(_allowed_exec_commands) | list }}"
+  ansible.builtin.assert:
+    that:
+      - _unlisted_exec | length == 0
+    fail_msg: >-
+      SECURITY: distrobox_host_exec_commands contains commands outside the known-safe allowlist.
+      Allowed: podman, flatpak, kind, docker.
+      Unlisted: {{ _unlisted_exec }}.
+      A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
+      Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
+
 # --- Detect container tool ---
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:

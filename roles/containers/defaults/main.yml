@@ -32,3 +32,11 @@ registry_tokens: []  # fallback; authoritative in group_vars/all/vars.yml
 
 containers_prune_enabled: false
 containers_prune_schedule: weekly  # OnCalendar value for podman-prune.timer; any systemd calendar expression
+
+# SECURITY: environment.d/containers.conf exports DOCKER_HOST system-wide via
+# systemd-environment-d-generator. All graphical applications (VS Code extensions,
+# language servers, browser-spawned processes) inherit DOCKER_HOST and can reach the
+# Podman socket without any explicit configuration. Enable only if 'make kind' (OVN-K/
+# Submariner) is used; disable on hosts where untrusted code runs in the graphical session.
+# Set containers_environment_d_enabled: false in config.yml to disable.
+containers_environment_d_enabled: true

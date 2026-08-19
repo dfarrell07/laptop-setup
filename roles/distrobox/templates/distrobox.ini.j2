@@ -15,6 +15,13 @@ additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON
 additional_packages={{ distrobox_packages | map('regex_replace', '[\r\n]', '') | join(' ') }}
 
 # Host delegation symlinks
+# ACCEPTED RISK: each entry creates /usr/local/bin/<cmd> -> /usr/bin/distrobox-host-exec,
+# which delegates execution to the host Podman daemon. Any container process can invoke
+# the delegated binary. podman is intentionally included — it is required for
+# container-in-container workflows (kind, OVN-K make targets). The allowlist in
+# common/tasks/pre_flight_checks.yml restricts distrobox_host_exec_commands to
+# [podman, flatpak, kind, docker]; shells and arbitrary binaries are rejected at
+# preflight to prevent trivial host-shell escape via distrobox-host-exec.
 {% for cmd in distrobox_host_exec_commands %}
 init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd | quote }} || true;
 {% endfor %}

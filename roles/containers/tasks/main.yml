@@ -441,6 +441,16 @@
     - _prune_remove_daemon_reload.failed | default(false)
 
 # --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
+# SECURITY WARNING: environment.d exports DOCKER_HOST system-wide via
+# systemd-environment-d-generator. Every process in the graphical session — VS Code
+# extensions, language servers, browser-spawned helpers — inherits DOCKER_HOST and can
+# reach the Podman socket without any explicit configuration. A malicious extension or
+# plugin can use the Docker/Podman API against the host daemon.
+# This is enabled by default because 'make kind' (OVN-K/Submariner) requires DOCKER_HOST
+# to be set for sh-spawned Make sub-processes (sh does not source .zshrc/.bashrc).
+# Set containers_environment_d_enabled: false in config.yml to opt out on hosts where
+# untrusted code runs in the graphical session. KIND_EXPERIMENTAL_PROVIDER is low-risk
+# (a provider hint only), but is scoped alongside DOCKER_HOST as they are used together.
 - name: Deploy containers environment.d config (KIND and Podman socket)
   ansible.builtin.copy:
     content: |
@@ -456,6 +466,7 @@
     # ~/.config/environment.d not created in containers (common task guards it);
     # systemd-environment-d-generator not active inside containers
     - not (system_is_container)
+    - containers_environment_d_enabled | bool
   # environment.d is processed by systemd-environment-d-generator at user session start,
   # processes in the graphical session including Make — unlike .zshrc which is
   # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or

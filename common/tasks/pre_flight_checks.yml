@@ -1843,6 +1843,35 @@
           Remove any spaces, semicolons, dollar signs, backticks, pipes, or other shell
           metacharacters from distrobox_host_exec_commands entries.
 
+    - name: Assert distrobox_host_exec_commands entries are in the known-safe allowlist (host-exec escape guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_raw }}"
+        _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
+        # Allowlist: only these binaries may be delegated via distrobox-host-exec symlinks.
+        # podman: accepted risk — documented in distrobox.ini.j2; required for container-in-container workflows.
+        # flatpak: host Flatpak app access from inside the container.
+        # kind: Kubernetes-in-Docker cluster management via host Podman daemon.
+        # docker: optional; only active when install_docker: true; follows same threat model as podman.
+        _allowed_commands: [podman, flatpak, kind, docker]
+        _unlisted_entries: "{{ _host_exec_commands | map('string') | difference(_allowed_commands) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unlisted_entries | length == 0
+        fail_msg: >-
+          SECURITY: distrobox_host_exec_commands contains commands outside the known-safe allowlist.
+          Input: distrobox_host_exec_commands={{ _host_exec_commands }} in config.yml.
+          Mechanism: each entry creates /usr/local/bin/<cmd> -> /usr/bin/distrobox-host-exec
+          inside the container; any container process can run '<cmd> <args>' against the host.
+          A shell name (e.g. bash) creates a trivial host-shell escape — any container process
+          can run: bash -c 'podman run --privileged --volume /:/host image' to mount the full
+          host root filesystem, escaping all container isolation.
+          Allowed: podman, flatpak, kind, docker (the vetted host-exec delegation set).
+          Unlisted entries: {{ _unlisted_entries }}.
+          Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
+          If a new binary is genuinely needed, review the threat model in distrobox.ini.j2
+          and add it to the allowlist in common/tasks/pre_flight_checks.yml.
+
     - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -2393,6 +2422,25 @@
               yes, no, resolve. Current values:
               system_resolved_llmnr={{ system_resolved_llmnr | default('DEFAULT') }},
               system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
+          tags: [always]
+
+        - name: Assert notes_repo_path in play namespace is a safe path (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - >-
+                notes_repo_path | default('') | string == ''
+                or notes_repo_path | default('') | string is match('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)/[a-zA-Z0-9._-]*$')
+            fail_msg: >-
+              SECURITY: notes_repo_path in the play namespace contains an unsafe value
+              (possibly set via -e flag, bypassing config.yml pre-flight validation).
+              This value is rendered verbatim into alias notes="cd {{ notes_repo_path }}"
+              in zshrc.j2; shell $() and backtick sequences expand at alias-definition
+              time (every interactive shell open), executing arbitrary commands as the user.
+              Example attack: make all -e notes_repo_path='$(evil_cmd)'
+              Allowed: empty (use safe computed default) or a path matching
+              /home/<user>/…, /root/…, or /Users/<user>/… with alphanumeric, dot,
+              underscore, hyphen only. No $(), backticks, spaces, or shell metacharacters.
+              Current value: '{{ notes_repo_path | default("") }}'.
           tags: [always]
 
         - name: Set namespace validation flag (internal, cannot be pre-set)
