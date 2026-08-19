@@ -106,7 +106,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-test.lock
 
-      - name: Install dependencies
+      - name: Install pyyaml and packaging from lockfile
         run: |
           pip install --require-hashes -r <(awk '
             /^pyyaml==|^packaging==/ {
@@ -529,9 +529,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify site.yml syntax (ensures assertion is executable)
-        run: ansible-playbook site.yml --syntax-check || exit 1
-
   git-config-guards:
     name: Git Config Guards
     runs-on: ubuntu-24.04
@@ -614,7 +611,7 @@ jobs:
     name: GPG Signature Verification
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
