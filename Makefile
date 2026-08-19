@@ -392,4 +392,4 @@ smoke-test-user:
 # --- Vault ---
 
 vault-edit:
-	ansible-vault edit group_vars/all/vault.yml
+	$(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml

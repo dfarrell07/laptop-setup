@@ -13,7 +13,9 @@ runs:
         cache-dependency-path: requirements-test.lock
 
     - name: Install CI dependencies
-      run: pip install --require-hashes -r requirements-test.lock
+      run: |
+        test -z "${PIP_INDEX_URL:-}" || (echo 'PIP_INDEX_URL must not be set in CI' && exit 1)
+        pip install --require-hashes -r requirements-test.lock
       shell: bash
 
     - name: Audit installed dependencies for known CVEs

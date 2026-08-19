@@ -517,6 +517,7 @@
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
     - packages_cosign_install_enabled
+    - _sops_checksums_verify_result.rc == 0
   ansible.builtin.shell: |
     set -euo pipefail
     arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
