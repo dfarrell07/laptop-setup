@@ -134,6 +134,7 @@
   when:
     - repo_mullvad
     - is_fedora
+    - profile == 'personal'
     - not csb_detected
   block:
     - name: Add mullvad repo
@@ -360,7 +361,7 @@
   when:
     - repo_rpmfusion_free
     - is_fedora
-    - not csb_detected
+    - not csb_rhel
   block:
     - name: Create secure temporary directory for RPM Fusion free GPG key
       ansible.builtin.tempfile:
@@ -425,7 +426,7 @@
   when:
     - repo_rpmfusion_nonfree
     - is_fedora
-    - not csb_detected
+    - not csb_rhel
   block:
     - name: Create secure temporary directory for RPM Fusion nonfree GPG key
       ansible.builtin.tempfile:
