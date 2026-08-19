@@ -61,8 +61,8 @@
   delay: 3
   until: gosumdb_reachability.status == 200
   environment:
-    HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
-    HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
+    HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
 
 
 - name: Install Go tools
@@ -77,8 +77,8 @@
     GOPATH: "{{ ansible_facts['user_dir'] }}/go"
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-    HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
-    HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
+    HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
     GOPROXY: 'https://proxy.golang.org,direct'  # security-critical: pin proxy, prevent GOPROXY env injection
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
