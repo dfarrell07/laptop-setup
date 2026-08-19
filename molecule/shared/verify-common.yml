@@ -461,7 +461,7 @@
   ansible.builtin.assert:
     that:
       - "'--smart-case' in (verify_ripgreprc_content.content | b64decode) or '--follow' in (verify_ripgreprc_content.content | b64decode)"
-    fail_msg: "~/.config/ripgrep/config exists but contains no expected options (--smart-case or --follow)"
+    fail_msg: "~/.config/ripgrep/config exists but contains no expected options (--smart-case or --follow); got: {{ (verify_ripgreprc_content.content | b64decode)[:200] }}"
 
 - name: Verify git config-work exists (always deployed)
   ansible.builtin.stat:
@@ -484,7 +484,7 @@
     that: >-
       '[user]' in (verify_git_config_work_content.content | b64decode) or
       'email =' in (verify_git_config_work_content.content | b64decode)
-    fail_msg: "git config-work exists but contains no [user] section or email — work identity unset"
+    fail_msg: "git config-work exists but contains no [user] section or email — work identity unset; got: {{ (verify_git_config_work_content.content | b64decode)[:200] }}"
   when: verify_git_config_work.stat.exists
 
 - name: Verify ssh-agent environment.d config deployed (Linux)
