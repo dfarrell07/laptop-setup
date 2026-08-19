@@ -1216,9 +1216,19 @@
     - not csb_rhel
     - not (system_is_container | default(false))
 
+- name: Check sudoers go-env contains Defaults env_keep
+  ansible.builtin.command: grep 'Defaults env_keep' /etc/sudoers.d/go-env
+  register: verify_sudoers_go_env_content
+  changed_when: false
+  failed_when: false
+  become: true
+  when: verify_sudoers_go_env.stat.exists | default(false)
+
 - name: Assert sudoers go-env drop-in deployed
   ansible.builtin.assert:
-    that: verify_sudoers_go_env.stat.exists
+    that:
+      - verify_sudoers_go_env.stat.exists
+      - verify_sudoers_go_env_content.rc == 0
     fail_msg: "/etc/sudoers.d/go-env not deployed — system role sudoers go-env task regression (exists={{ verify_sudoers_go_env.stat.exists | default(false) }})"
   when:
     - ansible_system == 'Linux'
@@ -1246,11 +1256,20 @@
     - not csb_rhel
     - not (system_is_container | default(false))
 
+- name: Check logrotate sudo config references sudo.log
+  ansible.builtin.command: grep '/var/log/sudo.log' /etc/logrotate.d/sudo
+  register: verify_logrotate_sudo_content
+  changed_when: false
+  failed_when: false
+  become: true
+  when: verify_logrotate_sudo.stat.exists | default(false)
+
 - name: Assert logrotate sudo config deployed
   ansible.builtin.assert:
     that:
       - verify_logrotate_sudo.stat.exists
       - verify_logrotate_sudo.stat.mode == '0644'
+      - verify_logrotate_sudo_content.rc == 0
     fail_msg: "/etc/logrotate.d/sudo not deployed or wrong mode (expected 0644, got {{ verify_logrotate_sudo.stat.mode | default('absent') }}) — system role logrotate task regression"
   when:
     - ansible_system == 'Linux'
@@ -1310,7 +1329,7 @@
     - verify_journald_conf.stat.exists
 
 - name: Check sudoers drop-in has logfile=/var/log/sudo.log directive
-  ansible.builtin.command: grep -q 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
+  ansible.builtin.command: grep 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
   register: verify_sudoers_logfile
   changed_when: false
   failed_when: false
@@ -1325,8 +1344,13 @@
 - name: Assert sudoers drop-in contains logfile=/var/log/sudo.log directive
   ansible.builtin.assert:
     that: verify_sudoers_logfile.rc == 0
-    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=/var/log/sudo.log' — sudo logging regression (rc={{ verify_sudoers_logfile.rc | default('?') }})"
+    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=/var/log/sudo.log' — file content: {{ verify_sudoers_logfile.stdout_lines | default([]) | join(' | ') | default('(empty or absent)') }}"
   when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
+    - verify_sudoers_conf.stat.exists
     - verify_sudoers_logfile is not skipped
 
 - name: Stat auditd rules file (system role deploys it on non-RHEL-CSB Linux, including Fedora hybrid CSB)
