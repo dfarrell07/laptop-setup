@@ -1090,8 +1090,10 @@
 
 - name: Assert logrotate sudo config deployed
   ansible.builtin.assert:
-    that: verify_logrotate_sudo.stat.exists
-    fail_msg: "/etc/logrotate.d/sudo not deployed — system role logrotate task regression"
+    that:
+      - verify_logrotate_sudo.stat.exists
+      - verify_logrotate_sudo.stat.mode == '0644'
+    fail_msg: "/etc/logrotate.d/sudo not deployed or wrong mode — system role logrotate task regression"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
