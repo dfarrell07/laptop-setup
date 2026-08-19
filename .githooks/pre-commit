@@ -3,150 +3,53 @@
 
 failed=0
 
-# SECURITY GUARD: Block commits that modify verify-collections.sh without updating .sha256 baseline
-# Protects against attacker-modified script that passes CI but disables integrity checks at runtime
-_vc_modified=0
-_vc_hash_modified=0
-while IFS= read -r -d '' f; do
-  _vc_modified=$(((_vc_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-collections.sh')
-while IFS= read -r -d '' f; do
-  _vc_hash_modified=$(((_vc_hash_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-collections.sh.sha256')
+# Check file+hash pair: ERROR if file modified but hash not (unguarded tampering risk),
+# WARN if both modified (synchronized change pattern), WARN if hash but not file (unusual).
+check_modified_and_hash_baseline() {
+  local file_path="$1" hash_path="$2" error_desc="$3" critical_note="$4"
+  local file_mod=0 hash_mod=0
 
-if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -eq 0 ]; then
-  echo "ERROR: scripts/verify-collections.sh modified but .sha256 baseline not updated" >&2
-  echo "       CRITICAL: Attacker could modify the script to disable integrity checks" >&2
-  echo "       Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256 && git add scripts/verify-collections.sh.sha256" >&2
-  failed=1
-fi
+  while IFS= read -r -d '' _; do
+    ((file_mod++))
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- "$file_path")
 
-# WARNING (non-blocking): Detect synchronized modifications to critical files
-# Flags high-risk patterns for human review; does NOT prevent commit
-if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -gt 0 ]; then
-  echo "WARN: Both scripts/verify-collections.sh and .sha256 modified in same commit" >&2
-  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
-  echo "      See the commit diff and verify changes are intentional." >&2
-fi
+  while IFS= read -r -d '' _; do
+    ((hash_mod++))
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- "$hash_path")
 
-if [ "$_vc_hash_modified" -gt 0 ] && [ "$_vc_modified" -eq 0 ]; then
-  echo "WARN: scripts/verify-collections.sh.sha256 modified but script not changed" >&2
-  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- scripts/verify-collections.sh.sha256" >&2
-fi
+  if [ "$file_mod" -gt 0 ] && [ "$hash_mod" -eq 0 ]; then
+    echo "ERROR: $error_desc modified but baseline not updated" >&2
+    echo "       CRITICAL: $critical_note" >&2
+    failed=1
+  fi
 
-# SECURITY GUARD: Block commits that modify verify-ansible-args.sh without updating .sha256 baseline
-# Protects against attacker-modified script that bypasses pre-flight security checks
-_vaa_modified=0
-_vaa_hash_modified=0
-while IFS= read -r -d '' f; do
-  _vaa_modified=$(((_vaa_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-ansible-args.sh')
-while IFS= read -r -d '' f; do
-  _vaa_hash_modified=$(((_vaa_hash_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-ansible-args.sh.sha256')
+  if [ "$file_mod" -gt 0 ] && [ "$hash_mod" -gt 0 ]; then
+    echo "WARN: Both $error_desc and baseline modified in same commit" >&2
+    echo "      Bypasses hash-based detection; split into separate commits" >&2
+  fi
 
-if [ "$_vaa_modified" -gt 0 ] && [ "$_vaa_hash_modified" -eq 0 ]; then
-  echo "ERROR: scripts/verify-ansible-args.sh modified but .sha256 baseline not updated" >&2
-  echo "       CRITICAL: Attacker could modify the script to bypass pre-flight checks" >&2
-  echo "       Run: sha256sum scripts/verify-ansible-args.sh > scripts/verify-ansible-args.sh.sha256 && git add scripts/verify-ansible-args.sh.sha256" >&2
-  failed=1
-fi
+  if [ "$hash_mod" -gt 0 ] && [ "$file_mod" -eq 0 ]; then
+    echo "WARN: Baseline modified but $error_desc not changed — unusual" >&2
+  fi
+}
 
-# WARNING (non-blocking): Detect synchronized modifications to critical files
-# Flags high-risk patterns for human review; does NOT prevent commit
-if [ "$_vaa_modified" -gt 0 ] && [ "$_vaa_hash_modified" -gt 0 ]; then
-  echo "WARN: Both scripts/verify-ansible-args.sh and .sha256 modified in same commit" >&2
-  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
-  echo "      See the commit diff and verify changes are intentional." >&2
-fi
+# Guard scripts against integrity check disabling
+check_modified_and_hash_baseline 'scripts/verify-collections.sh' 'scripts/verify-collections.sh.sha256' \
+  'scripts/verify-collections.sh' 'Attacker could disable integrity checks at runtime'
 
-if [ "$_vaa_hash_modified" -gt 0 ] && [ "$_vaa_modified" -eq 0 ]; then
-  echo "WARN: scripts/verify-ansible-args.sh.sha256 modified but script not changed" >&2
-  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- scripts/verify-ansible-args.sh.sha256" >&2
-fi
+check_modified_and_hash_baseline 'scripts/verify-ansible-args.sh' 'scripts/verify-ansible-args.sh.sha256' \
+  'scripts/verify-ansible-args.sh' 'Attacker could bypass pre-flight security checks'
 
-# SECURITY GUARD: Block commits that modify Makefile without updating .sha256 baseline
-# Protects against attacker-modified Makefile that disables VERIFY_AND_RUN dispatcher
-_makefile_modified=0
-_makefile_hash_modified=0
-while IFS= read -r -d '' f; do
-  _makefile_modified=$(((_makefile_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'Makefile')
-while IFS= read -r -d '' f; do
-  _makefile_hash_modified=$(((_makefile_hash_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'Makefile.sha256')
+check_modified_and_hash_baseline 'Makefile' 'Makefile.sha256' \
+  'Makefile' 'Attacker could disable VERIFY_AND_RUN dispatcher'
 
-if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -eq 0 ]; then
-  echo "ERROR: Makefile modified but .sha256 baseline not updated" >&2
-  echo "       CRITICAL: Attacker could modify VERIFY_AND_RUN to bypass pre-flight checks" >&2
-  echo "       Run: sha256sum Makefile > Makefile.sha256 && git add Makefile.sha256" >&2
-  failed=1
-fi
+# Guard collections against supply-chain tampering
+check_modified_and_hash_baseline 'collections-dist/*.tar.gz' 'collections-dist/SHA256SUMS' \
+  'collections-dist tarballs' 'Attacker could substitute with malicious versions'
 
-# WARNING (non-blocking): Detect synchronized modifications to Makefile
-# Flags high-risk patterns for human review; does NOT prevent commit
-if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -gt 0 ]; then
-  echo "WARN: Both Makefile and .sha256 modified in same commit" >&2
-  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
-  echo "      See the commit diff and verify changes are intentional." >&2
-fi
-
-if [ "$_makefile_hash_modified" -gt 0 ] && [ "$_makefile_modified" -eq 0 ]; then
-  echo "WARN: Makefile.sha256 modified but Makefile not changed" >&2
-  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- Makefile.sha256" >&2
-fi
-
-# SECURITY GUARD: Block commits that modify collections-dist/ without updating SHA256SUMS
-# Protects against supply chain tampering (modified tarballs without hash update)
-_modified_tarballs=0
-_modified_hashes=0
-while IFS= read -r -d '' f; do
-  _modified_tarballs=$(((_modified_tarballs + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/*.tar.gz')
-while IFS= read -r -d '' f; do
-  _modified_hashes=$(((_modified_hashes + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS')
-
-if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -eq 0 ]; then
-  echo "ERROR: collections-dist/*.tar.gz modified but SHA256SUMS not updated" >&2
-  echo "       Possible supply chain tampering or accidental modification" >&2
-  echo "       Run: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS && git add SHA256SUMS" >&2
-  failed=1
-fi
-
-# WARNING (non-blocking): Detect synchronized modifications to supply chain files
-# Flags high-risk patterns for human review; does NOT prevent commit
-if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -gt 0 ]; then
-  echo "WARN: Both collections-dist/*.tar.gz and SHA256SUMS modified in same commit" >&2
-  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
-  echo "      See the commit diff and verify changes are intentional." >&2
-fi
-if [ "$_modified_hashes" -gt 0 ] && [ "$_modified_tarballs" -eq 0 ]; then
-  echo "WARN: SHA256SUMS modified but no collections-dist/*.tar.gz changes detected" >&2
-  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- collections-dist/SHA256SUMS" >&2
-fi
-
-# SECURITY GUARD: Block commits that modify SHA256SUMS without updating SHA256SUMS.asc
-# Prevents stale GPG signatures that cause fresh machines to fall back to hash-only verification
-_sha256_modified=0
-_sha256asc_modified=0
-while IFS= read -r -d '' f; do
-  _sha256_modified=$(((_sha256_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS')
-while IFS= read -r -d '' f; do
-  _sha256asc_modified=$(((_sha256asc_modified + 1)))
-done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS.asc')
-
-if [ "$_sha256_modified" -gt 0 ] && [ "$_sha256asc_modified" -eq 0 ]; then
-  echo "ERROR: collections-dist/SHA256SUMS modified but SHA256SUMS.asc not updated" >&2
-  echo "       CRITICAL: Stale signature allows fallback to hash-only verification" >&2
-  echo "       Run: make vendor-collections (regenerates signature automatically)" >&2
-  failed=1
-fi
-
-if [ "$_sha256asc_modified" -gt 0 ] && [ "$_sha256_modified" -eq 0 ]; then
-  echo "WARN: SHA256SUMS.asc modified but SHA256SUMS not changed (unusual)" >&2
-fi
+# Guard signatures against staleness
+check_modified_and_hash_baseline 'collections-dist/SHA256SUMS' 'collections-dist/SHA256SUMS.asc' \
+  'collections-dist/SHA256SUMS' 'Stale signature allows fallback to hash-only verification'
 
 # SECURITY GUARD: Block commits to vault-pass-ci.sh without xtrace protection
 # Protects against removal of 'set +x' that prevents shell tracing exposure of vault password
