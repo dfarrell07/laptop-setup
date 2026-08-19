@@ -2,6 +2,29 @@
 # Pre-commit checks: vault encryption, secrets, YAML, shell, JSON, collections integrity
 failed=0
 
+# SECURITY GUARD: Block commits that modify verify-collections.sh without updating .sha256 baseline
+# Protects against attacker-modified script that passes CI but disables integrity checks at runtime
+_vc_modified=0
+_vc_hash_modified=0
+while IFS= read -r -d '' f; do
+  _vc_modified=$(((_vc_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-collections.sh')
+while IFS= read -r -d '' f; do
+  _vc_hash_modified=$(((_vc_hash_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/verify-collections.sh.sha256')
+
+if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -eq 0 ]; then
+  echo "ERROR: scripts/verify-collections.sh modified but .sha256 baseline not updated" >&2
+  echo "       CRITICAL: Attacker could modify the script to disable integrity checks" >&2
+  echo "       Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256 && git add scripts/verify-collections.sh.sha256" >&2
+  failed=1
+fi
+
+if [ "$_vc_hash_modified" -gt 0 ] && [ "$_vc_modified" -eq 0 ]; then
+  echo "WARN: scripts/verify-collections.sh.sha256 modified but script not changed" >&2
+  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- scripts/verify-collections.sh.sha256" >&2
+fi
+
 # SECURITY GUARD: Block commits that modify collections-dist/ without updating SHA256SUMS
 # Protects against supply chain tampering (modified tarballs without hash update)
 _modified_tarballs=0
