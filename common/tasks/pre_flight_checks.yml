@@ -3073,7 +3073,7 @@
     - name: "GRUB: Assert password hash format when enabled (preflight)"
       when:
         - system_grub_password_enabled | default(false)
-        - not (system_is_container | default(false) or csb_rhel | default(false))
+        - not (system_is_container or csb_rhel)
         - _pf_grub_validated is not defined
       block:
         - name: "GRUB: Assert hash matches PBKDF2 format and rounds"
