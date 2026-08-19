@@ -255,6 +255,16 @@ packages_oc_sha256: "22cb5df5206569ca2c8ca3b56f55f5af9dbd68fc35ea237a4069e06ffd6
 packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09ca36e2a"
 packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
+# kubectl source: 'ocp' (extracted from OCP tarball, tracks OCP release cadence) or
+# 'upstream' (downloaded from dl.k8s.io, tracks upstream Kubernetes stable releases).
+# OCP 4.22 ships kubectl 1.35; upstream is currently 1.36.
+packages_kubectl_source: ocp
+# Used only when packages_kubectl_source: upstream; ignored when source is 'ocp'.
+# Fetch latest: curl -L -s https://dl.k8s.io/release/stable.txt
+packages_kubectl_version: "1.36.3"
+packages_kubectl_sha256: "096dd0c0c6e169f8476d9cfb1eb5c5ac23a929fa5f84a22ccd00231c0b82f6a2"  # x86_64 Linux
+packages_kubectl_sha256_arm64: "5fe5855e815d13e8e4c76e4c0a71cffc23befa21a47e81c5ad25a9975fb77c66"  # arm64 Linux
+
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
 packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' pins to system Go.
   # Set 'auto' in config.yml only to allow toolchain self-replacement (e.g. older distro Go).

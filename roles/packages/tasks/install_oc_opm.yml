@@ -101,6 +101,11 @@
           become: true
           tags: [become]
 
+        - name: Build list of binaries to extract from OCP tarball
+          ansible.builtin.set_fact:
+            _oc_binaries_to_extract: >-
+              {{ ['oc'] + (['kubectl'] if packages_kubectl_source == 'ocp' else []) }}
+
         - name: Extract oc and kubectl
           # Idempotency guard: skip re-extraction when get_url reports the tarball
           # is unchanged (sha256 matches the cached copy).  Still extracts
@@ -109,15 +114,13 @@
           # most for packages_oc_version == 'stable', where the outer when-clause
           # always fires and creates: /usr/local/bin/oc would wrongly prevent
           # upgrades when the stable pointer advances to a new release.
+          # When packages_kubectl_source == 'upstream', only oc is extracted; kubectl
+          # is installed separately from dl.k8s.io via install_kubectl_upstream.yml.
           ansible.builtin.unarchive:
             src: "{{ packages_oc_download.dest }}"
             dest: /usr/local/bin
             remote_src: true
-            extra_opts:
-              - --no-same-owner
-              - --no-absolute-names
-              - oc
-              - kubectl
+            extra_opts: "{{ ['--no-same-owner', '--no-absolute-names'] + _oc_binaries_to_extract }}"
           when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
           become: true
           tags: [become]

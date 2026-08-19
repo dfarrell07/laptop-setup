@@ -1,0 +1,67 @@
+---
+# roles/packages/tasks/install_kubectl_upstream.yml
+# Install kubectl from upstream dl.k8s.io (instead of OCP tarball).
+# Included from install_binary_downloads.yml when packages_kubectl_source == 'upstream'.
+# Guarded by _packages_linux_x86_work; do not include directly without that guard.
+- name: Install kubectl from upstream
+  block:
+    - name: Assert kubectl SHA256 is set
+      ansible.builtin.assert:
+        that: packages_kubectl_sha256 | length == 64
+        fail_msg: "packages_kubectl_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_kubectl_version"
+
+    - name: Check if kubectl is installed
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kubectl version --client
+      register: _kubectl_upstream_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: kubectl present at {{ packages_kubectl_version }}
+      when: >-
+        _kubectl_upstream_check.rc != 0 or
+        packages_kubectl_version not in _kubectl_upstream_check.stdout
+      ansible.builtin.get_url:
+        url: >-
+          https://dl.k8s.io/release/v{{ packages_kubectl_version }}/bin/linux/{{
+          'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}/kubectl
+        dest: /usr/local/bin/kubectl
+        checksum: >-
+          sha256:{{ packages_kubectl_sha256_arm64 if ansible_facts['architecture'] == 'aarch64'
+          else packages_kubectl_sha256 }}
+        mode: "0755"
+        timeout: 120
+      environment:
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+        http_proxy: ''
+        https_proxy: ''
+      become: true
+      tags: [become]
+      register: _kubectl_upstream_download
+      retries: 3
+      delay: 10
+      until: _kubectl_upstream_download is succeeded
+
+  rescue:
+    - name: Record kubectl download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "kubectl (upstream)"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install kubectl manually from
+          https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+        _csb_ticket_summary: "Cannot download kubectl binary on CSB"
+        _csb_ticket_body: >-
+          kubectl binary could not be downloaded from dl.k8s.io.
+          Install manually from https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: csb_rhel
+    - name: Warn kubectl download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: not csb_rhel
