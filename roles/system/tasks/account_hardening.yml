@@ -1,6 +1,6 @@
 ---
 # --- Sudoers hardening ---
-- name: Configure sudoers security defaults
+- name: Write /etc/sudoers.d/99-hardening (logfile, log_input/output, use_pty, timestamp_timeout)
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -34,7 +34,7 @@
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
 # service accounts that don't rotate passwords. YESCRYPT is the RHEL 9 default already.
 # Skip on CSB and rely on IPA/SSSD + IT group policy for account management.
-- name: Configure password aging in login.defs
+- name: Set login.defs password aging fields (PASS_MAX_DAYS, PASS_MIN_DAYS, PASS_WARN_AGE, HOME_MODE, INACTIVE)
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: "^{{ item.name }}\\s+"

@@ -172,9 +172,10 @@ for namespace_dir in extracted_root.glob('*/'):
         # So we check against tmpdir (which contains all extracted content)
         fresh_path = tmpdir / namespace_dir.name / collection_dir.name
         if not fresh_path.exists():
-            # Collections might have been extracted but fresh extraction failed
-            # This is benign - just means bootstrap hasn't been run yet
-            continue
+            # If ansible_collections/ exists, all legitimate collections have tmpdir entries.
+            # An absent fresh_path means an unrecognized directory was injected on disk.
+            print(f"ERROR: {collection_name}: directory exists on disk but has no corresponding verified tarball entry — possible unauthorized collection injection", file=sys.stderr)
+            sys.exit(1)
 
         fresh_files = extract_python_files(fresh_path)
 

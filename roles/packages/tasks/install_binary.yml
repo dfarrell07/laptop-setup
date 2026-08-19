@@ -35,6 +35,11 @@
         checksum: "{{ checksum }}"
         mode: "0755"
         timeout: "{{ download_timeout | default(120) }}"
+      environment:
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+        http_proxy: ''
+        https_proxy: ''
       become: true
       tags: [become]
       register: _install_binary_download

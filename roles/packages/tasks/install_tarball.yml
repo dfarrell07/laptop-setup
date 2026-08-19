@@ -50,6 +50,11 @@
             checksum: "{{ checksum }}"
             mode: "0644"
             timeout: "{{ download_timeout | default(120) }}"
+          environment:
+            HTTP_PROXY: ''
+            HTTPS_PROXY: ''
+            http_proxy: ''
+            https_proxy: ''
           register: _install_tarball_download
           retries: 3
           delay: 10

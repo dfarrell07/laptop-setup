@@ -11,7 +11,7 @@
 #   2. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   3. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
 #   4. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
-#   5. ENV sanitization — pins/clears 20+ ANSIBLE_* and socket vars (env-injection layer)
+#   5. ENV sanitization — pins/clears 50+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
 #   6. HOME hijack check — validates HOME matches /etc/passwd before any path operations
 #   7. verify-collections.sh — supply-chain integrity check before exec
 
@@ -154,6 +154,7 @@ done
 #   PYTHONSTARTUP               — executes named file before main script; CPython skips it for
 #                                 non-interactive invocations (no tty), so practical risk is low,
 #                                 but cleared for defence-in-depth
+
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
 # SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
@@ -188,7 +189,7 @@ export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking 
 export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
-unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so injected into ansible-playbook Python process at exec() time; sudo env_reset only strips these from become tasks, not the initial user-context process that decrypts the vault
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
 unset PYTHONHOME PYTHONSTARTUP && export PYTHONNOUSERSITE=1  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONNOUSERSITE=1 disables ~/.local site-packages (PYTHONUSERSITE is a no-op variable; PYTHONNOUSERSITE is the real CPython control); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth
 export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
@@ -203,8 +204,11 @@ export MOLECULE_PODMAN_EXECUTABLE=podman  # pin podman executable — molecule-p
 unset GIT_TEMPLATE_DIR  # prevent git template injection — attacker-set GIT_TEMPLATE_DIR=/tmp/evil copies malicious hooks into every repo cloned by git_repos role; hooks fire at clone time in user context with full SSH agent access and persist after provisioning ends
 unset GIT_EXEC_PATH  # git-internal subcommand resolver — git resolves git-fetch/git-clone/git-remote via GIT_EXEC_PATH before PATH; a fake /tmp/evil/git-fetch can exfiltrate SSH agent sockets or silently patch cloned source before Ansible sees exit 0; not covered by the PATH pin below
 unset GIT_SSH GIT_SSH_COMMAND  # prevent SSH binary hijack — ansible.builtin.git re-exports GIT_SSH/GIT_SSH_COMMAND verbatim (absolute path, bypasses PATH pin) as the SSH wrapper for every git clone; attacker binary inherits SSH_AUTH_SOCK and can exfiltrate credentials or MITM cloned source
+unset SSH_ASKPASS SSH_ASKPASS_REQUIRE DISPLAY  # prevent askpass injection — SSH_ASKPASS_REQUIRE=force (OpenSSH 8.4+) causes ssh to invoke $SSH_ASKPASS unconditionally even without a tty, regardless of DISPLAY; an attacker-set SSH_ASKPASS=/tmp/log.sh receives any passphrase/password prompts from ssh subprocesses spawned by ansible.builtin.git (affects internal SSH git hosts configured via ssh_work_keyscan_hosts that support keyboard-interactive/password auth); DISPLAY cleared to remove the pre-8.4 fallback gating path; provisioning does not require any of these variables
+unset SSH_AUTH_SOCK  # prevent agent socket proxy attack — with GIT_SSH/GIT_SSH_COMMAND cleared, git falls back to /usr/bin/ssh which reads SSH_AUTH_SOCK from the inherited environment; a pre-set SSH_AUTH_SOCK=/tmp/evil.sock proxy socket receives every signing request from all SSH-URL git clones (16+ repos + notes), enabling silent credential logging or source MITM; Ansible itself does not require SSH_AUTH_SOCK
 unset GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM  # attacker-controlled global git config — GIT_CONFIG_GLOBAL=/tmp/evil.gitconfig can inject url.insteadOf to silently redirect all HTTPS GitHub clones to an attacker server, or inject core.fsmonitor=/tmp/evil_script to execute arbitrary code on every git-status call (fsmonitor is separate from core.hooksPath and bypasses the hooks guard); GIT_CONFIG_NOSYSTEM, when set by an attacker, suppresses /etc/gitconfig so any system-level security settings (e.g. allowed protocols) are bypassed — unsetting it restores normal system-config reading
 unset GIT_HTTP_PROXY_AUTHMETHOD  # defense-in-depth: prevents downgrade of proxy auth to basic-auth when HTTPS_PROXY is set, which would send GitHub tokens in cleartext to the proxy
+unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy  # prevent proxy interception — caller-set proxy vars pass through to ansible-playbook and every child task (binary downloads, go module fetches, git clones); a MITM proxy sees all version strings and can 502-abort selective tasks; use network_proxied in config.yml for the supported go-module proxy mechanism
 unset SIGSTORE_NO_VERIFY SIGSTORE_ROOT_FILE SIGSTORE_REKOR_PUBLIC_KEY COSIGN_EXPERIMENTAL  # Sigstore/cosign trust chain — SIGSTORE_NO_VERIFY=1 skips all Rekor/Fulcio verification; SIGSTORE_ROOT_FILE=/tmp/evil.pem substitutes a malicious root CA; SIGSTORE_REKOR_PUBLIC_KEY=/tmp/evil.pub replaces Rekor's transparency log key; COSIGN_EXPERIMENTAL=1 changes verification semantics; any of these bypass cosign verify-blob trust chain for cosign self-verification and sops checksums verification
 unset GOPROXY GONOSUMDB GOFLAGS GOENV  # Go env injection: GOPROXY redirects module downloads to attacker proxy; GONOSUMDB=* disables checksum verification for all modules; GOFLAGS injects arbitrary go build flags; GOENV=/tmp/evil sets all of the above via a file the Go toolchain reads before per-command env vars (printenv shows no suspicious values yet go uses them)
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
