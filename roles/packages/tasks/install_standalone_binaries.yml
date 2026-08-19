@@ -105,7 +105,7 @@
       actionlint binary could not be downloaded from github.com/rhysd/actionlint.
       Install manually from https://github.com/rhysd/actionlint/releases
 
-- name: Install zizmor (GitHub Actions security scanner; version pinned to match CI linting.yml)
+- name: Install zizmor
   # zizmor uses GitHub attestations (actions/attest) for released binaries — not cosign bundles.
   # No .bundle files appear in release assets; verification uses gh attestation verify
   # (GitHub Actions OIDC keyless signing). See task "Verify zizmor binary via GitHub attestation"
@@ -139,14 +139,14 @@
 # GitHub CLI (gh attestation verify) to validate. These tasks verify the downloaded binaries
 # against the public attestation transparency log (rekor) via Sigstore infrastructure.
 
-- name: Verify actionlint binary via GitHub attestation
+- name: Verify actionlint binary attestation
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
     - ansible_facts.get('packages_gh_available', false)
   block:
-    - name: Verify actionlint binary attestation via gh CLI
+    - name: Check actionlint attestation
       ansible.builtin.command:
         argv:
           - gh
@@ -184,14 +184,14 @@
           re-verify the installed binary via attestation. Continuing without attestation is safe
           but not ideal for work profiles where supply-chain integrity is important.
 
-- name: Verify zizmor binary via GitHub attestation
+- name: Verify zizmor binary attestation
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'
     - profile == 'work'
     - ansible_facts.get('packages_gh_available', false)
   block:
-    - name: Verify zizmor binary attestation via gh CLI
+    - name: Check zizmor attestation
       ansible.builtin.command:
         argv:
           - gh
