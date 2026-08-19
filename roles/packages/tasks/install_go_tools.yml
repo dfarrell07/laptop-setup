@@ -21,7 +21,7 @@
       }}
   become: false
 
-- name: Validate GONOSUMDB contains only private module domains
+- name: "Validate GONOSUMDB/GOSUMDB: (1/3) no public module domains in GONOSUMDB"
   ansible.builtin.assert:
     that:
       - "dotfiles_gonosumdb | default('') | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none"  # yamllint disable-line rule:line-length
@@ -29,7 +29,7 @@
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
 
-- name: Validate GOSUMDB is not disabled and is a valid hostname
+- name: "Validate GONOSUMDB/GOSUMDB: (2/3) GOSUMDB not disabled and valid hostname"
   # Accepts: FQDN (e.g. sum.golang.org) and FQDN:port (e.g. sum.corp.com:443)
   # Rejects: 'off', empty string, IP addresses, single-label hostnames (localhost)
   ansible.builtin.assert:
@@ -48,7 +48,7 @@
       (default: sum.golang.org, leave undefined) or define packages_gosumdb in group_vars/all/vars.yml
       to use a corporate proxy. Invalid value: {{ packages_gosumdb | default('(undefined)') }}
 
-- name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
+- name: "Validate GONOSUMDB/GOSUMDB: (3/3) GOSUMDB server reachable (hijack mitigation)"
   # Uses same proxy environment for validation and go install (consistency).
   ansible.builtin.command:
     cmd: "timeout 5 curl -s -f https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
