@@ -740,6 +740,37 @@ This re-enables USB storage for the current boot session only. Plain `modprobe u
 
 ---
 
+## system: USB Modem / Mobile Tethering Not Working
+
+**Symptom:**
+
+USB modem or phone USB tethering fails to create a network connection after plugging in the device. `nmcli device` may show the device but no connection is established, or the device is not detected at all.
+
+**Root Cause:**
+
+ModemManager.service is masked. The role masks ModemManager when `system_disable_modemmanager: true` in `config.yml` (or when running an older version that used runtime hardware detection). ModemManager is required for NetworkManager to activate WWAN devices, mobile broadband USB dongles, and USB tethering from phones.
+
+**Fix:**
+
+Set in `config.yml` (gitignored, per-machine):
+
+```yaml
+system_disable_modemmanager: false
+```
+
+Then re-run `make system` to unmask and enable ModemManager. The change takes effect immediately for newly plugged devices.
+
+**Without re-provisioning (temporary):**
+
+```bash
+sudo systemctl unmask ModemManager
+sudo systemctl start ModemManager
+```
+
+This unmasks and starts ModemManager for the current session. Plug in the USB modem or tethering device and NetworkManager should detect it automatically. This reverts on the next provisioning run unless you set `system_disable_modemmanager: false` in `config.yml`.
+
+---
+
 ## system: Tailscale Not Authenticated After Provisioning
 
 **Symptom:**
