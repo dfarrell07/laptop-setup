@@ -52,13 +52,12 @@
           Automatic security updates are disabled without dnf-automatic.
       when: csb_detected
 
-    - name: Fail on dnf-automatic install/enable failure (standard Fedora)
+    - name: Fail on dnf-automatic install/enable failure
       ansible.builtin.fail:
         msg: >-
           dnf-automatic install or enable failed. Automatic security updates are a critical
           hardening requirement. Error: {{ ansible_failed_result.msg | default('unknown error') }}.
           Fix repo connectivity and re-run provisioning.
-      when: not csb_detected
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
 - name: Ensure dnf-automatic service drop-in directory exists
