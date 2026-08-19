@@ -167,7 +167,7 @@
     dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
     update: false
     depth: "{{ item.depth | default(omit) }}"
-    accept_newhostkey: true  # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) enforcing ssh_work_keyscan_hosts configuration for all SSH git repos
+    accept_newhostkey: true  # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) asserting every SSH git hostname is pre-seeded in ssh_work_keyscan_hosts (github.com exempt — always seeded via API); new hosts must be added to ssh_work_keyscan_hosts in config.yml
   environment:
     GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos
   loop: "{{ git_repos_filtered }}"

@@ -1011,27 +1011,40 @@
               then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
             tags: [always]
 
-    - name: SECURITY — Assert SSH git repos have keyscanned hosts pre-seeded (TOFU mitigation)
+    - name: SECURITY — Assert SSH git repo hosts are all pre-seeded in keyscan (TOFU mitigation)
       when: not _pf_is_molecule
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
         _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
-        _ssh_git_repos: >-
+        _keyscan_raw: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
+        # Hostnames from ssh_work_keyscan_hosts (handles both dict {host:...} and plain-string entries)
+        _keyscan_hostnames: >-
+          {{ (_keyscan_raw | map(attribute='host', default='') | map('string') | select() | list)
+             + (_keyscan_raw | selectattr('host', 'undefined') | map('string') | select() | list) }}
+        # Extract per-URL hostnames from SSH git repos; github.com excluded (always pre-seeded via API)
+        _ssh_git_hostnames: >-
           {{ _git_repos_list
-             | selectattr('url', 'search', 'ssh://|git@')
+             | selectattr('url', 'search', '^git@|^ssh://')
              | map(attribute='url')
+             | map('regex_replace', '^git@([^:]+):.*', '\1')
+             | map('regex_replace', '^ssh://([^/:]+).*', '\1')
+             | reject('equalto', 'github.com')
+             | unique
              | list }}
-        _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
+        # Hosts present in git_repos_list but absent from ssh_work_keyscan_hosts
+        _missing_keyscan_hosts: "{{ _ssh_git_hostnames | difference(_keyscan_hostnames) }}"
       ansible.builtin.assert:
         that:
-          - >-
-            (_ssh_git_repos | length == 0)
-            or (_keyscan_hosts | length > 0)
+          - _missing_keyscan_hosts | length == 0
         fail_msg: >-
-          SECURITY: git_repos_list contains SSH URLs but ssh_work_keyscan_hosts is empty.
-          First-clone MITM risk (TOFU). Add fingerprinted hosts to ssh_work_keyscan_hosts
-          in config.yml — see SECURITY.md 'Internal SSH Git Host Setup'.
-          Affected repos: {{ _ssh_git_repos }}
+          SECURITY: SSH git repos reference hosts not covered by ssh_work_keyscan_hosts (TOFU/MITM risk).
+          Input: git_repos_list has SSH URLs for hosts absent from ssh_work_keyscan_hosts.
+          Mechanism: accept_newhostkey:true trusts any key on first clone with no fingerprint check.
+          Example: MITM on new-internal.corp.com substitutes attacker key, serves malicious repo.
+          Impact: Arbitrary code from malicious repo runs during provisioning (become:true context).
+          Fix: Add each missing host (with fingerprint) to ssh_work_keyscan_hosts in config.yml.
+          Missing hosts: {{ _missing_keyscan_hosts }}
+      tags: [always]
 
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
       when: _config_yml_raw.content is defined
