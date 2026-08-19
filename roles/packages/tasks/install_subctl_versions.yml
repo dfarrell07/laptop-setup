@@ -78,7 +78,7 @@
 
     - name: Verify subctl binary exists and compute SHA256
       ansible.builtin.stat:
-        path: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin/subctl"
+        path: "{{ _subctl_tmpdir.path }}/subctl-v{{ item.version }}-bin/subctl"
         get_checksum: true
         checksum_algorithm: sha256
       register: _subctl_binary_stat
@@ -94,7 +94,7 @@
 
     - name: Copy versioned subctl to ~/.local/bin/subctlXX
       ansible.builtin.copy:
-        src: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin/subctl"
+        src: "{{ _subctl_tmpdir.path }}/subctl-v{{ item.version }}-bin/subctl"
         dest: "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
         mode: "0755"
         remote_src: true
@@ -111,9 +111,9 @@
 
     - name: Clean up temp GOBIN directory
       ansible.builtin.file:
-        path: "{{ _subctl_tmpdir.stdout }}"
+        path: "{{ _subctl_tmpdir.path }}"
         state: absent
-      when: _subctl_tmpdir.stdout is defined
+      when: _subctl_tmpdir.path is defined
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
   when: _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
