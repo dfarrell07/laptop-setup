@@ -26,6 +26,29 @@
       when:
         - (system_existing_crontabs.files | default([])) | length > 0
 
+    - name: Check if root crontab exists
+      ansible.builtin.stat:
+        path: /var/spool/cron/root
+      register: system_root_crontab_stat
+      failed_when: false
+
+    - name: Read root crontab if it exists
+      ansible.builtin.slurp:
+        src: /var/spool/cron/root
+      register: system_root_crontab_content
+      when: system_root_crontab_stat.stat.exists | default(false)
+
+    - name: Warn if root crontab contains pre-existing jobs
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: /var/spool/cron/root exists with content — pre-existing root cron
+          jobs may persist outside Ansible management:
+          {{ system_root_crontab_content.content | b64decode | trim }}
+      when:
+        - system_root_crontab_stat.stat.exists | default(false)
+        - system_root_crontab_content.content is defined
+        - (system_root_crontab_content.content | b64decode | trim) | length > 0
+
     - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
       ansible.builtin.copy:
         content: "root\n"
@@ -65,3 +88,19 @@
       loop_control:
         label: "{{ item.path }}"
       failed_when: false
+
+    - name: Find unmanaged files in /etc/cron.d
+      ansible.builtin.find:
+        paths: /etc/cron.d
+        file_type: file
+      register: system_crond_files
+      failed_when: false
+
+    - name: Warn about unmanaged files in /etc/cron.d
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Files found in /etc/cron.d not managed by this role:
+          {{ system_crond_files.files | map(attribute='path') | list }}.
+          Review each file for unexpected cron jobs placed before provisioning.
+      when:
+        - (system_crond_files.files | default([])) | length > 0

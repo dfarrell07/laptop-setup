@@ -507,7 +507,16 @@ jobs:
         uses: ./.github/actions/ci-setup
 
       - name: Run syntax check
-        run: ansible-playbook site.yml --syntax-check
+        run: |
+          # Sanitize env vars that could be injected on a self-hosted or compromised runner.
+          # Mirrors the subset of sanitization performed by scripts/verify-ansible-args.sh
+          # for the vars that affect plugin loading and Python/linker behaviour.
+          # PATH is intentionally NOT pinned here to preserve the ci-setup Python venv path.
+          unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS \
+                ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS \
+                PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR \
+                TMPDIR TEMP TMP
+          ansible-playbook site.yml --syntax-check
 
   critical-assertions-guard:
     name: Critical Assertions Guard
