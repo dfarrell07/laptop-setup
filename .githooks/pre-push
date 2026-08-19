@@ -56,19 +56,26 @@ while IFS= read -r -d '' f; do
     # This prevents marker spoofing (plaintext file with forged $ANSIBLE_VAULT prefix).
     # Attack: Attacker writes plaintext secrets with $ANSIBLE_VAULT;1.1;AES256 prefix to bypass this check.
     # Defense: Require actual decryption success (not just format validation).
+    vault_pass_file=""
     if [ -f "vault-pass.sh" ]; then
-      if ! ansible-vault view --vault-password-file=vault-pass.sh "$f" >/dev/null 2>&1; then
+      vault_pass_file="vault-pass.sh"
+    elif [ -f "scripts/vault-pass-ci.sh" ]; then
+      # Fallback to CI stub (e.g., in CI environments where vault-pass.sh is gitignored)
+      vault_pass_file="scripts/vault-pass-ci.sh"
+    fi
+
+    if [ -n "$vault_pass_file" ]; then
+      if ! ansible-vault view --vault-password-file="$vault_pass_file" "$f" >/dev/null 2>&1; then
         echo "ERROR: $f has vault marker but is not validly encrypted or password is incorrect." >&2
         echo "ERROR: Run: ansible-vault encrypt $f" >&2
         failed=1
       fi
     else
-      # If vault-pass.sh is missing, fall back to format validation
-      # Real encrypted vault files have $ANSIBLE_VAULT;X.X;CIPHER format on line 1
-      if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT;[0-9]\.[0-9];'; then
-        echo "ERROR: $f does not have valid vault format ($ANSIBLE_VAULT;X.X;CIPHER). Run: ansible-vault encrypt $f" >&2
-        failed=1
-      fi
+      # vault-pass.sh and vault-pass-ci.sh both missing: cannot validate decryption, fail-fast
+      echo "ERROR: $f has vault marker but vault-pass.sh/scripts/vault-pass-ci.sh is missing." >&2
+      echo "ERROR: Cannot validate encryption without password provider. Run: ansible-vault view $f" >&2
+      echo "ERROR: (Requires vault-pass.sh or scripts/vault-pass-ci.sh in repo or environment)" >&2
+      failed=1
     fi
   fi
 done < <(git ls-files -z -- '*vault.yml')

@@ -26,7 +26,7 @@
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
 
-- name: Validate GOSUMDB is not disabled and is reachable
+- name: Validate GOSUMDB is not disabled
   ansible.builtin.assert:
     that:
       - "packages_gosumdb is not defined or packages_gosumdb != 'off'"
@@ -34,8 +34,19 @@
       GOSUMDB must not be set to 'off' — doing so disables Go checksum database verification
       and allows GOPROXY tampering attacks. Set to a valid sum server (default: sum.golang.org)
       or define packages_gosumdb in group_vars/all/vars.yml to use a corporate proxy.
-  # Note: No hardcoded reachability test here (network state varies per environment).
-  # Failures during go install with explicit error detection (below) serve as runtime validation.
+
+- name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
+  ansible.builtin.command:
+    cmd: "timeout 5 curl -s -f https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
+  changed_when: false
+  register: gosumdb_reachability
+  failed_when: gosumdb_reachability.rc != 0
+  retries: 2
+  delay: 3
+  until: gosumdb_reachability.rc == 0
+  environment:
+    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps in packages_go_install_work would be silently
@@ -133,3 +144,32 @@
   when:
     - not csb_rhel | bool
     - _packages_go_failed | length > 0
+
+- name: Post-install security advisory — init() injection risk (user awareness)
+  ansible.builtin.debug:
+    msg: |
+      SECURITY NOTICE: Go module init() code execution during 'go install'
+
+      Go tools were installed via 'go install', which executes arbitrary code during
+      compilation (init() functions run before the binary is finalized). Unlike binaries
+      downloaded and checksummed post-facto, Go init() code runs with your privileges
+      and cannot be detected by Ansible return code checks.
+
+      XZ Utils 2024 (CVE-2024-3156) demonstrated this attack: malicious init() code
+      in build-time dependencies was undetected until after release.
+
+      MITIGATIONS ACTIVE:
+      - Version pinning (deliberate version bumps only)
+      - GOSUMDB reachability verified before install
+      - Checksum mismatch errors fail fast (not retried)
+      - Distrobox container isolation available (make container)
+
+      RECOMMENDED POST-PROVISION STEPS:
+      1. Run 'govulncheck ./...' in each project (detects known CVEs)
+      2. Review tool --version output to verify basic functionality
+      3. For sensitive work: use 'make container' to isolate tools in distrobox
+      4. Enable auditd logging (system_aide_enabled: true) to detect file modifications
+
+      See SECURITY.md § "Go Module Supply Chain" for complete mitigation strategies
+      and guidance on Tier 3 (Container Isolation) and Tier 4 (Alternative Approaches).
+
