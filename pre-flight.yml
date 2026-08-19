@@ -46,6 +46,12 @@
         real_user_id: "{{ lookup('env', 'USER') }}"
       tags: [always]
 
+    - name: Set OS family facts (is_linux, is_macos) for early validation
+      ansible.builtin.set_fact:
+        is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+        is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+      tags: [always]
+
     - name: Set project root for include paths
       ansible.builtin.set_fact:
         common_project_root: >-
