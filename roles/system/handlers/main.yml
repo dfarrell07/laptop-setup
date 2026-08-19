@@ -175,4 +175,4 @@
   become: true
   changed_when: true
   when: not system_is_container  # GRUB not applicable in containers
-  ignore_errors: true  # noqa: ignore-errors
+  # Never ignore handler errors — failure surfaces missing grub-mkconfig (CIS 1.4.2 bypass risk)
