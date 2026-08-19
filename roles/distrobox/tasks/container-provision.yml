@@ -13,7 +13,7 @@
   failed_when: false
   when:
     - distrobox_packages | length > 0
-    - not (system_is_container | default(false))  # dnf scriptlets → daemon-reload → D-Bus → crashes PID 1 in privileged containers
+    - not system_is_container  # dnf scriptlets → daemon-reload → D-Bus → crashes PID 1 in privileged containers
   register: container_dnf_result
 
 # --- Binary downloads ---
@@ -23,7 +23,7 @@
     state: directory
     mode: "0755"
   become: true
-  when: not (system_is_container | default(false))
+  when: not system_is_container
 
 - name: Check if oc is installed
   ansible.builtin.command:
@@ -215,7 +215,7 @@
   loop: "{{ distrobox_host_exec_commands }}"
   when:
     - container_host_exec.stat.exists
-    - not (system_is_container | default(false))  # become:true sudo → pam_systemd.so D-Bus crashes PID 1 in privileged containers
+    - not system_is_container  # become:true sudo → pam_systemd.so D-Bus crashes PID 1 in privileged containers
   become: true
 
 - name: Deploy flatpak-spawn wrapper scripts (Toolbx fallback)
@@ -293,7 +293,7 @@
   ansible.builtin.debug:
     msg: |
       === Container Provisioning Summary ===
-      packages     : {{ 'skipped (container mode)' if (system_is_container | default(false)) else ('skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')')) }}
+      packages     : {{ 'skipped (container mode)' if system_is_container else ('skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')')) }}
       oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
       oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING')) }}
       golangci-lint: {{ 'OK' if container_golangci_lint_result.rc | default(-1) == 0 else ('already installed' if container_golangci_lint_result.skipped | default(false) else 'FAILED (rc=' + (container_golangci_lint_result.rc | string) + ')') }}
