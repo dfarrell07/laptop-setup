@@ -51,6 +51,13 @@ packages_yubikey_enabled: true
 # Disabled by default: every major macOS upgrade requires interactive system extension approval in System Settings.
 packages_brew_cask_lulu_enabled: false
 
+# bpfman eBPF program manager daemon — opt in by setting packages_bpfman_enabled: true in config.yml.
+# SECURITY WARNING: bpfman requires CAP_SYS_ADMIN to manage eBPF programs. Fedora 44 ships no
+# SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode.
+# Without MAC, a compromised bpfman can load arbitrary kernel eBPF programs. Only enable on
+# machines where eBPF development requires the daemon; prefer manual bpftool for one-off tasks.
+packages_bpfman_enabled: false
+
 packages_security_yubikey:
   - yubikey-manager
   - ykpers  # legacy: provides ykchalresp; setup-yubikeys.sh uses ykman only (ykpersonalize EOL Feb 2026);
@@ -117,11 +124,10 @@ packages_networking_work:
 packages_support_work:
   - sos      # general RH support diagnostic bundle tool (sosreport); work profile only
              # (no RH support contract on personal)
-  - strace   # system call tracer; needed on host for bpfman daemon debugging
-  - gdb      # GNU debugger; 'gdb -p <pid>' attaches to bpfman daemon for live inspection
+  - strace   # system call tracer; general debugging and system tracing
+  - gdb      # GNU debugger; general debugging (attach to processes, coredumps)
   - perf     # kernel performance profiling
-  - bpfman   # eBPF program manager daemon; must run on host for kernel BPF access
-  - bpftrace # eBPF dynamic tracing; host install for tracing bpfman daemon without entering container
+  - bpftrace # eBPF dynamic tracing; requires CAP_SYS_ADMIN for kernel tracing
   - bpftool  # eBPF program/map introspection
 
 packages_apt:

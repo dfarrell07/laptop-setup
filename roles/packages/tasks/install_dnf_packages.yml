@@ -27,7 +27,8 @@
              + (packages_networking | reject('equalto', 'tailscale') | list
                 if not repo_tailscale else packages_networking)
              + (packages_networking_work if profile == 'work' else [])
-             + (packages_support_work if profile == 'work' else []) }}
+             + (packages_support_work if profile == 'work' else [])
+             + (['bpfman'] if packages_bpfman_enabled | bool else []) }}
 
     - name: Apply dnf package list to host
       ansible.builtin.dnf:

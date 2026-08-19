@@ -18,18 +18,18 @@
     state: started
     enabled: true
   when:
-    - profile == 'work'
+    - packages_bpfman_enabled | bool
     - is_dnf
     - not system_is_container
     - (system_bpfman_check.rc | default(-1)) == 0
 
-- name: Stop and disable bpfman.socket (profile != work)
+- name: Stop and disable bpfman.socket (packages_bpfman_enabled disabled)
   ansible.builtin.systemd:
     name: bpfman.socket
     state: stopped
     enabled: false
   when:
-    - not (profile == 'work')
+    - not (packages_bpfman_enabled | bool)
     - is_dnf
     - not system_is_container
     - (system_bpfman_check.rc | default(-1)) == 0

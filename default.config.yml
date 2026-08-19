@@ -39,6 +39,11 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
 #   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
 #   packages_yubikey_enabled: true     (roles/packages/defaults) — yubikey-manager + ykpers; set false on machines without a YubiKey
+#   packages_bpfman_enabled: false     (roles/packages/defaults) — bpfman eBPF program manager daemon; opt-in only;
+#     WARNING: bpfman requires CAP_SYS_ADMIN (kernel-level privilege) to load eBPF programs. Fedora 44 ships NO
+#     SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode. Without Mandatory
+#     Access Control, a compromised bpfman can load arbitrary kernel code via eBPF. Only enable on machines where
+#     eBPF development explicitly requires the daemon; prefer manual bpftool for one-off debugging.
 #   packages_brew_yubikey: [ykman]               (roles/packages/defaults) — macOS YubiKey brew packages;
 #     ykpers unavailable on Homebrew; use ykman otp calculate (hex challenge) in vault-pass.sh — see SECURITY.md
 #     ssh-askpass removed: macOS Keychain (UseKeychain yes in ssh_config) is the Apple-native passphrase store
