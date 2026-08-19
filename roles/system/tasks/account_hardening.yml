@@ -1,6 +1,6 @@
 ---
 # --- Sudoers hardening ---
-- name: Write /etc/sudoers.d/99-hardening (logfile, log_input/output, use_pty, timestamp_timeout)
+- name: Write /etc/sudoers.d/99-hardening (Defaults hardening)
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -41,7 +41,7 @@
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
 # service accounts that don't rotate passwords. YESCRYPT is the RHEL 9 default already.
 # Skip on CSB and rely on IPA/SSSD + IT group policy for account management.
-- name: Set login.defs password aging fields (PASS_MAX_DAYS, PASS_MIN_DAYS, PASS_WARN_AGE, HOME_MODE, INACTIVE)
+- name: Set login.defs password aging and home mode fields
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: "^{{ item.name }}\\s+"
@@ -113,7 +113,7 @@
     - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
     - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
 
-- name: Restrict existing user home directory to {{ system_home_mode }} (CIS 6.2.x, retroactive)
+- name: Restrict existing user home directory permissions to system_home_mode (CIS 6.2.x)
   ansible.builtin.file:
     path: "{{ real_user_home }}"
     mode: "{{ system_home_mode }}"
