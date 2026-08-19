@@ -406,7 +406,16 @@
     path: "{{ _cosign_tmpdir.path }}"
     state: absent
 
-- name: Install cosign (first install; bootstrap - bundle verification not possible)
+# Bootstrap trust limitation: the SHA256 checksum and the cosign binary are both served from
+# the GitHub releases CDN — they share the same trust domain. A CDN compromise or GitHub
+# release tampering that simultaneously updates the binary and the release-page SHA256 would
+# produce a malicious cosign binary that passes this SHA256 check unchanged.
+# Sigstore bundle verification (used on re-provision via the block above) is structurally
+# impossible here because cosign is not yet installed. As a mitigation, a post-install
+# self-attestation block below uses the just-installed cosign to verify its own
+# sigstore.json bundle against the Rekor transparency log, providing a second trust root
+# independent of the GitHub releases CDN immediately after bootstrap.
+- name: Install cosign (first install; bootstrap — SHA256 and binary share GitHub releases CDN trust domain)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
@@ -430,6 +439,94 @@
     csb_ticket_body: >-
       cosign binary could not be downloaded from github.com/sigstore/cosign.
       Install manually from https://github.com/sigstore/cosign/releases
+
+# Post-install cosign self-attestation (first install only):
+# The bootstrap step above uses only SHA256 (same trust domain as binary — GitHub releases CDN).
+# After install, the newly placed cosign verifies its own Sigstore bundle against the Rekor
+# transparency log. Rekor is an independent trust root: a tampered binary whose SHA256 was
+# also updated on GitHub releases would still fail Rekor inclusion-proof verification.
+# Accepted limitation: a compromised cosign binary could lie about its own verify-blob result.
+# This step is still valuable — it confirms the installed binary matches a transparency-log
+# entry and catches CDN tampering that does NOT control the Rekor log.
+- name: Create temporary directory for cosign post-install self-attestation
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - not _cosign_pre_stat.stat.exists
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "ansible_cosign_self_"
+  register: _cosign_self_tmpdir
+
+- name: Download cosign sigstore bundle for post-install self-attestation (first install only)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - not _cosign_pre_stat.stat.exists
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/sigstore/cosign/releases/download/v{{ packages_cosign_version
+      }}/cosign-linux-{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}.sigstore.json
+    dest: "{{ _cosign_self_tmpdir.path }}/cosign.sigstore.json"
+    mode: "0600"
+
+- name: Verify installed cosign binary via Sigstore bundle self-attestation (first install only)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - not _cosign_pre_stat.stat.exists
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - /usr/local/bin/cosign
+      - --bundle
+      - "{{ _cosign_self_tmpdir.path }}/cosign.sigstore.json"
+      - --certificate-identity
+      - keyless@projectsigstore.iam.gserviceaccount.com
+      - --certificate-oidc-issuer
+      - https://accounts.google.com
+      - --certificate-oidc-issuer-regexp
+      - "^https://accounts\\.google\\.com$"
+  changed_when: false
+  failed_when: false
+  register: _cosign_self_verify_result
+
+- name: Warn if cosign post-install self-attestation failed (offline or restricted environment)
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - not _cosign_pre_stat.stat.exists
+    - _cosign_self_verify_result.rc != 0
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: cosign post-install self-attestation via Sigstore bundle failed
+      (rc={{ _cosign_self_verify_result.rc }}). Bootstrap used SHA256 from GitHub releases CDN
+      (same trust domain as binary). Sigstore self-attestation adds a second trust root via
+      Rekor transparency log. Failure here may indicate a network restriction, offline
+      environment, or a compromised binary. If unexpected, verify manually:
+      cosign verify-blob /usr/local/bin/cosign --bundle <cosign.sigstore.json>
+      --certificate-identity keyless@projectsigstore.iam.gserviceaccount.com
+      --certificate-oidc-issuer https://accounts.google.com
+
+- name: Clean up cosign post-install self-attestation temporary directory
+  when:
+    - is_linux
+    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    - profile == 'work'
+    - packages_cosign_install_enabled
+    - not _cosign_pre_stat.stat.exists
+  ansible.builtin.file:
+    path: "{{ _cosign_self_tmpdir.path }}"
+    state: absent
 
 # --- Post-install cosign signature verification ---
 # cosign verify-blob --bundle is offline-capable: the bundle embeds the certificate,

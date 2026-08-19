@@ -329,7 +329,7 @@ check-vars-sync: .venv
 
 .venv: requirements-test.lock
 	python3 -m venv .venv
-	.venv/bin/pip install pip-tools==7.6.0
+	.venv/bin/pip install --no-deps --require-hashes -r requirements-bootstrap.txt
 	.venv/bin/pip install --require-hashes -r requirements-test.lock
 	touch .venv
 
