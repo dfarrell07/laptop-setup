@@ -52,7 +52,7 @@
         - system_grubby_info.rc == 0
         - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
       changed_when: system_lockdown_result.rc == 0
-      failed_when: false
+      failed_when: system_lockdown_result.rc != 0 and system_grubby_info.rc == 0
 
     - name: Remove kernel lockdown grub parameter (lockdown disabled)
       ansible.builtin.command:

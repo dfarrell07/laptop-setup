@@ -55,6 +55,12 @@ if ! [[ "$_cfg_ssh_port" =~ ^[0-9]+$ ]]; then
   echo "ERROR: ssh_port in config.yml must be a plain decimal integer, got: $_cfg_ssh_port" >&2
   _cfg_ssh_port="722"
 fi
+# Read system_kernel_lockdown: key-present=use value (may be empty to opt out); key-absent=role default (integrity)
+if grep -qE '^system_kernel_lockdown:' "$_cfg" 2>/dev/null; then
+  _lockdown_intended=$(awk -F': ' '/^system_kernel_lockdown:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
+else
+  _lockdown_intended="integrity"  # role default
+fi
 unset _cfg
 
 run() { # execute locally or inside container
@@ -765,8 +771,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     if grep -qE '\[integrity\]|\[confidentiality\]' <<< "$ld"; then record "kernel-lockdown" "PASS"
     elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
       record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
+    elif [[ -n "$_lockdown_intended" ]]; then
+      record "kernel-lockdown" "WARN" "lockdown= absent from /etc/kernel/cmdline but lockdown='${_lockdown_intended}' was intended — grubby may have failed silently; verify with: sudo grubby --info=DEFAULT"
     fi
-    # Silent skip: lockdown= absent from /etc/kernel/cmdline means intentionally disabled
+    # Silent skip: lockdown= absent AND system_kernel_lockdown='' means intentionally disabled
     # (system_kernel_lockdown: '' in config.yml) or CSB (IT manages boot config)
   fi
 
