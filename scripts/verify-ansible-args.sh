@@ -213,7 +213,7 @@ export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
-export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; prevents ANSIBLE_INVENTORY=/attacker/hosts injecting host_vars (e.g. ansible_python_interpreter) that bypass interpreter controls even after unset ANSIBLE_PYTHON_INTERPRETER
+export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; host_var inject bypasses ANSIBLE_PYTHON_INTERPRETER unset
 export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
