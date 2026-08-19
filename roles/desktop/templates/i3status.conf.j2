@@ -28,7 +28,7 @@ cpu_usage {
 # Default: /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input (ThinkPad P16v Gen 1 AMD k10temp)
 cpu_temperature 0 {
     format = " %degrees°C"
-    path = "{{ desktop_i3status_cpu_temp_path }}"
+    path = "{{ desktop_i3status_cpu_temp_path | regex_replace('[^/a-zA-Z0-9._-]', '') }}"
     max_threshold = 90
 }
 {% endif %}

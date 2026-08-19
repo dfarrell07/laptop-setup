@@ -383,7 +383,8 @@ smoke-test:
 	scripts/smoke-test.sh
 
 smoke-test-container:
-	scripts/smoke-test.sh --container $(CONTAINER)
+	@echo "$(CONTAINER)" | grep -qE '^[a-zA-Z0-9_.-]+$$' || { echo 'ERROR: invalid CONTAINER name' >&2; exit 1; }
+	scripts/smoke-test.sh --container "$(CONTAINER)"
 
 smoke-test-user:
 	scripts/smoke-test.sh --user-only

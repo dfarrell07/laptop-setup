@@ -79,6 +79,7 @@ export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
+export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"

@@ -6,6 +6,6 @@ Section "InputClass"
     Identifier "ThinkPad TrackPoint"
     MatchProduct "{{ desktop_i3_trackpoint_id | regex_replace("[\\n\\r].*", "") }}"
     MatchDriver "libinput"
-    Option "AccelProfile" "{{ desktop_i3_trackpoint_accel_profile }}"
-    Option "AccelSpeed" "{{ desktop_i3_trackpoint_pointer_accel }}"
+    Option "AccelProfile" "{{ desktop_i3_trackpoint_accel_profile | regex_replace('[^a-z]', '') }}"
+    Option "AccelSpeed" "{{ desktop_i3_trackpoint_pointer_accel | float }}"
 EndSection

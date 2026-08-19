@@ -396,6 +396,7 @@
           - _raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
           - _raw.get('desktop_wm_font_size', 10) | int > 0
           - _raw.get('desktop_sway_adaptive_sync', '') | string is match('^(enabled|disabled|)$')
+          - _raw.get('desktop_sway_focus_follows_mouse', '') | string is match('^(yes|no|workspace|)$')
           - _raw.get('desktop_sway_xwayland', '') | string is match('^(disable|)$')
           - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
           - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
@@ -409,20 +410,31 @@
           - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
           - _raw.get('desktop_sway_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./:_-]*$')
+          - _raw.get('desktop_i3_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
           - _raw.get('desktop_sway_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
           - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float >= -1.0
           - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float <= 1.0
+          - _raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float >= -1.0
+          - _raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float <= 1.0
           - _raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
           - _raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
           - _raw.get('desktop_wm_repeat_rate', '50') | string is match('^[0-9]+$')
           - _raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
           - _raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
+          - _raw.get('desktop_wm_hide_edge_borders', '') | string is match('^(both|vertical|horizontal|smart|smart_no_gaps|none)?$')
           - _raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
           - _raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
           - _raw.get('desktop_sway_cursor_theme', 'Adwaita') | string is match('^[a-zA-Z0-9_-]+$')
           - _raw.get('desktop_sway_cursor_size', '24') | string is match('^[0-9]+$')
+          - _raw.get('desktop_sway_libva_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
+          - _raw.get('desktop_sway_vdpau_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
-          SECURITY: desktop_wm_border_width and desktop_wm_floating_border_width in config.yml
+          SECURITY: desktop_wm_hide_edge_borders must be one of: both, vertical, horizontal,
+          smart, smart_no_gaps, none, or empty. A newline payload (e.g. 'both\nexec /bin/sh')
+          injects a top-level sway/i3 directive executed on WM start or reload.
+          Impact: arbitrary command execution as the login user on WM start or reload.
+          Fix: use only an allowed keyword (e.g. desktop_wm_hide_edge_borders: both) or leave empty.
+          desktop_wm_border_width and desktop_wm_floating_border_width in config.yml
           must be non-negative integers (^[0-9]+$). These values are rendered bare into sway/i3
           config as 'default_border pixel <value>'; a payload like '1\nexec /bin/sh -c cmd'
           injects a top-level exec directive executed when the WM starts.
@@ -441,8 +453,8 @@
           (Xorg device name characters). desktop_sway_trackpoint_id must be alphanumeric/space/
           dot/colon/slash/underscore/hyphen (sway input device name e.g. '2:10:TPPS/2_IBM_TrackPoint');
           a newline payload closes the input block and injects exec directives into sway config.
-          desktop_sway_trackpoint_accel_profile must be flat or adaptive.
-          desktop_sway_trackpoint_pointer_accel must be in [-1.0, 1.0].
+          desktop_i3_trackpoint_accel_profile and desktop_sway_trackpoint_accel_profile must be flat or adaptive.
+          desktop_sway_trackpoint_pointer_accel and desktop_i3_trackpoint_pointer_accel must be in [-1.0, 1.0].
           desktop_sway_trackpoint_scroll_factor must be >= 0.
           These values are rendered into WM exec directives or Xorg
           config; shell metacharacters, newlines, or special Xorg syntax (EndSection, MatchProduct)
@@ -461,6 +473,8 @@
           metacharacters allow injection into the exec dbus-update-activation-environment and
           seat commands in sway.config (e.g. 'Adwaita; id>/tmp/pwned #' executes on WM start).
           desktop_sway_cursor_size must be a non-negative integer (e.g. 24).
+          desktop_sway_focus_follows_mouse must be one of yes/no/workspace or empty (^(yes|no|workspace|)$);
+          a newline payload (e.g. "yes\nexec /bin/sh") injects a top-level sway directive executed at WM start.
 
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_yml_raw.content is defined
@@ -480,6 +494,55 @@
           Example: desktop_wm_idle_lock_timeout: "300\nexec /bin/sh -c 'id>/tmp/pwned'"
           Impact: local code execution as the user when sway starts.
           Fix: use only digits (e.g. desktop_wm_idle_lock_timeout: 300).
+
+    - name: Assert desktop_i3status_cpu_temp_path is a safe sysfs path (i3status config injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('desktop_i3status_cpu_temp_path', '') | string is match('^(/sys/[a-zA-Z0-9/_.-]+)?$')
+        fail_msg: >-
+          SECURITY: desktop_i3status_cpu_temp_path in config.yml is not a valid sysfs path.
+          Threat: i3status config injection — a '"' in the value closes the quoted string and a
+          newline injects an additional i3status directive or opens a rogue module block.
+          Input: desktop_i3status_cpu_temp_path='{{ _raw.get('desktop_i3status_cpu_temp_path', '') }}' in config.yml.
+          Mechanism: the value is rendered inside path = "..." in i3status.conf.j2; a '"' closes
+          the quoted value and subsequent text is parsed as i3status config directives.
+          Example: '/sys/hwmon0/temp1_input"\ncpu_usage { format = " %usage" }' closes the
+          string and injects a new i3status block, crashing or corrupting the status bar.
+          Impact: i3status DoS or attacker-controlled sysfs path read.
+          Fix: use only a /sys/... path with alphanumeric, slash, dot, underscore, hyphen
+          (e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input).
+
+    - name: Assert desktop_sway_workspace_outputs entries contain only safe characters (sway config injection guard)
+      when: _config_yml_raw.content is defined
+      tags: [always]
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _wo_list: "{{ _raw.get('desktop_sway_workspace_outputs', []) }}"
+        _bad_workspaces: >-
+          {{ _wo_list | map(attribute='workspace', default='') | map('string') | select() |
+             reject('match', '^[a-zA-Z0-9_-]+$') | list }}
+        _bad_outputs: >-
+          {{ _wo_list | map(attribute='output', default='') | map('string') | select() |
+             reject('match', '^[a-zA-Z0-9*_/-]+$') | list }}
+      ansible.builtin.assert:
+        that:
+          - _bad_workspaces | length == 0
+          - _bad_outputs | length == 0
+        fail_msg: >-
+          SECURITY: desktop_sway_workspace_outputs in config.yml contains unsafe workspace or output values.
+          Threat: newline injection into the sway WM config file rendered at login or swaymsg reload.
+          Input: desktop_sway_workspace_outputs[*].workspace and [*].output fields in config.yml.
+          Mechanism: fields are rendered bare into 'workspace <name> output <output>' lines in sway.config.j2;
+          a newline inside either field (e.g. workspace="1\nexec /bin/sh") escapes the directive and
+          injects an arbitrary top-level sway directive executed when the WM starts or reloads.
+          Example: desktop_sway_workspace_outputs: [{workspace: "1\nexec /bin/sh", output: "*"}]
+          Impact: arbitrary command execution as the login user on every WM start or swaymsg reload.
+          Fix: workspace must match ^[a-zA-Z0-9_-]+$ (e.g. "1", "work"); output must match
+          ^[a-zA-Z0-9*_/-]+$ (e.g. "*", "eDP-1", "HDMI-A-1"). No newlines or shell metacharacters.
+          Bad workspaces: {{ _bad_workspaces }}. Bad outputs: {{ _bad_outputs }}.
 
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
@@ -1140,14 +1203,17 @@
           - _raw.get('ssh_port', '722') | string is match('^[0-9]{1,5}$')
           - _raw.get('ssh_port', 722) | int >= 1
           - _raw.get('ssh_port', 722) | int <= 65535
+          - _raw.get('ssh_port', 722) | int != 22
         fail_msg: >-
-          SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535).
-          Newlines, spaces, regex metacharacters (|*+?.^$[]{}()\), or text after the port number
-          inject arbitrary directives into /etc/ssh/sshd_config.d/00-hardening.conf or cause
-          shell injection in smoke-test.sh grep patterns. sshd -t does not catch syntactically
-          valid injected directives (e.g. PermitRootLogin yes), so the rescue block would not
-          remove the file. smoke-test.sh grep patterns with unquoted values allow metacharacters
-          to be interpreted as regex operators (e.g. "722|8080" filters both ports instead of just 722).
+          SECURITY: ssh_port in config.yml must be a plain decimal integer (1-65535) and must not be 22.
+          Threat: setting ssh_port: 22 silently removes the port-obscurity layer, exposing hardened sshd
+          to direct internet scanning and automated credential-stuffing on the standard SSH port.
+          Input: ssh_port={{ _raw.get('ssh_port', 722) }} in config.yml.
+          Mechanism: the SELinux relabeling block in sshd.yml is gated `when: ssh_port | int != 22`
+          and silently skips; sshd.socket masking leaves the standard port-22 path unchanged.
+          Impact: all auth hardening remains intact but port-obscurity is lost without operator awareness.
+          Fix: use a non-standard port (default 722). If port 22 is intentionally required, document the
+          decision and remove this assertion — do not silently accept the reduced security posture.
 
     - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
       when: _config_yml_raw.content is defined

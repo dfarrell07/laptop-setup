@@ -16,6 +16,10 @@ runs:
       run: pip install --require-hashes -r requirements-test.lock
       shell: bash
 
+    - name: Audit installed dependencies for known CVEs
+      run: pip-audit -r requirements-test.lock --fail-on-vuln
+      shell: bash
+
     - name: Comprehensive collection verification (TOCTOU check before install)
       run: scripts/verify-collections.sh
       shell: bash

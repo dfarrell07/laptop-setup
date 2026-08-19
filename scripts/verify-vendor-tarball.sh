@@ -39,6 +39,7 @@ COLLECTIONS=(
 )
 
 FAILED=0
+SKIPPED=0
 
 for spec in "${COLLECTIONS[@]}"; do
 	# Parse spec
@@ -67,6 +68,7 @@ for spec in "${COLLECTIONS[@]}"; do
 		echo "    ACTION: Manually verify at https://github.com/${github_repo}/releases/tag/${version}"
 		echo "    If tag exists and has expected files, continue. If compromised, contact collection maintainers."
 		echo ""
+		SKIPPED=$((SKIPPED + 1))
 		continue
 	fi
 
@@ -142,6 +144,15 @@ if [ "$FAILED" -eq 1 ]; then
 	echo "Supply chain verification FAILED."
 	echo "ACTION: Do NOT commit vendored collections until mismatches are resolved."
 	echo "See SECURITY.md § 'Ansible Collections Supply Chain' for remediation steps."
+	exit 1
+fi
+
+if [ "$SKIPPED" -gt 0 ]; then
+	echo "WARNING: Verification INCOMPLETE — ${SKIPPED} collection(s) could not be cloned from GitHub."
+	echo "  An attacker who compromises the Galaxy CDN/API and blocks GitHub can exploit this gap."
+	echo "  ACTION: Do NOT commit vendored collections until all upstream clones succeed."
+	echo "  Retry when GitHub is reachable, or manually audit the affected collection(s) above."
+	echo "  See SECURITY.md § 'Ansible Collections Supply Chain' for remediation steps."
 	exit 1
 fi
 

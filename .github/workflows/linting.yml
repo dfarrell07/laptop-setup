@@ -75,6 +75,12 @@ jobs:
                       f'{req.name}: locked at {locked[key]}, but {req.specifier} required'
                   )
 
+          # Reverse check: packages in lockfile not present in requirements-test.txt
+          # Catches injected packages that have no entry in .txt (forward loop never visits them)
+          for key, ver in locked.items():
+              if key not in reqs:
+                  drift.append(f'{key}=={ver}: in requirements-test.lock but not in requirements-test.txt (unexpected extra package)')
+
           if drift:
               for d in drift:
                   print(f'::error::{d}')
@@ -643,7 +649,7 @@ jobs:
             # - collections-dist/* for vendored collections and SHA256SUMS
             # - roles/packages/defaults/main.yml for binary download SHA256 hashes (prevents hash bypass attacks)
             # - .github/workflows/* for CI/CD pipeline definitions
-            if git show "$commit" --name-only | grep -qE '^(scripts/|\.githooks/|collections-dist/|roles/packages/defaults/main\.yml|\.github/workflows/)'; then
+            if git show "$commit" --name-only | grep -qE '^(scripts/|\.githooks/|collections-dist/|roles/packages/defaults/main\.yml|\.github/workflows/|requirements-test\.lock)'; then
               # Check GPG signature (cryptographic verification via git verify-commit)
               if git verify-commit "$commit" 2>&1; then
                 sig_status=$(git show --format=%G? -s "$commit")
@@ -651,7 +657,7 @@ jobs:
                 echo "✓ Commit $commit: GPG-signed (status: $sig_status, signer: $signer)"
               else
                 sig_status=$(git show --format=%G? -s "$commit")
-                modified_files=$(git show "$commit" --name-only | grep -E '^(scripts/|\.githooks/|collections-dist/|\.github/workflows/)' | paste -sd ',' -)
+                modified_files=$(git show "$commit" --name-only | grep -E '^(scripts/|\.githooks/|collections-dist/|\.github/workflows/|requirements-test\.lock)' | paste -sd ',' -)
                 echo "::error::Commit $commit modifies critical supply-chain files but is NOT GPG-signed (status: $sig_status)"
                 echo "::error::Modified files: $modified_files"
                 failed=1
