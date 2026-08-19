@@ -21,6 +21,23 @@ while IFS= read -r -d '' f; do
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
     echo "ERROR: Unencrypted vault files cannot be pushed to prevent secrets exposure." >&2
     failed=1
+  else
+    # File has vault marker on line 1; validate actual encryption by attempting decryption
+    # This prevents marker spoofing where a plaintext file starts with $ANSIBLE_VAULT
+    if [ -f "vault-pass.sh" ]; then
+      if ! ansible-vault view --vault-password-file=vault-pass.sh "$f" >/dev/null 2>&1; then
+        echo "ERROR: $f has vault marker but is not validly encrypted or password is incorrect." >&2
+        echo "ERROR: Run: ansible-vault encrypt $f" >&2
+        failed=1
+      fi
+    else
+      # If vault-pass.sh is missing, fall back to format validation
+      # Real encrypted vault files have $ANSIBLE_VAULT;1.1;AES256 format on line 1
+      if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT;[0-9]\.[0-9];'; then
+        echo "ERROR: $f does not have valid vault format ($ANSIBLE_VAULT;X.X;CIPHER). Run: ansible-vault encrypt $f" >&2
+        failed=1
+      fi
+    fi
   fi
 done < <(git ls-files -z -- '*vault.yml')
 
