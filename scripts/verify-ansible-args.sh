@@ -220,6 +220,18 @@ Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass
 EOF
         exit 1
     fi
+    # Block space-separated: -e @file and --extra-vars @file
+    # @file loads arbitrary YAML, bypassing all per-variable guards in one flag.
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == @* ]]; then
+        cat >&2 <<EOF
+ERROR: @file extra-vars rejected by VERIFY_AND_RUN
+Reason: Ansible's @file syntax loads arbitrary YAML from a file, bypassing all
+        per-variable guards (csb_rhel, _pf_vault_asserted, common_project_root,
+        system_sysctl_hardening, etc.) in a single flag.
+Solution: Pass key=value pairs directly instead of using a @file reference.
+EOF
+        exit 1
+    fi
     # Block space-separated: -e _pf_is_molecule=<value> and --extra-vars _pf_is_molecule=<value>
     if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_is_molecule=* ]]; then
         cat >&2 <<EOF
@@ -280,6 +292,19 @@ Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
         validation, and CSB classification across Play 0, Play 1, and Play 2.
 SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
 Solution: Do not override common_project_root on the command line.
+EOF
+        exit 1
+    fi
+    # Block space-separated two-arg form: --vault-id label@source / --vault-id @prompt
+    # @prompt opens /dev/tty; in CI or tmux sessions without a controlling tty this
+    # hangs provisioning indefinitely (provisioning DoS).
+    if [[ "${args[$i]}" == '--vault-id' ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-id rejected by VERIFY_AND_RUN
+Reason: --vault-id @prompt opens /dev/tty for interactive vault-password input;
+        in CI or tmux sessions without a controlling tty this hangs the run
+        indefinitely (provisioning DoS). Vault password is managed via vault-pass.sh.
+Solution: Do not pass --vault-id on the command line.
 EOF
         exit 1
     fi
@@ -425,6 +450,7 @@ unset ANSIBLE_SU_EXE ANSIBLE_PFEXEC_EXE ANSIBLE_SUDO_EXE  # remove per-plugin ex
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 export ANSIBLE_BECOME_EXE=/usr/bin/sudo  # pin become_exe — ANSIBLE_BECOME_EXE env var takes precedence over ansible.cfg become_exe; without this pin, 'ANSIBLE_BECOME_EXE=/tmp/evil make all' routes every Play 1 become task through an arbitrary binary that can exec real sudo transparently while silently rewriting sshd_config, authorized_keys, and audit rules
 export ANSIBLE_BECOME_USER=root  # pin become_user — ANSIBLE_BECOME_USER env var overrides the implicit root default for all Play 1 become: true tasks; 'ANSIBLE_BECOME_USER=dfarrell make all' causes sudo to run as the invoking user rather than root, making all system file writes (sysctl, sshd_config, PAM, audit rules, firewall) fail with EACCES; many failures are swallowed by CSB rescue blocks leaving the host unhardened while provisioning appears to succeed
+unset ANSIBLE_BECOME_PASS ANSIBLE_SUDO_PASS  # strip pre-seeded become password — ANSIBLE_BECOME_PASS=wrong_password causes all Play 1 become:true tasks to fail with sudo auth errors; CSB rescue blocks silently absorb the failures (logged to CSB report, provisioning continues) leaving the host unhardened; additionally a pre-seeded ANSIBLE_BECOME_PASS exposes the plaintext credential in /proc/<pid>/environ to any root process during provisioning; the playbook uses cached sudo credentials (NOPASSWD or interactive prompt via sudo), not env-var credentials, so these vars are never needed
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"
