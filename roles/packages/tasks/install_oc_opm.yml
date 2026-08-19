@@ -196,17 +196,18 @@
       check_mode: false
 
     - name: Read opm OCP version marker
-      ansible.builtin.slurp:
-        src: /var/lib/ansible-packages/opm-ocp-version
+      ansible.builtin.command:
+        cmd: cat /var/lib/ansible-packages/opm-ocp-version
       register: packages_opm_marker
       failed_when: false
+      changed_when: false
 
     - name: opm present at {{ packages_oc_version }}
       when: >-
         packages_opm_check.rc != 0 or
         packages_oc_version == 'stable' or
-        'content' not in packages_opm_marker or
-        (packages_opm_marker.content | b64decode | trim) != packages_oc_version
+        packages_opm_marker.rc != 0 or
+        packages_opm_marker.stdout | trim != packages_oc_version
       block:
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:

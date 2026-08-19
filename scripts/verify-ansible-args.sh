@@ -8,7 +8,7 @@
 #
 # Defense-in-depth layers:
 #   1. Makefile VERIFY_AND_RUN calls this script (Makefile layer — blocks direct users)
-#   2. Arg scanner — rejects --start-at-task, --skip-tags=always, _pf_vault_asserted, csb_rhel/_csb_molecule_force overrides (this script)
+#   2. Arg scanner — rejects --start-at-task, --vault-password-file, --vault-id, --skip-tags=always, -e @file, _pf_is_molecule, _pf_vault_asserted, csb_rhel/_csb_molecule_force, system_sysctl_hardening, common_project_root (this script)
 #   3. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   4. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
 #   5. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
