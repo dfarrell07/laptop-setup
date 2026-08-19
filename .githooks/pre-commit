@@ -1,21 +1,6 @@
 #!/bin/bash
 # Pre-commit checks: vault encryption, secrets, YAML, shell, JSON, collections integrity
 
-# Hook responsibilities:
-# HARD-BLOCK gates (exit 1 if fail):
-#   - verify-collections.sh + .sha256 sync (lines 5–115)
-#   - verify-ansible-args.sh + .sha256 sync
-#   - Makefile + .sha256 sync
-#   - collections-dist tarballs + SHA256SUMS sync (lines 117–152)
-#   - SHA256SUMS + SHA256SUMS.asc sync (lines 154–174)
-#   - vault-pass-ci.sh xtrace protection (lines 176–190)
-#   - vault.yml encryption (line 192)
-# ADVISORY checks (warn if tool present; skip if absent):
-#   - gitleaks secret scanning (line 211)
-#   - yamllint YAML validation (line 225)
-#   - shellcheck shell syntax (line 245)
-#   - python3 JSON + lockfile integrity (line 259)
-
 failed=0
 
 # SECURITY GUARD: Block commits that modify verify-collections.sh without updating .sha256 baseline
@@ -98,19 +83,12 @@ if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -eq 0 ]; then
   failed=1
 fi
 
-# SECURITY ENHANCEMENT: Detect synchronized modifications to Makefile
-# SECURITY ENHANCEMENT: Detect synchronized modifications to Makefile
-# Attack pattern: modify Makefile + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# WARNING (non-blocking): Detect synchronized modifications to Makefile
+# Flags high-risk patterns for human review; does NOT prevent commit
 if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -gt 0 ]; then
   echo "WARN: Both Makefile and .sha256 modified in same commit" >&2
-  echo "       This pattern can bypass hash-based integrity checks" >&2
-  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
-  echo "       To update the Makefile intentionally:" >&2
-  echo "         1. Create a separate commit with only the Makefile change" >&2
-  echo "         2. Review and merge that commit" >&2
-  echo "         3. Then create a second commit to update the .sha256 hash" >&2
-  # Note: We cannot enforce GPG signing here, but CI checks will verify.
+  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
+  echo "      See the commit diff and verify changes are intentional." >&2
 fi
 
 if [ "$_makefile_hash_modified" -gt 0 ] && [ "$_makefile_modified" -eq 0 ]; then
@@ -136,19 +114,12 @@ if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -eq 0 ]; then
   failed=1
 fi
 
-# SECURITY ENHANCEMENT: Detect synchronized modifications to supply chain files
-# SECURITY ENHANCEMENT: Detect synchronized modifications to supply chain files
-# Attack pattern: modify tarball + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# WARNING (non-blocking): Detect synchronized modifications to supply chain files
+# Flags high-risk patterns for human review; does NOT prevent commit
 if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -gt 0 ]; then
   echo "WARN: Both collections-dist/*.tar.gz and SHA256SUMS modified in same commit" >&2
-  echo "       This pattern can bypass hash-based integrity checks" >&2
-  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
-  echo "       To update collections intentionally:" >&2
-  echo "         1. Create a separate commit with only the tarball changes" >&2
-  echo "         2. Review and merge that commit" >&2
-  echo "         3. Then create a second commit to update the SHA256SUMS hash" >&2
-  # Note: We cannot enforce GPG signing here, but CI checks will verify.
+  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
+  echo "      See the commit diff and verify changes are intentional." >&2
 fi
 if [ "$_modified_hashes" -gt 0 ] && [ "$_modified_tarballs" -eq 0 ]; then
   echo "WARN: SHA256SUMS modified but no collections-dist/*.tar.gz changes detected" >&2
