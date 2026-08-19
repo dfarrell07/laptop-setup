@@ -398,9 +398,9 @@ against tarball tampering. The signing key is distributed in the repository at
 `collections-dist/signing-key.asc` and is automatically imported during `make bootstrap`.
 
 **Bootstrap Flow** (automatic, no user action required):
-1. `make bootstrap` runs `gpg --import collections-dist/signing-key.asc` (line 109 in Makefile)
+1. `make bootstrap` provides instructions for manual GPG key import (line 121 in Makefile)
 2. `verify-collections.sh` validates GPG signature before hash verification
-3. If key import fails, hash verification continues (defense-in-depth: hashes are still checked)
+3. If key is not in keyring, hash verification continues (defense-in-depth: hashes are still checked)
 
 **Manual Key Import** (if bootstrap failed or you're using an existing clone):
 ```bash

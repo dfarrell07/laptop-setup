@@ -127,6 +127,9 @@ bootstrap: guard-not-root
 	@echo ""
 	@echo "  See SECURITY.md § 'Ansible Collections Supply Chain' for complete details."
 	@echo ""
+	@# GUARD: Never import the stub signing-key.asc without error handling
+	@# If future changes add 'gpg --import', it MUST be: gpg --import ... || true
+	@# The stub key will fail GPG import with exit code 2 (CRC error). Unguarded import would break bootstrap.
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
 		collections-dist/community-general-13.2.0.tar.gz \
