@@ -45,6 +45,29 @@
       Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
   tags: [always]
 
+- name: "SECURITY: Enumerate files in /etc/udev/rules.d/ (pre-plant audit)"
+  ansible.builtin.find:
+    paths: /etc/udev/rules.d/
+    file_type: file
+  register: _udev_rules_found
+  when: not system_is_container
+  tags: [always]
+
+- name: "SECURITY: Assert no unauthorized files in /etc/udev/rules.d/ (pre-plant attack)"
+  ansible.builtin.assert:
+    that:
+      - >-
+        _udev_rules_found.files | map(attribute='path') | map('basename')
+        | difference(system_udev_rules_d_allowlist) | list | length == 0
+    fail_msg: >-
+      SECURITY: Unauthorized file(s) in /etc/udev/rules.d/.
+      Attack: a pre-planted udev rule executes as root on every matching device event.
+      Unauthorized: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list }}
+      Fix: add the basename(s) to system_udev_rules_d_allowlist in config.yml, then re-run.
+  when: not system_is_container
+  tags: [always]
+
 # --- Load kernel modules for kind BEFORE hardening_core applies modules_disabled ratchet ---
 # kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
 # sysctl.yml (included by hardening_core.yml) writes this value, and sshd.yml's
@@ -105,29 +128,6 @@
       Input: system_kernel_lockdown={{ system_kernel_lockdown }}.
       Fix: remove the override or set system_kernel_lockdown to a permitted value in config.yml.
   when: not (system_is_container or csb_rhel)
-  tags: [always]
-
-- name: "SECURITY: Enumerate files in /etc/udev/rules.d/ (pre-plant audit)"
-  ansible.builtin.find:
-    paths: /etc/udev/rules.d/
-    file_type: file
-  register: _udev_rules_found
-  when: not system_is_container
-  tags: [always]
-
-- name: "SECURITY: Assert no unauthorized files in /etc/udev/rules.d/ (pre-plant attack)"
-  ansible.builtin.assert:
-    that:
-      - >-
-        _udev_rules_found.files | map(attribute='path') | map('basename')
-        | difference(system_udev_rules_d_allowlist) | list | length == 0
-    fail_msg: >-
-      SECURITY: Unauthorized file(s) in /etc/udev/rules.d/.
-      Attack: a pre-planted udev rule executes as root on every matching device event.
-      Unauthorized: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
-      | difference(system_udev_rules_d_allowlist) | list }}
-      Fix: add the basename(s) to system_udev_rules_d_allowlist in config.yml, then re-run.
-  when: not system_is_container
   tags: [always]
 
 - name: "SECURITY: Find systemd drop-in directories under /etc/systemd/system"
