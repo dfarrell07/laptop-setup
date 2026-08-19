@@ -428,7 +428,17 @@ export ANSIBLE_BECOME_EXE=/usr/bin/sudo  # pin become_exe — ANSIBLE_BECOME_EXE
 export ANSIBLE_BECOME_USER=root  # pin become_user — ANSIBLE_BECOME_USER env var overrides the implicit root default for all Play 1 become: true tasks; 'ANSIBLE_BECOME_USER=dfarrell make all' causes sudo to run as the invoking user rather than root, making all system file writes (sysctl, sshd_config, PAM, audit rules, firewall) fail with EACCES; many failures are swallowed by CSB rescue blocks leaving the host unhardened while provisioning appears to succeed
 unset ANSIBLE_BECOME_PASS ANSIBLE_SUDO_PASS  # strip pre-seeded become password — ANSIBLE_BECOME_PASS=wrong_password causes all Play 1 become:true tasks to fail with sudo auth errors; CSB rescue blocks silently absorb the failures (logged to CSB report, provisioning continues) leaving the host unhardened; additionally a pre-seeded ANSIBLE_BECOME_PASS exposes the plaintext credential in /proc/<pid>/environ to any root process during provisioning; the playbook uses cached sudo credentials (NOPASSWD or interactive prompt via sudo), not env-var credentials, so these vars are never needed
 
-# Verify collections integrity (defense-in-depth: supply chain verification)
+# Verify collections integrity (defense-in-depth: supply chain verification).
+# GPG key verification is automatically bypassed for non-provisioning invocations
+# (--syntax-check, molecule, ansible-lint) where only playbook syntax is checked,
+# not actual collection code execution. Production provisioning requires the key.
+_is_syntax_only=false
+for _arg in "${args[@]}"; do
+    [[ "$_arg" == '--syntax-check' ]] && _is_syntax_only=true && break
+done
+if "$_is_syntax_only"; then
+    export SKIP_GPG_VERIFY=1
+fi
 "${_repo_root}/scripts/verify-collections.sh"
 
 # All checks passed — exec the remaining arguments (ansible-playbook or molecule with its args).
