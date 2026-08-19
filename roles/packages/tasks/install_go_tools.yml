@@ -22,9 +22,11 @@
   become: false
 
 - name: "Validate GONOSUMDB/GOSUMDB: (1/3) no public module domains in GONOSUMDB"
+  vars:
+    _pub_mod_re: '(^|,)(\*|github\.com|golang\.org|mvdan\.cc|sigs\.k8s\.io|k8s\.io|gopkg\.in)(,|$)'
   ansible.builtin.assert:
     that:
-      - "dotfiles_gonosumdb | default('') | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none"  # yamllint disable-line rule:line-length
+      - dotfiles_gonosumdb | default('') | regex_search(_pub_mod_re) is none
     fail_msg: >-
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
