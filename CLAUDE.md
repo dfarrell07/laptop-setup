@@ -129,7 +129,7 @@ make backup           # Back up dotfiles before re-provisioning
 make backup-dry-run   # Dry-run backup to preview what would be copied
 make bootstrap        # Initial setup (install deps, collections, hooks)
 make update           # Update collections + full run (sets -e git_repos_pull=true to fetch upstream changes)
-make lint             # ansible-lint + yamllint + shellcheck + markdownlint + check-vars-sync
+make lint             # ansible-lint + yamllint + shellcheck + markdownlint + check-vars-sync + script integrity checks (actionlint + zizmor if installed)
 make shellcheck       # Run shellcheck on scripts and hooks (also run by lint)
 make syntax-check     # Playbook syntax validation only
 make markdownlint     # markdownlint on all .md files
