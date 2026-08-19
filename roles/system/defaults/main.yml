@@ -471,8 +471,10 @@ system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use 
   # stepping to the first three updates (boot convergence), then switches to slewing permanently.
 system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
 system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
-system_chrony_dhcp_sourcedir: /run/chrony-dhcp  # NM-dispatcher DHCP NTP dir; included when non-empty and
-  # authselectmode != require; set '' to opt out (removes corporate DHCP-pushed NTP sources)
+system_chrony_dhcp_sourcedir: ''  # NM-dispatcher DHCP NTP dir; disabled by default (DHCP-sourced NTP is opt-in).
+  # Set '/run/chrony-dhcp' in config.yml to accept corporate DHCP-pushed NTP sources.
+  # WARNING: enabling this trusts your local DHCP server to control your clock — a rogue
+  # DHCP server can push an attacker-controlled NTP source and enable replay/Kerberos attacks.
 system_chrony_driftfile: "{{ '/var/lib/chrony/chrony.drift' if is_apt else '/var/lib/chrony/drift' }}"  # apt: chrony.drift; dnf: drift
 system_chrony_ntsdumpdir: /var/lib/chrony   # NTS cookie persistence dir; override in config.yml for small /var partitions
 system_chrony_logdir: /var/log/chrony       # chrony log dir; override in config.yml for small /var/log partitions

@@ -1740,6 +1740,23 @@
           prefer/require (authselectmode); 0-9 (minsources); NTP pool/server hostnames and ports only
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
 
+    - name: "Warn: DHCP-sourced NTP active with authselectmode=prefer — rogue DHCP risk"
+      tags: [always]
+      when:
+        - system_chrony_dhcp_sourcedir | default('') | length > 0
+        - system_chrony_authselectmode | default('prefer') != 'require'
+        - system_chrony_service_enabled | default(true) | bool
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY NOTE: system_chrony_dhcp_sourcedir='{{ system_chrony_dhcp_sourcedir }}'
+          and system_chrony_authselectmode='{{ system_chrony_authselectmode | default("prefer") }}'.
+          DHCP-sourced NTP servers are accepted as unauthenticated clock sources. A rogue or
+          compromised DHCP server on the local segment can push an attacker-controlled NTP server,
+          manipulate the system clock, and enable replay/certificate/Kerberos attacks. To harden:
+          (a) set system_chrony_dhcp_sourcedir: '' in config.yml to disable DHCP NTP (recommended),
+          or (b) set system_chrony_authselectmode: require to reject unauthenticated DHCP sources
+          (time sync will fail if NTS-KE port 4460 is blocked on your network).
+
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -1806,6 +1823,26 @@
           directives (e.g. system_faillock_deny='5\nevendenyroot' injects extra faillock
           directive). Impact: lockout bypass, PAM policy override, audit dispatcher hijack.
           Fix: see assert that: conditions above for per-variable allowed patterns.
+
+    - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
+      when: _config_yml_raw.content is defined
+      tags: [always]
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
+          - _raw.get('system_sudo_timestamp_timeout', 15) | int >= 0
+          - _raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
+        fail_msg: >-
+          SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
+          Input: system_sudo_timestamp_timeout='{{ _raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
+          Mechanism: the value is rendered verbatim into /etc/sudoers.d/99-hardening as
+          'Defaults timestamp_timeout=<value>'; non-integer or out-of-range values break sudoers
+          syntax (visudo -cf rejects the file) or produce unexpected sudo cache behavior.
+          Example: '15\nDefaults !authenticate' disables sudo password checks entirely.
+          Impact: sudoers parse failure (sudo unusable) or authentication bypass.
+          Fix: use a plain integer 0-60 (e.g., 0 for re-auth on every sudo, 15 for default).
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       when: _config_yml_raw.content is defined

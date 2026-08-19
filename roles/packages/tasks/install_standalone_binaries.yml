@@ -352,6 +352,11 @@
       - https://accounts.google.com
       - --certificate-oidc-issuer-regexp
       - "^https://accounts\\.google\\.com$"
+  environment:
+    SIGSTORE_NO_VERIFY: "0"
+    SIGSTORE_ROOT_FILE: ""
+    SIGSTORE_REKOR_PUBLIC_KEY: ""
+    COSIGN_EXPERIMENTAL: "0"
   changed_when: false
   failed_when: false
   register: _cosign_verify_result
@@ -491,6 +496,11 @@
       - https://token.actions.githubusercontent.com
       - --certificate-oidc-issuer-regexp
       - "^https://token\\.actions\\.githubusercontent\\.com$"
+  environment:
+    SIGSTORE_NO_VERIFY: "0"
+    SIGSTORE_ROOT_FILE: ""
+    SIGSTORE_REKOR_PUBLIC_KEY: ""
+    COSIGN_EXPERIMENTAL: "0"
   changed_when: false
   failed_when: false
   register: _sops_checksums_verify_result

@@ -79,7 +79,8 @@
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
-    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPROXY: 'https://proxy.golang.org,direct'  # security-critical: pin proxy, prevent GOPROXY env injection
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
     GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"

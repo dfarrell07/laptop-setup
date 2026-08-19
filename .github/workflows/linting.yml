@@ -108,8 +108,8 @@ jobs:
 
       - name: Install pyyaml and packaging from lockfile
         run: |
-          : "${PIP_INDEX_URL:=}" && [ -z "${PIP_INDEX_URL}" ] || { echo "PIP_INDEX_URL is set; aborting to prevent index override"; exit 1; }
-          pip install --no-index --require-hashes -r <(awk '
+          test -z "${PIP_INDEX_URL:-}" || (echo 'PIP_INDEX_URL must not be set in CI' && exit 1)
+          pip install --require-hashes -r <(awk '
             /^pyyaml==|^packaging==/ {
               in_pkg=1; line=$0
               sub(/[[:space:]]*\\[[:space:]]*$/, "", line)
