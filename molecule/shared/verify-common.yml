@@ -1478,7 +1478,7 @@
 - name: Assert chrony NTS config is present
   ansible.builtin.assert:
     that: verify_chrony_nts.rc == 0
-    fail_msg: "NTS not configured in /etc/chrony.conf — NTS deployment regression"
+    fail_msg: "NTS not configured in /etc/chrony.conf — NTS deployment regression (rc={{ verify_chrony_nts.rc }})"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
