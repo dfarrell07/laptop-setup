@@ -487,18 +487,23 @@
         that:
           - >-
             (_redhat_gpgkey | length == 0) or
-            (_redhat_gpgkey is match('^https://.*\.redhat\.com/.*\.gpg$'))
+            (_redhat_gpgkey is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*\.gpg$'))
         fail_msg: >-
-          SECURITY: repos_dnf_redhat_gpgkey in config.yml is set but does not target a trusted
-          internal Red Hat domain. This value is passed directly to dnf as the GPG key URL for
+          SECURITY: repos_dnf_redhat_gpgkey in config.yml must target a known Red Hat internal
+          domain (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com) or be unset.
+          This prevents subdomain hijacking attacks. Arbitrary redhat.com subdomains are not
+          trusted. This value is passed directly to dnf as the GPG key URL for
           repos_dnf_redhat_baseurl; if an attacker can set repos_dnf_redhat_gpgkey to an
-          external URL (e.g., https://attacker.com/malicious.gpg), dnf will fetch and trust
-          the attacker's GPG key to verify packages from repos_dnf_redhat_baseurl. The attacker
-          can then sign malicious packages that bypass dnf's gpgcheck security, resulting in
-          arbitrary code execution when those packages are installed as root.
+          attacker-controlled redhat.com subdomain, dnf will fetch and trust the attacker's
+          GPG key to verify packages from repos_dnf_redhat_baseurl. The attacker can then sign
+          malicious packages that bypass dnf's gpgcheck security, resulting in arbitrary code
+          execution when those packages are installed as root. Additionally, fingerprint
+          verification (via repos_dnf_redhat_gpg_fingerprint) provides an additional layer of
+          defense against key substitution attacks.
 
-          REQUIRED: repos_dnf_redhat_gpgkey must be an internal Red Hat URL and must point to a
-          GPG key file (ending in .gpg). Allowed format: https://<subdomain>.redhat.com/<path>/<file>.gpg
+          REQUIRED: repos_dnf_redhat_gpgkey must target a known Red Hat internal domain
+          (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com) and must point to a
+          GPG key file (ending in .gpg). Allowed format: https://(pkgs.devel|repo|keys).redhat.com/<path>/<file>.gpg
           Example: https://pkgs.devel.redhat.com/repo-gnupg-keys/dogecorp-ca.gpg
 
           Current value: '{{ _redhat_gpgkey }}'
