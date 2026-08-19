@@ -12,20 +12,20 @@ Do not open a public issue for security vulnerabilities.
 Navigate to your task below:
 
 **Setup Workflows:**
-- [YubiKey + vault-pass.sh](https://github.com/dfarrell07/laptop-setup#setting-up-vault-passsh) — Program HMAC-SHA1 for vault encryption
-- [GPG key generation/import](https://github.com/dfarrell07/laptop-setup#gpg-key-import-and-setup) — Set up commit signing
-- [SSH key pair generation](https://github.com/dfarrell07/laptop-setup#ssh-key-rotation) — Create ed25519-sk FIDO2 keys
-- [Configure git signing](https://github.com/dfarrell07/laptop-setup#configuring-git-to-use-your-gpg-key) — Enable automatic GPG signatures
+- [YubiKey + vault-pass.sh](#setting-up-vault-passsh) — Program HMAC-SHA1 for vault encryption
+- [GPG key generation/import](#gpg-key-requirements-for-supply-chain-commits) — Set up commit signing
+- [SSH key pair generation](#ssh-key-rotation) — Create ed25519-sk FIDO2 keys
+- [Configure git signing](#gpg-key-requirements-for-supply-chain-commits) — Enable automatic GPG signatures
 
 **Security Incident Response:**
-- [Lost/compromised YubiKey](https://github.com/dfarrell07/laptop-setup#lost-or-compromised-yubikey) — Recovery via backup password or re-keying
-- [GPG key compromise](https://github.com/dfarrell07/laptop-setup#sha256sums-signing-key-management) — Key rotation procedure
-- [Vault password recovery](https://github.com/dfarrell07/laptop-setup#recovering-from-lost-yubikey-with-password-backup) — Restore vault access without YubiKey
+- [Lost/compromised YubiKey](#lost-or-compromised-yubikey) — Recovery via backup password or re-keying
+- [GPG key compromise](#sha256sums-signing-key-management) — Key rotation procedure
+- [Vault password recovery](#lost-or-compromised-yubikey) — Restore vault access without YubiKey
 
 **Policy & Operations:**
-- [Git hook bypass rules](https://github.com/dfarrell07/laptop-setup#unsafe-git-operations) — When (and never) to use --no-verify
-- [Supply-chain commit requirements](https://github.com/dfarrell07/laptop-setup#supply-chain-commits-critical-distinction-between--s-and--s-flags) — -s and -S flag distinction
-- [Go module supply chain risk](https://github.com/dfarrell07/laptop-setup#go-module-supply-chain) — Mitigation tiers and hardening options
+- [Git hook bypass rules](#unsafe-git-operations) — When (and never) to use --no-verify
+- [Supply-chain commit requirements](#supply-chain-commits-critical-distinction-between--s-and--s-flags) — -s and -S flag distinction
+- [Go module supply chain risk](#go-module-supply-chain) — Mitigation tiers and hardening options
 
 ## Scope
 
