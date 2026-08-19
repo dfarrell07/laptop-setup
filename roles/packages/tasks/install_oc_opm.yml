@@ -33,12 +33,22 @@
       register: packages_kubectl_stat
       check_mode: false
 
+    - name: Read kubectl source marker
+      ansible.builtin.command:
+        cmd: cat /var/lib/ansible-packages/kubectl-source
+      register: packages_kubectl_source_marker
+      failed_when: false
+      changed_when: false
+
     - name: oc + kubectl present at {{ packages_oc_version }}
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
         (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
-        not packages_kubectl_stat.stat.exists
+        not packages_kubectl_stat.stat.exists or
+        (packages_kubectl_source == 'ocp' and
+         (packages_kubectl_source_marker.rc != 0 or
+          packages_kubectl_source_marker.stdout | trim != 'ocp'))
       block:
         # WARNING: stable track fetches sha256sum.txt from the same server as the binary
         # (mirror.openshift.com) with no GPG verification — a compromised server can serve a
@@ -124,6 +134,25 @@
           when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
           become: true
           tags: [become]
+
+        - name: Create ansible-packages state directory
+          ansible.builtin.file:
+            path: /var/lib/ansible-packages
+            state: directory
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Write kubectl source marker when kubectl extracted from OCP
+          ansible.builtin.copy:
+            content: "{{ packages_kubectl_source }}"
+            dest: /var/lib/ansible-packages/kubectl-source
+            mode: "0644"
+          become: true
+          tags: [become]
+          when:
+            - packages_kubectl_source == 'ocp'
+            - "'kubectl' in _oc_binaries_to_extract"
 
       always:
         - name: Clean up oc temporary directory
