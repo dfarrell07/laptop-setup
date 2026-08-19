@@ -2119,9 +2119,6 @@
 
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
       when: _config_raw is defined and _pf_gh_check_done is not defined
-      vars:
-        _raw: "{{ _config_raw }}"
-        _profile: "{{ _raw.get('profile', 'work') }}"
       block:
         - name: Check GitHub CLI in PATH
           ansible.builtin.command: which gh
@@ -2145,7 +2142,7 @@
               verified only by SHA256 checksums. For maximum supply-chain security on work
               profiles, install GitHub CLI: https://cli.github.com/
           when:
-            - _profile == 'work'
+            - _config_raw.get('profile', 'work') == 'work'
             - not packages_gh_available
           tags: [always]
 
@@ -2158,8 +2155,6 @@
       when:
         - _config_yml_raw.content is defined
         - _cosign_alt_verification_warned is not defined
-      vars:
-        _raw: "{{ _config_raw }}"
       block:
         - name: Warn if cosign is disabled in config.yml
           ansible.builtin.debug:
@@ -2171,7 +2166,7 @@
               you must install and configure it manually. See
               https://github.com/sigstore/cosign/releases for available signature formats and
               verification options. This warning is informational only — cosign will not be installed.
-          when: _raw.get('packages_cosign_install_enabled', true) == false
+          when: _config_raw.get('packages_cosign_install_enabled', true) == false
           tags: [always]
 
         - name: Set cosign alternative verification warned flag
