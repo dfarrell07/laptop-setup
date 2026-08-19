@@ -1,6 +1,6 @@
 ---
 # --- Firewall (drop zone) ---
-- name: Ensure firewalld is running (required for minimal/netinstall and RHEL; no-op on Fedora 44 Workstation/Server)
+- name: Ensure firewalld is started and enabled
   ansible.builtin.systemd:
     name: firewalld
     state: started
