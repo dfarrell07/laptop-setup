@@ -98,7 +98,9 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
 #   packages_networking_work: [ovn, iproute-tc,
 #     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
-#     (OVN-K dev); override in config.yml to add/remove packages for this profile
+#     (OVN-K dev); override in config.yml to add/remove packages for this profile.
+#     WARNING: nmap is installed for local/test network debugging only (kind clusters, home lab).
+#     DO NOT scan production Red Hat infrastructure (gitlab.cee, code.engineering, etc.) — triggers IT IDS/IPS alerts and SOC investigation.
 #   packages_support_work: [sos, strace, gdb, perf, bpfman, bpftrace, bpftool]  (roles/packages/defaults)
 #     — work-profile-only diagnostic/debugging tools; override in config.yml to add/remove
 #   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
