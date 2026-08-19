@@ -97,17 +97,26 @@ def compute_file_hash(filepath):
     return sha256.hexdigest()
 
 def extract_python_files(collection_dir):
-    """Extract all .py files from plugins, module_utils, roles directories."""
+    """Extract all .py and .so files from plugins, module_utils, roles.
+
+    Note: .pyc files not validated (Python handles mtime internally).
+    .so files included for C extension modules (security-critical).
+    """
     python_files = {}
     for subdir in ['plugins', 'module_utils', 'roles']:
         base = collection_dir / subdir
         if not base.exists():
             continue
-        for pyfile in base.rglob('*.py'):
-            if '__pycache__' in str(pyfile):
+        for pyfile in base.rglob('*'):
+            # Skip cache and non-code files
+            if '__pycache__' in str(pyfile) or '__pycache__' in pyfile.parts:
                 continue
-            rel_path = str(pyfile.relative_to(collection_dir))
-            python_files[rel_path] = compute_file_hash(pyfile)
+            # Only .py and .so files
+            if pyfile.suffix not in ('.py', '.so'):
+                continue
+            if pyfile.is_file():
+                rel_path = str(pyfile.relative_to(collection_dir))
+                python_files[rel_path] = compute_file_hash(pyfile)
     return python_files
 
 def load_manifest(manifest_path):
@@ -118,27 +127,26 @@ def load_manifest(manifest_path):
         return json.load(f)
 
 def get_manifest_files(manifest_data, tarball_base):
-    """Extract set of expected Python files from manifest for a given collection."""
+    """Extract dict of expected files and hashes from manifest.
+
+    Returns: dict mapping relative_path -> content_hash
+    """
     if tarball_base not in manifest_data:
-        return None  # Collection not in manifest (benign — bootstrap may not have run)
+        return {}  # Collection not in manifest (benign — bootstrap may not have run)
 
     collection_manifest = manifest_data[tarball_base]
-    expected_files = set()
+    expected_files = {}
 
-    # Add module_utils files (stored as basenames without .py in manifest)
-    for filename in collection_manifest.get('module_utils', []):
-        expected_files.add(f'module_utils/{filename}.py')
+    # Add module_utils files with their hashes (dict {filename: hash})
+    for filename, file_hash in collection_manifest.get('module_utils', {}).items():
+        expected_files[f'module_utils/{filename}.py'] = file_hash
 
-    # Add plugin files from all plugin types
-    for plugin_type, filenames in collection_manifest.get('plugins', {}).items():
-        for filename in filenames:
-            expected_files.add(f'plugins/{plugin_type}/{filename}.py')
+    # Add plugin files from all plugin types with their hashes
+    for plugin_type, files_dict in collection_manifest.get('plugins', {}).items():
+        for filename, file_hash in files_dict.items():
+            expected_files[f'plugins/{plugin_type}/{filename}.py'] = file_hash
 
-    # Add role files (stored as role names in manifest)
-    for role_name in collection_manifest.get('roles', []):
-        # Roles can have various .py files in subdirs, check if any exist
-        # For now, accept role_name as reference; actual role structure varies
-        pass
+    # Note: roles structure varies; hashes computed from tarball baseline
 
     return expected_files
 
@@ -237,18 +245,36 @@ for namespace_dir in extracted_root.glob('*/'):
 
         if tarball_base and manifest_data.get(tarball_base):
             manifest_files = get_manifest_files(manifest_data, tarball_base)
-            # Only validate if manifest entry exists
-            unmanifested = fresh_keys - manifest_files
+
+            # Check for new files not in manifest
+            unmanifested = fresh_keys - set(manifest_files.keys())
             if unmanifested:
                 print(f"ERROR: {collection_name}: Python files in tarball not listed in PYTHON_MANIFEST.json:", file=sys.stderr)
                 for f in sorted(unmanifested)[:10]:
                     print(f"  ~ {f}", file=sys.stderr)
                 if len(unmanifested) > 10:
                     print(f"  ... and {len(unmanifested) - 10} more", file=sys.stderr)
-                print("       This indicates possible collection tarball tampering.", file=sys.stderr)
+                print("       This indicates possible collection tarball tampering (new file added).", file=sys.stderr)
                 print("       Action: Audit git log, SECURITY.md, collections-dist/ for unauthorized modifications.", file=sys.stderr)
                 print("              Regenerate manifest: scripts/gen-collection-manifest.py", file=sys.stderr)
                 print("              Then: make bootstrap", file=sys.stderr)
+                sys.exit(1)
+
+            # Check for modified files by comparing content hashes (TOCTOU attack detection)
+            modified = []
+            for fpath in fresh_keys & set(manifest_files.keys()):
+                if fresh_files[fpath] != manifest_files[fpath]:
+                    modified.append(fpath)
+
+            if modified:
+                print(f"ERROR: {collection_name}: Python file content differs from baseline manifest (TOCTOU):", file=sys.stderr)
+                for f in sorted(modified)[:10]:
+                    print(f"  ~ {f}", file=sys.stderr)
+                if len(modified) > 10:
+                    print(f"  ... and {len(modified) - 10} more", file=sys.stderr)
+                print("       File content hash mismatch — possible TOCTOU attack or corrupted tarball.", file=sys.stderr)
+                print("       Action: Verify tarball integrity (make bootstrap), audit collections-dist/ for changes.", file=sys.stderr)
+                print("              If attack suspected: Audit git log, SECURITY.md, contact maintainers.", file=sys.stderr)
                 sys.exit(1)
 
 print("✓ All collection Python files match verified tarballs and PYTHON_MANIFEST.json")

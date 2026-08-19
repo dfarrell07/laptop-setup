@@ -6,20 +6,32 @@ Usage:
     gen-collection-manifest.py <collections-dist-dir> <output-manifest>
 
 This script generates a manifest of all Python modules, module_utils, and roles
-from each collection tarball. The manifest is committed alongside SHA256SUMS
-to enable detection of unexpected transitive Python code additions.
+from each collection tarball, including SHA256 content hashes for each .py file.
+The manifest is committed alongside SHA256SUMS to enable detection of unexpected
+transitive Python code additions and TOCTOU (Time-of-Check-Time-of-Use) attacks
+via per-file content hash verification.
 
 Manifest format (JSON):
 {
-  "ansible-posix-2.2.2": {
-    "plugins": {...module names...},
-    "module_utils": {...module_utils names...},
-    "roles": {...role names...}
+  "ansible-posix-2.2.2.tar": {
+    "plugins": {
+      "modules": {
+        "ping": "68143c60d730863b...",
+        ...
+      },
+      ...
+    },
+    "module_utils": {
+      "version": "ab063b19d6340894...",
+      ...
+    },
+    "roles": [...role names...]
   },
   ...
 }
 """
 
+import hashlib
 import json
 import sys
 import tarfile
@@ -27,11 +39,18 @@ from pathlib import Path
 from collections import defaultdict
 
 
+def compute_file_hash(file_content):
+    """Compute SHA256 hash of file content (bytes)."""
+    sha256 = hashlib.sha256()
+    sha256.update(file_content)
+    return sha256.hexdigest()
+
+
 def extract_collection_content(tarball_path):
-    """Extract Python content metadata from a collection tarball."""
+    """Extract Python content metadata from a collection tarball with per-file hashes."""
     content = {
-        'plugins': defaultdict(list),
-        'module_utils': [],
+        'plugins': defaultdict(dict),
+        'module_utils': {},
         'roles': set(),
         'runtime_requires_ansible': None,
     }
@@ -48,11 +67,12 @@ def extract_collection_content(tarball_path):
                     import yaml
                     runtime_data = yaml.safe_load(runtime_file)
                     if runtime_data and 'requires_ansible' in runtime_data:
-                        content['runtime_requires_ansible'] = runtime_data['requires_ansible']
+                        content['runtime_requires_ansible'] = (
+                            runtime_data['requires_ansible'])
             except Exception:
                 pass
 
-        # Extract plugins (by plugin type)
+        # Extract plugins (by plugin type) with content hashes
         plugin_types = set()
         for member in members:
             if '/plugins/' in member and member.endswith('.py'):
@@ -62,19 +82,32 @@ def extract_collection_content(tarball_path):
                     plugin_types.add(plugin_type)
                     plugin_name = parts[-1].replace('.py', '')
                     if plugin_name != '__init__':
-                        content['plugins'][plugin_type].append(plugin_name)
+                        try:
+                            file_obj = tar.extractfile(member)
+                            if file_obj:
+                                file_content = file_obj.read()
+                                file_hash = compute_file_hash(file_content)
+                                content['plugins'][plugin_type][plugin_name] = (
+                                    file_hash)
+                        except Exception:
+                            pass
 
-        # Extract module_utils
-        module_utils = set()
+        # Extract module_utils with content hashes
         for member in members:
             if '/module_utils/' in member and member.endswith('.py'):
                 parts = member.split('/module_utils/', 1)[1].split('/')
                 module_name = parts[-1].replace('.py', '')
                 if module_name != '__init__':
-                    module_utils.add(module_name)
-        content['module_utils'] = sorted(module_utils)
+                    try:
+                        file_obj = tar.extractfile(member)
+                        if file_obj:
+                            file_content = file_obj.read()
+                            file_hash = compute_file_hash(file_content)
+                            content['module_utils'][module_name] = file_hash
+                    except Exception:
+                        pass
 
-        # Extract roles
+        # Extract roles (names only — roles have complex structures)
         roles = set()
         for member in members:
             if '/roles/' in member:
@@ -85,7 +118,7 @@ def extract_collection_content(tarball_path):
         content['roles'] = sorted(roles)
 
     # Convert defaultdict to regular dict for JSON serialization
-    content['plugins'] = {k: sorted(v) for k, v in content['plugins'].items()}
+    content['plugins'] = {k: dict(v) for k, v in content['plugins'].items()}
     return content
 
 
@@ -103,13 +136,15 @@ def main():
 
     manifest = {}
     for tarball in sorted(collections_dist.glob('*.tar.gz')):
-        collection_id = tarball.stem  # e.g., 'community-general-13.2.0'
+        # Use tarball name with .tar suffix (without .gz) to match verify-collections.sh
+        tarball_id = tarball.stem + '.tar'  # e.g., 'community-general-13.2.0.tar'
         try:
             content = extract_collection_content(tarball)
-            manifest[collection_id] = content
-            print(f"✓ {collection_id}")
+            manifest[tarball_id] = content
+            print(f"✓ {tarball_id}")
         except Exception as e:
-            print(f"ERROR: Failed to process {tarball.name}: {e}", file=sys.stderr)
+            print(f"ERROR: Failed to process {tarball.name}: {e}",
+                  file=sys.stderr)
             sys.exit(1)
 
     # Write manifest with sorted keys for reproducibility
