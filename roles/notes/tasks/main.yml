@@ -1,8 +1,8 @@
 ---
-- name: Notes role tasks
+- name: Run notes role tasks
   when: notes_enabled | bool
   block:
-    - name: Check if notes repo exists
+    - name: Stat notes repo
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_stat
@@ -46,7 +46,7 @@
               {{ notes_https_clone_result.stderr | default('', true) or notes_https_clone_result.msg | default('unknown') }}
           when: notes_https_clone_result.rc | default(1) != 0
 
-    - name: Re-check if notes repo exists after clone attempts
+    - name: Stat notes repo after clone
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_post_clone
@@ -56,13 +56,13 @@
       ansible.builtin.set_fact:
         notes_repo_available: "{{ notes_repo_stat.stat.exists or (notes_repo_post_clone.stat.exists | default(false)) }}"
 
-    - name: Notes repo setup
+    - name: Set up notes repo
       when: notes_repo_available
       block:
         - name: Set up git-lfs smudge/clean filter drivers
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
 
-        - name: Transcrypt detection
+        - name: Detect transcrypt binary
           block:
             - name: Check if transcrypt is available
               ansible.builtin.stat:
@@ -106,7 +106,7 @@
                 chdir: "{{ notes_repo_path }}"
               register: notes_transcrypt_check
               changed_when: false
-              failed_when: false
+              failed_when: notes_transcrypt_check.rc not in [0, 1]
               check_mode: false  # always executes, even with --check (read-only, no state change)
               no_log: true
 
@@ -129,7 +129,6 @@
           register: notes_transcrypt_init_result
           no_log: true
           changed_when: notes_transcrypt_init_result.rc == 0
-          failed_when: false
           when:
             - notes_transcrypt_available
             - not notes_transcrypt_inited
