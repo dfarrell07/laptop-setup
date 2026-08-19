@@ -232,8 +232,8 @@
   changed_when: >-
     git_repos_pull_results.rc == 0 and
     'Already up to date' not in git_repos_pull_results.stdout
-  # NOTE: failed_when: false forces failed=false on non-zero rc; use selectattr('rc', 'ne', 0) to detect failures
-  failed_when: false  # retries omitted: failed_when: false makes every run appear succeeded, so retries would never trigger
+  # NOTE: ignore_errors: true sets failed=true on non-zero rc in .results, making rc and failed attribute filters reliable
+  ignore_errors: true  # retries omitted: ignore_errors still records failed=true per item, so retries would never trigger
   timeout: 120
 
 - name: Report failed pulls
