@@ -1312,7 +1312,7 @@
 - name: Assert sudoers drop-in contains logfile= directive
   ansible.builtin.assert:
     that: verify_sudoers_logfile.rc == 0
-    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=' — sudo logging regression"
+    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=' — sudo logging regression (rc={{ verify_sudoers_logfile.rc | default('?') }})"
   when:
     - verify_sudoers_logfile is not skipped
 
@@ -1355,7 +1355,7 @@
 - name: Assert auditd rules contain immutability flag -e 2
   ansible.builtin.assert:
     that: verify_auditd_e2.rc == 0
-    fail_msg: "claude-code.rules missing '-e 2' — audit immutability regression"
+    fail_msg: "claude-code.rules missing '-e 2' — audit immutability regression (rc={{ verify_auditd_e2.rc | default('?') }})"
   when:
     - verify_auditd_e2 is not skipped
 
@@ -1413,7 +1413,7 @@
 - name: Assert auditd rules contain all required watch keys
   ansible.builtin.assert:
     that: item.rc == 0
-    fail_msg: "claude-code.rules missing '-k {{ item.item }}' — audit watch key regression"
+    fail_msg: "claude-code.rules missing '-k {{ item.item }}' — audit watch key regression (rc={{ item.rc | default('?') }})"
   loop: "{{ verify_auditd_watch_keys.results }}"
   loop_control:
     label: "{{ item.item }}"
