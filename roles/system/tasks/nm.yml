@@ -1,4 +1,16 @@
 ---
+# Restrict system-connections directory so unprivileged users cannot enumerate
+# VPN endpoints, SSIDs, or corporate network topology via directory listing.
+# Enforce before any NM restart handler fires.
+- name: Restrict /etc/NetworkManager/system-connections permissions
+  ansible.builtin.file:
+    path: /etc/NetworkManager/system-connections
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  when: not system_is_container
+
 # --- NetworkManager dispatcher.d audit ---
 # Scripts in dispatcher.d execute as root on every NM restart. Enumerate the
 # directory before any task that notifies 'Restart NetworkManager' so unexpected
