@@ -2,25 +2,38 @@
 # roles/system/tasks/bolt.yml
 # Bolt daemon. Included from main.yml.
 # --- Bolt (Thunderbolt device authorization daemon) ---
-- name: Install bolt for Thunderbolt device authorization
-  ansible.builtin.dnf:
-    name: bolt
-    state: present
+- name: Bolt install and service start (Thunderbolt device authorization)
   when:
     - is_dnf
     - system_bolt_enabled
-    - not system_is_container  # DNF RPM post-install calls systemctl daemon-reload, crashes container PID 1
-  failed_when: false
+    - not system_is_container  # DNF post-install + D-Bus activation crash container PID 1
+  block:
+    - name: Install bolt for Thunderbolt device authorization
+      ansible.builtin.dnf:
+        name: bolt
+        state: present
 
-- name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
-  ansible.builtin.systemd:
-    name: bolt
-    state: started
-  when:
-    - is_dnf
-    - system_bolt_enabled
-    - not system_is_container  # D-Bus activation crashes Podman containers
-  failed_when: false
+    - name: Start bolt service (D-Bus activated, no [Install] section — cannot be enabled)
+      ansible.builtin.systemd:
+        name: bolt
+        state: started
+  rescue:
+    - name: Record bolt install/start failure in CSB report
+      ansible.builtin.include_tasks: ../../../common/tasks/csb-failure-handler.yml
+      vars:
+        _csb_role: system
+        _csb_task_name: "Bolt (Thunderbolt device authorization daemon) install or service start"
+        _csb_action: >-
+          Verify package repository availability and run 'make system' to retry.
+          Without bolt, Thunderbolt devices will not be authorized automatically.
+        _csb_ticket_summary: "bolt install or service start failed — Thunderbolt authorization inactive"
+        _csb_ticket_body: |
+          bolt installation or service start failed during system provisioning.
+          Thunderbolt device authorization enforcement is inactive until resolved.
+          Re-run 'make system' after confirming DNF repos and systemd are functional.
+        _csb_error: "{{ ansible_failed_result.msg | default('bolt install or service start failed') }}"
+        _csb_ticket_priority: "Normal"
+        _csb_ticket_category: "Software Installation"
 
 - name: Set bolt authorization policy to manual (require explicit enroll per device)
   ansible.builtin.command: boltctl policy --set manual
