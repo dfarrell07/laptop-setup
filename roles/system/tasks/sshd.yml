@@ -72,22 +72,13 @@
         state: directory
         mode: "0700"
 
-    - name: Verify sshd_config includes drop-in directory  # noqa: command-instead-of-module
-      ansible.builtin.command:
-        cmd: grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config
-      changed_when: false
-      failed_when: false
-      check_mode: false  # read-only probe — must run in check mode
-      register: system_sshd_include_check
-
-    - name: Add Include /etc/ssh/sshd_config.d/*.conf when missing (rpmnew unmerged or old config)
+    - name: Ensure Include /etc/ssh/sshd_config.d/*.conf is present (rpmnew or old config guard)
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         line: 'Include /etc/ssh/sshd_config.d/*.conf'
         insertbefore: BOF
         state: present
         backup: true
-      when: system_sshd_include_check.rc != 0
 
     - name: Warn if unreviewed sshd_config.rpmnew is present
       ansible.builtin.stat:

@@ -15,7 +15,7 @@
         state: directory
         mode: "0755"
 
-    - name: Configure lid close behavior
+    - name: Write logind session policy (lid switch, power key, idle timeout, process kill)
       community.general.ini_file:
         path: /etc/systemd/logind.conf.d/99-hardening.conf
         section: Login

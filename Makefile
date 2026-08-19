@@ -180,7 +180,7 @@ bootstrap: guard-not-root
 	@echo "       podman login registry.redhat.io  # work profile only, if oc is installed"
 	@echo "       Log out and back in for libvirt/kvm group membership changes"
 	@echo "       make container               # CSB/hybrid machines only: provision distrobox dev container"
-	@echo "     See CLAUDE.md §7 for full details."
+	@echo "     See CLAUDE.md 'Quick Reference' step 6 for post-provisioning details."
 	@echo ""
 
 bootstrap-test: guard-not-root
