@@ -266,13 +266,16 @@
           - _raw.get('claude_queue_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
           - _raw.get('claude_work_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
           - _raw.get('claude_default_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _raw.get('claude_personal_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
         fail_msg: >-
-          SECURITY: claude_queue_config_dir, claude_work_config_dir, or claude_default_config_dir
-          in config.yml contains unsafe characters. These values are rendered into the
-          Environment=CLAUDE_CONFIG_DIR= directive in claude-queue.service; an embedded newline
-          injects an additional Environment= or other systemd [Service] directive into the
-          deployed unit file. Allowed: alphanumeric, slash, dot, underscore, tilde, hyphen
-          (standard filesystem path characters). No newlines, spaces, or shell metacharacters.
+          SECURITY: claude_queue_config_dir, claude_work_config_dir, claude_default_config_dir,
+          or claude_personal_config_dir in config.yml contains unsafe characters. These values
+          are rendered into the Environment=CLAUDE_CONFIG_DIR= directive in claude-queue.service
+          and into claude-privacy.conf (systemd-tmpfiles); an embedded newline injects an
+          additional Environment= or other systemd [Service] directive into the deployed unit
+          file, or an additional tmpfiles.d directive into claude-privacy.conf. Allowed:
+          alphanumeric, slash, dot, underscore, tilde, hyphen (standard filesystem path
+          characters). No newlines, spaces, or shell metacharacters.
 
     - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
       when: _config_yml_raw.content is defined
@@ -429,7 +432,7 @@
           - _raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float <= 1.0
           - _raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
           - _raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
-          - _raw.get('desktop_wm_repeat_rate', '50') | string is match('^[0-9]+$')
+          - _raw.get('desktop_wm_repeat_rate', '50') | int > 0
           - _raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
           - _raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
           - _raw.get('desktop_wm_hide_edge_borders', '') | string is match('^(both|vertical|horizontal|smart|smart_no_gaps|none)?$')
