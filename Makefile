@@ -1,7 +1,7 @@
 .PHONY: help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes \
        ssh desktop system repos_dnf redhat containers claude distrobox container \
-       container-rebuild csb-audit vault-edit update hooks \
+       container-rebuild csb-audit vault-edit vault-view vault-diff update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-% \
@@ -44,8 +44,9 @@ override SHELL := /bin/bash
 # executing the payload before the 50+ variable sanitization block in verify-ansible-args.sh.
 # 'unexport' strips the variable from every child process Make spawns — load-bearing fix.
 # ENV and ZDOTDIR are analogous vectors for sh/zsh child processes.
-unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX
+unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX CDPATH
 unexport EDITOR VISUAL ANSIBLE_EDITOR
+unexport PAGER MANPAGER SYSTEMD_PAGER GIT_PAGER
 
 CONTAINER ?= fedora-dev
 
@@ -82,7 +83,7 @@ help:
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
-	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit pip-lock pip-sync preflight"
+	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
@@ -414,3 +415,12 @@ smoke-test-user:
 
 vault-edit:
 	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
+
+vault-view:
+	PAGER= ANSIBLE_PAGER= SYSTEMD_PAGER= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
+
+vault-view:
+	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
+
+vault-diff:
+	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault decrypt --output=- group_vars/all/vault.yml | diff - group_vars/all/vault.yml || true
