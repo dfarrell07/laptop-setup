@@ -192,6 +192,25 @@
           system_ptrace_scope: 0 is set. Restore to 1 (CIS default) after dev work.
       when: system_ptrace_scope | int == 0
 
+    - name: Validate system_sysctl_hardening is a non-empty dict (defense-in-depth)
+      # extra-vars (precedence 22) beats set_fact (18); -esystem_sysctl_hardening={}
+      # replaces the role-default dict before this task runs.  A mapping check alone
+      # does not catch the empty-dict attack, so also enforce a minimum key count
+      # matching the static baseline (30 keys as of last audit).  Using >= 25 as the
+      # floor gives headroom for minor refactors while still blocking {}.
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_hardening is mapping
+          - system_sysctl_hardening | length >= 25
+        fail_msg: >-
+          SECURITY: system_sysctl_hardening must be a dict with at least 25 keys
+          (current: {{ system_sysctl_hardening | type_debug }},
+          length={{ system_sysctl_hardening | length }}).
+          Passing an empty or minimal dict via -e/--extra-vars silently drops
+          kptr_restrict, dmesg_restrict, ASLR, tcp_syncookies, and all other
+          static CIS/STIG hardening entries from /etc/sysctl.d/90-hardening.conf.
+          Do not override system_sysctl_hardening on the command line.
+
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:
         system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
