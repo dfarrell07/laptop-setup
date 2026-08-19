@@ -316,17 +316,25 @@
     - is_fedora
     - not csb_detected
   block:
+    - name: Fetch RPM Fusion free GPG key from HTTPS
+      ansible.builtin.get_url:
+        url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-{{ ansible_facts['distribution_major_version'] }}"
+        dest: "/tmp/rpmfusion-free-gpg-key.gpg"
+        mode: "0644"
+    - name: Import RPM Fusion free GPG key
+      ansible.builtin.command:
+        cmd: "rpm --import /tmp/rpmfusion-free-gpg-key.gpg"
+      changed_when: false
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-        disable_gpg_check: true
-    - name: Check RPM Fusion free release signing key  # noqa: command-instead-of-module
+    - name: Check RPM Fusion free release signing key  # verify GPG signature after install
       ansible.builtin.command:
         cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-free-release
       changed_when: false
       register: _rpmfusion_free_sig
-    - name: Assert RPM Fusion free release signed by expected key  # compensating control for disable_gpg_check bootstrap
+    - name: Assert RPM Fusion free release signed by expected key
       ansible.builtin.assert:
         that: "'4c7033ea' in _rpmfusion_free_sig.stdout | lower"
         fail_msg: >-
@@ -355,17 +363,25 @@
     - is_fedora
     - not csb_detected
   block:
+    - name: Fetch RPM Fusion nonfree GPG key from HTTPS
+      ansible.builtin.get_url:
+        url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-{{ ansible_facts['distribution_major_version'] }}"
+        dest: "/tmp/rpmfusion-nonfree-gpg-key.gpg"
+        mode: "0644"
+    - name: Import RPM Fusion nonfree GPG key
+      ansible.builtin.command:
+        cmd: "rpm --import /tmp/rpmfusion-nonfree-gpg-key.gpg"
+      changed_when: false
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-        disable_gpg_check: true
-    - name: Check RPM Fusion nonfree release signing key  # noqa: command-instead-of-module
+    - name: Check RPM Fusion nonfree release signing key  # verify GPG signature after install
       ansible.builtin.command:
         cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-nonfree-release
       changed_when: false
       register: _rpmfusion_nonfree_sig
-    - name: Assert RPM Fusion nonfree release signed by expected key  # compensating control for disable_gpg_check bootstrap
+    - name: Assert RPM Fusion nonfree release signed by expected key
       ansible.builtin.assert:
         that: "'4c7033ea' in _rpmfusion_nonfree_sig.stdout | lower"
         fail_msg: >-
