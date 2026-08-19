@@ -40,13 +40,8 @@
       - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}') is none)"
       - "packages_gosumdb is not defined or packages_gosumdb not in ['localhost', 'localhost:']"
     fail_msg: >-
-      GOSUMDB must not be set to 'off' or empty string — both disable Go checksum database verification
-      and allow GOPROXY tampering attacks with undetected init() code injection.
-      GOSUMDB must be a valid hostname (e.g., sum.golang.org, sum.myproxy.com) or hostname:port.
-      Hostname must not contain embedded credentials (user:pass@), IP addresses (127.0.0.1), or localhost.
-      Hostname segments must start with a letter (RFC 952/1123). Set to a valid sum server
-      (default: sum.golang.org, leave undefined) or define packages_gosumdb in group_vars/all/vars.yml
-      to use a corporate proxy. Invalid value: {{ packages_gosumdb | default('(undefined)') }}
+      GOSUMDB must not be 'off' or empty (enables GOPROXY tampering/init() injection) and must
+      be a valid FQDN or FQDN:port (not IP/localhost). Invalid value: {{ packages_gosumdb | default('(undefined)') }}
 
 - name: "Validate GONOSUMDB/GOSUMDB: (3/3) GOSUMDB server reachable (hijack mitigation)"
   ansible.builtin.uri:
