@@ -208,7 +208,7 @@ fi
 # Tailscale connectivity (cross-platform via CLI)
 if ! command -v tailscale &>/dev/null; then
   record "tailscale" "WARN" "tailscale not installed (run: make packages)"
-elif run tailscale status &>/dev/null; then record "tailscale" "PASS"
+elif run tailscale status &>/dev/null; then record "tailscale" "PASS" "tailscaled running (VPN/auth state not verified)"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
@@ -433,11 +433,11 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   if [[ "$perms" == "600" ]]; then record "ssh-config" "PASS"
   else record "ssh-config" "FAIL" "permissions $perms, expected 600"; fi
   # SSH config content assertions
-  if grep -q 'HashKnownHosts yes' "$HOME/.ssh/config"; then record "ssh-config-hash-known-hosts" "PASS"
+  if grep -qE '^[[:space:]]*HashKnownHosts yes' "$HOME/.ssh/config"; then record "ssh-config-hash-known-hosts" "PASS"
   else record "ssh-config-hash-known-hosts" "FAIL" "HashKnownHosts yes missing from ~/.ssh/config — host list exposed in plaintext"; fi
-  if grep -q 'StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
+  if grep -qE '^[[:space:]]*StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
-  if grep -q 'ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
+  if grep -qE '^[[:space:]]*ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
   else record "ssh-config-control-master" "WARN" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
   if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
   elif grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"
