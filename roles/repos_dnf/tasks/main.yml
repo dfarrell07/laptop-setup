@@ -131,6 +131,10 @@
 # adding it on CSB could trigger SIEM/DLP alerts and violates corporate policy intent.
 # Skip entirely on CSB (not just rescue-on-failure) unlike other consumer repos.
 - name: Add Mullvad VPN repo
+  when:
+    - repo_mullvad
+    - is_fedora
+    - not csb_detected
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
@@ -141,13 +145,9 @@
         repo_gpgcheck: true
         gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
         enabled: true
-      when:
-        - repo_mullvad
-        - is_fedora
-        - not csb_detected
   rescue:
-    # No CSB handler here: the block-level 'when' already excludes CSB machines
-    # (not csb_detected), so csb_detected is always false when rescue runs.
+    # Block-level 'when' (not csb_detected) excludes CSB machines,
+    # so csb_detected is always false when rescue runs.
     - name: Warn Mullvad VPN repo failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -157,6 +157,9 @@
           Continuing playbook execution.
 
 - name: Add Docker CE repo
+  when:
+    - repo_docker_ce
+    - not csb_rhel  # CSB: Podman is the corporate standard; Docker CE repo not permitted on RHEL CSB
   block:
     - name: Add docker-ce repo
       ansible.builtin.yum_repository:
@@ -172,9 +175,6 @@
           {{ 'fedora' if is_fedora
              else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
              else 'rhel') }}
-      when:
-        - repo_docker_ce
-        - not csb_rhel  # CSB: Podman is the corporate standard; Docker CE repo not permitted on RHEL CSB
   rescue:
     - name: Warn Docker CE repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -488,6 +488,9 @@
           transient network error (DNS timeout, connectivity). Continuing playbook execution.
 
 - name: Add Tailscale repo
+  when:
+    - repo_tailscale
+    - not csb_rhel
   block:
     - name: Add Tailscale stable repo
       vars:
@@ -502,9 +505,6 @@
         repo_gpgcheck: true
         gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
         enabled: true
-      when:
-        - repo_tailscale
-        - not csb_rhel
   rescue:
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
