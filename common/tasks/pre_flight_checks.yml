@@ -187,33 +187,15 @@
             (_packages_gosumdb == '') or
             (_packages_gosumdb is not defined)
         fail_msg: >-
-          SECURITY: packages_gosumdb in config.yml must be whitelisted to prevent arbitrary
-          GOSUMDB proxy hijacking. An attacker-controlled GOSUMDB allows substitution of
-          malicious Go module checksums during 'go install', bypassing Go's integrity
-          verification and allowing initialization code execution with your privileges.
-
-          WHITELISTED VALUES (organization-owned domains only):
-            - sum.golang.org (default, Google-owned public Go module checksum server)
-            - sum.redhat.com (Red Hat-owned internal proxy)
-            - sum.internal.redhat.com (Red Hat-owned internal proxy variant)
-            - Undefined/omitted (uses default sum.golang.org)
-
-          NOTE: Placeholder domains (e.g., sum.myproxy.com, sum.example.com) are NOT whitelisted
-          to prevent domain-hijacking attacks. The whitelist contains only domains owned and
-          controlled by established organizations (Google, Red Hat). If you need a corporate
-          GOSUMDB proxy, use a domain that your organization owns, registers, and controls.
-
-          EXPLOIT SCENARIO: An attacker who can edit config.yml sets
-          packages_gosumdb: 'attacker-proxy.com:443'. During 'go install', Go queries
-          attacker-proxy.com for module checksums. The attacker serves modified checksums
-          for legitimate modules, and Go accepts them (both source and checksum are attacker-
-          controlled). Malicious init() code executes during build with your privileges,
-          achieving full system compromise without detection.
-
-          REQUIRED FIX: Either omit packages_gosumdb from config.yml (use the default
-          sum.golang.org), or set it to one of the whitelisted values above.
-
-          Current value: '{{ _packages_gosumdb }}'.
+          SECURITY: packages_gosumdb='{{ _packages_gosumdb }}' is not whitelisted.
+          Input: packages_gosumdb in config.yml.
+          Mechanism: an attacker-controlled GOSUMDB endpoint serves tampered checksums,
+          causing go install to accept malicious modules whose init() runs at compile time.
+          Example: packages_gosumdb=attacker.com → attacker serves checksums for any module;
+          modified binary executes with provisioning privileges.
+          Impact: supply-chain RCE via checksum substitution during go install.
+          Fix: omit packages_gosumdb (defaults to sum.golang.org) or use a whitelisted value:
+          sum.golang.org, sum.redhat.com, sum.internal.redhat.com.
 
     - name: Assert packages_gosumdb from -e flag is whitelisted (command-line bypass guard)
       vars:
