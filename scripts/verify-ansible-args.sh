@@ -203,7 +203,7 @@ EOF
 done
 
 # Override or clear critical env vars to prevent environment-injection attacks.
-# Covers the vectors below — SET known-safe values; UNSET those that must be clean:
+# Key high-risk vectors (see also inline comments below for ANSIBLE_LIBRARY, ANSIBLE_FORCE_HANDLERS, ANSIBLE_BECOME_*, NSS_WRAPPER_*, TMPDIR, MOLECULE_*): — SET known-safe values; UNSET those that must be clean:
 #   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
 #   ANSIBLE_VAULT_PASSWORD_FILE — redirects vault decryption to an exfiltration script
 #   ANSIBLE_COLLECTIONS_PATH    — loads malicious collections (role 0 code execution)
@@ -246,6 +246,7 @@ done
 # intercepts getent passwd and returns an attacker-controlled home directory entry, making
 # HOME=/home/attacker appear valid. This poisons ANSIBLE_COLLECTIONS_PATH with an attacker
 # path before exec. Unset these here so getent reads the real /etc/passwd.
+# LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT are also cleared here (early, before getent HOME check); the main sanitization block repeats this for defence-in-depth.
 unset NSS_WRAPPER_PASSWD NSS_WRAPPER_GROUP
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
 
