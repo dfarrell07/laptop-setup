@@ -473,8 +473,36 @@
           metacharacters allow injection into the exec dbus-update-activation-environment and
           seat commands in sway.config (e.g. 'Adwaita; id>/tmp/pwned #' executes on WM start).
           desktop_sway_cursor_size must be a non-negative integer (e.g. 24).
+          desktop_sway_libva_driver and desktop_sway_vdpau_driver must match ^[a-zA-Z0-9_-]*$
+          (e.g. 'radeonsi', 'iHD', 'va_gl', or empty). These are interpolated on the exec
+          dbus-update-activation-environment line in sway.config.j2; a newline (e.g.
+          'radeonsi\nexec /bin/sh -c cmd') terminates the exec continuation and injects a new
+          top-level sway directive executed as the login user on WM startup.
+          Impact: arbitrary command execution as the user on WM start or reload.
+          Fix: use only alphanumeric/underscore/hyphen driver names; no newlines or spaces.
           desktop_sway_focus_follows_mouse must be one of yes/no/workspace or empty (^(yes|no|workspace|)$);
           a newline payload (e.g. "yes\nexec /bin/sh") injects a top-level sway directive executed at WM start.
+
+    - name: Assert keyboard layout vars in config.yml are safe identifiers (sway input block injection guard)
+      when: _config_yml_raw.content is defined
+      tags: [always]
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('desktop_sway_keyboard_layout', '') | string is match('^[a-z0-9,_-]*$')
+          - _raw.get('desktop_sway_keyboard_variant', '') | string is match('^[a-z0-9,_-]*$')
+          - _raw.get('desktop_sway_keyboard_options', '') | string is match('^[a-zA-Z0-9:,_-]*$')
+        fail_msg: >-
+          SECURITY: desktop_sway_keyboard_layout, desktop_sway_keyboard_variant, and
+          desktop_sway_keyboard_options in config.yml must use only safe characters.
+          Threat: these values are rendered bare inside the sway 'input "type:keyboard" {}' block.
+          Input: config.yml desktop_sway_keyboard_layout / desktop_sway_keyboard_variant / desktop_sway_keyboard_options.
+          Mechanism: a newline in any value closes the block and injects a top-level sway directive.
+          Example: desktop_sway_keyboard_layout: "us\n}\nexec /bin/sh\ninput \"type:keyboard\" {"
+          Impact: arbitrary command execution as the login user when sway starts or reloads.
+          Fix: keyboard_layout/variant must match ^[a-z0-9,_-]*$; keyboard_options ^[a-zA-Z0-9:,_-]*$.
+          Use plain values only (e.g. 'us', 'intl', 'ctrl:nocaps,compose:ralt').
 
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_yml_raw.content is defined

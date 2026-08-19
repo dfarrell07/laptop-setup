@@ -146,10 +146,10 @@ seat seat0 xcursor_theme {{ desktop_sway_cursor_theme | regex_replace('[^a-zA-Z0
 
 {% if desktop_sway_touchpad_tap != '' or desktop_sway_touchpad_natural_scroll != '' or desktop_sway_touchpad_dwt != '' or desktop_sway_touchpad_middle_emulation != '' %}
 input "type:touchpad" {
-    {% if desktop_sway_touchpad_tap != '' %}tap {{ desktop_sway_touchpad_tap }}{% endif %}
-    {% if desktop_sway_touchpad_natural_scroll != '' %}natural_scroll {{ desktop_sway_touchpad_natural_scroll }}{% endif %}
-    {% if desktop_sway_touchpad_dwt != '' %}dwt {{ desktop_sway_touchpad_dwt }}{% endif %}
-    {% if desktop_sway_touchpad_middle_emulation != '' %}middle_emulation {{ desktop_sway_touchpad_middle_emulation }}{% endif %}
+    {% if desktop_sway_touchpad_tap != '' %}tap {{ desktop_sway_touchpad_tap | regex_replace('[^a-z]', '') }}{% endif %}
+    {% if desktop_sway_touchpad_natural_scroll != '' %}natural_scroll {{ desktop_sway_touchpad_natural_scroll | regex_replace('[^a-z]', '') }}{% endif %}
+    {% if desktop_sway_touchpad_dwt != '' %}dwt {{ desktop_sway_touchpad_dwt | regex_replace('[^a-z]', '') }}{% endif %}
+    {% if desktop_sway_touchpad_middle_emulation != '' %}middle_emulation {{ desktop_sway_touchpad_middle_emulation | regex_replace('[^a-z]', '') }}{% endif %}
 }
 {% endif %}
 

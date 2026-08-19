@@ -63,7 +63,12 @@
           crash; an attacker-set value like '|/bin/sh' achieves root code execution on coredump.
           Even a bare | (no handler) enables pipe mode. Use a file path (e.g. /var/crash/core.%e.%p).
           Set system_core_pattern in config.yml or leave unset to use the playbook default.
-      when: system_core_pattern is defined and system_core_pattern | length > 0
+      when:
+        - system_core_pattern is defined
+        - system_core_pattern | length > 0
+        # Skip when value equals the role-default systemd-coredump pipe path — that value is
+        # intentional and safe. Only validate user overrides from config.yml.
+        - system_core_pattern != '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F'
 
     - name: Ensure /etc/sysctl.d exists
       ansible.builtin.file:
