@@ -1939,6 +1939,41 @@
           Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
           Unsafe entries found: {{ _unsafe_entries }}.
 
+    - name: Assert system_firewall_icmp_extra_types entries are in the safe allowlist (icmp-block-inversion guard)
+      when: _config_raw is defined
+      tags: [always]
+      vars:
+        _icmp_extra: "{{ _config_raw.get('system_firewall_icmp_extra_types', []) }}"
+        # With icmp-block-inversion active on the drop zone, each entry here is ALLOWED inbound.
+        # Only permit types that have a legitimate operational need and minimal exposure risk.
+        # echo-request is intentionally excluded: it makes the host globally pingable.
+        _icmp_allowlist:
+          - destination-unreachable
+          - packet-too-big
+          - time-exceeded
+          - parameter-problem
+        _bad_format: >-
+          {{ _icmp_extra | map('string') | select() |
+             reject('match', '^[a-z0-9-]+$') | list }}
+        _bad_value: >-
+          {{ _icmp_extra | map('string') | select() |
+             difference(_icmp_allowlist) | list }}
+      ansible.builtin.assert:
+        that:
+          - _bad_format | length == 0
+          - _bad_value | length == 0
+        fail_msg: >-
+          SECURITY: system_firewall_icmp_extra_types in config.yml contains an invalid entry.
+          Input: system_firewall_icmp_extra_types={{ _icmp_extra }} in config.yml.
+          Mechanism: with icmp-block-inversion active on the drop zone, every entry in
+          system_firewall_icmp_extra_types is ALLOWED inbound, not blocked. Adding
+          echo-request makes the host externally pingable from all sources.
+          Allowed values: destination-unreachable, packet-too-big, time-exceeded,
+          parameter-problem. All other types (including echo-request) are rejected.
+          Bad format (must match ^[a-z0-9-]+$): {{ _bad_format }}.
+          Not in allowlist: {{ _bad_value }}.
+          Fix: remove disallowed entries or leave system_firewall_icmp_extra_types empty ([]).
+
     - name: Assert system_aide_monitoring_etc_paths non-empty when system_aide_enabled (AIDE vacuous-truth guard)
       when:
         - _config_yml_raw.content is defined

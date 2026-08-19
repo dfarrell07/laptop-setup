@@ -85,6 +85,20 @@
       ansible.builtin.dnf:
         name: google-cloud-cli
         state: present
+    - name: Query installed google-cloud-cli version
+      ansible.builtin.command:
+        cmd: rpm -q --queryformat '%{VERSION}' google-cloud-cli
+      changed_when: false
+      register: _gcloud_installed_version
+    - name: Assert google-cloud-cli meets minimum version floor (MITM downgrade guard)
+      ansible.builtin.assert:
+        that: _gcloud_installed_version.stdout is version(repos_dnf_gcloud_min_version, '>=')
+        fail_msg: >-
+          google-cloud-cli {{ _gcloud_installed_version.stdout }} is below minimum
+          floor {{ repos_dnf_gcloud_min_version }}. A MITM may have substituted an
+          older version via unsigned repomd.xml. Remove
+          /etc/yum.repos.d/google-cloud-cli.repo, investigate, and re-run. Override
+          repos_dnf_gcloud_min_version in config.yml if intentionally downgrading.
     - name: Pin google-cloud-cli version to limit MITM downgrade exposure
       community.general.dnf_versionlock:
         name: google-cloud-cli

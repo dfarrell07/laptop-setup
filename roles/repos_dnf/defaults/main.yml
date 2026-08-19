@@ -32,6 +32,13 @@ repos_dnf_rpmfusion_gpg_fingerprint: "79BDB8874A068716907325C664A4849E4C7033EA"
 # To extract fingerprint: gpg --with-colons /path/to/key.gpg | grep "^fpr" | cut -d: -f10
 repos_dnf_redhat_gpg_fingerprint: ""
 
+# Minimum google-cloud-cli version floor (MITM downgrade protection).
+# repo_gpgcheck: false on packages.cloud.google.com lets a MITM serve unsigned repomd.xml
+# that lists an older signed RPM; this floor ensures the installed version is not below a
+# known-good release. RPM-level gpgcheck still verifies payload authenticity.
+# Update when upgrading gcloud: rpm -q --queryformat '%{VERSION}' google-cloud-cli
+repos_dnf_gcloud_min_version: "500.0.0"
+
 # Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
 # If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
 # Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard
