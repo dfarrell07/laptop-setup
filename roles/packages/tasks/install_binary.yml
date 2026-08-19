@@ -24,7 +24,7 @@
         cmd: "timeout {{ version_check_timeout | default(10) }} {{ version_check_cmd }}"
       register: _install_binary_check
       changed_when: false
-      failed_when: false
+      failed_when: _install_binary_check.rc not in [0, 1, 127]
       check_mode: false
 
     - name: "{{ binary_name }} fetched and SHA256-verified"
