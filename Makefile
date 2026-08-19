@@ -339,7 +339,7 @@ diff: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
-ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
+ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
 
 lint: .venv shellcheck markdownlint check-vars-sync
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering"; exit 1; }
@@ -383,7 +383,7 @@ commitlint:
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
 # For VM tests: make test-vm (requires: make bootstrap-test first).
-test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
+test: shellcheck test-scripts test-poller test-fedora test-rocky test-debian test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
 
 # Syntax-check the scripts/ directory (bash -n: parse only, no execution).
 test-scripts:
