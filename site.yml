@@ -1,22 +1,23 @@
 ---
 # Play 0 — Pre-flight security assertions (defense-in-depth)
 # Runs before all other plays to ensure --start-at-task cannot bypass security checks.
-# This play is protected against bypassing by play-level tags: [always].
+# SECURITY NOTE: No play-level tags — Ansible's --skip-tags applies to play-level tags too.
+# Instead, individual tasks have tags: [always] which is enforced by Makefile VERIFY_AND_RUN.
 - name: Pre-flight security validation (always runs)
   hosts: localhost
   become: false
   gather_facts: false
-  tags: [always]
 
   tasks:
     - name: SECURITY CRITICAL — Verify collection integrity before execution (supply chain defense-in-depth)
       # Ensures even --start-at-task cannot skip collections verification.
       # Primary protection is VERIFY_AND_RUN in Makefile (shell command, not Ansible task).
-      # This play-level assertion provides defense-in-depth for direct ansible-playbook invocations.
+      # This task-level assertion provides defense-in-depth for direct ansible-playbook invocations.
       ansible.builtin.command:
         cmd: scripts/verify-collections.sh
       changed_when: false
       check_mode: false  # always run even in --check mode; collection integrity must be verified
+      tags: [always]
 
     - name: Gather facts for early validation
       ansible.builtin.gather_facts:
