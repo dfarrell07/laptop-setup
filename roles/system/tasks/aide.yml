@@ -334,14 +334,14 @@
 
         - name: Assert /etc/udev/rules.d/ is empty before AIDE reinit
           ansible.builtin.assert:
-            that: _aide_udev_reinit_precheck.files | length == 0
+            that: _aide_udev_reinit_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) | length == 0
             fail_msg: >-
-              AIDE reinit aborted: /etc/udev/rules.d/ contains
-              {{ _aide_udev_reinit_precheck.files | length }} unexpected file(s).
+              AIDE reinit aborted: /etc/udev/rules.d/ contains unauthorized file(s).
               A pre-planted udev rule would be silently baselined as known-good,
               making it permanently invisible to aide --check.
-              Inspect and remove unexpected files before re-running.
-              Files: {{ _aide_udev_reinit_precheck.files | map(attribute='path') | join(', ') }}
+              Unauthorized: {{ _aide_udev_reinit_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) | list }}
+              Whitelisted: {{ system_udev_rules_d_allowlist }}
+              Fix: remove unauthorized files, or add to system_udev_rules_d_allowlist in config.yml if legitimate.
 
         - name: Reinitialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
@@ -385,15 +385,15 @@
 
         - name: Assert /etc/udev/rules.d/ is empty before AIDE init
           ansible.builtin.assert:
-            that: _aide_udev_init_precheck.files | length == 0
+            that: _aide_udev_init_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) | length == 0
             fail_msg: >-
-              AIDE init aborted: /etc/udev/rules.d/ contains
-              {{ _aide_udev_init_precheck.files | length }} unexpected file(s).
+              AIDE init aborted: /etc/udev/rules.d/ contains unauthorized file(s).
               A pre-planted udev rule would be silently baselined as known-good,
               making it permanently invisible to aide --check. aide --init must
-              run on a clean filesystem. Inspect and remove unexpected files
-              before re-running.
-              Files: {{ _aide_udev_init_precheck.files | map(attribute='path') | join(', ') }}
+              run on a clean filesystem.
+              Unauthorized: {{ _aide_udev_init_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) | list }}
+              Whitelisted: {{ system_udev_rules_d_allowlist }}
+              Fix: remove unauthorized files, or add to system_udev_rules_d_allowlist in config.yml if legitimate.
 
         - name: Initialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
