@@ -51,9 +51,12 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   on hook changes (see "Unsafe git operations" below)
 - **Privilege escalation** — `become_exe = /usr/bin/sudo` in ansible.cfg
   prevents PATH-based sudo trojan attacks
-- **Branch protection** — main requires 4 status checks (Ansible Lint,
-  Vault Encryption Check, Secret Detection, Ansible Syntax Check);
-  force push and deletion blocked; linear history enforced
+- **Branch protection** — main requires minimum 4 status checks (Ansible Lint,
+  Vault Encryption Check, Secret Detection, Ansible Syntax Check); workflow
+  aggregates 16 critical supply-chain checks via `all-checks-pass` job
+  (GPG signatures, Signed-off-by, collections integrity, script integrity);
+  force push and deletion blocked; linear history enforced. For full enforcement,
+  add `All Checks Pass` to required status checks in GitHub repository settings
 - **Secret scanning** — GitHub secret scanning and push protection
   enabled (server-side complement to gitleaks pre-commit hook)
 - **Browser hardening** — 41 Chrome/Chromium managed policies (HTTPS-only,
