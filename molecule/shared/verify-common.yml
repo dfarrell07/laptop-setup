@@ -1635,7 +1635,7 @@
     - system_chrony_service_enabled | default(true) | bool
     - verify_chronyd is not skipped
 
-- name: Check chrony NTS config in /etc/chrony.conf
+- name: Check /etc/chrony.conf has NTS-enabled server directive (^server.*nts)
   ansible.builtin.command: grep -qE '^server.*[[:space:]]nts' /etc/chrony.conf
   changed_when: false
   failed_when: false
@@ -1815,7 +1815,7 @@
 - name: Assert git-lfs installed
   ansible.builtin.assert:
     that: verify_git_lfs.rc == 0
-    fail_msg: "git-lfs not installed — packages_cli regression (needed for repos with LFS-tracked files)"
+    fail_msg: "git-lfs not installed (rc={{ verify_git_lfs.rc }}) — packages_cli regression (needed for repos with LFS-tracked files)"
 
 - name: Check git-lfs filter registered globally
   ansible.builtin.command:
