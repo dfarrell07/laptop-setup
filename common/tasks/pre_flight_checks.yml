@@ -2080,7 +2080,7 @@
               must not contain newlines. Unsafe keys: {{ _extra_keys_unsafe + _additional_keys_unsafe }}.
           tags: [always]
 
-        - name: Assert kernel.core_pattern in extra dicts contains no shell metacharacters (RCE guard)
+        - name: Assert kernel.core_pattern contains no shell metacharacters
           vars:
             _extra_core_patterns: "{{ system_sysctl_extra | default({}) | dict2items
                 | selectattr('key', 'equalto', 'kernel.core_pattern')
@@ -2148,7 +2148,7 @@
                 flatpak-spawn --host during distrobox assemble create).
           tags: [always]
 
-        - name: Assert PAM lockout/pwquality vars in play namespace have safe minimum values (-e override guard)
+        - name: Assert PAM lockout/pwquality vars have safe minimum values
           ansible.builtin.assert:
             that:
               - system_faillock_deny | default(5) | int >= 1
@@ -2288,7 +2288,7 @@
           (container_image — registry URL format); alphanumeric, underscore, hyphen
           (container_name, container_release).
 
-    - name: Assert pwquality variables are non-negative integers (pwquality.conf injection guard)
+    - name: Assert pwquality vars are non-negative integers
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -2308,7 +2308,7 @@
           Affected: system_pwquality_minlen (>= 1), credit vars (>= -1), difok/maxrepeat/maxsequence (>= 0).
           Fix: use plain integers only, e.g. system_pwquality_minlen: 14.
 
-    - name: Assert login.defs password aging variables are non-negative integers (login.defs injection guard)
+    - name: Assert login.defs aging vars are non-negative integers
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -2325,7 +2325,7 @@
           system_pass_max_days/min_days/warn_age/inactive_days (>= 0 integers), system_home_mode (octal digits 0-7).
           Fix: plain integers/octal only, e.g. system_pass_max_days: 365, system_home_mode: '0700'.
 
-    - name: Assert sysctl extra dicts contain no shell metacharacters (sysctl injection guard)
+    - name: Assert sysctl extra dicts contain no shell metacharacters
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -2353,7 +2353,7 @@
           directives). Keys must match ^[a-zA-Z0-9._/-]+$; values must not contain newlines or
           shell metacharacters (&, |, ;, >, <, $, (, ), backtick, space, tab).
 
-    - name: Assert system_ssh_allow_agent_forwarding and system_ssh_allow_tcp_forwarding are safe (sshd injection guard)
+    - name: Assert SSH forwarding vars have safe enum values
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
@@ -2367,7 +2367,7 @@
           These values are rendered directly into sshd_config without inline escaping; newlines
           or unexpected values could inject additional sshd directives (e.g. PermitRootLogin yes).
 
-    - name: Assert gh CLI is available for attestation verification (attestation verification guard)
+    - name: Assert gh CLI is available for attestation verification
       when:
         - profile == 'work'
         - _pf_attestation_gh_checked is not defined
