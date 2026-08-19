@@ -1499,7 +1499,7 @@
           the file. Remove any non-digit characters from the value.
 
     - name: Assert ansible.cfg pipelining value is valid boolean (fapolicyd bypass guard)
-      when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
+      when: not _pf_is_molecule
       block:
         - name: Read ansible.cfg for pipelining validation
           ansible.builtin.slurp:
@@ -1530,11 +1530,6 @@
               while failing at runtime, causing fapolicyd to block /tmp execution despite
               a successful preflight report. Ensure pipelining uses standard boolean syntax
               without internal spacing. Found: '{{ _pipelining_line | default('not set') }}'.
-          tags: [always]
-
-        - name: Set ansible.cfg checked flag
-          ansible.builtin.set_fact:
-            _pf_ansiblecfg_checked: true
           tags: [always]
 
     - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
@@ -2061,6 +2056,21 @@
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
       tags: [always]
 
+    - name: Reject _csb_molecule_force outside molecule (CSB tier-routing bypass guard)
+      when: not _pf_is_molecule
+      ansible.builtin.assert:
+        that:
+          - not (_csb_molecule_force | default(false))
+        fail_msg: >-
+          SECURITY: _csb_molecule_force is set outside a molecule run.
+          This variable bypasses csb_detect.yml, locking csb_detected/csb_rhel/
+          needs_container_tier to caller-supplied values and skipping all real CSB
+          detection probes. Outside molecule it has no legitimate use; its presence
+          indicates a -e _csb_molecule_force=true injection that silently changes
+          which hardening tasks execute (e.g. forcing hybrid tier, skipping SELinux).
+          Remove _csb_molecule_force from the command line.
+      tags: [always]
+
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
     # NOTE: This block is unconditional (no _pf_vault_asserted is not defined guard) so that
     # passing -e _pf_vault_asserted=true cannot bypass these security assertions. The guard was
@@ -2137,20 +2147,12 @@
           tags: [always]
 
     # Catches user typos — in normal operation profile is always 'work' or 'personal'
-    - name: Validate profile value (run once per playbook)
-      when: _pf_profile_asserted is not defined
+    - name: Validate profile value
       block:
         - name: Assert profile is a valid value
           ansible.builtin.assert:
             that: profile in ['work', 'personal']
             fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
-          tags: [always]
-
-        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets _pf_profile_asserted; Play 2's include then sees it defined.
-        - name: Set profile asserted flag (suppresses duplicate assertion in Play 2)
-          ansible.builtin.set_fact:
-            _pf_profile_asserted: true
           tags: [always]
 
     # Validate critical security variables in the PLAY NAMESPACE (after -e overrides applied)
@@ -2648,14 +2650,13 @@
               Invalid values: {{ _version_vals_ns | select() | reject('match', _semver_pattern) | list }}.
           tags: [always]
 
-        - name: Set namespace validation flag (internal, cannot be pre-set)
+        - name: Set namespace validation flag
           ansible.builtin.set_fact:
             _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"
           tags: [always]
-          when: _pf_namespace_validated_internal is not defined
 
     - name: Non-molecule pre-flight assertions
-      when: not _pf_is_molecule and _pf_assertions_checked is not defined
+      when: not _pf_is_molecule
       block:
         - name: Assert system_timezone is set and not the CHANGE_ME placeholder
           ansible.builtin.assert:
@@ -2727,13 +2728,6 @@
               real_user_home='{{ real_user_home }}' does not look like a user home directory.
               Ensure HOME is set correctly before running make all.
               real_user_home must not contain '..' or './' path traversal sequences.
-          tags: [always]
-
-        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets _pf_assertions_checked; Play 2's include then sees it defined.
-        - name: Set assertions checked flag (suppresses duplicate assertions in Play 2)
-          ansible.builtin.set_fact:
-            _pf_assertions_checked: true
           tags: [always]
 
     - name: Assert container_* vars contain only safe characters (INI injection guard)
@@ -2921,7 +2915,6 @@
       when:
         - system_grub_password_enabled | default(false)
         - not (system_is_container or csb_rhel)
-        - _pf_grub_password_asserted is not defined
       block:
         - name: "GRUB: Assert hash is set and valid PBKDF2 format"
           ansible.builtin.assert:
@@ -2958,38 +2951,23 @@
               vault encryption and expose the hash in your repository.
           tags: [always]
 
-        - name: Set GRUB password asserted flag (suppresses duplicate assertions in Play 2)
-          ansible.builtin.set_fact:
-            _pf_grub_password_asserted: true
-          tags: [always]
-
-    - name: Warn and flag when vault stub is not populated
+    - name: Warn when vault stub is not populated
       when:
         - >-
           (vault_ssh_auth_key | default('') | length == 0) or
           (vault_ssh_auth_key_pub | default('') | length == 0) or
           (vault_ssh_signing_key | default('') | length == 0) or
           (vault_ssh_signing_key_pub | default('') | length == 0)
-        - _vault_stub_warned is not defined
         - not _pf_is_molecule
-      block:
-        - name: Warn when vault.yml has not been populated with real secrets
-          ansible.builtin.debug:
-            msg: >-
-              WARNING: vault.yml has not been populated with real secrets
-              (one or more of vault_ssh_auth_key, vault_ssh_auth_key_pub,
-              vault_ssh_signing_key, vault_ssh_signing_key_pub is missing).
-              Secret-backed features will silently skip: SSH key deployment,
-              git commit signing, and transcrypt (notes). See CLAUDE.md step 3 to populate
-              and encrypt the vault.
-          tags: [always]
-
-        # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets _vault_stub_warned; Play 2's include then sees it defined.
-        - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
-          ansible.builtin.set_fact:
-            _vault_stub_warned: true
-          tags: [always]
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: vault.yml has not been populated with real secrets
+          (one or more of vault_ssh_auth_key, vault_ssh_auth_key_pub,
+          vault_ssh_signing_key, vault_ssh_signing_key_pub is missing).
+          Secret-backed features will silently skip: SSH key deployment,
+          git commit signing, and transcrypt (notes). See CLAUDE.md step 3 to populate
+          and encrypt the vault.
+      tags: [always]
 
     # GRUB password hash validation (CWE-426: vault-source enforcement + format validation)
     - name: "GRUB: Assert password hash format when enabled (preflight)"
