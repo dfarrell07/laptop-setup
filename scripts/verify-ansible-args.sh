@@ -10,7 +10,7 @@
 #   1. Makefile VERIFY_AND_RUN calls this script (Makefile layer — blocks direct users)
 #   2. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   3. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
-#   4. Each role's tasks/main.yml has a no-tag defense-in-depth assertion (role layer)
+#   4. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
 #   5. ENV sanitization — pins/clears 20+ ANSIBLE_* and socket vars (env-injection layer)
 #   6. HOME hijack check — validates HOME matches /etc/passwd before any path operations
 #   7. verify-collections.sh — supply-chain integrity check before exec
