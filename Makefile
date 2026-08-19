@@ -285,6 +285,7 @@ ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debia
 
 lint: .venv shellcheck markdownlint check-vars-sync
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering"; exit 1; }
+	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering"; exit 1; }
 	$(VERIFY_AND_RUN) .venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	@if command -v actionlint >/dev/null 2>&1; then actionlint -color; else echo "SKIP: actionlint not installed (run: make packages)"; fi
