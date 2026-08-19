@@ -559,6 +559,14 @@ See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SEC
   On non-Secure Boot systems, the GRUB password guards a pre-reboot vulnerability window. Set
   `system_grub_password_enabled: true` in config.yml and `system_grub_password_hash: '<hash>'` (or use `vault_grub_password_hash` from vault.yml
   for production). Empty (default) disables GRUB password; RHEL CSB skips (IT manages bootloader).
+  **UEFI firmware password scope**: GRUB password protects only the GRUB menu — it does NOT
+  prevent a physical attacker from entering firmware setup to change the UEFI boot order (e.g.,
+  boot from USB) or disable Secure Boot entirely. A UEFI/BIOS admin password must be set in
+  firmware setup (vendor-specific; not configurable via Ansible) to close this gap. Without a
+  UEFI admin password, GRUB password provides only GRUB-menu-level protection. The provisioning
+  playbook emits an advisory warning when `system_grub_password_enabled: true` and fwupdmgr
+  cannot confirm a UEFI admin password (`get-bios-setting` output checked for AdminPassword /
+  BiosPassword / SetupPassword fields). Verify via your vendor's firmware setup utility.
 - **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
   Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
   correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`
