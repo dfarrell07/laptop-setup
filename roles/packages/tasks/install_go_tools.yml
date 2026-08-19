@@ -11,10 +11,8 @@
 # Known gap: maintainer compromise passes GOSUMDB (same as XZ Utils 2024 vector).
 
 - name: Compute effective GOSUMDB proxy environment
-  # packages_gosumdb_proxy takes precedence if set (user override); otherwise
-  # use proxy_url if network_proxied=true (auto-detection); else use no proxy.
-  # This decouples GOSUMDB proxy from general network proxy detection, allowing
-  # users to specify a dedicated corporate proxy for packages_gosumdb when needed.
+  # Prefers packages_gosumdb_proxy; falls back to auto-detected proxy when
+  # network_proxied=true. Decouples GOSUMDB proxy from general network proxy.
   ansible.builtin.set_fact:
     _gosumdb_proxy_env: >-
       {{
@@ -47,9 +45,7 @@
       that default to empty are not permitted. Invalid value: {{ packages_gosumdb | default('(undefined)') }}
 
 - name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
-  # Uses computed _gosumdb_proxy_env which prefers packages_gosumdb_proxy if set,
-  # else uses auto-detected proxy when network_proxied=true. This ensures the same
-  # proxy environment is used for validation and for the actual go install command.
+  # Uses same proxy environment for validation and go install (consistency).
   ansible.builtin.command:
     cmd: "timeout 5 curl -s -f https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
   changed_when: false
