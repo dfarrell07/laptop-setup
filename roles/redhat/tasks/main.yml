@@ -58,37 +58,37 @@
 
 - name: Install Red Hat cert packages
   # File-based cert deploy (above) covers CSB Fedora hybrid; the RPM is RHEL CSB only (IT-managed repos)
+  ansible.builtin.dnf:
+    name: "{{ redhat_cert_packages }}"
+    state: present
   when: csb_rhel
-  block:
-    - name: Install cert packages via dnf
-      ansible.builtin.dnf:
-        name: "{{ redhat_cert_packages }}"
-        state: present
-      become: true
-      tags: [become]
-      notify: Update CA trust
-  rescue:
-    # No csb_detected guard needed — block is csb_rhel-only, so csb_detected is always true here
-    - name: Record cert package install failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: redhat
-        _csb_task_name: "Install Red Hat cert packages"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: "Red Hat internal CA certs may be missing; request redhat-internal-cert-install access or install manually"
-        _csb_ticket_priority: High
-        _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
-        _csb_ticket_body: >-
-          The redhat-internal-cert-install package could not be installed.
-          Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}.
-          These are managed by the redhat-internal-cert-install RPM; check repo access and RPM availability.
-          Without these certificates, internal HTTPS endpoints fail:
-          Jira, Confluence, and internal container registries all require
-          the Red Hat internal CA chain.
-          The redhat-internal-cert-install package is the supported
-          distribution mechanism for these certs on CSB systems.
-          Blocked workflows: internal web services, container image pulls
-          from internal registries, authenticated internal API calls.
+  become: true
+  tags: [become]
+  notify: Update CA trust
+  ignore_errors: true
+  register: _rh_cert_result
+
+- name: Record cert package install failure
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+  vars:
+    _csb_role: redhat
+    _csb_task_name: "Install Red Hat cert packages"
+    _csb_error: "{{ _rh_cert_result.msg | default('unknown error') }}"
+    _csb_action: "Red Hat internal CA certs may be missing; request redhat-internal-cert-install access or install manually"
+    _csb_ticket_priority: High
+    _csb_ticket_summary: "Cannot install redhat-internal-cert-install on CSB"
+    _csb_ticket_body: >-
+      The redhat-internal-cert-install package could not be installed.
+      Affected CA cert files: {{ redhat_ca_certs | join(' and ') }}.
+      These are managed by the redhat-internal-cert-install RPM; check repo access and RPM availability.
+      Without these certificates, internal HTTPS endpoints fail:
+      Jira, Confluence, and internal container registries all require
+      the Red Hat internal CA chain.
+      The redhat-internal-cert-install package is the supported
+      distribution mechanism for these certs on CSB systems.
+      Blocked workflows: internal web services, container image pulls
+      from internal registries, authenticated internal API calls.
+  when: _rh_cert_result is failed
 
 - name: Install VPN packages
   when:
