@@ -16,12 +16,16 @@ else
   _sc_files_modified=1
 fi
 
-# Warn if critical supply-chain files modified without GPG signing configured
+# SECURITY: Enforce GPG signing for critical supply-chain files
+# Prevents unsigned commits that modify scripts + hashes in the same commit
 if [ "$_sc_files_modified" -eq 1 ]; then
   if ! git config --local --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
     if ! git config --global --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
-      echo "WARNING: Critical supply-chain files modified but commit.gpgsign not configured" >&2
-      echo "         This commit MUST be GPG-signed — use: git commit -s -S" >&2
+      echo "ERROR: Critical supply-chain files modified but commit.gpgsign not configured" >&2
+      echo "       This commit MUST be GPG-signed — use: git commit -s -S" >&2
+      echo "       Setup: import your GPG key (see SECURITY.md GPG Key Import section)" >&2
+      echo "       Then configure: git config --global commit.gpgsign true" >&2
+      exit 1
     fi
   fi
 fi
