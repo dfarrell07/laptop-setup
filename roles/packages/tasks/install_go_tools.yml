@@ -11,12 +11,13 @@
   # Users who set GONOSUMDB accept explicit trust in the upstream module sources.
   # All Go tools below (gofumpt, gopls, golangci-lint, govulncheck, gci, controller-gen,
   # client-gen, subctl, stern) compile and execute init() functions during 'go install'.
-  # No binary verification occurs after installation — malicious init() code executes
-  # at compile time. XZ Utils (2024) demonstrated this vector in production.
-  # MITIGATION: Monitor supply chain advisories (govulncheck runs during provisioning),
-  # pin versions (see packages_*_version), use distrobox tier for sensitive dev environments,
-  # and upgrade aggressively when advisories emerge. Consider download+verify for tools
-  # with published binaries (gofumpt, golangci-lint have GitHub Releases with checksums).
+  # MITIGATION: Post-compilation SHA256 verification of compiled binaries against pinned hashes
+  # (packages_<toolname>_sha256) detects supply-chain attacks that succeed during init() code
+  # execution. Monitor supply chain advisories (govulncheck runs during provisioning), pin
+  # versions (see packages_*_version), use distrobox tier for sensitive dev environments, and
+  # upgrade aggressively when advisories emerge. XZ Utils (2024) demonstrated this vector in
+  # production. Binary verification occurs immediately after installation (see Compute/Assert
+  # SHA256 tasks below). Version pins and hashes MUST be kept in sync.
   ansible.builtin.assert:
     that:
       - "dotfiles_gonosumdb | default('') | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none"  # yamllint disable-line rule:line-length
