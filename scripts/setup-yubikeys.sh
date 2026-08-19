@@ -202,12 +202,169 @@ while true; do
   fi
 done
 
-# ── Require at least 2 keys ───────────────────────────────────────────────────
+# ── Require at least 2 keys (or backup password saved) ───────────────────────
 if [[ $PROGRAMMED_COUNT -lt 2 ]]; then
-  warn "Only 1 key was programmed. A backup key is strongly recommended."
-  printf "Continue with just 1 key? [y/N] "
-  read -r CONTINUE
-  [[ "${CONTINUE,,}" == "y" ]] || die "Aborted. Re-run to program more keys."
+  warn "Only 1 key was programmed. Backup YubiKey or password backup is REQUIRED."
+  printf "\nChoose one of the following:\n"
+  printf "  [1] Program a backup YubiKey now (recommended)\n"
+  printf "  [2] Save vault password to password manager instead\n"
+  printf "  [q] Quit and start over\n\n"
+  printf "Choice [1/2/q]: "
+  read -r BACKUP_CHOICE
+  case "${BACKUP_CHOICE,,}" in
+    1)
+      printf "\nContinue programming more keys. Press Ctrl+C when done, or proceed below.\n"
+      printf "Program another key? [y/N] "
+      read -r ANOTHER_KEY
+      if [[ "${ANOTHER_KEY,,}" == "y" ]]; then
+        printf "\n"
+        # Loop back to get another key
+        KEY_COUNT=$((KEY_COUNT + 1))
+        printf "── YubiKey #%d ──────────────────────────────────────\n" "$KEY_COUNT"
+        printf "Remove the previous key. Insert YubiKey #%d and press Enter\n" "$KEY_COUNT"
+        printf "(or press Enter with nothing inserted to finish): "
+        read -r USER_INPUT
+        if [[ -z "$USER_INPUT" ]]; then
+          # User pressed Enter without key — require 2 keys total
+          [[ $PROGRAMMED_COUNT -lt 2 ]] && die "At least 2 YubiKeys are required. Re-run to program another."
+        else
+          # Continue programming
+          _current_serial=$("$_timeout" 10 ykman list --serials 2>/dev/null | head -n1) \
+            || die "ykman timed out or failed listing devices — check USB connection"
+          [[ -n "$_current_serial" ]] \
+            || die "No YubiKey detected — insert YubiKey #$KEY_COUNT and retry"
+          _key_count=$(ykman list --serials 2>/dev/null | wc -l)
+          [[ "$_key_count" -le 1 ]] || die "Multiple YubiKeys detected ($_key_count) — remove extras and connect only one at a time"
+          case ":$SEEN_SERIALS:" in
+            *":$_current_serial:"*)
+              die "Same YubiKey still inserted (serial $_current_serial) — remove it before programming key #$KEY_COUNT" ;;
+          esac
+          SEEN_SERIALS="${SEEN_SERIALS:+$SEEN_SERIALS:}$_current_serial"
+
+          if ykman otp info 2>/dev/null | grep -q 'Slot 2: Programmed'; then
+            warn "Slot 2 is already programmed on YubiKey #$KEY_COUNT — this will permanently overwrite it."
+            printf "Overwrite slot 2? [y/N] "
+            read -r SLOT2_CONFIRM
+            [[ "${SLOT2_CONFIRM,,}" == "y" ]] || die "Aborted."
+          fi
+
+          _prog_err=$(mktemp)
+          if ! printf '%s\ny\n' "$HMAC_SECRET" | \
+               ykman otp chalresp --touch 2 2>"$_prog_err"; then
+            _err_msg=$(cat "$_prog_err")
+            rm -f "$_prog_err"
+            if printf '%s' "$_err_msg" | grep -qiE 'BACKEND_ERROR|write error|access.?code'; then
+              _err_msg="${_err_msg} — Slot 2 may have an access code set. Clear it with: ykman otp delete 2"
+            fi
+            die_loop "ykman otp chalresp failed on YubiKey #$KEY_COUNT: ${_err_msg:-no error output — is a YubiKey inserted?}"
+          fi
+          rm -f "$_prog_err"
+          ok "YubiKey #$KEY_COUNT: slot 2 programmed"
+          PROGRAMMED_COUNT=$((PROGRAMMED_COUNT + 1))
+
+          printf "       Touch your YubiKey to verify (%ds timeout)... " "$CHALRESP_TIMEOUT"
+          ACTUAL_OUTPUT=""
+          _ykcr_err=$(mktemp)
+          _ykcr_rc=0
+          ACTUAL_OUTPUT=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_ykcr_err") || _ykcr_rc=$?
+          if [[ $_ykcr_rc -ne 0 ]]; then
+            printf "\n"
+            if [[ $_ykcr_rc -eq 124 ]]; then
+              rm -f "$_ykcr_err"
+              die_loop "Timed out waiting for YubiKey #$KEY_COUNT touch — touch the key when its light blinks."
+            else
+              _ykcr_msg=$(cat "$_ykcr_err")
+              rm -f "$_ykcr_err"
+              die_loop "ykman otp calculate failed on YubiKey #$KEY_COUNT (rc=$_ykcr_rc)${_ykcr_msg:+: $_ykcr_msg} — is the key still inserted?"
+            fi
+          fi
+          rm -f "$_ykcr_err"
+          printf "\n"
+
+          [[ -n "$ACTUAL_OUTPUT" ]] || die_loop "ykman otp calculate returned empty output on YubiKey #$KEY_COUNT — slot 2 programming may have failed"
+
+          if [[ "$ACTUAL_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
+            die_loop "YubiKey #$KEY_COUNT output differs from YubiKey #1 — programming failed"
+          fi
+          ok "YubiKey #$KEY_COUNT verified (matches YubiKey #1)"
+          printf "\n"
+
+          # After programming second key, sufficient backup is in place
+          [[ $PROGRAMMED_COUNT -ge 2 ]] && BACKUP_CHOICE="done"
+        fi
+      else
+        die "2 YubiKeys required. Re-run to program a backup key."
+      fi
+      ;;
+    2)
+      # Will prompt for password backup below
+      ;;
+    q|*)
+      die "Aborted. Program at least 2 YubiKeys before proceeding."
+      ;;
+  esac
+fi
+
+# ── Mandatory vault password backup (if only 1 YubiKey) ──────────────────────
+if [[ $PROGRAMMED_COUNT -lt 2 && "${BACKUP_CHOICE:-}" != "done" ]]; then
+  printf "\n%s\n" "═══════════════════════════════════════════════"
+  printf "%s\n"   " VAULT PASSWORD BACKUP REQUIRED"
+  printf "%s\n\n" "═══════════════════════════════════════════════"
+
+  printf "You are using a single YubiKey without a backup.\n"
+  printf "A backup of your vault password is REQUIRED to avoid permanent data loss.\n"
+  printf "If your YubiKey is lost or damaged, this password is your only recovery path.\n\n"
+
+  printf "Computing vault password from YubiKey...\n"
+  # Get the vault password for display and backup
+  VAULT_PASSWORD=""
+  _vault_err=$(mktemp)
+  _vault_rc=0
+  VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_vault_err") || _vault_rc=$?
+
+  if [[ $_vault_rc -ne 0 ]]; then
+    printf "Touch YubiKey when ready (%ds timeout)... " "$CHALRESP_TIMEOUT"
+    VAULT_PASSWORD=$("$_timeout" "$CHALRESP_TIMEOUT" ykman otp calculate 2 "$_CHALRESP_HEX" 2>"$_vault_err") || _vault_rc=$?
+  fi
+
+  if [[ $_vault_rc -ne 0 ]]; then
+    rm -f "$_vault_err"
+    warn "Failed to compute vault password. Touch YubiKey and retry setup."
+    die "YubiKey unavailable or timed out"
+  fi
+  rm -f "$_vault_err"
+
+  if [[ -z "$VAULT_PASSWORD" ]]; then
+    die "Vault password computation failed — empty response"
+  fi
+
+  printf "\n%s\n" "───────────────────────────────────────────────────"
+  printf "%s\n"   " YOUR VAULT PASSWORD (save this immediately)"
+  printf "%s\n"   "───────────────────────────────────────────────────"
+  printf "\n"
+  printf "%s\n" "$VAULT_PASSWORD"
+  printf "\n"
+  printf "%s\n" "───────────────────────────────────────────────────"
+  printf "\nINSTRUCTIONS:\n\n"
+  printf "1. COPY the password above (Ctrl+C to select, then Ctrl+Shift+C)\n"
+  printf "2. Open your password manager (Bitwarden, 1Password, etc.)\n"
+  printf "3. Create a new entry:\n"
+  printf "   - Title: 'laptop-setup vault password' or similar\n"
+  printf "   - Username: 'vault'\n"
+  printf "   - Password: Paste from clipboard\n"
+  printf "   - Notes: 'Ansible vault password for laptop-setup. Required if YubiKey is lost.'\n"
+  printf "4. Save the entry\n"
+  printf "5. Return here and confirm completion\n\n"
+
+  printf "Have you saved the vault password to your password manager? [y/N]: "
+  read -r BACKUP_CONFIRM
+
+  if [[ "${BACKUP_CONFIRM,,}" != "y" ]]; then
+    die "Backup password required. Save it to your password manager before continuing."
+  fi
+
+  ok "Vault password backup confirmed"
+  printf "\n"
 fi
 
 # ── Write vault-pass.sh (atomic: temp file → chmod → rename) ─────────────────
@@ -301,5 +458,11 @@ printf "       ykman piv certificates generate --subject 'age-yubikey' 9a\n"
 printf "       age-plugin-yubikey  # follow prompts to get recipient string\n\n"
 printf "  6. Reboot — SSH authorized_keys is now deployed; port 722 is safe.\n\n"
 warn "Store each YubiKey in a different physical location."
-warn "The HMAC secret was NOT saved. If all keys are lost: re-provision the machine."
+if [[ $PROGRAMMED_COUNT -ge 2 ]]; then
+  warn "Multiple YubiKeys programmed — vault is protected by hardware redundancy."
+  warn "The HMAC secret was NOT saved, but you can use any YubiKey to access the vault."
+else
+  warn "Single YubiKey in use — vault password backup saved to password manager."
+  warn "If YubiKey is lost, retrieve the vault password from your password manager."
+fi
 printf "\n"

@@ -37,7 +37,8 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   telemetry controls, `enableAllProjectMcpServers=false`, auditd monitoring
 - **Supply chain** — `.npmrc ignore-scripts=true`, Ansible collection
   verification, Chrome extension allowlisting, binary SHA256 verification,
-  oh-my-zsh pinned to commit SHA
+  oh-my-zsh pinned to commit SHA, Go module verification with GONOSUMDB
+  (see "Go Module Supply Chain" section below)
 - **CI supply chain** — actionlint, zizmor, and gitleaks run as
   SHA256-verified binary downloads instead of third-party node actions;
   all GHA actions SHA-pinned by commit hash; OSSF Scorecard weekly
@@ -313,11 +314,15 @@ Requirement" for the complete upgrade procedure and mandatory review checklist.
   tools; the Claude Code installer is the deliberate exception)
 - **Secure Boot** — not managed by Ansible (BIOS/firmware setting); kernel
   `lockdown=integrity` is weakened without a Secure Boot chain of trust
-- **GRUB bootloader password** — not set (CIS 1.4.2); an attacker with
-  physical console access can edit kernel boot parameters
-- **LUKS TRIM/discard** — not managed by this playbook; if `rd.luks.options=discard`
-  was set at OS install time, the storage controller can infer free blocks
-  (SSD longevity vs. data remanence tradeoff)
+- **GRUB bootloader password** — implemented (CIS 1.4.2); opt-in via
+  system_grub_password_enabled: true in config.yml + system_grub_password_hash
+  (generated via grub2-mkpasswd-pbkdf2 or grub-mkpasswd-pbkdf2)
+- **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
+  Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
+  correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`
+  in `config.yml` ONLY on machines where SSD longevity outweighs cryptographic remanence protection
+  (e.g., temporary test environments with disposable data). Non-default setting requires explicit
+  opt-in to ensure awareness of the security tradeoff. Smoke-test warns when discard is active.
 - **Vault + CI** — encrypting vault.yml with a real YubiKey-derived password
   will break CI syntax-check (which uses the dummy password stub); this is
   a known design tradeoff, not a bug
@@ -371,8 +376,17 @@ ansible-vault encrypt group_vars/all/vault.yml
 
 ### Lost or Compromised YubiKey
 
-**Backup YubiKey** — `make setup-yubikeys` programs all keys in one session with
-the same secret. Run it with 2+ YubiKeys before storing backups separately.
+**Backup strategies** — `make setup-yubikeys` enforces one of the following:
+
+1. **Hardware redundancy (recommended)** — Program 2+ YubiKeys in one session with
+   the same HMAC secret before storing backups in separate physical locations.
+   If one key is lost, any other programmed key can unlock the vault.
+
+2. **Password manager backup (for single YubiKey)** — If using a single YubiKey,
+   `make setup-yubikeys` requires you to save the vault password to your password
+   manager (Bitwarden, 1Password, etc.) during setup. This provides recovery if
+   the YubiKey is lost. The setup script displays the password clearly and confirms
+   you have saved it before proceeding.
 
 **Manual re-programming** — if you have the original 40-character hex key from
 a previous run, program a replacement YubiKey:
@@ -386,21 +400,29 @@ Without `-a <hexkey>`, `ykpersonalize` generates a new random secret and the
 backup will not produce the same vault password. The HMAC secret cannot be read
 back from a YubiKey after programming, so retroactive backup is impossible.
 
-**Password manager fallback** — store the literal output of
+**Recovering from lost YubiKey with password backup** — If you saved the vault
+password to your password manager during setup:
 
-```bash
-_HEX=$(printf '%s' 'ansible-vault-laptop-setup' | od -An -tx1 | tr -d ' \n')
-ykman otp calculate 2 "$_HEX"
-```
+1. Retrieve the vault password from your password manager
+2. Set the environment variable: `export VAULT_PASS='<saved-password>'`
+3. Create a temporary password script:
+   ```bash
+   printf '#!/bin/bash\necho "%s"\n' "$VAULT_PASS" > /tmp/vault-pass-temp.sh
+   chmod 700 /tmp/vault-pass-temp.sh
+   ```
+4. Use it to decrypt/rekey the vault:
+   ```bash
+   export ANSIBLE_VAULT_PASSWORD_FILE=/tmp/vault-pass-temp.sh
+   ansible-vault view group_vars/all/vault.yml
+   # or to migrate to a new password source:
+   ansible-vault rekey group_vars/all/vault.yml
+   ```
 
-in a hardware-backed password manager (e.g., Bitwarden) as a plaintext emergency
-copy. This is the most practical single-YubiKey recovery path.
-
-**YubiKey already lost with no backup** — if neither a backup YubiKey nor the
-stored response exists, the vault is permanently inaccessible. The only path is
-to re-encrypt from scratch: recover the secret values from memory or other
-records, edit `group_vars/all/vault.yml` with known secrets, then re-key with a
-new password source:
+**YubiKey lost with no backup** — if you programmed a single YubiKey without
+saving the password to a password manager, the vault is permanently inaccessible.
+The only recovery path is to re-encrypt from scratch: recover the secret values
+from memory or other records, edit `group_vars/all/vault.yml` with known secrets,
+then re-key with a new password source:
 
 ```bash
 ansible-vault rekey group_vars/all/vault.yml
@@ -584,3 +606,87 @@ running Ansible. Each decryption requires PIN entry + YubiKey touch. The
 SOPS encrypts per-value — variable names (e.g. `vault_ssh_private_key:`)
 remain plaintext in the committed file; only values are ciphertext. This
 differs from `ansible-vault`, which encrypts the entire file as a single blob.
+
+## Go Module Supply Chain
+
+**Vulnerability**: Go tools installed via `go install` (gofumpt, gopls, golangci-lint,
+govulncheck, gci, controller-gen, client-gen, subctl, stern) lack post-installation
+binary verification, despite having the same attack surface as other package types.
+
+**Attack Vector**: Go init() functions execute during compilation (`go install`), not
+tool runtime. A compromised Go module (via GOPROXY hijack, maintainer account compromise,
+or TLS MITM) injects malicious code that executes during `go install`, before the user
+even runs the tool. XZ Utils (2024) demonstrated this in production: a malicious init()
+function in a build dependency was discovered only after release.
+
+**GONOSUMDB Limitations**: The GONOSUMDB environment variable prevents sumdb bypass for
+specified domains but does NOT protect against:
+- GOPROXY serving malicious code for golang.org/github.com modules
+- Upstream maintainer account compromise (GitHub accounts, golang.org accounts)
+- TLS MITM attacks on go.googlesource.com (sumdb validation alone is insufficient)
+- Typosquatting attacks (registry content is not audited)
+
+Users who rely on `go install` accept explicit trust in upstream module sources.
+
+**Current Tooling**:
+- `roles/packages/tasks/install_go_tools.yml` installs work-profile Go tools
+- GONOSUMDB is validated to contain only private domain patterns (line 5-11)
+- No post-installation binary verification (tools are trusted after compilation)
+- Post-install sanity-check runs `--version` to catch obvious corruption
+- Versions are pinned in `roles/packages/defaults/main.yml` (e.g., `packages_gofumpt_version`)
+
+**Installed Tools** (work profile only):
+- mvdan.cc/gofumpt — formatter
+- golang.org/x/tools/gopls — language server
+- golang.org/x/vuln/cmd/govulncheck — vulnerability scanner
+- github.com/daixiang0/gci — import organizer
+- github.com/golangci/golangci-lint — linter suite
+- sigs.k8s.io/controller-tools/cmd/controller-gen — Kubernetes API codegen
+- k8s.io/code-generator/* — Kubernetes client-gen, informer-gen, lister-gen, deepcopy-gen, applyconfiguration-gen
+- github.com/submariner-io/subctl — Submariner cluster management
+- github.com/stern/stern — Kubernetes log viewer
+
+**Mitigations** (defense-in-depth):
+
+1. **VERSION PINNING** — All tools pinned to specific versions in `defaults/main.yml`.
+   Prevents silent upstream updates. Requires deliberate version bump review.
+
+2. **GONOSUMDB VALIDATION** — Pre-provision check (install_go_tools.yml:5-11) rejects any
+   GONOSUMDB pattern containing public domains. Enforces explicit configuration of only
+   private module exclusions.
+
+3. **SANITY-CHECK VALIDATION** — Post-install `--version` check (install_go_tools.yml:73-87)
+   catches obvious init() corruption or incomplete installations. Defense-in-depth signal only;
+   does NOT detect stealthy supply-chain attacks.
+
+4. **GOVULNCHECK INTEGRATION** — Smoke tests (scripts/smoke-test.sh) run `govulncheck`
+   on the provisioned workstation to detect vulnerable dependencies in installed tools.
+   Not a guarantee, but improves visibility into known vulnerabilities.
+
+5. **DISTROBOX ISOLATION** — Sensitive development environments should use `make container`
+   to provision a containerized dev tier. Container isolation limits blast radius if a Go
+   tool is compromised. Containers cannot access host SSH keys or mounted volumes by default.
+
+**Future Improvements**:
+
+- **Download+Verify for Tools with Published Binaries**: Some tools publish checksummed
+  releases:
+  - gofumpt: GitHub Releases (sha256sum per binary)
+  - golangci-lint: GitHub Releases with GPG signatures (since v1.54)
+  - These could replace `go install` with download+verify (like kind, helm, kustomize)
+
+- **Supply Chain Monitoring**: Track module advisories via `go list -m all | govulncheck` or
+  native Go telemetry integration (if adopted upstream).
+
+- **Hook Signing**: Future plan (2026+) — sign Go tools post-compilation with a developer key,
+  verify signature at runtime.
+
+**Configuration**:
+
+Users who need stricter Go module controls can set `GONOSUMDB` and `GOPRIVATE` in
+`config.yml` (see default.config.yml for examples). For air-gapped environments, set
+`GOPROXY=off` or point to an internal proxy. For untrusted networks, prefer distrobox
+tier (see "Distrobox (Container Provisioning)" in CLAUDE.md).
+
+**Recommendation**: Monitor security advisories (govulncheck, GitHub Dependabot), upgrade
+aggressively when vulnerabilities emerge, and use distrobox tier for sensitive workloads.
