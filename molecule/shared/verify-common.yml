@@ -344,7 +344,7 @@
 
 - name: Assert claude-privacy.conf deploys 0700 tmpfiles rule
   ansible.builtin.assert:
-    that: "'d %h/.claude 0700' in (verify_claude_tmpfiles_content.content | b64decode)"
+    that: (verify_claude_tmpfiles_content.content | b64decode) is search('^d %h/\.claude 0700', multiline=True)
     fail_msg: "claude-privacy.conf missing 'd %h/.claude 0700' line (actual={{ (verify_claude_tmpfiles_content.content | b64decode)[:120] }})"
   when: ansible_system == 'Linux'
 
@@ -460,8 +460,8 @@
 - name: Assert ripgrep config contains expected options
   ansible.builtin.assert:
     that:
-      - "'--smart-case' in (verify_ripgreprc_content.content | b64decode) or '--follow' in (verify_ripgreprc_content.content | b64decode)"
-    fail_msg: "~/.config/ripgrep/config exists but contains no expected options (--smart-case or --follow); got: {{ (verify_ripgreprc_content.content | b64decode)[:200] }}"
+      - "'--smart-case' in (verify_ripgreprc_content.content | b64decode)"
+    fail_msg: "~/.config/ripgrep/config exists but missing --smart-case; got: {{ (verify_ripgreprc_content.content | b64decode)[:200] }}"
 
 - name: Verify git config-work exists (always deployed)
   ansible.builtin.stat:
@@ -482,7 +482,7 @@
 - name: Assert git config-work contains user identity
   ansible.builtin.assert:
     that: >-
-      '[user]' in (verify_git_config_work_content.content | b64decode) or
+      '[user]' in (verify_git_config_work_content.content | b64decode) and
       'email =' in (verify_git_config_work_content.content | b64decode)
     fail_msg: "git config-work exists but contains no [user] section or email — work identity unset; got: {{ (verify_git_config_work_content.content | b64decode)[:200] }}"
   when: verify_git_config_work.stat.exists
