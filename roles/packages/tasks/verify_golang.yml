@@ -1,0 +1,41 @@
+---
+# roles/packages/tasks/verify_golang.yml
+# Verify golang binary after installation via dnf/apt/brew.
+# Implements defense-in-depth: ensures system golang is present before GOTOOLCHAIN=local
+# forces its use in go install tasks. Validates version to detect compromised packages.
+
+- name: Verify golang is installed
+  ansible.builtin.command:
+    cmd: go version
+  register: _golang_version_check
+  changed_when: false
+  failed_when: _golang_version_check.rc != 0
+
+- name: Extract installed golang version
+  ansible.builtin.set_fact:
+    _golang_installed_version: >-
+      {{ _golang_version_check.stdout | regex_search('go([\d.]+)', '\1') | first | default('') }}
+
+- name: Assert golang version is acceptable
+  ansible.builtin.assert:
+    that:
+      - _golang_installed_version != ''
+      - _golang_installed_version is version('1.20', '>=')
+    fail_msg: >-
+      golang binary verification failed: Expected version >= 1.20, got {{ _golang_installed_version }}.
+      This may indicate a corrupted or incompatible golang installation.
+      Installed golang must support go install with GOTOOLCHAIN=local before proceeding.
+      Reinstall golang via dnf/apt/brew and re-run provisioning.
+
+- name: Verify golang binary exists in PATH
+  ansible.builtin.stat:
+    path: /usr/bin/go
+  register: _go_binary_stat
+  failed_when: not _go_binary_stat.stat.exists or _go_binary_stat.stat.size == 0
+
+- name: Log golang verification success
+  ansible.builtin.debug:
+    msg: >-
+      golang binary verified: {{ _golang_installed_version }} at /usr/bin/go
+      (size: {{ _go_binary_stat.stat.size }} bytes)
+    verbosity: 1

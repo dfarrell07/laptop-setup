@@ -173,6 +173,15 @@
   ansible.builtin.include_tasks: install_standalone_binaries.yml
   when: packages_install_binaries | bool
 
+# --- golang verification (defense-in-depth before GOTOOLCHAIN=local) ---
+
+- name: Verify golang binary after installation
+  ansible.builtin.include_tasks: verify_golang.yml
+  when:
+    - profile == 'work'
+    - (is_dnf or is_apt or is_macos)
+    - packages_install_binaries | bool
+
 # --- Go install tools ---
 
 - name: Install Go tools
