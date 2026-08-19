@@ -76,11 +76,9 @@
       loop_control:
         label: "subctl{{ item.suffix }}"
 
-    - name: Verify subctl binary exists and compute SHA256
+    - name: Verify subctl binary exists in temp GOBIN
       ansible.builtin.stat:
         path: "{{ _subctl_tmpdir.path }}/subctl-v{{ item.version }}-bin/subctl"
-        get_checksum: true
-        checksum_algorithm: sha256
       register: _subctl_binary_stat
       when: >-
         (packages_subctl_version_check.results[loop_idx].rc != 0 or

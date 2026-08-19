@@ -108,7 +108,7 @@ Git hooks enforce critical security policies:
 
 **Core protection: core.hooksPath immutability**
 
-The hooks path is set via `make bootstrap` (line 192):
+The hooks path is set via `make bootstrap` (line 212):
 ```bash
 git config --local core.hooksPath .githooks
 ```
@@ -187,7 +187,7 @@ before merge, but it is still a violation of security policy.
 2. Secret scanning (gitleaks) — detects hard-coded credentials
 3. Collections supply chain — enforces `collections-dist/SHA256SUMS` update when tarballs are modified
 
-**Why this matters**: Collections tarballs (`collections-dist/*.tar.gz`) modified without a matching `SHA256SUMS` update bypass the pre-commit hook check (lines 5-26). An unverified tarball can reach the PR branch before `collections-integrity` CI validation runs. This is a concrete, exploitable codebase vulnerability — supply chain tampering via unsigned collections.
+**Why this matters**: Collections tarballs (`collections-dist/*.tar.gz`) modified without a matching `SHA256SUMS` update bypass the pre-commit hook check (lines 47-48). An unverified tarball can reach the PR branch before `collections-integrity` CI validation runs. This is a concrete, exploitable codebase vulnerability — supply chain tampering via unsigned collections.
 
 **Exception: CI-only scenarios** — in GitHub Actions workflows, using `--no-verify` is acceptable ONLY when:
 - The workflow is sealed (no untrusted input)
