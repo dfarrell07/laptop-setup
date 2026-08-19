@@ -964,12 +964,22 @@
     - not (system_is_container | default(false))
     - verify_llmnr_conf.stat.exists
 
-- name: Check 98-llmnr.conf disables LLMNR and mDNS
+- name: Check 98-llmnr.conf MulticastDNS setting
   ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   loop:
-    - "LLMNR={{ system_resolved_llmnr | default('no') }}"
     - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
   changed_when: false
+  failed_when: false
+  register: verify_mdns_setting
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_llmnr_conf.stat.exists
+
+- name: Assert 98-llmnr.conf MulticastDNS value matches expected
+  ansible.builtin.assert:
+    that: verify_mdns_setting.results | selectattr('rc', 'ne', 0) | list | length == 0
+    fail_msg: "98-llmnr.conf missing MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
