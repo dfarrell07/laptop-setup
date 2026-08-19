@@ -2396,6 +2396,28 @@
           '|/bin/false'). No spaces, newlines, or shell metacharacters.
       tags: [always]
 
+    - name: Assert system_selinux_enforcing_required is not disabled on dnf hosts (SELinux enforcement guard)
+      when:
+        - is_dnf | default(false)
+        - not (csb_rhel | default(false))
+        - not (system_is_container | default(false))
+      ansible.builtin.assert:
+        that:
+          - system_selinux_enforcing_required | default(true) | bool
+          - ansible_facts['selinux'] | default(false) is mapping
+        fail_msg: >-
+          SECURITY: SELinux enforcement disabled or kernel-disabled on a dnf host.
+          Threat: without SELinux enforcing, mandatory access control is removed — container
+          escapes and privilege escalation proceed undetected on Fedora/RHEL hosts.
+          Input: system_selinux_enforcing_required=false in config.yml or selinux=0 kernel param.
+          Mechanism: false-toggle bypasses hardening_core.yml SELinux block; kernel-disabled path
+          leaves selinux fact as non-mapping, uncaught when --start-at-task skips pre_tasks.
+          Example: make all -e system_selinux_enforcing_required=false skips all SELinux tasks.
+          Impact: mandatory access control removed; no confinement for setuid binaries or services.
+          Fix: remove system_selinux_enforcing_required: false from config.yml; set SELINUX=enforcing
+          in /etc/selinux/config and reboot; remove selinux=0 from kernel cmdline via grubby.
+      tags: [always]
+
     - name: "GRUB password: Assert valid PBKDF2 format when enabled (preflight)"
       when:
         - system_grub_password_enabled | default(false)
