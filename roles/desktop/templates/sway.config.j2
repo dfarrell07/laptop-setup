@@ -159,12 +159,12 @@ input "type:touchpad" {
 # Then set desktop_sway_trackpoint_id in config.yml, e.g.:
 #   desktop_sway_trackpoint_id: "2:10:TPPS/2_IBM_TrackPoint"
 {% if desktop_sway_trackpoint_id %}
-input "{{ desktop_sway_trackpoint_id }}" {
+input "{{ desktop_sway_trackpoint_id | regex_replace('[^a-zA-Z0-9 ./:_-]', '') }}" {
     scroll_method on_button_down
     scroll_button 274
-    scroll_factor {{ desktop_sway_trackpoint_scroll_factor }}
-    accel_profile {{ desktop_sway_trackpoint_accel_profile }}
-    pointer_accel {{ desktop_sway_trackpoint_pointer_accel }}
+    scroll_factor {{ desktop_sway_trackpoint_scroll_factor | float }}
+    accel_profile {{ desktop_sway_trackpoint_accel_profile | regex_replace('[^a-z]', '') }}
+    pointer_accel {{ desktop_sway_trackpoint_pointer_accel | float }}
 }
 {% endif %}
 
