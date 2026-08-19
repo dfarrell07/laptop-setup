@@ -943,6 +943,28 @@
           Fix: dest must be a plain relative path without '..' or './' (e.g. 'my-project').
           Offending entries: {{ _bad_dests }}
 
+    - name: Assert git_repos_base_dir is not the home directory or a sensitive path (SSH takeover guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _base_dir: "{{ _raw.get('git_repos_base_dir', '') | string }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _base_dir == ''
+            or (_base_dir not in ['~', '~/', ansible_facts['user_dir'], ansible_facts['user_dir'] + '/'])
+          - >-
+            _base_dir == ''
+            or (_base_dir | regex_search('(^|/)(\\.ssh|\\.gnupg|\\.local/bin)(/|$)') is none)
+        fail_msg: >-
+          SECURITY: git_repos_base_dir in config.yml is the home directory or a sensitive path.
+          Threat: first-provision SSH takeover — dest:.ssh clones a malicious repo to ~/.ssh.
+          Input: git_repos_base_dir='{{ _base_dir }}' in config.yml.
+          Mechanism: git clones to git_repos_base_dir/item.dest; home dir + dest=.ssh = ~/.ssh overwrite.
+          Example: git_repos_base_dir: ~ with dest: .ssh replaces ~/.ssh/authorized_keys on first provision.
+          Impact: persistent unauthorized SSH access, SSH config/known_hosts hijack after reboot.
+          Fix: set git_repos_base_dir to a subdirectory of home (e.g. ~/src — the default).
+
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
