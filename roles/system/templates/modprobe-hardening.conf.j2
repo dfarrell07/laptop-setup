@@ -108,6 +108,12 @@ install n_hdlc /bin/false
 # Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
 # CIS RHEL 9 2.1.5: blacklist BT modules on machines with no BT peripherals.
 # Default is true (disabled) — set false in config.yml to enable Bluetooth peripherals.
+# rfcomm/bnep are upper-layer BT protocols that remain loaded after bluetooth.service stops;
+# blacklisted here alongside btusb/bluetooth to ensure no BT module survives post-reboot.
+blacklist rfcomm
+install rfcomm /bin/false
+blacklist bnep
+install bnep /bin/false
 blacklist btusb
 install btusb /bin/false
 blacklist bluetooth

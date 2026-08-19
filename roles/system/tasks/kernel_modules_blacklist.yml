@@ -22,6 +22,22 @@
         dest: /etc/modprobe.d/hardening.conf
         mode: "0644"
 
+    - name: Unload Bluetooth modules (best-effort, pre-reboot)
+      # rfcomm/bnep have user counts > 0 when bluetooth.service is stopped but modules remain loaded.
+      # Unload in dependency order so dependent modules release before bluetooth core.
+      # failed_when/ignore_errors handle never-loaded or in-use modules gracefully.
+      when: system_disable_bluetooth | bool
+      ansible.builtin.command:
+        cmd: modprobe -r {{ item }}
+      loop:
+        - rfcomm
+        - bnep
+        - btusb
+        - bluetooth
+      failed_when: false
+      ignore_errors: true
+      changed_when: false
+
     - name: Unload unconditionally blacklisted modules (best-effort, pre-reboot)
       # Modules already loaded at provisioning time remain exploitable until reboot.
       # Attempt immediate unload so CVEs (vivid OOB write, n_hdlc privesc, firewire DMA)

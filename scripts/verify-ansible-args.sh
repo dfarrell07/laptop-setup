@@ -69,8 +69,8 @@ Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass
 EOF
         exit 1
     fi
-    # Block --skip-tags=always (single-arg form with =); also block --skip-tags=always,<extra>
-    if [[ "$arg" == '--skip-tags=always' || "$arg" == '--skip-tags=always,'* ]]; then
+    # Block --skip-tags=always (single-arg form with =); match always anywhere in comma-separated list
+    if [[ "$arg" =~ ^--skip-tags=(.+,)?always(,.+)?$ ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
 Reason: --skip-tags=always bypasses Play 2's [always]-tagged pre_tasks (vault
@@ -185,7 +185,7 @@ Solution: Do not pass --vault-password-file on the command line.
 EOF
         exit 1
     fi
-    if [[ "${args[$i]}" == '--skip-tags' && ( "${args[$((i+1))]}" == 'always' || "${args[$((i+1))]}" == 'always,'* ) ]]; then
+    if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" =~ (^|,)always(,|$) ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always bypasses Play 2's [always]-tagged pre_tasks (vault
@@ -389,7 +389,8 @@ unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
-unset PYTHONHOME PYTHONSTARTUP && export PYTHONNOUSERSITE=1  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONNOUSERSITE=1 disables ~/.local site-packages (PYTHONUSERSITE is a no-op variable; PYTHONNOUSERSITE is the real CPython control); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth
+unset ANSIBLE_LOCAL_TEMP ANSIBLE_REMOTE_TEMP  # Ansible-specific tmp overrides: these env vars take precedence over local_tmp/remote_tmp ini pins in ansible.cfg (confirmed via ansible-config list); attacker sets ANSIBLE_LOCAL_TEMP=/var/tmp (exec-capable) to redirect AnsiballZ module staging to an attacker-writable path, enabling the same inotifywait race-condition root RCE described above — unset TMPDIR/TEMP/TMP does NOT guard against these Ansible-specific vars
+unset PYTHONHOME PYTHONSTARTUP PYTHONINSPECT && export PYTHONNOUSERSITE=1  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONNOUSERSITE=1 disables ~/.local site-packages (PYTHONUSERSITE is a no-op variable; PYTHONNOUSERSITE is the real CPython control); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth; PYTHONINSPECT=1 (equiv -i) causes CPython to enter interactive REPL after ansible-playbook exits, hanging provisioning terminal/CI
 export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
 export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection

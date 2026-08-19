@@ -1810,22 +1810,27 @@
           set in config.yml: system_chrony_authselectmode_prefer_confirmed: true
       tags: [always]
 
-    - name: "Warn: DHCP-sourced NTP active with authselectmode=prefer — rogue DHCP risk"
+    - name: Assert DHCP-sourced NTP with non-require authselectmode requires explicit acknowledgement
       tags: [always]
       when:
         - system_chrony_dhcp_sourcedir | default('') | length > 0
         - system_chrony_authselectmode | default('require') != 'require'
         - system_chrony_service_enabled | default(true) | bool
-      ansible.builtin.debug:
-        msg: >-
-          SECURITY NOTE: system_chrony_dhcp_sourcedir='{{ system_chrony_dhcp_sourcedir }}'
-          and system_chrony_authselectmode='{{ system_chrony_authselectmode | default("require") }}'.
-          DHCP-sourced NTP servers are accepted as unauthenticated clock sources. A rogue or
-          compromised DHCP server on the local segment can push an attacker-controlled NTP server,
-          manipulate the system clock, and enable replay/certificate/Kerberos attacks. To harden:
-          (a) set system_chrony_dhcp_sourcedir: '' in config.yml to disable DHCP NTP (recommended),
-          or (b) set system_chrony_authselectmode: require to reject unauthenticated DHCP sources
-          (time sync will fail if NTS-KE port 4460 is blocked on your network).
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_chrony_dhcp_sourcedir_confirmed', false) | bool
+        fail_msg: >-
+          SECURITY: system_chrony_dhcp_sourcedir is set with
+          system_chrony_authselectmode={{ system_chrony_authselectmode | default('require') }}.
+          DHCP-sourced NTP servers are unauthenticated; a rogue DHCP server can push an
+          attacker-controlled NTP source, enabling Kerberos replay, TOTP bypass, and TLS
+          certificate expiry extension. To fix: (a) set system_chrony_dhcp_sourcedir: '' to
+          disable DHCP NTP (recommended), (b) set system_chrony_authselectmode: require to
+          reject unauthenticated sources, or (c) if DHCP NTP is intentional, also set
+          system_chrony_dhcp_sourcedir_confirmed: true in config.yml to acknowledge this risk
+          (distinct from system_chrony_authselectmode_prefer_confirmed).
 
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
       when: _config_raw is defined
