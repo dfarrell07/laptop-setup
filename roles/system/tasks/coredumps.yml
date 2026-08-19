@@ -15,7 +15,7 @@
     # from reaching systemd-coredump regardless of system_coredump_storage (CIS 1.5.1 req a —
     # SUID only; RLIMIT_CORE=0 req b applied only when system_coredump_storage=none).
     # SUID crash capture can be re-enabled via fs.suid_dumpable: 2 in system_sysctl_extra_additional (config.yml).
-    - name: Ensure coredump config directory
+    - name: Create /etc/systemd/coredump.conf.d directory
       ansible.builtin.file:
         path: /etc/systemd/coredump.conf.d
         state: directory
