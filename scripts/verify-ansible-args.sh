@@ -38,6 +38,37 @@ Solution: Use a scoped make target instead (make claude, make packages, make ssh
 EOF
         exit 1
     fi
+    # Block --vault-password-file (single-arg = form)
+    # ANSIBLE_VAULT_PASSWORD_FILE is already pinned; a CLI-supplied --vault-password-file
+    # adds a second vault source and executes the named script as the invoking user before
+    # the first task runs. No legitimate caller needs this flag.
+    if [[ "$arg" == --vault-password-file=* ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-password-file rejected by VERIFY_AND_RUN
+Reason: ANSIBLE_VAULT_PASSWORD_FILE is already pinned to scripts/vault-pass.sh.
+        A CLI-supplied --vault-password-file executes an additional script as the
+        invoking user before any task runs, bypassing vault source controls.
+SECURITY RISK: Arbitrary code execution via attacker-controlled vault password script.
+Solution: Do not pass --vault-password-file on the command line.
+EOF
+        exit 1
+    fi
+    # Block --vault-id: Ansible 2.8+ vault-id unification executes the vault-id source
+    # (e.g. --vault-id=attacker@/tmp/evil.py) as a subprocess alongside vault-pass.sh,
+    # achieving code execution as the invoking user before the first task runs.
+    # ANSIBLE_VAULT_PASSWORD_FILE does NOT suppress CLI-supplied vault-id sources; both execute.
+    if [[ "$arg" == '--vault-id' || "$arg" == --vault-id=* ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-id rejected by VERIFY_AND_RUN
+Reason: Ansible 2.8+ vault-id unification executes the vault-id source script
+        alongside vault-pass.sh before any task runs. --vault-id=attacker@/tmp/evil.py
+        achieves code execution as the invoking user; ANSIBLE_VAULT_PASSWORD_FILE does
+        not suppress CLI-supplied vault-id sources.
+Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass.sh).
+          Do not supply --vault-id on the command line.
+EOF
+        exit 1
+    fi
     # Block --skip-tags=always (single-arg form with =)
     if [[ "$arg" == '--skip-tags=always' ]]; then
         cat >&2 <<EOF
@@ -127,6 +158,18 @@ done
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
 # This requires scanning consecutive arg pairs since the loop above only sees individual args.
 for ((i=0; i<${#args[@]}-1; i++)); do
+    # Block space-separated: --vault-password-file /tmp/evil.py
+    if [[ "${args[$i]}" == '--vault-password-file' ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-password-file rejected by VERIFY_AND_RUN
+Reason: ANSIBLE_VAULT_PASSWORD_FILE is already pinned to scripts/vault-pass.sh.
+        A CLI-supplied --vault-password-file executes an additional script as the
+        invoking user before any task runs, bypassing vault source controls.
+SECURITY RISK: Arbitrary code execution via attacker-controlled vault password script.
+Solution: Do not pass --vault-password-file on the command line.
+EOF
+        exit 1
+    fi
     if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" == 'always' ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags always rejected by VERIFY_AND_RUN
@@ -292,6 +335,7 @@ unset _invoking_user _passwd_home
 
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
+export ANSIBLE_VAULT_ID_MATCH=False  # prevent ANSIBLE_VAULT_ID_MATCH=true lockout: default encryption (ansible-vault encrypt) uses @default label; if an attacker sets ID_MATCH=true and label mismatches, all vault-sourced vars (SSH keys, authorized_keys, registry tokens) fail to decrypt — post-reboot host becomes SSH-inaccessible on port 722
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
 export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; host_var inject bypasses ANSIBLE_PYTHON_INTERPRETER unset
@@ -319,6 +363,7 @@ unset ANSIBLE_LOG_PATH  # general Ansible run log — note: ANSIBLE_LOG_PATH is 
 export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
 export ANSIBLE_BECOME_FLAGS=  # strip injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
 export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
+export ANSIBLE_TASK_TIMEOUT=0  # pin task timeout to disabled — ANSIBLE_TASK_TIMEOUT=1 kills every task action after 1 second; dnf install, sysctl apply, sshd restart, firewall, PAM writes, and audit rules all exceed this; each kill registers as an external failure absorbed by CSB rescue blocks, so provisioning 'completes' while sysctl hardening, sshd config, firewall rules, PAM config, and audit rules are all unapplied; mid-write truncation of files like /etc/sysctl.d/90-hardening.conf is also possible; 0 (the Ansible default) disables the timeout entirely
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 unset MOLECULE_SCENARIO_NAME  # prevent molecule-context bypass on real hosts
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions

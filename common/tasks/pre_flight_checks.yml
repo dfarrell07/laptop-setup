@@ -81,7 +81,7 @@
       tags: [always]
 
     - name: Cache parsed config.yml dict for SSTI guard assertions
-      when: _config_raw is defined
+      when: _config_yml_raw.content is defined
       ansible.builtin.set_fact:
         _config_raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       tags: [always]
