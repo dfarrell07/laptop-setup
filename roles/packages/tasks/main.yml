@@ -63,6 +63,16 @@
     packages_install_binaries: false
   when: needs_container_tier == 'container'
 
+- name: Warn about future fapolicyd risk on hybrid CSB tier
+  ansible.builtin.debug:
+    msg: |
+      WARNING: csb_detected=true but fapolicyd not enforcing (hybrid tier).
+      Binary downloads to /usr/local/bin will fail if IT enables fapolicyd enforcement.
+      If this happens, run 'make container' to provision dev tools in distrobox instead.
+  when:
+    - needs_container_tier == 'hybrid'
+    - packages_install_binaries | bool
+
 - name: Install dnf packages
   ansible.builtin.include_tasks: install_dnf_packages.yml
 
