@@ -89,6 +89,7 @@ export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults 
 export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
 export ANSIBLE_CALLBACK_PLUGINS=""  # block callback plugin path hijacking — prevents exfiltration of slurp task results via malicious callback
+export ANSIBLE_STDOUT_CALLBACK="default"  # pin stdout callback — prevents ANSIBLE_STDOUT_CALLBACK=evil_cb injecting a callback that receives all task results (vault secrets, authorized_keys, registry tokens)
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution

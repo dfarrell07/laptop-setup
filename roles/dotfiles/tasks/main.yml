@@ -321,6 +321,24 @@
           SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
       when: _dotfiles_ssh_agent_enable.failed | default(false)
 
+    - name: Find all files in ~/.config/environment.d
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/environment.d"
+        file_type: file
+        recurse: false
+      register: _dotfiles_envd_files
+
+    - name: Fail on unmanaged files in ~/.config/environment.d
+      ansible.builtin.fail:
+        msg: >-
+          Unmanaged file detected in ~/.config/environment.d: {{ item.path }}.
+          This file is not managed by this playbook and may have been planted by
+          an attacker to hijack SYSTEMD_UNIT_PATH or other environment variables
+          picked up by systemd-environment-d-generator at login.
+          Remove it or add it to the allowlist before re-running provisioning.
+      loop: "{{ _dotfiles_envd_files.files }}"
+      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf']
+
     - name: Deploy environment.d conf files
       ansible.builtin.copy:
         content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
