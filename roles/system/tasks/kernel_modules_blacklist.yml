@@ -26,18 +26,33 @@
         file_type: file
       register: _modprobe_d_audit
 
+    - name: "Find /etc/modprobe.d files not owned by any RPM (pre-plant audit)"
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          find /etc/modprobe.d -maxdepth 1 -type f \
+            | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+        executable: /bin/bash
+      register: _modprobe_unowned
+      changed_when: false
+      failed_when: false
+      when: is_dnf
+
     - name: Fail on unexpected files in /etc/modprobe.d
       vars:
         _found: "{{ _modprobe_d_audit.files | map(attribute='path') | map('basename') | list }}"
-        _unexpected: "{{ _found | difference(system_modprobed_whitelist) }}"
+        _unowned_basenames: "{{ _modprobe_unowned.stdout_lines | default([]) | map('basename') | list }}"
+        _unexpected: "{{ _unowned_basenames | difference(system_modprobed_whitelist) }}"
       ansible.builtin.fail:
         msg: |
           Unexpected file(s) in /etc/modprobe.d — last-rule-wins ordering means any file
           sorted after hardening.conf can override 'install <module> /bin/false' guards.
-          Unexpected: {{ _unexpected | join(', ') }}
+          Unexpected (unpackaged AND not whitelisted): {{ _unexpected | join(', ') }}
           Allowed:    {{ system_modprobed_whitelist | join(', ') }}
           Remove the file(s) or add basenames to system_modprobed_whitelist in config.yml.
-      when: _unexpected | length > 0
+      when:
+        - is_dnf
+        - _unexpected | length > 0
 
     - name: Deploy kernel module blacklist
       ansible.builtin.template:
