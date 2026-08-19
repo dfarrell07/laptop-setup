@@ -45,7 +45,9 @@
   register: ssh_github_meta
   changed_when: false
   check_mode: false
-  failed_when: false
+  failed_when: >
+    ssh_github_meta.status is not defined and
+    ssh_github_meta.msg is defined
   retries: 2
   delay: 3
   until: ssh_github_meta.status | default(0) == 200
