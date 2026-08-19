@@ -324,17 +324,20 @@
     - ssh_port | int != 22
     - lookup('env', 'SSH_CONNECTION') | length > 0
 
-- name: Fail if changing SSH port while connected over port 22 (prevents connection loss)
+- name: Fail if changing SSH port while connected over port 22 outside tmux (prevents connection loss)
   ansible.builtin.fail:
     msg: >-
       SAFETY: Cannot change sshd to port {{ ssh_port }} while provisioning session is
-      running over SSH port {{ _ssh_connection_port }}. The sshd restart will kill this
-      connection and abort provisioning mid-run. Run at the local console or inside tmux
-      (see CLAUDE.md Quick Reference step 4). To override this check and proceed anyway
-      (NOT recommended unless in tmux), set system_ssh_port_change_override: true in config.yml.
+      running over bare SSH port {{ _ssh_connection_port }} (no tmux/screen detected).
+      The sshd restart will kill this connection and abort provisioning mid-run.
+      Fix: Run inside tmux (tmux new-session -s provision 'make all') or at local console.
+      See CLAUDE.md Quick Reference step 4. To override (only if you know tmux is active),
+      set system_ssh_port_change_override: true in config.yml.
   when:
     - ssh_port | int != 22
     - _ssh_connection_port | default('') == '22'
+    - lookup('env', 'TMUX') == ''     # tmux sets $TMUX; inside tmux = safe (survives sshd restart)
+    - lookup('env', 'STY') == ''      # GNU screen sets $STY; also safe
     - not (system_ssh_port_change_override | default(false) | bool)
 
 - name: Flush sshd restart handler immediately after TOCTOU integrity check passes
