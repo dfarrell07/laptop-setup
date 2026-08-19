@@ -134,16 +134,16 @@
     dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
     mode: "0644"
   when:
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
-- name: Remove DHCP hostname suppression config on CSB
+- name: Remove DHCP hostname suppression config on CSB RHEL
   ansible.builtin.file:
     path: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
     state: absent
   when:
-    - csb_detected
+    - csb_rhel
     - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
   notify: Restart NetworkManager
 
