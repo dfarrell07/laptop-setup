@@ -8,12 +8,13 @@
 #
 # Defense-in-depth layers:
 #   1. Makefile VERIFY_AND_RUN calls this script (Makefile layer — blocks direct users)
-#   2. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
-#   3. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
-#   4. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
-#   5. ENV sanitization — pins/clears 50+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
-#   6. HOME hijack check — validates HOME matches /etc/passwd before any path operations
-#   7. verify-collections.sh — supply-chain integrity check before exec
+#   2. Arg scanner — rejects --start-at-task, --skip-tags=always, _pf_vault_asserted, csb_rhel/_csb_molecule_force overrides (this script)
+#   3. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
+#   4. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
+#   5. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
+#   6. ENV sanitization — pins/clears 50+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
+#   7. HOME hijack check — validates HOME matches /etc/passwd before any path operations
+#   8. verify-collections.sh — supply-chain integrity check before exec
 
 set -euo pipefail
 
@@ -197,6 +198,7 @@ export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plug
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
 export ANSIBLE_CALLBACK_PLUGINS=""  # block callback plugin path hijacking — prevents exfiltration of slurp task results via malicious callback
 export ANSIBLE_STDOUT_CALLBACK="default"  # pin stdout callback — prevents ANSIBLE_STDOUT_CALLBACK=evil_cb injecting a callback that receives all task results (vault secrets, authorized_keys, registry tokens)
+export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
 unset CONTAINER_HOST DOCKER_HOST PODMAN_HOST  # prevent socket hijacking — attacker-set CONTAINER_HOST/DOCKER_HOST/PODMAN_HOST redirects podman API calls (including vault credential writes via podman login) to an attacker-controlled socket
