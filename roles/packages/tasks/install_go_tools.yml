@@ -43,11 +43,12 @@
   ansible.builtin.assert:
     that:
       - "packages_gosumdb is not defined or (packages_gosumdb != 'off' and packages_gosumdb | length > 0)"
+      - "packages_gosumdb is not defined or (packages_gosumdb | type_debug != 'str' or packages_gosumdb != '')"
     fail_msg: >-
       GOSUMDB must not be set to 'off' or empty string — both disable Go checksum database verification
       and allow GOPROXY tampering attacks with undetected init() code injection. Set to a valid sum server
       (default: sum.golang.org, leave undefined) or define packages_gosumdb in group_vars/all/vars.yml to
-      use a corporate proxy (e.g., sum.myproxy.com). Empty strings are not permitted.
+      use a corporate proxy (e.g., sum.myproxy.com). Empty strings, 'off', and undefined values that default to empty are not permitted.
 
 - name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
   # Uses computed _gosumdb_proxy_env which prefers packages_gosumdb_proxy if set,
