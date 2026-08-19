@@ -37,7 +37,7 @@
       tags: [become]
       when: not system_is_container
 
-    - name: Apply dnf package list (scriptlets suppressed)  # noqa: command-instead-of-module
+    - name: Apply dnf package list to container (scriptlets suppressed)  # noqa: command-instead-of-module
       ansible.builtin.command:
         # --setopt=tsflags=noscripts,notriggers: suppresses all RPM script execution in the
         # DNF5 transaction. noscripts covers %pre/%post/%preun/%postun scriptlets;
@@ -61,11 +61,8 @@
         _csb_task_name: "Install dnf packages"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
         _csb_action: >-
-          One or more packages in
-          packages_cli/languages_work/containers/containers_work/networking/networking_work/support_work,
-          packages_security_rhel (non-Fedora only), packages_security, packages_containers_kubectl (personal/non-x86_64/no-binaries),
-          packages_security_yubikey (when packages_yubikey_enabled)
-          could not be installed; check repo access or install manually
+          One or more dnf packages could not be installed;
+          check repo access or install manually (see ticket body for details)
         _csb_ticket_summary: "Cannot install core dnf packages on CSB"
         _csb_ticket_body: >-
           One or more packages from packages_cli, packages_languages_work,
