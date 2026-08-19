@@ -50,16 +50,19 @@
         fail_msg: "system_sysctl_extra_additional must be a dict, not {{ system_sysctl_extra_additional | type_debug }}"
       when: system_sysctl_extra_additional is defined
 
-    - name: Validate system_core_pattern format (prevent arbitrary code execution via pipe)
+    - name: Validate system_core_pattern is a plain file path (no pipe = no RCE via coredump handler)
+      # Bare | enables kernel pipe mode (RCE risk); |/path also rejected — playbook default uses
+      # role-level default (systemd-coredump); config.yml overrides must use safe file paths only.
       ansible.builtin.assert:
         that:
           - system_core_pattern is string
-          - system_core_pattern | regex_search('^(\||[a-zA-Z0-9._/%\- ]+)$')
+          - system_core_pattern | regex_search('^[a-zA-Z0-9._/%\- ]+$')
         fail_msg: >-
-          system_core_pattern contains invalid characters or shell metacharacters.
-          Only pipe (|) prefix, alphanumeric chars, dots, underscores, slashes, percent signs,
-          hyphens, and spaces are allowed. Pipe character is only valid at the start to enable
-          core_pattern piping to a handler program.
+          SECURITY: system_core_pattern must be a plain file path — no pipe (|) allowed.
+          A | prefix in kernel.core_pattern enables pipe mode, executing a program for every
+          crash; an attacker-set value like '|/bin/sh' achieves root code execution on coredump.
+          Even a bare | (no handler) enables pipe mode. Use a file path (e.g. /var/crash/core.%e.%p).
+          Set system_core_pattern in config.yml or leave unset to use the playbook default.
       when: system_core_pattern is defined and system_core_pattern | length > 0
 
     - name: Ensure /etc/sysctl.d exists

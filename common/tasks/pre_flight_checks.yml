@@ -659,6 +659,26 @@
           every interactive shell. Allowed: alphanumeric, underscore, hyphen
           (e.g. gallois, robbyrussell, agnoster).
 
+    - name: Assert dotfiles_oh_my_zsh_plugins entries contain only safe characters (zshrc injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _plugins: "{{ _raw.get('dotfiles_oh_my_zsh_plugins', []) | default([]) }}"
+      ansible.builtin.assert:
+        that:
+          - _plugins | map('string') | select() |
+            reject('match', '^[a-zA-Z0-9_-]+$') | list | length == 0
+        fail_msg: >-
+          SECURITY: dotfiles_oh_my_zsh_plugins in config.yml contains an entry with unsafe characters.
+          Input: dotfiles_oh_my_zsh_plugins list in config.yml.
+          Mechanism: entries are joined with spaces and rendered into plugins=(...) in .zshrc;
+          a plugin name containing ')' closes the array literal and injects arbitrary shell commands
+          executed in every interactive shell session.
+          Example: 'git) echo pwned; plugins=(' injects 'echo pwned' into .zshrc.
+          Impact: persistent shell code execution for the provisioned user.
+          Fix: plugin names must match ^[a-zA-Z0-9_-]+$ (e.g. git, docker, kubectl).
+          Offending entries: {{ _plugins | reject('match', '^[a-zA-Z0-9_-]+$') | list }}
+
     - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
       when: _config_yml_raw.content is defined
       vars:

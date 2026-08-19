@@ -7,7 +7,7 @@ ZSH_THEME="{{ dotfiles_oh_my_zsh_theme }}"
 
 zstyle ':omz:update' mode disabled
 
-plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
+plugins=({{ dotfiles_oh_my_zsh_plugins | map('regex_replace', '[^a-zA-Z0-9_-]', '') | join(' ') }})
 
 [[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"
 
