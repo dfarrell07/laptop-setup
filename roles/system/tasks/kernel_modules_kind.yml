@@ -22,32 +22,41 @@
     - _modules_disabled_state.content is defined
     - (_modules_disabled_state.content | b64decode | trim) == '1'
 
-- name: Update sysctl config when transitioning modules_disabled 1→0
+- name: Read current sysctl file modules_disabled value
+  ansible.builtin.command:
+    cmd: grep -oP '^kernel\.modules_disabled\s*=\s*\K[0-9]+' /etc/sysctl.d/90-hardening.conf
+  register: _file_modules_disabled
+  failed_when: false
+  changed_when: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Update sysctl config when modules_disabled file value mismatches config
   ansible.builtin.lineinfile:
     path: /etc/sysctl.d/90-hardening.conf
     regexp: '^kernel\.modules_disabled\s*='
-    line: 'kernel.modules_disabled=0'
+    line: 'kernel.modules_disabled={{ system_modules_disabled | int }}'
+    create: yes
+    mode: '0644'
   become: true
   tags: [become]
   when:
     - not csb_rhel
     - not system_is_container
-    - system_modules_disabled | int == 0
-    - _modules_disabled_state.content is defined
-    - (_modules_disabled_state.content | b64decode | trim) == '1'
-  failed_when: false
+    - _file_modules_disabled.rc == 0
+    - _file_modules_disabled.stdout != (system_modules_disabled | string)
 
-- name: Inform user that reboot is required to apply modules_disabled=0
+- name: Inform user about modules_disabled file correction
   ansible.builtin.debug:
     msg: >-
-      Updated /etc/sysctl.d/90-hardening.conf to set kernel.modules_disabled=0.
-      REBOOT NOW to reset the ratchet, then re-run provisioning to complete setup.
+      Updated /etc/sysctl.d/90-hardening.conf: kernel.modules_disabled={{ system_modules_disabled }}.
+      File had stale value {{ _file_modules_disabled.stdout | default('(not found)') }}, now synced with config.yml.
   when:
     - not csb_rhel
     - not system_is_container
-    - system_modules_disabled | int == 0
-    - _modules_disabled_state.content is defined
-    - (_modules_disabled_state.content | b64decode | trim) == '1'
+    - _file_modules_disabled.rc == 0
+    - _file_modules_disabled.stdout != (system_modules_disabled | string)
 
 - name: Fail gracefully after config update to require reboot
   ansible.builtin.fail:
