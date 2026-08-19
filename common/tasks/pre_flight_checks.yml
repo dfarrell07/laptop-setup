@@ -2182,6 +2182,43 @@
               Fix: correct the -e override or config.yml value before running make all.
           tags: [always]
 
+        - name: Assert DNS server/domain vars in play namespace contain only safe characters (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - system_dns_primary | default('1.1.1.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
+              - system_dns_fallback | default('9.9.9.9#dns.quad9.net') | string is match('^[a-zA-Z0-9:./,#-]*$')
+              - system_dns_domains | default('~.') | string is match('^[a-zA-Z0-9:.~-]*$')
+            fail_msg: >-
+              SECURITY: system_dns_primary, system_dns_fallback, or system_dns_domains in the play
+              namespace contains unsafe characters (possibly set via -e flag, bypassing config.yml
+              pre-flight validation). These values are rendered verbatim into
+              /etc/systemd/resolved.conf.d/99-dot.conf; characters outside the allowed set can
+              inject arbitrary systemd-resolved directives or redirect DNS resolution to an
+              attacker-controlled server. Allowed: alphanumeric, colon, dot, slash, hash, comma,
+              hyphen (DNS server addresses with optional #hostname SNI hint and FQDN domains;
+              e.g. 1.1.1.1#cloudflare-dns.com, 2606:4700:4700::1111, ~., example.com).
+              Forbidden: newlines, spaces, square brackets, parentheses, semicolons, and other
+              INI metacharacters. Current values:
+              system_dns_primary={{ system_dns_primary | default('DEFAULT') }},
+              system_dns_fallback={{ system_dns_fallback | default('DEFAULT') }},
+              system_dns_domains={{ system_dns_domains | default('DEFAULT') }}.
+          tags: [always]
+
+        - name: Assert system_resolved_llmnr and system_resolved_multicast_dns in play namespace are valid enums (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - system_resolved_llmnr | default('no') | string in ['yes', 'no', 'resolve']
+              - system_resolved_multicast_dns | default('no') | string in ['yes', 'no', 'resolve']
+            fail_msg: >-
+              SECURITY: system_resolved_llmnr or system_resolved_multicast_dns in the play namespace
+              has an invalid value (possibly set via -e flag, bypassing config.yml pre-flight
+              validation). Threat: invalid value writes a malformed 98-llmnr.conf, leaving LLMNR
+              and mDNS in an undefined state (CIS hardening bypass). Allowed values for both:
+              yes, no, resolve. Current values:
+              system_resolved_llmnr={{ system_resolved_llmnr | default('DEFAULT') }},
+              system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
+          tags: [always]
+
         - name: Set namespace validation flag (internal, cannot be pre-set)
           ansible.builtin.set_fact:
             _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"
