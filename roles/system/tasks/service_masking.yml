@@ -112,17 +112,17 @@
     - is_dnf
   failed_when: false
 
-# --- Mask ModemManager (no WWAN hardware — AMD ThinkPad has no cellular modem) ---
-- name: Mask ModemManager (no WWAN interface detected)
+# --- Mask ModemManager (WWAN/USB modems) ---
+- name: Mask ModemManager (system_disable_modemmanager enabled)
   ansible.builtin.systemd:
     name: ModemManager.service
     masked: true
     force: true
     state: stopped
   when:
+    - system_disable_modemmanager | bool
     - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
     - not csb_rhel  # CSB: IT manages modem hardware policy
-    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
   failed_when: false
 
 - name: Verify ModemManager masking succeeded (covert modem guard)
@@ -130,31 +130,31 @@
     name: ModemManager.service
   register: _modemmanager_facts
   when:
+    - system_disable_modemmanager | bool
     - not system_is_container
     - not csb_rhel
-    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
 
 - name: Fail if ModemManager is not masked (covert cellular network risk)
   ansible.builtin.fail:
     msg: >-
       ModemManager masking failed: UnitFileState={{ _modemmanager_facts.status.UnitFileState | default('unknown') }}.
-      ModemManager must be masked when no WWAN interface is present.
+      ModemManager must be masked when system_disable_modemmanager=true.
       Investigate: systemctl mask --force ModemManager.service; journalctl -u ModemManager.
   when:
+    - system_disable_modemmanager | bool
     - not system_is_container
     - not csb_rhel
-    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
     - _modemmanager_facts.status is defined
     - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
 
-- name: Unmask ModemManager (WWAN interface detected)
+- name: Unmask ModemManager (system_disable_modemmanager disabled)
   ansible.builtin.systemd:
     name: ModemManager.service
     masked: false
   when:
+    - not (system_disable_modemmanager | bool)
     - not system_is_container  # no WWAN interfaces in containers
     - not csb_rhel  # CSB: IT manages modem hardware policy
-    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length > 0
   failed_when: false
 
 # --- TLP battery charge management (ThinkPad) ---
