@@ -101,3 +101,59 @@
     - profile == 'work'
     - not csb_rhel
     - not system_is_container
+
+- name: Create ansible-packages doc directory for OVN service guidance
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages"
+    state: directory
+    mode: "0755"
+  when:
+    - is_dnf
+    - profile == 'work'
+    - not csb_rhel
+    - not system_is_container
+
+- name: Write OVN service unmasking guidance
+  ansible.builtin.copy:
+    content: |
+      OVN/openvswitch service management — post-installation guidance
+      ================================================================
+
+      All OVN/openvswitch services are masked by default for security (auto-start disabled).
+
+      For OVN-Kubernetes local cluster development:
+        1. Unmask and start basic OVN services:
+           sudo systemctl unmask ovs-vswitchd.service ovsdb-server.service
+           sudo systemctl start ovs-vswitchd.service ovsdb-server.service
+
+        2. Verify OVS database is running:
+           ovs-vsctl show
+
+      For northd testing (advanced):
+        sudo systemctl unmask ovn-northd.service
+        sudo systemctl start ovn-northd.service
+
+      For ovn-controller (rarely needed on development host):
+        sudo systemctl unmask ovn-controller.service
+        sudo systemctl start ovn-controller.service
+
+      To re-mask services after testing:
+        sudo systemctl stop ovs-vswitchd.service ovsdb-server.service
+        sudo systemctl mask ovs-vswitchd.service ovsdb-server.service
+
+      Service dependencies (must start in order):
+        1. ovsdb-server.service (OVS database)
+        2. ovs-vswitchd.service (OVS switch daemon — depends on ovsdb-server)
+        3. ovn-northd.service (OVN northbound database — optional for local dev)
+        4. ovn-controller.service (OVN local controller — rarely needed on dev host)
+
+      Common error: "ovs-vsctl: cannot connect to ovsdb-server"
+        → ovsdb-server.service is not running or is masked
+        → Run: sudo systemctl unmask ovsdb-server.service && sudo systemctl start ovsdb-server.service
+    dest: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/ovn-services-README.txt"
+    mode: "0644"
+  when:
+    - is_dnf
+    - profile == 'work'
+    - not csb_rhel
+    - not system_is_container
