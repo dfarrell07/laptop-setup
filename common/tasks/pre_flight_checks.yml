@@ -394,6 +394,9 @@
             reject('match', '^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$') | list | length == 0
           - _raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
           - _raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _raw.get('desktop_wm_font_size', 10) | int > 0
+          - _raw.get('desktop_sway_adaptive_sync', '') | string is match('^(enabled|disabled|)$')
+          - _raw.get('desktop_sway_xwayland', '') | string is match('^(disable|)$')
           - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
           - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
           - _raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
