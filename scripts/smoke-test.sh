@@ -122,21 +122,21 @@ if [[ -x "$HOME/.krew/bin/krew" ]]; then
 else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
 
+_check_if_present() { # guard_path record_name cmd...
+  [[ -x "$1" ]] || return 0
+  local _p="$1" _n="$2"; shift 2
+  # shellcheck disable=SC2086
+  if run $@ &>/dev/null; then record "$_n" "PASS"
+  else record "$_n" "FAIL" "$_p present but command failed"; fi
+}
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
 for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "golangci-lint:--version" "subctl:version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
-  [[ -x "$_gobin" ]] && {
-    # shellcheck disable=SC2086  # intentional word-split: args is a short arg list
-    if run "$_gobin" $args &>/dev/null; then record "go-$name" "PASS"
-    else record "go-$name" "FAIL" "$_gobin present but command failed"; fi
-  }
+  _check_if_present "$_gobin" "go-$name" "$_gobin" $args
 done
 # Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
 for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
-  if [[ -x "$_bin" ]]; then
-    if run "$_bin" version &>/dev/null; then record "$(basename "$_bin")" "PASS"
-    else record "$(basename "$_bin")" "FAIL" "$_bin present but version failed"; fi
-  fi
+  _check_if_present "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
 if [[ -x /usr/local/bin/oc ]]; then
@@ -155,11 +155,7 @@ fi
 for _b in "cosign:cosign version" "tkn:tkn version --component=client" \
            "operator-sdk:operator-sdk version" "opm:opm version" "ec:ec version"; do
   _bname="${_b%%:*}"; _bvcmd="${_b#*:}"
-  if [[ -x "/usr/local/bin/$_bname" ]]; then
-    # shellcheck disable=SC2086
-    if run $_bvcmd &>/dev/null; then record "$_bname" "PASS"
-    else record "$_bname" "FAIL" "$_bname binary present but version command failed"; fi
-  fi
+  _check_if_present "/usr/local/bin/$_bname" "$_bname" $_bvcmd
 done
 # gcloud minimum-version floor (guards against repomd.xml suppression — repo_gpgcheck disabled upstream)
 if command -v gcloud &>/dev/null; then
