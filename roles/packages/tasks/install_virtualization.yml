@@ -5,7 +5,7 @@
 
 - name: Install virtualization packages
   block:
-    - name: Install virtualization packages
+    - name: Run dnf install for virtualization packages
       ansible.builtin.dnf:
         name: "{{ packages_virtualization }}"
         state: present
@@ -53,7 +53,7 @@
     # Unconditional (no changed guard) — intentionally re-enables sockets after manual
     # 'systemctl disable'; daemon_reload above is change-gated because it is only needed
     # when packages changed.
-    - name: Enable virtqemud.socket and virtnetworkd.socket after libvirt package install
+    - name: Enable and start libvirt socket units via systemd
       ansible.builtin.systemd:
         name: "{{ item }}"
         state: started
