@@ -111,6 +111,10 @@
       ansible.builtin.dnf:
         name: python3-dnf-plugin-versionlock
         state: present
+    - name: Install google-cloud-cli to enable versionlock protection on first install
+      ansible.builtin.dnf:
+        name: google-cloud-cli
+        state: present
     - name: Pin google-cloud-cli version to limit MITM downgrade exposure
       community.general.dnf_versionlock:
         name: google-cloud-cli
@@ -274,10 +278,14 @@
     - profile == 'work'
     - repos_dnf_redhat_baseurl is defined
   block:
-    - name: Assert Red Hat internal repo GPG key is defined
+    - name: Assert Red Hat internal repo URLs target expected internal domain
       ansible.builtin.assert:
-        that: repos_dnf_redhat_gpgkey is defined
-        fail_msg: "repos_dnf_redhat_baseurl is set but repos_dnf_redhat_gpgkey is not — repo will have gpgcheck disabled"
+        that:
+          - repos_dnf_redhat_baseurl is match('^https://.*\.redhat\.com/.*')
+          - repos_dnf_redhat_gpgkey is match('^https://.*\.redhat\.com/.*')
+        fail_msg: >-
+          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must be internal Red Hat URLs
+          (https://*.redhat.com/...). Ensure both URLs target *.redhat.com domain, not external servers.
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
@@ -321,6 +329,15 @@
         url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-{{ ansible_facts['distribution_major_version'] }}"
         dest: "/tmp/rpmfusion-free-gpg-key.gpg"
         mode: "0644"
+    - name: Verify RPM Fusion free GPG key fingerprint
+      ansible.builtin.shell:
+        cmd: |
+          gpg --with-colons /tmp/rpmfusion-free-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+      changed_when: false
+      register: _rpmfusion_free_fp
+      failed_when: |
+        _rpmfusion_free_fp.stdout_lines | length == 0 or
+        '79BDB8874A068716907325C664A4849E4C7033EA' not in _rpmfusion_free_fp.stdout | upper
     - name: Import RPM Fusion free GPG key
       ansible.builtin.command:
         cmd: "rpm --import /tmp/rpmfusion-free-gpg-key.gpg"
@@ -329,19 +346,12 @@
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-    - name: Check RPM Fusion free release signing key  # verify GPG signature after install
+    - name: Verify RPM Fusion free release cryptographic signature
       ansible.builtin.command:
-        cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-free-release
+        cmd: rpm --verify --verbose --nofiles --nomtime --noperm rpmfusion-free-release
       changed_when: false
-      register: _rpmfusion_free_sig
-    - name: Assert RPM Fusion free release signed by expected key
-      ansible.builtin.assert:
-        that: "'4c7033ea' in _rpmfusion_free_sig.stdout | lower"
-        fail_msg: >-
-          RPM Fusion free release signing key mismatch (expected Key ID 4C7033EA /
-          fingerprint 79BD B887 4A06 8716 9073 25C6 64A4 849E 4C70 33EA).
-          Got: {{ _rpmfusion_free_sig.stdout }}.
-          Possible supply-chain compromise — remove rpmfusion-free-release and investigate.
+      register: _rpmfusion_free_verify
+      failed_when: "_rpmfusion_free_verify.rc != 0"
   rescue:
     - name: Remove rpmfusion-free-release after signing check failure
       ansible.builtin.dnf:
