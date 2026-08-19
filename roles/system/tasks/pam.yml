@@ -163,6 +163,25 @@
         insertafter: '^auth.*pam_unix\.so'
         mode: "0644"
 
+    - name: Verify pam_faillock.so authfail appears after pam_unix.so in common-auth (Debian)
+      ansible.builtin.shell:
+        cmd: >-
+          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
+      changed_when: false
+      register: system_pam_faillock_order_check
+      failed_when: false
+
+    - name: Fail if pam_faillock.so authfail is not ordered after pam_unix.so in common-auth (Debian)
+      ansible.builtin.fail:
+        msg: >-
+          pam_faillock.so authfail is not in the correct position in /etc/pam.d/common-auth.
+          Required order: preauth < pam_unix.so < authfail. The insertafter pattern
+          '^auth.*pam_unix\.so' found no matching line (distro PAM refactor?).
+          Out-of-order placement breaks faillock semantics. Inspect common-auth
+          and re-run after correcting the PAM stack.
+      when: system_pam_faillock_order_check.rc | default(1) != 0
+
     - name: Ensure pam_faillock.so account line is in common-account (Debian)
       ansible.builtin.lineinfile:
         path: /etc/pam.d/common-account
