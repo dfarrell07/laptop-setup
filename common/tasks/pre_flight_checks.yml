@@ -1345,46 +1345,6 @@
           the rescue block will not remove the file.
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
 
-    - name: Assert ansible.cfg pipelining value is a valid boolean (fapolicyd bypass guard)
-      when: not _pf_is_molecule and _pf_ansiblecfg_checked is not defined
-      block:
-        - name: Read ansible.cfg pipelining value for validation
-          ansible.builtin.slurp:
-            src: "{{ playbook_dir }}/../ansible.cfg"
-          register: _ansible_cfg_raw
-          failed_when: false
-          tags: [always]
-
-        - name: Validate ansible.cfg pipelining value matches safe format
-          when: _ansible_cfg_raw.content is defined
-          vars:
-            _cfg_content: "{{ _ansible_cfg_raw.content | b64decode }}"
-            # Extract pipelining from [defaults] section, strip whitespace and comments
-            _pipelining_line: >-
-              {{ _cfg_content | regex_search('(?m)^\\s*pipelining\\s*=\\s*([^#\\n]+)') }}
-            # Strip all whitespace, comments, and normalize to lowercase
-            _pipelining_normalized: >-
-              {{ (_pipelining_line | default('') | regex_replace('.*=\\s*', '')
-              | regex_replace('\\s*#.*', '')
-              | regex_replace('^\\s+|\\s+$', '') | lower) }}
-          ansible.builtin.assert:
-            that:
-              - _pipelining_normalized is match('^(true|false|yes|no|on|off|1|0|)$')
-            fail_msg: >-
-              SECURITY: ansible.cfg pipelining value contains invalid characters or formatting.
-              The pipelining value must be a valid boolean: true, false, yes, no, on, off, 1,
-              or 0 (case-insensitive). The value must not contain embedded spaces (e.g., 't rue'
-              bypasses the preflight check but fails at runtime, causing fapolicyd to block /tmp
-              execution despite the check reporting success). If pipelining is set, ensure it uses
-              valid boolean syntax with no internal spacing. Current raw value:
-              '{{ (_pipelining_line | default('not found')) }}'.
-          tags: [always]
-
-        - name: Set ansible.cfg checked flag (suppresses duplicate assertion in Play 2)
-          ansible.builtin.set_fact:
-            _pf_ansiblecfg_checked: true
-          tags: [always]
-
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
       vars:
