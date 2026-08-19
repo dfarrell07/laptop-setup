@@ -15,9 +15,7 @@
     is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
     is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
     is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
-    is_rhel: "{{ ansible_facts['distribution'] == 'RedHat' }}"
     is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
-    is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
     is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
 
 - name: Override for container testing (system role)
