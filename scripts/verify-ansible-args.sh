@@ -19,6 +19,15 @@ unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before saniti
 
 set -euo pipefail
 
+# SECURITY: Defense-in-depth against BASH_ENV/ENV/ZDOTDIR shell-init injection.
+# The Makefile's 'unexport BASH_ENV ZDOTDIR ENV' is the load-bearing fix that prevents
+# these vars from reaching this process in the first place. This unset prevents
+# propagation to any child bash/sh/zsh processes spawned later in the script
+# (e.g., verify-collections.sh, exec ansible-playbook wrapper scripts).
+# NOTE: By the time this line runs the BASH_ENV payload has already executed if the
+# variable was somehow inherited; this guard is strictly for child-process containment.
+unset BASH_ENV ZDOTDIR ENV
+
 # Collect all command-line arguments after the script name
 args=("$@")
 

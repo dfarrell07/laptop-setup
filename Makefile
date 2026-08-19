@@ -32,6 +32,14 @@ endif
 # Guard against MAKEFLAGS flag injection (CWE-426) — attacker-supplied -x flag exposes vault password in shell trace. MUST be AFTER ifneq above.
 override MAKEFLAGS :=
 
+# Guard against BASH_ENV/ENV/ZDOTDIR shell-init injection (CWE-454/CWE-426).
+# BASH_ENV=/tmp/evil.sh make all causes the Makefile recipe to spawn a bash process
+# (via #!/usr/bin/env bash shebang) that sources BASH_ENV before any script code runs,
+# executing the payload before the 50+ variable sanitization block in verify-ansible-args.sh.
+# 'unexport' strips the variable from every child process Make spawns — load-bearing fix.
+# ENV and ZDOTDIR are analogous vectors for sh/zsh child processes.
+unexport BASH_ENV ZDOTDIR ENV
+
 CONTAINER ?= fedora-dev
 
 define INSTALL_COLLECTIONS
