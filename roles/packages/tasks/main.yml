@@ -65,7 +65,6 @@
 
 - name: Install dnf packages
   ansible.builtin.include_tasks: install_dnf_packages.yml
-  when: is_dnf
 
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
@@ -166,7 +165,6 @@
 
 - name: Install Homebrew packages and configure autoupdate (macOS)
   ansible.builtin.include_tasks: install_brew.yml
-  when: is_macos
 
 - name: Set Linux x86 work binary install fact
   ansible.builtin.set_fact:
@@ -227,7 +225,6 @@
 
 - name: Install subctl multi-version binaries
   ansible.builtin.include_tasks: install_subctl_versions.yml
-  when: _packages_linux_x86_work
 
 - name: Update krew plugin index
   ansible.builtin.command:
