@@ -9,6 +9,13 @@ additional_flags=--network=host --cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-
 {% else %}
 # Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
 # Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
+# CAP_BPF + CAP_PERFMON: inert when kernel.unprivileged_bpf_disabled=2 (write-locked default) because
+# the kernel rejects bpf() from non-root processes regardless of container capabilities.
+# WARNING: lowering system_unprivileged_bpf_disabled to 0 or 1 in config.yml activates bpf() access
+# for ALL container processes holding CAP_BPF (including transitive npm/cargo/pip dependencies).
+# Any malicious package inside the container can then load eBPF programs attaching to host kprobes
+# or tracepoints. Only lower that sysctl if you understand this trade-off.
+# See references/troubleshooting.md "kernel.unprivileged_bpf_disabled=2 Is Write-Once".
 additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON
 {% endif %}
 

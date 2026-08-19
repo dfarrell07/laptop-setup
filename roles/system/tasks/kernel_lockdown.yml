@@ -28,6 +28,47 @@
 - name: Kernel cmdline hardening block (skipped on RHEL CSB)
   when: not csb_rhel
   block:
+    # Secure Boot pre-check: lockdown=integrity without Secure Boot is defense-in-depth only.
+    # An attacker with physical access can replace the bootloader or kernel with one that strips
+    # the lockdown= parameter. Secure Boot is required to enforce lockdown against physical access.
+    - name: Probe Secure Boot state (lockdown=integrity pre-check)
+      ansible.builtin.command:
+        cmd: mokutil --sb-state
+      register: system_sb_state_result
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode for conditionals
+      when: system_kernel_lockdown | length > 0
+
+    - name: Warn — lockdown={{ system_kernel_lockdown }} without Secure Boot is defense-in-depth only
+      ansible.builtin.debug:
+        msg: >-
+          WARN: Secure Boot is NOT enabled
+          (mokutil --sb-state: {{ system_sb_state_result.stdout | default('') | trim }}).
+          lockdown={{ system_kernel_lockdown }} provides NO physical-access boundary without
+          Secure Boot — an attacker with physical access can boot a kernel that ignores or strips
+          the lockdown= parameter. Enable Secure Boot in firmware to enforce this control.
+          This remains a useful defense-in-depth measure against software-only attacks.
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_sb_state_result.rc | default(-1) == 0
+        - "'SecureBoot enabled' not in (system_sb_state_result.stdout | default(''))"
+
+    - name: Assert Secure Boot enabled when GRUB password hardening is active
+      ansible.builtin.assert:
+        that:
+          - "'SecureBoot enabled' in (system_sb_state_result.stdout | default(''))"
+        fail_msg: >-
+          FAIL: system_grub_password_enabled is true but Secure Boot is NOT enabled.
+          Without Secure Boot, the GRUB password provides no physical-access protection —
+          an attacker can boot a custom bootloader that bypasses GRUB authentication.
+          Enable Secure Boot in firmware before activating GRUB password hardening,
+          or set system_grub_password_enabled: false to suppress this check.
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grub_password_enabled | default(false) | bool
+        - system_sb_state_result.rc | default(-1) == 0
+
     - name: Remove stale kernel lockdown parameter before mode change
       ansible.builtin.command:
         cmd: grubby --remove-args="lockdown" --update-kernel=ALL

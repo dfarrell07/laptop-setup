@@ -224,13 +224,20 @@
     - csb_detected | bool
     - is_fedora | bool
 
-- name: Inform on RHEL CSB hybrid tier (fapolicyd not enforcing)
-  ansible.builtin.debug:
-    msg: >-
-      NOTE: RHEL host with CSB detection but fapolicyd not enforcing (stopped, permissive mode, or masked) — running in hybrid tier.
-      Dev tools will be installed in a container rather than the host.
-      Pass -e needs_container_tier=host-only on the ansible-playbook command line to override
-      (set_fact outranks config.yml; use -e flag, not config.yml).
+- name: Assert fapolicyd downgrade acknowledged on RHEL CSB hybrid tier
+  ansible.builtin.assert:
+    that:
+      - csb_fapolicyd_downgrade_acknowledged | default(false) | bool
+    fail_msg: |
+      SECURITY: RHEL CSB host detected but fapolicyd is NOT enforcing
+      (stopped, permissive mode, or masked before provisioning started).
+      This silently downgrades isolation from 'container' to 'hybrid',
+      installing dev tooling directly on the host and bypassing CSB policy.
+      To acknowledge and proceed: re-run with
+        -e csb_fapolicyd_downgrade_acknowledged=true
+    success_msg: >-
+      RHEL CSB hybrid tier acknowledged: fapolicyd not enforcing,
+      proceeding with explicit operator override.
   become: false
   when:
     - not (_csb_molecule_force | default(false))

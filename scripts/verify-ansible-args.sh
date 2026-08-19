@@ -218,6 +218,7 @@ export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
 export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
+export ANSIBLE_CONNECTION_PLUGINS=""  # prevent ANSIBLE_CONNECTION_PLUGINS=/tmp/evil hijacking: PluginLoader searches user paths before builtins; malicious local.py intercepts all localhost task execution (all 13 roles, including become:true plays)
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become
@@ -246,6 +247,7 @@ unset SIGSTORE_NO_VERIFY SIGSTORE_ROOT_FILE SIGSTORE_REKOR_PUBLIC_KEY COSIGN_EXP
 unset GOPROXY GONOSUMDB GOFLAGS GOENV  # Go env injection: GOPROXY redirects module downloads to attacker proxy; GONOSUMDB=* disables checksum verification for all modules; GOFLAGS injects arbitrary go build flags; GOENV=/tmp/evil sets all of the above via a file the Go toolchain reads before per-command env vars (printenv shows no suspicious values yet go uses them)
 unset DBUS_SESSION_BUS_ADDRESS  # D-Bus socket poisoning — dconf.py (community.general.dconf) reads DBUS_SESSION_BUS_ADDRESS first via os.environ.get before the canonical /run/user/<uid>/bus socket; _validate_address only requires dbus-send exit 0, which any cooperating fake daemon satisfies; an attacker-set DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/evil.sock routes all community.general.dconf calls (GNOME settings in roles/desktop/tasks/main.yml: show-in-lock-screen, location/enabled, remember-recent-files) to a fake daemon that silently no-ops; unsetting forces dconf.py to fall through to /run/user/<uid>/bus (canonical, non-spoofable) or dbus-run-session fallback; system-level CIS dconf hardening (roles/system/tasks/dconf.yml) writes to /etc/dconf/db/ via ansible.builtin.copy and is not affected
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
+export ANSIBLE_BECOME_EXE=/usr/bin/sudo  # pin become_exe — ANSIBLE_BECOME_EXE env var takes precedence over ansible.cfg become_exe; without this pin, 'ANSIBLE_BECOME_EXE=/tmp/evil make all' routes every Play 1 become task through an arbitrary binary that can exec real sudo transparently while silently rewriting sshd_config, authorized_keys, and audit rules
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"

@@ -1173,6 +1173,17 @@ Add to `GRUB_CMDLINE_LINUX` in `/etc/default/grub` (or use `grubby`) for a one-t
 
 **If you only need value=1 (the default):** with `system_unprivileged_bpf_disabled: 1`, root can change the sysctl at runtime without rebooting: `sudo sysctl -w kernel.unprivileged_bpf_disabled=0`.
 
+**Security note — distrobox container impact:** The distrobox container is granted CAP_BPF and
+CAP_PERFMON (required for bpfman/OVN-K workloads). At `system_unprivileged_bpf_disabled=2` these
+capabilities are effectively inert because the kernel rejects `bpf()` from unprivileged callers
+regardless of container capability grants. However, lowering the sysctl to 0 or 1 silently
+activates `bpf()` access for **all** container processes holding CAP_BPF — including transitive
+package dependencies (npm, cargo, pip). A malicious dependency can then load eBPF programs that
+attach to host kernel kprobes or tracepoints, giving it a host-kernel observation primitive with
+no user-visible interaction. Only lower `system_unprivileged_bpf_disabled` if you understand this
+trade-off, and prefer rebooting with the sysctl override in the kernel cmdline for one-time tests
+rather than persisting a lower value in `config.yml`.
+
 **CSB IT ticket:** No. This is expected behavior; no provisioning change needed.
 
 ## system: SSH Fails to Legacy RHEL 7 / Old Servers After Provisioning
