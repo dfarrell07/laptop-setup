@@ -2101,7 +2101,7 @@
               roles/claude/defaults/main.yml if policy change is intentional.
           tags: [always]
 
-        - name: Assert redhat_splunk_nologin_shell is a non-login shell when overridden (CIS 5.6 guard)
+        - name: Assert redhat_splunk_nologin_shell is a non-login shell (CIS 5.6)
           when: "'redhat_splunk_nologin_shell' in (_user_config | default({}))"
           ansible.builtin.assert:
             that:
@@ -2167,7 +2167,7 @@
               To fix: Set all three variables in config.yml to actual values before running provisioning.
           tags: [always]
 
-        - name: Assert identity/gitconfig vars contain safe characters (gitconfig injection guard, play namespace)
+        - name: Assert identity/gitconfig vars have safe characters (play namespace)
           ansible.builtin.assert:
             that:
               - dotfiles_user_name | default('') | string is not search('[\n\r\x00-\x1f]')
@@ -2193,7 +2193,7 @@
               slash, hyphen (dotfiles_internal_ca_path — filesystem path).
           tags: [always]
 
-        - name: Assert SSH key basenames in play namespace contain safe characters (ssh_config injection guard)
+        - name: Assert SSH key basenames have safe characters (ssh_config guard)
           ansible.builtin.assert:
             that:
               - dotfiles_ssh_hardware_key_basename | default('id_ed25519_sk') | string is match('^[a-zA-Z0-9._-]+$')
@@ -2210,7 +2210,7 @@
               hyphen only (e.g., id_ed25519_sk, id_rsa_redhat, id_ed25519_sk_signing).
           tags: [always]
 
-        - name: Assert real_user_id in play namespace matches valid Linux username character set (ssh_config injection guard)
+        - name: Assert real_user_id matches valid Linux username format (ssh_config guard)
           when: profile == 'work'
           ansible.builtin.assert:
             that:
