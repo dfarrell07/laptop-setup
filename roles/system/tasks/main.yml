@@ -68,17 +68,6 @@
   when: not system_is_container
   tags: [always]
 
-# --- Load kernel modules for kind BEFORE hardening_core applies modules_disabled ratchet ---
-# kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
-# sysctl.yml (included by hardening_core.yml) writes this value, and sshd.yml's
-# flush_handlers triggers sysctl --system mid-play. If kernel_modules_kind.yml runs
-# after that flush, modprobe commands fail with EPERM and kind networking is broken
-# until reboot. Moving kernel module loads to pre-flight phase (before any hardening)
-# eliminates the race entirely.
-- name: Kernel modules for kind (pre-hardening)
-  ansible.builtin.include_tasks: kernel_modules_kind.yml
-  when: profile == 'work' or install_virtualization | bool
-
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
@@ -193,6 +182,17 @@
 
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
+
+# --- Load kernel modules for kind AFTER sysctl.yml deploys 90-hardening.conf ---
+# kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
+# Task order satisfies two constraints:
+# 1. kernel_modules_kind.yml runs AFTER sysctl.yml deploys 90-hardening.conf
+#    (fixes bridge-nf-call-iptables assertion failure on first provision)
+# 2. modprobe runs BEFORE flush_handlers activates modules_disabled=1 ratchet
+#    (sshd.yml flush at line 334 triggers sysctl --system; after that modprobe fails with EPERM)
+- name: Kernel modules for kind
+  ansible.builtin.include_tasks: kernel_modules_kind.yml
+  when: profile == 'work' or install_virtualization | bool
 
 - name: "GRUB bootloader password (CIS 1.4.2)"
   ansible.builtin.import_tasks: grub_password.yml
