@@ -49,6 +49,20 @@ Solution: Do not use --skip-tags always with site.yml.
 EOF
         exit 1
     fi
+    # Block -e _pf_is_molecule=* / --extra-vars=_pf_is_molecule=* (single-arg =value form)
+    # extra-vars (precedence 22) beats set_fact (18); pre-defining _pf_is_molecule=true
+    # forces the flag permanently true, bypassing all 7 `when: not _pf_is_molecule` guards
+    # in pre_flight_checks.yml for the entire play (vault checks, SSTI guard, URL validation).
+    if [[ "$arg" == --extra-vars=_pf_is_molecule=* || "$arg" == -e_pf_is_molecule=* ]]; then
+        cat >&2 <<EOF
+ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
+Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
+        set_fact (precedence 18) that derives it from the environment, permanently
+        forcing it true and bypassing all 7 pre_flight_checks.yml security assertions.
+Solution: Do not pass _pf_is_molecule as an extra-var.
+EOF
+        exit 1
+    fi
     # Block -e _pf_vault_asserted=* / --extra-vars=_pf_vault_asserted=* (single-arg =value form)
     # Passing this via extra-vars (precedence 22) would pre-define the flag that gates the
     # vault_*/secret-key/security-policy assertions in pre_flight_checks.yml, silently skipping
@@ -104,6 +118,17 @@ Reason: --skip-tags always skips Play 0 entirely, bypassing collection verificat
         and all security assertions tagged [always] in pre_flight_checks.yml.
 Solution: Do not use --skip-tags always with site.yml.
          Use a scoped make target instead (make claude, make packages, make ssh, etc.).
+EOF
+        exit 1
+    fi
+    # Block space-separated: -e _pf_is_molecule=<value> and --extra-vars _pf_is_molecule=<value>
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_is_molecule=* ]]; then
+        cat >&2 <<EOF
+ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
+Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
+        set_fact (precedence 18) that derives it from the environment, permanently
+        forcing it true and bypassing all 7 pre_flight_checks.yml security assertions.
+Solution: Do not pass _pf_is_molecule as an extra-var.
 EOF
         exit 1
     fi
@@ -215,6 +240,19 @@ Do not set HOME to another user's directory before running make all.
 EOF
     exit 1
 fi
+# SECURITY: Validate USER matches id -un to prevent identity injection.
+# An attacker setting USER=victim causes AllowUsers victim in the sshd drop-in,
+# locking out the real user mid-play. id -un is kernel-sourced (getpwuid) and
+# cannot be spoofed via environment variables.
+if [[ -n "${USER:-}" && "$USER" != "$_invoking_user" ]]; then
+    cat >&2 <<EOF
+ERROR: USER env var does not match id -un — possible identity injection
+  USER env var : ${USER}
+  Expected     : ${_invoking_user} (from id -un)
+Do not set USER to another user's identity before running make all.
+EOF
+    exit 1
+fi
 unset _invoking_user _passwd_home
 
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
@@ -240,6 +278,7 @@ export ANSIBLE_CALLBACK_PLUGINS=""  # block callback plugin path hijacking — p
 export ANSIBLE_STDOUT_CALLBACK="default"  # pin stdout callback — prevents ANSIBLE_STDOUT_CALLBACK=evil_cb injecting a callback that receives all task results (vault secrets, authorized_keys, registry tokens)
 export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
 export ANSIBLE_BECOME_FLAGS=  # strip injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
+export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 unset MOLECULE_SCENARIO_NAME  # prevent molecule-context bypass on real hosts
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
@@ -260,6 +299,7 @@ export ANSIBLE_BECOME_METHOD=sudo  # pin become_method — ANSIBLE_BECOME_METHOD
 unset ANSIBLE_SU_EXE ANSIBLE_PFEXEC_EXE ANSIBLE_SUDO_EXE  # remove per-plugin exe escape paths — each alternative become plugin (su, pfexec, sudo) exposes its own executable env var; clearing all three prevents ANSIBLE_BECOME_METHOD override from activating a residual attacker-controlled executable even if pinning above is somehow circumvented
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 export ANSIBLE_BECOME_EXE=/usr/bin/sudo  # pin become_exe — ANSIBLE_BECOME_EXE env var takes precedence over ansible.cfg become_exe; without this pin, 'ANSIBLE_BECOME_EXE=/tmp/evil make all' routes every Play 1 become task through an arbitrary binary that can exec real sudo transparently while silently rewriting sshd_config, authorized_keys, and audit rules
+export ANSIBLE_BECOME_USER=root  # pin become_user — ANSIBLE_BECOME_USER env var overrides the implicit root default for all Play 1 become: true tasks; 'ANSIBLE_BECOME_USER=dfarrell make all' causes sudo to run as the invoking user rather than root, making all system file writes (sysctl, sshd_config, PAM, audit rules, firewall) fail with EACCES; many failures are swallowed by CSB rescue blocks leaving the host unhardened while provisioning appears to succeed
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"
