@@ -287,27 +287,33 @@
           repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must target known Red Hat
           internal domains (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com);
           this prevents subdomain hijacking attacks. Do not use arbitrary redhat.com subdomains.
-    - name: Fetch Red Hat internal GPG key from HTTPS
-      ansible.builtin.get_url:
-        url: "{{ repos_dnf_redhat_gpgkey }}"
-        dest: "/tmp/redhat-gpg-key.gpg"
-        mode: "0644"
+    - name: Create secure temporary directory for Red Hat GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _redhat_gpg
+      register: _redhat_gpg_tmp_dir
       when: repos_dnf_redhat_gpg_fingerprint | length > 0
-    - name: Verify Red Hat internal GPG key fingerprint
+    - name: Fetch and verify Red Hat internal GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          gpg --with-colons /tmp/redhat-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+          set -e
+          KEYFILE="{{ _redhat_gpg_tmp_dir.path }}/key.gpg"
+          curl -fsSL "{{ repos_dnf_redhat_gpgkey }}" -o "$KEYFILE"
+          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ "$FP" = "{{ repos_dnf_redhat_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
       changed_when: false
-      register: _redhat_fp
-      failed_when: |
-        _redhat_fp.stdout_lines | length == 0 or
-        repos_dnf_redhat_gpg_fingerprint not in _redhat_fp.stdout | upper
       when: repos_dnf_redhat_gpg_fingerprint | length > 0
-    - name: Import Red Hat internal GPG key
-      ansible.builtin.command:
-        cmd: "rpm --import /tmp/redhat-gpg-key.gpg"
-      changed_when: false
-      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+    - name: Clean up Red Hat GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _redhat_gpg_tmp_dir.path }}"
+        state: absent
+      when:
+        - repos_dnf_redhat_gpg_fingerprint | length > 0
+        - _redhat_gpg_tmp_dir is defined
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
@@ -317,6 +323,14 @@
         gpgkey: "{{ repos_dnf_redhat_gpgkey | default(omit) }}"
         enabled: true
   rescue:
+    - name: Remove Red Hat GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _redhat_gpg_tmp_dir.path }}"
+        state: absent
+      failed_when: false
+      when:
+        - _redhat_gpg_tmp_dir is defined
+        - _redhat_gpg_tmp_dir.path is defined
     - name: Record Red Hat repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
