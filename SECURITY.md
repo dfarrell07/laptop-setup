@@ -181,14 +181,19 @@ before merge, but it is still a violation of security policy.
 
 ## Unsafe Git Operations
 
-**NEVER use `git commit --no-verify` or `git push --no-verify`.** See § "Git Hooks Protection" for architecture (why pre-push bypass is unpreventable) and risk analysis. The pre-commit hook enforces vault encryption, secrets scanning (gitleaks), and code quality; server-side CI validation compensates for `--no-verify` pushes via required status checks on all branches.
+**NEVER use `git commit --no-verify` or `git push --no-verify`.** The pre-commit hook (.githooks/pre-commit) enforces three critical gates:
+1. Vault encryption — blocks plaintext vault files
+2. Secret scanning (gitleaks) — detects hard-coded credentials
+3. Collections supply chain — enforces `collections-dist/SHA256SUMS` update when tarballs are modified
+
+**Why this matters**: Collections tarballs (`collections-dist/*.tar.gz`) modified without a matching `SHA256SUMS` update bypass the pre-commit hook check (lines 5-26). An unverified tarball can reach the PR branch before `collections-integrity` CI validation runs. This is a concrete, exploitable codebase vulnerability — supply chain tampering via unsigned collections.
 
 **Exception: CI-only scenarios** — in GitHub Actions workflows, using `--no-verify` is acceptable ONLY when:
-- The workflow is part of a sealed CI system (no untrusted input)
-- The commit is generated entirely by CI automation (not from developer code)
-- The commit message and content have already been validated by earlier CI gates
+- The workflow is sealed (no untrusted input)
+- The commit is entirely CI-generated (not developer code)
+- Earlier CI gates have validated commit content
 
-Never use `--no-verify` in local development or on developer machines.
+Never use `--no-verify` in local development or on developer machines. See § "Git Hooks Protection" for architecture details on why pre-push bypass is unpreventable at the hook level.
 
 ## Git Hook Security and Signing
 
@@ -416,7 +421,7 @@ as a required check. This ensures:
 
 ### GPG Signature Verification
 
-**Signing Key**: AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+See § Cryptographic Identities Registry — Collections Signing row for the key fingerprint.
 
 The `collections-dist/SHA256SUMS.asc` file is GPG-signed to provide defense-in-depth protection
 against tarball tampering. The signing key is distributed in the repository at
