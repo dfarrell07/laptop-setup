@@ -121,7 +121,10 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    vault.yml ships as plaintext — `make all` works as-is but SSH keys won't be deployed.
    **WARNING**: if vault is unpopulated, no authorized_keys is written; after reboot sshd
    moves to port 722 and SSH login fails unless an out-of-band authorized_keys entry already
-   exists. Populate the vault (or manually add your public key) before rebooting.
+   exists. Additionally, sshd hardening will REJECT RSA/ECDSA keys — only ed25519 and FIDO2
+   (sk-ssh-ed25519) keys are accepted. Existing authorized_keys with RSA keys will fail auth
+   after hardening deploys. Populate the vault with an ed25519 key (or manually add one to
+   authorized_keys) before rebooting.
 3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts

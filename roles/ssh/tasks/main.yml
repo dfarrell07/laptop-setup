@@ -150,6 +150,42 @@
       Remove the symlink and re-run provisioning.
   tags: [always]
 
+- name: Validate existing authorized_keys key types when vault is empty
+  when:
+    - ssh_auth_key_pub | trim | length == 0  # vault empty
+    - _ssh_authkeys_stat.stat.exists
+  block:
+    - name: Read existing authorized_keys
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+      register: _existing_authkeys
+
+    - name: Parse key types from authorized_keys
+      ansible.builtin.set_fact:
+        _existing_key_types: >-
+          {{ (_existing_authkeys.content | b64decode).split('\n')
+             | select('match', '^ssh-')
+             | map('regex_replace', '^([^ ]+).*', '\\1')
+             | list }}
+
+    - name: Assert all existing authorized_keys are compatible with sshd hardening
+      ansible.builtin.assert:
+        that:
+          - _existing_key_types | difference(ssh_pubkey_accepted_algorithms) | length == 0
+        fail_msg: >-
+          CRITICAL: SSH Lockout Risk — Vault Empty + Incompatible authorized_keys.
+          Your vault is empty (vault_ssh_auth_key_pub not populated), so no ed25519 key
+          will be deployed. However, ~/.ssh/authorized_keys contains key types that will
+          be REJECTED by sshd hardening: {{ _existing_key_types | difference(ssh_pubkey_accepted_algorithms) | join(', ') }}.
+          After provisioning, sshd will restrict PubkeyAcceptedAlgorithms to {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
+          On reboot, sshd moves to port 722 with hardening that rejects RSA/incompatible keys.
+          You will be LOCKED OUT. REQUIRED ACTIONS BEFORE RUNNING 'make all':
+          (1) Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_bootstrap
+          (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_bootstrap.pub >> ~/.ssh/authorized_keys
+          (3) Test login with ed25519 key before rebooting
+          OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
+      when: _existing_key_types | length > 0
+
 - name: Add SSH auth public key to authorized_keys
   ansible.posix.authorized_key:
     user: "{{ ansible_facts['user_id'] }}"
