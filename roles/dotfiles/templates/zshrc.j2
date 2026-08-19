@@ -65,8 +65,8 @@ command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && 
 # Fedora rpm ships completion via /usr/share/zsh/site-functions/_fzf (picked up by compinit);
 # completion.zsh does not exist in the Fedora package. No explicit source needed for rpm installs.
 {% elif _system == 'Darwin' %}
-command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh" ]] && source "{{ dotfiles_homebrew_prefix }}/opt/fzf/shell/key-bindings.zsh"
-command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh" ]] && source "{{ dotfiles_homebrew_prefix }}/opt/fzf/shell/completion.zsh"
+command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh"
+command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh"
 {% endif %}
 {% if _system == 'Linux' %}
 command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
@@ -78,8 +78,8 @@ command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'" 
 [[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 [[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 {% elif _system == 'Darwin' %}
-[[ -f "{{ dotfiles_homebrew_prefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && source "{{ dotfiles_homebrew_prefix }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-[[ -f "{{ dotfiles_homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && source "{{ dotfiles_homebrew_prefix }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+[[ -f "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+[[ -f "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 {% endif %}
 
 # --- Claude Code ---
