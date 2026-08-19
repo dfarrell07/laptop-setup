@@ -435,7 +435,13 @@
           desktop_wm_browser, desktop_sway_polkit_agent, desktop_i3_polkit_agent, desktop_terminal
           must be safe executable paths (alphanumeric/slash/dot/dash/underscore only — no shell
           metacharacters). desktop_i3_trackpoint_id must be alphanumeric/space/dot/underscore/hyphen
-          (Xorg device name characters). These values are rendered into WM exec directives or Xorg
+          (Xorg device name characters). desktop_sway_trackpoint_id must be alphanumeric/space/
+          dot/colon/slash/underscore/hyphen (sway input device name e.g. '2:10:TPPS/2_IBM_TrackPoint');
+          a newline payload closes the input block and injects exec directives into sway config.
+          desktop_sway_trackpoint_accel_profile must be flat or adaptive.
+          desktop_sway_trackpoint_pointer_accel must be in [-1.0, 1.0].
+          desktop_sway_trackpoint_scroll_factor must be >= 0.
+          These values are rendered into WM exec directives or Xorg
           config; shell metacharacters, newlines, or special Xorg syntax (EndSection, MatchProduct)
           allow command injection when the WM/Xorg starts (e.g., desktop_i3_trackpoint_id='device\nEndSection\nSection'
           breaks Xorg parsing and injects arbitrary Xorg directives).

@@ -218,6 +218,30 @@
     'INVALID_ZONE' not in (_result.msg | default(''))
   notify: Apply firewall rules
 
+# Non-CSB safety net: on plain Fedora with zone management explicitly disabled via
+# system_firewall_manage_zone: false, the drop-zone SSH task (line ~176) is skipped and
+# the CSB fallback above requires csb_detected=true — leaving port {{ ssh_port }} in no zone.
+# After sshd.yml reconfigures sshd to port {{ ssh_port }}, SSH becomes unreachable externally.
+# This task is a safety net; the recommended setting is to leave system_firewall_manage_zone
+# at its default (not csb_rhel, which is true on plain Fedora).
+- name: Open SSH port in default firewall zone (non-CSB safety net — zone management disabled)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  register: _result_non_csb_ssh
+  when:
+    - system_firewalld_running | bool
+    - not csb_detected
+    - not (system_firewall_manage_zone | bool)
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', '']
+  failed_when: >-
+    (_result_non_csb_ssh.failed | default(false)) and
+    'INVALID_ZONE' not in (_result_non_csb_ssh.msg | default(''))
+  notify: Apply firewall rules
+
 - name: Warn that SSH port {{ ssh_port }} not opened — RHEL CSB drop zone requires IT policy
   ansible.builtin.debug:
     msg: >-
