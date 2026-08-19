@@ -993,7 +993,7 @@
       ('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic')))
       in (verify_dot_conf_content.content | b64decode)
     fail_msg: >-
-      99-dot.conf missing expected DNSOverTLS={{ system_dot_mode | default('opportunistic') }} — template regression?
+      99-dot.conf missing expected DNSOverTLS={{ system_dot_mode | default('opportunistic') }}, got: {{ verify_dot_conf_content.content | b64decode | regex_search('DNSOverTLS=\S*') | default('(no DNSOverTLS= line)') }} — template regression?
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
