@@ -2888,3 +2888,30 @@
           ansible.builtin.set_fact:
             _pf_grub_validated: true
           tags: [always]
+
+    - name: Assert desktop_gnome_hardening_dconf is a non-empty list with /org/gnome/* keys (CIS dconf hardening guard)
+      when: _config_yml_raw.content is defined
+      tags: [always]
+      vars:
+        _raw: "{{ _config_raw }}"
+        _dconf_list: "{{ _raw.get('desktop_gnome_hardening_dconf', '__unset__') }}"
+        _bad_keys: >-
+          {{ _dconf_list | map(attribute='key', default='') | map('string') | select() |
+             reject('match', '^/org/gnome/') | list
+             if _dconf_list != '__unset__' else [] }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_dconf_list == '__unset__') or
+            (_dconf_list | type_debug != 'list') or
+            (_dconf_list | length > 0)
+          - _bad_keys | length == 0
+        fail_msg: >-
+          SECURITY: desktop_gnome_hardening_dconf in config.yml is empty or contains keys
+          outside /org/gnome/. Setting this list to [] silently drops all CIS GNOME hardening
+          (lock-screen notification suppression, location disable, recent-files disable) because
+          include_vars precedence 17 fully replaces the role default (precedence 2) and the
+          desktop role loops over an empty list with no error.
+          Fix: remove desktop_gnome_hardening_dconf from config.yml to use the role defaults,
+          or keep ALL required CIS keys with /org/gnome/ prefixes.
+          Bad keys (not /org/gnome/*): {{ _bad_keys }}

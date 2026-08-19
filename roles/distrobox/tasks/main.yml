@@ -252,6 +252,9 @@
           distrobox assemble create
           {{ '--replace' if distrobox_container_replace | bool else '' }}
           --file {{ distrobox_ini_path }}
+      environment:
+        CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
+        DOCKER_HOST: ""
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_create_result
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change

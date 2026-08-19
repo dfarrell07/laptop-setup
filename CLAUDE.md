@@ -231,11 +231,12 @@ make repos-downstream # downstream repos only
   `system_disable_avahi` (true — masks avahi-daemon for mDNS/DNS-SD; set false to restore .local resolution),
   `system_core_pattern` (roles/system/defaults only — pipe target for kernel.core_pattern sysctl; toggle-managed, do NOT override via system_sysctl_extra),
   `system_chrony_service_enabled` (`not system_is_container` — chrony disabled in containers; import guard in main.yml prevents enabling chrony inside a container regardless of this variable),
-  `system_dnssec_mode` (allow-downgrade — DNSSEC validation mode for systemd-resolved; set `yes` when also using `system_dot_mode: yes` for full strict DoT+DNSSEC enforcement; allow-downgrade pairs with opportunistic DoT).
+  `system_dnssec_mode` (allow-downgrade — DNSSEC validation mode for systemd-resolved; set `yes` when also using `system_dot_mode: yes` for full strict DoT+DNSSEC enforcement; allow-downgrade pairs with opportunistic DoT),
+  `containers_environment_d_enabled` (false — opt-in; writes DOCKER_HOST to environment.d so non-interactive shells like `make` can reach Podman; set true in config.yml only when using `make kind` for OVN-K/Submariner; disabled by default because systemd-environment-d-generator injects DOCKER_HOST into every graphical session process).
 - **environment.d for Make**: `DOCKER_HOST` and `KIND_EXPERIMENTAL_PROVIDER=podman` are in both `.zshrc`
   (interactive shells) AND `~/.config/environment.d/containers.conf` (systemd user session generator).
   The environment.d path is critical for OVN-K/Submariner `make kind` since `make` spawns `sh` not
-  `zsh` — see `troubleshooting.md` for the failure mode
+  `zsh` — see `troubleshooting.md` for the failure mode. Requires `containers_environment_d_enabled: true` in config.yml (opt-in; default false)
 
 ## Commit Conventions
 
