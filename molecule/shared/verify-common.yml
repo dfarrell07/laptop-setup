@@ -844,8 +844,20 @@
     - "AllowUsers "
   loop_control:
     label: "{{ item | split(' ') | first }}"
-  changed_when: false
+  failed_when: false
+  register: verify_sshd_directives
   become: true
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - not csb_rhel
+    - verify_sshd_dropin.stat.exists
+
+- name: Verify sshd directives found in drop-in
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "sshd drop-in missing directive {{ item.item }} (expected in /etc/ssh/sshd_config.d/00-hardening.conf)"
+  loop: "{{ verify_sshd_directives.results }}"
   when:
     - ansible_system == 'Linux'
     - ansible_os_family != 'Debian'
