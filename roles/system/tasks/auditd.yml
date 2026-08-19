@@ -51,6 +51,32 @@
           the auditd rules file. Ensure HOME is set correctly before running.
           real_user_home must not contain '..' or './' path traversal sequences.
 
+    - name: Detect audit rules files that sort after claude-code.rules and disable enforcement
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          problem=""
+          for f in /etc/audit/rules.d/*.rules; do
+            [ -f "$f" ] || continue
+            b=$(basename "$f")
+            [ "$b" \> "claude-code.rules" ] || continue
+            grep -qE '^[[:space:]]*-e[[:space:]]+0' "$f" && problem="${problem:+$problem }$b"
+          done
+          printf '%s' "$problem"
+        executable: /bin/bash
+      register: _auditd_late_e0_files
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if a late-sorting audit rules file disables enforcement
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY: file(s) in /etc/audit/rules.d/ sort after claude-code.rules and
+          contain '-e 0', which overrides audit enforcement after augenrules merge:
+          {{ _auditd_late_e0_files.stdout }}. Remove or rename so they sort before
+          claude-code.rules, then re-run provisioning.
+      when: _auditd_late_e0_files.stdout | trim | length > 0
+
     - name: Deploy auditd rules
       # File sorts as 's' — before 'z' and digit-prefixed files. augenrules merges
       # rules.d/ in lexicographic order; the last -e directive wins. If IT later deploys
