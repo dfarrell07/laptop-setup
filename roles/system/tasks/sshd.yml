@@ -150,6 +150,14 @@
       changed_when: false
       check_mode: false  # read-only probe — must run in check mode
 
+    - name: Record sshd drop-in checksum for TOCTOU integrity guard
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.d/00-hardening.conf
+        checksum_algorithm: sha256
+      register: _sshd_dropin_post_validation
+      changed_when: false
+      check_mode: false  # read-only probe
+
   rescue:
     - name: Remove broken sshd drop-in to prevent SSH lockout on next restart
       ansible.builtin.file:
@@ -255,3 +263,32 @@
       may remain permitted — CIS {{ system_crypto_policy_target }} policy not enforced.
   when:
     - system_crypto_policy_set.rc | default(0) != 0
+
+# --- TOCTOU guard: re-verify drop-in integrity before sshd restart handler fires ---
+- name: Re-stat sshd drop-in before handler fires (TOCTOU guard)
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/00-hardening.conf
+    checksum_algorithm: sha256
+  register: _sshd_dropin_pre_handler
+  changed_when: false
+  check_mode: false  # read-only probe
+  when:
+    - _sshd_dropin_post_validation is defined
+    - _sshd_dropin_post_validation.stat is defined
+
+- name: Abort if sshd drop-in changed since sshd -t validation (TOCTOU guard)
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: /etc/ssh/sshd_config.d/00-hardening.conf changed after sshd -t
+      validated it — possible TOCTOU file substitution. Aborting before sshd restart
+      to prevent loading an unvalidated config. Re-run make system to recover.
+      Expected: {{ _sshd_dropin_post_validation.stat.checksum }}
+      Found:    {{ _sshd_dropin_pre_handler.stat.checksum | default('missing') }}
+  when:
+    - _sshd_dropin_post_validation is defined
+    - _sshd_dropin_post_validation.stat is defined
+    - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
+      _sshd_dropin_post_validation.stat.checksum
+
+- name: Flush sshd restart handler immediately after TOCTOU integrity check passes
+  ansible.builtin.meta: flush_handlers

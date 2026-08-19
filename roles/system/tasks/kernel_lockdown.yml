@@ -338,3 +338,46 @@
     system_luks_allow_discards_remove is changed or
     system_luks_options_discard_remove is changed or
     system_kernel_cmdline_result is changed
+
+# Write /etc/motd.d/30-reboot-required when lockdown is configured but not yet active
+# in the running kernel. This persists across sessions until the host is rebooted.
+# The smoke-test emits FAIL for this condition; the MOTD ensures every login is a reminder.
+- name: Check whether kernel lockdown is active in the running kernel
+  ansible.builtin.slurp:
+    src: /sys/kernel/security/lockdown
+  register: _system_lockdown_active_raw
+  failed_when: false
+  changed_when: false
+  when:
+    - system_kernel_lockdown | length > 0
+    - not system_is_container
+
+- name: Write MOTD reboot notice when lockdown is configured but not active on running kernel
+  ansible.builtin.copy:
+    content: |
+      *** REBOOT REQUIRED ***
+      Kernel lockdown ({{ system_kernel_lockdown }}) has been written to the boot cmdline
+      but is NOT active on the running kernel. kexec_file_load() is unblocked until reboot.
+      Run `make smoke-test` after reboot to confirm kernel-lockdown PASS before using this machine.
+    dest: /etc/motd.d/30-reboot-required
+    mode: "0644"
+  when:
+    - system_kernel_lockdown | length > 0
+    - not system_is_container
+    - not csb_rhel
+    - _system_lockdown_active_raw is not failed
+    - _system_lockdown_active_raw.content is defined
+    - (_system_lockdown_active_raw.content | b64decode) is not search('\[(integrity|confidentiality)\]')
+
+- name: Remove MOTD reboot notice once lockdown is active on running kernel
+  ansible.builtin.file:
+    path: /etc/motd.d/30-reboot-required
+    state: absent
+  when: >-
+    system_is_container or
+    (system_kernel_lockdown | length > 0 and
+     _system_lockdown_active_raw is not failed and
+     _system_lockdown_active_raw.content is defined and
+     (_system_lockdown_active_raw.content | b64decode) is search('\[(integrity|confidentiality)\]')) or
+    system_kernel_lockdown | length == 0
+  failed_when: false

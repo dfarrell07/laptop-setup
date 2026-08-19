@@ -255,8 +255,10 @@ system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: 
 #   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
 #   system_chrony_service_enabled: "{{ not system_is_container }}"
 #                                        (roles/system/defaults) — auto-disabled in containers; set true to force-enable
-#   system_chrony_authselectmode: prefer (roles/system/defaults) — NTS auth select mode; set 'require' for strict NTS
-#                                        (time sync fails completely on NTS-blocking networks when set to 'require')
+#   system_chrony_authselectmode: require (roles/system/defaults) — NTS auth select mode; default 'require' surfaces NTS-KE
+#                                        failure as a chrony error rather than silent fallback to unauthenticated NTP.
+#                                        Set 'prefer' on restricted networks where TCP 4460 is blocked; also set
+#                                        system_chrony_authselectmode_prefer_confirmed: true to acknowledge the trade-off.
 #   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
 #                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
 #   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile

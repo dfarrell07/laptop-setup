@@ -765,8 +765,9 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if [[ -f /sys/kernel/security/lockdown ]]; then
     ld=$(<"/sys/kernel/security/lockdown")
     if grep -qE '\[integrity\]|\[confidentiality\]' <<< "$ld"; then record "kernel-lockdown" "PASS"
-    elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null; then
-      record "kernel-lockdown" "WARN" "lockdown in /etc/kernel/cmdline but not active — reboot to activate"
+    elif grep -q 'lockdown=' /etc/kernel/cmdline 2>/dev/null || \
+         grep -q 'lockdown=' /proc/cmdline 2>/dev/null; then
+      record "kernel-lockdown" "FAIL" "lockdown= in cmdline but not active in running kernel — machine not yet hardened; reboot required before this host is considered secure"
     elif [[ -n "$_lockdown_intended" ]]; then
       record "kernel-lockdown" "WARN" "lockdown= absent from /etc/kernel/cmdline but lockdown='${_lockdown_intended}' was intended — grubby may have failed silently; verify with: sudo grubby --info=DEFAULT"
     fi

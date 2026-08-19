@@ -1755,16 +1755,34 @@
           list, then set in config.yml: system_chrony_nts_servers_confirmed: true
       tags: [always]
 
+    - name: Assert system_chrony_authselectmode prefer requires explicit acknowledgement
+      when:
+        - _config_yml_raw.content is defined
+        - _config_raw.get('system_chrony_authselectmode', '') == 'prefer'
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_chrony_authselectmode_prefer_confirmed', false) | bool
+        fail_msg: >-
+          SECURITY: system_chrony_authselectmode=prefer is set in config.yml but
+          system_chrony_authselectmode_prefer_confirmed is not true. prefer mode allows
+          silent fallback to unauthenticated NTP when TCP 4460 (NTS-KE) is blocked,
+          enabling on-path clock manipulation (Kerberos/TLS replay, cert expiry bypass).
+          If prefer is intentional (e.g. restricted network where 4460 is blocked), also
+          set in config.yml: system_chrony_authselectmode_prefer_confirmed: true
+      tags: [always]
+
     - name: "Warn: DHCP-sourced NTP active with authselectmode=prefer — rogue DHCP risk"
       tags: [always]
       when:
         - system_chrony_dhcp_sourcedir | default('') | length > 0
-        - system_chrony_authselectmode | default('prefer') != 'require'
+        - system_chrony_authselectmode | default('require') != 'require'
         - system_chrony_service_enabled | default(true) | bool
       ansible.builtin.debug:
         msg: >-
           SECURITY NOTE: system_chrony_dhcp_sourcedir='{{ system_chrony_dhcp_sourcedir }}'
-          and system_chrony_authselectmode='{{ system_chrony_authselectmode | default("prefer") }}'.
+          and system_chrony_authselectmode='{{ system_chrony_authselectmode | default("require") }}'.
           DHCP-sourced NTP servers are accepted as unauthenticated clock sources. A rogue or
           compromised DHCP server on the local segment can push an attacker-controlled NTP server,
           manipulate the system clock, and enable replay/certificate/Kerberos attacks. To harden:

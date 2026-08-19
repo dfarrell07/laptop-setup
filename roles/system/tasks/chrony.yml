@@ -258,13 +258,14 @@
     - system_chrony_authselectmode == 'require'
     - not csb_rhel
 
-- name: "Warn: NTS-KE requires outbound TCP 4460 (standard deployment)"
+- name: "Warn: authselectmode prefer — unauthenticated fallback active (standard deployment)"
   ansible.builtin.debug:
     msg: >-
-      chrony NTS deployed — requires TCP 4460 to {{ system_chrony_nts_servers | join('/') }};
-      if blocked, chrony falls back to unauthenticated pool (not cryptographically verified,
-      vulnerable to on-path NTP spoofing); set system_chrony_authselectmode: require in
-      config.yml to surface NTS failure as an error if authenticated time is a hard requirement.
+      chrony NTS deployed with authselectmode=prefer — requires TCP 4460 to
+      {{ system_chrony_nts_servers | join('/') }}; if blocked, chrony falls back to
+      unauthenticated pool (not cryptographically verified, vulnerable to on-path NTP
+      spoofing). Default is require; prefer was explicitly set in config.yml and
+      acknowledged via system_chrony_authselectmode_prefer_confirmed: true.
   when:
     - system_chrony_service_enabled | bool
     - not csb_detected
