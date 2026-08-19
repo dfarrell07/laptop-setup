@@ -349,6 +349,13 @@
     - not (containers_enforce_fqin | bool)
 
 # --- periodic container storage cleanup ---
+- name: Assert containers_prune_schedule contains only valid OnCalendar characters
+  ansible.builtin.assert:
+    that:
+      - containers_prune_schedule | string | regex_search('^[a-zA-Z0-9:*/, .-]+$') is not none
+    fail_msg: "containers_prune_schedule '{{ containers_prune_schedule }}' contains invalid characters for a systemd OnCalendar value"
+  when: containers_prune_enabled | bool
+
 - name: Set systemd user unit directory fact
   ansible.builtin.set_fact:
     _containers_systemd_user_dir: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
