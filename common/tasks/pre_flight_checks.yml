@@ -658,14 +658,14 @@
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_tmux_history_limit', '50000') | string is match('^[1-9][0-9]*$')
-          - _raw.get('dotfiles_tmux_prefix', 'C-a') | string is match('^[CM]-[a-zA-Z]$')
+          - _raw.get('dotfiles_tmux_prefix', 'C-a') | string is match('^[CM]-[a-zA-Z][a-zA-Z0-9]*$')
         fail_msg: >-
           SECURITY: dotfiles_tmux_history_limit or dotfiles_tmux_prefix in config.yml
           contains an unsafe value. These values are rendered verbatim into tmux.conf;
           newlines inject additional tmux commands (run-shell allows arbitrary shell
           execution on tmux start or prefix-r reload).
           dotfiles_tmux_history_limit must be a positive integer (e.g. 50000).
-          dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b).
+          dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b, C-Space).
 
     - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
       when: _config_raw is defined

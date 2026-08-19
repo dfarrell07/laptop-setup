@@ -272,11 +272,11 @@
   ansible.builtin.assert:
     that:
       - dotfiles_tmux_prefix | length > 0
-      - dotfiles_tmux_prefix is regex('^[A-Za-z0-9-]+$')
+      - dotfiles_tmux_prefix is regex('^[CM]-[a-zA-Z][a-zA-Z0-9]*$')
     fail_msg: >-
-      dotfiles_tmux_prefix='{{ dotfiles_tmux_prefix }}' contains characters outside
-      the allowed set [A-Za-z0-9-]. A newline or special character would inject
-      arbitrary directives (e.g. run-shell) into tmux.conf. Correct config.yml.
+      dotfiles_tmux_prefix='{{ dotfiles_tmux_prefix }}' must be a Ctrl or Meta key chord.
+      Valid patterns: C-a, M-b, C-Space, C-Enter. A newline or arbitrary string would inject
+      directives (e.g. run-shell) into tmux.conf. Correct config.yml.
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2
