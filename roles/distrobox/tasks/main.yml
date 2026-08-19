@@ -34,7 +34,7 @@
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
 
-- name: SECURITY assert distrobox_host_exec_commands in known-safe allowlist (defense-in-depth)
+- name: SECURITY assert distrobox_host_exec_commands allowlist
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
   # Duplicates the allowlist check in pre_flight_checks.yml as defense-in-depth.
   vars:
@@ -240,7 +240,7 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
-    - name: Warn before destroying existing container when container_replace is true
+    - name: Warn: container_replace will destroy existing container
       ansible.builtin.debug:
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
@@ -310,7 +310,7 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
-    - name: Warn before destroying existing container when container_replace is true
+    - name: Warn: container_replace will destroy existing container
       ansible.builtin.debug:
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
