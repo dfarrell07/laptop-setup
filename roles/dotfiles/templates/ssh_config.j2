@@ -54,15 +54,15 @@ Host gitlab.cee.redhat.com
 {% if profile == 'work' and dotfiles_internal_git_host != '' %}
 
 Host internal-git
-    HostName {{ dotfiles_internal_git_host }}
+    HostName {{ dotfiles_internal_git_host | regex_replace('[^\x20-\x7e]', '') }}
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_redhat_key_basename }}
 {% endif %}
 
 {% set _ts_hosts = [dotfiles_laptop_tailscale_host, dotfiles_mac_tailscale_host] | select | list %}
 {% if _ts_hosts %}
-Host {{ _ts_hosts | join(' ') }}
-    Port {{ ssh_port }}
+Host {{ _ts_hosts | map('regex_replace', '[^\x20-\x7e]', '') | join(' ') }}
+    Port {{ ssh_port | int }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
 {% endif %}
 

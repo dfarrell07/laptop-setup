@@ -403,13 +403,23 @@
           - _raw.get('claude_queue_max_turns', 50) | int >= 0
           - _raw.get('claude_queue_timeout', 1800) | int >= 0
           - _raw.get('claude_queue_max_issues_per_run', 5) | int >= 0
+          - _raw.get('claude_queue_allowed_authors', []) | map('string') | select() |
+            reject('match', '^[a-zA-Z0-9-]+$') | list | length == 0
+          - _raw.get('claude_queue_memory_max', '4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
+          - _raw.get('claude_queue_cpu_quota', '80%') | string is match('^[0-9]+%$')
         fail_msg: >-
-          SECURITY: claude_queue_repo must be alphanumeric/slash/dot/hyphen/underscore
-          (GitHub owner/repo format). claude_queue_host_label must be alphanumeric/space/
-          dot/hyphen/underscore. claude_queue_max_turns, claude_queue_timeout,
-          claude_queue_max_issues_per_run must be non-negative integers. These values are
-          rendered into systemd unit Environment= directives and macOS launchd plist
-          <string> tags; newlines or XML metacharacters allow directive/plist injection.
+          SECURITY: claude_queue service variables in config.yml contain unsafe values.
+          Input: config.yml claude_queue_* section.
+          Mechanism: values are rendered directly into systemd unit [Service] directives
+          (Environment=, MemoryMax=, CPUQuota=); newlines inject additional directives.
+          Example: claude_queue_memory_max='4G\nMemoryMax=infinity' disables memory cap.
+          Impact: systemd unit directive injection — resource limits bypass, env var injection.
+          Fix: claude_queue_allowed_authors entries must be GitHub usernames (^[a-zA-Z0-9-]+$);
+          claude_queue_memory_max must match ^[0-9]+(K|M|G|T|%)?$|^infinity$;
+          claude_queue_cpu_quota must match ^[0-9]+%$.
+          Current values: allowed_authors={{ _raw.get('claude_queue_allowed_authors', []) }},
+          memory_max={{ _raw.get('claude_queue_memory_max', '4G') }},
+          cpu_quota={{ _raw.get('claude_queue_cpu_quota', '80%') }}.
 
     - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
       when: _config_yml_raw.content is defined
@@ -2047,6 +2057,10 @@
               - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
               - system_crypto_policy_target | default('DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
               - dotfiles_work_src_dirs | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
+              - claude_queue_allowed_authors | default([]) | map('string') | select() |
+                reject('match', '^[a-zA-Z0-9-]+$') | list | length == 0
+              - claude_queue_memory_max | default('4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
+              - claude_queue_cpu_quota | default('80%') | string is match('^[0-9]+%$')
             fail_msg: >-
               SECURITY: High-risk variable in play namespace contains unsafe value (possibly set
               via -e command-line override, bypassing config.yml-based preflight validation):
@@ -2059,7 +2073,13 @@
               system_crypto_policy_target={{ system_crypto_policy_target | default('DEFAULT') }} --
                 must be ^[A-Z0-9:_+-]+$ (no spaces; CLI arg injection via shlex.split);
               dotfiles_work_src_dirs={{ dotfiles_work_src_dirs | default([]) }} --
-                entries must be alphanumeric/hyphen/underscore (gitconfig includeIf injection).
+                entries must be alphanumeric/hyphen/underscore (gitconfig includeIf injection);
+              claude_queue_allowed_authors={{ claude_queue_allowed_authors | default([]) }} --
+                entries must be GitHub usernames (^[a-zA-Z0-9-]+$; newline injects systemd env);
+              claude_queue_memory_max={{ claude_queue_memory_max | default('4G') }} --
+                must match ^[0-9]+(K|M|G|T|%)?$|^infinity$ (newline injects systemd directive);
+              claude_queue_cpu_quota={{ claude_queue_cpu_quota | default('80%') }} --
+                must match ^[0-9]+%$ (newline injects systemd directive bypassing resource limit).
           tags: [always]
 
         - name: Set namespace validation flag (internal, cannot be pre-set)
