@@ -1549,6 +1549,14 @@
   register: verify_dconf_51_screensaver
   when: ansible_system == 'Linux'
 
+- name: Assert 51-screensaver present on GDM host
+  ansible.builtin.assert:
+    that: verify_dconf_51_screensaver.stat.exists
+    fail_msg: "/etc/dconf/db/local.d/51-screensaver missing on GDM host"
+  when:
+    - ansible_system == 'Linux'
+    - verify_gdm.stat.exists | default(false)
+
 - name: Check dconf 51-screensaver has lock-enabled=true (CIS 1.8.5)
   ansible.builtin.command: grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver
   changed_when: false
