@@ -27,27 +27,36 @@
         dest: /etc/logrotate.d/sudo
         mode: "0644"
 
-    - name: Find all files in /etc/logrotate.d
-      ansible.builtin.find:
-        paths: /etc/logrotate.d
-        file_type: file
-      register: _logrotated_found
+    - name: Find /etc/logrotate.d files not owned by any RPM (pre-plant audit)
+      # postrotate blocks execute as root via logrotate.timer; a planted file gives persistent
+      # root code execution. RPM-owned files are automatically permitted; only non-RPM files
+      # must be listed in system_logrotated_whitelist. Pattern mirrors dbus-1/system.d check.
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          find /etc/logrotate.d -maxdepth 1 -type f \
+            | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+        executable: /bin/bash
+      register: _logrotated_unowned
+      changed_when: false
+      failed_when: false
+      when: is_dnf
 
     - name: Fail if unexpected files exist in /etc/logrotate.d
       vars:
         _unexpected: >-
-          {{ _logrotated_found.files
-             | map(attribute='path')
-             | map('basename')
+          {{ _logrotated_unowned.stdout_lines | default([]) | map('basename') | list
              | difference(system_logrotated_whitelist) }}
       ansible.builtin.fail:
         msg: >-
-          Unexpected files in /etc/logrotate.d: {{ _unexpected }}.
+          Unexpected unpackaged files in /etc/logrotate.d: {{ _unexpected }}.
           Each postrotate block runs as root via logrotate.timer — a planted file
           gives persistent root code execution. Remove the unexpected file(s) or
           add them to system_logrotated_whitelist in config.yml if they are
-          legitimate packages.
-      when: _unexpected | length > 0
+          legitimate non-RPM configs.
+      when:
+        - is_dnf
+        - _unexpected | length > 0
 
 - name: Remove logrotate config for sudo.log on CSB RHEL
   ansible.builtin.file:
