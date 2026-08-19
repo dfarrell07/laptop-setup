@@ -127,6 +127,13 @@
       loop_control:
         label: "subctl{{ item.suffix }}"
 
+    - name: Create secure temp directory for RH subctl tarballs (TOCTOU mitigation)
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_subctl_rh_
+        path: "{{ ansible_facts['user_dir'] }}/.cache"
+      register: _subctl_rh_tmpdir
+
     - name: Extract downstream subctl tarball from registry image
       ansible.builtin.command:
         argv:
@@ -134,7 +141,7 @@
           - image
           - extract
           - "registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}"
-          - "--path=/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz:/tmp/"
+          - "--path=/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz:{{ _subctl_rh_tmpdir.path }}/"
           - "--confirm"
           - "--registry-config={{ ansible_facts['user_dir'] }}/.config/containers/auth.json"
       environment:
@@ -152,9 +159,9 @@
         label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Find RH subctl tarball in /tmp
+    - name: Find RH subctl tarball in secure temp directory
       ansible.builtin.find:
-        paths: /tmp
+        paths: "{{ _subctl_rh_tmpdir.path }}"
         maxdepth: 1
         patterns: "subctl-{{ item.tag }}-linux-amd64.tar.xz"
         file_type: file
@@ -168,9 +175,9 @@
         label: "{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Find RH subctl tarball (wildcard fallback) in /tmp
+    - name: Find RH subctl tarball (wildcard fallback) in secure temp directory
       ansible.builtin.find:
-        paths: /tmp
+        paths: "{{ _subctl_rh_tmpdir.path }}"
         maxdepth: 1
         patterns: "subctl-{{ item.tag }}*-linux-amd64.tar.xz"
         file_type: file
@@ -185,58 +192,31 @@
         label: "{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Set RH subctl tarball path (exact match or most recent)
-      ansible.builtin.set_fact:
-        _subctl_tarball_path: >-
-          {% set exact = _subctl_exact_match.results[loop_idx].files | default([]) %}
-          {% set wildcard = _subctl_wildcard_match.results[loop_idx].files | default([]) | sort(attribute='mtime', reverse=True) %}
-          {{ (exact + wildcard)[0].path if (exact + wildcard) | length > 0 else '' }}
-      when: >-
-        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
-        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
-                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
-      loop: "{{ packages_subctl_rh_versions }}"
-      loop_control:
-        label: "{{ item.suffix }}"
-        index_var: loop_idx
-
-    - name: Fail if RH subctl tarball is a symlink (TOCTOU attack detected)
-      ansible.builtin.fail:
-        msg: "SECURITY: RH subctl tarball is a symlink — aborting extraction to prevent TOCTOU attack"
-      when: >-
-        _subctl_tarball_path and
-        _subctl_tarball_path is symlink and
-        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
-        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
-                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
-      loop: "{{ packages_subctl_rh_versions }}"
-      loop_control:
-        label: "{{ item.suffix }}"
-        index_var: loop_idx
-
     - name: Extract and install versioned RH subctl to ~/.local/bin
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
-          TARBALL="{{ _subctl_tarball_path }}"
+          # Inline tarball path lookup (per-iteration, fixes multi-version bug)
+          EXACT=( {{ _subctl_exact_match.results[loop_idx].files | default([]) | map(attribute='path') | list | join(' ') }} )
+          WILDCARD=( {{ _subctl_wildcard_match.results[loop_idx].files | default([]) | sort(attribute='mtime', reverse=True) | map(attribute='path') | list | join(' ') }} )
+          TARBALL="${EXACT[0]:-${WILDCARD[0]:-}}"
           [[ -z "$TARBALL" ]] && exit 0
+          # Atomic symlink check (TOCTOU mitigation)
+          [[ -L "$TARBALL" ]] && { echo "SECURITY: RH subctl tarball is a symlink — aborting extraction to prevent TOCTOU attack"; exit 1; }
           TMPDIR=$(mktemp -d)
           tar -C "$TMPDIR" -xf "$TARBALL"
           BINARY=$(find "$TMPDIR" -name "subctl-{{ item.tag }}*-linux-amd64" -type f | head -1)
           [[ -z "$BINARY" ]] && { echo "ERROR: subctl binary not found in extracted tarball"; exit 1; }
           install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
           rm -rf "$TMPDIR"
-          # Clean up all matching extracted tarballs to prevent orphans
-          rm -f /tmp/subctl-{{ item.tag }}*-linux-amd64.tar.xz
           echo "INSTALLED"
         executable: /bin/bash
       register: _pkg_subctl_install
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       when: >-
-        _subctl_tarball_path and
-        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
         item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
-                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.suffix }}"
@@ -260,8 +240,15 @@
         _pkg_subctl_install.results | default([])
         | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
 
+  always:
+    - name: Clean up secure temp directory for RH subctl tarballs
+      ansible.builtin.file:
+        path: "{{ _subctl_rh_tmpdir.path }}"
+        state: absent
+      when: _subctl_rh_tmpdir.path is defined
+
   rescue:
-    - name: Clean up stale subctl tarballs from /tmp on failure
+    - name: Clean up stale subctl tarballs from /tmp on failure (legacy cleanup)
       ansible.builtin.shell:
         cmd: |
           rm -f /tmp/subctl-*-linux-amd64.tar.xz
