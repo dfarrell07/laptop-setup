@@ -12,6 +12,8 @@
     that:
       - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
       - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
+      - (container_image | default('') == '') or
+        (container_image | default('') is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
       - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
     fail_msg: >-
@@ -22,8 +24,9 @@
         entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
         flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
       container_image={{ container_image | default('') }} --
-        must match OCI image reference format (alphanumeric/colon/slash/at/dot/hyphen; no spaces);
-        a space injects extra arguments into 'toolbox create --image', e.g. --privileged;
+        must be from a trusted registry (registry.fedoraproject.org/, quay.io/,
+        registry.access.redhat.com/, registry.redhat.io/); untrusted registry controls image
+        content even with digest pin (CAP_BPF+CAP_PERFMON, $HOME bind-mount);
       container_name={{ container_name | default('') }} --
         must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
       distrobox_packages={{ distrobox_packages | default([]) }} --

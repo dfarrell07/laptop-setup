@@ -15,6 +15,22 @@
     mode: "0700"
   when: is_linux
 
+# Deploy /etc/containers/policy.json equivalent at user scope.
+# Default rejects all registries not explicitly listed, preventing accidental pulls
+# from unknown or compromised registries. GPG signature enforcement is added for
+# registry.redhat.io and registry.access.redhat.com on DNF-based hosts (Fedora/RHEL),
+# where Red Hat's GPG key ships at {{ containers_policy_rh_gpg_key }}.
+# quay.io is allowed without signature enforcement (most images there are unsigned;
+# per-repo cosign verification is out of scope for a workstation policy).
+- name: Deploy container image pull policy (reject unknown; GPG-verify RH registries on DNF)
+  ansible.builtin.template:
+    src: policy.json.j2
+    dest: "{{ containers_config_dir }}/policy.json"
+    mode: "0644"
+  when:
+    - is_linux
+    - containers_policy_enabled | bool
+
 - name: Stat auth.json
   ansible.builtin.stat:
     path: "{{ containers_auth_file }}"

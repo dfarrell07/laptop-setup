@@ -1670,12 +1670,16 @@
           - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$')
           - _cimage is match('^[a-zA-Z0-9:/@._-]*$')
           - (_cimage == '') or (_cimage is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
+          - _cimage == '' or '@sha256:' in _cimage
         fail_msg: >-
-          SECURITY: container_image in config.yml is not from a trusted registry.
+          SECURITY: container_image in config.yml is not from a trusted registry or is
+          missing a pinned @sha256: digest.
           Allowed prefixes: registry.fedoraproject.org/, quay.io/,
           registry.access.redhat.com/, registry.redhat.io/.
-          Got: {{ _cimage }}. Even with a digest pin the untrusted registry controls
-          image content and gains CAP_BPF+CAP_PERFMON and $HOME bind-mount access.
+          Got: {{ _cimage }}. Mutable tags let a registry serve arbitrary content at pull
+          time; the container runs with CAP_BPF+CAP_PERFMON and $HOME bind-mounted
+          (vault-pass.sh, .ssh/, .gnupg/ accessible by container UID).
+          Use: registry.example.com/image:tag@sha256:<64-hex-chars>
           container_release must be alphanumeric/dot/hyphen (e.g. 44, f39, custom).
 
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)

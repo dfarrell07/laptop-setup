@@ -41,6 +41,16 @@ containers_prune_schedule: weekly  # OnCalendar value for podman-prune.timer; an
 # Set containers_environment_d_enabled: false in config.yml to disable.
 containers_environment_d_enabled: true
 
+# Container image pull policy (policy.json).
+# Default policy rejects pulls from unrecognized registries; GPG-verified for RH
+# registries on DNF hosts. Set false to disable (reverts to system default).
+containers_policy_enabled: true
+# Path to the Red Hat GPG key used to verify registry.redhat.io / registry.access.redhat.com images.
+# Only referenced on DNF-based hosts (Fedora/RHEL); unused on Debian/macOS.
+containers_policy_rh_gpg_key: /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+
+is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
+
 # SECURITY: Enforce fully-qualified image references by deploying a registries.conf
 # that sets unqualified-search-registries = []. This prevents `podman pull nginx`
 # (short/unqualified name) from silently resolving to docker.io where namespace

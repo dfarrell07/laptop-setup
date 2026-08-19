@@ -43,6 +43,26 @@
     cmd: grep -q 'default_ulimits.*nofile' "{{ ansible_user_dir }}/.config/containers/containers.conf"
   changed_when: false
 
+- name: Verify policy.json is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers/policy.json"
+  register: verify_containers_policy
+
+- name: Assert policy.json exists
+  ansible.builtin.assert:
+    that: verify_containers_policy.stat.exists
+    fail_msg: "policy.json was not deployed (~/.config/containers/policy.json)"
+
+- name: Assert policy.json default policy is reject
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "
+      import json, sys
+      p = json.load(open('{{ ansible_user_dir }}/.config/containers/policy.json'))
+      sys.exit(0 if p.get('default', [{}])[0].get('type') == 'reject' else 1)
+      "
+  changed_when: false
+
 # CI gap: environment.d/containers.conf and KIND_EXPERIMENTAL_PROVIDER not verified in container CI
 # (containers role guards deploy with not system_is_container — user inotify triggers daemon-reload,
 # crashes PID 1); make test-vm only.
