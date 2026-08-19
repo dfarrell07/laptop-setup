@@ -114,10 +114,10 @@ _tool_absent="FAIL"
 for tool in "kubectl:kubectl version --client" "podman:podman info" "claude:claude --version" "gh:gh --version" "kind:kind version" "helm:helm version" "kustomize:kustomize version" "jq:jq --version" "tmux:tmux -V" "go:go version" "rg:rg --version" "fzf:fzf --version" "sops:sops --version" "k9s:k9s version" "transcrypt:transcrypt --version" "gitleaks:gitleaks version" "direnv:direnv --version"; do
   name="${tool%%:*}"; cmd="${tool#*:}"
   # shellcheck disable=SC2086  # intentional word-split: cmd is "binary arg1 arg2"
-  if run $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
+  if exec_cmd $cmd &>/dev/null; then record "$name" "PASS"; else record "$name" "$_tool_absent" "not found"; fi
 done
 if [[ -x "$HOME/.krew/bin/krew" ]]; then
-  if run "$HOME/.krew/bin/krew" version &>/dev/null; then record "krew" "PASS"
+  if exec_cmd "$HOME/.krew/bin/krew" version &>/dev/null; then record "krew" "PASS"
   else record "krew" "FAIL" "krew installed but version failed"; fi
 else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
@@ -126,7 +126,7 @@ _test_if_installed() { # guard_path record_name cmd...
   [[ -x "$1" ]] || return 0
   local _p="$1" _n="$2"; shift 2
   # shellcheck disable=SC2086
-  if run $@ &>/dev/null; then record "$_n" "PASS"
+  if exec_cmd $@ &>/dev/null; then record "$_n" "PASS"
   else record "$_n" "FAIL" "$_p present but command failed"; fi
 }
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
@@ -140,12 +140,12 @@ for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
 done
 
 if [[ -x /usr/local/bin/oc ]]; then
-  if run oc version --client &>/dev/null; then record "oc" "PASS"
+  if exec_cmd oc version --client &>/dev/null; then record "oc" "PASS"
   else record "oc" "FAIL" "oc binary present but 'oc version --client' failed"; fi
   # kubectl comes from the same OCP tarball; if oc is present, kubectl must be present too
   if [[ ! -x /usr/local/bin/kubectl ]]; then
     record "kubectl-ocp" "FAIL" "/usr/local/bin/kubectl absent despite oc present — OCP tarball extraction incomplete"
-  elif run /usr/local/bin/kubectl version --client &>/dev/null; then
+  elif exec_cmd /usr/local/bin/kubectl version --client &>/dev/null; then
     record "kubectl-ocp" "PASS"
   else
     record "kubectl-ocp" "FAIL" "OCP kubectl present but version check failed"
@@ -170,7 +170,7 @@ fi
 
 # GitHub CLI authenticated (skip when gh binary is absent — tools loop already records FAIL)
 if command -v gh &>/dev/null; then
-  if run gh auth status &>/dev/null; then record "gh-auth" "PASS"
+  if exec_cmd gh auth status &>/dev/null; then record "gh-auth" "PASS"
   else record "gh-auth" "WARN" "not authenticated (interactive login required)"; fi
 fi
 
@@ -184,7 +184,7 @@ if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/loc
 fi
 
 # YubiKey
-if run ykman info &>/dev/null; then record "yubikey" "PASS"
+if exec_cmd ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
 # vault-pass.sh stub (skip in molecule — stub is intentional in CI)
@@ -210,7 +210,7 @@ fi
 # Tailscale connectivity (cross-platform via CLI)
 if ! command -v tailscale &>/dev/null; then
   record "tailscale" "WARN" "tailscale not installed (run: make packages)"
-elif run tailscale status &>/dev/null; then record "tailscale" "PASS" "tailscaled running (VPN/auth state not verified)"
+elif exec_cmd tailscale status &>/dev/null; then record "tailscale" "PASS" "tailscaled running (VPN/auth state not verified)"
 else record "tailscale" "WARN" "tailscaled not running or VPN not established (check: systemctl status tailscaled)"; fi
 
 # ssh-agent has a FIDO2 sk-ssh-ed25519 key loaded (use -L for full pubkey: -l shows ED25519-SK not sk-ssh-ed25519)
@@ -239,7 +239,7 @@ else record "vim-binary" "WARN" "vim not found (macOS: system or brew)"; fi
 # --- pipx tools (yamllint, ansible-lint — installed by packages role via pipx) ---
 for tool in yamllint ansible-lint; do
   if command -v "$tool" &>/dev/null; then
-    if run "$tool" --version &>/dev/null; then
+    if exec_cmd "$tool" --version &>/dev/null; then
       record "pipx-$tool" "PASS"
     else
       record "pipx-$tool" "FAIL" "$tool present but --version failed"
