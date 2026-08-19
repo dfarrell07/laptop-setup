@@ -30,6 +30,7 @@
   ansible.builtin.set_fact:
     _dnf_auto_svc: "{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}"
     _dnf_auto_timer: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
+  when: is_dnf
 
 - name: Enable dnf-automatic timer
   ansible.builtin.systemd:
