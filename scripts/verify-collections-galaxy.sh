@@ -21,12 +21,21 @@ for spec in \
 
   [ ! -f "$filepath" ] && { echo "SKIP: ${file} — file not yet present"; continue; }
 
-  api_hash=$(curl -sf --max-time 10 --connect-timeout 5 "${GALAXY_API}/${ns}/${name}/versions/${ver}/" | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
+  # Fetch Galaxy API hash with explicit error handling
+  # Any network error, timeout, malformed JSON, or missing 'artifact' key causes fatal failure
+  api_hash=$(curl -sf --max-time 10 --connect-timeout 5 "${GALAXY_API}/${ns}/${name}/versions/${ver}/" 2>&1 | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>&1) || {
+    echo "ERROR: ${file} — failed to fetch/parse Galaxy API hash (possible API compromise or network error)" >&2
+    echo "       Verify network connectivity and API availability before retrying." >&2
+    FAIL=1
+    continue
+  }
+
   local_hash=$(sha256sum "$filepath" 2>/dev/null | awk '{print $1}' || echo "")
 
   if [ -z "$api_hash" ]; then
-    echo "WARN: ${file} — could not fetch Galaxy API hash"
-    continue
+    # This branch should never execute now (errors are caught above), but retained for defense-in-depth
+    echo "ERROR: ${file} — Galaxy API hash is empty (unexpected)" >&2
+    FAIL=1
   elif [ -z "$local_hash" ]; then
     echo "ERROR: ${file} — local file missing or unreadable"
     FAIL=1
