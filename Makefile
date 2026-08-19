@@ -417,10 +417,7 @@ vault-edit:
 	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
 
 vault-view:
-	PAGER= ANSIBLE_PAGER= SYSTEMD_PAGER= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
-
-vault-view:
-	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
+	PAGER= ANSIBLE_PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
 
 vault-diff:
 	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault decrypt --output=- group_vars/all/vault.yml | diff - group_vars/all/vault.yml || true
