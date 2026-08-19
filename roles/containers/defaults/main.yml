@@ -36,15 +36,14 @@ containers_prune_schedule: weekly  # OnCalendar value for podman-prune.timer; an
 # SECURITY: environment.d/containers.conf exports DOCKER_HOST system-wide via
 # systemd-environment-d-generator. All graphical applications (VS Code extensions,
 # language servers, browser-spawned processes) inherit DOCKER_HOST and can reach the
-# Podman socket without any explicit configuration. Disabled by default; enable only
-# if 'make kind' (OVN-K/Submariner) is used and only on hosts where all graphical
-# session processes are trusted. Set containers_environment_d_enabled: true
+# Podman socket without any explicit configuration. Enable only if 'make kind' (OVN-K/
+# Submariner) is used; disable on hosts where untrusted code runs in the graphical session.
+# Set containers_environment_d_enabled: false in config.yml to disable.
+containers_environment_d_enabled: true
 
 # SECURITY: Enforce fully-qualified image references by deploying a registries.conf
 # that sets unqualified-search-registries = []. This prevents `podman pull nginx`
 # (short/unqualified name) from silently resolving to docker.io where namespace
 # squatting can deliver a malicious image. Use full names (e.g. docker.io/library/nginx).
 # Set to false in config.yml only if short image names are genuinely required.
-containers_enforce_fqin: true in
-# config.yml to opt in.
-containers_environment_d_enabled: false
+containers_enforce_fqin: true

@@ -161,6 +161,17 @@
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
   when: git_repos_filtered | length > 0
 
+- name: Assert SSH git repo hosts are in known_hosts (--start-at-task guard)
+  ansible.builtin.command:
+    cmd: >-
+      ssh-keygen -F "{{ item }}" -f "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+  loop: >-
+    {{ git_repos_filtered | default([]) | map(attribute='url')
+       | select('match', '^git@') | map('regex_replace', '^git@([^:]+):.*', '\1')
+       | unique | list }}
+  changed_when: false
+  tags: [always]
+
 - name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:
     repo: "{{ item.url }}"
