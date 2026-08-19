@@ -538,9 +538,3 @@ system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; 
                                    # (breaks perf stat/top/record for non-root users); set 3 in config.yml
                                    # for stricter posture on non-dev hosts
 
-# GRUB bootloader password (CIS 1.4.2)
-# Protects against physical console attacks that edit kernel parameters before lockdown=integrity activates.
-# Secure Boot + GRUB password = protection against pre-reboot window vulnerability.
-# If empty (default), GRUB password protection is disabled. Set in config.yml to enable:
-# system_grub_password: 'your-secure-password'  # recommend vault_grub_password from vault.yml for production
-system_grub_password: ''  # empty = disabled; set in config.yml to enable CIS 1.4.2
