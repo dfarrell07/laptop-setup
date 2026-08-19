@@ -1268,7 +1268,7 @@ EOF
       record "chrony-nts" "PASS"
     else record "chrony-nts" "WARN" "NTS configured but chronyc authdata shows no authenticated sources — time sync may have fallen back to unauthenticated pool (TCP 4460 blocked? run: chronyc authdata)"; fi
   elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
-  else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
+  else record "chrony-nts" "FAIL" "NTS not configured in chrony.conf"; fi
   _chrony_svc="chronyd"
   grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _chrony_svc="chrony"
   if systemctl is-enabled "$_chrony_svc" &>/dev/null && systemctl is-active "$_chrony_svc" &>/dev/null; then
@@ -1279,9 +1279,9 @@ EOF
   unset _chrony_svc
   # fwupd firmware update daemon
   if systemctl is-enabled fwupd &>/dev/null; then record "fwupd-enabled" "PASS"
-  else record "fwupd-enabled" "WARN" "fwupd not enabled (firmware updates won't run automatically)"; fi
+  else record "fwupd-enabled" "FAIL" "fwupd not enabled (firmware updates won't run automatically)"; fi
   if systemctl is-active fwupd-refresh.timer &>/dev/null; then record "fwupd-refresh-timer" "PASS"
-  else record "fwupd-refresh-timer" "WARN" "fwupd-refresh.timer inactive — LVFS firmware metadata may be stale"; fi
+  else record "fwupd-refresh-timer" "FAIL" "fwupd-refresh.timer inactive — LVFS firmware metadata may be stale"; fi
 
   # pam_wheel.so
   if grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su 2>/dev/null; then record "pam-wheel" "PASS"
