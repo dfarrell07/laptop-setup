@@ -436,6 +436,8 @@ system_luks_discards_enabled: false
 system_iommu_passthrough: false
 system_wifi_mac_rand: "{{ not csb_detected }}"
 system_wifi_powersave_disabled: "{{ not csb_rhel }}"
+system_nm_dispatcher_allowlist: []  # Extra basenames allowed in /etc/NetworkManager/dispatcher.d.
+  # CSB hosts auto-allow csb-fedora-logo. Add site-specific scripts here to suppress the audit fail.
 system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-accessible; use Tailscale for VPN-only access
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block

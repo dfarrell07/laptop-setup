@@ -1,4 +1,31 @@
 ---
+# --- NetworkManager dispatcher.d audit ---
+# Scripts in dispatcher.d execute as root on every NM restart. Enumerate the
+# directory before any task that notifies 'Restart NetworkManager' so unexpected
+# entries are caught before they run again.
+- name: Enumerate NetworkManager dispatcher scripts
+  ansible.builtin.find:
+    paths: /etc/NetworkManager/dispatcher.d
+    file_type: file
+    recurse: true
+  register: _nm_dispatcher_audit
+  when: not system_is_container
+
+- name: Fail on unexpected NetworkManager dispatcher scripts
+  vars:
+    _expected: "{{ (['csb-fedora-logo'] if csb_detected else []) + (system_nm_dispatcher_allowlist | default([])) }}"
+    _found: "{{ _nm_dispatcher_audit.files | default([]) | map(attribute='path') | map('basename') | list }}"
+    _unexpected: "{{ _found | difference(_expected) }}"
+  ansible.builtin.fail:
+    msg: |
+      Unexpected scripts in /etc/NetworkManager/dispatcher.d run as root on NM restart.
+      Unexpected: {{ _unexpected | join(', ') }}
+      Allowed:    {{ _expected | join(', ') if _expected else '(none — non-CSB host)' }}
+      Remove the files or add them to system_nm_dispatcher_allowlist in config.yml.
+  when:
+    - not system_is_container
+    - _unexpected | length > 0
+
 # --- NetworkManager Tailscale unmanaged ---
 # On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
 # authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
