@@ -1,5 +1,21 @@
 #!/bin/bash
 # Pre-commit checks: vault encryption, secrets, YAML, shell, JSON, collections integrity
+
+# Hook responsibilities:
+# HARD-BLOCK gates (exit 1 if fail):
+#   - verify-collections.sh + .sha256 sync (lines 5–115)
+#   - verify-ansible-args.sh + .sha256 sync
+#   - Makefile + .sha256 sync
+#   - collections-dist tarballs + SHA256SUMS sync (lines 117–152)
+#   - SHA256SUMS + SHA256SUMS.asc sync (lines 154–174)
+#   - vault-pass-ci.sh xtrace protection (lines 176–190)
+#   - vault.yml encryption (line 192)
+# ADVISORY checks (warn if tool present; skip if absent):
+#   - gitleaks secret scanning (line 211)
+#   - yamllint YAML validation (line 225)
+#   - shellcheck shell syntax (line 245)
+#   - python3 JSON + lockfile integrity (line 259)
+
 failed=0
 
 # SECURITY GUARD: Block commits that modify verify-collections.sh without updating .sha256 baseline
@@ -20,18 +36,12 @@ if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -eq 0 ]; then
   failed=1
 fi
 
-# SECURITY ENHANCEMENT: Detect synchronized modifications to critical files
-# Attack pattern: modify script + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# WARNING (non-blocking): Detect synchronized modifications to critical files
+# Flags high-risk patterns for human review; does NOT prevent commit
 if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -gt 0 ]; then
   echo "WARN: Both scripts/verify-collections.sh and .sha256 modified in same commit" >&2
-  echo "       This pattern can bypass hash-based integrity checks" >&2
-  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
-  echo "       To update the script intentionally:" >&2
-  echo "         1. Create a separate commit with only the script change" >&2
-  echo "         2. Review and merge that commit" >&2
-  echo "         3. Then create a second commit to update the .sha256 hash" >&2
-  # Note: We cannot enforce GPG signing here, but CI checks will verify.
+  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
+  echo "      See the commit diff and verify changes are intentional." >&2
 fi
 
 if [ "$_vc_hash_modified" -gt 0 ] && [ "$_vc_modified" -eq 0 ]; then
@@ -57,18 +67,12 @@ if [ "$_vaa_modified" -gt 0 ] && [ "$_vaa_hash_modified" -eq 0 ]; then
   failed=1
 fi
 
-# SECURITY ENHANCEMENT: Detect synchronized modifications to critical files
-# Attack pattern: modify script + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# WARNING (non-blocking): Detect synchronized modifications to critical files
+# Flags high-risk patterns for human review; does NOT prevent commit
 if [ "$_vaa_modified" -gt 0 ] && [ "$_vaa_hash_modified" -gt 0 ]; then
   echo "WARN: Both scripts/verify-ansible-args.sh and .sha256 modified in same commit" >&2
-  echo "       This pattern can bypass hash-based integrity checks" >&2
-  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
-  echo "       To update the script intentionally:" >&2
-  echo "         1. Create a separate commit with only the script change" >&2
-  echo "         2. Review and merge that commit" >&2
-  echo "         3. Then create a second commit to update the .sha256 hash" >&2
-  # Note: We cannot enforce GPG signing here, but CI checks will verify.
+  echo "      UNUSUAL PATTERN DETECTED: This bypasses hash-based detection and requires careful review." >&2
+  echo "      See the commit diff and verify changes are intentional." >&2
 fi
 
 if [ "$_vaa_hash_modified" -gt 0 ] && [ "$_vaa_modified" -eq 0 ]; then
