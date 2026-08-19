@@ -155,6 +155,47 @@
           Do NOT set it to an empty string or whitespace-only value.
           Current value: '{{ _gonosumdb }}'.
 
+
+    - name: Assert packages_gosumdb is whitelisted (supply chain guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _packages_gosumdb: "{{ _raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
+        _whitelisted_servers:
+          - sum.golang.org
+          - sum.myproxy.com
+          - sum.redhat.com
+          - sum.internal.redhat.com
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_packages_gosumdb in _whitelisted_servers) or
+            (_packages_gosumdb == '') or
+            (_packages_gosumdb is not defined)
+        fail_msg: >-
+          SECURITY: packages_gosumdb in config.yml must be whitelisted to prevent arbitrary
+          GOSUMDB proxy hijacking. An attacker-controlled GOSUMDB allows substitution of
+          malicious Go module checksums during 'go install', bypassing Go's integrity
+          verification and allowing initialization code execution with your privileges.
+
+          APPROVED VALUES:
+            - sum.golang.org (default, public Go module checksum server)
+            - sum.myproxy.com (example corporate proxy)
+            - sum.redhat.com (Red Hat internal proxy)
+            - sum.internal.redhat.com (Red Hat internal proxy variant)
+            - Undefined/omitted (uses default sum.golang.org)
+
+          EXPLOIT SCENARIO: An attacker who can edit config.yml sets
+          packages_gosumdb: 'attacker-proxy.com:443'. During 'go install', Go queries
+          attacker-proxy.com for module checksums. The attacker serves modified checksums
+          for legitimate modules, and Go accepts them (both source and checksum are attacker-
+          controlled). Malicious init() code executes during build with your privileges,
+          achieving full system compromise without detection.
+
+          REQUIRED FIX: Either omit packages_gosumdb from config.yml (use the default
+          sum.golang.org), or set it to one of the whitelisted values above.
+
+          Current value: '{{ _packages_gosumdb }}'.
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
