@@ -178,23 +178,33 @@ for namespace_dir in extracted_root.glob('*/'):
 
         fresh_files = extract_python_files(fresh_path)
 
-        # Compare: extracted vs fresh
+        # Compare: extracted (installed on disk) vs fresh (from tarball re-extraction)
         extracted_keys = set(extracted_files.keys())
         fresh_keys = set(fresh_files.keys())
 
-        # Check for added files (possible TOCTOU tampering or manifest out-of-sync)
-        added = fresh_keys - extracted_keys
-        if added:
-            print(f"ERROR: {collection_name}: unexpected files added to extracted collection:", file=sys.stderr)
-            for f in sorted(added)[:10]:
+        # Tarball replacement detection: files in tarball NOT on disk
+        # (tarball was swapped for one with extra files)
+        tarball_extra = fresh_keys - extracted_keys
+        if tarball_extra:
+            print(f"ERROR: {collection_name}: tarball contains files not in installed collection:", file=sys.stderr)
+            for f in sorted(tarball_extra)[:10]:
                 print(f"  + {f}", file=sys.stderr)
-            if len(added) > 10:
-                print(f"  ... and {len(added) - 10} more", file=sys.stderr)
-            print("       This indicates either:", file=sys.stderr)
-            print("         1. Possible TOCTOU tampering (file added locally after extraction)", file=sys.stderr)
-            print("         2. Collection tarball contains new files not in PYTHON_MANIFEST.json", file=sys.stderr)
-            print("       Action: If new files in tarball, update PYTHON_MANIFEST.json and audit changes", file=sys.stderr)
-            print("              If tampering suspected: Audit git log and SECURITY.md, then: make bootstrap", file=sys.stderr)
+            if len(tarball_extra) > 10:
+                print(f"  ... and {len(tarball_extra) - 10} more", file=sys.stderr)
+            print("       Tarball may have been replaced. Re-run: make bootstrap", file=sys.stderr)
+            sys.exit(1)
+
+        # TOCTOU disk tampering: files on disk NOT in tarball
+        # (files injected into installed collection directory after extraction)
+        disk_extra = extracted_keys - fresh_keys
+        if disk_extra:
+            print(f"ERROR: {collection_name}: installed collection has files not in verified tarball:", file=sys.stderr)
+            for f in sorted(disk_extra)[:10]:
+                print(f"  + {f}", file=sys.stderr)
+            if len(disk_extra) > 10:
+                print(f"  ... and {len(disk_extra) - 10} more", file=sys.stderr)
+            print("       Possible TOCTOU disk tampering (file injected after extraction).", file=sys.stderr)
+            print("       Re-run: make bootstrap", file=sys.stderr)
             sys.exit(1)
 
         # Check for modified files
