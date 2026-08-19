@@ -242,7 +242,7 @@
     that:
       - verify_repos_dir.stat.exists
       - verify_repos_dir.stat.isdir
-    fail_msg: "Git repos base directory ~/src was not created"
+    fail_msg: "Git repos base directory ~/src was not created (exists={{ verify_repos_dir.stat.exists | default(false) }}, isdir={{ verify_repos_dir.stat.isdir | default(false) }})"
 
 # --- git_repos role: verify a public HTTPS repo was actually cloned ---
 - name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
