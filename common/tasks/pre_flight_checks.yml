@@ -2303,20 +2303,10 @@
           - _raw.get('system_pwquality_maxrepeat', '0') | int >= 0
           - _raw.get('system_pwquality_maxsequence', '0') | int >= 0
         fail_msg: >-
-          SECURITY: pwquality variables in config.yml must be integers only. These values
-          are rendered verbatim into /etc/security/pwquality.conf via community.general.ini_file;
-          embedded newlines (e.g. "14\nminlen 100") inject additional pwquality directives,
-          overriding intended password complexity settings (last-wins semantics).
-          Attack scenario: system_pwquality_minlen: "6\ndifok -1" weakens password requirements
-          or disables character-difference enforcement. All pwquality variables must be parsed
-          as integers only — no newlines, spaces, letters, or special characters allowed.
-          Affected vars: system_pwquality_minlen, system_pwquality_dcredit, system_pwquality_ucredit,
-          system_pwquality_lcredit, system_pwquality_ocredit, system_pwquality_difok,
-          system_pwquality_maxrepeat, system_pwquality_maxsequence.
-          Allowed: system_pwquality_minlen >= 1 (minlen=0 disables minimum length enforcement;
-          minimum value is 1); non-negative integers for difok/maxrepeat/maxsequence;
-          -1 or greater for credit variables (e.g., -1=disabled, 0+=required count).
-          Examples: system_pwquality_minlen: 14, system_pwquality_dcredit: -1.
+          SECURITY: pwquality var in config.yml is not a safe integer. Threat: newline injection
+          (e.g. "14\ndifok -1") into /etc/security/pwquality.conf overrides complexity policy (last-wins).
+          Affected: system_pwquality_minlen (>= 1), credit vars (>= -1), difok/maxrepeat/maxsequence (>= 0).
+          Fix: use plain integers only, e.g. system_pwquality_minlen: 14.
 
     - name: Assert login.defs password aging variables are non-negative integers (login.defs injection guard)
       when: _config_yml_raw.content is defined
@@ -2330,21 +2320,10 @@
           - _raw.get('system_inactive_days', '30') | int >= 0
           - _raw.get('system_home_mode', '0700') | string is match('^[0-7]+$')
         fail_msg: >-
-          SECURITY: login.defs variables in config.yml must be integers only
-          (except system_home_mode which must be octal digits). These values are rendered
-          verbatim into /etc/login.defs via ansible.builtin.lineinfile; embedded newlines
-          (e.g. "99\nPASS_MIN_DAYS 0") inject additional login.defs directives, overriding
-          hardened account management policy. Attack scenario: system_pass_max_days: "1\nPASS_MIN_DAYS 999"
-          locks accounts by enforcing password change every day AND prevents password reuse forever.
-          system_home_mode: "0700\nPASS_MAX_DAYS 999" weakens password expiration while appearing
-          to set secure home permissions. All password aging variables must be parsed as non-negative
-          integers only — no newlines, spaces, letters, or special characters allowed.
-          system_home_mode must be octal digits (0-7 only, e.g. 0700, 0755).
-          Affected vars: system_pass_max_days, system_pass_min_days, system_pass_warn_age,
-          system_inactive_days, system_home_mode.
-          Allowed: non-negative integers for password aging (e.g., 365, 1, 7, 30);
-          octal digits for system_home_mode (e.g., 0700, 0755, 0750).
-          Examples: system_pass_max_days: 365, system_pass_min_days: 1, system_home_mode: '0700'.
+          SECURITY: login.defs var in config.yml is not a safe integer or octal. Threat: newline injection
+          (e.g. "99\nPASS_MIN_DAYS 0") into /etc/login.defs overrides account policy. Affected:
+          system_pass_max_days/min_days/warn_age/inactive_days (>= 0 integers), system_home_mode (octal digits 0-7).
+          Fix: plain integers/octal only, e.g. system_pass_max_days: 365, system_home_mode: '0700'.
 
     - name: Assert sysctl extra dicts contain no shell metacharacters (sysctl injection guard)
       when: _config_yml_raw.content is defined
