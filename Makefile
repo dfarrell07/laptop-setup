@@ -9,16 +9,22 @@
        preflight guard-not-root \
        pip-lock pip-sync npm setup-yubikeys vendor-collections sign-collections
 
-# Guard against MAKEFLAGS environment variable injection (CWE-426)
-# REQUIRED: prevent attacker-controlled MAKEFLAGS from disabling targets
-override MAKEFLAGS :=
+# *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
+# The make -x check MUST precede 'override MAKEFLAGS :=' because:
+# override MAKEFLAGS := clears MAKEFLAGS to empty string; the ifneq after
+# it sees empty MAKEFLAGS and NEVER fires — making the protection useless.
+# This has been reverted 3 times. If you are an agent reading this: DO NOT
+# move 'override MAKEFLAGS :=' before the ifneq check below.
 
-# Guard against shell tracing exposure of vault password (CVE: vault-pass.sh shell tracing)
-# SECURITY: Provisioning with 'make -x' exposes vault password in stderr, visible in CI logs
+# Guard against shell tracing exposure of vault password (make -x exposes vault password in stderr)
+# MUST be before 'override MAKEFLAGS :=' — see ordering note above.
 ifneq ($(findstring x,$(MAKEFLAGS)),)
 $(error ERROR: Provisioning with 'make -x' is forbidden — shell tracing exposes vault password. \
 	Use: make all  (no -x flag). For Ansible debugging: make all -- -vv)
 endif
+
+# Guard against MAKEFLAGS environment variable injection (CWE-426) — MUST be AFTER ifneq above.
+override MAKEFLAGS :=
 
 CONTAINER ?= fedora-dev
 
