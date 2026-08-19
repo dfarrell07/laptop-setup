@@ -11,6 +11,9 @@
 #   2. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   3. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
 #   4. Each role's tasks/main.yml has a no-tag defense-in-depth assertion (role layer)
+#   5. ENV sanitization — pins/clears 20+ ANSIBLE_* and socket vars (env-injection layer)
+#   6. HOME hijack check — validates HOME matches /etc/passwd before any path operations
+#   7. verify-collections.sh — supply-chain integrity check before exec
 
 set -euo pipefail
 
@@ -27,7 +30,7 @@ for arg in "${args[@]}"; do
         cat >&2 <<EOF
 ERROR: --start-at-task rejected by VERIFY_AND_RUN
 Reason: --start-at-task skips pre_tasks (even with tags: [always] on Play 0),
-        allowing bypass of ALL 83+ security assertions in pre_flight_checks.yml.
+        allowing bypass of ALL security assertions in pre_flight_checks.yml.
 
 SECURITY RISK: Enables attacker to inject malicious values via -e without validation.
 Solution: Use a scoped make target instead (make claude, make packages, make ssh, etc.)
@@ -41,6 +44,7 @@ ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
         and all security assertions tagged [always] in pre_flight_checks.yml.
 Solution: Do not use --skip-tags always with site.yml.
+         Use a scoped make target instead (make claude, make packages, make ssh, etc.).
 EOF
         exit 1
     fi
@@ -55,13 +59,14 @@ ERROR: --skip-tags always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
         and all security assertions tagged [always] in pre_flight_checks.yml.
 Solution: Do not use --skip-tags always with site.yml.
+         Use a scoped make target instead (make claude, make packages, make ssh, etc.).
 EOF
         exit 1
     fi
 done
 
 # Override or clear critical env vars to prevent environment-injection attacks.
-# Covers twelve vectors — SET known-safe values; UNSET those that must be clean:
+# Covers the vectors below — SET known-safe values; UNSET those that must be clean:
 #   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
 #   ANSIBLE_VAULT_PASSWORD_FILE — redirects vault decryption to an exfiltration script
 #   ANSIBLE_COLLECTIONS_PATH    — loads malicious collections (role 0 code execution)
@@ -80,6 +85,24 @@ done
 #   ANSIBLE_VARS_PLUGINS        — vars plugins run before any play task at inventory/play precedence
 #                                 (higher than group_vars); injects/overrides variables before
 #                                 pre_flight_checks.yml runs, bypassing SSTI guards entirely
+#   LD_PRELOAD                  — injects attacker .so into ansible-playbook Python process at exec() time;
+#                                 hooks libc open()/read() to exfiltrate vault plaintext BEFORE sudo ever runs;
+#                                 sudo env_reset strips it from become tasks but the user-context process
+#                                 decrypts the vault first — that window is the attack surface
+#   LD_LIBRARY_PATH             — redirects shared library resolution for Python + all subprocesses;
+#                                 allows substituting libpython*.so or any dependency with a malicious copy
+#   LD_AUDIT                    — silent rtld-audit hook (la_* interface) into every dynamic symbol call
+#                                 in every process; more covert than LD_PRELOAD (no symbol replacement,
+#                                 observation only) but sufficient to exfiltrate vault secrets
+#   PYTHONHOME                  — completely replaces Python's stdlib search path before any Ansible code
+#                                 runs; attacker sets PYTHONHOME=/tmp/evil, plants os.py/hashlib.py/
+#                                 subprocess.py replacements — full Python interpreter redirection
+#   PYTHONUSERSITE              — when "1", enables ~/.local/lib/pythonX.Y/site-packages; attacker
+#                                 pre-seeds ~/.local/lib/python3.x/site-packages/ansible/ with
+#                                 malicious modules that survive PYTHONPATH unset (different mechanism)
+#   PYTHONSTARTUP               — executes named file before main script; CPython skips it for
+#                                 non-interactive invocations (no tty), so practical risk is low,
+#                                 but cleared for defence-in-depth
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
 # SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
@@ -114,7 +137,8 @@ export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking 
 export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
-unset CONTAINER_HOST DOCKER_HOST  # Podman consults CONTAINER_HOST (then DOCKER_HOST) for socket selection; a rogue daemon at an attacker-set socket returns a malicious image pulled into the distrobox container (CAP_BPF/CAP_PERFMON + $HOME bind-mount)
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so injected into ansible-playbook Python process at exec() time; sudo env_reset only strips these from become tasks, not the initial user-context process that decrypts the vault
+unset PYTHONHOME PYTHONUSERSITE PYTHONSTARTUP  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONUSERSITE enables ~/.local site-packages (bypasses PYTHONPATH unset); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth
 export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
 export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
