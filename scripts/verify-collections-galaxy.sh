@@ -21,7 +21,7 @@ for spec in \
 
   [ ! -f "$filepath" ] && { echo "SKIP: ${file} — file not yet present"; continue; }
 
-  api_hash=$(curl -sf "${GALAXY_API}/${ns}/${name}/versions/${ver}/" | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
+  api_hash=$(curl -sf --max-time 10 --connect-timeout 5 "${GALAXY_API}/${ns}/${name}/versions/${ver}/" | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
   local_hash=$(sha256sum "$filepath" 2>/dev/null | awk '{print $1}' || echo "")
 
   if [ -z "$api_hash" ]; then
