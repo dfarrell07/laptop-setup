@@ -1100,7 +1100,9 @@
       ('ProcessSizeMax=' ~ (system_coredump_process_size_max | default('2G')))
       in (verify_coredump_content.content | b64decode)
     fail_msg: >-
-      coredump drop-in missing expected ProcessSizeMax={{ system_coredump_process_size_max | default('2G') }} — template regression?
+      coredump drop-in missing expected ProcessSizeMax={{ system_coredump_process_size_max | default('2G') }},
+      got: {{ verify_coredump_content.content | b64decode | regex_search('ProcessSizeMax=\S*') | default('(no ProcessSizeMax= line)') }}
+      — template regression?
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
