@@ -330,8 +330,9 @@ fi
 # GTK theme config (only on Sway desktop — no GNOME settings daemon)
 if command -v sway &>/dev/null; then
   _gtk3="$HOME/.config/gtk-3.0/settings.ini"
-  if [[ -f "$_gtk3" ]]; then record "gtk-3-settings" "PASS"
-  else record "gtk-3-settings" "WARN" "GTK 3.0 settings.ini not deployed — GTK apps use system default theme in Sway"; fi
+  if [[ ! -f "$_gtk3" ]]; then record "gtk-3-settings" "WARN" "GTK 3.0 settings.ini not deployed — GTK apps use system default theme in Sway"
+  elif ! grep -q 'Ansible managed' "$_gtk3"; then record "gtk-3-settings" "WARN" "$_gtk3 present but not Ansible-managed"
+  else record "gtk-3-settings" "PASS"; fi
   unset _gtk3
   # Sway also uses wpctl for audio keybindings (same as i3 after cycle-13 alignment)
   if command -v wpctl &>/dev/null; then record "sway-wpctl" "PASS"
