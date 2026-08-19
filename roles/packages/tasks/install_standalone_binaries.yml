@@ -1,5 +1,12 @@
 ---
-# --- Standalone script/binary downloads ---
+# Standalone binary/script downloads for work-profile tools.
+#
+# To add a new binary:
+#   1. Add packages_BINARY_version and packages_BINARY_sha256 to defaults/main.yml
+#   2. Use include_tasks: install_binary.yml (single binary) or install_tarball.yml (archive)
+#   3. For binaries with upstream signatures: add verification after download (see cosign/sops pattern)
+#   4. Gate with: when: _packages_linux_x86_work (Linux x86_64 work profile) or is_linux/is_macos
+#   5. Handle CSB restriction: set csb_action/csb_ticket_* vars for fapolicyd environments
 
 - name: Install transcrypt
   when:
