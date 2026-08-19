@@ -2937,7 +2937,6 @@
           # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
           # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
           # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
-          - _raw.get('system_core_pattern', '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %e') | string is match('^[^\n\r]*$')
           - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_-]*$|^$')
         fail_msg: >-
           SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
