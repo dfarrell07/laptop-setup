@@ -60,10 +60,16 @@ EOF
     fi
 done
 
-# Override ANSIBLE_COLLECTIONS_PATH and ANSIBLE_ROLES_PATH to always use verified repo
-# paths first. This is stronger than validation: instead of checking what's set, we SET
-# both to known-safe values. Callers cannot inject malicious paths via environment.
+# Override critical ANSIBLE_* env vars to always use verified repo values.
+# Stronger than validation: SET known-safe values; callers cannot inject via environment.
+# Covers the four highest-impact override vectors:
+#   ANSIBLE_CONFIG             — could replace all plugin paths + vault_password_file via evil cfg
+#   ANSIBLE_VAULT_PASSWORD_FILE — could redirect vault decryption to an exfiltration script
+#   ANSIBLE_COLLECTIONS_PATH   — could load malicious collections (role 0 code execution)
+#   ANSIBLE_ROLES_PATH         — could load malicious roles (arbitrary become code execution)
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
+export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
 
