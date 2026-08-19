@@ -26,7 +26,7 @@
           {{ system_sysctl_extra | from_json
              if system_sysctl_extra is string
              else system_sysctl_extra }}
-      when: system_sysctl_extra is defined and system_sysctl_extra | length > 0
+      when: system_sysctl_extra | default({}) | length > 0
 
     - name: Parse system_sysctl_extra_additional if passed as JSON string
       ansible.builtin.set_fact:
@@ -34,7 +34,7 @@
           {{ system_sysctl_extra_additional | from_json
              if system_sysctl_extra_additional is string
              else system_sysctl_extra_additional }}
-      when: system_sysctl_extra_additional is defined and system_sysctl_extra_additional | length > 0
+      when: system_sysctl_extra_additional | default({}) | length > 0
 
     - name: Validate system_sysctl_extra is a dict
       ansible.builtin.assert:

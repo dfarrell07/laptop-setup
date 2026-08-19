@@ -1249,10 +1249,15 @@
 
 # CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
 # make test-vm exercises full chrony service-enablement and NTS coverage.
-- name: Assert chrony/chronyd is enabled
+- name: Assert chrony/chronyd is enabled and active
   ansible.builtin.assert:
-    that: verify_chronyd.status.UnitFileState | default('') == 'enabled'
-    fail_msg: "chrony/chronyd UnitFileState is '{{ verify_chronyd.status.UnitFileState | default('') }}', expected 'enabled' — NTP authentication regression"  # yamllint disable-line rule:line-length
+    that:
+      - verify_chronyd.status.UnitFileState | default('') == 'enabled'
+      - verify_chronyd.status.ActiveState | default('') == 'active'
+    fail_msg: >-
+      chrony/chronyd state regression: UnitFileState='{{ verify_chronyd.status.UnitFileState | default('') }}'
+      ActiveState='{{ verify_chronyd.status.ActiveState | default('') }}'; expected enabled+active.
+      A service can be enabled (will start on boot) but not currently running — both must be true.
   when:
     - ansible_system == 'Linux'
     - not csb_rhel

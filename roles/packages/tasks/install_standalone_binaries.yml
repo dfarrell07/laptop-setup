@@ -139,7 +139,7 @@
 # GitHub CLI (gh attestation verify) to validate. These tasks verify the downloaded binaries
 # against the public attestation transparency log (rekor) via Sigstore infrastructure.
 
-- name: Verify actionlint binary via GitHub attestation (OIDC keyless signing via GitHub Actions)
+- name: Verify actionlint binary via GitHub attestation
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'
@@ -184,7 +184,7 @@
           re-verify the installed binary via attestation. Continuing without attestation is safe
           but not ideal for work profiles where supply-chain integrity is important.
 
-- name: Verify zizmor binary via GitHub attestation (OIDC keyless signing via GitHub Actions)
+- name: Verify zizmor binary via GitHub attestation
   when:
     - is_linux
     - ansible_facts['architecture'] == 'x86_64'
@@ -332,7 +332,7 @@
     dest: "{{ _cosign_tmpdir.path }}/cosign.sigstore.json"
     mode: "0600"
 
-- name: Verify new cosign binary via bundle using existing cosign (second trust root; re-provision only)
+- name: Verify new cosign binary via Sigstore bundle (existing cosign as second trust root)
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
