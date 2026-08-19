@@ -159,7 +159,7 @@
     - name: Verify pam_faillock.so authfail appears after pam_unix.so in system-auth (authselect)
       ansible.builtin.shell:
         cmd: >-
-          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+          awk '/pam_faillock\.so preauth/{pre=NR} /^auth.*pam_unix\.so/ && !unix {unix=NR} /pam_faillock\.so authfail/{fail=NR}
                END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/system-auth
       changed_when: false
       register: system_pam_faillock_authselect_order_check
@@ -263,7 +263,7 @@
           preauth='auth    required                        pam_faillock.so preauth'
           authfail='auth    [default=die]                  pam_faillock.so authfail'
           # Idempotency: skip when both lines are already present in correct order
-          if awk '/pam_faillock\.so preauth/{p=NR} /pam_unix\.so/{u=NR} /pam_faillock\.so authfail/{f=NR} \
+          if awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
                    END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$path"; then
             exit 0
           fi
@@ -279,7 +279,7 @@
             /^auth.*pam_unix\.so/ { print authfail }
           ' "$path" > "$tmp"
           # Validate temp file BEFORE committing
-          if ! awk '/pam_faillock\.so preauth/{p=NR} /pam_unix\.so/{u=NR} /pam_faillock\.so authfail/{f=NR} \
+          if ! awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
                      END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$tmp"; then
             rm -f "$tmp"
             echo "ERROR: Generated PAM config missing required faillock lines or incorrect ordering" >&2
@@ -294,7 +294,7 @@
     - name: Verify pam_faillock.so authfail appears after pam_unix.so in common-auth (Debian)
       ansible.builtin.shell:
         cmd: >-
-          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+          awk '/pam_faillock\.so preauth/{pre=NR} /^auth.*pam_unix\.so/ && !unix {unix=NR} /pam_faillock\.so authfail/{fail=NR}
                END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
       changed_when: false
       register: system_pam_faillock_order_check

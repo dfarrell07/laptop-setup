@@ -84,6 +84,30 @@
     list | length > 0)
   when: not system_is_container
 
+- name: Verify bridge netfilter sysctls were activated
+  ansible.builtin.assert:
+    that:
+      - lookup('file', '/proc/sys/net/bridge/bridge-nf-call-iptables', errors='ignore') == '1'
+      - lookup('file', '/proc/sys/net/bridge/bridge-nf-call-ip6tables', errors='ignore') == '1'
+    fail_msg: |
+      Bridge netfilter sysctls NOT activated — br_netfilter module load FAILED.
+
+      Current state:
+      - br_netfilter load result: {{ system_modprobe_results.results | selectattr('item', 'eq', 'br_netfilter') | map(attribute='rc') | first | default('unknown') }}
+      - /proc/sys/net/bridge/ exists: {{ lookup('fileglob', '/proc/sys/net/bridge', errors='ignore') | length > 0 }}
+
+      Root cause: modprobe br_netfilter failed (check journalctl -k for kernel denials).
+      Possible reasons: kernel lockdown=confidentiality, SELinux denial, module not compiled.
+
+      Impact: 'kind create cluster' will FAIL with "bridge netfilter not enabled".
+
+      Fix: Resolve kernel/SELinux denial OR set system_kernel_lockdown: '' in config.yml
+      if lockdown blocks module loading, then reboot and re-provision.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - profile == 'work'  # Bridge sysctls only in _system_sysctl_work_defaults
+
 - name: Warn if any kernel module failed to load
   ansible.builtin.debug:
     msg: >-
