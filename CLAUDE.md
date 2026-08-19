@@ -155,7 +155,7 @@ make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
 make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries); Podman only
-make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, container-offline-distrobox, distrobox-role, packages-binaries)
+make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (adds test-macos over make test; uses lint+syntax-check instead of shellcheck)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
