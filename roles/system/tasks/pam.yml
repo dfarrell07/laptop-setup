@@ -202,6 +202,30 @@
         insertbefore: '^password.*pam_unix\.so'
         mode: "0644"
 
+# Assert exactly one preauth/authfail entry after lineinfile — detects duplicates
+# from libpam-runtime reconfiguration or repeated runs with whitespace drift.
+- name: Assert exactly one pam_faillock.so preauth line in common-auth (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so.*preauth' /etc/pam.d/common-auth
+  register: _pam_preauth_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_preauth_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Assert exactly one pam_faillock.so authfail line in common-auth (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so.*authfail' /etc/pam.d/common-auth
+  register: _pam_authfail_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_authfail_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
 # --- Debian PAM pwquality (password complexity) ---
 # On Debian, pam_pwquality.so is active in common-password by default (via
 # libpam-pwquality) and reads /etc/security/pwquality.conf. Configure the

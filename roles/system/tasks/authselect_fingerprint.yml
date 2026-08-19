@@ -85,6 +85,14 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Probe fprintd.service unit file existence
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/fprintd.service
+  register: fprintd_unit_stat
+  when:
+    - not csb_rhel
+    - not system_is_container
+
 - name: Mask or unmask fprintd.service (masked when system_disable_fingerprint is true)
   ansible.builtin.systemd:
     name: fprintd.service
@@ -93,7 +101,20 @@
   when:
     - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
     - not system_is_container  # systemctl mask writes to /etc/systemd/system/, triggers inotify → daemon-reload → crashes containers
-  failed_when: false
+    - fprintd_unit_stat.stat.exists | default(false)
+
+- name: Assert fprintd.service is masked when fingerprint auth is disabled
+  ansible.builtin.command:
+    cmd: systemctl is-enabled fprintd.service
+  register: fprintd_mask_verify
+  changed_when: false
+  check_mode: false
+  failed_when: fprintd_mask_verify.stdout | trim != 'masked'
+  when:
+    - system_disable_fingerprint | bool
+    - not csb_rhel
+    - not system_is_container
+    - fprintd_unit_stat.stat.exists | default(false)
 
 - name: Enable authselect with-fingerprint feature
   ansible.builtin.command:
