@@ -3,13 +3,13 @@
 set $mod Mod4
 set $term {{ desktop_terminal }}
 
-font pango:{{ desktop_wm_font_family }} {{ desktop_wm_font_size }}
+font pango:{{ desktop_wm_font_family | regex_replace('[\n\r].*', '') }} {{ desktop_wm_font_size }}
 
 # Autostart
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork -c {{ desktop_wm_lock_color }}
 exec --no-startup-id xautolock -time {{ (desktop_wm_idle_lock_timeout | int // 60) }} -locker 'i3lock -c {{ desktop_wm_lock_color }}'
 exec --no-startup-id xset dpms 0 0 {{ desktop_wm_idle_display_timeout }}
-exec --no-startup-id xset r rate {{ desktop_wm_repeat_delay }} {{ desktop_wm_repeat_rate }}
+exec --no-startup-id xset r rate {{ desktop_wm_repeat_delay | int }} {{ desktop_wm_repeat_rate | int }}
 exec --no-startup-id dunst
 exec --no-startup-id {{ desktop_i3_polkit_agent }}  # polkit-gnome removed Fedora 41+
 exec --no-startup-id clipit -n  # clipboard manager daemon — persists clipboard content after source app closes
@@ -88,8 +88,8 @@ bindsym $mod+Shift+r restart
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg exit'"
 
 # Appearance
-default_border pixel {{ desktop_wm_border_width }}
-default_floating_border pixel {{ desktop_wm_floating_border_width }}
+default_border pixel {{ desktop_wm_border_width | int }}
+default_floating_border pixel {{ desktop_wm_floating_border_width | int }}
 {% if desktop_wm_hide_edge_borders | length > 0 %}hide_edge_borders {{ desktop_wm_hide_edge_borders }}{% endif %}
 
 # Status bar

@@ -102,6 +102,37 @@
       Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
   when: git_repos_vpn_check.failed | default(false)
 
+- name: Stat base directory without following symlinks
+  ansible.builtin.stat:
+    path: "{{ git_repos_base_dir }}"
+    follow: false
+  register: _git_repos_base_dir_stat
+  when: git_repos_filtered | length > 0
+
+- name: Assert base directory is not a symlink
+  ansible.builtin.assert:
+    that: not _git_repos_base_dir_stat.stat.exists or not _git_repos_base_dir_stat.stat.islnk
+    fail_msg: >-
+      SECURITY: git_repos_base_dir ({{ git_repos_base_dir }}) is a symlink. A malicious
+      package could pre-create ~/src as a symlink to a privileged path (e.g. /etc/cron.d),
+      causing clone tasks to write attacker-controlled content there. Remove the symlink and
+      re-run, or set git_repos_base_dir to a non-symlinked path.
+  when: git_repos_filtered | length > 0
+
+- name: Assert git_repos_base_dir is within user home directory
+  ansible.builtin.assert:
+    that:
+      - git_repos_base_dir | string is match('^' ~ ansible_facts['user_dir'] ~ '(/|$)')
+    fail_msg: >-
+      SECURITY: git_repos_base_dir='{{ git_repos_base_dir }}' is not inside {{ ansible_facts['user_dir'] }}.
+      Input: git_repos_base_dir set to an absolute path outside the user home dir (e.g., '/' or '/etc').
+      Mechanism: ansible.builtin.file with state=directory chmods the target path to mode 0755.
+      Example: git_repos_base_dir: / chmods the root filesystem; git_repos_base_dir: /home chmods /home world-readable.
+      Impact: privilege escalation via filesystem permission widening on sensitive system directories.
+      Fix: set git_repos_base_dir to a path inside your home directory, e.g. ~/src (default).
+  tags: [always]
+  when: git_repos_filtered | length > 0
+
 - name: Ensure base directory exists
   ansible.builtin.file:
     path: "{{ git_repos_base_dir }}"

@@ -86,11 +86,11 @@
     content: |
       # {{ ansible_managed }}
       [Resolve]
-      DNS={{ system_dns_primary }}
-      Domains={{ system_dns_domains }}
+      DNS={{ system_dns_primary | regex_replace("[\n\r].*", "") }}
+      Domains={{ system_dns_domains | regex_replace("[\n\r].*", "") }}
       DNSOverTLS={{ system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
       DNSSEC={{ system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
-      FallbackDNS={{ system_dns_fallback }}
+      FallbackDNS={{ system_dns_fallback | regex_replace("[\n\r].*", "") }}
       # NOTE: In strict DNSOverTLS mode (yes), FallbackDNS also uses port 853 — no plain-UDP fallback available on networks blocking port 853. In opportunistic mode, FallbackDNS falls back to plain UDP 53 if port 853 fails.
     dest: /etc/systemd/resolved.conf.d/99-dot.conf
     mode: "0644"

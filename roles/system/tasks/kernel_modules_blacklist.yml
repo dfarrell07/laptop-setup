@@ -21,3 +21,22 @@
         src: modprobe-hardening.conf.j2
         dest: /etc/modprobe.d/hardening.conf
         mode: "0644"
+
+    - name: Unload unconditionally blacklisted modules (best-effort, pre-reboot)
+      # Modules already loaded at provisioning time remain exploitable until reboot.
+      # Attempt immediate unload so CVEs (vivid OOB write, n_hdlc privesc, firewire DMA)
+      # are not exploitable during the pre-reboot window. failed_when/ignore_errors
+      # handle the common case where a module was never loaded.
+      ansible.builtin.command:
+        cmd: modprobe -r {{ item }}
+      loop:
+        - vivid
+        - n_hdlc
+        - firewire-sbp2
+        - firewire-net
+        - firewire-ohci
+        - firewire-core
+        - nosy
+      failed_when: false
+      ignore_errors: true
+      changed_when: false

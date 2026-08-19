@@ -9,13 +9,17 @@
     - not system_is_container
     - system_selinux_enforcing_required | bool
   block:
-    - name: Warn - SELinux is disabled — enforcing mode requires reboot
-      ansible.builtin.debug:
-        msg: >-
-          SELinux is config-disabled on this host. system_selinux_enforcing_required is true
-          but the selinux fact is not a mapping (SELinux disabled in /etc/selinux/config).
-          The enforcement block will be skipped. Set SELINUX=enforcing in /etc/selinux/config
-          and reboot to allow Ansible to enforce the correct mode.
+    - name: Fail - SELinux kernel-disabled with enforcing required
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['selinux'] is mapping
+        fail_msg: >-
+          SELinux is not active in the kernel (selinux fact is not a mapping).
+          system_selinux_enforcing_required is true but SELinux was disabled in
+          /etc/selinux/config and the host was rebooted with selinux=0 or
+          SELINUX=disabled. An attacker can use this path to neutralize SELinux
+          enforcement entirely. Fix: set SELINUX=enforcing in /etc/selinux/config
+          and reboot, or set system_selinux_enforcing_required: false to opt out.
       when: ansible_facts['selinux'] is not mapping
 
     - name: SELinux enforcement block

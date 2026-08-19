@@ -446,6 +446,10 @@ system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-acce
 
 # Chrony NTS time sources. Override in config.yml for corporate environments that block
 # outbound NTP or require regional servers.
+# SECURITY: pre-flight validates hostnames by character allowlist only ([a-zA-Z0-9._:-]).
+# No domain-allowlist check is performed — config.yml integrity is the sole guard against
+# NTS server substitution. With system_chrony_authselectmode: require, a rogue entry fully
+# controls the clock (no unauthenticated fallback). Only list hostnames you explicitly trust.
 system_chrony_nts_servers:
   - time.cloudflare.com
   - nts.netnod.se

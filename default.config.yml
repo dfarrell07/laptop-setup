@@ -243,7 +243,15 @@ system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: 
 #                                        resolved is desired (lightweight avahi-daemon replacement without the daemon)
 #   system_chrony_nts_servers: [time.cloudflare.com, nts.netnod.se, ptbtime1.ptb.de, ntppool1.time.nl]
 #                                        (roles/system/defaults) — NTS-capable time sources; override for corporate NTP or regional servers
+#     SECURITY: pre-flight validates hostnames by character allowlist only ([a-zA-Z0-9._:-]).
+#     No domain-allowlist check is performed. config.yml integrity is the sole guard against
+#     NTS server substitution. With system_chrony_authselectmode: require, a rogue NTS entry
+#     fully controls the clock. Only list hostnames you explicitly trust.
 #   system_chrony_fallback_pool: 2.fedora.pool.ntp.org  (roles/system/defaults) — plain NTP pool fallback when NTS sources unreachable
+#                                        SECURITY: this pool is unauthenticated (no NTS); an attacker-controlled
+#                                        value silently redirects time sync on networks where NTS (TCP 4460) is
+#                                        blocked. Use only pools from the pool.ntp.org project or your
+#                                        organisation's trusted NTP infrastructure (e.g. 2.fedora.pool.ntp.org).
 #   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
 #   system_chrony_service_enabled: "{{ not system_is_container }}"
 #                                        (roles/system/defaults) — auto-disabled in containers; set true to force-enable

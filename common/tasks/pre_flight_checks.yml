@@ -378,6 +378,7 @@
             map('string') | select() | list |
             reject('match', '^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$') | list | length == 0
           - _raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
           - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
           - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
           - _raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
@@ -389,11 +390,24 @@
           - _raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
+          - _raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
+          - _raw.get('desktop_wm_repeat_rate', '50') | string is match('^[0-9]+$')
+          - _raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
+          - _raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
+          - _raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
+          - _raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
         fail_msg: >-
-          SECURITY: desktop_alacritty_color_* and desktop_bar_* values must be 3- or 6-digit
+          SECURITY: desktop_wm_border_width and desktop_wm_floating_border_width in config.yml
+          must be non-negative integers (^[0-9]+$). These values are rendered bare into sway/i3
+          config as 'default_border pixel <value>'; a payload like '1\nexec /bin/sh -c cmd'
+          injects a top-level exec directive executed when the WM starts.
+          Impact: arbitrary command execution as the login user on WM start or reload.
+          Fix: use a plain integer (e.g. 1, 2); no newlines or non-digit characters allowed.
+          desktop_alacritty_color_* and desktop_bar_* values must be 3- or 6-digit
           hex colors (#RGB or #RRGGBB). desktop_wm_lock_color must be a 6-digit hex color
-          WITHOUT # (swaylock/i3lock format). desktop_alacritty_font_family must use only
-          alphanumeric/space/underscore/hyphen. desktop_alacritty_font_size must be a positive
+          WITHOUT # (swaylock/i3lock format). desktop_alacritty_font_family and
+          desktop_wm_font_family must use only alphanumeric/space/underscore/hyphen
+          (no newlines — a newline injects a new sway/i3 directive, exec runs as the user). desktop_alacritty_font_size must be a positive
           number. desktop_i3status_battery_num must be a non-negative integer or empty.
           desktop_gtk_theme and desktop_gtk_icon_theme must be alphanumeric/space/dash/underscore.
           desktop_wm_browser, desktop_sway_polkit_agent, desktop_i3_polkit_agent, desktop_terminal
@@ -404,6 +418,33 @@
           allow command injection when the WM/Xorg starts (e.g., desktop_i3_trackpoint_id='device\nEndSection\nSection'
           breaks Xorg parsing and injects arbitrary Xorg directives).
           containers_log_driver must be one of k8s-file/journald/json-file/syslog/none.
+          desktop_wm_repeat_delay and desktop_wm_repeat_rate must be non-negative integers (^[0-9]+$).
+          Input: config.yml; Mechanism: i3/sway pass these to xset r rate / repeat_delay via sh -c;
+          shell metacharacters (e.g. "200; id>/tmp/pwned #") execute arbitrary code at WM startup.
+          Impact: local code execution as the user when the WM starts.
+          Fix: use only digits (e.g. desktop_wm_repeat_delay: 200, desktop_wm_repeat_rate: 50).
+          desktop_sway_output must match ^[a-zA-Z0-9*_-]+$ (e.g. '*' or 'eDP-1'); a newline
+          payload injects an exec directive into sway.config (e.g. "*\nexec /bin/sh -c 'cmd'").
+          desktop_sway_hidpi_scale must match ^[0-9]+\.?[0-9]*$ (e.g. '1' or '1.5').
+
+    - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('desktop_wm_idle_lock_timeout', '300') | string is match('^[0-9]+$')
+          - _raw.get('desktop_wm_idle_display_timeout', '600') | string is match('^[0-9]+$')
+        fail_msg: >-
+          SECURITY: desktop_wm_idle_lock_timeout or desktop_wm_idle_display_timeout in config.yml
+          must be a plain non-negative integer (seconds).
+          Input: config.yml desktop_wm_idle_lock_timeout / desktop_wm_idle_display_timeout.
+          Mechanism: values are interpolated bare into the swayidle exec directive in sway.config.j2;
+          a newline in the value terminates the backslash continuation and injects a new top-level
+          sway directive (e.g. "300\nexec /bin/sh -c 'cmd'" runs cmd at WM startup).
+          Example: desktop_wm_idle_lock_timeout: "300\nexec /bin/sh -c 'id>/tmp/pwned'"
+          Impact: local code execution as the user when sway starts.
+          Fix: use only digits (e.g. desktop_wm_idle_lock_timeout: 300).
 
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
@@ -1031,6 +1072,22 @@
           remove the file. smoke-test.sh grep patterns with unquoted values allow metacharacters
           to be interpreted as regex operators (e.g. "722|8080" filters both ports instead of just 722).
 
+    - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_selinux_enforcing_required', true) | bool
+        fail_msg: >-
+          SECURITY: system_selinux_enforcing_required is set to false in config.yml.
+          Threat: disabling this variable silently bypasses all SELinux enforcement tasks.
+          Input: system_selinux_enforcing_required={{ _raw.get('system_selinux_enforcing_required', true) }} in config.yml.
+          Mechanism: hardening_core.yml outer block when-condition evaluates false — setenforce,
+          fact refresh, and enforce assert are skipped; provisioning completes with SELinux in any state.
+          Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
+          Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
+
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -1472,6 +1529,27 @@
           Use standard filesystem paths only (e.g., /etc/ssh/sshd_config.d, not /etc/[sshd_config]).
           Unsafe entries found: {{ _unsafe_entries }}.
 
+    - name: Assert system_aide_monitoring_etc_paths non-empty when system_aide_enabled (AIDE vacuous-truth guard)
+      when:
+        - _config_yml_raw.content is defined
+        - (_config_yml_raw.content | b64decode | from_yaml | default({})).get('system_aide_enabled', false) | bool
+        - "'system_aide_monitoring_etc_paths' in (_config_yml_raw.content | b64decode | from_yaml | default({}))"
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _aide_paths | length > 0
+        fail_msg: >-
+          SECURITY: system_aide_enabled is true but system_aide_monitoring_etc_paths is empty in
+          config.yml. Threat: with an empty path list aide.yml writes zero supplemental monitoring
+          entries, so AIDE initialises its DB without coverage of /etc/ssh/sshd_config.d,
+          /etc/crypto-policies, /etc/selinux/config, /etc/audit/rules.d, /etc/modprobe.d,
+          /etc/pam.d, and similar security-critical trees. An attacker who modifies these paths
+          post-provision evades integrity detection entirely (vacuous-truth bypass). Fix: either
+          remove system_aide_monitoring_etc_paths from config.yml (defaults cover the 14 standard
+          paths) or supply at least one explicit path such as /etc/ssh/sshd_config.d.
+
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -1576,6 +1654,26 @@
           (systemd calendar specification format per systemd.time(7),
           e.g. weekly, daily, *-*-* 00:00:00, Mon,Wed,Fri *-*-* 10:00:00).
           No newlines or other special characters allowed.
+
+    - name: Assert system_dot_mode and system_dnssec_mode in config.yml are valid enum values (resolved config guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_dot_mode', 'opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
+          - _raw.get('system_dnssec_mode', 'allow-downgrade') | string | lower in ['yes', 'no', 'allow-downgrade']
+        fail_msg: >-
+          SECURITY: system_dot_mode or system_dnssec_mode in config.yml has an invalid value.
+          Threat: invalid value causes mid-play failure in dns_over_tls.yml after systemd-resolved
+          is enabled and resolved drop-in directories are created (partial hardening state).
+          Input: system_dot_mode='{{ _raw.get("system_dot_mode", "opportunistic") }}',
+          system_dnssec_mode='{{ _raw.get("system_dnssec_mode", "allow-downgrade") }}'.
+          Allowed: system_dot_mode in [yes, no, opportunistic];
+          system_dnssec_mode in [yes, no, allow-downgrade].
+          Note: 'no' is a valid enum value but silently disables DoT/DNSSEC — set intentionally.
+          Fix: correct the value in config.yml before running make all.
+      tags: [always]
 
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
       when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
@@ -1988,6 +2086,23 @@
                 must be >= 1 (minlen=0 removes minimum password length enforcement; any password
                 including empty strings pass the length check).
               Do NOT set these to 0 via -e flag or config.yml.
+          tags: [always]
+
+        - name: Assert system_dot_mode and system_dnssec_mode in play namespace are valid (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - system_dot_mode | default('opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
+              - system_dnssec_mode | default('allow-downgrade') | string | lower in ['yes', 'no', 'allow-downgrade']
+            fail_msg: >-
+              SECURITY: system_dot_mode or system_dnssec_mode in the play namespace has an invalid
+              value (possibly set via -e flag, bypassing config.yml pre-flight validation).
+              Threat: invalid value causes mid-play failure in dns_over_tls.yml after
+              systemd-resolved is enabled and resolved drop-in directories are created
+              (partial hardening state). Allowed: system_dot_mode in [yes, no, opportunistic];
+              system_dnssec_mode in [yes, no, allow-downgrade].
+              Current: system_dot_mode={{ system_dot_mode | default('DEFAULT') }},
+              system_dnssec_mode={{ system_dnssec_mode | default('DEFAULT') }}.
+              Fix: correct the -e override or config.yml value before running make all.
           tags: [always]
 
         - name: Set namespace validation flag (internal, cannot be pre-set)

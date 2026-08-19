@@ -67,6 +67,21 @@
     - not csb_rhel
     - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
 
+- name: "SECURITY: Reject system_selinux_enforcing_required: false on managed dnf hosts"
+  ansible.builtin.assert:
+    that:
+      - system_selinux_enforcing_required | bool
+    fail_msg: >-
+      SECURITY: system_selinux_enforcing_required is false — all SELinux enforcement tasks are skipped.
+      Threat: config.yml sets system_selinux_enforcing_required: false to silently bypass MAC enforcement.
+      Input: system_selinux_enforcing_required={{ system_selinux_enforcing_required }}.
+      Mechanism: hardening_core.yml outer block when-condition evaluates false — setenforce, fact refresh,
+      and enforce assert are all skipped; provisioning completes with SELinux in permissive or disabled state.
+      Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
+      Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
+  when: is_dnf and not csb_rhel and not system_is_container
+  tags: [always]
+
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
