@@ -30,6 +30,8 @@
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
 
 - name: Validate GOSUMDB is not disabled and is a valid hostname
+  # Accepts: FQDN (e.g. sum.golang.org) and FQDN:port (e.g. sum.corp.com:443)
+  # Rejects: 'off', empty string, IP addresses, single-label hostnames (localhost)
   ansible.builtin.assert:
     that:
       - "packages_gosumdb is not defined or (packages_gosumdb != 'off' and packages_gosumdb | length > 0)"
