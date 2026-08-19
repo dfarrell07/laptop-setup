@@ -16,4 +16,4 @@ set -euo pipefail
 # SECURITY: Disable shell tracing to prevent password exposure in CI logs
 _t=0; [[ $- == *x* ]] && _t=1; set +x
 printf '%s\n' "ci-dummy-vault-password"
-[ "$_t" = "1" ] && set -x
+[ "$_t" != "0" ] && set -x || true
