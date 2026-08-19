@@ -40,6 +40,21 @@
         mode: "0644"
       when: system_coredump_storage == 'none'
 
+    # Security advisory: external storage captures full process memory of privileged tools.
+    # ansible-playbook, gpg, and ssh-agent crashes write decrypted vault material to
+    # /var/lib/systemd/coredump/ readable by the systemd-journal group via 'coredumpctl dump'.
+    # Set system_coredump_storage: none in config.yml to eliminate this exposure at the cost
+    # of losing crash diagnostics. See CLAUDE.md "Key Patterns" for the trade-off.
+    - name: WARN — coredump storage=external may capture decrypted vault/key material from privileged process crashes
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_coredump_storage is 'external'. Crashes of ansible-playbook, gpg,
+          or ssh-agent may write decrypted vault plaintext or SSH private keys to
+          /var/lib/systemd/coredump/. Any local user in the systemd-journal group can read
+          these via 'coredumpctl dump'. Set system_coredump_storage: none in config.yml
+          to prevent this. The smoke-test will alert if such coredumps are found.
+      when: system_coredump_storage == 'external'
+
     # Cleanup path: no-op in default config; relevant only on re-provision when system_coredump_storage changes from none to external.
     - name: Remove RLIMIT_CORE limits when coredump storage is active
       ansible.builtin.file:

@@ -1119,6 +1119,22 @@ EOF
   else record "coredump-processsizemax" "FAIL" "coredump ProcessSizeMax not configured"; fi
   unset _cd_storage _cd_size
 
+  # coredump security check — alert if ansible-playbook, gpg, or ssh-agent have coredumps
+  # (these processes handle vault plaintext/SSH keys; their coredumps expose secrets)
+  if command -v coredumpctl &>/dev/null; then
+    _cd_priv_dumps=$(coredumpctl list --no-pager --no-legend 2>/dev/null \
+      | awk '{print $NF}' | grep -cE '^(ansible-playbook|gpg|gpg-agent|ssh-agent)$' || true)
+    if [[ "$_cd_priv_dumps" -eq 0 ]]; then
+      record "coredump-no-vault-process-dumps" "PASS" "no ansible-playbook/gpg/ssh-agent coredumps found"
+    else
+      record "coredump-no-vault-process-dumps" "WARN" \
+        "$_cd_priv_dumps coredump(s) from privileged process(es) found — may contain vault plaintext or SSH keys; inspect with: coredumpctl list; consider: coredumpctl clean"
+    fi
+    unset _cd_priv_dumps
+  else
+    record "coredump-no-vault-process-dumps" "WARN" "coredumpctl not available — cannot audit for vault-process coredumps"
+  fi
+
   # journald persistent storage (verify Storage=persistent, not just file existence)
   # Skipped on CSB — Ansible omits journald config to avoid suppressing SIEM-forwarded events
   # (RateLimitBurst in the drop-in could drop audit events before audisp-remote ships them)
