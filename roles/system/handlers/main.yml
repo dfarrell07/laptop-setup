@@ -118,12 +118,16 @@
   become: true
   when: not system_is_container  # daemon_reload: true crashes privileged Podman containers; ignore_errors cannot catch a process death
 
-# Must use SysV wrapper, not 'systemctl restart auditd': the SysV script calls
-# auditctl to reload rules into the kernel; systemctl sends SIGTERM and skips
-# that step, leaving new rules defined in config but not loaded at runtime.
+# Use augenrules --load instead of 'service auditd restart' to minimize the
+# audit rule gap: a full daemon restart calls auditctl -D (clears all rules)
+# then waits for the process to stop/start before repopulating, leaving a
+# ~1-3 second window with no kernel audit rules active. augenrules --load
+# compiles rules and feeds them to the running daemon directly, reducing the
+# gap to the sub-second auditctl apply time. The compiled ruleset still begins
+# with -D so a brief clear is unavoidable, but daemon-restart overhead is gone.
 - name: Restart auditd  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: service auditd restart
+    cmd: augenrules --load
   become: true
   changed_when: true
   when: not system_is_container  # auditd restart crashes privileged Podman containers; ignore_errors cannot catch a process death

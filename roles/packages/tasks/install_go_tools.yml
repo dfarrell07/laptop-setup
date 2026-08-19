@@ -83,6 +83,11 @@
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
     GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical
+    CC: /usr/bin/gcc  # pin compiler identity; prevent caller CC injection into CGO builds
+    CGO_CFLAGS: ''  # clear inherited flags; prevent CGO_CFLAGS injection
+    CGO_CXXFLAGS: ''  # clear inherited flags; prevent CGO_CXXFLAGS injection
+    CGO_LDFLAGS: ''  # clear inherited flags; prevent CGO_LDFLAGS injection
+    CGO_ENABLED: '1'  # explicit; some tools (subctl, golangci-lint) require CGO
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   loop_control:
     label: "{{ item | regex_replace('@.*', '') | basename }}"

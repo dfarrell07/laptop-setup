@@ -154,6 +154,11 @@
     GOSUMDB: "sum.golang.org"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+    CC: /usr/bin/gcc
+    CGO_ENABLED: '1'
+    CGO_CFLAGS: ''
+    CGO_CXXFLAGS: ''
+    CGO_LDFLAGS: ''
   register: container_golangci_lint_result
   changed_when: container_golangci_lint_result.rc == 0
   timeout: 300
@@ -183,6 +188,11 @@
     GOSUMDB: "sum.golang.org"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+    CC: /usr/bin/gcc
+    CGO_ENABLED: '1'
+    CGO_CFLAGS: ''
+    CGO_CXXFLAGS: ''
+    CGO_LDFLAGS: ''
   register: container_subctl_result
   changed_when: container_subctl_result.rc == 0
   timeout: 600
