@@ -58,6 +58,23 @@
   # tailscale0 is in the 'trusted' firewall zone so any Tailscale peer can reach it.
   # Masking does not affect fwupd firmware update functionality.
 
+- name: Harden fwupd configuration (OnlyTrusted, UriSchemes)
+  ansible.builtin.ini_file:
+    path: /etc/fwupd/fwupd.conf
+    section: fwupd
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - {option: OnlyTrusted, value: "true"}
+    - {option: UriSchemes, value: "https"}
+  when:
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
 - name: Check for firmware updates
   ansible.builtin.command:
     cmd: fwupdmgr get-updates --no-device-prompt
