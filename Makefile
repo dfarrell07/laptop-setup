@@ -253,11 +253,7 @@ setup-yubikeys: guard-not-root
 update: guard-not-root preflight
 	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
-	ansible-galaxy collection install -p ./collections \
-		collections-dist/ansible-posix-2.2.2.tar.gz \
-		collections-dist/community-general-13.2.0.tar.gz \
-		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
-		collections-dist/containers-podman-1.20.2.tar.gz
+	$(INSTALL_COLLECTIONS)
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e git_repos_pull=true
 
 # --- Individual roles ---
