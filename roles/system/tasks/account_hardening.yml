@@ -147,26 +147,37 @@
     - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
 
 - name: Restrict existing user home directory permissions to system_home_mode (CIS 6.2.x)
-  ansible.builtin.file:
-    path: "{{ real_user_home }}"
-    mode: "{{ system_home_mode }}"
-    state: directory
-  register: _home_mode_result
+  block:
+    - name: Set home directory mode
+      ansible.builtin.file:
+        path: "{{ real_user_home }}"
+        mode: "{{ system_home_mode }}"
+        state: directory
+      register: _home_mode_result
+
+  rescue:
+    - name: Check current home directory permissions
+      ansible.builtin.stat:
+        path: "{{ real_user_home }}"
+      register: _home_stat
+
+    - name: Abort if home directory is more permissive than allowed
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY: Home directory {{ real_user_home }} permissions are {{ _home_stat.stat.mode }}
+          (expected {{ system_home_mode }} or less permissive). chmod failed with error:
+          {{ _home_mode_result.msg | default('unknown error') }}.
+          Possible causes: NFS with root_squash (disable or use nfsvers=4.2 with idmap),
+          ACLs preventing chmod (check getfacl/setfacl), SELinux denial (check audit.log).
+          Manual fix required before provisioning can continue.
+      when: _home_stat.stat.mode | regex_replace('^0?', '') | int > system_home_mode | regex_replace('^0?', '') | int
+
   when:
     - real_user_home | length > 0
     - real_user_home != '/'
     - real_user_home is regex('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9_. -]+)*$')
     - not csb_rhel  # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir
     - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
-  ignore_errors: true
-
-- name: Warn if home directory mode enforcement failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: Could not set {{ real_user_home }} to mode {{ system_home_mode }}
-      ({{ _home_mode_result.msg | default('unknown error') }}) —
-      CIS 6.2.x home dir permission may not be enforced
-  when: _home_mode_result.failed | default(false)
 
 # --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
 - when:
@@ -348,11 +359,12 @@
   ignore_errors: true
   when: not csb_rhel and not system_is_container
 
-- name: Warn if Lock root account failed
-  ansible.builtin.debug:
+- name: Abort if Lock root account failed
+  ansible.builtin.fail:
     msg: >-
-      WARNING: Lock root account failed ({{ _lock_root_result.msg | default('unknown error') }}) —
-      root account may not be locked; check PAM, NSS, or shadow configuration
+      CRITICAL: Failed to lock root account ({{ _lock_root_result.msg | default('unknown error') }}).
+      Root account must be locked per CIS benchmark. Check /etc/shadow permissions,
+      PAM configuration, and NSS. Do not continue provisioning until this is resolved.
   when:
     - not csb_rhel
     - not system_is_container
