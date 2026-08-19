@@ -504,6 +504,27 @@
           Fix: keyboard_layout/variant must match ^[a-z0-9,_-]*$; keyboard_options ^[a-zA-Z0-9:,_-]*$.
           Use plain values only (e.g. 'us', 'intl', 'ctrl:nocaps,compose:ralt').
 
+    - name: Assert sway touchpad vars in config.yml are enabled, disabled, or empty (block-escape injection guard)
+      when: _config_yml_raw.content is defined
+      tags: [always]
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('desktop_sway_touchpad_tap', '') | string is match('^(enabled|disabled|)$')
+          - _raw.get('desktop_sway_touchpad_natural_scroll', '') | string is match('^(enabled|disabled|)$')
+          - _raw.get('desktop_sway_touchpad_dwt', '') | string is match('^(enabled|disabled|)$')
+          - _raw.get('desktop_sway_touchpad_middle_emulation', '') | string is match('^(enabled|disabled|)$')
+        fail_msg: >-
+          SECURITY: sway touchpad vars in config.yml must be 'enabled', 'disabled', or empty.
+          Input: config.yml desktop_sway_touchpad_{tap,natural_scroll,dwt,middle_emulation}.
+          Mechanism: values are rendered bare inside 'input "type:touchpad" {}' in sway.config.j2;
+          a newline closes the block and injects top-level sway directives on the next line.
+          Example: desktop_sway_touchpad_tap='enabled\n}\nexec /bin/sh\ninput "type:touchpad" {'
+          closes the block, injects exec /bin/sh, and reopens a dummy block to suppress parse errors.
+          Impact: arbitrary command execution as the login user when sway starts or reloads config.
+          Fix: set each var to 'enabled', 'disabled', or leave empty (default).
+
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -1242,6 +1263,27 @@
           Impact: all auth hardening remains intact but port-obscurity is lost without operator awareness.
           Fix: use a non-standard port (default 722). If port 22 is intentionally required, document the
           decision and remove this assertion — do not silently accept the reduced security posture.
+
+    - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set (sshd AllowUsers injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _extra_users: "{{ _raw.get('system_ssh_extra_allow_users', []) }}"
+      ansible.builtin.assert:
+        that:
+          - _extra_users | map('string') | select() |
+            reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
+        fail_msg: >-
+          SECURITY: system_ssh_extra_allow_users in config.yml contains an invalid entry.
+          Threat: a newline-embedded value like "validuser\nPermitRootLogin yes" passes sshd -t
+          and loads a malicious directive that silently overrides PermitRootLogin no.
+          Input: system_ssh_extra_allow_users={{ _extra_users | to_json }} in config.yml.
+          Mechanism: entries are joined verbatim into AllowUsers in sshd_config.d/00-hardening.conf;
+          a newline splits the directive and the next token is parsed as a top-level sshd directive.
+          Example: ["validuser\nPermitRootLogin yes"] → AllowUsers … validuser\nPermitRootLogin yes.
+          Impact: PermitRootLogin or other hardened directives silently overridden; root SSH enabled.
+          Fix: each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username, 32 chars max).
+          Offending entries: {{ _extra_users | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
 
     - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
       when: _config_yml_raw.content is defined
@@ -2538,17 +2580,23 @@
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          # system_core_pattern is a sysctl VALUE, not a key; allows pipe and paths but blocks newlines
-          # Pattern: pipe (for piped target) or path chars, but NOT newlines or other shell metacharacters
+          # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
+          # Pipe-based coredump handlers (e.g. '|/usr/lib/systemd/systemd-coredump ...') are reserved
+          # for role defaults only and must not be overridden via config.yml — pipe exec runs as root.
           - _raw.get('system_core_pattern', '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %e') | string is match('^[^\n\r]*$')
-          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9|/_-]*$|^$')
+          - _raw.get('system_core_pattern', '') | string is match('^[a-zA-Z0-9/_-]*$|^$')
         fail_msg: >-
-          SECURITY: system_core_pattern in config.yml contains unsafe characters.
-          This value is set as a sysctl (kernel parameter) via kernel.core_pattern; embedded
-          newlines inject additional sysctl directives or break the kernel parameter parser.
-          Allowed: alphanumeric, pipe (|), slash, underscore, hyphen for the core_pattern
-          (e.g., '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %e' or
-          '|/bin/false'). No spaces, newlines, or shell metacharacters.
+          SECURITY: system_core_pattern in config.yml contains unsafe characters or a pipe handler.
+          Threat: kernel.core_pattern with a leading pipe ('|') causes the kernel to exec the named
+          binary as root on every process crash — a pipe value in config.yml enables an RCE vector.
+          Input: system_core_pattern value supplied in config.yml.
+          Mechanism: preflight validates the value before sysctl.yml deploys kernel.core_pattern;
+          pipe characters are now blocked because pipe-exec handlers run as root at crash time.
+          Example: system_core_pattern: '|/malicious/handler' would exec that binary as root.
+          Impact: arbitrary root code execution triggered by any process crash on the system.
+          Fix: remove system_core_pattern from config.yml (role default is safe) or use a plain
+          path without a leading pipe (e.g. '/var/lib/systemd/coredump/core'). No spaces, newlines,
+          shell metacharacters, or pipe characters are permitted in config.yml overrides.
       tags: [always]
 
     - name: Assert system_selinux_enforcing_required is not disabled on dnf hosts (SELinux enforcement guard)
