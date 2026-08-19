@@ -1474,6 +1474,40 @@
           (semantic version required; reject @latest, @v1 without minor/patch).
           Unsafe entries: {{ _unsafe_entries }}.
 
+    - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _go_packages_work: "{{ _raw.get('packages_go_install_work', []) }}"
+        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
+        _unsafe_entries: "{{ _go_packages_work | map('string') | reject('match', _go_module_regex) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _go_packages_work | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: packages_go_install_work in config.yml contains unsafe Go module paths.
+          These values are passed directly to 'go install'; init() functions execute
+          at compile time (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z
+          (semantic version required; reject @latest, @v1 without minor/patch).
+          Unsafe entries: {{ _unsafe_entries }}.
+
+    - name: Assert packages_go_install_work from -e flag (go install RCE guard)
+      vars:
+        _go_packages_work: "{{ packages_go_install_work | default([]) }}"
+        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
+        _unsafe_entries: "{{ _go_packages_work | map('string') | reject('match', _go_module_regex) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _go_packages_work | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: packages_go_install_work (from environment or config.yml) contains unsafe Go module paths.
+          These values are passed directly to 'go install'; init() functions execute at compile time
+          (RCE during provisioning). This guard validates both file-based and environment variable sources.
+          Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
+          Unsafe entries: {{ _unsafe_entries }}.
+
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
