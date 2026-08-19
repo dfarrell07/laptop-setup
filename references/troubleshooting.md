@@ -142,6 +142,39 @@ nmap 10.0.0.0/8  # IDS ALERT, may trigger access suspension
 
 ---
 
+## packages: OVN/openvswitch Services Masked After Installation
+
+**Symptom:**
+```
+ovs-vsctl: cannot connect to ovsdb-server
+```
+OVN-Kubernetes development fails when trying to use ovs-vsctl or start OVN services. `systemctl status ovsdb-server` shows the service is masked.
+
+**Cause:**
+The packages role masks openvswitch and OVN services after installation for security (roles/packages/tasks/install_dnf_packages.yml). Services are masked rather than disabled to prevent accidental auto-start or socket-activation.
+
+**Fix:**
+For OVN-Kubernetes local cluster development, unmask and start the basic services:
+```bash
+sudo systemctl unmask ovsdb-server.service ovs-vswitchd.service
+sudo systemctl start ovsdb-server.service ovs-vswitchd.service
+ovs-vsctl show  # verify connection
+```
+
+For detailed guidance including service dependencies and advanced scenarios (northd, ovn-controller), see the generated README:
+```bash
+cat ~/.local/share/ansible-packages/ovn-services-README.txt
+```
+
+**Optional convenience alias** (add to ~/.zshrc):
+```bash
+alias ovn-start='sudo systemctl unmask ovsdb-server.service ovs-vswitchd.service && sudo systemctl start ovsdb-server.service ovs-vswitchd.service'
+```
+
+**CSB IT ticket:** No. Unmasking is a local systemd operation requiring only sudo.
+
+---
+
 ## system: Failed to Restart firewalld
 
 **Symptom:**
