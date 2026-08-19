@@ -2,6 +2,15 @@
 # Shared pre-flight checks included by Play 1 and Play 2.
 # Each task carries become: false so the file is safe to include from
 # Play 1 (become: true at play level) without privilege escalation.
+# Section map (search for section name to jump):
+#   SSTI guard (config.yml template injection)
+#   Shell injection guards (homebrew_prefix, env vars, etc.)
+#   SSH/sshd config guards
+#   System hardening vars (sysctl, chrony, journald, etc.)
+#   Packages supply chain guards (go tools, binaries, gosumdb)
+#   Git/dotfiles guards
+#   Play-namespace validation (-e override bypass guards)
+#   Non-molecule assertions (CHANGE_ME, vault, profile)
 - name: Pre-flight checks (no privilege escalation)
   become: false
   tags: [always]
