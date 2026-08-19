@@ -84,7 +84,7 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Configure fprintd.service mask (fingerprint auth control)
+- name: Mask or unmask fprintd.service (masked when system_disable_fingerprint is true)
   ansible.builtin.systemd:
     name: fprintd.service
     masked: "{{ system_disable_fingerprint | bool }}"
