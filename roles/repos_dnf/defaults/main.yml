@@ -18,6 +18,12 @@ repo_tailscale: true
 
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 
+# RPM Fusion GPG key fingerprint (free and nonfree repos share the same key)
+# Pinned to detect MITM attacks on initial key fetch from rpmfusion.org.
+# If GPG key is compromised at fetch time, subsequent package verification fails.
+# Fingerprint valid for: RPM Fusion free and nonfree repos (Fedora 44+)
+repos_dnf_rpmfusion_gpg_fingerprint: "79BDB8874A068716907325C664A4849E4C7033EA"
+
 # Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
 # If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
 # Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard
