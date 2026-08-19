@@ -165,7 +165,7 @@
     - name: Assert GOSUMDB empty string is rejected (supply chain guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _gonosumdb: "{{ _raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
@@ -189,7 +189,7 @@
     - name: Assert packages_gosumdb is whitelisted (supply chain guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _packages_gosumdb: "{{ _raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
         _whitelisted_servers:
           - sum.golang.org
@@ -231,7 +231,7 @@
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_homebrew_prefix', '/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
@@ -245,7 +245,7 @@
     - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('claude_log_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
@@ -259,7 +259,7 @@
     - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _install_method: "{{ _raw.get('claude_install_method', 'native') }}"
         _install_sha256: "{{ _raw.get('claude_install_sha256', '') }}"
       ansible.builtin.assert:
@@ -276,7 +276,7 @@
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('claude_install_url', 'https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
@@ -291,7 +291,7 @@
     - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
@@ -307,7 +307,7 @@
     - name: Assert container_name contains only safe characters (INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
@@ -321,7 +321,7 @@
     - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('claude_queue_repo', '') | string is match('^[A-Za-z0-9_./-]*$')
@@ -350,7 +350,7 @@
     - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _color_keys:
           - desktop_alacritty_color_bg
           - desktop_alacritty_color_fg
@@ -477,7 +477,7 @@
       when: _config_yml_raw.content is defined
       tags: [always]
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('desktop_sway_keyboard_layout', '') | string is match('^[a-z0-9,_-]*$')
@@ -498,7 +498,7 @@
       when: _config_yml_raw.content is defined
       tags: [always]
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('desktop_sway_touchpad_tap', '') | string is match('^(enabled|disabled|)$')
@@ -518,7 +518,7 @@
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('desktop_wm_idle_lock_timeout', '300') | string is match('^[0-9]+$')
@@ -537,7 +537,7 @@
     - name: Assert desktop_i3status_cpu_temp_path is a safe sysfs path (i3status config injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('desktop_i3status_cpu_temp_path', '') | string is match('^(/sys/[a-zA-Z0-9/_.-]+)?$')
@@ -558,7 +558,7 @@
       when: _config_yml_raw.content is defined
       tags: [always]
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _wo_list: "{{ _raw.get('desktop_sway_workspace_outputs', []) }}"
         _bad_workspaces: >-
           {{ _wo_list | map(attribute='workspace', default='') | map('string') | select() |
@@ -586,7 +586,7 @@
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_github_user', '') | string is match('^[a-zA-Z0-9-]*$')
@@ -611,7 +611,7 @@
     - name: Assert SSH key basenames and claude_queue_repo in config.yml contain only safe characters (ssh_config injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_ssh_hardware_key_basename', 'id_ed25519_sk') | string is match('^[a-zA-Z0-9._-]+$')
@@ -632,7 +632,7 @@
     - name: Assert email identity vars in config.yml are valid email addresses (allowed_signers injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_user_email_work', '') | string is match('^([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})?$')
@@ -667,7 +667,7 @@
     - name: Assert dotfiles_work_src_dirs entries contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _work_src_dirs: "{{ _raw.get('dotfiles_work_src_dirs', []) }}"
       ansible.builtin.assert:
         that:
@@ -683,7 +683,7 @@
     - name: Assert tmux vars in config.yml are safe (newline injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_tmux_history_limit', '50000') | string is match('^[1-9][0-9]*$')
@@ -699,7 +699,7 @@
     - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_ssh_agent_timeout', '28800') | string is match('^[0-9]+$')
@@ -741,7 +741,7 @@
     - name: Assert repos_dnf_redhat_gpgkey targets expected internal domain (GPG key injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _redhat_gpgkey: "{{ _raw.get('repos_dnf_redhat_gpgkey', '') }}"
       ansible.builtin.assert:
         that:
@@ -775,7 +775,7 @@
     - name: Assert repos_dnf_acli_baseurl targets expected internal domain (package repository injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _acli_baseurl: "{{ _raw.get('repos_dnf_acli_baseurl', '') }}"
       ansible.builtin.assert:
         that:
@@ -803,7 +803,7 @@
     - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_oh_my_zsh_theme', 'gallois') | string is match('^[a-zA-Z0-9_-]+$')
@@ -817,7 +817,7 @@
     - name: Assert dotfiles_oh_my_zsh_plugins entries contain only safe characters (zshrc injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _plugins: "{{ _raw.get('dotfiles_oh_my_zsh_plugins', []) | default([]) }}"
       ansible.builtin.assert:
         that:
@@ -837,7 +837,7 @@
     - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_ssh_agent_label', '') | string is match('^[a-zA-Z0-9._-]*$')
@@ -852,7 +852,7 @@
     - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('dotfiles_claude_queue_repo', 'CHANGE_ME/CHANGE_ME') | string is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
@@ -866,7 +866,7 @@
     - name: Assert notes_repo_name and notes_repo_path in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('notes_repo_name', 'notes') | string is match('^[a-zA-Z0-9_-]+$')
@@ -886,7 +886,7 @@
     - name: Assert notes_remote_url and notes_remote_url_https are valid git URLs (path traversal guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _notes_ssh_url: "{{ _raw.get('notes_remote_url', '') }}"
         _notes_https_url: "{{ _raw.get('notes_remote_url_https', '') }}"
       ansible.builtin.assert:
@@ -914,7 +914,7 @@
     - name: Assert system_gid0_allowed_accounts entries are safe usernames (account hardening guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _unsafe_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
       ansible.builtin.assert:
         that:
@@ -936,7 +936,7 @@
     - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (command injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
         # Handle both string entries and dict entries with 'host' field
         _hostnames_to_check: >-
@@ -1004,7 +1004,7 @@
     - name: SECURITY — Assert SSH git repo hosts are all pre-seeded in keyscan (TOFU mitigation)
       when: not _pf_is_molecule
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
         _keyscan_raw: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
         # Hostnames from ssh_work_keyscan_hosts (handles both dict {host:...} and plain-string entries)
@@ -1039,7 +1039,7 @@
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
         _bad_dests: >-
           {{ _git_repos_list
@@ -1064,7 +1064,7 @@
     - name: Assert git_repos_base_dir is not the home directory or a sensitive path (SSH takeover guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _base_dir: "{{ _raw.get('git_repos_base_dir', '') | string }}"
       ansible.builtin.assert:
         that:
@@ -1086,7 +1086,7 @@
     - name: Assert git_repos_base_dir is within user home directory (path escape guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _base_dir: "{{ _raw.get('git_repos_base_dir', ansible_facts['user_dir'] ~ '/src') | string }}"
       ansible.builtin.assert:
         that:
@@ -1106,7 +1106,7 @@
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
@@ -1124,7 +1124,7 @@
     - name: Assert binary version variables match semantic versioning (URL path injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         # Semantic version pattern: major.minor.patch with optional prerelease
         _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
         # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
@@ -1180,7 +1180,7 @@
     - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('packages_opm_binary_name', 'opm-rhel8') | string is match('^[a-zA-Z0-9._-]+$')
@@ -1195,7 +1195,7 @@
     - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
         _subctl_versioned_entries: "{{ _raw.get('packages_subctl_versioned', []) }}"
       ansible.builtin.assert:
@@ -1216,7 +1216,7 @@
     - name: Assert packages_subctl_rh_versions entries have safe version strings (oc image extract injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         # Enforce FULL semantic versioning (v0.18.0 format required) to prevent glob ambiguity
         # when item.tag="v0.18" matches both v0.18.0 and v0.18.1 tarballs in /tmp.
         # Three-part versioning (major.minor.patch) prevents filesystem ordering attacks where
@@ -1249,10 +1249,9 @@
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('ssh_port', '722') | string is match('^[0-9]{1,5}$')
           - _raw.get('ssh_port', 722) | int >= 1
           - _raw.get('ssh_port', 722) | int <= 65535
           - _raw.get('ssh_port', 722) | int != 22
@@ -1270,7 +1269,7 @@
     - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set (sshd AllowUsers injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _extra_users: "{{ _raw.get('system_ssh_extra_allow_users', []) }}"
       ansible.builtin.assert:
         that:
@@ -1291,7 +1290,7 @@
     - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_selinux_enforcing_required', true) | bool
@@ -1307,7 +1306,7 @@
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_umask', '027') | string is match('^[0-7]+$')
@@ -1324,7 +1323,7 @@
     - name: Assert password aging and home mode vars safe (login.defs injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_pass_max_days', '365') | string is match('^[0-9]+$')
@@ -1345,7 +1344,7 @@
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_tmout', '0') | string is match('^[0-9]*$')
@@ -1359,7 +1358,7 @@
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_ssh_rekey_limit', '1G 1h') | string is match('^[0-9]+[KMG]?( [0-9]+[smhdw])?$|^(none|default)$')
@@ -1374,7 +1373,7 @@
     - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_kernel_lockdown', 'integrity') | string is match('^(integrity|confidentiality|none|)$')
@@ -1388,7 +1387,7 @@
     - name: Assert system_crypto_policy_target and packages_brew_autoupdate_interval are safe (CLI arg injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_crypto_policy_target', 'DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
@@ -1404,7 +1403,7 @@
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_ssh_max_sessions', '10') | string is match('^[0-9]+$')
@@ -1461,7 +1460,7 @@
     - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_ssh_channel_timeout', '') | string is match('^[a-zA-Z0-9=, *hms]*$')
@@ -1477,7 +1476,7 @@
     - name: Assert system_resolved_* DNS config vars are safe (systemd conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_resolved_llmnr', 'no') | string in ['yes', 'no', 'resolve']
@@ -1496,7 +1495,7 @@
     - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_coredump_storage', 'external') | string is match('^(none|external|journal)$')
@@ -1514,7 +1513,7 @@
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('ssh_host_key_algorithms', 'ssh-ed25519') | string is match('^[a-zA-Z0-9@.,_-]+$')
@@ -1535,7 +1534,7 @@
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _allowed: ['true', 'false', 'yes', 'no', 'on', 'off', '1', '0', true, false]
       ansible.builtin.assert:
         that:
@@ -1551,7 +1550,7 @@
     - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _usbguard_extra: "{{ _raw.get('system_usbguard_extra_rules', []) }}"
       ansible.builtin.assert:
         that:
@@ -1569,7 +1568,7 @@
     - name: Assert system_usbguard_whitelist entries are well-formed (USBGuard injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _usbguard_wl: "{{ _raw.get('system_usbguard_whitelist', []) }}"
       ansible.builtin.assert:
         that:
@@ -1584,7 +1583,7 @@
     - name: Assert container_release and container_image contain only safe characters (distrobox tag injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$')
@@ -1603,7 +1602,7 @@
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_bluetooth_name', 'Bluetooth') | string is not search('\n')
@@ -1622,7 +1621,7 @@
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_chrony_logdir', '') | string is match('^[a-zA-Z0-9/._-]*$')
@@ -1650,7 +1649,7 @@
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_dns_primary', '1.1.1.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
@@ -1673,7 +1672,7 @@
     - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_journald_storage', '') | string is match('^(persistent|volatile|auto|none|)$')
@@ -1697,7 +1696,6 @@
           - _raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
           - _raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
           - _raw.get('system_pwhistory_remember', 24) | int >= 0
-          - _raw.get('system_faillock_deny', 5) | string is match('^[0-9]+$')
           - _raw.get('system_faillock_deny', 5) | int >= 1
           - _raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
           - _raw.get('system_faillock_audit', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
@@ -1716,7 +1714,7 @@
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
         _unsafe_entries: "{{ _aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
       ansible.builtin.assert:
@@ -1742,7 +1740,7 @@
         - (_config_yml_raw.content | b64decode | from_yaml | default({})).get('system_aide_enabled', false) | bool
         - "'system_aide_monitoring_etc_paths' in (_config_yml_raw.content | b64decode | from_yaml | default({}))"
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
       ansible.builtin.assert:
         that:
@@ -1760,7 +1758,7 @@
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _go_packages: "{{ _raw.get('packages_go_install', []) }}"
         # Regex: module.path/cmd@vX.Y.Z with optional pre-release/build metadata
         _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
@@ -1794,7 +1792,7 @@
     - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _go_packages_work: "{{ _raw.get('packages_go_install_work', []) }}"
         _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
         _unsafe_entries: "{{ _go_packages_work | map('string') | reject('match', _go_module_regex) | list }}"
@@ -1827,7 +1825,7 @@
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
         _unsafe_entries: "{{ _host_exec_commands | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
       ansible.builtin.assert:
@@ -1846,7 +1844,7 @@
     - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('containers_prune_schedule', 'weekly') | string is match('^[a-zA-Z0-9:*,.\\-/~ ]+$')
@@ -1865,7 +1863,7 @@
     - name: Assert system_dot_mode and system_dnssec_mode in config.yml are valid enum values (resolved config guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_dot_mode', 'opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
@@ -1885,7 +1883,7 @@
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
       when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _profile: "{{ _raw.get('profile', 'work') }}"
       block:
         - name: Check GitHub CLI in PATH
@@ -1924,7 +1922,7 @@
         - _config_yml_raw.content is defined
         - _cosign_alt_verification_warned is not defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       block:
         - name: Warn if cosign is disabled in config.yml
           ansible.builtin.debug:
@@ -2440,7 +2438,7 @@
     - name: Assert container_* vars contain only safe characters (INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('container_image', '') | string is match('^[a-zA-Z0-9._/:@-]*$|^$')
@@ -2458,7 +2456,7 @@
     - name: Assert pwquality vars are non-negative integers
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_pwquality_minlen', '14') | int >= 1
@@ -2478,7 +2476,7 @@
     - name: Assert login.defs aging vars are non-negative integers
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_pass_max_days', '365') | int >= 0
@@ -2495,7 +2493,7 @@
     - name: Assert sysctl extra dicts contain no shell metacharacters
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
         _extra: "{{ _raw.get('system_sysctl_extra', {}) }}"
         _extra_additional: "{{ _raw.get('system_sysctl_extra_additional', {}) }}"
         _extra_has_newlines: "{{ _extra | dict2items | map(attribute='value') | map('string') | select('search', '\n') | list | length > 0 }}"  # yamllint disable-line rule:line-length
@@ -2523,7 +2521,7 @@
     - name: Assert SSH forwarding vars have safe enum values
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           - _raw.get('system_ssh_allow_agent_forwarding', 'no') | string in ['yes', 'no']
@@ -2571,7 +2569,7 @@
     - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
       when: _config_yml_raw.content is defined
       vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
           # system_core_pattern is a sysctl VALUE, not a key; blocks newlines and shell metacharacters.
