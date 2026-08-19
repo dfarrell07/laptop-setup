@@ -102,7 +102,7 @@
 - name: Assert git config-personal deployed
   ansible.builtin.assert:
     that: verify_git_personal.stat.exists
-    fail_msg: "git config-personal not deployed"
+    fail_msg: "git config-personal not deployed (exists={{ verify_git_personal.stat.exists | default(false) }})"
 
 # --- SSH ---
 - name: Verify SSH config exists with correct permissions
@@ -218,7 +218,7 @@
     that:
       - verify_bin_dir.stat.exists
       - verify_bin_dir.stat.isdir
-    fail_msg: "~/bin directory was not created"
+    fail_msg: "~/bin not created (exists={{ verify_bin_dir.stat.exists | default(false) }}, isdir={{ verify_bin_dir.stat.isdir | default(false) }})"
 
 - name: Verify ~/.local/bin directory exists
   ansible.builtin.stat:
@@ -230,7 +230,7 @@
     that:
       - verify_local_bin.stat.exists
       - verify_local_bin.stat.isdir
-    fail_msg: "~/.local/bin directory was not created"
+    fail_msg: "~/.local/bin not created (exists={{ verify_local_bin.stat.exists | default(false) }}, isdir={{ verify_local_bin.stat.isdir | default(false) }})"
 
 - name: Verify git repos base directory exists
   ansible.builtin.stat:
@@ -258,6 +258,8 @@
     fail_msg: >-
       git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
       clone task logic regression or git_repos_list filtering broken
+      (exists={{ verify_git_repos_clone.stat.exists | default(false) }},
+      isdir={{ verify_git_repos_clone.stat.isdir | default(false) }})
 
 # --- Claude ---
 - name: Verify Claude personal config directory
@@ -333,7 +335,7 @@
 - name: Assert claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.assert:
     that: verify_claude_tmpfiles.stat.exists
-    fail_msg: "claude-privacy.conf tmpfiles config not deployed — ~/.claude permissions won't be enforced at boot"
+    fail_msg: "claude-privacy.conf tmpfiles config not deployed (exists={{ verify_claude_tmpfiles.stat.exists | default(false) }}) — ~/.claude permissions won't be enforced at boot"
   when: ansible_system == 'Linux'
 
 - name: Slurp claude-privacy.conf content
@@ -345,7 +347,7 @@
 - name: Assert claude-privacy.conf deploys 0700 tmpfiles rule
   ansible.builtin.assert:
     that: "'d %h/.claude 0700' in (verify_claude_tmpfiles_content.content | b64decode)"
-    fail_msg: "claude-privacy.conf missing 'd %h/.claude 0700' line — ~/.claude will not be mode-restricted at boot"
+    fail_msg: "claude-privacy.conf missing 'd %h/.claude 0700' line (actual={{ (verify_claude_tmpfiles_content.content | b64decode)[:120] }})"
   when: ansible_system == 'Linux'
 
 - name: Verify Claude CLAUDE.md deployed
@@ -424,21 +426,15 @@
     that:
       - "'strict_env = true' in (verify_direnv_toml.content | b64decode)"
       - "'disable_stdin = true' in (verify_direnv_toml.content | b64decode)"
-    fail_msg: "direnv.toml missing expected settings (strict_env = true, disable_stdin = true)"
+    fail_msg: "direnv.toml missing expected settings (actual={{ (verify_direnv_toml.content | b64decode)[:200] }})"
 
 # --- Dotfiles: SSH agent (Linux only) ---
-# CI gap: SSH agent service/envd deployment only verified in make test-vm (system_is_container guard skips container CI)
+# CI gap: SSH agent service file verified on all Linux scenarios including container CI
 - name: Verify SSH agent systemd service deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
   register: verify_ssh_agent
   when: ansible_system == 'Linux'
-
-- name: Assert SSH agent service deployed
-  ansible.builtin.assert:
-    that: verify_ssh_agent.stat.exists
-    fail_msg: "SSH agent systemd user service not deployed"
-  when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 - name: Assert SSH agent service file present (all scenarios)
   ansible.builtin.assert:
