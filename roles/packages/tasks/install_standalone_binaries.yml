@@ -173,16 +173,6 @@
           Reinstall actionlint: rm /usr/local/bin/actionlint and re-run 'make packages'.
           If attestation verification is not yet implemented upstream, verify manually via:
           'gh attestation verify /usr/local/bin/actionlint --repo rhysd/actionlint'
-  rescue:
-    - name: Warn about actionlint attestation verification failure
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: actionlint attestation verification failed or gh CLI is unavailable.
-          The binary was installed via SHA256 checksum verification (acceptable but less
-          robust than cryptographic attestation). For maximum security, ensure GitHub CLI is
-          installed and authenticated ('gh auth login'), then re-run 'make packages' to
-          re-verify the installed binary via attestation. Continuing without attestation is safe
-          but not ideal for work profiles where supply-chain integrity is important.
 
 - name: Verify zizmor binary attestation
   when:
@@ -218,16 +208,6 @@
           Reinstall zizmor: rm /usr/local/bin/zizmor and re-run 'make packages'.
           If attestation verification is not yet implemented upstream, verify manually via:
           'gh attestation verify /usr/local/bin/zizmor --repo zizmorcore/zizmor'
-  rescue:
-    - name: Warn about zizmor attestation verification failure
-      ansible.builtin.debug:
-        msg: >-
-          WARNING: zizmor attestation verification failed or gh CLI is unavailable.
-          The binary was installed via SHA256 checksum verification (acceptable but less
-          robust than cryptographic attestation). For maximum security, ensure GitHub CLI is
-          installed and authenticated ('gh auth login'), then re-run 'make packages' to
-          re-verify the installed binary via attestation. Continuing without attestation is safe
-          but not ideal for work profiles where supply-chain integrity is important.
 
 - name: Install operator-sdk
   # operator-sdk releases are GPG/PGP signed (checksums.txt.asc) — not cosign/Sigstore.
