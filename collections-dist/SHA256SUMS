@@ -3,6 +3,18 @@
 # Galaxy does not publish platform-level GPG or Sigstore signatures for community collections,
 # so no upstream signature verification was possible at download time.
 #
+# SHA256SUMS.asc Signature Verification
+# ======================================
+# SHA256SUMS is signed with RSA key fingerprint AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+# To verify the signature:
+#   1. Import the public key from the configured keyserver (set in ~/.gnupg/gpg.conf)
+#   2. Verify the fingerprint matches: AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+#   3. Verify the signature: gpg --verify SHA256SUMS.asc SHA256SUMS
+#
+# If GPG returns "Can't check signature: No public key", the key is not yet imported.
+# Obtain it from a trusted source and import with: gpg --import <key-file>
+# Then re-run the verification command above.
+#
 # SECURITY: Maintainer Identity Verification & Mitigations
 # =========================================================
 # Galaxy does not publish GPG signatures, Sigstore certificates, or SLSA provenance for community
