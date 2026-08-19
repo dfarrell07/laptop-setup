@@ -182,6 +182,7 @@
     accept_newhostkey: true  # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) asserting every SSH git hostname is pre-seeded in ssh_work_keyscan_hosts (github.com exempt — always seeded via API); new hosts must be added to ssh_work_keyscan_hosts in config.yml
   environment:
     GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos
+    GIT_CONFIG_NOSYSTEM: "1"  # prevent /etc/gitconfig injection (core.fsmonitor RCE, url.insteadOf redirect)
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
@@ -219,6 +220,7 @@
   environment:
     LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
     GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging on expired HTTPS auth
+    GIT_CONFIG_NOSYSTEM: "1"  # prevent /etc/gitconfig injection (core.fsmonitor RCE, url.insteadOf redirect)
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
