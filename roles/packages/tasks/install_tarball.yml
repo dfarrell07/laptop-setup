@@ -43,7 +43,7 @@
           become: true
           tags: [become]
 
-        - name: "Tarball download: {{ binary_name }}"
+        - name: "{{ binary_name }} archive fetched"
           ansible.builtin.get_url:
             url: "{{ url }}"
             dest: "{{ _install_tarball_tmpdir.path }}/{{ binary_name }}.tar.gz"
@@ -62,7 +62,7 @@
           become: true
           tags: [become]
 
-        - name: "Binary extraction: {{ binary_name }}"
+        - name: "{{ binary_name }} extracted to /usr/local/bin"
           ansible.builtin.unarchive:
             src: "{{ _install_tarball_tmpdir.path }}/{{ binary_name }}.tar.gz"
             dest: /usr/local/bin
