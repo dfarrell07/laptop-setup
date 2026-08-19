@@ -3021,6 +3021,50 @@
           and encrypt the vault.
       tags: [always]
 
+    - name: SECURITY CRITICAL — Block provisioning when vault empty AND SSH hardening would cause lockout
+      when:
+        - not _pf_is_molecule
+        - is_linux
+      ansible.builtin.assert:
+        that:
+          - >-
+            (ssh_auth_key_pub | default('') | trim | length > 0) or
+            (ssh_port | default(722) | int == 22)
+        fail_msg: >-
+          SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning blocked.
+          Input: vault.yml is empty (ssh_auth_key_pub='{{ ssh_auth_key_pub | default("") }}').
+          Mechanism: SSHD hardening applies PasswordAuthentication no + SSH port {{ ssh_port | default(722) }}
+          + PubkeyAcceptedAlgorithms restricts to ed25519 variants only.
+          Impact: After reboot, SSH login impossible — no password auth, existing RSA keys rejected,
+          non-standard port. Physical console access required to recover.
+
+          REQUIRED FIX (choose ONE):
+
+          1. Populate vault.yml BEFORE provisioning (RECOMMENDED):
+             a. Run: make setup-yubikeys
+             b. Populate group_vars/all/vault.yml with vault_ssh_auth_key_pub
+                (MUST be ed25519 type: ssh-ed25519, sk-ssh-ed25519@openssh.com, or cert variants)
+             c. Encrypt: ansible-vault encrypt group_vars/all/vault.yml
+             d. Run: make all
+
+          2. Bootstrap at local console (temporary workaround):
+             a. Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local
+             b. Replace authorized_keys: cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
+             c. Run: make all (at console, NOT over SSH)
+             d. Reboot (SSH will work with ed25519 key on port {{ ssh_port | default(722) }})
+             e. Later: populate vault and re-provision to replace bootstrap key
+
+          3. Disable SSH hardening (NOT RECOMMENDED):
+             Add to config.yml: ssh_port: 22
+             WARNING: This removes port-obscurity layer and is NOT a secure long-term solution.
+
+          Current state:
+          - ssh_auth_key_pub: {{ 'EMPTY' if (ssh_auth_key_pub | default('') | trim | length == 0) else 'POPULATED' }}
+          - ssh_port: {{ ssh_port | default(722) }}
+          - PasswordAuthentication will be: no
+          - PubkeyAcceptedAlgorithms will be: {{ system_ssh_pubkey_accepted_algorithms | default('ssh-ed25519*') }}
+      tags: [always]
+
     # GRUB password hash validation (CWE-426: vault-source enforcement + format validation)
     - name: "GRUB: Assert password hash format when enabled (preflight)"
       when:
