@@ -282,10 +282,12 @@
       ansible.builtin.assert:
         that:
           - repos_dnf_redhat_baseurl is match('^https://.*\.redhat\.com/.*')
-          - repos_dnf_redhat_gpgkey is match('^https://.*\.redhat\.com/.*')
+          - repos_dnf_redhat_gpgkey is match('^https://.*\.redhat\.com/.*\.gpg$')
         fail_msg: >-
-          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must be internal Red Hat URLs
-          (https://*.redhat.com/...). Ensure both URLs target *.redhat.com domain, not external servers.
+          repos_dnf_redhat_baseurl must be an internal Red Hat URL (https://*.redhat.com/...);
+          repos_dnf_redhat_gpgkey must be an internal Red Hat GPG key URL
+          (https://*.redhat.com/*.gpg). Ensure both URLs target *.redhat.com domain,
+          not external servers.
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
