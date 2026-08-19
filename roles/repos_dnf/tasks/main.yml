@@ -326,7 +326,9 @@
   block:
     - name: Fetch RPM Fusion free GPG key from HTTPS
       ansible.builtin.get_url:
-        url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-{{ ansible_facts['distribution_major_version'] }}"
+        url: >-
+          https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-{{
+          ansible_facts['distribution_major_version'] }}
         dest: "/tmp/rpmfusion-free-gpg-key.gpg"
         mode: "0644"
     - name: Verify RPM Fusion free GPG key fingerprint
@@ -375,7 +377,9 @@
   block:
     - name: Fetch RPM Fusion nonfree GPG key from HTTPS
       ansible.builtin.get_url:
-        url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-{{ ansible_facts['distribution_major_version'] }}"
+        url: >-
+          https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-
+          {{ ansible_facts['distribution_major_version'] }}
         dest: "/tmp/rpmfusion-nonfree-gpg-key.gpg"
         mode: "0644"
     - name: Verify RPM Fusion nonfree GPG key fingerprint

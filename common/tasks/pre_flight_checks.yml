@@ -478,6 +478,63 @@
           Alternatively, unset HTTPS_PROXY/HTTP_PROXY/https_proxy/http_proxy in the environment
           where ansible-playbook runs.
 
+    - name: Assert repos_dnf_redhat_gpgkey targets expected internal domain (GPG key injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _redhat_gpgkey: "{{ _raw.get('repos_dnf_redhat_gpgkey', '') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_redhat_gpgkey | length == 0) or
+            (_redhat_gpgkey is match('^https://.*\.redhat\.com/.*\.gpg$'))
+        fail_msg: >-
+          SECURITY: repos_dnf_redhat_gpgkey in config.yml is set but does not target a trusted
+          internal Red Hat domain. This value is passed directly to dnf as the GPG key URL for
+          repos_dnf_redhat_baseurl; if an attacker can set repos_dnf_redhat_gpgkey to an
+          external URL (e.g., https://attacker.com/malicious.gpg), dnf will fetch and trust
+          the attacker's GPG key to verify packages from repos_dnf_redhat_baseurl. The attacker
+          can then sign malicious packages that bypass dnf's gpgcheck security, resulting in
+          arbitrary code execution when those packages are installed as root.
+
+          REQUIRED: repos_dnf_redhat_gpgkey must be an internal Red Hat URL and must point to a
+          GPG key file (ending in .gpg). Allowed format: https://<subdomain>.redhat.com/<path>/<file>.gpg
+          Example: https://pkgs.devel.redhat.com/repo-gnupg-keys/dogecorp-ca.gpg
+
+          Current value: '{{ _redhat_gpgkey }}'
+
+          If you do not need an internal Red Hat repository, remove repos_dnf_redhat_baseurl and
+          repos_dnf_redhat_gpgkey from config.yml entirely. These variables are optional and only
+          needed for access to Red Hat internal package repositories.
+
+    - name: Assert repos_dnf_acli_baseurl targets expected internal domain (package repository injection guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _acli_baseurl: "{{ _raw.get('repos_dnf_acli_baseurl', '') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_acli_baseurl | length == 0) or
+            (_acli_baseurl is match('^https://.*\.redhat\.com/.*'))
+        fail_msg: >-
+          SECURITY: repos_dnf_acli_baseurl in config.yml is set but does not target a trusted
+          internal Red Hat domain. This value is passed directly to dnf as a package repository
+          URL; if an attacker can set repos_dnf_acli_baseurl to an external URL, dnf will install
+          packages from that untrusted source. Even with gpgcheck enabled, an attacker controlling
+          the repository server can serve backdoored packages, resulting in arbitrary code execution
+          when those packages are installed as root.
+
+          REQUIRED: repos_dnf_acli_baseurl must be an internal Red Hat URL.
+          Allowed format: https://<subdomain>.redhat.com/<path>
+          Example: https://pkgs.devel.redhat.com/acli/repo
+
+          Current value: '{{ _acli_baseurl }}'
+
+          If you do not need the internal Atlassian CLI repository, remove repos_dnf_acli_baseurl
+          from config.yml entirely. This variable is optional and only needed for access to Red Hat
+          internal Atlassian CLI package repository.
+
     - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
       when: _config_yml_raw.content is defined
       vars:
@@ -2019,6 +2076,52 @@
           '|/bin/false'). No spaces, newlines, or shell metacharacters.
       tags: [always]
 
+    - name: "GRUB password: Assert valid PBKDF2 format when enabled (preflight)"
+      when:
+        - system_grub_password_enabled | default(false)
+        - not (system_is_container or csb_rhel)
+        - _pf_grub_password_asserted is not defined
+      block:
+        - name: "GRUB: Assert hash is set and valid PBKDF2 format"
+          ansible.builtin.assert:
+            that:
+              - system_grub_password_hash | default('') | length > 0
+              - system_grub_password_hash is regex('^grub\.pbkdf2\.sha512\.[0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+$')
+              - (system_grub_password_hash.split('.')[3] | int) >= 10000
+            fail_msg: >-
+              SECURITY: system_grub_password_hash is not a valid PBKDF2 hash.
+
+              GRUB bootloader password protection (CIS 1.4.2) enabled, but the hash is missing,
+              malformed, or uses insufficient rounds. This prevents kernel parameter tampering
+              (e.g., disabling lockdown=integrity) from the GRUB menu.
+
+              Required format: grub.pbkdf2.sha512.ROUNDS.SALT.HASH
+              - Prefix: "grub.pbkdf2.sha512." (required)
+              - ROUNDS: numeric value >= 10000 (security minimum)
+              - SALT: alphanumeric (generated by grub*-mkpasswd-pbkdf2)
+              - HASH: alphanumeric (generated by grub*-mkpasswd-pbkdf2)
+
+              Example of valid output:
+                grub.pbkdf2.sha512.10000.1234567890abcdef.LONGHASHHEREWITHENOUGHBYTES
+
+              GENERATION:
+                Fedora: grub2-mkpasswd-pbkdf2
+                Debian: grub-mkpasswd-pbkdf2
+
+              Copy-paste the entire output (grub.pbkdf2.sha512...) to group_vars/all/vault.yml as:
+                system_grub_password_hash: "grub.pbkdf2.sha512.10000...."
+
+              Then encrypt: ansible-vault encrypt group_vars/all/vault.yml
+
+              CRITICAL: Do NOT place system_grub_password_hash in config.yml — it would bypass
+              vault encryption and expose the hash in your repository.
+          tags: [always]
+
+        - name: Set GRUB password asserted flag (suppresses duplicate assertions in Play 2)
+          ansible.builtin.set_fact:
+            _pf_grub_password_asserted: true
+          tags: [always]
+
     - name: Warn and flag when vault stub is not populated
       when:
         - >-
@@ -2045,4 +2148,30 @@
         - name: Set vault stub warned flag (suppresses duplicate warning in Play 2)
           ansible.builtin.set_fact:
             _vault_stub_warned: true
+          tags: [always]
+
+    # GRUB password hash validation (CWE-426: vault-source enforcement + format validation)
+    - name: "GRUB: Assert password hash format when enabled (preflight)"
+      when:
+        - system_grub_password_enabled | default(false)
+        - _pf_grub_validated is not defined
+      block:
+        - name: "GRUB: Assert hash matches PBKDF2 format and rounds"
+          ansible.builtin.assert:
+            that:
+              - system_grub_password_hash | default('') | length > 0
+              - system_grub_password_hash is regex('^grub\.pbkdf2\.sha512\.[0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+$')
+              - (system_grub_password_hash.split('.')[3] | int) >= 10000
+            fail_msg: >-
+              SECURITY: system_grub_password_hash invalid format or insufficient rounds.
+              GRUB bootloader password (CIS 1.4.2) requires: grub.pbkdf2.sha512.ROUNDS.SALT.HASH (ROUNDS >= 10000).
+              Malformed hash fails silently at boot, bypassing kernel tampering protection.
+              Generate: grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian).
+              Store in vault.yml (NOT plaintext config.yml) as: system_grub_password_hash: "grub.pbkdf2.sha512.10000...."
+              Current: {{ system_grub_password_hash | default('(empty)') }}
+          tags: [always]
+
+        - name: Set GRUB preflight validation flag
+          ansible.builtin.set_fact:
+            _pf_grub_validated: true
           tags: [always]
