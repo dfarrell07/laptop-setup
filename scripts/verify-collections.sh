@@ -24,12 +24,13 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # Security model:
 #   - Good signature with key in keyring (exit 0): PASS
 #   - Bad signature with key in keyring (exit 1): FATAL (active tampering detected)
-#   - Key NOT in keyring (exit 2): WARNING only (TOFU — fresh machine, key not yet imported)
+#   - Key NOT in keyring (exit 2): FATAL — SHA256SUMS is git-tracked and can be replaced
+#     atomically with a malicious tarball; GPG is the only backstop against this.
 #
-# Note: verify-collections.sh cannot make key import FATAL without breaking provisioning on
-# fresh machines (git clone → no keys → fail). However, if a key is present in the keyring,
-# signature validation IS mandatory (FATAL if invalid). This is checked in bootstrap target
-# in Makefile, which can enforce mandatory import before proceeding.
+# To import the signing key before running bootstrap:
+#   gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+#   Verify the fingerprint matches SECURITY.md § 'Ansible Collections Supply Chain'.
+# To bypass (non-production, CI without key material): set SKIP_GPG_VERIFY=1
 cd "${REPO_DIR}/collections-dist"
 if [[ -f SHA256SUMS.asc ]]; then
   gpg_exit=0
@@ -38,15 +39,21 @@ if [[ -f SHA256SUMS.asc ]]; then
   if [[ $gpg_exit -eq 0 ]]; then
     echo "✓ SHA256SUMS.asc GPG signature verified"
   elif echo "$gpg_output" | grep -q "No public key\|public key not found\|can't check signature"; then
-    # Key not in keyring — advisory only (expected on fresh machines).
-    # Rationale: we cannot mandate key import during bootstrap because users need to clone
-    # the repo first and import keys from collections-dist/signing-key.asc. However, if a key
-    # IS present but signature is invalid, we treat that as FATAL (active tampering).
-    echo "WARNING: SHA256SUMS.asc signing key not in GPG keyring" >&2
-    echo "         Continuing with hash-only verification (TOFU: Trust On First Use)" >&2
-    echo "         This is expected on fresh machines. On subsequent runs, import the key for" >&2
-    echo "         cryptographic verification: gpg --import collections-dist/signing-key.asc" >&2
-    echo "         For security context, see SECURITY.md § 'Ansible Collections Supply Chain'." >&2
+    if [[ "${SKIP_GPG_VERIFY:-0}" == "1" ]]; then
+      echo "WARNING: SHA256SUMS.asc signing key not in GPG keyring (SKIP_GPG_VERIFY=1 — bypassed)" >&2
+    else
+      # Key absent → FATAL. SHA256SUMS is git-tracked; an attacker with commit access or a
+      # git-clone MITM can replace both the tarball and SHA256SUMS atomically. The SHA256
+      # check then passes, and without GPG there is no cryptographic backstop.
+      echo "FATAL: SHA256SUMS.asc signing key not in GPG keyring" >&2
+      echo "       GPG verification is mandatory — SHA256SUMS alone cannot detect a" >&2
+      echo "       malicious tarball+hash replacement by a committer or MITM." >&2
+      echo "       Import the signing key, then re-run:" >&2
+      echo "         gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882" >&2
+      echo "       Verify the fingerprint matches SECURITY.md § 'Ansible Collections Supply Chain'." >&2
+      echo "       CI/non-production bypass: export SKIP_GPG_VERIFY=1" >&2
+      exit 1
+    fi
   else
     # Bad signature with key present — FATAL (tampering detected)
     echo "FATAL: SHA256SUMS.asc GPG signature verification FAILED" >&2
