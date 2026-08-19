@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before sanitization runs
 # SECURITY: Reject --start-at-task flag and other dangerous ansible-playbook flags
 # to prevent bypassing pre-flight validation checks.
 #
@@ -337,8 +338,17 @@ done
 # LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT are also cleared here (early, before getent HOME check); the main sanitization block repeats this for defence-in-depth.
 unset NSS_WRAPPER_PASSWD NSS_WRAPPER_GROUP
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
+unset BASH_ENV  # prevent BASH_ENV payload executing in vault-pass.sh: non-interactive bash reads BASH_ENV before set +x; cleared here before exec so it does not propagate to the vault password subprocess
 
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+# SECURITY: Remove any shell function definitions that may shadow system commands.
+# BASH_ENV=/tmp/evil.sh is sourced before line 1 executes and can define functions such as
+# `id() { echo "realuser"; }` and `getent() { printf 'realuser:x:1000::/home/attacker:\n'; }`.
+# These shadow the real binaries and defeat the HOME and USER identity checks below.
+# `unset NSS_WRAPPER_PASSWD` above only guards libc-level interception; it does NOT remove
+# bash function definitions injected via BASH_ENV.
+unset -f id getent cut awk command
 
 # SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
 # An attacker setting HOME=/home/victim causes account_hardening.yml to chmod victim's home
@@ -409,6 +419,7 @@ export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HA
 export ANSIBLE_INJECT_FACT_VARS=True  # pin fact injection — ANSIBLE_INJECT_FACT_VARS=False disables injection of ansible_facts dict keys as bare vars (ansible_distribution, ansible_user_dir, etc.); bare-var references in install_dnf_packages.yml (lines 13,19) and csb-report.yml (lines 98,108) evaluate as Undefined when injection is off; Undefined != 'Fedora' is True in Jinja2 so packages_security_rhel is appended on Fedora and repo_gh_cli guard evaluates incorrectly; bare ansible_user_dir in csb-report.yml becomes Undefined causing a template error; dict-form ansible_facts['key'] references used in pre_flight_checks.yml and csb_detect.yml are immune but the bare-var paths are not
 export ANSIBLE_BECOME_FLAGS=  # strip injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
 export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
+export ANSIBLE_DIFF_ALWAYS=False  # suppress forced diff output — ANSIBLE_DIFF_ALWAYS=1 enables --diff globally for every file-writing task; in a logged tmux session or with stdout piped to tee/CI artifact this prints vault-derived content: authorized_keys (vault_ssh_public_keys), SSH private key material written to ~/.ssh/, registry token files, sshd drop-in contents, PAM config; False matches Ansible's default and ensures no caller-set value forces diff mode
 export ANSIBLE_TASK_TIMEOUT=0  # pin task timeout to disabled — ANSIBLE_TASK_TIMEOUT=1 kills every task action after 1 second; dnf install, sysctl apply, sshd restart, firewall, PAM writes, and audit rules all exceed this; each kill registers as an external failure absorbed by CSB rescue blocks, so provisioning 'completes' while sysctl hardening, sshd config, firewall rules, PAM config, and audit rules are all unapplied; mid-write truncation of files like /etc/sysctl.d/90-hardening.conf is also possible; 0 (the Ansible default) disables the timeout entirely
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 unset MOLECULE_SCENARIO_NAME  # prevent molecule-context bypass on real hosts
