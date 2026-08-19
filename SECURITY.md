@@ -107,7 +107,7 @@ Git hooks enforce critical security policies:
 
 **Core protection: core.hooksPath immutability**
 
-The hooks path is set via `make bootstrap` (line 135):
+The hooks path is set via `make bootstrap` (line 192):
 ```bash
 git config --local core.hooksPath .githooks
 ```
@@ -155,7 +155,7 @@ the server before CI status checks prevent merge to main.
 
 **Mitigations implemented**:
 
-1. **Client-side education** — SECURITY.md (this file, line 93-99) explicitly
+1. **Client-side education** — SECURITY.md (this file, line 127-131) explicitly
    forbids `git push --no-verify` as a violation of security policy. Developers
    are educated that this operation cannot be prevented at the hook level.
 
@@ -317,10 +317,6 @@ is constrained to safe domains (https://claude.ai or https://anthropic.com). Usi
 arbitrary code. **Workaround:** run `make all` (full provisioning) or `make minimal`
 instead. If you must re-run a subset of tasks:
 
-## Git Security
-
-See § "Unsafe Git Operations" above for complete guidance on `--no-verify` restrictions. This project's collections supply chain requires care — tampering with `collections-dist/*.tar.gz` without updating `SHA256SUMS` bypasses pre-commit hooks and reaches the PR branch before CI runs. Architectural detail on the hook-level pre-push bypass is in "Git Hooks Protection" § "Pre-push hook limitation: --no-verify bypass".
-
 ```bash
 # SAFE: Run from a specific role tag (full play pre_tasks still execute)
 ansible-playbook site.yml -t dotfiles,repos
@@ -333,6 +329,10 @@ ansible-playbook site.yml --start-at-task 'Some Task Name'
 Defense-in-depth: the `claude` role re-validates `claude_install_url` before
 download (line 6-17 in roles/claude/tasks/main.yml), so even `--start-at-task`
 bypasses cannot reach RCE without also modifying the role's validation.
+
+## Git Security
+
+See § "Unsafe Git Operations" above for complete guidance on `--no-verify` restrictions. This project's collections supply chain requires care — tampering with `collections-dist/*.tar.gz` without updating `SHA256SUMS` bypasses pre-commit hooks and reaches the PR branch before CI runs. Architectural detail on the hook-level pre-push bypass is in "Git Hooks Protection" § "Pre-push hook limitation: --no-verify bypass".
 
 ## SHA256SUMS Signing Key Management
 
@@ -532,8 +532,7 @@ file header for complete verification procedure.
 **Reporting Compromise**: If you suspect a collection maintainer's Galaxy account has been
 compromised, report immediately to Galaxy security team: https://galaxy.ansible.com/security
 
-See also: `CLAUDE.md` § "Ansible Galaxy Collections — Verification Limitation and Code Review
-Requirement" for the complete upgrade procedure and mandatory review checklist.
+See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SECURITY.md` § "Ansible Collections Supply Chain" for the upgrade procedure and mandatory review checklist.
 
 ## Known Limitations
 
@@ -554,11 +553,11 @@ Requirement" for the complete upgrade procedure and mandatory review checklist.
   tools; the Claude Code installer is the deliberate exception)
 - **Secure Boot + GRUB bootloader password (CIS 1.4.2)** — Kernel `lockdown=integrity`
   without Secure Boot is weakened by an unprotected GRUB bootloader. Ansible now enforces GRUB
-  superuser password protection (opt-in via `system_grub_password` in config.yml) to prevent
+  superuser password protection (opt-in via `system_grub_password_enabled` in config.yml) to prevent
   physical console attacks that disable lockdown before it activates at boot. **Both** Secure
   Boot (BIOS setting — out of scope for Ansible) AND GRUB password are required for full protection.
   On non-Secure Boot systems, the GRUB password guards a pre-reboot vulnerability window. Set
-  `system_grub_password: 'your-password'` in config.yml (or use `vault_grub_password` from vault.yml
+  `system_grub_password_enabled: true` in config.yml and `system_grub_password_hash: '<hash>'` (or use `vault_grub_password_hash` from vault.yml
   for production). Empty (default) disables GRUB password; RHEL CSB skips (IT manages bootloader).
 - **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
   Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
@@ -1030,7 +1029,7 @@ catches network failures and routes to `csb_rhel` rescues. Go tool installation 
 CSB are expected if fapolicyd blocks /tmp compilation. Options:
 1. Configure GOPROXY via corporate proxy (set `packages_gosumdb` in group_vars/all/vars.yml)
 2. Request IT whitelist for go.googlesource.com and sum.golang.org
-3. Use pre-built binaries instead (download from GitHub Releases; see install_packages_binaries.yml)
+3. Use pre-built binaries instead (download from GitHub Releases; see install_binary_downloads.yml)
 4. Run tools inside distrobox container (fapolicyd may exempt container):
    ```bash
    make container
