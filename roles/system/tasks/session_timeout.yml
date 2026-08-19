@@ -16,19 +16,12 @@
     - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
 
 - name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
-  ansible.builtin.lineinfile:
+  ansible.builtin.blockinfile:
     path: /etc/bash.bashrc
-    line: "readonly TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
-    regexp: '^\s*(readonly\s+)?TMOUT='
-  when:
-    - is_apt
-    - system_tmout | int > 0
-
-- name: Export TMOUT in /etc/bash.bashrc (Debian bash interactive shells)
-  ansible.builtin.lineinfile:
-    path: /etc/bash.bashrc
-    line: "export TMOUT  # CIS 5.5.5"
-    regexp: '^\s*export TMOUT\b'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: CIS 5.5.5 session timeout"
+    block: |
+      readonly TMOUT={{ system_tmout | int }}  # CIS 5.5.5
+      export TMOUT  # CIS 5.5.5
   when:
     - is_apt
     - system_tmout | int > 0
@@ -75,18 +68,9 @@
     - not is_apt  # Debian does not use profile.d for TMOUT; avoid spurious no-op on Debian hosts
 
 - name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
-  ansible.builtin.lineinfile:
+  ansible.builtin.blockinfile:
     path: /etc/bash.bashrc
-    regexp: '^\s*(readonly\s+)?TMOUT='
-    state: absent
-  when:
-    - is_apt
-    - system_tmout | int <= 0
-
-- name: Remove TMOUT export from /etc/bash.bashrc when disabled (Debian)
-  ansible.builtin.lineinfile:
-    path: /etc/bash.bashrc
-    regexp: '^\s*export TMOUT\b'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: CIS 5.5.5 session timeout"
     state: absent
   when:
     - is_apt
