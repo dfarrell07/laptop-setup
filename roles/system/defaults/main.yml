@@ -4,7 +4,7 @@ profile: work  # fallback for standalone invocation
 # Sysctl hardening values
 system_sysctl_hardening:
   # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
-  kernel.kptr_restrict: 1          # CIS — hide kernel pointer addresses from /proc (reduces KASLR bypass surface)
+  kernel.kptr_restrict: 2          # STIG RHEL-09-213075 — hide kernel pointers from all processes including root/CAP_SYSLOG (prevents KASLR bypass)
   # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
   # MAINTENANCE: Values below that match Fedora defaults are pinned intentionally

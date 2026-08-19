@@ -940,7 +940,7 @@
     that:
       - verify_llmnr_conf.stat.exists
       - (ansible_date_time.epoch | int) - verify_llmnr_conf.stat.mtime < 600
-    fail_msg: "98-llmnr.conf missing or older than 10 min — may be stale from prior run"
+    fail_msg: "98-llmnr.conf missing or older than 10 min (mtime={{ verify_llmnr_conf.stat.mtime | default('?') }}, epoch={{ ansible_date_time.epoch }})"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -989,7 +989,7 @@
     that:
       - verify_dot_conf.stat.exists
       - (ansible_date_time.epoch | int) - verify_dot_conf.stat.mtime < 600
-    fail_msg: "99-dot.conf missing or older than 10 min — may be stale from prior run"
+    fail_msg: "99-dot.conf missing or older than 10 min (mtime={{ verify_dot_conf.stat.mtime | default('?') }}, epoch={{ ansible_date_time.epoch }})"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
