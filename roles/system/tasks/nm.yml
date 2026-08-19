@@ -19,7 +19,7 @@
   when: not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   notify: Restart NetworkManager
 
-- name: Configure NM for non-CSB host networking
+- name: NM Tailscale-unmanaged and systemd-resolved DNS deployed (non-CSB)
   when:
     - not csb_rhel  # IT may use wg* for managed WireGuard VPN; do not mark unmanaged on RHEL CSB
     - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
@@ -34,7 +34,7 @@
         mode: "0644"
       notify: Restart NetworkManager
 
-    - name: Deploy NM dns=systemd-resolved config (required for Tailscale MagicDNS split-DNS)
+    - name: Deploy NM systemd-resolved DNS config (Tailscale MagicDNS)
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}
