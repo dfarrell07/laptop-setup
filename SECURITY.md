@@ -253,7 +253,7 @@ git commit -s -S -m "Scripts: update verify-collections.sh"
 
 **Local enforcement (.githooks/commit-msg):**
 - Lines 5-8: Rejects commits missing Signed-off-by text
-- Lines 21-31: Requires `commit.gpgsign=true` config for supply-chain files (enforces -S requirement)
+- Lines 21-51: Detects supply-chain file changes (21-26) and requires `commit.gpgsign=true` (32-51)
 - Error messages clearly separate the checks
 
 **CI enforcement (linting.yml, gpg-signatures job):**
@@ -409,7 +409,7 @@ against tarball tampering. The signing key is distributed in the repository at
 `collections-dist/signing-key.asc` and is automatically imported during `make bootstrap`.
 
 **Bootstrap Flow** (automatic, no user action required):
-1. `make bootstrap` provides instructions for manual GPG key import (line 121 in Makefile)
+1. `make bootstrap` provides instructions for manual GPG key import (lines 152–158 in Makefile)
 2. `verify-collections.sh` validates GPG signature before hash verification
 3. If key is not in keyring, hash verification continues (defense-in-depth: hashes are still checked)
 
@@ -717,7 +717,7 @@ git config --global commit.gpgsign true  # Always sign commits
 git config --global user.signingkey KEYID  # Set your key ID
 ```
 
-**Enforcement**: The commit-msg hook (lines 21-31 in .githooks/commit-msg) enforces GPG signatures on supply-chain file changes. CI job `gpg-signatures` (linting.yml) validates all commits to main require both `-s` (--signoff text) and `-S` (--gpg-sign cryptographic signature).
+**Enforcement**: The commit-msg hook (lines 32-51 in .githooks/commit-msg) enforces GPG signatures on supply-chain file changes. CI job `gpg-signatures` (linting.yml) validates all commits to main require both `-s` (--signoff text) and `-S` (--gpg-sign cryptographic signature).
 
 **Setup**: For detailed GPG key generation, importing, and verification procedures, see external resources:
 - [GnuPG Handbook](https://www.gnupg.org/gph/en/manual/) (official)
@@ -960,7 +960,7 @@ Each module pulls in dozens of transitive dependencies, multiplying attack surfa
    (e.g., `packages_gofumpt_version`). Prevents silent upstream updates. Requires
    deliberate human review before version bumps. Does NOT prevent compromise of pinned version.
 
-2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:21-27) validates that
+2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:24-27) validates that
    GONOSUMDB is either unset (use sum.golang.org for all modules) or contains only private/internal
    domain patterns (e.g., `*.internal.com`). Empty string `GONOSUMDB=""` is also rejected to prevent
    accidental bypass of checksum verification. This enforces explicit opt-in for public modules
@@ -991,7 +991,7 @@ Each module pulls in dozens of transitive dependencies, multiplying attack surfa
 **Why Current Mitigations Are Insufficient**:
 
 The file `/home/dfarrell/laptop-setup/roles/packages/tasks/install_go_tools.yml` contains
-explicit documentation (lines 13-19) acknowledging init() injection risk but states "only
+explicit documentation (lines 5-11) acknowledging init() injection risk but states "only
 GOSUMDB mitigates." This is incomplete: GOSUMDB protects against GOPROXY tampering, NOT
 against maintainer compromise, supply chain attacks, or typosquatting.
 
