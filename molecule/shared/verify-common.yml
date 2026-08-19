@@ -618,7 +618,7 @@
     - verify_sysctl_file is not skipped
     - verify_sysctl_file.stat.exists
 
-- name: Assert sysctl 90-hardening.conf contains ip_forward keys
+- name: Check sysctl 90-hardening.conf contains ip_forward keys
   ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - 'net.ipv4.ip_forward = {{ system_enable_ip_forward | bool | int }}'
@@ -626,6 +626,20 @@
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
+  failed_when: false
+  register: verify_ip_forward_keys
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_sysctl_file is not skipped
+    - verify_sysctl_file.stat.exists
+    - system_enable_ip_forward | default(true) | bool
+
+- name: Assert sysctl 90-hardening.conf ip_forward keys match expected value
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "90-hardening.conf missing '{{ item.item }}' — sysctl.yml ip_forward regression"
+  loop: "{{ verify_ip_forward_keys.results }}"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -829,7 +843,7 @@
     - ansible_os_family != 'Debian'  # openssh-server not installed in Debian Podman CI (daemon-reload crash risk)
     - not csb_rhel
 
-- name: Assert sshd hardening drop-in contains required directives
+- name: Check sshd hardening drop-in for required directives
   ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
   loop:
     - "PasswordAuthentication no"
@@ -880,7 +894,7 @@
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
 
-- name: Assert 98-llmnr.conf contains correct LLMNR setting
+- name: Check 98-llmnr.conf for LLMNR setting
   ansible.builtin.command: grep -q 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   changed_when: false
   failed_when: false
