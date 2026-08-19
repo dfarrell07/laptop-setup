@@ -1754,9 +1754,9 @@
           - _raw.get('system_pwhistory_remember', 24) | int >= 0
           - _raw.get('system_faillock_deny', 5) | int >= 1
           - _raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
-          - _raw.get('system_faillock_audit', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
-          - _raw.get('system_faillock_local_users_only', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
-          - _raw.get('system_faillock_even_deny_root', false) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
+          - _raw.get('system_faillock_audit', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
+          - _raw.get('system_faillock_local_users_only', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
+          - _raw.get('system_faillock_even_deny_root', 'false') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
         fail_msg: >-
           SECURITY: conf-file variable contains unsafe value. Input: one of
           system_journald_storage/max_use/rate_burst, system_auditd_max_log_file/num_logs,
