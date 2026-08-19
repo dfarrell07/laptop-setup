@@ -62,16 +62,17 @@
     - packages_install_binaries | bool
     - claude_pinned_version | length == 0
 
-- name: Warn when claude_install_sha256 is unset (TOFU advisory — Anthropic does not publish installer hashes)
-  ansible.builtin.debug:
+- name: Fail when claude_install_sha256 is unset (hash required for integrity verification)
+  ansible.builtin.fail:
     msg: >-
-      SUPPLY CHAIN ADVISORY: claude_install_sha256 is not set in config.yml.
-      The Claude Code installer at {{ claude_install_url }} will be downloaded
-      without SHA256 verification. Anthropic does not currently publish a stable
-      hash for install.sh (it changes with each Claude Code release), so TOFU
-      (trust on first use) is the accepted model here. The domain restriction
-      (claude.ai/anthropic.com) and HTTPS provide the primary integrity controls.
-      To pin the hash, set claude_install_sha256 in config.yml once verified.
+      SECURITY: claude_install_sha256 is not set in config.yml.
+      Provisioning requires a SHA256 hash for the Claude Code installer to guard against
+      CDN compromise, rogue certificates, or DNS/BGP hijacks that could deliver arbitrary
+      shell code. Per-release hash-fetch workflow:
+        curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
+        sha256sum /tmp/claude-install.sh
+      Set claude_install_sha256: <hash> in config.yml and re-run provisioning.
+      The hash changes with each Claude Code release; update it after each upstream release.
   when:
     - claude_install_method == 'native'
     - packages_install_binaries | bool
@@ -97,11 +98,10 @@
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:
-    # SECURITY: SHA256 verification is used when claude_install_sha256 is set in config.yml.
-    # Anthropic does not publish stable hashes for install.sh (changes per release), so TOFU
-    # is the accepted model when unset. Domain restriction (claude.ai/anthropic.com) + HTTPS
-    # are the primary integrity controls. Set claude_install_sha256 in config.yml to opt into
-    # hash pinning once you've verified the hash of a specific installer version.
+    # SECURITY: claude_install_sha256 is mandatory (provisioning fails above if unset).
+    # get_url checksum= downloads and verifies atomically; the hash is validated before
+    # the script is executed. Domain restriction (claude.ai/anthropic.com) + HTTPS provide
+    # transport-layer integrity; the SHA256 check adds content integrity independent of TLS.
     - name: Create secure temporary file for Claude Code install script
       ansible.builtin.tempfile:
         state: file
