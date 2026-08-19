@@ -2,6 +2,23 @@
 # roles/git_repos/tasks/main.yml
 # Clone repos (HTTPS or SSH), add fork remotes. Filter by category.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: Assert git_repos_base_dir is within user home directory (path traversal guard)
+  ansible.builtin.assert:
+    that:
+      - git_repos_base_dir | string is match(ansible_facts['user_dir'] | regex_escape ~ '(/.*)?$')
+      - git_repos_base_dir | string is not search('\.\.|\./')
+    fail_msg: >-
+      SECURITY: git_repos_base_dir must be within the user home directory.
+      Input: git_repos_base_dir='{{ git_repos_base_dir }}' (from config.yml or -e flag).
+      Mechanism: git_repos_base_dir is mkdir'd and used as clone destination without path
+      validation; a value outside home dir writes repos to attacker-chosen locations.
+      Example: make repos -e git_repos_base_dir=/etc/cron.d clones repo files as
+      root-owned cron entries executed system-wide.
+      Impact: arbitrary file write outside ~/src — LPE or persistent code execution.
+      Fix: omit git_repos_base_dir or set it under {{ ansible_facts['user_dir'] }} (e.g. ~/src).
+  tags: [always]
+
 - name: Check gh auth status
   ansible.builtin.command:
     cmd: gh auth status
