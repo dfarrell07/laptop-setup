@@ -81,7 +81,7 @@
       changed_when: system_lockdown_stale_remove_result.rc == 0
       failed_when: false
 
-    - name: Enable kernel lockdown (integrity mode)
+    - name: "Enable kernel lockdown ({{ system_kernel_lockdown }})"
       ansible.builtin.command:
         argv:
           - grubby
