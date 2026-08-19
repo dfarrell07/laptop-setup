@@ -200,14 +200,10 @@
     - name: Assert packages_gosumdb from -e flag is whitelisted (command-line bypass guard)
       vars:
         _packages_gosumdb_effective: "{{ packages_gosumdb | default('sum.golang.org') }}"
-        _whitelisted_servers:
-          - sum.golang.org
-          - sum.redhat.com
-          - sum.internal.redhat.com
       ansible.builtin.assert:
         that:
           - >-
-            (_packages_gosumdb_effective in _whitelisted_servers)
+            _packages_gosumdb_effective in ['sum.golang.org', 'sum.redhat.com', 'sum.internal.redhat.com']
         fail_msg: >-
           SECURITY: packages_gosumdb (from -e flag or play namespace) is not whitelisted.
           Command-line -e flags have higher Ansible precedence than config.yml, allowing attackers
@@ -267,29 +263,10 @@
             (_install_method != 'native') or
             (_install_sha256 | length > 0 and _install_sha256 | string is match('^[a-f0-9]{64}$'))
         fail_msg: >-
-          SECURITY: claude_install_sha256 in config.yml is not set or invalid.
-          Integrity verification of the Claude Code installer is MANDATORY when
-          claude_install_method is set to 'native' (the default).
-
-          The installer downloaded from {{ _raw.get('claude_install_url', 'https://claude.ai/install.sh') }}
-          MUST be verified using SHA256 before execution to prevent CDN-layer
-          compromises, supply-chain attacks, or MITM interception.
-
-          REQUIRED FIX: Add claude_install_sha256 to config.yml with a valid
-          SHA256 hash (64 lowercase hexadecimal characters). Obtain the official
-          hash from Anthropic's documentation:
-          https://docs.anthropic.com/claude/reference/claude-installation
-
-          Example config.yml entry:
-              claude_install_sha256: "a7f8d1c6b2e5d4c3a1f8e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6"
-
-          ALTERNATIVE: If you are intentionally skipping Claude installation on
-          this machine, set:
-              claude_install_method: skip
-
-          This mandatory validation prevents unverified execution of remote
-          installation scripts — a critical security requirement for supply-chain
-          protection. Do not disable this check.
+          SECURITY: claude_install_sha256 in config.yml is missing or invalid.
+          Must be a 64-char lowercase hex SHA256 of the Claude installer.
+          Obtain from Anthropic release notes.
+          To skip Claude install entirely, set claude_install_method: skip.
 
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
       when: _config_yml_raw.content is defined
@@ -868,30 +845,10 @@
             (_ssh_git_repos | length == 0)
             or (_keyscan_hosts | length > 0)
         fail_msg: >-
-          SECURITY: git_repos_list contains SSH URLs (git@ or ssh://) but ssh_work_keyscan_hosts
-          is not configured. This creates a TOFU (Trust On First Use) vulnerability during
-          the first git clone of SSH repositories — the ansible.builtin.git module with
-          accept_newhostkey=true accepts unverified host keys from unknown hosts, allowing
-          MITM attacks (DNS hijack, ARP spoofing, BGP hijack) to deliver malicious code.
-
-          REQUIRED FIX: Pre-seed ssh_work_keyscan_hosts with fingerprints in config.yml.
-
-          Add to config.yml:
-
-              ssh_work_keyscan_hosts:
-                - {host: git.example.com, fingerprint: "SHA256:ABCD1234..."}
-                - {host: github.com, fingerprint: "SHA256:..."}
-
-          Obtain fingerprints safely via:
-
-              ssh-keyscan -t ed25519 git.example.com | ssh-keygen -lf /dev/stdin
-
-          Or for GitHub (pre-verified by the playbook):
-
-              ssh_work_keyscan_hosts:
-                - git.example.com
-
-          Affected SSH git repos: {{ _ssh_git_repos }}
+          SECURITY: git_repos_list contains SSH URLs but ssh_work_keyscan_hosts is empty.
+          First-clone MITM risk (TOFU). Add fingerprinted hosts to ssh_work_keyscan_hosts
+          in config.yml — see SECURITY.md 'Internal SSH Git Host Setup'.
+          Affected repos: {{ _ssh_git_repos }}
 
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
       when: _config_yml_raw.content is defined
@@ -1167,7 +1124,7 @@
       ansible.builtin.assert:
         that:
           - _raw.get('system_crypto_policy_target', 'DEFAULT:NO-SHA1') | string is match('^[A-Z0-9:_+-]+$')
-          - _raw.get('packages_brew_autoupdate_interval', 86400) | int >= 0
+          - _raw.get('packages_brew_autoupdate_interval', 86400) | string is match('^[0-9]+$')
         fail_msg: >-
           SECURITY: system_crypto_policy_target must contain only uppercase alphanumeric
           characters, colons, underscores, plus signs, and hyphens (no spaces). Spaces
