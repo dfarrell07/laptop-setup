@@ -119,16 +119,16 @@
       loop_control:
         loop_var: _item
 
-    - name: Assert no hardening-critical keys in extra_additional
+    - name: Assert no hardening-critical keys in extra dicts
       ansible.builtin.assert:
         that:
-          - "(_item.keys() | intersect(_hardening_critical_keys)) | length == 0"
+          - "(_item.dict.keys() | intersect(_hardening_critical_keys)) | length == 0"
         fail_msg: >-
           Hardening-critical keys
-          {{ _item.keys() | intersect(_hardening_critical_keys) | join(', ') }}
-          found in system_sysctl_extra_additional. These keys enforce
+          {{ _item.dict.keys() | intersect(_hardening_critical_keys) | join(', ') }}
+          found in {{ _item.name }}. These keys enforce
           CIS/STIG security requirements and cannot be overridden via
-          system_sysctl_extra_additional. Document security exception with
+          system_sysctl_extra or system_sysctl_extra_additional. Document security exception with
           your security team before attempting to modify these keys.
       vars:
         _hardening_critical_keys:
@@ -163,8 +163,11 @@
           - net.ipv4.tcp_rfc1337
           - net.ipv6.conf.all.use_tempaddr
           - net.ipv6.conf.default.use_tempaddr
-      with_items:
-        - "{{ system_sysctl_extra_additional }}"
+      loop:
+        - name: system_sysctl_extra
+          dict: "{{ system_sysctl_extra }}"
+        - name: system_sysctl_extra_additional
+          dict: "{{ system_sysctl_extra_additional }}"
       loop_control:
         loop_var: _item
 
