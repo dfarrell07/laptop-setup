@@ -65,6 +65,50 @@
   when:
     - item.rc | default(0) != 0
 
+- name: Compute SHA256 hashes of installed Go tool binaries
+  # SECURITY: Post-compilation binary verification — the installed binary must match
+  # the SHA256 hash recorded at provisioning-time (pre-computed and pinned in defaults/main.yml).
+  # This catches supply-chain attacks (malicious init() during compilation, GOPROXY MITM,
+  # upstream account compromise) that produce a working but compromised binary.
+  # Computed hash is compared against packages_<toolname>_sha256 in the assert task below.
+  ansible.builtin.shell:
+    cmd: "sha256sum '{{ ansible_facts['user_dir'] }}/go/bin/{{ item | regex_replace('@.*', '') | basename }}' | awk '{print $1}'"
+  timeout: 10
+  changed_when: false
+  register: _go_tool_checksums
+  loop: "{{ packages_go_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | regex_replace('@.*', '') | basename }}"
+  when:
+    - item.rc | default(0) == 0
+  failed_when: false
+
+- name: Assert Go tool binary SHA256 checksums match pinned values
+  # SECURITY: Verify that the compiled binary matches the pre-computed, version-pinned hash
+  # stored in packages_<toolname>_sha256. Failure indicates:
+  # - Supply-chain attack (malicious init() code or MITM module injection during go install)
+  # - Binary corruption (filesystem damage, incomplete download/compilation)
+  # - Version mismatch (pinned hash does not correspond to the installed version)
+  ansible.builtin.assert:
+    that:
+      - "lookup('vars', 'packages_' + (_go_tool_name) + '_sha256', default='') != ''"
+      - "item.stdout | regex_search('^[a-f0-9]{64}$')"
+      - "item.stdout == lookup('vars', 'packages_' + (_go_tool_name) + '_sha256')"
+    fail_msg: >-
+      Go tool binary integrity check FAILED: {{ _go_tool_name }}.
+      Supply-chain attack suspected or version mismatch.
+      Pinned SHA256: {{ lookup('vars', 'packages_' + (_go_tool_name) + '_sha256', default='HASH_NOT_FOUND') }}
+      Computed SHA256: {{ item.stdout }}
+      Recompute hashes after verifying module source integrity:
+      go clean -modcache && go install {{ item.item }} && sha256sum ~/.local/bin/{{ _go_tool_name }}
+  loop: "{{ _go_tool_checksums.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | regex_replace('@.*', '') | basename }}"
+  vars:
+    _go_tool_name: "{{ item.item | regex_replace('@.*', '') | basename | replace('-', '_') }}"
+  when:
+    - item.rc | default(0) == 0
+
 - name: Report failed Go tool runtime version checks
   ansible.builtin.debug:
     msg: "Go tool version check failed: {{ item.item | regex_replace('@.*', '') | basename }}"
@@ -90,6 +134,7 @@
   # or incomplete installations. Go init() functions run during compilation
   # ('go install'), not tool runtime—this check detects obvious failures only,
   # not stealthy supply-chain attacks. Intended as a defense-in-depth signal.
+  # Note: Binary integrity verification (SHA256) occurs in prior task before this check.
   ansible.builtin.command:
     cmd: "{{ ansible_facts['user_dir'] }}/go/bin/{{ item | regex_replace('@.*', '') | basename }} --version"
   timeout: 30

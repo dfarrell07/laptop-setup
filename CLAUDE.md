@@ -247,6 +247,12 @@ make repos-downstream # downstream repos only
 - **Do NOT define `vault_*` variables in `config.yml`** — `include_vars` (precedence 17) outranks
   `group_vars` (4-5), so any `vault_*` key in `config.yml` silently shadows the vault-encrypted
   value. A runtime `assert` in `common/tasks/pre_flight_checks.yml` (included by `site.yml`) enforces this.
+- **GRUB password hash MUST be vault-sourced**: When using `system_grub_password_enabled: true`,
+  generate the hash with `grub2-mkpasswd-pbkdf2` or `grub-mkpasswd-pbkdf2`, then store it in
+  `group_vars/all/vault.yml` as `vault_grub_password_hash` (NOT in plaintext config.yml). The playbook
+  automatically maps `vault_grub_password_hash` → `system_grub_password_hash` for use. Storing PBKDF2
+  hashes in plaintext config.yml or CI artifacts enables offline brute-force attacks on bootloader
+  authentication.
 
 ## Ansible Collections Supply Chain Security
 
