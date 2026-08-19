@@ -224,21 +224,23 @@ fi
 
 # --- Vault password scripts ---
 vscript="${SCRIPT_DIR}/vault-pass.sh"
-if [[ -x "$vscript" ]] && [[ "$JSON" == true ]]; then
-  record "vault" "skip" "skipped in --json mode (interactive)"
-elif [[ -x "$vscript" ]]; then
-  output=$("$vscript" 2>/dev/null) || true
-  len=${#output}
-  if [[ $len -ge 8 ]]; then
-    if [[ "$output" == *ci-dummy-vault-password* ]]; then
-      record "vault" "warn" "vault-pass.sh is still the CI dummy stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
+if [[ -x "$vscript" ]]; then
+  if [[ "$JSON" == false ]]; then
+    output=$("$vscript" 2>/dev/null) || true
+    len=${#output}
+    if [[ $len -ge 8 ]]; then
+      if [[ "$output" == *ci-dummy-vault-password* ]]; then
+        record "vault" "warn" "vault-pass.sh is still the CI dummy stub — run: make setup-yubikeys (or see SECURITY.md 'Setting Up vault-pass.sh')"
+      else
+        record "vault" "pass" "script returned valid password"
+      fi
+    elif [[ $len -gt 0 ]]; then
+      record "vault" "fail" "script returned only ${len} chars — vault password too short"
     else
-      record "vault" "pass" "script returned valid password"
+      record "vault" "fail" "script returned empty output"
     fi
-  elif [[ $len -gt 0 ]]; then
-    record "vault" "fail" "script returned only ${len} chars — vault password too short"
   else
-    record "vault" "fail" "script returned empty output"
+    record "vault" "skip" "skipped in --json mode (interactive)"
   fi
 elif [[ -f "$vscript" ]]; then
   record "vault" "fail" "script exists but is not executable"
@@ -342,7 +344,7 @@ if [[ "$PROFILE" == "work" ]]; then
       record "registry_redhat_auth" "warn" "not authenticated with registry.redhat.io — run 'podman login registry.redhat.io' before using packages_subctl_rh_versions"
     fi
   else
-    record "registry_redhat_auth" "skip" "podman not installed"
+    record "registry_redhat_auth" "warn" "podman not installed — registry.redhat.io auth not verifiable; install podman or run 'make packages' first"
   fi
 fi
 
