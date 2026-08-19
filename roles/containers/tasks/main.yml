@@ -26,10 +26,18 @@
   ansible.builtin.template:
     src: policy.json.j2
     dest: "{{ containers_config_dir }}/policy.json"
-    mode: "0644"
+    mode: "0600"
   when:
     - is_linux
     - containers_policy_enabled | bool
+
+- name: Remove policy.json (container image pull policy disabled)
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/policy.json"
+    state: absent
+  when:
+    - is_linux
+    - not (containers_policy_enabled | bool)
 
 - name: Stat auth.json
   ansible.builtin.stat:

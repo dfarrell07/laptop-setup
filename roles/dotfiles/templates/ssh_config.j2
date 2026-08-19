@@ -37,6 +37,7 @@ Host gh gist github.com gist.github.com
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     HostKeyAlgorithms ssh-ed25519
+    StrictHostKeyChecking yes
     # SK enforcement via IdentityFile+IdentitiesOnly rather than PubkeyAcceptedAlgorithms:
     # On Fedora-patched OpenSSH 10.2+ the crypto-policies layer intersects PubkeyAcceptedAlgorithms
     # with HostKeyAlgorithms; restricting to sk-ssh-ed25519 variants (which GitHub does not offer

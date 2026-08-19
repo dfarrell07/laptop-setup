@@ -82,7 +82,10 @@ for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
   _ns="${_parts[0]}"
   _col="${_parts[1]}"
   mkdir -p "$_tmpdir/$_ns/$_col"
-  tar -xzf "$tarball" -C "$_tmpdir/$_ns/$_col" 2>/dev/null || true
+  if ! tar -xzf "$tarball" -C "$_tmpdir/$_ns/$_col"; then
+    echo "ERROR: tar extraction failed for $tarball (possible path traversal or corrupt archive)" >&2
+    exit 1
+  fi
 done
 
 _extracted="${REPO_DIR}/collections"
@@ -121,6 +124,8 @@ def extract_python_files(collection_dir):
                 continue
             # Only .py and .so files
             if pyfile.suffix not in ('.py', '.so'):
+                continue
+            if pyfile.is_symlink():
                 continue
             if pyfile.is_file():
                 rel_path = str(pyfile.relative_to(collection_dir))
