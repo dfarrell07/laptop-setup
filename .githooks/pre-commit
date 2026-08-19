@@ -72,6 +72,39 @@ if [ "$_vaa_hash_modified" -gt 0 ] && [ "$_vaa_modified" -eq 0 ]; then
   echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- scripts/verify-ansible-args.sh.sha256" >&2
 fi
 
+# SECURITY GUARD: Block commits that modify Makefile without updating .sha256 baseline
+# Protects against attacker-modified Makefile that disables VERIFY_AND_RUN dispatcher
+_makefile_modified=0
+_makefile_hash_modified=0
+while IFS= read -r -d '' f; do
+  _makefile_modified=$(((_makefile_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'Makefile')
+while IFS= read -r -d '' f; do
+  _makefile_hash_modified=$(((_makefile_hash_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'Makefile.sha256')
+
+if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -eq 0 ]; then
+  echo "ERROR: Makefile modified but .sha256 baseline not updated" >&2
+  echo "       CRITICAL: Attacker could modify VERIFY_AND_RUN to bypass pre-flight checks" >&2
+  echo "       Run: sha256sum Makefile > Makefile.sha256 && git add Makefile.sha256" >&2
+  failed=1
+fi
+
+# SECURITY ENHANCEMENT: Detect synchronized modifications to Makefile
+# Attack pattern: modify Makefile + update hash in same commit to pass all checks
+# Mitigation: flag suspicious synchronized changes and require GPG signing
+if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -gt 0 ]; then
+  echo "WARN: Both Makefile and .sha256 modified in same commit" >&2
+  echo "      This pattern can bypass hash-based integrity checks if both are modified" >&2
+  echo "      MITIGATION: This commit MUST be GPG-signed with your YubiKey" >&2
+  echo "      (Signed commits provide cryptographic proof of committer identity)" >&2
+fi
+
+if [ "$_makefile_hash_modified" -gt 0 ] && [ "$_makefile_modified" -eq 0 ]; then
+  echo "WARN: Makefile.sha256 modified but Makefile not changed" >&2
+  echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- Makefile.sha256" >&2
+fi
+
 # SECURITY GUARD: Block commits that modify collections-dist/ without updating SHA256SUMS
 # Protects against supply chain tampering (modified tarballs without hash update)
 _modified_tarballs=0

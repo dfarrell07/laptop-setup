@@ -6,6 +6,26 @@ if ! grep -q '^Signed-off-by:' "$1"; then
   echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
   exit 1
 fi
+
+# SECURITY: If critical supply-chain files are staged, require GPG signing
+# Prevents unsigned commits that modify scripts + hashes in the same commit
+_sc_files_modified=0
+if git diff --cached --quiet --diff-filter=ACMR -- 'scripts/verify-collections.sh' 'scripts/verify-collections.sh.sha256' 'scripts/verify-ansible-args.sh' 'scripts/verify-ansible-args.sh.sha256' 'collections-dist/SHA256SUMS' 'collections-dist/*.tar.gz' 2>/dev/null; then
+  : # No changes to critical files
+else
+  _sc_files_modified=1
+fi
+
+# Warn if critical supply-chain files modified without GPG signing configured
+if [ "$_sc_files_modified" -eq 1 ]; then
+  if ! git config --local --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
+    if ! git config --global --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
+      echo "WARNING: Critical supply-chain files modified but commit.gpgsign not configured" >&2
+      echo "         This commit MUST be GPG-signed — use: git commit -s -S" >&2
+    fi
+  fi
+fi
+
 # Signed-off-by still required above; these prefixes skip scope/tense/length checks only
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
