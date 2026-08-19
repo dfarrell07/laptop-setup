@@ -1,6 +1,7 @@
 ---
 profile: work  # fallback for standalone invocation (--tags claude)
-packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+# Fallback; authoritative in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+packages_install_binaries: true
 is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
 is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
 system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
@@ -8,7 +9,8 @@ csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
 dotfiles_github_user: "CHANGE_ME"  # shared cross-role variable, intentionally unprefixed
 claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
-claude_install_sha256: ""  # SECURITY: SHA256 integrity verification is MANDATORY — set this in config.yml before running make all
+# SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
+claude_install_sha256: ""
 claude_pinned_version: ""  # pin in config.yml (e.g. "1.0.3"); empty = installs latest (advisory WARN)
 claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
