@@ -873,6 +873,31 @@
 
           Affected SSH git repos: {{ _ssh_git_repos }}
 
+    - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
+        _bad_dests: >-
+          {{ _git_repos_list
+             | map(attribute='dest', default='')
+             | map('string')
+             | select('search', '\\.\\.|\\./')
+             | list }}
+      ansible.builtin.assert:
+        that:
+          - _bad_dests | length == 0
+        fail_msg: >-
+          SECURITY: git_repos_list contains a dest field with path traversal sequences.
+          Input: git_repos_list[*].dest fields in config.yml.
+          Mechanism: dest is appended to git_repos_base_dir to form the clone path; a value
+          like '../../.local/bin' resolves to a path outside the repos directory.
+          Example: dest='../../.local/bin' with git_repos_base_dir='~/src' clones to
+          ~/.local/bin, replacing executables with attacker-controlled code on next login.
+          Impact: arbitrary file write outside repos dir — privilege escalation via PATH hijack.
+          Fix: dest must be a plain relative path without '..' or './' (e.g. 'my-project').
+          Offending entries: {{ _bad_dests }}
+
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
