@@ -104,3 +104,14 @@
     - "'libvirt' in ansible_etc_group"
     - "'kvm' in ansible_etc_group"
   # No failed_when:false — groups are confirmed present, failures are real errors.
+  register: _virt_group_add
+
+- name: Warn about required logout for libvirt/kvm group membership
+  ansible.builtin.debug:
+    msg: |
+      IMPORTANT: User {{ real_user_id }} added to libvirt and kvm groups.
+      Log out and back in for changes to take effect, or run 'newgrp libvirt' for immediate access in current shell.
+      Verify with: groups | grep libvirt
+  when:
+    - _virt_group_add is defined
+    - _virt_group_add.changed
