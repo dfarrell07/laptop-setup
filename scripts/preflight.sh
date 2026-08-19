@@ -101,8 +101,9 @@ if [[ -z "$PROFILE" ]]; then
   else
     record "config_profile" "skip" "config.yml absent — profile defaults to ${PROFILE}"
   fi
+else
+  record "config_profile" "pass" "profile=${PROFILE} (set via --profile CLI flag)"
 fi
-[[ -z "${RESULTS[*]}" ]] || grep -q 'config_profile' <<< "${RESULTS[*]}" || record "config_profile" "skip" "profile=${PROFILE} (set via --profile CLI flag)"
 
 # --- Required tools ---
 # When adding a tool to the loop, add a matching elif branch with install guidance.
