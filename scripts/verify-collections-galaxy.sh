@@ -21,14 +21,31 @@ for spec in \
 
   [ ! -f "$filepath" ] && { echo "SKIP: ${file} — file not yet present"; continue; }
 
-  # Fetch Galaxy API hash with explicit error handling
-  # Any network error, timeout, malformed JSON, or missing 'artifact' key causes fatal failure
-  api_hash=$(curl -sf --max-time 10 --connect-timeout 5 "${GALAXY_API}/${ns}/${name}/versions/${ver}/" 2>&1 | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>&1) || {
-    echo "ERROR: ${file} — failed to fetch/parse Galaxy API hash (possible API compromise or network error)" >&2
-    echo "       Verify network connectivity and API availability before retrying." >&2
+  # Fetch Galaxy API hash with exponential backoff retry for transient failures
+  # Fail fatally on API errors: any network failure, timeout, or malformed JSON is fatal
+  api_hash=""
+  api_error=""
+  for attempt in 1 2 3; do
+    # Capture both stdout and stderr to detect all error conditions
+    api_hash=$(curl -sf --max-time 10 --connect-timeout 5 "${GALAXY_API}/${ns}/${name}/versions/${ver}/" 2>&1 | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>&1) && {
+      api_error=""
+      break
+    } || {
+      api_error="$?"
+      api_hash=""
+      if [ "$attempt" -lt 3 ]; then
+        sleep $((2 ** (attempt - 1)))
+      fi
+    }
+  done
+
+  # If API fetch still failed after retries, treat as fatal error (possible compromise)
+  if [ -n "$api_error" ] && [ -z "$api_hash" ]; then
+    echo "ERROR: ${file} — failed to fetch/parse Galaxy API hash after 3 retries" >&2
+    echo "       Possible API compromise or persistent network error. Do not proceed." >&2
     FAIL=1
     continue
-  }
+  fi
 
   local_hash=$(sha256sum "$filepath" 2>/dev/null | awk '{print $1}' || echo "")
 
