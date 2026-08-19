@@ -1286,6 +1286,24 @@
           root-owned cron job during provisioning (LPE). Allowed: alphanumeric, dot, underscore,
           hyphen only (e.g. "opm-rhel8", "opm.v0.22.0"). No slashes or path separators.
 
+    - name: Assert redhat_ca_certs entries are plain filenames (path traversal guard)
+      when: _config_raw is defined
+      vars:
+        _raw: "{{ _config_raw }}"
+        _ca_certs: "{{ _raw.get('redhat_ca_certs', []) }}"
+        _bad: "{{ _ca_certs | map('string') | reject('match', '^[a-zA-Z0-9._-]+$') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _bad | length == 0
+        fail_msg: >-
+          SECURITY: redhat_ca_certs in config.yml contains path traversal characters.
+          Each entry must be a plain filename (alphanumeric, dot, underscore, hyphen only —
+          no slashes, no dot-dot sequences). This list is used in become:true copy tasks;
+          a value like "../../../../cron.d/evil" resolves outside the role files/ tree
+          and writes attacker-controlled content to /etc/cron.d/evil (root cron LPE).
+          Invalid entries: {{ _bad }}. Remove all slashes and path separators.
+      tags: [always]
+
     - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
       when: _config_raw is defined
       vars:
