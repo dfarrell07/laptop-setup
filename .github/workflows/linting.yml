@@ -644,12 +644,14 @@ jobs:
           failed=0
           for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             # SECURITY: Use directory-prefix wildcard patterns (scripts/, .githooks/, collections-dist/, .github/workflows/)
-            # instead of hardcoded filenames. This automatically covers all current and future supply-chain files:
+            # and specific critical files (roles/packages/defaults/main.yml for binary download hashes).
+            # This automatically covers all current and future supply-chain files:
             # - scripts/verify-collections.sh, scripts/verify-ansible-args.sh, scripts/check-vars-sync.py, etc.
             # - .githooks/pre-commit, .githooks/pre-push, .githooks/commit-msg, etc.
             # - collections-dist/* for vendored collections and SHA256SUMS
+            # - roles/packages/defaults/main.yml for binary download SHA256 hashes (prevents hash bypass attacks)
             # - .github/workflows/* for CI/CD pipeline definitions
-            if git show "$commit" --name-only | grep -qE '^(scripts/|\.githooks/|collections-dist/|\.github/workflows/)'; do
+            if git show "$commit" --name-only | grep -qE '^(scripts/|\.githooks/|collections-dist/|roles/packages/defaults/main\.yml|\.github/workflows/)'; then
               # Check GPG signature (cryptographic verification via git verify-commit)
               if git verify-commit "$commit" 2>&1; then
                 sig_status=$(git show --format=%G? -s "$commit")
@@ -1093,6 +1095,62 @@ PYEOF
           echo ""
           echo "All collections match upstream GitHub sources."
 
+  supply-chain-validation-gate:
+    name: Supply-Chain Validation Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    needs:
+      - gpg-signatures
+      - node-lint
+      - gitleaks
+    steps:
+      - name: Verify supply-chain validation jobs succeeded
+        run: |
+          # SECURITY: Enforce that supply-chain validation gates pass before merge.
+          # This is a secondary gate (redundant with branch protection) that validates:
+          #   1. GPG Signature Verification (critical supply-chain files must be signed)
+          #   2. Node Lint (enforces Signed-off-by requirement in PR commits)
+          #   3. Secret Detection/gitleaks (no credentials leaked in history)
+          # If this job fails, the PR cannot be merged (in addition to branch protection).
+          # If this job succeeds, it confirms that all supply-chain validation has passed.
+          failed=0
+          echo "Supply-chain validation gate results:"
+          echo "  - GPG Signature Verification: ${{ needs.gpg-signatures.result }}"
+          echo "  - Node Lint: ${{ needs.node-lint.result }}"
+          echo "  - Secret Detection (gitleaks): ${{ needs.gitleaks.result }}"
+
+          if [ "${{ needs.gpg-signatures.result }}" != "success" ]; then
+            echo "::error::GPG Signature Verification failed"
+            failed=1
+          fi
+          if [ "${{ needs.node-lint.result }}" != "success" ]; then
+            echo "::error::Node Lint failed (Signed-off-by validation)"
+            failed=1
+          fi
+          if [ "${{ needs.gitleaks.result }}" != "success" ]; then
+            echo "::error::Secret Detection (gitleaks) failed"
+            failed=1
+          fi
+
+          if [ "$failed" -eq 0 ]; then
+            echo ""
+            echo "✓ All supply-chain validation checks PASSED"
+            echo "This PR is safe to merge from a supply-chain perspective."
+          else
+            echo ""
+            echo "Supply-chain validation FAILED. Review errors above."
+            echo ""
+            echo "NOTE: Ensure GitHub branch protection is configured with required checks:"
+            echo "  Required checks on 'main' branch MUST include:"
+            echo "    - Node Lint (enforces Signed-off-by: on all commits)"
+            echo "    - GPG Signature Verification (requires GPG signatures on critical files)"
+            echo "    - Secret Detection (gitleaks) (detects leaked credentials)"
+            echo ""
+            echo "See SECURITY.md § 'Supply-Chain Validation' for configuration details."
+            exit 1
+          fi
+
   all-checks-pass:
     name: All Checks Pass
     runs-on: ubuntu-24.04
@@ -1114,6 +1172,7 @@ PYEOF
       - workflow-security
       - galaxy-recheck
       - upstream-collections-check
+      - supply-chain-validation-gate
     steps:
       - name: Verify no required job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
