@@ -594,8 +594,8 @@
 - name: Check sysctl hardening config contains ip_forward keys
   ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
-    - net.ipv4.ip_forward
-    - net.ipv6.conf.all.forwarding
+    - 'net.ipv4.ip_forward = {{ system_enable_ip_forward | bool | int }}'
+    - 'net.ipv6.conf.all.forwarding = {{ system_enable_ip_forward | bool | int }}'
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
@@ -920,9 +920,11 @@
     - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
-- name: Check logind drop-in has IdleAction=lock
+- name: Assert logind drop-in has IdleAction=lock
   ansible.builtin.command: grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_idle_action
   changed_when: false
+  failed_when: false
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -930,11 +932,37 @@
     - verify_logind_conf is not skipped
     - verify_logind_conf.stat.exists
 
-- name: Check logind drop-in has HandlePowerKey setting
+- name: Assert IdleAction=lock present in logind drop-in
+  ansible.builtin.assert:
+    that: verify_logind_idle_action.rc == 0
+    fail_msg: "logind 99-hardening.conf missing 'IdleAction=lock' — CIS session locking regression"
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Assert logind drop-in has HandlePowerKey={{ system_power_key | default("lock") }}
   ansible.builtin.command: >-
     grep -q '^HandlePowerKey={{ system_power_key | default("lock") }}'
     /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_power_key
   changed_when: false
+  failed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Assert HandlePowerKey={{ system_power_key | default("lock") }} present in logind drop-in
+  ansible.builtin.assert:
+    that: verify_logind_power_key.rc == 0
+    fail_msg: >-
+      logind 99-hardening.conf missing 'HandlePowerKey={{ system_power_key | default("lock") }}'
+      — expected HandlePowerKey={{ system_power_key | default("lock") }}
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -959,6 +987,17 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
+
+- name: Assert sudoers go-env drop-in is mode 0440
+  ansible.builtin.assert:
+    that: verify_sudoers_go_env.stat.mode == '0440'
+    fail_msg: "/etc/sudoers.d/go-env has wrong mode {{ verify_sudoers_go_env.stat.mode }} — expected 0440 (sudo silently rejects non-0440 sudoers files)"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+    - verify_sudoers_go_env is not skipped
+    - verify_sudoers_go_env.stat.exists
 
 - name: Stat logrotate sudo config (/var/log/sudo.log rotation)
   ansible.builtin.stat:
