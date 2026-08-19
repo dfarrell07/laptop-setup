@@ -63,7 +63,7 @@ else
 fi
 unset _cfg
 
-run() { # execute locally or inside container
+exec_cmd() { # execute locally or inside container
   if [[ -n "$CONTAINER" ]]; then
     if command -v distrobox &>/dev/null; then
       distrobox enter "$CONTAINER" -- "$@" 2>/dev/null
@@ -88,7 +88,7 @@ _sysctl_check() {
 
 # ---- User-level checks (always run) ----
 
-# SSH auth to GitHub (bypass run() — host SSH keys and agent are not forwarded into the container; run() would use container key material and always fail)
+# SSH auth to GitHub (bypass exec_cmd() — host SSH keys and agent are not forwarded into the container; exec_cmd() would use container key material and always fail)
 _ssh_ret=0
 if ! command -v timeout &>/dev/null; then
   record "github-ssh-auth" "WARN" "timeout not available (install gnu-coreutils on macOS) — skipping GitHub SSH auth check"
@@ -122,7 +122,7 @@ if [[ -x "$HOME/.krew/bin/krew" ]]; then
 else record "krew" "$_tool_absent" "not found"; fi
 unset _tool_absent
 
-_check_if_present() { # guard_path record_name cmd...
+_test_if_installed() { # guard_path record_name cmd...
   [[ -x "$1" ]] || return 0
   local _p="$1" _n="$2"; shift 2
   # shellcheck disable=SC2086
@@ -132,11 +132,11 @@ _check_if_present() { # guard_path record_name cmd...
 # Go install tools (guard on binary presence — emit nothing when absent, FAIL when present-but-broken)
 for tool in "gofumpt:--version" "gopls:version" "stern:--version" "govulncheck:-version" "gci:--version" "golangci-lint:--version" "subctl:version"; do
   name="${tool%%:*}"; args="${tool#*:}"; _gobin="$HOME/go/bin/$name"
-  _check_if_present "$_gobin" "go-$name" "$_gobin" $args
+  _test_if_installed "$_gobin" "go-$name" "$_gobin" $args
 done
 # Versioned subctl binaries (subctl18, subctlRH* — guard on binary presence, emit nothing when absent)
 for _bin in "$HOME"/.local/bin/subctl[0-9]* "$HOME"/.local/bin/subctlRH*; do
-  _check_if_present "$_bin" "$(basename "$_bin")" "$_bin" version
+  _test_if_installed "$_bin" "$(basename "$_bin")" "$_bin" version
 done
 
 if [[ -x /usr/local/bin/oc ]]; then
@@ -155,7 +155,7 @@ fi
 for _b in "cosign:cosign version" "tkn:tkn version --component=client" \
            "operator-sdk:operator-sdk version" "opm:opm version" "ec:ec version"; do
   _bname="${_b%%:*}"; _bvcmd="${_b#*:}"
-  _check_if_present "/usr/local/bin/$_bname" "$_bname" $_bvcmd
+  _test_if_installed "/usr/local/bin/$_bname" "$_bname" $_bvcmd
 done
 # gcloud minimum-version floor (guards against repomd.xml suppression — repo_gpgcheck disabled upstream)
 if command -v gcloud &>/dev/null; then
