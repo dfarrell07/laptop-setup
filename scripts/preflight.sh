@@ -435,12 +435,12 @@ else
 fi
 
 # --- RAM ---
-if [[ "$OS_FAMILY" == "darwin" ]]; then
-  _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null)
-  [[ -n "$_raw_ram_bytes" ]] && ram_gb=$(( _raw_ram_bytes / 1073741824 ))
-elif [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
-else _raw_ram_gib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_gib; fi
-if [[ "$OS_FAMILY" != "unknown" ]]; then
+if [[ "$OS_FAMILY" == "unknown" ]]; then record 'ram' 'skip' 'unknown OS — cannot read RAM'
+else
+  if [[ "$OS_FAMILY" == "darwin" ]]; then
+    _raw_ram_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+    [[ -n "$_raw_ram_bytes" ]] && ram_gb=$(( _raw_ram_bytes / 1073741824 ))
+  else _raw_ram_gib=$(awk '/MemTotal/ {print int(($2 + 1048575) / 1048576)}' /proc/meminfo 2>/dev/null); ram_gb=$_raw_ram_gib; fi
   ram_gb=${ram_gb:-0}  # guard: awk exits 0 with empty output when MemTotal absent
   if [[ -z "${_raw_ram_bytes:-}${_raw_ram_gib:-}" ]]; then record "ram" "warn" "could not read RAM — measurement tool returned empty output"
   elif [[ $ram_gb -ge 8 ]]; then record "ram" "pass" "${ram_gb}GiB"
