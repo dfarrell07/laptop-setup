@@ -5,6 +5,38 @@
 # See PATCH: Ansible pre_tasks bypassed with --start-at-task / OPTION 2 defense.
 - import_playbook: pre-flight.yml
 
+# ============================================================================
+# PLAY ARCHITECTURE & CONTRIBUTOR GUIDE
+# ============================================================================
+# Play 0 (pre-flight.yml, import_playbook): Unbypassable pre-flight checks
+#   • CSB detection, fapolicyd state, vault encryption validation
+#   • Cannot be skipped with --start-at-task; runs before all plays
+#
+# Play 1 (System setup, become: true): Root-level infrastructure
+#   • repos_dnf: Configure package repos (Fedora/RHEL only)
+#   • system: Hardening, SELinux, firewall, kernel params, services
+#   • Play-level become: true simplifies privilege escalation for these roles
+#   • Post-task: Validates DNS resolution after NetworkManager restart
+#     (Play 2 depends on DNS for git/binary downloads; see line 35)
+#
+# Play 2 (User setup, become: false): User-level provisioning
+#   • Pre-tasks: CSB re-validation, pre-flight re-check (defense against
+#     --start-at-task bypass), vault healthcheck, identity var assertions
+#   • Roles: packages, ssh, dotfiles, git_repos, notes, redhat, containers,
+#     desktop, distrobox, claude
+#   • Individual tasks use become: true + tags: [become] when needed
+#   • See CLAUDE.md § "Key Patterns" for become convention details
+#   • NEW ROLES: Add here with appropriate tags and conditional become: true
+#
+# Play 3 (Container provisioning): Podman-based dev container
+#   • Only runs if distrobox role registered a container with add_host
+#   • Uses containers.podman.podman connection plugin
+#   • Bootstraps Python inside container, gathers facts, runs container tasks
+#
+# SECURITY NOTE: Play 0 and Play 2 pre-tasks enforce checks that --start-at-task
+# would normally bypass. Do not remove or relocate these blocks.
+# ============================================================================
+
 # Play 1 — Host system (become: true)
 # Runs repos_dnf and system roles that need play-level privilege escalation.
 - name: System setup (requires sudo)
@@ -60,7 +92,7 @@
         - system_dns_liveness.rc | default(1) != 0
       tags: [system]
 
-# Play 2 — Host user (no play-level become)
+# Play 2 — User-level provisioning (no play-level become)
 # Individual tasks escalate with become: true + tags: [become] as needed.
 - name: User setup
   hosts: localhost
@@ -110,10 +142,8 @@
           - vault_ssh_signing_key is defined and vault_ssh_signing_key | length > 0
           - vault_ssh_signing_key_pub is defined and vault_ssh_signing_key_pub | length > 0
         fail_msg: >-
-          vault.yml has some SSH key variables defined but one or more required
-          variables are missing or empty. Check for key name typos in
-          vault.yml — expected: vault_ssh_auth_key, vault_ssh_auth_key_pub,
-          vault_ssh_signing_key, vault_ssh_signing_key_pub.
+          vault.yml missing or empty SSH key vars. Expected:
+          vault_ssh_auth_key, vault_ssh_auth_key_pub, vault_ssh_signing_key, vault_ssh_signing_key_pub.
           Run: ansible-vault view group_vars/all/vault.yml | grep vault_ssh
       when: >-
         vault_ssh_auth_key is defined or
@@ -135,10 +165,8 @@
             (dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME') and
             (dotfiles_user_email_personal | default('') | length > 0)
         fail_msg: >-
-          Set dotfiles_user_name, dotfiles_github_user, and dotfiles_user_email_personal
-          in config.yml before running make all.
-          These are currently 'CHANGE_ME' placeholder values — git commits will be
-          attributed to 'CHANGE_ME' and email notifications will go to wrong addresses.
+          Set dotfiles_user_name, dotfiles_github_user, dotfiles_user_email_personal in config.yml.
+          These are CHANGE_ME placeholders; git commits will be misattributed.
       when: not _pf_is_molecule
       tags: [always]
 
@@ -147,8 +175,7 @@
         that:
           - dotfiles_user_email_work | default('CHANGE_ME') != 'CHANGE_ME'
         fail_msg: >-
-          Set dotfiles_user_email_work in config.yml before running make all with
-          profile=work. It is currently a 'CHANGE_ME' placeholder value.
+          Set dotfiles_user_email_work in config.yml (required for profile=work).
       when: not _pf_is_molecule and profile == 'work'
       tags: [always]
 
@@ -203,8 +230,8 @@
       tags: [always]
       when: csb_detected
 
-# Play 3 — Container provisioning (podman connection)
-# Only runs when the distrobox role registered a container via add_host.
+# Play 3 — Dev container provisioning (podman connection)
+# Runs only if distrobox role registered a container with add_host.
 - name: Provision dev container
   hosts: containers
   connection: containers.podman.podman
