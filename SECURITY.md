@@ -312,11 +312,14 @@ Requirement" for the complete upgrade procedure and mandatory review checklist.
   verification; Anthropic uses a rolling installer without pinned releases
   (note: binary SHA256 verification in the Scope section refers to other
   tools; the Claude Code installer is the deliberate exception)
-- **Secure Boot** — not managed by Ansible (BIOS/firmware setting); kernel
-  `lockdown=integrity` is weakened without a Secure Boot chain of trust
-- **GRUB bootloader password** — implemented (CIS 1.4.2); opt-in via
-  system_grub_password_enabled: true in config.yml + system_grub_password_hash
-  (generated via grub2-mkpasswd-pbkdf2 or grub-mkpasswd-pbkdf2)
+- **Secure Boot + GRUB bootloader password (CIS 1.4.2)** — Kernel `lockdown=integrity`
+  without Secure Boot is weakened by an unprotected GRUB bootloader. Ansible now enforces GRUB
+  superuser password protection (opt-in via `system_grub_password` in config.yml) to prevent
+  physical console attacks that disable lockdown before it activates at boot. **Both** Secure
+  Boot (BIOS setting — out of scope for Ansible) AND GRUB password are required for full protection.
+  On non-Secure Boot systems, the GRUB password guards a pre-reboot vulnerability window. Set
+  `system_grub_password: 'your-password'` in config.yml (or use `vault_grub_password` from vault.yml
+  for production). Empty (default) disables GRUB password; RHEL CSB skips (IT manages bootloader).
 - **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
   Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
   correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`

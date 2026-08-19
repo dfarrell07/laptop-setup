@@ -11,9 +11,13 @@
 
 CONTAINER ?= fedora-dev
 
-# Verify collections integrity before ansible-playbook execution
-# REQUIRED: guard against supply chain tampering (CVE-mitigation)
-override VERIFY_AND_RUN := scripts/verify-collections.sh &&
+# Verify collections integrity and reject dangerous flags before ansible-playbook execution
+# REQUIRED: guard against TOCTOU tampering (CVE-mitigation)
+# SECURITY: Also rejects --start-at-task and --tags/--skip-tags to prevent bypassing
+# pre-flight checks (see PATCH: Ansible pre_tasks bypassed with --start-at-task)
+# Use exec to run ansible-playbook in the SAME process/shell context,
+# preventing attacker from modifying collections between verify and import.
+override VERIFY_AND_RUN := exec scripts/verify-ansible-args.sh &&
 
 # Explicitly set ANSIBLE_COLLECTIONS_PATH to prevent environment variable override (CWE-426)
 # REQUIRED: guard against ANSIBLE_COLLECTIONS_PATH environment variable injection
