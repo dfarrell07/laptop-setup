@@ -1612,10 +1612,9 @@
           - _go_packages | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
           - _unsafe_entries | length == 0
         fail_msg: >-
-          SECURITY: packages_go_install (from environment or config.yml) contains unsafe Go module paths.
+          SECURITY: packages_go_install contains unsafe Go module paths.
           These values are passed directly to 'go install'; init() functions execute at compile time
-          (RCE during provisioning). This guard validates both file-based and environment variable sources.
-          Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
+          (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
           Unsafe entries: {{ _unsafe_entries }}.
 
     - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
@@ -1646,10 +1645,9 @@
           - _go_packages_work | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
           - _unsafe_entries | length == 0
         fail_msg: >-
-          SECURITY: packages_go_install_work (from environment or config.yml) contains unsafe Go module paths.
+          SECURITY: packages_go_install_work contains unsafe Go module paths.
           These values are passed directly to 'go install'; init() functions execute at compile time
-          (RCE during provisioning). This guard validates both file-based and environment variable sources.
-          Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
+          (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
           Unsafe entries: {{ _unsafe_entries }}.
 
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
