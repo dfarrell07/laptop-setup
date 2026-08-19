@@ -13,7 +13,7 @@ unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before saniti
 #   3. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   4. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
 #   5. Each role's tasks/main.yml has a tags: [always] defense-in-depth assertion (role layer)
-#   6. ENV sanitization — pins/clears 50+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
+#   6. ENV sanitization — pins/clears 90+ vars: ANSIBLE_*, LD_*, PYTHON*, GIT_*, Go, Sigstore, socket/temp (env-injection layer)
 #   7. HOME hijack check — validates HOME matches /etc/passwd before any path operations
 #   8. verify-collections.sh — supply-chain integrity check before exec
 
