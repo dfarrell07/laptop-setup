@@ -52,41 +52,35 @@
   # fails with "group does not exist". failed_when: false prevents play abort;
   # the packages role re-runs this after installing libvirt, completing membership.
 
-- name: Install Mullvad VPN
-  ansible.builtin.dnf:
-    name: mullvad-vpn
-    state: present
-  register: _system_mullvad_install
-  notify: Reload systemd daemon
-  when:
-    - install_vpn | bool
-    - is_dnf
-    - is_fedora
-    - not system_is_container
-  failed_when: _system_mullvad_install.failed and 'No match for argument' not in (_system_mullvad_install.msg | default(''))
+- block:
+    - name: Install Mullvad VPN
+      ansible.builtin.dnf:
+        name: mullvad-vpn
+        state: present
+      register: _system_mullvad_install
+      notify: Reload systemd daemon
+      when: not system_is_container
+      failed_when: _system_mullvad_install.failed and 'No match for argument' not in (_system_mullvad_install.msg | default(''))
 
-- name: Warn if Mullvad VPN package install failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
-      mullvad-daemon will not be enabled and VPN protection is not active on this host
-  when:
-    - install_vpn | bool
-    - is_dnf
-    - is_fedora
-    - _system_mullvad_install.rc | default(0) != 0
+    - name: Warn if Mullvad VPN package install failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Mullvad VPN package install failed (rc={{ _system_mullvad_install.rc | default('n/a') }});
+          mullvad-daemon will not be enabled and VPN protection is not active on this host
+      when: _system_mullvad_install.rc | default(0) != 0
 
-- name: Enable Mullvad VPN service
-  ansible.builtin.systemd:
-    name: mullvad-daemon
-    state: started
-    enabled: true
+    - name: Enable Mullvad VPN service
+      ansible.builtin.systemd:
+        name: mullvad-daemon
+        state: started
+        enabled: true
+      when:
+        - not system_is_container
+        - _system_mullvad_install.rc == 0
   when:
     - install_vpn | bool
     - is_dnf
     - is_fedora
-    - not system_is_container
-    - _system_mullvad_install.rc == 0
 
 - name: Detect mullvad-daemon (may not be installed)
   ansible.builtin.command: # noqa: command-instead-of-module
