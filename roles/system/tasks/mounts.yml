@@ -67,6 +67,18 @@
   when:
     - _tmp_remount_result.rc | default(0) != 0
 
+- name: Warn that system_tmp_noexec may break Play 2 become tasks
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_tmp_noexec is enabled — /tmp is now mounted noexec on this host.
+      Ansible Play 2 (user play) tasks that use become: true write AnsiballZ modules to
+      /tmp before exec; with noexec active those tasks will fail with exec errors.
+      Recommended two-pass approach: run Play 1 only (make system), reboot, then run the
+      full playbook (make all). Alternatively disable system_tmp_noexec in config.yml.
+  when:
+    - system_tmp_noexec | bool
+    - not system_is_container
+
 # --- Harden /dev/shm mount options ---
 # Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under
 # dev-shm.mount.d/ is silently ignored. Use fstab for persistence and a

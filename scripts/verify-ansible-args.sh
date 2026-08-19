@@ -99,7 +99,7 @@ EOF
     # extra-vars (precedence 22) beats set_fact (18); pre-defining _pf_is_molecule=true
     # forces the flag permanently true, bypassing all 7 `when: not _pf_is_molecule` guards
     # in pre_flight_checks.yml for the entire play (vault checks, SSTI guard, URL validation).
-    if [[ "$arg" == --extra-vars=_pf_is_molecule=* || "$arg" == -e_pf_is_molecule=* ]]; then
+    if [[ "$arg" == --extra-vars=_pf_is_molecule=* || "$arg" == -e_pf_is_molecule=* ]] || [[ "$arg" == --extra-vars=*_pf_is_molecule* ]]; then
         cat >&2 <<EOF
 ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
 Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
@@ -222,7 +222,7 @@ EOF
         exit 1
     fi
     # Block space-separated: -e _pf_is_molecule=<value> and --extra-vars _pf_is_molecule=<value>
-    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_is_molecule=* ]]; then
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_is_molecule=* ]] || [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == *_pf_is_molecule* ]]; then
         cat >&2 <<EOF
 ERROR: -e _pf_is_molecule rejected by VERIFY_AND_RUN
 Reason: Pre-defining _pf_is_molecule via extra-vars (precedence 22) overrides the
