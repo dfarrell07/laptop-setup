@@ -706,6 +706,76 @@
           or [{'host': 'git.internal.com', 'fingerprint': 'SHA256:...'}]).
           Unsafe entries found: {{ _unsafe_hosts }}.
 
+    - name: SECURITY CRITICAL — Block vault.yml encryption with weak vault-pass.sh stub
+      when: not _pf_is_molecule
+      tags: [always]
+      block:
+        - name: Check if vault-pass.sh contains hardcoded CHANGE_ME placeholder
+          ansible.builtin.slurp:
+            src: "{{ playbook_dir }}/scripts/vault-pass.sh"
+          register: _vault_pass_sh
+          failed_when: false
+          tags: [always]
+
+        - name: Check if vault.yml exists and may be plaintext
+          ansible.builtin.slurp:
+            src: "{{ playbook_dir }}/group_vars/all/vault.yml"
+          register: _vault_yml
+          failed_when: false
+          tags: [always]
+
+        - name: Assert vault.yml is not encrypted with weak password stub
+          when:
+            - _vault_pass_sh.content is defined
+            - _vault_yml.content is defined
+          vars:
+            _vpass_content: "{{ _vault_pass_sh.content | b64decode }}"
+            _vaultfile_first_line: "{{ (_vault_yml.content | b64decode).split('
+')[0] }}"
+            _is_encrypted: "{{ _vaultfile_first_line is search('^\$ANSIBLE_VAULT') }}"
+            _is_stub: "{{ _vpass_content is search("pass='CHANGE_ME'") }}"
+          ansible.builtin.assert:
+            that:
+              - >-
+                (not _is_stub) or (not _is_encrypted)
+            fail_msg: >-
+              SECURITY CRITICAL: vault.yml is encrypted with vault-pass.sh, but vault-pass.sh
+              still contains the hardcoded placeholder password 'CHANGE_ME'. This means all your
+              secrets are encrypted with a trivial password that can be easily guessed or brute-forced.
+
+              ALL secrets in vault.yml are at risk:
+              - vault_ssh_auth_key (SSH authentication)
+              - vault_ssh_signing_key (Git commit signing)
+              - vault_rh_git_key (Red Hat Git credentials)
+              - vault_notes_transcrypt_password (Encrypted notes master password)
+              - vault_registry_tokens (Container registry credentials)
+              - vault_grub_password_hash (System bootloader password)
+
+              IMMEDIATE ACTION REQUIRED:
+
+              OPTION 1: Re-encrypt vault.yml with a secure password
+              1. Back up vault.yml:  cp group_vars/all/vault.yml group_vars/all/vault.yml.backup
+              2. Decrypt with weak password:  echo 'CHANGE_ME' | ansible-vault decrypt group_vars/all/vault.yml
+              3. Set up YubiKey or secure password:  make setup-yubikeys
+              4. Re-encrypt with secure password:  make vault-edit (uses vault-pass.sh)
+              5. Verify:  make preflight
+
+              OPTION 2: Run setup-yubikeys to generate a secure vault-pass.sh
+              1. Run:  make setup-yubikeys
+              2. This creates a YubiKey HMAC-SHA1 vault-pass.sh
+              3. Then re-encrypt vault.yml:  make vault-edit
+              4. Verify:  make preflight
+
+              OPTION 3: Manually configure vault-pass.sh (see SECURITY.md)
+              1. Edit scripts/vault-pass.sh with a secure method (keyring, encrypted file, etc.)
+              2. Test vault-pass.sh returns a strong password
+              3. Run:  make vault-edit  to re-encrypt vault.yml
+              4. Update hash:  sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256
+
+              This guard prevents accidental encryption with weak passwords. Your secrets are
+              protected only as well as your vault password.
+            tags: [always]
+
     - name: SECURITY — Assert SSH git repos have keyscanned hosts pre-seeded (TOFU mitigation)
       when: not _pf_is_molecule
       vars:
