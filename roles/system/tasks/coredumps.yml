@@ -27,7 +27,7 @@
         dest: /etc/systemd/coredump.conf.d/coredump.conf
         mode: "0644"
 
-    - name: "Set RLIMIT_CORE=0 in security limits (CIS 1.5.1 req b — only when storage: none)"
+    - name: "Set RLIMIT_CORE=0 in limits.d (CIS 1.5.1 req b, storage: none only)"
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}
