@@ -1740,6 +1740,23 @@
           prefer/require (authselectmode); 0-9 (minsources); NTP pool/server hostnames and ports only
           (nts_servers, fallback_pool; alphanumeric, dot, hyphen, colon for ports).
 
+    - name: Assert system_chrony_nts_servers override requires explicit trust acknowledgement
+      when:
+        - _config_yml_raw.content is defined
+        - _config_raw.get('system_chrony_nts_servers') is not none
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_chrony_nts_servers_confirmed', false) | bool
+        fail_msg: >-
+          SECURITY: system_chrony_nts_servers is set in config.yml but
+          system_chrony_nts_servers_confirmed is not true. NTS servers are clock
+          trust anchors: with authselectmode=require, a rogue entry fully controls
+          the system clock with no unauthenticated fallback. Review your NTS server
+          list, then set in config.yml: system_chrony_nts_servers_confirmed: true
+      tags: [always]
+
     - name: "Warn: DHCP-sourced NTP active with authselectmode=prefer — rogue DHCP risk"
       tags: [always]
       when:
