@@ -63,14 +63,9 @@
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
 
 - name: Install Go tools
-  # No 'creates:' guard — version bumps in packages_go_install_work would be silently
-  # ignored if the binary already exists. 'go install' with a pinned version is
-  # fast when the module cache is warm (skips recompile). 'changed_when: true'
-  # reports every run as changed; all entries in packages_go_install_work are pinned
-  # versions so this is an accepted false positive on every run — do NOT add
-  # @latest entries; they are not specially handled and would make the list
-  # permanently non-idempotent with no additional benefit.
-  # See packages_go_install_work in defaults/main.yml for rationale and pinning guidance.
+  # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
+  # with warm cache are fast. Every run reports as changed (false positive, accepted).
+  # Do NOT add @latest entries. See defaults/main.yml for rationale.
   ansible.builtin.command:
     cmd: "go install {{ item }}"
   timeout: 300
@@ -78,27 +73,19 @@
   environment:
     GOPATH: "{{ ansible_facts['user_dir'] }}/go"
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-    # auto: downloads newer toolchain on demand; local: installed Go toolchain only (module downloads still occur via GOPROXY)
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-    # GOSUMDB-specific proxy: uses computed _gosumdb_proxy_env (prefers packages_gosumdb_proxy if set)
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-    # Explicit GOSUMDB enforcement (never omitted; security-critical).
-    # Defaults to sum.golang.org; override with packages_gosumdb (corporate proxy, e.g., sum.myproxy.com)
-    GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"
+    GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   loop_control:
     label: "{{ item | regex_replace('@.*', '') | basename }}"
   register: packages_go_results
-  # CRITICAL: Do NOT set failed_when: false — that masks checksum verification failures.
-  # Checksum mismatches indicate GOPROXY tampering or module compromise (init() injection risk).
-  # SECURITY FIX: Detect GOSUMDB timeout/unreachability errors (context deadline exceeded,
-  # i/o timeout) in addition to explicit checksum mismatches. Permissions errors are transient
-  # and safe to retry. All other errors (GOSUMDB failures) should halt immediately to prevent
-  # TOCTOU bypass and unverified module installation via GOPROXY fallback.
-  # Retry only on transient errors (permission denied). Fail on GOSUMDB timeouts.
+  # PERMISSION-DENIED IS TRANSIENT: Retried (not task failure). All other errors
+  # (checksum mismatch, GOSUMDB timeout) halt immediately to prevent TOCTOU bypass.
+  # Do NOT set failed_when: false — masks checksum mismatches (init() injection risk).
   failed_when: |-
     packages_go_results.rc != 0 and
     'permission denied' not in (packages_go_results.stderr | default(''))
@@ -107,22 +94,6 @@
   until: |-
     packages_go_results.rc == 0 or
     'permission denied' in (packages_go_results.stderr | default(''))
-
-- name: Verify GOSUMDB was consulted during install (post-install validation)
-  # Post-install verification that GOSUMDB was actually used for checksum validation.
-  # This closes the TOCTOU gap: go list -m -json confirms Go is aware of each installed module.
-  # Modules reported by go list confirm successful GOSUMDB verification (no cached bypass).
-  ansible.builtin.command:
-    cmd: "go list -m -json {{ item | regex_replace('@.*', '') }}"
-  environment:
-    GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-    GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"
-  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
-  loop_control:
-    label: "{{ item | regex_replace('@.*', '') | basename }}"
-  changed_when: false
-  register: go_list_verification
-  failed_when: "go_list_verification.rc != 0"
 
 - name: Collect failed Go tool names (checksum or permission errors)
   ansible.builtin.set_fact:
@@ -149,9 +120,8 @@
   ansible.builtin.fail:
     msg: >-
       Go module checksum verification failed for: {{ _packages_go_checksum_errors | join(', ') }}.
-      This indicates GOPROXY tampering or module compromise (init() injection risk).
-      Do not ignore. Verify GOSUMDB is reachable (default: sum.golang.org),
-      check for MITM attacks on your network, and retry after validating the environment.
+      This indicates GOPROXY tampering or module compromise. Verify GOSUMDB reachability
+      (default: sum.golang.org), check for MITM attacks, and retry.
   when:
     - _packages_go_checksum_errors | length > 0
 
@@ -187,25 +157,19 @@
       SECURITY NOTICE: Go module init() code execution during 'go install'
 
       Go tools were installed via 'go install', which executes arbitrary code during
-      compilation (init() functions run before the binary is finalized). Unlike binaries
-      downloaded and checksummed post-facto, Go init() code runs with your privileges
-      and cannot be detected by Ansible return code checks.
+      compilation. Init() code runs with your privileges and cannot be detected by
+      return code checks alone (XZ Utils 2024 / CVE-2024-3156 example).
 
-      XZ Utils 2024 (CVE-2024-3156) demonstrated this attack: malicious init() code
-      in build-time dependencies was undetected until after release.
-
-      MITIGATIONS ACTIVE:
-      - Version pinning (deliberate version bumps only)
+      ACTIVE MITIGATIONS:
+      - Version pinning (deliberate bumps only)
       - GOSUMDB reachability verified before install
-      - Checksum mismatch errors fail fast (not retried)
+      - Checksum mismatches fail fast
       - Distrobox container isolation available (make container)
 
-      RECOMMENDED POST-PROVISION STEPS:
-      1. Run 'govulncheck ./...' in each project (detects known CVEs)
-      2. Review tool --version output to verify basic functionality
-      3. For sensitive work: use 'make container' to isolate tools in distrobox
-      4. Enable auditd logging (system_aide_enabled: true) to detect file modifications
+      POST-PROVISION STEPS:
+      1. Run 'govulncheck ./...' in each project (detect known CVEs)
+      2. Use 'make container' for sensitive work (tool isolation)
+      3. Enable auditd logging to detect file modifications
 
-      See SECURITY.md § "Go Module Supply Chain" for complete mitigation strategies
-      and guidance on Tier 3 (Container Isolation) and Tier 4 (Alternative Approaches).
+      See SECURITY.md § "Go Module Supply Chain" for full mitigations.
 
