@@ -38,7 +38,7 @@
     - not system_is_container
     - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install.rc | default(0) == 0)
   block:
-    - name: Assert real_user_home is a valid absolute path
+    - name: real_user_home must be a valid absolute path
       ansible.builtin.assert:
         that:
           - real_user_home is regex('^/[a-zA-Z0-9_/.:@-]+$')
@@ -68,7 +68,7 @@
       changed_when: false
       failed_when: false
 
-    - name: Fail if a late-sorting audit rules file disables enforcement
+    - name: "Guard: late-sorting audit rules must not disable enforcement"
       ansible.builtin.fail:
         msg: >-
           SECURITY: file(s) in /etc/audit/rules.d/ sort after claude-code.rules and
