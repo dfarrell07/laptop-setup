@@ -191,27 +191,12 @@
         label: "{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Verify RH subctl tarball is not a symlink
-      ansible.builtin.stat:
-        path: "{{ _subctl_tarball_path }}"
-        follow: false
-      register: _subctl_tarball_stat
-      when: >-
-        _subctl_tarball_path and
-        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
-        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
-                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
-      loop: "{{ packages_subctl_rh_versions }}"
-      loop_control:
-        label: "{{ item.suffix }}"
-        index_var: loop_idx
-
     - name: Fail if RH subctl tarball is a symlink (TOCTOU attack detected)
       ansible.builtin.fail:
         msg: "SECURITY: RH subctl tarball is a symlink — aborting extraction to prevent TOCTOU attack"
       when: >-
         _subctl_tarball_path and
-        _subctl_tarball_stat.results[loop_idx].stat.islnk | default(false) and
+        _subctl_tarball_path is symlink and
         (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
         item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
                         (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
