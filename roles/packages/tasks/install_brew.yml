@@ -5,7 +5,7 @@
 - name: Add Homebrew taps (macOS)
   when: is_macos
   block:
-    - name: Add Homebrew taps (macOS)
+    - name: Run homebrew_tap module for all configured taps
       community.general.homebrew_tap:
         name: "{{ item }}"
         state: present
@@ -31,7 +31,7 @@
 - name: Install Homebrew packages (macOS)
   when: is_macos
   block:
-    - name: Install Homebrew packages (macOS)
+    - name: Run homebrew module for all configured formulas
       community.general.homebrew:
         name: >-
           {{ packages_brew
@@ -66,7 +66,7 @@
 - name: Install Homebrew cask packages (macOS)
   when: is_macos
   block:
-    - name: Install Homebrew cask packages (macOS)
+    - name: Run homebrew_cask module for all configured casks
       community.general.homebrew_cask:
         name: >-
           {{ packages_brew_cask
@@ -189,7 +189,7 @@
           ansible.builtin.file:
             path: "{{ _aerospace_tmpdir.path | default('') }}"
             state: absent
-          when: _aerospace_tmpdir is defined and _aerospace_tmpdir.path is defined
+          when: _aerospace_tmpdir.path is defined
 
   rescue:
     - name: Warn AeroSpace install failed (will fail play)
