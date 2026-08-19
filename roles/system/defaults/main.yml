@@ -7,13 +7,8 @@ system_sysctl_hardening:
   kernel.kptr_restrict: 2          # STIG RHEL-09-213075 — hide kernel pointers from all processes including root/CAP_SYSLOG (prevents KASLR bypass)
   # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
   # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
-  # MAINTENANCE: Values below that match Fedora defaults are pinned intentionally
-  # (90-hardening.conf wins lexicographically over third-party drop-ins). On each Fedora
-  # major upgrade, review against TWO sources: (1) /usr/lib/sysctl.d/*.conf for vendor
-  # sysctl.d keys (e.g. fs.protected_hardlinks from 50-default.conf); (2) kernel
-  # compile-time config and Documentation/admin-guide/sysctl/ for keys not present in
-  # any vendor sysctl.d file (e.g. dmesg_restrict, perf_event_paranoid below).
-  # Highest-risk duplicate to drift on upgrade: kernel.perf_event_paranoid (2 on F44; Fedora has used 3 previously).
+  # MAINTENANCE: pinned defaults override third-party sysctl.d (90-hardening.conf sorts last).
+  # On each Fedora upgrade review /usr/lib/sysctl.d/*.conf AND kernel compile-time defaults.
   # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
   kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
   # kernel.perf_event_paranoid: merged via system_perf_event_paranoid combine() in sysctl.yml
@@ -34,12 +29,9 @@ system_sysctl_hardening:
   net.ipv4.conf.default.accept_source_route: 0
   net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; default 0 (no vendor sysctl.d); pinned vs third-party sysctl.d
   net.ipv6.conf.default.accept_source_route: 0
-  # `all.rp_filter` reset to 0 by Fedora 50-default.conf (line 27: `-net.ipv4.conf.all.rp_filter`
-  # clears after `*.rp_filter=2` wildcard). Setting 2 here makes all.rp_filter a floor:
-  # max(all=2, per-iface) ensures no interface drops below loose mode even if sysctl_extra
-  # sets a per-iface value to 0. NOTE: all=2 is also a ceiling — max(all=2, per-iface=1) = 2,
-  # so strict (1) per-interface filtering is not achievable without also lowering all.rp_filter
-  # to 0 or 1 via system_sysctl_extra_additional.
+  # Fedora 50-default.conf resets all.rp_filter to 0 after the *.rp_filter=2 wildcard; pinning 2
+  # floors all interfaces at loose mode. NOTE: all=2 is also a ceiling — max(all=2,per-iface=1)=2,
+  # so strict-per-interface needs system_sysctl_extra_additional to lower all.rp_filter to 0 or 1.
   net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
   # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
   # (CIS recommends 1 on non-Kubernetes hosts); pinned in 90-hardening.conf to
