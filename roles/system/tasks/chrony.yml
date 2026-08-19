@@ -34,7 +34,9 @@
         enabled: true
       ignore_errors: true
       register: _chrony_restore_result
-      when: is_apt and not system_is_container
+      when:
+        - is_apt
+        - not system_is_container
 
     - name: Re-raise chrony install failure
       ansible.builtin.fail:
@@ -75,7 +77,10 @@
         enabled: true
       ignore_errors: true
       register: _chrony_restore_result
-      when: is_dnf and not system_is_container and not csb_rhel
+      when:
+        - is_dnf
+        - not system_is_container
+        - not csb_rhel
 
     - name: Re-raise chrony install failure
       ansible.builtin.fail:
