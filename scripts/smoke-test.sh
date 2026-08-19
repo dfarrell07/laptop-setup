@@ -207,6 +207,21 @@ fi
 if exec_cmd ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi
 
+# libvirt/kvm group membership (virtualization packages add user to groups but require logout to activate)
+if $IS_LINUX && [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
+  if getent group libvirt &>/dev/null && getent group kvm &>/dev/null; then
+    # Check if user is in /etc/group but not active in current session
+    if getent group libvirt | grep -q "$USER" && getent group kvm | grep -q "$USER"; then
+      # User is in groups per /etc/group — check if active in session
+      if groups | grep -q libvirt && groups | grep -q kvm; then
+        record "libvirt-kvm-groups" "PASS"
+      else
+        record "libvirt-kvm-groups" "WARN" "User in libvirt/kvm groups but not active in session. Log out and back in, or run: newgrp libvirt. Verify with: groups | grep libvirt"
+      fi
+    fi
+  fi
+fi
+
 # vault-pass.sh stub (skip in molecule — stub is intentional in CI)
 if [[ -z "${MOLECULE_PROJECT_DIRECTORY:-}" ]]; then
   _vp="$SCRIPT_DIR/vault-pass.sh"
