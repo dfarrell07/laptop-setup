@@ -584,6 +584,87 @@ then re-key with a new password source:
 ansible-vault rekey group_vars/all/vault.yml
 ```
 
+## GPG Key Import and Setup
+
+Commits modifying supply-chain files (scripts, SHA256SUMS, collections) must be
+signed with a GPG key to prevent unsigned tampering.
+
+### Generating a GPG Key
+
+If you don't have a GPG key yet:
+
+```bash
+gpg --full-generate-key
+# Select: (1) RSA and RSA, 4096 bits (or higher), no expiration recommended for personal use
+```
+
+### Importing an Existing GPG Key
+
+To import your GPG private key from backup:
+
+```bash
+gpg --import /path/to/private-key.gpg
+```
+
+Verify the key was imported:
+
+```bash
+gpg --list-secret-keys
+```
+
+### Configuring Git to Use Your GPG Key
+
+1. Get your GPG key ID:
+   ```bash
+   gpg --list-secret-keys --keyid-format LONG
+   # Example output: sec   rsa4096/0123456789ABCDEF 2024-01-01 [SC]
+   #                           ^^^^^^^^^^^^^^^^^^ <- Use this
+   ```
+
+2. Configure git globally to use your GPG key:
+   ```bash
+   git config --global user.signingkey 0123456789ABCDEF
+   git config --global commit.gpgsign true
+   ```
+
+3. (Optional) Enable signing for all commits by default:
+   ```bash
+   git config --global commit.gpgsign true
+   git config --global gpg.format openpgp
+   ```
+
+### Signing Commits Manually
+
+If you haven't enabled `commit.gpgsign`, sign individual commits:
+
+```bash
+git commit -s -S  # Both --signoff and --gpg-sign
+```
+
+### Verifying Your Signatures
+
+Verify a commit is signed:
+
+```bash
+git verify-commit <commit-sha>
+```
+
+Show signature information:
+
+```bash
+git log --show-signature
+```
+
+### Exporting Your GPG Key
+
+To back up your GPG key securely:
+
+```bash
+gpg --export-secret-keys --armor YOUR_KEY_ID > private-key.gpg
+# Store in a secure backup location (e.g., encrypted USB, password manager, HSM)
+chmod 600 private-key.gpg
+```
+
 ## Internal SSH Git Host Setup
 
 When cloning repositories from internal SSH git servers (not GitHub), pre-seed SSH host keys
