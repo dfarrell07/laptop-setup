@@ -190,7 +190,7 @@
 # distrobox does not natively support per-path volume exclusions. Accepted residual risk on
 # developer workstations where the container user == the host user (no privilege boundary).
 # Do not use this profile on multi-tenant or shared hosts.
-- name: Enable podman user socket (needed for kind, docker-compatible CLIs, devcontainers)
+- name: Enable podman user socket (kind, docker-compat CLIs, devcontainers)
   ansible.builtin.systemd:
     name: podman.socket
     state: started
@@ -322,7 +322,7 @@
       Got: {{ containers_log_driver }}
   when: is_linux
 
-- name: Set containers.conf workstation options (user-scope; logging and kind compatibility)
+- name: Set containers.conf user-scope options (logging, kind compatibility)
   ansible.builtin.template:
     src: containers.conf.j2
     dest: "{{ containers_config_dir }}/containers.conf"
