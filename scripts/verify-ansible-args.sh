@@ -46,6 +46,21 @@ EOF
     fi
 done
 
+# Validate ANSIBLE_COLLECTIONS_PATH if set externally (prevents malicious path override)
+if [[ -n "${ANSIBLE_COLLECTIONS_PATH:-}" ]]; then
+    expected_prefix="$(cd "$(dirname "$0")/.." && pwd)/collections"
+    if [[ "${ANSIBLE_COLLECTIONS_PATH}" != "${expected_prefix}"* ]]; then
+        cat >&2 <<EOF
+ERROR: ANSIBLE_COLLECTIONS_PATH overrides the verified collections directory.
+Expected path starting with: ${expected_prefix}
+Got: ${ANSIBLE_COLLECTIONS_PATH}
+This could load unverified collection code bypassing supply chain verification.
+Solution: Unset ANSIBLE_COLLECTIONS_PATH or run via 'make' which sets it correctly.
+EOF
+        exit 1
+    fi
+fi
+
 # Verify collections integrity (defense-in-depth: supply chain verification)
 scripts/verify-collections.sh
 

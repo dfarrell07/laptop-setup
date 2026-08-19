@@ -15,12 +15,11 @@ override MAKEFLAGS :=
 
 CONTAINER ?= fedora-dev
 
-# Verify collections integrity and reject dangerous flags before ansible-playbook execution
-# REQUIRED: guard against TOCTOU tampering (CVE-mitigation)
-# SECURITY: Also rejects --start-at-task and --tags/--skip-tags to prevent bypassing
-# pre-flight checks (see PATCH: Ansible pre_tasks bypassed with --start-at-task)
-# Use exec to run ansible-playbook in the SAME process/shell context,
-# preventing attacker from modifying collections between verify and import.
+# Verify collections integrity, validate ANSIBLE_COLLECTIONS_PATH, and reject dangerous flags.
+# REQUIRED: guard against TOCTOU tampering and supply chain attacks.
+# SECURITY: Rejects --start-at-task (bypasses Play 0 pre-flight checks) and
+# --skip-tags=always (skips [always]-tagged security assertions). Does NOT block --tags
+# or other --skip-tags values (needed for role-specific targets like make claude).
 override VERIFY_AND_RUN := scripts/verify-ansible-args.sh
 
 # Explicitly set ANSIBLE_COLLECTIONS_PATH to prevent environment variable override (CWE-426)
