@@ -1,5 +1,17 @@
 # {{ ansible_managed }}
 # Blacklist unused filesystem and DMA modules (CIS/STIG)
+#
+# DESIGN NOTE — unconditional vs. conditional entries:
+# The following modules are ALWAYS blacklisted, regardless of config.yml settings,
+# and cannot be suppressed by any variable: jffs2, cramfs, freevxfs, hfs, hfsplus,
+# dccp, rds, tipc, firewire-core, firewire-ohci, firewire-net, firewire-sbp2, nosy,
+# vivid, n_hdlc. These are considered universally safe to blacklist on workstations
+# (no legitimate use case, confirmed CVE history, or CIS/STIG mandate). This is an
+# intentional one-way ratchet — if a specific unconditional entry must be re-enabled
+# (e.g., rds for cluster testing), drop a file under /etc/modprobe.d/ that overrides
+# the install directive with the real path (e.g., install rds /sbin/modprobe --ignore-install rds)
+# rather than modifying this template. Conditional entries (udf, sctp, thunderbolt,
+# usb_storage, bluetooth) retain their config.yml toggles for legitimate use cases.
 
 # Unused filesystems — attack surface via crafted images
 # squashfs is NOT blacklisted — Flatpak runtime images require it. Without it

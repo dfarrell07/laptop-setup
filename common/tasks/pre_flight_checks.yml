@@ -390,12 +390,19 @@
           - _raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
           - _raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
+          - _raw.get('desktop_sway_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./:_-]*$')
+          - _raw.get('desktop_sway_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
+          - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float >= -1.0
+          - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float <= 1.0
+          - _raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
           - _raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
           - _raw.get('desktop_wm_repeat_rate', '50') | string is match('^[0-9]+$')
           - _raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
           - _raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
           - _raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
           - _raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
+          - _raw.get('desktop_sway_cursor_theme', 'Adwaita') | string is match('^[a-zA-Z0-9_-]+$')
+          - _raw.get('desktop_sway_cursor_size', '24') | string is match('^[0-9]+$')
         fail_msg: >-
           SECURITY: desktop_wm_border_width and desktop_wm_floating_border_width in config.yml
           must be non-negative integers (^[0-9]+$). These values are rendered bare into sway/i3
