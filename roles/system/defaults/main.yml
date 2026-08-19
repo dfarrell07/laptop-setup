@@ -538,3 +538,11 @@ system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; 
                                    # (breaks perf stat/top/record for non-root users); set 3 in config.yml
                                    # for stricter posture on non-dev hosts
 
+# GRUB bootloader password (CIS 1.4.2)
+# Protects against physical console attacks that edit kernel parameters before lockdown=integrity activates.
+# Secure Boot + GRUB password = protection against pre-reboot window vulnerability.
+system_grub_password_enabled: false  # set true in config.yml to enable CIS 1.4.2 GRUB superuser password
+system_grub_password_hash: ''        # pre-generated pbkdf2 hash from grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian)
+                                     # Generate hash: echo 'password' | grub2-mkpasswd-pbkdf2
+                                     # Then extract and set in config.yml or vault.yml
+

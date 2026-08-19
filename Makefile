@@ -191,9 +191,14 @@ vendor-collections: guard-not-root
 	cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
 	@echo "Regenerating Python manifest for supply chain verification..."
 	python3 scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json
+	@echo ""
 	@echo "Tarballs downloaded, API-verified, and manifest generated."
-	@echo "Review changes: git diff collections-dist/"
-	@echo "Then: git add collections-dist/ && git commit"
+	@echo ""
+	@echo "NEXT STEP (REQUIRED): Verify vendored tarballs against upstream GitHub sources:"
+	@echo "  scripts/verify-vendor-tarball.sh"
+	@echo ""
+	@echo "Then review and commit: git diff collections-dist/"
+	@echo "           git add collections-dist/ && git commit -s"
 
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh

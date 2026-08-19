@@ -70,80 +70,69 @@ for spec in "${COLLECTIONS[@]}"; do
 		continue
 	fi
 
-	# Extract Python module lists
-	# Vendored: tar tzf lists all files
-	# Upstream: from cloned git repo (extract .py file paths from plugins/, module_utils/, roles/)
-
-	vendored_py_files=$(_tmpdir="${_tmpdir}" python3 - "$vendored_file" "$upstream_dir" "$namespace" "$name" <<'PYEOF'
-import sys, tarfile, os, tempfile
+	# Extract Python module lists and compare using Python
+	if ! python3 <<'PYEOF' "$vendored_file" "$upstream_dir"
+import sys
+import tarfile
+import os
 from pathlib import Path
 
 vendored_tar = sys.argv[1]
 upstream_dir = sys.argv[2]
-namespace = sys.argv[3]
-name = sys.argv[4]
 
 # Extract Python files from vendored tarball
 vendored_py = set()
 try:
 	with tarfile.open(vendored_tar, 'r:gz') as tar:
 		for member in tar.getmembers():
-			# Vendored tarballs extract to top-level dirs (plugins, module_utils, roles, CHANGELOG.rst, etc.)
-			# We only care about Python files in executables dirs
+			# Vendored tarballs extract to top-level dirs (plugins, module_utils, roles, etc.)
 			if member.name.endswith('.py') and \
 			   any(member.name.startswith(d) for d in ['plugins/', 'module_utils/', 'roles/']):
-				# Remove leading collection dirs (vendored has no namespace/name prefix)
-				rel_path = member.name
-				if '/' in rel_path:
-					vendored_py.add(rel_path)
+				vendored_py.add(member.name)
 except Exception as e:
 	print(f"ERROR: Failed to read vendored tarball {vendored_tar}: {e}", file=sys.stderr)
 	sys.exit(1)
 
-# Extract Python files from upstream git repo
+# Extract Python files from upstream
 upstream_py = set()
 try:
 	for root, dirs, files in os.walk(upstream_dir):
-		# Skip .git directory
 		dirs[:] = [d for d in dirs if d != '.git']
 		for file in files:
 			if file.endswith('.py'):
 				fpath = os.path.join(root, file)
 				rel_path = os.path.relpath(fpath, upstream_dir)
-				# Only include files from plugins/, module_utils/, roles/
 				if any(rel_path.startswith(d) for d in ['plugins', 'module_utils', 'roles']):
 					upstream_py.add(rel_path)
 except Exception as e:
-	print(f"ERROR: Failed to walk upstream directory {upstream_dir}: {e}", file=sys.stderr)
+	print(f"ERROR: Failed to walk upstream: {e}", file=sys.stderr)
 	sys.exit(1)
 
-# Report differences
+# Check for differences
 added = vendored_py - upstream_py
 removed = upstream_py - vendored_py
 
 if added or removed:
-	print(f"MISMATCH: {namespace}/{name} {sys.argv[4]}", file=sys.stderr)
+	print(f"ERROR: Python modules mismatch", file=sys.stderr)
 	if added:
-		print(f"  Files added in vendored tarball (not in upstream):", file=sys.stderr)
-		for f in sorted(list(added))[:10]:
+		print(f"  Files added in vendored (not in upstream):", file=sys.stderr)
+		for f in sorted(list(added))[:5]:
 			print(f"    + {f}", file=sys.stderr)
-		if len(added) > 10:
-			print(f"    ... and {len(added) - 10} more", file=sys.stderr)
+		if len(added) > 5:
+			print(f"    ... and {len(added) - 5} more", file=sys.stderr)
 	if removed:
-		print(f"  Files removed from vendored tarball (present in upstream):", file=sys.stderr)
-		for f in sorted(list(removed))[:10]:
+		print(f"  Files removed from vendored (present in upstream):", file=sys.stderr)
+		for f in sorted(list(removed))[:5]:
 			print(f"    - {f}", file=sys.stderr)
-		if len(removed) > 10:
-			print(f"    ... and {len(removed) - 10} more", file=sys.stderr)
+		if len(removed) > 5:
+			print(f"    ... and {len(removed) - 5} more", file=sys.stderr)
 	sys.exit(1)
 else:
 	print("PASS: Python modules match upstream")
 	sys.exit(0)
 PYEOF
-	)
-
-	if [ $? -ne 0 ]; then
-		echo "  FAIL: Mismatch detected between vendored and upstream"
+	then
+		echo "  FAIL: Mismatch detected"
 		FAILED=1
 	fi
 	echo ""
