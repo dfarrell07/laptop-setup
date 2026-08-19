@@ -133,7 +133,7 @@
       changed_when: system_init_on_free_result.rc == 0
       failed_when: false
 
-    - name: Remove init_on_free grub parameter (system_init_on_free false — removes performance/security tradeoff param)
+    - name: Remove init_on_free grub parameter (system_init_on_free disabled)
       ansible.builtin.command:
         cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
       register: system_init_on_free_remove_result
@@ -189,14 +189,9 @@
       changed_when: system_luks_allow_discards_remove.rc == 0
       failed_when: false
 
-    - name: Remove rd.luks.options=discard grub parameter (mitigates SSD wear-pattern fingerprinting)
-      ansible.builtin.shell:
-        cmd: |
-          set -euo pipefail
-          if grep -q 'rd\.luks\.options.*discard' /etc/default/grub 2>/dev/null; then
-            grubby --remove-args='rd.luks.options' --update-kernel=ALL 2>/dev/null || true
-          fi
-        executable: /bin/bash
+    - name: Remove rd.luks.options=discard grub parameter (SSD wear-pattern)
+      ansible.builtin.command:
+        cmd: grubby --remove-args='rd.luks.options' --update-kernel=ALL
       register: system_luks_options_discard_remove
       when:
         - system_grubby_info.rc == 0
