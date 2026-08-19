@@ -60,15 +60,16 @@ EOF
     fi
 done
 
-# Override critical ANSIBLE_* env vars to always use verified repo values.
-# Stronger than validation: SET known-safe values; callers cannot inject via environment.
-# Covers the six highest-impact override vectors:
-#   ANSIBLE_CONFIG              — could replace all plugin paths + vault_password_file via evil cfg
-#   ANSIBLE_VAULT_PASSWORD_FILE — could redirect vault decryption to an exfiltration script
-#   ANSIBLE_COLLECTIONS_PATH    — could load malicious collections (role 0 code execution)
-#   ANSIBLE_ROLES_PATH          — could load malicious roles (arbitrary become code execution)
-#   ANSIBLE_ACTION_PLUGINS      — action plugins run for EVERY task; malicious plugin = full intercept
-#   ANSIBLE_STRATEGY_PLUGINS    — strategy plugin controls task dispatch; malicious plugin = intercept all
+# Override or clear critical env vars to prevent environment-injection attacks.
+# Covers eight vectors — SET known-safe values; UNSET those that must be clean:
+#   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
+#   ANSIBLE_VAULT_PASSWORD_FILE — redirects vault decryption to an exfiltration script
+#   ANSIBLE_COLLECTIONS_PATH    — loads malicious collections (role 0 code execution)
+#   ANSIBLE_ROLES_PATH          — loads malicious roles (arbitrary become code execution)
+#   ANSIBLE_ACTION_PLUGINS      — action plugins run for every task; malicious = full intercept
+#   ANSIBLE_STRATEGY_PLUGINS    — strategy plugin controls task dispatch; malicious = intercept all
+#   PYTHONPATH                  — injected module shadows ansible.* at Python import time (CRITICAL)
+#   ANSIBLE_PYTHON_INTERPRETER  — redirects Python used by Ansible to attacker binary
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
@@ -76,6 +77,8 @@ export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/coll
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
 export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
+unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
+unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"
