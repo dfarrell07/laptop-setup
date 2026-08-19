@@ -171,6 +171,7 @@
           - net.ipv4.tcp_rfc1337
           - net.ipv6.conf.all.use_tempaddr
           - net.ipv6.conf.default.use_tempaddr
+          - kernel.yama.ptrace_scope
       loop:
         - name: system_sysctl_extra
           dict: "{{ system_sysctl_extra }}"
@@ -179,6 +180,17 @@
       loop_control:
         loop_var: _item
         label: "{{ _item.name }}"
+
+    - name: Warn when ptrace scope is disabled (system_ptrace_scope = 0)
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY WARNING: system_ptrace_scope is 0 — YAMA ptrace restrictions are
+          disabled system-wide for this session. Any same-UID process (including shell
+          subprocesses spawned during provisioning) can call ptrace(PTRACE_ATTACH) or
+          open /proc/<pid>/mem against ansible-playbook and extract the in-memory vault
+          password. Do not run 'make all' with an encrypted vault while
+          system_ptrace_scope: 0 is set. Restore to 1 (CIS default) after dev work.
+      when: system_ptrace_scope | int == 0
 
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:

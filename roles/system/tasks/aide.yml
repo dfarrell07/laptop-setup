@@ -223,6 +223,22 @@
         state: present
       register: _aide_conf_r6c
 
+    - name: Remove NetworkManager system-connections exclusion (blindspot fix)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^!/etc/NetworkManager/system-connections'
+        state: absent
+      register: _aide_conf_r6d
+
+    - name: Add /etc/NetworkManager/system-connections to AIDE monitoring (PERMS)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/NetworkManager/system-connections\s'
+        line: '/etc/NetworkManager/system-connections PERMS'
+        insertbefore: '^/etc/NetworkManager\s'
+        state: present
+      register: _aide_conf_r6e
+
     - name: Check if AIDE database exists
       ansible.builtin.stat:
         path: /var/lib/aide/aide.db.gz
@@ -248,7 +264,9 @@
              or _aide_conf_r5_remove is changed
              or _aide_conf_r6 is changed
              or _aide_conf_r6b is changed
-             or _aide_conf_r6c is changed }}
+             or _aide_conf_r6c is changed
+             or _aide_conf_r6d is changed
+             or _aide_conf_r6e is changed }}
 
     - name: Reinitialize AIDE database on config change
       when: _aide_conf_changed

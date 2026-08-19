@@ -810,6 +810,31 @@
           repos_dnf_redhat_gpgkey from config.yml entirely. These variables are optional and only
           needed for access to Red Hat internal package repositories.
 
+    - name: Assert repos_dnf_redhat_gpgkey is set when repos_dnf_redhat_baseurl is defined (unsigned-delivery guard)
+      tags: [always]
+      when: _config_raw is defined
+      vars:
+        _raw: "{{ _config_raw }}"
+        _redhat_baseurl: "{{ _raw.get('repos_dnf_redhat_baseurl', '') }}"
+        _redhat_gpgkey: "{{ _raw.get('repos_dnf_redhat_gpgkey', '') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_redhat_baseurl | length == 0) or
+            (_redhat_gpgkey | length > 0)
+        fail_msg: >-
+          SECURITY: repos_dnf_redhat_baseurl is set in config.yml but repos_dnf_redhat_gpgkey
+          is missing or empty. Without a GPG key, dnf installs packages from the Red Hat internal
+          repo with gpgcheck: false and repo_gpgcheck: false, allowing unsigned or maliciously
+          substituted packages to be installed as root with no integrity verification.
+
+          REQUIRED: Set repos_dnf_redhat_gpgkey to the HTTPS URL of the repo's GPG key
+          (must target pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com).
+          Example: repos_dnf_redhat_gpgkey: https://pkgs.devel.redhat.com/repo-gnupg-keys/dogecorp-ca.gpg
+
+          If you intentionally need an unsigned repo, remove repos_dnf_redhat_baseurl from
+          config.yml — unsigned-delivery via the internal repo path is not supported.
+
     - name: Assert repos_dnf_acli_baseurl targets expected internal domain (package repository injection guard)
       when: _config_raw is defined
       vars:
@@ -1800,11 +1825,9 @@
         - system_chrony_dhcp_sourcedir | default('') | length > 0
         - system_chrony_authselectmode | default('require') != 'require'
         - system_chrony_service_enabled | default(true) | bool
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_chrony_dhcp_sourcedir_confirmed', false) | bool
+          - _config_raw.get('system_chrony_dhcp_sourcedir_confirmed', false) | bool
         fail_msg: >-
           SECURITY: system_chrony_dhcp_sourcedir is set with
           system_chrony_authselectmode={{ system_chrony_authselectmode | default('require') }}.
@@ -1818,13 +1841,11 @@
 
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_dns_primary', '1.1.1.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
-          - _raw.get('system_dns_fallback', '1.0.0.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
-          - _raw.get('system_dns_domains', '~.') | string is match('^[a-zA-Z0-9:.~-]*$')
+          - _config_raw.get('system_dns_primary', '1.1.1.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
+          - _config_raw.get('system_dns_fallback', '1.0.0.1') | string is match('^[a-zA-Z0-9:./,#-]*$')
+          - _config_raw.get('system_dns_domains', '~.') | string is match('^[a-zA-Z0-9:.~-]*$')
         fail_msg: >-
           SECURITY: system_dns_primary, system_dns_fallback, or system_dns_domains in
           config.yml contains unsafe characters. These values are rendered verbatim into
@@ -1841,35 +1862,33 @@
 
     - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_journald_storage', '') | string is match('^(persistent|volatile|auto|none|)$')
-          - _raw.get('system_journald_max_use', '') | string is match('^[0-9]+[KMGTP]?$|^$')
-          - _raw.get('system_journald_keep_free', '') | string is match('^[0-9]+[KMGTP]?$|^$')
-          - _raw.get('system_journald_max_retention', '') | string is match('^[0-9a-zA-Z]+$|^$')
-          - _raw.get('system_journald_rate_interval', '') | string is match('^[0-9]+[smhd]?$|^$')
-          - _raw.get('system_journald_rate_burst', 10000) | int >= 0
-          - _raw.get('system_journald_compress', '') | string is match('^(yes|no|true|false|1|0|)$')
-          - _raw.get('system_auditd_max_log_file', 8) | string is match('^[0-9]+$')
-          - _raw.get('system_auditd_max_log_file', 8) | int >= 1
-          - _raw.get('system_auditd_num_logs', 5) | string is match('^[0-9]+$')
-          - _raw.get('system_auditd_num_logs', 5) | int >= 1
-          - _raw.get('system_aide_check_calendar', '') | string is match('^[a-zA-Z0-9:* _-]*$')
-          - _raw.get('system_aide_check_random_delay', '') | string is match('^[0-9]+[smhd]?$|^$')
-          - _raw.get('system_tlp_bat0_start', '20') | string is match('^[0-9]+$')
-          - _raw.get('system_tlp_bat0_stop', '80') | string is match('^[0-9]+$')
-          - _raw.get('system_tlp_platform_profile_ac', '') | string is match('^(performance|balanced|low-power|)$')
-          - _raw.get('system_tlp_platform_profile_bat', '') | string is match('^(performance|balanced|low-power|)$')
-          - _raw.get('system_tlp_cpu_energy_policy_ac', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
-          - _raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
-          - _raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
-          - _raw.get('system_faillock_deny', 5) | int >= 1
-          - _raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
-          - _raw.get('system_faillock_audit', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
-          - _raw.get('system_faillock_local_users_only', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
-          - _raw.get('system_faillock_even_deny_root', 'false') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
+          - _config_raw.get('system_journald_storage', '') | string is match('^(persistent|volatile|auto|none|)$')
+          - _config_raw.get('system_journald_max_use', '') | string is match('^[0-9]+[KMGTP]?$|^$')
+          - _config_raw.get('system_journald_keep_free', '') | string is match('^[0-9]+[KMGTP]?$|^$')
+          - _config_raw.get('system_journald_max_retention', '') | string is match('^[0-9a-zA-Z]+$|^$')
+          - _config_raw.get('system_journald_rate_interval', '') | string is match('^[0-9]+[smhd]?$|^$')
+          - _config_raw.get('system_journald_rate_burst', 10000) | int >= 0
+          - _config_raw.get('system_journald_compress', '') | string is match('^(yes|no|true|false|1|0|)$')
+          - _config_raw.get('system_auditd_max_log_file', 8) | string is match('^[0-9]+$')
+          - _config_raw.get('system_auditd_max_log_file', 8) | int >= 1
+          - _config_raw.get('system_auditd_num_logs', 5) | string is match('^[0-9]+$')
+          - _config_raw.get('system_auditd_num_logs', 5) | int >= 1
+          - _config_raw.get('system_aide_check_calendar', '') | string is match('^[a-zA-Z0-9:* _-]*$')
+          - _config_raw.get('system_aide_check_random_delay', '') | string is match('^[0-9]+[smhd]?$|^$')
+          - _config_raw.get('system_tlp_bat0_start', '20') | string is match('^[0-9]+$')
+          - _config_raw.get('system_tlp_bat0_stop', '80') | string is match('^[0-9]+$')
+          - _config_raw.get('system_tlp_platform_profile_ac', '') | string is match('^(performance|balanced|low-power|)$')
+          - _config_raw.get('system_tlp_platform_profile_bat', '') | string is match('^(performance|balanced|low-power|)$')
+          - _config_raw.get('system_tlp_cpu_energy_policy_ac', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
+          - _config_raw.get('system_tlp_cpu_energy_policy_bat', '') | string is match('^(performance|balance_performance|balance_power|power|)$')
+          - _config_raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
+          - _config_raw.get('system_faillock_deny', 5) | int >= 1
+          - _config_raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
+          - _config_raw.get('system_faillock_audit', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
+          - _config_raw.get('system_faillock_local_users_only', 'true') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
+          - _config_raw.get('system_faillock_even_deny_root', 'false') | string | lower in ['true', 'false', 'yes', 'no', '1', '0', 'on', 'off']
         fail_msg: >-
           SECURITY: conf-file variable contains unsafe value. Input: one of
           system_journald_storage/max_use/rate_burst, system_auditd_max_log_file/num_logs,
@@ -1883,16 +1902,14 @@
     - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
       when: _config_raw is defined
       tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
-          - _raw.get('system_sudo_timestamp_timeout', 15) | int >= 0
-          - _raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
+          - _config_raw.get('system_sudo_timestamp_timeout', 15) | string is match('^[0-9]+$')
+          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int >= 0
+          - _config_raw.get('system_sudo_timestamp_timeout', 15) | int <= 60
         fail_msg: >-
           SECURITY: system_sudo_timestamp_timeout in config.yml must be an integer in [0, 60].
-          Input: system_sudo_timestamp_timeout='{{ _raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
+          Input: system_sudo_timestamp_timeout='{{ _config_raw.get("system_sudo_timestamp_timeout", 15) }}' in config.yml.
           Mechanism: the value is rendered verbatim into /etc/sudoers.d/99-hardening as
           'Defaults timestamp_timeout=<value>'; non-integer or out-of-range values break sudoers
           syntax (visudo -cf rejects the file) or produce unexpected sudo cache behavior.
@@ -1903,8 +1920,7 @@
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
+        _aide_paths: "{{ _config_raw.get('system_aide_monitoring_etc_paths', []) }}"
         _unsafe_entries: "{{ _aide_paths | map('string') | select('search', '[^a-zA-Z0-9._/-]') | list }}"
       ansible.builtin.assert:
         that:
@@ -1929,8 +1945,7 @@
         - (_config_yml_raw.content | b64decode | from_yaml | default({})).get('system_aide_enabled', false) | bool
         - "'system_aide_monitoring_etc_paths' in (_config_yml_raw.content | b64decode | from_yaml | default({}))"
       vars:
-        _raw: "{{ _config_raw }}"
-        _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
+        _aide_paths: "{{ _config_raw.get('system_aide_monitoring_etc_paths', []) }}"
       ansible.builtin.assert:
         that:
           - _aide_paths | length > 0
@@ -1947,8 +1962,7 @@
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _go_packages: "{{ _raw.get('packages_go_install', []) }}"
+        _go_packages: "{{ _config_raw.get('packages_go_install', []) }}"
         # Regex: module.path/cmd@vX.Y.Z with optional pre-release/build metadata
         _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
         _unsafe_entries: "{{ _go_packages | map('string') | reject('match', _go_module_regex) | list }}"
@@ -1981,8 +1995,7 @@
     - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _go_packages_work: "{{ _raw.get('packages_go_install_work', []) }}"
+        _go_packages_work: "{{ _config_raw.get('packages_go_install_work', []) }}"
         _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
         _unsafe_entries: "{{ _go_packages_work | map('string') | reject('match', _go_module_regex) | list }}"
       ansible.builtin.assert:
@@ -2014,8 +2027,7 @@
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
+        _host_exec_commands: "{{ _config_raw.get('distrobox_host_exec_commands', []) }}"
         _unsafe_entries: "{{ _host_exec_commands | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
       ansible.builtin.assert:
         that:
@@ -2033,8 +2045,7 @@
     - name: Assert distrobox_host_exec_commands entries are in the known-safe allowlist (host-exec escape guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
+        _host_exec_commands: "{{ _config_raw.get('distrobox_host_exec_commands', []) }}"
         # Allowlist: only these binaries may be delegated via distrobox-host-exec symlinks.
         # podman: accepted risk — documented in distrobox.ini.j2; required for container-in-container workflows.
         # flatpak: host Flatpak app access from inside the container.
@@ -2061,11 +2072,9 @@
 
     - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('containers_prune_schedule', 'weekly') | string is match('^[a-zA-Z0-9:*,.\\-/~ ]+$')
+          - _config_raw.get('containers_prune_schedule', 'weekly') | string is match('^[a-zA-Z0-9:*,.\\-/~ ]+$')
         fail_msg: >-
           SECURITY: containers_prune_schedule in config.yml contains unsafe characters.
           This value is rendered verbatim into the [Timer] OnCalendar= directive of the user
@@ -2080,18 +2089,16 @@
 
     - name: Assert system_dot_mode and system_dnssec_mode in config.yml are valid enum values (resolved config guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_dot_mode', 'opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
-          - _raw.get('system_dnssec_mode', 'allow-downgrade') | string | lower in ['yes', 'no', 'allow-downgrade']
+          - _config_raw.get('system_dot_mode', 'opportunistic') | string | lower in ['yes', 'no', 'opportunistic']
+          - _config_raw.get('system_dnssec_mode', 'allow-downgrade') | string | lower in ['yes', 'no', 'allow-downgrade']
         fail_msg: >-
           SECURITY: system_dot_mode or system_dnssec_mode in config.yml has an invalid value.
           Threat: invalid value causes mid-play failure in dns_over_tls.yml after systemd-resolved
           is enabled and resolved drop-in directories are created (partial hardening state).
-          Input: system_dot_mode='{{ _raw.get("system_dot_mode", "opportunistic") }}',
-          system_dnssec_mode='{{ _raw.get("system_dnssec_mode", "allow-downgrade") }}'.
+          Input: system_dot_mode='{{ _config_raw.get("system_dot_mode", "opportunistic") }}',
+          system_dnssec_mode='{{ _config_raw.get("system_dnssec_mode", "allow-downgrade") }}'.
           Allowed: system_dot_mode in [yes, no, opportunistic];
           system_dnssec_mode in [yes, no, allow-downgrade].
           Note: 'no' is a valid enum value but silently disables DoT/DNSSEC — set intentionally.

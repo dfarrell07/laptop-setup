@@ -275,6 +275,7 @@
         description: Red Hat Internal Tools
         baseurl: "{{ repos_dnf_redhat_baseurl }}"
         gpgcheck: "{{ repos_dnf_redhat_gpgkey | default('') | length > 0 }}"
+        repo_gpgcheck: "{{ repos_dnf_redhat_gpgkey | default('') | length > 0 }}"
         gpgkey: "{{ repos_dnf_redhat_gpgkey | default(omit) }}"
         enabled: true
   rescue:

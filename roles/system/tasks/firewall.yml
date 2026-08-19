@@ -198,11 +198,27 @@
     - system_firewalld_running | bool
     - csb_detected
     - not (system_firewall_manage_zone | bool)
-    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', '']
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
   failed_when: >-
     (_result.failed | default(false)) and
     'INVALID_ZONE' not in (_result.msg | default(''))
   notify: Apply firewall rules
+
+- name: Assert trusted zone incompatible with CSB hardening
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY FAILURE: firewalld default zone is 'trusted' (accept-all) and
+      csb_detected=true with system_firewall_manage_zone=false. The accept-all
+      zone is incompatible with CSB hardening — all traffic is permitted without
+      restriction. Either set system_firewall_manage_zone: true to let the
+      playbook switch the default zone to 'drop', or reconfigure firewalld to
+      use a non-accept-all default zone (public/FedoraWorkstation) before
+      re-running provisioning.
+  when:
+    - system_firewalld_running | bool
+    - csb_detected
+    - not (system_firewall_manage_zone | bool)
+    - (system_firewall_info.firewalld_info.default_zone | default('')) == 'trusted'
 
 # Non-CSB safety net: on plain Fedora with zone management explicitly disabled via
 # system_firewall_manage_zone: false, the drop-zone SSH task (line ~176) is skipped and
@@ -222,7 +238,7 @@
     - system_firewalld_running | bool
     - not csb_detected
     - not (system_firewall_manage_zone | bool)
-    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', '']
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
   failed_when: >-
     (_result_non_csb_ssh.failed | default(false)) and
     'INVALID_ZONE' not in (_result_non_csb_ssh.msg | default(''))
