@@ -44,7 +44,7 @@ override SHELL := /bin/bash
 # executing the payload before the 50+ variable sanitization block in verify-ansible-args.sh.
 # 'unexport' strips the variable from every child process Make spawns — load-bearing fix.
 # ENV and ZDOTDIR are analogous vectors for sh/zsh child processes.
-unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX NPM_CONFIG_CACHE NPM_CONFIG_PREFIX NPM_CONFIG_REGISTRY
+unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX
 
 CONTAINER ?= fedora-dev
 
