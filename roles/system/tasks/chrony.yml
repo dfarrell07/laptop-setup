@@ -85,6 +85,10 @@
           if _chrony_restore_result is not failed
           else 'timesyncd restore also failed — no active time source' }}
 
+- name: Set chrony service name fact
+  ansible.builtin.set_fact:
+    _chrony_svc: "{{ 'chrony' if is_apt else 'chronyd' }}"
+
 - name: Assert NTS server list non-empty when authselectmode=require
   ansible.builtin.assert:
     that: system_chrony_nts_servers | length > 0
@@ -154,7 +158,7 @@
 
 - name: Stop and disable chrony when chrony is disabled
   ansible.builtin.systemd:
-    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
+    name: "{{ _chrony_svc }}"
     state: stopped
     enabled: false
   when:
@@ -218,7 +222,7 @@
 
 - name: Ensure chrony/chronyd is enabled
   ansible.builtin.systemd:
-    name: "{{ 'chrony' if is_apt else 'chronyd' }}"
+    name: "{{ _chrony_svc }}"
     state: started
     enabled: true
   when:
