@@ -70,7 +70,8 @@
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
 # on first provision bpfman is not yet installed when Play 1 runs, so that attempt
-# is a no-op. Both roles use failed_when: false for container/macOS safety.
+# is a no-op. Both roles use failed_when: false because bpfman may be absent if the
+# package install was rescued on CSB; container/macOS already excluded by when: guards above.
 - name: Enable bpfman.socket after package install (required for bpfman load/list to work)
   ansible.builtin.systemd:
     name: bpfman.socket
