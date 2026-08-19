@@ -531,6 +531,10 @@ system_gid0_allowed_accounts:     # accounts exempt from the GID-0 primary-group
   - shutdown
   - halt
   - operator
+system_crond_whitelist:            # filenames (not paths) permitted in /etc/cron.d; unknown files abort provisioning
+  - 0hourly                        # cronie base package
+  - dailyjobs                      # cronie-noanacron
+  - sysstat                        # sysstat package
 system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
 system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
 system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)

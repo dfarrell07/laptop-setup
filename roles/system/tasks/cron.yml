@@ -93,14 +93,17 @@
       ansible.builtin.find:
         paths: /etc/cron.d
         file_type: file
+        excludes: "{{ system_crond_whitelist }}"
       register: system_crond_files
       failed_when: false
 
-    - name: Warn about unmanaged files in /etc/cron.d
-      ansible.builtin.debug:
+    - name: Abort on unexpected /etc/cron.d files not in system_crond_whitelist
+      ansible.builtin.fail:
         msg: >-
-          WARNING: Files found in /etc/cron.d not managed by this role:
+          SECURITY: Unexpected files in /etc/cron.d not in system_crond_whitelist:
           {{ system_crond_files.files | map(attribute='path') | list }}.
-          Review each file for unexpected cron jobs placed before provisioning.
+          These files execute as cron system jobs (cron.allow does not restrict /etc/cron.d).
+          Remove attacker-placed files or add legitimate package files to system_crond_whitelist
+          in config.yml before re-running provisioning.
       when:
         - (system_crond_files.files | default([])) | length > 0
