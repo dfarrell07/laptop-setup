@@ -1491,11 +1491,25 @@
 # --- dconf hardening (CIS 1.8.x — GNOME/GDM only, stat-gated) ---
 # Only fires when the system role's dconf.yml ran (gdm.service present on target).
 # Skips cleanly on Sway/i3 and all Podman container CI scenarios where GDM is absent.
+- name: Stat /usr/sbin/gdm (GDM display manager binary)
+  ansible.builtin.stat:
+    path: /usr/sbin/gdm
+  register: verify_gdm
+  when: ansible_system == 'Linux'
+
 - name: Stat /etc/dconf/db/local.d/50-hardening (dconf media-handling CIS 1.8.6-1.8.8)
   ansible.builtin.stat:
     path: /etc/dconf/db/local.d/50-hardening
   register: verify_dconf_50_hardening
   when: ansible_system == 'Linux'
+
+- name: Assert 50-hardening present on GDM host
+  ansible.builtin.assert:
+    that: verify_dconf_50_hardening.stat.exists
+    fail_msg: "/etc/dconf/db/local.d/50-hardening missing on GDM host"
+  when:
+    - ansible_system == 'Linux'
+    - verify_gdm.stat.exists | default(false)
 
 - name: Stat /etc/dconf/db/local (compiled dconf database)
   ansible.builtin.stat:
