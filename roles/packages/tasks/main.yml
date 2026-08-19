@@ -371,6 +371,7 @@
   when:
     - _packages_linux_x86_work
     - not _krew_binary_stat.stat.exists
+    - not csb_detected
 
 - name: Install subctl multi-version binaries
   ansible.builtin.include_tasks: install_subctl_versions.yml
