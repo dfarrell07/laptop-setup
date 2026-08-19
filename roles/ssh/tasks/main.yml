@@ -2,7 +2,7 @@
 # roles/ssh/tasks/main.yml
 # Deploy SSH keys from vault + pre-seed known_hosts.
 
-# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always) ---
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
 - name: SECURITY assert ssh_work_keyscan_hosts entries are safe hostnames (SSH role guard)
   # NOTE: deliberately NO tags — tasks with no tags survive --skip-tags always.
   # tasks tagged [always] are SKIPPED by --skip-tags always, defeating the purpose.

@@ -2,7 +2,7 @@
 # roles/claude/tasks/main.yml
 # Claude Code install, instance isolation, settings.
 
-# --- Pre-role validation (defense-in-depth: protects against --start-at-task bypass) ---
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
 - name: SECURITY assert claude_install_url is constrained to known-safe domains (defense-in-depth)
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always
   # (only --tags something would skip this, but that's acceptable). Do NOT add tags: [always]

@@ -2,6 +2,7 @@
 # roles/dotfiles/tasks/main.yml
 # Deploy configuration files (copy + template), OS-conditional.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
 - name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
   vars:
     _user_name_pattern: '^[^\n\r\x00-\x1f]*$'

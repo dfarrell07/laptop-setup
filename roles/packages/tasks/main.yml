@@ -2,7 +2,7 @@
 # roles/packages/tasks/main.yml
 # Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
-# --- Pre-role validation (defense-in-depth: protects against --start-at-task bypass) ---
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
 - name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
   vars:
     _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
