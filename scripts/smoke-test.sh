@@ -776,8 +776,13 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   fi
 
   # Secure Boot (informational — not managed by Ansible, but critical to verify)
+  # Upgraded to FAIL when lockdown is intended: without Secure Boot, kexec_file_load() is
+  # unblocked in the pre-reboot window (root can load a kernel stripping all hardening params)
+  # and physical access can strip lockdown= from the cmdline entirely.
   if command -v mokutil &>/dev/null; then
     if mokutil --sb-state 2>/dev/null | grep -q "SecureBoot enabled"; then record "secure-boot" "PASS"
+    elif [[ -n "$_lockdown_intended" ]]; then
+      record "secure-boot" "FAIL" "disabled — Secure Boot required when lockdown=${_lockdown_intended}: without it, kexec_file_load() is unblocked pre-reboot and physical access can strip lockdown= from cmdline; enable Secure Boot in firmware"
     else record "secure-boot" "WARN" "disabled — kernel lockdown weakened without Secure Boot chain of trust"; fi
   fi
 
@@ -1938,9 +1943,15 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     record "sysctl-ipv6-forwarding" "WARN" "net.ipv6.conf.all.forwarding not in 90-hardening.conf (system_enable_ip_forward: false — IPv6 forwarding not expected)"
   fi
 
-  # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
-  if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
-  else record "vsyscall-none" "WARN" "vsyscall=none not in cmdline (requires reboot if grubby ran)"; fi
+  # vsyscall=none kernel param — vsyscall page at 0xffffffffff600000 is a fixed-address ROP gadget
+  # source (gettimeofday/time/getcpu entries); FAIL in pre-reboot window when configured but not active
+  if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then
+    record "vsyscall-none" "PASS"
+  elif grep -q 'vsyscall=none' /etc/kernel/cmdline 2>/dev/null; then
+    record "vsyscall-none" "FAIL" "vsyscall=none in /etc/kernel/cmdline but NOT active in running kernel — vsyscall page at 0xffffffffff600000 mapped (fixed ROP gadget); reboot required"
+  else
+    record "vsyscall-none" "WARN" "vsyscall=none absent from /proc/cmdline — run: make system"
+  fi
   # IOMMU kernel param (DMA remapping — vendor-specific; absent = PCIe DMA unprotected until reboot)
   if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
     if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"

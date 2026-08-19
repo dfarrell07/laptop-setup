@@ -45,10 +45,13 @@
         msg: >-
           WARN: Secure Boot is NOT enabled
           (mokutil --sb-state: {{ system_sb_state_result.stdout | default('') | trim }}).
-          lockdown={{ system_kernel_lockdown }} provides NO physical-access boundary without
-          Secure Boot — an attacker with physical access can boot a kernel that ignores or strips
-          the lockdown= parameter. Enable Secure Boot in firmware to enforce this control.
-          This remains a useful defense-in-depth measure against software-only attacks.
+          lockdown={{ system_kernel_lockdown }} without Secure Boot has two gaps:
+          (1) pre-reboot window: kexec_file_load() is unblocked until reboot activates
+          lockdown — a root process can load a kernel stripped of all hardening parameters;
+          (2) physical access: the lockdown= cmdline parameter can be stripped by booting
+          a custom kernel. Enable Secure Boot in firmware to close both gaps. Reboot SLA:
+          smoke-test emits FAIL (kernel-lockdown and secure-boot) until lockdown is active
+          on the running kernel — do not use this host before those checks PASS.
       when:
         - system_kernel_lockdown | length > 0
         - system_sb_state_result.rc | default(-1) == 0
@@ -197,6 +200,29 @@
         - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout)"
       changed_when: system_page_shuffle_result.rc == 0
       failed_when: false
+
+    - name: Read running kernel cmdline (vsyscall + page_alloc.shuffle active-boot probe)
+      ansible.builtin.command:
+        cmd: cat /proc/cmdline
+      register: _system_proc_cmdline
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode for conditionals
+
+    - name: Warn — vsyscall=none + page_alloc.shuffle=1 configured but not active in running kernel
+      ansible.builtin.debug:
+        msg: >-
+          WARN: vsyscall=none and/or page_alloc.shuffle=1 are written to the boot cmdline but are
+          NOT active in the running kernel. The vsyscall page at 0xffffffffff600000 remains mapped
+          (fixed-address ROP gadget: gettimeofday/time/getcpu entries) and page allocator free-list
+          order is deterministic — combined with KASLR bypass these enable reliable heap-spray + ROP
+          exploitation of kernel bugs in this pre-reboot window. Reboot to activate these mitigations.
+      when:
+        - _system_proc_cmdline.rc == 0
+        - "'vsyscall=none' not in (_system_proc_cmdline.stdout | default(''))"
+        - >-
+          ('vsyscall=none' in (system_grubby_info.stdout | default(''))) or
+          (system_vsyscall_result is defined and system_vsyscall_result is changed)
 
     - name: Remove rd.luks.key grub parameter (leaks LUKS UUID; dracut falls back to passphrase)
       ansible.builtin.command:
