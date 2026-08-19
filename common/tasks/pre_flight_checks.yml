@@ -120,37 +120,16 @@
             (_gonosumdb | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
           - _gonosumdb | string is match('^[a-zA-Z0-9.,/_-]*$')
         fail_msg: >-
-          SECURITY: dotfiles_gonosumdb in config.yml contains public module registry domains.
-          GONOSUMDB is a comma-separated list of module path prefixes that skip Go checksum
-          verification (GOSUMDB). An attacker who overrides dotfiles_gonosumdb via -e flag
-          can add public domains like 'github.com' or 'golang.org' to the skip list, bypassing
-          Go module signature verification for legitimate packages:
-          make all -e dotfiles_gonosumdb='attacker.io,github.com'
-
-          This allows malicious github.com/attacker-control/module@v1.0.0 to install without
-          checksum verification, executing init() code during compilation with provisioning privileges.
-
-          GONOSUMDB BYPASS ATTACK:
-          1. Attacker adds attacker.io to dotfiles_gonosumdb via -e flag
-          2. Go skips GOSUMDB checks for attacker.io/* modules
-          3. GOPROXY (default: proxy.golang.org,direct) serves attacker-controlled module
-          4. go install executes attacker's init() code at compile time (RCE)
-
-          MITIGATION: dotfiles_gonosumdb must ONLY contain PRIVATE domain patterns
-          (internal corporate domains, air-gapped systems). Reject all public registries:
-          - github.com (public GitHub)
-          - golang.org (Go language repository)
-          - mvdan.cc (Go formatting tools)
-          - sigs.k8s.io (Kubernetes SIG repositories)
-          - k8s.io (Kubernetes core)
-          - gopkg.in (gopkg.in package mirrors)
-
-          REQUIRED FIX: Either omit dotfiles_gonosumdb from config.yml (use the default,
-          which is empty), or set it ONLY to private domain prefixes:
-            - dotfiles_gonosumdb: 'pkgs.devel.redhat.com,internal.company.com'
-
-          Do NOT set dotfiles_gonosumdb to public registries or use wildcards (*) that match all domains.
-          Current value: '{{ _gonosumdb }}'.
+          SECURITY: dotfiles_gonosumdb contains a public module domain (github.com, golang.org,
+          k8s.io, etc.) that bypasses GOSUMDB checksum verification.
+          Input: dotfiles_gonosumdb='{{ _gonosumdb }}' in config.yml or via -e.
+          Mechanism: GONOSUMDB skips GOSUMDB for matching prefixes; a public domain in the list
+          lets an attacker serve a tampered module without checksum detection.
+          Example: make all -e dotfiles_gonosumdb=github.com → any github.com module installs
+          without checksum verification, executing init() code at compile time.
+          Impact: supply-chain RCE — arbitrary code execution during go install.
+          Fix: use only private domain prefixes (e.g. 'pkgs.devel.redhat.com'); omit the
+          variable entirely to use the default (empty, all modules go through GOSUMDB).
 
     - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
@@ -860,41 +839,14 @@
               - >-
                 (not _is_stub) or (not _is_encrypted)
             fail_msg: >-
-              SECURITY CRITICAL: vault.yml is encrypted with vault-pass.sh, but vault-pass.sh
-              still contains the hardcoded placeholder password 'CHANGE_ME'. This means all your
-              secrets are encrypted with a trivial password that can be easily guessed or brute-forced.
-
-              ALL secrets in vault.yml are at risk:
-              - vault_ssh_auth_key (SSH authentication)
-              - vault_ssh_signing_key (Git commit signing)
-              - vault_rh_git_key (Red Hat Git credentials)
-              - vault_notes_transcrypt_password (Encrypted notes master password)
-              - vault_registry_tokens (Container registry credentials)
-              - vault_grub_password_hash (System bootloader password)
-
-              IMMEDIATE ACTION REQUIRED:
-
-              OPTION 1: Re-encrypt vault.yml with a secure password
-              1. Back up vault.yml:  cp group_vars/all/vault.yml group_vars/all/vault.yml.backup
-              2. Decrypt with weak password:  echo 'CHANGE_ME' | ansible-vault decrypt group_vars/all/vault.yml
-              3. Set up YubiKey or secure password:  make setup-yubikeys
-              4. Re-encrypt with secure password:  make vault-edit (uses vault-pass.sh)
-              5. Verify:  make preflight
-
-              OPTION 2: Run setup-yubikeys to generate a secure vault-pass.sh
-              1. Run:  make setup-yubikeys
-              2. This creates a YubiKey HMAC-SHA1 vault-pass.sh
-              3. Then re-encrypt vault.yml:  make vault-edit
-              4. Verify:  make preflight
-
-              OPTION 3: Manually configure vault-pass.sh (see SECURITY.md)
-              1. Edit scripts/vault-pass.sh with a secure method (keyring, encrypted file, etc.)
-              2. Test vault-pass.sh returns a strong password
-              3. Run:  make vault-edit  to re-encrypt vault.yml
-              4. Update hash:  sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256
-
-              This guard prevents accidental encryption with weak passwords. Your secrets are
-              protected only as well as your vault password.
+              SECURITY CRITICAL: vault.yml is encrypted with the placeholder password 'CHANGE_ME'.
+              Input: scripts/vault-pass.sh contains pass='CHANGE_ME' stub.
+              Mechanism: ansible-vault uses vault-pass.sh output as the encryption key; the
+              'CHANGE_ME' placeholder produces a trivially guessable key.
+              Example: echo CHANGE_ME | ansible-vault decrypt group_vars/all/vault.yml decrypts all secrets.
+              Impact: all vault secrets (SSH keys, git keys, registry tokens, GRUB hash) are exposed.
+              Fix: run 'make setup-yubikeys' to replace the stub with YubiKey HMAC-SHA1 vault-pass.sh,
+              then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
             tags: [always]
 
     - name: SECURITY — Assert SSH git repos have keyscanned hosts pre-seeded (TOFU mitigation)
