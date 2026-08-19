@@ -9,6 +9,10 @@
        preflight guard-not-root \
        pip-lock pip-sync npm setup-yubikeys vendor-collections
 
+# Guard against MAKEFLAGS environment variable injection (CWE-426)
+# REQUIRED: prevent attacker-controlled MAKEFLAGS from disabling targets
+override MAKEFLAGS :=
+
 CONTAINER ?= fedora-dev
 
 # Verify collections integrity and reject dangerous flags before ansible-playbook execution
@@ -90,6 +94,8 @@ bootstrap: guard-not-root
 	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256" >&2; exit 1; }
 	@# Verify verify-collections.sh integrity (FATAL if check fails) — guards against supply chain tampering
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256" >&2; exit 1; }
+	@# Verify verify-ansible-args.sh integrity (FATAL if check fails) — guards against pre-flight check bypass
+	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-ansible-args.sh > scripts/verify-ansible-args.sh.sha256" >&2; exit 1; }
 	cd collections-dist && sha256sum -c SHA256SUMS
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \

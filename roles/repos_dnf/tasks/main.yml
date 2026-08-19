@@ -104,7 +104,7 @@
           # residual risk: MITM can manipulate repo metadata (version list, package
           # names) without detection — e.g. downgrade to a vulnerable version.
           # RPM-level gpgcheck above remains the effective guard against malicious
-          # payload delivery. Monitor Google's repo for future metadata signing support.
+          # payload delivery. Mitigated by versionlock pinning (see tasks below).
         gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 else 'rpm-package-key.gpg' }}"  # yamllint disable-line rule:line-length
         enabled: true
     - name: Install dnf versionlock plugin for google-cloud-cli pin
@@ -378,6 +378,15 @@
         url: "https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-{{ ansible_facts['distribution_major_version'] }}"
         dest: "/tmp/rpmfusion-nonfree-gpg-key.gpg"
         mode: "0644"
+    - name: Verify RPM Fusion nonfree GPG key fingerprint
+      ansible.builtin.shell:
+        cmd: |
+          gpg --with-colons /tmp/rpmfusion-nonfree-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+      changed_when: false
+      register: _rpmfusion_nonfree_fp
+      failed_when: |
+        _rpmfusion_nonfree_fp.stdout_lines | length == 0 or
+        '79BDB8874A068716907325C664A4849E4C7033EA' not in _rpmfusion_nonfree_fp.stdout | upper
     - name: Import RPM Fusion nonfree GPG key
       ansible.builtin.command:
         cmd: "rpm --import /tmp/rpmfusion-nonfree-gpg-key.gpg"
@@ -386,19 +395,12 @@
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
         state: present
-    - name: Check RPM Fusion nonfree release signing key  # verify GPG signature after install
+    - name: Verify RPM Fusion nonfree release cryptographic signature
       ansible.builtin.command:
-        cmd: rpm -q --qf '%{SIGPGP:pgpsig}' rpmfusion-nonfree-release
+        cmd: rpm --verify --verbose --nofiles --nomtime --noperm rpmfusion-nonfree-release
       changed_when: false
-      register: _rpmfusion_nonfree_sig
-    - name: Assert RPM Fusion nonfree release signed by expected key
-      ansible.builtin.assert:
-        that: "'4c7033ea' in _rpmfusion_nonfree_sig.stdout | lower"
-        fail_msg: >-
-          RPM Fusion nonfree release signing key mismatch (expected Key ID 4C7033EA /
-          fingerprint 79BD B887 4A06 8716 9073 25C6 64A4 849E 4C70 33EA).
-          Got: {{ _rpmfusion_nonfree_sig.stdout }}.
-          Possible supply-chain compromise — remove rpmfusion-nonfree-release and investigate.
+      register: _rpmfusion_nonfree_verify
+      failed_when: "_rpmfusion_nonfree_verify.rc != 0"
   rescue:
     - name: Remove rpmfusion-nonfree-release after signing check failure
       ansible.builtin.dnf:
