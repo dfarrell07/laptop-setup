@@ -4,6 +4,7 @@ name: Linting
 on:
   pull_request:
     branches: [main]
+  push:
   workflow_dispatch:
 
 concurrency:
@@ -614,7 +615,7 @@ jobs:
     name: GPG Signature Verification
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -628,7 +629,7 @@ jobs:
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           failed=0
           for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
-            if git show "$commit" --name-only | grep -qE '^(scripts/verify-collections\.sh|scripts/verify-collections\.sh\.sha256|scripts/verify-ansible-args\.sh|scripts/verify-ansible-args\.sh\.sha256|collections-dist/SHA256SUMS|collections-dist/SHA256SUMS\.asc|Makefile|Makefile\.sha256|\.githooks/)'; then
+            if git show "$commit" --name-only | grep -qE '^(scripts/verify-|scripts/check-|\.githooks/|collections-dist/|Makefile|\.github/workflows/)'; then
               if ! git verify-commit "$commit" 2>/dev/null; then
                 sig_status=$(git show --format=%G? -s "$commit")
                 echo "::error::Commit $commit modifies critical supply-chain files but is NOT GPG-signed (status: $sig_status)"
@@ -1047,6 +1048,7 @@ PYEOF
       - syntax-check
       - critical-assertions-guard
       - git-config-guards
+      - gpg-signatures
       - node-lint
       - gitleaks
       - workflow-security
