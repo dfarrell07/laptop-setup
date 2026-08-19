@@ -129,7 +129,7 @@ make backup           # Back up dotfiles before re-provisioning
 make backup-dry-run   # Dry-run backup to preview what would be copied
 make bootstrap        # Initial setup (install deps, collections, hooks)
 make update           # Update collections + full run (sets -e git_repos_pull=true to fetch upstream changes)
-make lint             # ansible-lint + yamllint + shellcheck + check-vars-sync
+make lint             # ansible-lint + yamllint + shellcheck + markdownlint + check-vars-sync
 make shellcheck       # Run shellcheck on scripts and hooks (also run by lint)
 make syntax-check     # Playbook syntax validation only
 make markdownlint     # markdownlint on all .md files
@@ -152,7 +152,7 @@ make smoke-test-container  # Post-run verification (distrobox)
 make check            # Dry run (--check mode)
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
-make test-scripts     # Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
+make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
 make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries); Podman only
 make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (includes macos, container-offline-distrobox, distrobox-role, packages-binaries)
