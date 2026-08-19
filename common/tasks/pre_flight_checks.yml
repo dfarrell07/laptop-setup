@@ -54,22 +54,6 @@
           before re-running. All user overrides were silently dropped.
       tags: [always]
 
-    - name: Assert csb_rhel is not injected on non-RedHat host via -e flag (CSB classification bypass guard)
-      when: csb_rhel | default(false) | bool
-      ansible.builtin.assert:
-        that:
-          - ansible_facts['distribution'] | default('') == 'RedHat'
-        fail_msg: >-
-          SECURITY: csb_rhel=true but distribution='{{ ansible_facts["distribution"] | default("unknown") }}' (not 'RedHat').
-          Input: csb_rhel injected via -e flag (extra-vars precedence 22 beats set_fact precedence 18).
-          Mechanism: csb_rhel=true silently skips sysctl hardening, cron restriction, authselect,
-          firmware daemon-reload, coredump config, chrony install, and kernel-modules-kind.
-          Example: make all -e csb_rhel=true skips ~10 hardening sub-tasks on a Fedora host.
-          Impact: host appears provisioned but OS hardening stack is silently bypassed.
-          Fix: do not pass -e csb_rhel=true; the value is set automatically by csb_detect.yml.
-          If provisioning a genuine RHEL CSB host, run on the actual RHEL machine (distribution=RedHat).
-      tags: [always]
-
     # SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
     # and check that identity variables do not contain Jinja2 expressions before any template
     # task can trigger lazy evaluation of the injected value.
@@ -109,6 +93,22 @@
           Fix: wrap values that legitimately contain braces with the !unsafe YAML tag:
             dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
             system_aide_monitoring_etc_paths: !unsafe ['/etc/[file]']
+
+    - name: Assert csb_rhel is not injected on non-RedHat host via -e flag (CSB classification bypass guard)
+      when: csb_rhel | default(false) | bool
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] | default('') == 'RedHat'
+        fail_msg: >-
+          SECURITY: csb_rhel=true but distribution='{{ ansible_facts["distribution"] | default("unknown") }}' (not 'RedHat').
+          Input: csb_rhel injected via -e flag (extra-vars precedence 22 beats set_fact precedence 18).
+          Mechanism: csb_rhel=true silently skips sysctl hardening, cron restriction, authselect,
+          firmware daemon-reload, coredump config, chrony install, and kernel-modules-kind.
+          Example: make all -e csb_rhel=true skips ~10 hardening sub-tasks on a Fedora host.
+          Impact: host appears provisioned but OS hardening stack is silently bypassed.
+          Fix: do not pass -e csb_rhel=true; the value is set automatically by csb_detect.yml.
+          If provisioning a genuine RHEL CSB host, run on the actual RHEL machine (distribution=RedHat).
+      tags: [always]
 
     - name: Assert playbook is not running inside a container host (hardening bypass guard)
       ansible.builtin.assert:

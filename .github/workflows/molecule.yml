@@ -80,7 +80,15 @@ jobs:
       - name: Run Molecule ${{ matrix.name }} scenario
         env:
           SCENARIO: ${{ matrix.scenario }}
-        run: molecule test -s "$SCENARIO"
+        run: |
+          # Sanitize env vars that could be injected on a self-hosted or compromised runner.
+          # Mirrors linting.yml sanitization; ANSIBLE_LIBRARY is the critical path for
+          # malicious setup.py execution via gather_facts on a poisoned runner.
+          unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS \
+                ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS \
+                PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR \
+                TMPDIR TEMP TMP
+          molecule test -s "$SCENARIO"
 
   all-molecule-pass:
     name: All Molecule Checks Pass

@@ -167,19 +167,6 @@ Solution: Do not override common_project_root on the command line.
 EOF
         exit 1
     fi
-    # Block --vault-id (single-arg = form): --vault-id=label@source
-    # --vault-id @prompt causes Ansible to open /dev/tty for interactive password input;
-    # in CI or tmux sessions without a controlling tty this hangs provisioning indefinitely.
-    if [[ "$arg" == '--vault-id' || "$arg" == --vault-id=* ]]; then
-        cat >&2 <<EOF
-ERROR: --vault-id rejected by VERIFY_AND_RUN
-Reason: --vault-id @prompt opens /dev/tty for interactive vault-password input;
-        in CI or tmux sessions without a controlling tty this hangs the run
-        indefinitely (provisioning DoS). Vault password is managed via vault-pass.sh.
-Solution: Do not pass --vault-id on the command line.
-EOF
-        exit 1
-    fi
 done
 
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
@@ -292,19 +279,6 @@ Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
         validation, and CSB classification across Play 0, Play 1, and Play 2.
 SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
 Solution: Do not override common_project_root on the command line.
-EOF
-        exit 1
-    fi
-    # Block space-separated two-arg form: --vault-id label@source / --vault-id @prompt
-    # @prompt opens /dev/tty; in CI or tmux sessions without a controlling tty this
-    # hangs provisioning indefinitely (provisioning DoS).
-    if [[ "${args[$i]}" == '--vault-id' ]]; then
-        cat >&2 <<EOF
-ERROR: --vault-id rejected by VERIFY_AND_RUN
-Reason: --vault-id @prompt opens /dev/tty for interactive vault-password input;
-        in CI or tmux sessions without a controlling tty this hangs the run
-        indefinitely (provisioning DoS). Vault password is managed via vault-pass.sh.
-Solution: Do not pass --vault-id on the command line.
 EOF
         exit 1
     fi
