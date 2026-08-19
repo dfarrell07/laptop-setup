@@ -585,6 +585,48 @@
           or [{'host': 'git.internal.com', 'fingerprint': 'SHA256:...'}]).
           Unsafe entries found: {{ _unsafe_hosts }}.
 
+    - name: SECURITY — Assert SSH git repos have keyscanned hosts pre-seeded (TOFU mitigation)
+      when: not _pf_is_molecule
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
+        _ssh_git_repos: >-
+          {{ _git_repos_list
+             | selectattr('url', 'search', 'ssh://|git@')
+             | map(attribute='url')
+             | list }}
+        _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_ssh_git_repos | length == 0)
+            or (_keyscan_hosts | length > 0)
+        fail_msg: >-
+          SECURITY: git_repos_list contains SSH URLs (git@ or ssh://) but ssh_work_keyscan_hosts
+          is not configured. This creates a TOFU (Trust On First Use) vulnerability during
+          the first git clone of SSH repositories — the ansible.builtin.git module with
+          accept_newhostkey=true accepts unverified host keys from unknown hosts, allowing
+          MITM attacks (DNS hijack, ARP spoofing, BGP hijack) to deliver malicious code.
+
+          REQUIRED FIX: Pre-seed ssh_work_keyscan_hosts with fingerprints in config.yml.
+
+          Add to config.yml:
+
+              ssh_work_keyscan_hosts:
+                - {host: git.example.com, fingerprint: "SHA256:ABCD1234..."}
+                - {host: github.com, fingerprint: "SHA256:..."}
+
+          Obtain fingerprints safely via:
+
+              ssh-keyscan -t ed25519 git.example.com | ssh-keygen -lf /dev/stdin
+
+          Or for GitHub (pre-verified by the playbook):
+
+              ssh_work_keyscan_hosts:
+                - git.example.com
+
+          Affected SSH git repos: {{ _ssh_git_repos }}
+
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
