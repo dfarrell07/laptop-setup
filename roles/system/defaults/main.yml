@@ -78,6 +78,7 @@ system_sysctl_hardening:
   # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
   net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
   # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
+  # kernel.modules_disabled: merged via system_modules_disabled combine() in sysctl.yml
   # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
   # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
   # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
@@ -535,6 +536,14 @@ system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by
                                    # before sysctl.d runs, making this sysctl a no-op from first boot. On
                                    # non-Secure Boot machines, this sysctl guards the pre-reboot window before
                                    # lockdown activates (and is the sole guard when system_kernel_lockdown is empty).
+system_modules_disabled: 1        # ONE-WAY RATCHET: blocks ALL kernel module loads (incl. legitimate ones) until
+                                   # reboot. Closes the pre-reboot init_module() window where lockdown=integrity
+                                   # has not yet activated — an LPE-to-root exploit in that window could otherwise
+                                   # load an unsigned rootkit via init_module(). kexec_load_disabled=1 does not
+                                   # block init_module(); this sysctl does. No effect inside containers (guarded
+                                   # by not system_is_container in the sysctl block). Set 0 in config.yml only
+                                   # if you load kernel modules at runtime after provisioning (e.g. kvm, vboxdrv,
+                                   # custom DKMS drivers) and accept the residual pre-reboot window.
 system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
                                    # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
                                    # normal child-process debugging unaffected by value 1

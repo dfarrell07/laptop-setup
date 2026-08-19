@@ -147,6 +147,7 @@ export ANSIBLE_STDOUT_CALLBACK="default"  # pin stdout callback — prevents ANS
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
 unset CONTAINER_HOST DOCKER_HOST PODMAN_HOST  # prevent socket hijacking — attacker-set CONTAINER_HOST/DOCKER_HOST/PODMAN_HOST redirects podman API calls (including vault credential writes via podman login) to an attacker-controlled socket
+unset GIT_TEMPLATE_DIR  # prevent git template injection — attacker-set GIT_TEMPLATE_DIR=/tmp/evil copies malicious hooks into every repo cloned by git_repos role; hooks fire at clone time in user context with full SSH agent access and persist after provisioning ends
 unset GIT_EXEC_PATH  # git-internal subcommand resolver — git resolves git-fetch/git-clone/git-remote via GIT_EXEC_PATH before PATH; a fake /tmp/evil/git-fetch can exfiltrate SSH agent sockets or silently patch cloned source before Ansible sees exit 0; not covered by the PATH pin below
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 
