@@ -5,6 +5,10 @@
 
 - name: Add GitHub CLI repo
   # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
+  when:
+    - repo_gh_cli
+    - not is_fedora
+    - not csb_rhel  # CSB: external repo write succeeds silently; gh available in container
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
@@ -15,10 +19,6 @@
         repo_gpgcheck: true
         gpgkey: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
         enabled: true
-      when:
-        - repo_gh_cli
-        - not is_fedora
-        - not csb_rhel  # CSB: external repo write succeeds silently; gh available in container
   rescue:
     - name: Warn gh-cli repo failed (non-CSB network error)
       ansible.builtin.debug:
@@ -30,6 +30,10 @@
       when: not csb_rhel
 
 - name: Add Google Chrome repo
+  when:
+    - repo_google_chrome
+    - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   block:
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
@@ -40,10 +44,6 @@
         repo_gpgcheck: true
         gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
         enabled: true
-      when:
-        - repo_google_chrome
-        - ansible_facts['architecture'] == 'x86_64'
-        - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   rescue:
     - name: Warn Google Chrome repo failed (non-CSB network error)
       ansible.builtin.debug:
