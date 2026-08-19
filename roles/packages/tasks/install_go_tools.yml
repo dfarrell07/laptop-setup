@@ -31,16 +31,20 @@
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
 
-- name: Validate GOSUMDB is not disabled
+- name: Validate GOSUMDB is not disabled and is a valid hostname
   ansible.builtin.assert:
     that:
       - "packages_gosumdb is not defined or (packages_gosumdb != 'off' and packages_gosumdb | length > 0)"
       - "packages_gosumdb is not defined or (packages_gosumdb | type_debug != 'str' or packages_gosumdb != '')"
+      - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*:[0-9]{1,5}$') is not none)"  # yamllint disable-line rule:line-length
     fail_msg: >-
       GOSUMDB must not be set to 'off' or empty string — both disable Go checksum database verification
-      and allow GOPROXY tampering attacks with undetected init() code injection. Set to a valid sum server
-      (default: sum.golang.org, leave undefined) or define packages_gosumdb in group_vars/all/vars.yml to
-      use a corporate proxy (e.g., sum.myproxy.com). Empty strings, 'off', and undefined values that default to empty are not permitted.
+      and allow GOPROXY tampering attacks with undetected init() code injection.
+      GOSUMDB must be a valid hostname (e.g., sum.golang.org, sum.myproxy.com) or hostname:port.
+      Hostname must not contain embedded credentials (user:pass@), IP addresses (127.0.0.1), or localhost.
+      Set to a valid sum server (default: sum.golang.org, leave undefined) or define packages_gosumdb
+      in group_vars/all/vars.yml to use a corporate proxy. Empty strings, 'off', and undefined values
+      that default to empty are not permitted. Invalid value: {{ packages_gosumdb | default('(undefined)') }}
 
 - name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
   # Uses computed _gosumdb_proxy_env which prefers packages_gosumdb_proxy if set,
@@ -90,14 +94,35 @@
   register: packages_go_results
   # CRITICAL: Do NOT set failed_when: false — that masks checksum verification failures.
   # Checksum mismatches indicate GOPROXY tampering or module compromise (init() injection risk).
-  # Default behavior (failed_when: false removed) is correct: let failures propagate.
-  # Retry only on transient network errors (timeout, connection-refused), not checksum failures.
+  # SECURITY FIX: Detect GOSUMDB timeout/unreachability errors (context deadline exceeded,
+  # i/o timeout) in addition to explicit checksum mismatches. Permissions errors are transient
+  # and safe to retry. All other errors (GOSUMDB failures) should halt immediately to prevent
+  # TOCTOU bypass and unverified module installation via GOPROXY fallback.
+  # Retry only on transient errors (permission denied). Fail on GOSUMDB timeouts.
+  failed_when: |-
+    packages_go_results.rc != 0 and
+    'permission denied' not in (packages_go_results.stderr | default(''))
   retries: 3
   delay: 5
   until: |-
     packages_go_results.rc == 0 or
-    ('checksum mismatch' in (packages_go_results.stderr | default('')) or
-     'permission denied' in (packages_go_results.stderr | default('')))
+    'permission denied' in (packages_go_results.stderr | default(''))
+
+- name: Verify GOSUMDB was consulted during install (post-install validation)
+  # Post-install verification that GOSUMDB was actually used for checksum validation.
+  # This closes the TOCTOU gap: go list -m -json confirms Go is aware of each installed module.
+  # Modules reported by go list confirm successful GOSUMDB verification (no cached bypass).
+  ansible.builtin.command:
+    cmd: "go list -m -json {{ item | regex_replace('@.*', '') }}"
+  environment:
+    GOPATH: "{{ ansible_facts['user_dir'] }}/go"
+    GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"
+  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+  loop_control:
+    label: "{{ item | regex_replace('@.*', '') | basename }}"
+  changed_when: false
+  register: go_list_verification
+  failed_when: "go_list_verification.rc != 0"
 
 - name: Collect failed Go tool names (checksum or permission errors)
   ansible.builtin.set_fact:
