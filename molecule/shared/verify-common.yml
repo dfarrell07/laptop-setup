@@ -936,8 +936,10 @@
 
 - name: Assert 98-llmnr.conf deployed
   ansible.builtin.assert:
-    that: verify_llmnr_conf.stat.exists
-    fail_msg: "/etc/systemd/resolved.conf.d/98-llmnr.conf not deployed — system role did not run or LLMNR/mDNS hardening removed"
+    that:
+      - verify_llmnr_conf.stat.exists
+      - (ansible_date_time.epoch | int) - verify_llmnr_conf.stat.mtime < 600
+    fail_msg: "98-llmnr.conf missing or older than 10 min — may be stale from prior run"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -972,8 +974,10 @@
 
 - name: Assert DNS-over-TLS config deployed
   ansible.builtin.assert:
-    that: verify_dot_conf.stat.exists
-    fail_msg: "/etc/systemd/resolved.conf.d/99-dot.conf not deployed — DNS-over-TLS regression"
+    that:
+      - verify_dot_conf.stat.exists
+      - (ansible_date_time.epoch | int) - verify_dot_conf.stat.mtime < 600
+    fail_msg: "99-dot.conf missing or older than 10 min — may be stale from prior run"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -1037,8 +1041,10 @@
 
 - name: Assert coredump drop-in deployed
   ansible.builtin.assert:
-    that: verify_coredump_conf.stat.exists
-    fail_msg: "/etc/systemd/coredump.conf.d/coredump.conf not deployed — system role Configure coredump storage task regression"
+    that:
+      - verify_coredump_conf.stat.exists
+      - (ansible_date_time.epoch | int) - verify_coredump_conf.stat.mtime < 600
+    fail_msg: "coredump.conf missing or older than 10 min — may be stale from prior run"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
