@@ -2276,13 +2276,11 @@
           tags: [always]
 
     # Catches user typos — in normal operation profile is always 'work' or 'personal'
-    - name: Validate profile value
-      block:
-        - name: Assert profile is a valid value
-          ansible.builtin.assert:
-            that: profile in ['work', 'personal']
-            fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
-          tags: [always]
+    - name: Assert profile is a valid value
+      ansible.builtin.assert:
+        that: profile in ['work', 'personal']
+        fail_msg: "profile must be 'work' or 'personal'; got '{{ profile }}'."
+      tags: [always]
 
     # Validate critical security variables in the PLAY NAMESPACE (after -e overrides applied)
     # This complements slurp-based file validation by catching -e override attacks that bypass file checks
@@ -2625,7 +2623,7 @@
               system_dns_domains={{ system_dns_domains | default('DEFAULT') }}.
           tags: [always]
 
-        - name: Assert system_resolved_llmnr and system_resolved_multicast_dns in play namespace are valid enums (-e override guard)
+        - name: Assert system_resolved_llmnr and system_resolved_multicast_dns are valid enums
           ansible.builtin.assert:
             that:
               - system_resolved_llmnr | default('no') | string in ['yes', 'no', 'resolve']
