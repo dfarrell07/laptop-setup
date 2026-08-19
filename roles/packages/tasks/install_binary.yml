@@ -27,7 +27,7 @@
       failed_when: false
       check_mode: false
 
-    - name: "Binary download: {{ binary_name }}"
+    - name: "{{ binary_name }} fetched and SHA256-verified"
       when: version_string not in (_install_binary_check.stdout + _install_binary_check.stderr)
       ansible.builtin.get_url:
         url: "{{ url }}"
