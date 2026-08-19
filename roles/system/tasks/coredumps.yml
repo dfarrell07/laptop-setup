@@ -21,7 +21,7 @@
         state: directory
         mode: "0755"
 
-    - name: Configure coredump storage
+    - name: Deploy coredump.conf drop-in (storage/process-size-max)
       ansible.builtin.template:
         src: coredump.conf.j2
         dest: /etc/systemd/coredump.conf.d/coredump.conf
