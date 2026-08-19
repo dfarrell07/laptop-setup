@@ -5,7 +5,12 @@ image={{ distrobox_container_image | regex_replace('[\r\n]', '') }}
 # Host networking: container shares the host network namespace.
 # CAP_NET_ADMIN grants full iptables/nftables/routing control over the host stack.
 # Required for OVN-K/bpfman scenarios; set distrobox_use_host_network: false for general dev.
-additional_flags=--network=host --cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
+# --cgroupns=private: container sees only its own cgroup subtree, not host service/PID metadata.
+# ACCEPTED RISK: systemd-in-container may behave unexpectedly under a private cgroup namespace
+# if the container runtime assigns a deep slice path that systemd cannot fully introspect.
+# Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
+# and document the specific runtime version as a known exception.
+additional_flags=--network=host --cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON --cgroupns=private
 {% else %}
 # Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
 # Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
@@ -16,7 +21,12 @@ additional_flags=--network=host --cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-
 # Any malicious package inside the container can then load eBPF programs attaching to host kprobes
 # or tracepoints. Only lower that sysctl if you understand this trade-off.
 # See references/troubleshooting.md "kernel.unprivileged_bpf_disabled=2 Is Write-Once".
-additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON
+# --cgroupns=private: container sees only its own cgroup subtree, not host service/PID metadata.
+# ACCEPTED RISK: systemd-in-container may behave unexpectedly under a private cgroup namespace
+# if the container runtime assigns a deep slice path that systemd cannot fully introspect.
+# Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
+# and document the specific runtime version as a known exception.
+additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON --cgroupns=private
 {% endif %}
 
 additional_packages={{ distrobox_packages | map('regex_replace', '[\r\n]', '') | join(' ') }}
