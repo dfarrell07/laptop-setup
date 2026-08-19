@@ -390,7 +390,7 @@
       register: _rpmfusion_nonfree_fp
       failed_when: |
         _rpmfusion_nonfree_fp.stdout_lines | length == 0 or
-        '79BDB8874A068716907325C664A4849E4C7033EA' not in _rpmfusion_nonfree_fp.stdout | upper
+        repos_dnf_rpmfusion_gpg_fingerprint not in _rpmfusion_nonfree_fp.stdout | upper
     - name: Import RPM Fusion nonfree GPG key
       ansible.builtin.command:
         cmd: "rpm --import /tmp/rpmfusion-nonfree-gpg-key.gpg"
