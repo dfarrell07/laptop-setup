@@ -7,7 +7,7 @@
        test-scripts test-poller test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections
+       pip-lock pip-sync npm setup-yubikeys vendor-collections sign-collections
 
 # Guard against MAKEFLAGS environment variable injection (CWE-426)
 # REQUIRED: prevent attacker-controlled MAKEFLAGS from disabling targets
