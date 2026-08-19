@@ -240,7 +240,7 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
-    - name: Warn: container_replace will destroy existing container
+    - name: "Warn: container_replace will destroy existing container"
       ansible.builtin.debug:
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
@@ -310,7 +310,7 @@
     - packages_install_binaries | bool
     - distrobox_container_exists.rc != 0 or distrobox_container_replace | bool
   block:
-    - name: Warn: container_replace will destroy existing container
+    - name: "Warn: container_replace will destroy existing container"
       ansible.builtin.debug:
         msg: >-
           WARNING: container_replace=true and container '{{ distrobox_container_name }}' already exists.
