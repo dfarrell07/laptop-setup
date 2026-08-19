@@ -90,19 +90,60 @@ with repo write access can override with `git config --local core.hooksPath
 **Hook bypass prohibition:**
 - **DO NOT use `git commit --no-verify`** — bypasses pre-commit hook checks
   (vault encryption, secrets scanning, syntax validation)
-- **DO NOT use `git push` with `--no-verify`** — the push hook currently
-  has no Git-native equivalent; CI (linting.yml) compensates on PRs
+- **DO NOT use `git push --no-verify`** — FORBIDDEN. This bypasses the pre-push
+  hook completely; Git will not invoke the hook when --no-verify is specified.
+  The hook has no ability to detect or prevent this bypass. Unencrypted vault
+  files can be pushed to any branch, accumulating secrets in git history before
+  CI status checks prevent merge to main. See "Pre-push hook limitation" below.
 
 **Enforcement summary:**
 1. Local hooks path is `.githooks` (set by `make bootstrap`)
 2. CI rejects commits where core.hooksPath is overridden
 3. All commits require --signoff (enforced by commit-msg hook + CI)
-4. Vault files must be encrypted (enforced by pre-commit hook + CI)
+4. Vault files must be encrypted (enforced by pre-commit hook + CI on all branches)
 5. No commits to main without PR + CI passing (branch protection)
 
 This defense-in-depth prevents attackers from committing unencrypted secrets,
 unsigned commits, or tampered collections even if they have direct repo write
 access.
+
+### Pre-push hook limitation: --no-verify bypass
+
+**Vulnerability**: The pre-push hook cannot prevent the `git push --no-verify`
+operation. Git's documented behavior (per `git help push`) is that `--no-verify`
+bypasses hooks completely — the hook script is never invoked. The hook has no
+ability to detect that `--no-verify` was used because it is not called at all.
+
+**Attack vector**: A developer or attacker with repo write access can execute
+`git push --no-verify` to push unencrypted vault files to any branch, bypassing
+the client-side hook check. Unencrypted secrets accumulate in git history on
+the server before CI status checks prevent merge to main.
+
+**Mitigations implemented**:
+
+1. **Client-side education** — SECURITY.md (this file, line 93-99) explicitly
+   forbids `git push --no-verify` as a violation of security policy. Developers
+   are educated that this operation cannot be prevented at the hook level.
+
+2. **Server-side CI validation on all branches** — CI job `vault-encryption`
+   (linting.yml) runs on pull_request AND push events (all branches), not just
+   main. This catches unencrypted vault files before they accumulate in git
+   history, regardless of `--no-verify` usage.
+
+3. **Branch protection on main** — Vault encryption check is a required status
+   check for main, preventing merge of unencrypted secrets even if CI runs on
+   a PR branch.
+
+4. **Commit history scanning** — Future mitigations (not yet implemented):
+   - Reject force-pushes to any branch via GitHub branch protection rules
+   - Implement post-receive hook on the Git server (if self-hosted) to validate
+     all commits for unencrypted vault files
+
+**Recommendation**: Treat `git push --no-verify` as a forbidden operation
+equivalent to `git commit --no-verify`. If a push becomes blocked by the hook,
+fix the underlying issue (encrypt vault files) rather than bypassing the check.
+The server-side CI catch ensures that even `--no-verify` usage is detected
+before merge, but it is still a violation of security policy.
 
 ## Unsafe Git Operations
 

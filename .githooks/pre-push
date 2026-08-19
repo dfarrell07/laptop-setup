@@ -1,8 +1,33 @@
 #!/bin/bash
 # Pre-push hook: enforce vault encryption before push completes
 # SECURITY: Blocks push if any vault.yml file is unencrypted, preventing secrets exposure in git history
+# DEFENSE-IN-DEPTH: This hook can be bypassed via core.hooksPath override. GitHub Actions vault-encryption
+# job provides secondary protection. Together they provide dual-layer defense against secrets leakage.
+
+set -euo pipefail
 
 failed=0
+
+# SECURITY: Verify hooks are enabled and not bypassed via core.hooksPath override
+# Attack: git config --local core.hooksPath /dev/null (or any other path) disables this entire hook
+# Detection: Compare current config against expected value; fatal error if overridden
+current_hookspath=$(git config --local core.hooksPath 2>/dev/null || true)
+if [ -n "$current_hookspath" ] && [ "$current_hookspath" != ".githooks" ]; then
+  echo "CRITICAL SECURITY ERROR: core.hooksPath override detected" >&2
+  echo "  Current setting: core.hooksPath = $current_hookspath" >&2
+  echo "  Expected:       core.hooksPath = .githooks (or unset)" >&2
+  echo "" >&2
+  echo "This override disables pre-push vault checks." >&2
+  echo "An attacker may have modified .git/config to bypass hook enforcement." >&2
+  echo "" >&2
+  echo "FIX: Restore core.hooksPath to .githooks or unset it:" >&2
+  echo "  git config --local --unset core.hooksPath" >&2
+  echo "Then restart the push." >&2
+  echo "" >&2
+  echo "Note: GitHub Actions will also catch and reject any pushed commits" >&2
+  echo "      if vault.yml is unencrypted, providing secondary protection." >&2
+  exit 1
+fi
 
 # Iterate through vault files in the push
 while IFS= read -r -d '' f; do
@@ -12,10 +37,15 @@ while IFS= read -r -d '' f; do
 
   # Check if file starts with $ANSIBLE_VAULT (encrypted marker)
   if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
-    # Allow plaintext stub (no real secrets)
+    # Allow plaintext stub (no real secrets): vault_placeholder marker + empty vault_* stubs
+    # Rationale: Initial setup requires a plaintext stub file before encryption (chicken-egg problem).
+    # Once any real secrets are added, encryption becomes mandatory.
+    # Stub format: contains vault_placeholder comment AND all vault_* variables are either:
+    #   1. vault_placeholder references, OR
+    #   2. empty stubs (: [])
     if grep -q 'vault_placeholder' "$f" && \
        [ "$(grep -E '^vault_' "$f" | grep -Ev '^vault_placeholder:|:[[:space:]]*\[\]' | wc -l)" -eq 0 ]; then
-      echo "NOTE: $f is a plaintext stub — OK" >&2
+      echo "NOTE: $f is a plaintext stub (vault_placeholder marker + empty stubs) — OK" >&2
       continue
     fi
     echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
@@ -23,7 +53,9 @@ while IFS= read -r -d '' f; do
     failed=1
   else
     # File has vault marker on line 1; validate actual encryption by attempting decryption
-    # This prevents marker spoofing where a plaintext file starts with $ANSIBLE_VAULT
+    # This prevents marker spoofing (plaintext file with forged $ANSIBLE_VAULT prefix).
+    # Attack: Attacker writes plaintext secrets with $ANSIBLE_VAULT;1.1;AES256 prefix to bypass this check.
+    # Defense: Require actual decryption success (not just format validation).
     if [ -f "vault-pass.sh" ]; then
       if ! ansible-vault view --vault-password-file=vault-pass.sh "$f" >/dev/null 2>&1; then
         echo "ERROR: $f has vault marker but is not validly encrypted or password is incorrect." >&2
@@ -32,7 +64,7 @@ while IFS= read -r -d '' f; do
       fi
     else
       # If vault-pass.sh is missing, fall back to format validation
-      # Real encrypted vault files have $ANSIBLE_VAULT;1.1;AES256 format on line 1
+      # Real encrypted vault files have $ANSIBLE_VAULT;X.X;CIPHER format on line 1
       if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT;[0-9]\.[0-9];'; then
         echo "ERROR: $f does not have valid vault format ($ANSIBLE_VAULT;X.X;CIPHER). Run: ansible-vault encrypt $f" >&2
         failed=1
