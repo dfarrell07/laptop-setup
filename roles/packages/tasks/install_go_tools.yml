@@ -1,6 +1,6 @@
 ---
 # roles/packages/tasks/install_go_tools.yml
-# Install Go tools via `go install` with cryptographic binary verification (extracted from main.yml)
+# Install Go tools via `go install` (extracted from main.yml)
 
 - name: Validate GONOSUMDB contains only private module domains
   ansible.builtin.assert:
@@ -10,355 +10,78 @@
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
 
-- name: Install and verify Go tools (work profile only)
-  tags: [always]
-  block:
-    - name: Install gofumpt
-      ansible.builtin.command:
-        cmd: "go install mvdan.cc/gofumpt@v{{ packages_gofumpt_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _gofumpt_install
-      retries: 3
-      delay: 5
-      until: _gofumpt_install.rc == 0
-
-    - name: Verify gofumpt binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/gofumpt | awk '{print $1}'"
-      register: _gofumpt_sha256
-      changed_when: false
-
-    - name: Assert gofumpt binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _gofumpt_sha256.stdout == packages_gofumpt_sha256
-        fail_msg: >-
-          SECURITY: gofumpt binary SHA256 mismatch. Expected: {{ packages_gofumpt_sha256 }}
-          Got: {{ _gofumpt_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install govulncheck
-      ansible.builtin.command:
-        cmd: "go install golang.org/x/vuln/cmd/govulncheck@v{{ packages_govulncheck_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _govulncheck_install
-      retries: 3
-      delay: 5
-      until: _govulncheck_install.rc == 0
-
-    - name: Verify govulncheck binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/govulncheck | awk '{print $1}'"
-      register: _govulncheck_sha256
-      changed_when: false
-
-    - name: Assert govulncheck binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _govulncheck_sha256.stdout == packages_govulncheck_sha256
-        fail_msg: >-
-          SECURITY: govulncheck binary SHA256 mismatch. Expected: {{ packages_govulncheck_sha256 }}
-          Got: {{ _govulncheck_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install gci
-      ansible.builtin.command:
-        cmd: "go install github.com/daixiang0/gci@v{{ packages_gci_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _gci_install
-      retries: 3
-      delay: 5
-      until: _gci_install.rc == 0
-
-    - name: Verify gci binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/gci | awk '{print $1}'"
-      register: _gci_sha256
-      changed_when: false
-
-    - name: Assert gci binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _gci_sha256.stdout == packages_gci_sha256
-        fail_msg: >-
-          SECURITY: gci binary SHA256 mismatch. Expected: {{ packages_gci_sha256 }}
-          Got: {{ _gci_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install gopls
-      ansible.builtin.command:
-        cmd: "go install golang.org/x/tools/gopls@v{{ packages_gopls_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _gopls_install
-      retries: 3
-      delay: 5
-      until: _gopls_install.rc == 0
-
-    - name: Verify gopls binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/gopls | awk '{print $1}'"
-      register: _gopls_sha256
-      changed_when: false
-
-    - name: Assert gopls binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _gopls_sha256.stdout == packages_gopls_sha256
-        fail_msg: >-
-          SECURITY: gopls binary SHA256 mismatch. Expected: {{ packages_gopls_sha256 }}
-          Got: {{ _gopls_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install golangci-lint
-      ansible.builtin.command:
-        cmd: "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v{{ packages_golangci_lint_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _golangci_lint_install
-      retries: 3
-      delay: 5
-      until: _golangci_lint_install.rc == 0
-
-    - name: Verify golangci-lint binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/golangci-lint | awk '{print $1}'"
-      register: _golangci_lint_sha256
-      changed_when: false
-
-    - name: Assert golangci-lint binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _golangci_lint_sha256.stdout == packages_golangci_lint_sha256
-        fail_msg: >-
-          SECURITY: golangci-lint binary SHA256 mismatch. Expected: {{ packages_golangci_lint_sha256 }}
-          Got: {{ _golangci_lint_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install controller-gen
-      ansible.builtin.command:
-        cmd: "go install sigs.k8s.io/controller-tools/cmd/controller-gen@v{{ packages_controller_gen_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _controller_gen_install
-      retries: 3
-      delay: 5
-      until: _controller_gen_install.rc == 0
-
-    - name: Verify controller-gen binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/controller-gen | awk '{print $1}'"
-      register: _controller_gen_sha256
-      changed_when: false
-
-    - name: Assert controller-gen binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _controller_gen_sha256.stdout == packages_controller_gen_sha256
-        fail_msg: >-
-          SECURITY: controller-gen binary SHA256 mismatch. Expected: {{ packages_controller_gen_sha256 }}
-          Got: {{ _controller_gen_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install k8s code generators
-      ansible.builtin.command:
-        cmd: "go install k8s.io/code-generator/cmd/{{ item }}@v{{ packages_code_generator_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _codegen_install
-      retries: 3
-      delay: 5
-      until: _codegen_install.rc == 0
-      loop:
-        - client-gen
-        - informer-gen
-        - lister-gen
-        - deepcopy-gen
-        - applyconfiguration-gen
-
-    - name: Verify k8s code generators binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/{{ item }} | awk '{print $1}'"
-      register: _codegen_sha256
-      changed_when: false
-      loop:
-        - client-gen
-        - informer-gen
-        - lister-gen
-        - deepcopy-gen
-        - applyconfiguration-gen
-
-    - name: Assert k8s code generators binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - item.stdout == packages_code_generator_version_sha256
-        fail_msg: >-
-          SECURITY: k8s code generator binary SHA256 mismatch ({{ item.item }}).
-          Expected: {{ packages_code_generator_version_sha256 }}
-          Got: {{ item.stdout }}. This could indicate compromised module source, MITM attack,
-          or binary corruption. Do not use this binary.
-      loop: "{{ _codegen_sha256.results }}"
-
-    - name: Install subctl
-      ansible.builtin.command:
-        cmd: "go install github.com/submariner-io/subctl/cmd/subctl@v{{ packages_subctl_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _subctl_install
-      retries: 3
-      delay: 5
-      until: _subctl_install.rc == 0
-
-    - name: Verify subctl binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/subctl | awk '{print $1}'"
-      register: _subctl_sha256
-      changed_when: false
-
-    - name: Assert subctl binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _subctl_sha256.stdout == packages_subctl_version_sha256
-        fail_msg: >-
-          SECURITY: subctl binary SHA256 mismatch. Expected: {{ packages_subctl_version_sha256 }}
-          Got: {{ _subctl_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-    - name: Install stern
-      ansible.builtin.command:
-        cmd: "go install github.com/stern/stern@v{{ packages_stern_version }}"
-      timeout: 300
-      changed_when: true
-      environment:
-        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
-        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
-      register: _stern_install
-      retries: 3
-      delay: 5
-      until: _stern_install.rc == 0
-
-    - name: Verify stern binary SHA256
-      ansible.builtin.shell:
-        cmd: "sha256sum {{ ansible_facts['user_dir'] }}/go/bin/stern | awk '{print $1}'"
-      register: _stern_sha256
-      changed_when: false
-
-    - name: Assert stern binary SHA256 matches expected value
-      ansible.builtin.assert:
-        that:
-          - _stern_sha256.stdout == packages_stern_sha256
-        fail_msg: >-
-          SECURITY: stern binary SHA256 mismatch. Expected: {{ packages_stern_sha256 }}
-          Got: {{ _stern_sha256.stdout }}. This could indicate a compromised module source,
-          MITM attack on GOPROXY, or binary corruption. Do not use this binary.
-
-  when: profile == 'work'
-  failed_when: false
+- name: Install Go tools
+  # No 'creates:' guard — version bumps in packages_go_install_work would be silently
+  # ignored if the binary already exists. 'go install' with a pinned version is
+  # fast when the module cache is warm (skips recompile). 'changed_when: true'
+  # reports every run as changed; all entries in packages_go_install_work are pinned
+  # versions so this is an accepted false positive on every run — do NOT add
+  # @latest entries; they are not specially handled and would make the list
+  # permanently non-idempotent with no additional benefit.
+  # See packages_go_install_work in defaults/main.yml for rationale and pinning guidance.
+  ansible.builtin.command:
+    cmd: "go install {{ item }}"
+  timeout: 300
+  changed_when: true
+  environment:
+    GOPATH: "{{ ansible_facts['user_dir'] }}/go"
+    GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
+    # auto: downloads newer toolchain on demand; local: installed Go toolchain only (module downloads still occur via GOPROXY)
+    GOTOOLCHAIN: "{{ packages_gotoolchain }}"
+    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+  loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+  loop_control:
+    label: "{{ item | regex_replace('@.*', '') | basename }}"
   register: packages_go_results
+  failed_when: false
+  retries: 3
+  delay: 5
+  until: packages_go_results.rc == 0
 
-- name: Report any Go tool install/verification failures
+- name: Report failed Go tool installs
   ansible.builtin.debug:
-    msg: "Go tools install or verification failed (work profile)"
+    msg: "Failed to install {{ item.item }}: {{ item.stderr | default('unknown error') | trim }}"
+  loop: "{{ packages_go_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
   when:
-    - profile == 'work'
-    - packages_go_results.failed
+    - item.rc | default(0) != 0
 
-- name: Fail if Go tools install failed (non-CSB)
-  ansible.builtin.fail:
-    msg: "Go tool installation or SHA256 verification failed"
-  when:
-    - profile == 'work'
-    - not csb_rhel | bool
-    - packages_go_results.failed
+- name: Collect failed Go tool names
+  ansible.builtin.set_fact:
+    _packages_go_failed: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | map(attribute='item')
+        | list
+      }}
 
 - name: Record Go tool install failures (CSB)
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
   vars:
     _csb_role: packages
-    _csb_task_name: "Go tools (go install + SHA256 verification)"
-    _csb_error: "Go tools install or SHA256 verification failed"
+    _csb_task_name: "Go tools (go install)"
+    _csb_error: "Failed tools: {{ _packages_go_failed | join(', ') }}"
     _csb_action: >-
       Install Go tools manually or configure GOPROXY/GONOSUMDB/GOPRIVATE
-      to allow access via corporate proxy. If SHA256 verification fails,
-      verify that GOPROXY is not intercepting binaries.
-    _csb_ticket_summary: "Cannot install verified Go tools on CSB (network/proxy/verification failure)"
+      to allow access via the corporate proxy.
+    _csb_ticket_summary: "Cannot install Go tools on CSB (network/proxy restriction)"
     _csb_ticket_body: >-
-      Go tools 'go install' + SHA256 verification failed. The corporate network
-      may block module proxies or intercept binaries. Configure GOPROXY, GONOSUMDB,
-      and GOPRIVATE, or install tools manually.
+      'go install' failed for: {{ _packages_go_failed | join(', ') }}.
+      The corporate network may block go.googlesource.com or Go module proxies.
+      Configure GOPROXY, GONOSUMDB, and GOPRIVATE, or install tools manually.
   when:
-    - profile == 'work'
     - csb_rhel | bool
-    - packages_go_results.failed
+    - _packages_go_failed | length > 0
+
+- name: Fail on Go tool install errors (non-CSB)
+  ansible.builtin.fail:
+    msg: "Go tool install failed: {{ _packages_go_failed | join(', ') }}"
+  when:
+    - not csb_rhel | bool
+    - _packages_go_failed | length > 0
