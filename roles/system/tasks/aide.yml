@@ -190,7 +190,7 @@
               5-10 minutes. Do not cancel.
 
         - name: Reinitialize AIDE database — aide --init
-          ansible.builtin.shell:  # noqa: command-instead-of-module
+          ansible.builtin.command:
             cmd: aide --init
           changed_when: true
           register: _aide_init_result
