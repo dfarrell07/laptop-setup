@@ -46,7 +46,8 @@
   tags: [become]
 
   pre_tasks:
-    - name: Gather facts (explicit become:false so check mode works without sudo)
+    # become:false so --check mode works without requiring sudo
+    - name: Gather facts
       ansible.builtin.gather_facts:
       become: false
       tags: [always]
