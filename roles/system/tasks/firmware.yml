@@ -12,6 +12,23 @@
     - not system_is_container  # RPM post-install calls systemctl preset + daemon-reload, crashes Podman container systemd
   failed_when: false
 
+- name: Pin LVFS MetadataURI and FirmwareBaseURI to known-good CDN values
+  ansible.builtin.ini_file:
+    path: /etc/fwupd/remotes.d/lvfs.conf
+    section: fwupd Remote
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - {key: MetadataURI, value: "https://cdn.fwupd.org/downloads/firmware.xml.zst"}
+    - {key: FirmwareBaseURI, value: "https://fwupd.org/downloads"}
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+  # Prevents 'fwupdmgr modify-remote lvfs MetadataURI https://evil.com/...' from persisting
+  # across provisioning runs. Any out-of-band URL modification is reset on every 'make all'.
+
 - name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
   ansible.builtin.systemd:
     name: fwupd-refresh.timer

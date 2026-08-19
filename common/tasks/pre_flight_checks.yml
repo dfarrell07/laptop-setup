@@ -1415,6 +1415,25 @@
           Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
           Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
 
+    - name: Assert system_selinux_policy is an allowlisted value (SELinux policy weakening guard)
+      when: _config_raw is defined
+      vars:
+        _raw: "{{ _config_raw }}"
+      ansible.builtin.assert:
+        that:
+          - _raw.get('system_selinux_policy', 'targeted') in ['targeted', 'strict']
+        fail_msg: >-
+          SECURITY: system_selinux_policy in config.yml must be 'targeted' or 'strict'.
+          Threat: setting system_selinux_policy: minimum applies near-permissive MAC enforcement.
+          Input: system_selinux_policy='{{ _raw.get('system_selinux_policy', 'targeted') }}' in config.yml.
+          Mechanism: ansible.posix.selinux applies the named policy; the post-apply assertion in
+          hardening_core.yml checks ansible_facts['selinux'].type == system_selinux_policy, so
+          'minimum' passes verification while SELinux is effectively near-permissive.
+          Impact: SELinux MAC weakened to near-full-permissive with no preflight warning.
+          Fix: remove system_selinux_policy from config.yml (defaults to 'targeted'), or
+          set it to one of the allowlisted values: 'targeted', 'strict'.
+      tags: [always]
+
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
       when: _config_raw is defined
       vars:
