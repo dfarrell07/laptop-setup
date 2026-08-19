@@ -152,6 +152,19 @@
     - is_linux
     - "'docker' in containers_user_groups.stdout.split()"
 
+# SECURITY NOTE — podman.socket lateral-movement path inside distrobox:
+# Distrobox unconditionally bind-mounts $XDG_RUNTIME_DIR (e.g. /run/user/<uid>) into the
+# container. The podman.socket lives at $XDG_RUNTIME_DIR/podman/podman.sock, so it is
+# reachable from any process inside a distrobox container regardless of whether that process
+# goes through the distrobox-host-exec symlink. A container process can call the host Podman
+# REST API directly (e.g. curl --unix-socket /run/user/<uid>/podman/podman.sock) and create
+# privileged containers with / bind-mounted, achieving host root access without distrobox-host-exec.
+# This is a known lateral path — it is NOT independently safe to assume distrobox-host-exec is
+# the only host-escape vector when podman.socket is active.
+# Mitigations considered: moving the socket outside XDG_RUNTIME_DIR breaks kind/devcontainers;
+# distrobox does not natively support per-path volume exclusions. Accepted residual risk on
+# developer workstations where the container user == the host user (no privilege boundary).
+# Do not use this profile on multi-tenant or shared hosts.
 - name: Enable podman user socket (needed for kind, docker-compatible CLIs, devcontainers)
   ansible.builtin.systemd:
     name: podman.socket
