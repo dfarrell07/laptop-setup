@@ -69,8 +69,8 @@ Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass
 EOF
         exit 1
     fi
-    # Block --skip-tags=always (single-arg form with =)
-    if [[ "$arg" == '--skip-tags=always' ]]; then
+    # Block --skip-tags=always (single-arg form with =); also block --skip-tags=always,<extra>
+    if [[ "$arg" == '--skip-tags=always' || "$arg" == '--skip-tags=always,'* ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
@@ -184,7 +184,7 @@ Solution: Do not pass --vault-password-file on the command line.
 EOF
         exit 1
     fi
-    if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" == 'always' ]]; then
+    if [[ "${args[$i]}" == '--skip-tags' && ( "${args[$((i+1))]}" == 'always' || "${args[$((i+1))]}" == 'always,'* ) ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
