@@ -334,8 +334,10 @@
 
 - name: Assert claude-privacy tmpfiles config deployed (Linux)
   ansible.builtin.assert:
-    that: verify_claude_tmpfiles.stat.exists
-    fail_msg: "claude-privacy.conf tmpfiles config not deployed (exists={{ verify_claude_tmpfiles.stat.exists | default(false) }}) — ~/.claude permissions won't be enforced at boot"
+    that:
+      - verify_claude_tmpfiles.stat.exists
+      - verify_claude_tmpfiles.stat.mode == '0644'
+    fail_msg: "claude-privacy.conf tmpfiles config not deployed (exists={{ verify_claude_tmpfiles.stat.exists | default(false) }}, mode={{ verify_claude_tmpfiles.stat.mode | default('absent') }}, expected 0644) — ~/.claude permissions won't be enforced at boot"
   when: ansible_system == 'Linux'
 
 - name: Slurp claude-privacy.conf content
@@ -369,7 +371,7 @@
 - name: Assert Claude CLAUDE.md contains signoff instruction
   ansible.builtin.assert:
     that: "'--signoff' in (verify_claude_md_content.content | b64decode)"
-    fail_msg: "Claude CLAUDE.md at {{ ansible_user_dir }}/.claude-personal/CLAUDE.md missing '--signoff' instruction — template may have rendered empty"
+    fail_msg: "Claude CLAUDE.md missing '--signoff' instruction (actual={{ (verify_claude_md_content.content | b64decode)[:120] }})"
   when: verify_claude_md.stat.exists
 
 # --- Git hooks ---
