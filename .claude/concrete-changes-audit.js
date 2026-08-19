@@ -442,6 +442,15 @@ RULES:
 - config.yml is gitignored (edit directly, not committed)
 - Tracked files: edit with Edit tool (will be committed)
 
+PROTECTED USER SETTINGS — DO NOT CHANGE THESE IN config.yml:
+- system_tmout: 600 — user explicitly set for CIS 5.5.5 compliance; do NOT change to 0 or 1800
+- system_firewall_icmp_extra_types: [echo-request] — user explicitly set for OVN-K/kind testing; do NOT remove or comment out
+- packages_kubectl_source: upstream — user explicitly set; do NOT change
+- system_modules_disabled: 0 — user explicitly set for dev laptop; do NOT change
+- system_kernel_panic: 10 — user explicitly set; do NOT change
+- system_dnf_automatic_apply_updates: false — user explicitly set; do NOT change
+These settings represent intentional trade-offs the user has made. Flag them as informational concerns only, never as "problems to fix".
+
 For each real problem:
 1. Read the relevant file
 2. Apply the minimal correct fix
