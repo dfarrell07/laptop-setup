@@ -159,6 +159,84 @@ jobs:
           done
           exit $failed
 
+      - name: Validate hook structural integrity (detect behavioral bypasses)
+        run: |
+          python3 << 'SUBPYEOF'
+          import sys
+          import re
+          failed = False
+          with open('.githooks/pre-commit', 'r') as f:
+              content = f.read()
+          if re.search(r'if\s+(?:false|true)\s*;?\s*then\b.*?gitleaks\b', content, re.DOTALL | re.IGNORECASE):
+              print('::error::.githooks/pre-commit: gitleaks call wrapped in "if false/true" bypass', file=sys.stderr)
+              failed = True
+          if 'gitleaks git --pre-commit' not in content:
+              print('::error::.githooks/pre-commit: gitleaks call missing or wrong command', file=sys.stderr)
+              failed = True
+          if '_gitleaks_rc' not in content or 'if [ "$_gitleaks_rc" -ne 0 ]' not in content:
+              print('::error::.githooks/pre-commit: gitleaks return code validation missing', file=sys.stderr)
+              failed = True
+          if 'if [ "$_gitleaks_rc" -ne 0 ]; then' in content and 'failed=1' not in content:
+              print('::error::.githooks/pre-commit: gitleaks failure not propagated', file=sys.stderr)
+              failed = True
+          with open('.githooks/pre-push', 'r') as f:
+              content = f.read()
+          if "git ls-files -z -- '*vault.yml'" not in content:
+              print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
+              failed = True
+          if 'ANSIBLE_VAULT' not in content:
+              print('::error::.githooks/pre-push: vault encryption check missing', file=sys.stderr)
+              failed = True
+          with open('.githooks/commit-msg', 'r') as f:
+              content = f.read()
+          if 'Signed-off-by' not in content:
+              print('::error::.githooks/commit-msg: Signed-off-by requirement missing', file=sys.stderr)
+              failed = True
+          if failed:
+              sys.exit(1)
+          print('✓ All hooks passed structural integrity validation')
+          SUBPYEOF
+
+
+      - name: Validate hook structural integrity (detect behavioral bypasses)
+        run: |
+          python3 << 'SUBPYEOF'
+          import sys
+          import re
+          failed = False
+          with open('.githooks/pre-commit', 'r') as f:
+              content = f.read()
+          if re.search(r'if\s+(?:false|true)\s*;?\s*then\b.*?gitleaks\b', content, re.DOTALL | re.IGNORECASE):
+              print('::error::.githooks/pre-commit: gitleaks call wrapped in "if false/true" bypass', file=sys.stderr)
+              failed = True
+          if 'gitleaks git --pre-commit' not in content:
+              print('::error::.githooks/pre-commit: gitleaks call missing or wrong command', file=sys.stderr)
+              failed = True
+          if '_gitleaks_rc' not in content or 'if [ "$_gitleaks_rc" -ne 0 ]' not in content:
+              print('::error::.githooks/pre-commit: gitleaks return code validation missing', file=sys.stderr)
+              failed = True
+          if 'if [ "$_gitleaks_rc" -ne 0 ]; then' in content and 'failed=1' not in content:
+              print('::error::.githooks/pre-commit: gitleaks failure not propagated', file=sys.stderr)
+              failed = True
+          with open('.githooks/pre-push', 'r') as f:
+              content = f.read()
+          if "git ls-files -z -- '*vault.yml'" not in content:
+              print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
+              failed = True
+          if 'ANSIBLE_VAULT' not in content:
+              print('::error::.githooks/pre-push: vault encryption check missing', file=sys.stderr)
+              failed = True
+          with open('.githooks/commit-msg', 'r') as f:
+              content = f.read()
+          if 'Signed-off-by' not in content:
+              print('::error::.githooks/commit-msg: Signed-off-by requirement missing', file=sys.stderr)
+              failed = True
+          if failed:
+              sys.exit(1)
+          print('✓ All hooks passed structural integrity validation')
+          SUBPYEOF
+
+
       - name: Verify hook baseline integrity (detect behavior changes)
         if: github.event_name == 'pull_request'
         run: |
@@ -193,15 +271,15 @@ jobs:
 
       - name: Validate preflight JSON output
         run: |
-          bash scripts/preflight.sh --json > /tmp/pf.json || true
-          test -s /tmp/pf.json || { echo 'preflight.sh --json produced no output'; exit 1; }
-          python3 -c "import json,sys; json.load(open('/tmp/pf.json'))"
+          pf_output=$(bash scripts/preflight.sh --json 2>&1 || true)
+          test -n "$pf_output" || { echo 'preflight.sh --json produced no output'; exit 1; }
+          printf '%s' "$pf_output" | python3 -m json.tool > /dev/null
 
       - name: Validate smoke-test JSON output
         run: |
-          bash scripts/smoke-test.sh --user-only --json > /tmp/st.json || true
-          test -s /tmp/st.json || { echo 'smoke-test.sh --json produced no output'; exit 1; }
-          python3 -c "import json,sys; json.load(open('/tmp/st.json'))"
+          st_output=$(bash scripts/smoke-test.sh --user-only --json 2>&1 || true)
+          test -n "$st_output" || { echo 'smoke-test.sh --json produced no output'; exit 1; }
+          printf '%s' "$st_output" | python3 -m json.tool > /dev/null
 
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh

@@ -102,7 +102,11 @@ bootstrap: guard-not-root
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256" >&2; exit 1; }
 	@# Verify verify-ansible-args.sh integrity (FATAL if check fails) — guards against pre-flight check bypass
 	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-ansible-args.sh > scripts/verify-ansible-args.sh.sha256" >&2; exit 1; }
+	@# Verify verify-collections-galaxy.sh integrity (FATAL if check fails) — guards against supply chain verification bypass
+	@cd scripts && sha256sum -c verify-collections-galaxy.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections-galaxy.sh integrity verified" || { echo "ERROR: verify-collections-galaxy.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections-galaxy.sh > scripts/verify-collections-galaxy.sh.sha256" >&2; exit 1; }
 	cd collections-dist && sha256sum -c SHA256SUMS
+	@# Verify collections against Galaxy API to detect supply chain tampering
+	@scripts/verify-collections-galaxy.sh
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
 		collections-dist/community-general-13.2.0.tar.gz \
