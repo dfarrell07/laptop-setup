@@ -190,8 +190,13 @@
   # (not a repo_X boolean, because the URL is an internal secret)
   # Risk acceptance: gpgcheck and repo_gpgcheck are disabled — this internal Red Hat repo
   # publishes no GPG key or signed metadata. Mitigations: opt-in only (explicit baseurl in
-  # config.yml), profile==work scoped, URL assert enforces *.redhat.com domain, and
-  # versionlock pin below limits unauthenticated-update blast radius (mirrors Slack pattern).
+  # config.yml), profile==work scoped, URL assert enforces *.redhat.com domain.
+  # SECURITY — first-install window: versionlock (below) only guards against post-provision
+  # unauthenticated updates; it does NOT protect the first-install window. A compromised repo
+  # host at first provision delivers a malicious package which versionlock then pins permanently.
+  # Mitigate by setting repos_dnf_acli_binary_sha256 in config.yml (gitignored) to the SHA256
+  # of the trusted acli binary — the play fails immediately if it mismatches. Obtain the hash
+  # out-of-band from IT or internal release notes before provisioning.
   when:
     - profile == 'work'
     - repos_dnf_acli_baseurl is defined
@@ -212,7 +217,34 @@
       ansible.builtin.dnf:
         name: python3-dnf-plugin-versionlock
         state: present
+    - name: Install acli to enable versionlock protection on first install
+      ansible.builtin.dnf:
+        name: acli
+        state: present
+    - name: Stat acli binary for SHA256 first-install integrity check
+      # Only runs when repos_dnf_acli_binary_sha256 is set in config.yml.
+      # This is the sole guard against a compromised first-install payload;
+      # versionlock below only prevents unauthenticated updates after this point.
+      ansible.builtin.stat:
+        path: /usr/bin/acli
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: _acli_stat
+      when: repos_dnf_acli_binary_sha256 is defined
+    - name: Assert acli binary SHA256 matches expected hash
+      ansible.builtin.assert:
+        that: _acli_stat.stat.checksum == repos_dnf_acli_binary_sha256
+        fail_msg: >-
+          SECURITY: acli binary SHA256 mismatch.
+          Expected: {{ repos_dnf_acli_binary_sha256 }}
+          Got:      {{ _acli_stat.stat.checksum | default('unavailable') }}
+          The installed binary does not match the trusted hash in config.yml.
+          Possible supply-chain compromise — do not proceed. Re-obtain the binary
+          hash out-of-band from IT or internal release notes before re-running.
+      when: repos_dnf_acli_binary_sha256 is defined
     - name: Pin acli version to limit unauthenticated update exposure
+      # NOTE: this pin only protects against post-provision tampering (future dnf updates).
+      # First-install integrity depends on repos_dnf_acli_binary_sha256 being set above.
       community.general.dnf_versionlock:
         name: acli
         state: present
