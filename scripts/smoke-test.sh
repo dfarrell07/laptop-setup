@@ -1014,7 +1014,10 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
     elif systemctl is-enabled bpfman.socket &>/dev/null; then
       record "bpfman-socket" "WARN" "bpfman.socket enabled but not active (first client connect will start it)"
     else record "bpfman-socket" "FAIL" "bpfman.socket not enabled — bpfman load/list will fail at runtime"; fi
-  fi  # bpfman absent = not installed on this profile — no record emitted
+  elif [[ "$PROFILE" == "work" ]] && [[ "$CONTAINER_TIER" != "container" ]] && ! $CSB_HOST; then
+    # bpfman is a work-profile package on non-CSB standard Fedora/RHEL — missing binary is a provisioning failure
+    record "bpfman-install" "FAIL" "bpfman binary missing on work profile (expected in packages_support_work) — re-run: make packages"
+  fi  # bpfman absent on personal profile or CSB = expected — no record emitted
 
   # tc/strace/bpftool (work-profile only — guard on binary presence, emit nothing when absent)
   for _t in "tc:-V" "strace:--version" "bpftool:version"; do
