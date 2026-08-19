@@ -267,6 +267,37 @@
              | default(playbook_dir, true) }}
       tags: [always]
 
+    - name: SECURITY CRITICAL — Validate config integrity before container provisioning
+      # DEFENSE: Play 3 can be targeted directly with --limit containers, bypassing
+      # Play 0 and Play 2 validations. Re-run SSTI guard, vault health, and identity
+      # checks with tags: [always] to ensure they execute regardless of --limit.
+      delegate_to: localhost
+      become: false
+      tags: [always]
+      block:
+        - name: Re-run pre-flight checks (ensures --limit cannot bypass)
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+
+    - name: Vault healthcheck — assert required SSH key variables are defined
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_auth_key is defined and vault_ssh_auth_key | length > 0
+          - vault_ssh_auth_key_pub is defined and vault_ssh_auth_key_pub | length > 0
+        fail_msg: vault.yml missing or empty SSH key vars (required for container provisioning)
+      delegate_to: localhost
+      when: vault_ssh_auth_key is defined or vault_ssh_auth_key_pub is defined
+      tags: [always]
+
+    - name: Assert identity vars are not CHANGE_ME placeholders
+      ansible.builtin.assert:
+        that:
+          - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME')
+          - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME')
+        fail_msg: Set identity vars in config.yml before container provisioning
+      delegate_to: localhost
+      when: not _pf_is_molecule
+      tags: [always]
+
     - name: Bootstrap Python inside container
       ansible.builtin.raw: |
         sudo dnf install -y python3 python3-libdnf5 2>/dev/null || \
