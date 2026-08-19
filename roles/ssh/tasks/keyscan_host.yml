@@ -59,6 +59,11 @@
           Expected {{ _ks_fingerprint }} — aborting, possible MITM attack.
       when: "'Verify host key fingerprint' in (ansible_failed_task.name | default(''))"
 
+    - name: Re-raise unexpected block failure for {{ _ks_host }}
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('unexpected error in keyscan block') }}"
+      when: "'Verify host key fingerprint' not in (ansible_failed_task.name | default(''))"
+
 - name: Warn — could not fetch host keys for {{ _keyscan_host.host | default(_keyscan_host) }}
   ansible.builtin.debug:
     msg: >
