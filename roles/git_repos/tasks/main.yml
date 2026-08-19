@@ -197,7 +197,8 @@
 - name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: >-
-      old=$(git remote get-url {{ item.1.name | quote }} 2>/dev/null);
+      set -euo pipefail;
+      old=$(git remote get-url {{ item.1.name | quote }} 2>/dev/null) || old="";
       if [ "$old" = {{ item.1.url | quote }} ]; then true;
       elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
       else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi

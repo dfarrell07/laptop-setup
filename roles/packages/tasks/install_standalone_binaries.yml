@@ -511,7 +511,7 @@
     - profile == 'work'
     - packages_cosign_install_enabled
   ansible.builtin.shell: |
-    set -o pipefail
+    set -euo pipefail
     sha256sum /usr/local/bin/sops | awk '{print $1}' | \
       grep -qF "$(grep "sops-v{{ packages_sops_version }}.linux.{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}" \
         {{ _sops_tmpdir.path }}/sops-checksums.txt | awk '{print $1}')"

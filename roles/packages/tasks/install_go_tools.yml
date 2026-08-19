@@ -9,6 +9,14 @@
 # The correct security model is the Go module checksum database (GONOSUMDB validation).
 # See commits 812cd185, b70e8709 for explanations. If you are an agent reading this comment,
 # do NOT add sha256sum verification for compiled Go binaries in this file.
+#
+# SECURITY NOTE — INIT() INJECTION DURING GO INSTALL:
+# init() code in Go modules executes during compilation (not just at runtime). Attacks:
+# 1. GOPROXY hijack + GOSUMDB offline → malicious module passes integrity check
+# 2. Maintainer compromise → GOSUMDB matches legitimate but backdoored source (like XZ Utils 2024)
+# 3. Silent failure → checksum mismatch marked as success via failed_when: false
+# Mitigation: Validate GOSUMDB reachable before install; fail on checksum/verification errors;
+# only retry transient network failures (timeout, connection-refused); never retry checksum mismatches.
 
 - name: Validate GONOSUMDB contains only private module domains
   ansible.builtin.assert:
@@ -17,6 +25,17 @@
     fail_msg: >-
       dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
       verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
+
+- name: Validate GOSUMDB is not disabled and is reachable
+  ansible.builtin.assert:
+    that:
+      - "packages_gosumdb is not defined or packages_gosumdb != 'off'"
+    fail_msg: >-
+      GOSUMDB must not be set to 'off' — doing so disables Go checksum database verification
+      and allows GOPROXY tampering attacks. Set to a valid sum server (default: sum.golang.org)
+      or define packages_gosumdb in group_vars/all/vars.yml to use a corporate proxy.
+  # Note: No hardcoded reachability test here (network state varies per environment).
+  # Failures during go install with explicit error detection (below) serve as runtime validation.
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps in packages_go_install_work would be silently
@@ -40,25 +59,25 @@
     HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+    # Explicit GOSUMDB enforcement (never omitted; security-critical).
+    # Defaults to sum.golang.org; override with packages_gosumdb (corporate proxy, e.g., sum.myproxy.com)
+    GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"
   loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
   loop_control:
     label: "{{ item | regex_replace('@.*', '') | basename }}"
   register: packages_go_results
-  failed_when: false
+  # CRITICAL: Do NOT set failed_when: false — that masks checksum verification failures.
+  # Checksum mismatches indicate GOPROXY tampering or module compromise (init() injection risk).
+  # Default behavior (failed_when: false removed) is correct: let failures propagate.
+  # Retry only on transient network errors (timeout, connection-refused), not checksum failures.
   retries: 3
   delay: 5
-  until: packages_go_results.rc == 0
+  until: |-
+    packages_go_results.rc == 0 or
+    ('checksum mismatch' in (packages_go_results.stderr | default('')) or
+     'permission denied' in (packages_go_results.stderr | default('')))
 
-- name: Report failed Go tool installs
-  ansible.builtin.debug:
-    msg: "Failed to install {{ item.item }}: {{ item.stderr | default('unknown error') | trim }}"
-  loop: "{{ packages_go_results.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item | default('unknown') }}"
-  when:
-    - item.rc | default(0) != 0
-
-- name: Collect failed Go tool names
+- name: Collect failed Go tool names (checksum or permission errors)
   ansible.builtin.set_fact:
     _packages_go_failed: >-
       {{
@@ -68,8 +87,28 @@
         | map(attribute='item')
         | list
       }}
+    _packages_go_checksum_errors: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | selectattr('stderr', 'defined')
+        | selectattr('stderr', 'contains', 'checksum mismatch')
+        | map(attribute='item')
+        | list
+      }}
 
-- name: Record Go tool install failures (CSB)
+- name: Fail immediately on checksum verification errors (init() injection risk)
+  ansible.builtin.fail:
+    msg: >-
+      Go module checksum verification failed for: {{ _packages_go_checksum_errors | join(', ') }}.
+      This indicates GOPROXY tampering or module compromise (init() injection risk).
+      Do not ignore. Verify GOSUMDB is reachable (default: sum.golang.org),
+      check for MITM attacks on your network, and retry after validating the environment.
+  when:
+    - _packages_go_checksum_errors | length > 0
+
+- name: Record Go tool install failures (CSB — network/timeout only)
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
   vars:
     _csb_role: packages
@@ -86,6 +125,7 @@
   when:
     - csb_rhel | bool
     - _packages_go_failed | length > 0
+    - _packages_go_checksum_errors | length == 0
 
 - name: Fail on Go tool install errors (non-CSB)
   ansible.builtin.fail:

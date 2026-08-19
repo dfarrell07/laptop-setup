@@ -296,7 +296,7 @@
     - name: Fetch and verify Red Hat internal GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          set -e
+          set -euo pipefail
           KEYFILE="{{ _redhat_gpg_tmp_dir.path }}/key.gpg"
           curl -fsSL "{{ repos_dnf_redhat_gpgkey }}" -o "$KEYFILE"
           FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
@@ -368,7 +368,7 @@
     - name: Fetch and verify RPM Fusion free GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          set -e
+          set -euo pipefail
           KEYFILE="{{ _rpmfusion_free_gpg_tmp_dir.path }}/key.gpg"
           REL="{{ ansible_facts['distribution_major_version'] }}"
           URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-${REL}"  # yamllint disable-line
@@ -432,7 +432,7 @@
     - name: Fetch and verify RPM Fusion nonfree GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          set -e
+          set -euo pipefail
           KEYFILE="{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}/key.gpg"
           REL="{{ ansible_facts['distribution_major_version'] }}"
           URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-${REL}"  # yamllint disable
