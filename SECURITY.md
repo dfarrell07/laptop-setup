@@ -71,8 +71,9 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   on hook changes (see "Unsafe git operations" below)
 - **Privilege escalation** — `become_exe = /usr/bin/sudo` in ansible.cfg
   prevents PATH-based sudo trojan attacks
-- **Branch protection** — main requires minimum 4 status checks (Ansible Lint,
-  Vault Encryption Check, Secret Detection, Ansible Syntax Check); workflow
+- **Branch protection** — main requires minimum 6 status checks (Ansible Lint,
+  Vault Encryption Check, Secret Detection, Ansible Syntax Check, Vars Sync Check,
+  GPG Signature Verification); workflow
   aggregates 16 critical supply-chain checks via `all-checks-pass` job
   (GPG signatures, Signed-off-by, collections integrity, script integrity);
   force push and deletion blocked; linear history enforced. For full enforcement,
