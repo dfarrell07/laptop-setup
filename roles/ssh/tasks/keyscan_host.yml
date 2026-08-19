@@ -51,9 +51,15 @@
       when: (ssh_keyscan_result.stdout_lines | select('match', '^' + (_ks_host | regex_escape)) | list | length) == 0
 
   rescue:
+    - name: Abort — fingerprint mismatch (MITM risk) for {{ _ks_host }}
+      ansible.builtin.fail:
+        msg: >
+          SECURITY: SSH host key fingerprint mismatch for {{ _ks_host }}.
+          Expected {{ _ks_fingerprint }} — aborting, possible MITM attack.
+      when: "'Verify host key fingerprint' in (ansible_failed_task.name | default(''))"
     - name: Warn — could not fetch host keys for {{ _ks_host }}
       ansible.builtin.debug:
-        msg: >-
+        msg: >
           WARNING: Could not fetch {{ _ks_host }} SSH host keys
-          (VPN may be required). known_hosts not pre-seeded — git clone
-          for {{ _ks_host }} repos will prompt on first connection.
+          (VPN may be required). known_hosts not pre-seeded.
+      when: "'Verify host key fingerprint' not in (ansible_failed_task.name | default(''))"
