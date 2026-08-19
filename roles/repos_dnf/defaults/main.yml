@@ -24,6 +24,14 @@ repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86
 # Fingerprint valid for: RPM Fusion free and nonfree repos (Fedora 44+)
 repos_dnf_rpmfusion_gpg_fingerprint: "79BDB8874A068716907325C664A4849E4C7033EA"
 
+# Red Hat internal GPG key fingerprint (work profile only)
+# Pinned to detect MITM attacks on initial key fetch from internal Red Hat domains.
+# If GPG key is compromised at fetch time, fingerprint verification fails before import.
+# Fingerprint valid for: Red Hat internal package repos (pkgs.devel.redhat.com).
+# Must be defined in config.yml (gitignored) when repos_dnf_redhat_gpgkey is used.
+# To extract fingerprint: gpg --with-colons /path/to/key.gpg | grep "^fpr" | cut -d: -f10
+repos_dnf_redhat_gpg_fingerprint: ""
+
 # Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
 # If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
 # Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard

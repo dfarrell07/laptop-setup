@@ -281,13 +281,33 @@
     - name: Assert Red Hat internal repo URLs target expected internal domain
       ansible.builtin.assert:
         that:
-          - repos_dnf_redhat_baseurl is match('^https://.*\.redhat\.com/.*')
-          - repos_dnf_redhat_gpgkey is match('^https://.*\.redhat\.com/.*\.gpg$')
+          - repos_dnf_redhat_baseurl is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*')
+          - repos_dnf_redhat_gpgkey is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*\.gpg$')
         fail_msg: >-
-          repos_dnf_redhat_baseurl must be an internal Red Hat URL (https://*.redhat.com/...);
-          repos_dnf_redhat_gpgkey must be an internal Red Hat GPG key URL
-          (https://*.redhat.com/*.gpg). Ensure both URLs target *.redhat.com domain,
-          not external servers.
+          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must target known Red Hat
+          internal domains (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com);
+          this prevents subdomain hijacking attacks. Do not use arbitrary redhat.com subdomains.
+    - name: Fetch Red Hat internal GPG key from HTTPS
+      ansible.builtin.get_url:
+        url: "{{ repos_dnf_redhat_gpgkey }}"
+        dest: "/tmp/redhat-gpg-key.gpg"
+        mode: "0644"
+      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+    - name: Verify Red Hat internal GPG key fingerprint
+      ansible.builtin.shell:
+        cmd: |
+          gpg --with-colons /tmp/redhat-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+      changed_when: false
+      register: _redhat_fp
+      failed_when: |
+        _redhat_fp.stdout_lines | length == 0 or
+        repos_dnf_redhat_gpg_fingerprint not in _redhat_fp.stdout | upper
+      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+    - name: Import Red Hat internal GPG key
+      ansible.builtin.command:
+        cmd: "rpm --import /tmp/redhat-gpg-key.gpg"
+      changed_when: false
+      when: repos_dnf_redhat_gpg_fingerprint | length > 0
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
