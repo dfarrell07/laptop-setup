@@ -204,9 +204,15 @@
   ignore_errors: true  # noqa: ignore-errors
 
 - name: Regenerate GRUB configuration  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "{{ 'grub2-mkconfig -o /boot/grub2/grub.cfg' if is_dnf else 'grub-mkconfig -o /boot/grub/grub.cfg' }}"
+  ansible.builtin.shell: |
+    set -e
+    {{ 'grub2-mkconfig -o /boot/grub2/grub.cfg' if is_dnf else 'grub-mkconfig -o /boot/grub/grub.cfg' }}
+    # Patch recovery entries with --users root (CIS 1.4.2)
+    if [ -x /etc/grub.d/41_protect_entries ]; then
+      /etc/grub.d/41_protect_entries
+    fi
   become: true
   changed_when: true
   when: not system_is_container  # GRUB not applicable in containers
   # Never ignore handler errors — failure surfaces missing grub-mkconfig (CIS 1.4.2 bypass risk)
+  # Post-processing with 41_protect_entries ensures recovery entries remain protected across kernel updates
