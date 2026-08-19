@@ -129,7 +129,7 @@
       when: _config_raw is defined
       ansible.builtin.assert:
         that:
-          - _config_raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
+          - _config_config_raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
         fail_msg: >-
           SECURITY: dotfiles_user_name in config.yml contains newlines or control characters.
           This value is rendered verbatim into the [user] name field in .gitconfig (INI format);
@@ -144,7 +144,7 @@
     - name: Assert dotfiles_gonosumdb contains only private domains (GONOSUMDB bypass guard)
       when: _config_raw is defined
       vars:
-        _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
+        _gonosumdb: "{{ _config_config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
           # Reject public registry patterns (github.com, golang.org, mvdan.cc, k8s.io, gopkg.in, etc.)
@@ -168,8 +168,8 @@
       when: _config_raw is defined
       ansible.builtin.assert:
         that:
-          - _config_raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
-          - _config_raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
+          - _config_config_raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
+          - _config_config_raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
           SECURITY: dotfiles_goprivate or dotfiles_aws_profile in config.yml
           contains unsafe characters. These values are written directly into shell export statements;
@@ -181,7 +181,7 @@
     - name: Assert GOSUMDB empty string is rejected (supply chain guard)
       when: _config_raw is defined
       vars:
-        _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
+        _gonosumdb: "{{ _config_config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
           - >-
@@ -204,7 +204,7 @@
     - name: Assert packages_gosumdb is whitelisted (supply chain guard)
       when: _config_raw is defined
       vars:
-        _packages_gosumdb: "{{ _config_raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
+        _packages_gosumdb: "{{ _config_config_raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
         _whitelisted_servers:
           - sum.golang.org
           - sum.redhat.com
@@ -244,11 +244,9 @@
 
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('dotfiles_homebrew_prefix', '/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
+          - _config_raw.get('dotfiles_homebrew_prefix', '/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
         fail_msg: >-
           SECURITY: dotfiles_homebrew_prefix in config.yml contains unsafe characters.
           This value is interpolated directly into shell file-test and source expressions
@@ -258,11 +256,9 @@
 
     - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('claude_log_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_log_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
         fail_msg: >-
           SECURITY: claude_log_dir in config.yml contains unsafe characters. This value is
           rendered verbatim into /etc/logrotate.d/claude-queue-poller (become: true); a
@@ -273,14 +269,12 @@
     - name: Assert claude config dir vars contain only safe path characters (systemd unit injection guard)
       when: _config_raw is defined
       tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('claude_queue_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_work_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_default_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_personal_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_queue_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_work_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_default_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_personal_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
         fail_msg: >-
           SECURITY: claude_queue_config_dir, claude_work_config_dir, claude_default_config_dir,
           or claude_personal_config_dir in config.yml contains unsafe characters. These values
@@ -294,9 +288,8 @@
     - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _install_method: "{{ _raw.get('claude_install_method', 'native') }}"
-        _install_sha256: "{{ _raw.get('claude_install_sha256', '') }}"
+        _install_method: "{{ _config_raw.get('claude_install_method', 'native') }}"
+        _install_sha256: "{{ _config_raw.get('claude_install_sha256', '') }}"
       ansible.builtin.assert:
         that:
           - >-
@@ -310,12 +303,10 @@
 
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('claude_install_url', 'https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
-          - _raw.get('claude_pinned_version', '') | string is match('^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9]+)*$|^$')
+          - _config_raw.get('claude_install_url', 'https://claude.ai/install.sh') | string is match('^https://(claude\.ai|anthropic\.com)/')
+          - _config_raw.get('claude_pinned_version', '') | string is match('^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9]+)*$|^$')
         fail_msg: >-
           SECURITY: claude_install_url in config.yml must start with https:// and use the
           claude.ai or anthropic.com domain. Setting an arbitrary URL causes the installer
@@ -325,16 +316,14 @@
 
     - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       tags: [always]
       ansible.builtin.assert:
         that:
-          - _raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_remote_control_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_queue_poller_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
-          - _raw.get('claude_queue_boot_delay_sec', 60) | int >= 0
-          - _raw.get('claude_queue_poll_interval_sec', 120) | int >= 0
+          - _config_raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_remote_control_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_queue_poller_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _config_raw.get('claude_queue_boot_delay_sec', 60) | int >= 0
+          - _config_raw.get('claude_queue_poll_interval_sec', 120) | int >= 0
         fail_msg: >-
           SECURITY: claude_bin_path, claude_remote_control_config_dir, claude_queue_poller_path
           must contain only alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection
@@ -344,11 +333,9 @@
 
     - name: Assert container_name contains only safe characters (INI injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
+          - _config_raw.get('container_name', 'fedora-dev') | string is match('^[a-zA-Z0-9_-]+$')
         fail_msg: >-
           SECURITY: container_name in config.yml contains unsafe characters.
           This value is rendered verbatim into the [section] header of distrobox.ini;
@@ -358,19 +345,17 @@
 
     - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('claude_queue_repo', '') | string is match('^[A-Za-z0-9_./-]*$')
-          - _raw.get('claude_queue_host_label', '') | string is match('^[a-zA-Z0-9 ._-]*$')
-          - _raw.get('claude_queue_max_turns', 50) | int >= 0
-          - _raw.get('claude_queue_timeout', 1800) | int >= 0
-          - _raw.get('claude_queue_max_issues_per_run', 5) | int >= 0
-          - _raw.get('claude_queue_allowed_authors', []) | map('string') | select() |
+          - _config_raw.get('claude_queue_repo', '') | string is match('^[A-Za-z0-9_./-]*$')
+          - _config_raw.get('claude_queue_host_label', '') | string is match('^[a-zA-Z0-9 ._-]*$')
+          - _config_raw.get('claude_queue_max_turns', 50) | int >= 0
+          - _config_raw.get('claude_queue_timeout', 1800) | int >= 0
+          - _config_raw.get('claude_queue_max_issues_per_run', 5) | int >= 0
+          - _config_raw.get('claude_queue_allowed_authors', []) | map('string') | select() |
             reject('match', '^[a-zA-Z0-9-]+$') | list | length == 0
-          - _raw.get('claude_queue_memory_max', '4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
-          - _raw.get('claude_queue_cpu_quota', '80%') | string is match('^[0-9]+%$')
+          - _config_raw.get('claude_queue_memory_max', '4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
+          - _config_raw.get('claude_queue_cpu_quota', '80%') | string is match('^[0-9]+%$')
         fail_msg: >-
           SECURITY: claude_queue service variables in config.yml contain unsafe values.
           Input: config.yml claude_queue_* section.
@@ -381,14 +366,13 @@
           Fix: claude_queue_allowed_authors entries must be GitHub usernames (^[a-zA-Z0-9-]+$);
           claude_queue_memory_max must match ^[0-9]+(K|M|G|T|%)?$|^infinity$;
           claude_queue_cpu_quota must match ^[0-9]+%$.
-          Current values: allowed_authors={{ _raw.get('claude_queue_allowed_authors', []) }},
-          memory_max={{ _raw.get('claude_queue_memory_max', '4G') }},
-          cpu_quota={{ _raw.get('claude_queue_cpu_quota', '80%') }}.
+          Current values: allowed_authors={{ _config_raw.get('claude_queue_allowed_authors', []) }},
+          memory_max={{ _config_raw.get('claude_queue_memory_max', '4G') }},
+          cpu_quota={{ _config_raw.get('claude_queue_cpu_quota', '80%') }}.
 
     - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
       when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
         _color_keys:
           - desktop_alacritty_color_bg
           - desktop_alacritty_color_fg
@@ -417,45 +401,45 @@
           - desktop_bar_binding_mode_text
       ansible.builtin.assert:
         that:
-          - _color_keys | map('extract', _raw) | select('defined') | list |
+          - _color_keys | map('extract', _config_raw) | select('defined') | list |
             map('string') | select() | list |
             reject('match', '^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$') | list | length == 0
-          - _raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _raw.get('desktop_wm_font_size', 10) | int > 0
-          - _raw.get('desktop_sway_adaptive_sync', '') | string is match('^(enabled|disabled|)$')
-          - _raw.get('desktop_sway_focus_follows_mouse', '') | string is match('^(yes|no|workspace|)$')
-          - _raw.get('desktop_sway_xwayland', '') | string is match('^(disable|)$')
-          - _raw.get('desktop_alacritty_font_size', 12.0) | float > 0
-          - _raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
-          - _raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
-          - _raw.get('desktop_i3status_battery_num', '') | string is match('^[0-9]*$')
-          - _raw.get('desktop_gtk_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _raw.get('desktop_gtk_icon_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
-          - _raw.get('desktop_wm_browser', '') | string is match('^[a-zA-Z0-9/ ._-]*$')
-          - _raw.get('desktop_sway_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
-          - _raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
-          - _raw.get('desktop_sway_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./:_-]*$')
-          - _raw.get('desktop_i3_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
-          - _raw.get('desktop_sway_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
-          - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float >= -1.0
-          - _raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float <= 1.0
-          - _raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float >= -1.0
-          - _raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float <= 1.0
-          - _raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
-          - _raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
-          - _raw.get('desktop_wm_repeat_rate', '50') | int > 0
-          - _raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
-          - _raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
-          - _raw.get('desktop_wm_hide_edge_borders', '') | string is match('^(both|vertical|horizontal|smart|smart_no_gaps|none)?$')
-          - _raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
-          - _raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
-          - _raw.get('desktop_sway_cursor_theme', 'Adwaita') | string is match('^[a-zA-Z0-9_-]+$')
-          - _raw.get('desktop_sway_cursor_size', '24') | string is match('^[0-9]+$')
-          - _raw.get('desktop_sway_libva_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
-          - _raw.get('desktop_sway_vdpau_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
+          - _config_raw.get('desktop_alacritty_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _config_raw.get('desktop_wm_font_family', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _config_raw.get('desktop_wm_font_size', 10) | int > 0
+          - _config_raw.get('desktop_sway_adaptive_sync', '') | string is match('^(enabled|disabled|)$')
+          - _config_raw.get('desktop_sway_focus_follows_mouse', '') | string is match('^(yes|no|workspace|)$')
+          - _config_raw.get('desktop_sway_xwayland', '') | string is match('^(disable|)$')
+          - _config_raw.get('desktop_alacritty_font_size', 12.0) | float > 0
+          - _config_raw.get('containers_log_driver', '') | string is match('^(k8s-file|journald|json-file|syslog|none|)$')
+          - _config_raw.get('desktop_wm_lock_color', '') | string is match('^[0-9a-fA-F]{6}$|^$')
+          - _config_raw.get('desktop_i3status_battery_num', '') | string is match('^[0-9]*$')
+          - _config_raw.get('desktop_gtk_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _config_raw.get('desktop_gtk_icon_theme', '') | string is match('^[a-zA-Z0-9 _-]*$')
+          - _config_raw.get('desktop_wm_browser', '') | string is match('^[a-zA-Z0-9/ ._-]*$')
+          - _config_raw.get('desktop_sway_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _config_raw.get('desktop_i3_polkit_agent', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _config_raw.get('desktop_terminal', '') | string is match('^[a-zA-Z0-9/_.-]*$')
+          - _config_raw.get('desktop_i3_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./_-]*$')
+          - _config_raw.get('desktop_sway_trackpoint_id', '') | string is match('^[a-zA-Z0-9 ./:_-]*$')
+          - _config_raw.get('desktop_i3_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
+          - _config_raw.get('desktop_sway_trackpoint_accel_profile', 'flat') | string is match('^(flat|adaptive)$')
+          - _config_raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float >= -1.0
+          - _config_raw.get('desktop_sway_trackpoint_pointer_accel', 0) | float <= 1.0
+          - _config_raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float >= -1.0
+          - _config_raw.get('desktop_i3_trackpoint_pointer_accel', 0) | float <= 1.0
+          - _config_raw.get('desktop_sway_trackpoint_scroll_factor', 1) | float >= 0
+          - _config_raw.get('desktop_wm_repeat_delay', '200') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_wm_repeat_rate', '50') | int > 0
+          - _config_raw.get('desktop_sway_output', '*') | string is match('^[a-zA-Z0-9*_-]+$')
+          - _config_raw.get('desktop_sway_hidpi_scale', '1') | string is match('^[0-9]+\.?[0-9]*$')
+          - _config_raw.get('desktop_wm_hide_edge_borders', '') | string is match('^(both|vertical|horizontal|smart|smart_no_gaps|none)?$')
+          - _config_raw.get('desktop_wm_border_width', '1') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_wm_floating_border_width', '1') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_sway_cursor_theme', 'Adwaita') | string is match('^[a-zA-Z0-9_-]+$')
+          - _config_raw.get('desktop_sway_cursor_size', '24') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_sway_libva_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
+          - _config_raw.get('desktop_sway_vdpau_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
           SECURITY: desktop_wm_hide_edge_borders must be one of: both, vertical, horizontal,
           smart, smart_no_gaps, none, or empty. A newline payload (e.g. 'both\nexec /bin/sh')
@@ -514,13 +498,11 @@
     - name: Assert keyboard layout vars in config.yml are safe identifiers (sway input block injection guard)
       when: _config_raw is defined
       tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('desktop_sway_keyboard_layout', '') | string is match('^[a-z0-9,_-]*$')
-          - _raw.get('desktop_sway_keyboard_variant', '') | string is match('^[a-z0-9,_-]*$')
-          - _raw.get('desktop_sway_keyboard_options', '') | string is match('^[a-zA-Z0-9:,_-]*$')
+          - _config_raw.get('desktop_sway_keyboard_layout', '') | string is match('^[a-z0-9,_-]*$')
+          - _config_raw.get('desktop_sway_keyboard_variant', '') | string is match('^[a-z0-9,_-]*$')
+          - _config_raw.get('desktop_sway_keyboard_options', '') | string is match('^[a-zA-Z0-9:,_-]*$')
         fail_msg: >-
           SECURITY: desktop_sway_keyboard_layout, desktop_sway_keyboard_variant, and
           desktop_sway_keyboard_options in config.yml must use only safe characters.
@@ -535,14 +517,12 @@
     - name: Assert sway touchpad vars in config.yml are enabled, disabled, or empty (block-escape injection guard)
       when: _config_raw is defined
       tags: [always]
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('desktop_sway_touchpad_tap', '') | string is match('^(enabled|disabled|)$')
-          - _raw.get('desktop_sway_touchpad_natural_scroll', '') | string is match('^(enabled|disabled|)$')
-          - _raw.get('desktop_sway_touchpad_dwt', '') | string is match('^(enabled|disabled|)$')
-          - _raw.get('desktop_sway_touchpad_middle_emulation', '') | string is match('^(enabled|disabled|)$')
+          - _config_raw.get('desktop_sway_touchpad_tap', '') | string is match('^(enabled|disabled|)$')
+          - _config_raw.get('desktop_sway_touchpad_natural_scroll', '') | string is match('^(enabled|disabled|)$')
+          - _config_raw.get('desktop_sway_touchpad_dwt', '') | string is match('^(enabled|disabled|)$')
+          - _config_raw.get('desktop_sway_touchpad_middle_emulation', '') | string is match('^(enabled|disabled|)$')
         fail_msg: >-
           SECURITY: sway touchpad vars in config.yml must be 'enabled', 'disabled', or empty.
           Input: config.yml desktop_sway_touchpad_{tap,natural_scroll,dwt,middle_emulation}.
@@ -555,12 +535,10 @@
 
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_raw is defined
-      vars:
-        _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('desktop_wm_idle_lock_timeout', '300') | string is match('^[0-9]+$')
-          - _raw.get('desktop_wm_idle_display_timeout', '600') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_wm_idle_lock_timeout', '300') | string is match('^[0-9]+$')
+          - _config_raw.get('desktop_wm_idle_display_timeout', '600') | string is match('^[0-9]+$')
         fail_msg: >-
           SECURITY: desktop_wm_idle_lock_timeout or desktop_wm_idle_display_timeout in config.yml
           must be a plain non-negative integer (seconds).
