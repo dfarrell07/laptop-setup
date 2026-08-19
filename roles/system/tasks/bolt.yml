@@ -21,3 +21,12 @@
     - system_bolt_enabled
     - not system_is_container  # D-Bus activation crashes Podman containers
   failed_when: false
+
+- name: Set bolt authorization policy to manual (require explicit enroll per device)
+  ansible.builtin.command: boltctl policy --set manual
+  when:
+    - is_dnf
+    - system_bolt_enabled
+    - not system_is_container
+  changed_when: true
+  failed_when: false

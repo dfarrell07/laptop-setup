@@ -23,6 +23,12 @@ $(error ERROR: Provisioning with 'make -x' is forbidden — shell tracing expose
 	Use: make all  (no -x flag). For Ansible debugging: make all -- -vv)
 endif
 
+# Guard against dry-run bypass — 'make -n' prints but does not execute recipes, skipping VERIFY_AND_RUN and preflight.
+# MUST be before 'override MAKEFLAGS :=' — see ordering note above.
+ifneq ($(findstring n,$(MAKEFLAGS)),)
+$(error ERROR: Provisioning with 'make -n' is forbidden — dry-run bypasses preflight and VERIFY_AND_RUN guards.)
+endif
+
 # Guard against MAKEFLAGS flag injection (CWE-426) — attacker-supplied -x flag exposes vault password in shell trace. MUST be AFTER ifneq above.
 override MAKEFLAGS :=
 

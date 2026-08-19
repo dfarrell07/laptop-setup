@@ -72,15 +72,16 @@
   changed_when: system_authselect_disable_fp_result.rc == 0
   failed_when: false
 
-- name: Warn if authselect disable-feature with-fingerprint failed
-  ansible.builtin.debug:
+- name: Fail if authselect disable-feature with-fingerprint did not deactivate
+  ansible.builtin.fail:
     msg: >-
-      WARNING: authselect disable-feature with-fingerprint returned non-zero
-      (rc={{ system_authselect_disable_fp_result.rc }}).
-      Fingerprint auth may still be active and bypass pam_faillock.
-      Check authselect status manually.
+      authselect disable-feature with-fingerprint exited
+      {{ system_authselect_disable_fp_result.rc | default('unknown') }} — fingerprint auth
+      is still active and bypasses pam_faillock deny threshold entirely.
+      Fix the authselect profile (must be sssd) and re-run.
   when:
     - system_authselect_disable_fp_result.rc | default(0) != 0
+    - system_authselect_disable_fp_result is not skipped
     - not csb_rhel
     - not system_is_container
 
