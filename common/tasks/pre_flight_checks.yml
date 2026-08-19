@@ -2059,7 +2059,6 @@
     - name: Set molecule context flag
       ansible.builtin.set_fact:
         _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
-      when: _pf_is_molecule is not defined
       tags: [always]
 
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
@@ -2172,6 +2171,20 @@
               the critical assertion in site.yml may have been removed or replaced.
               To fix: Set all three variables in config.yml to actual values before running provisioning.
           tags: [always]
+
+        - name: Assert system_timezone is not CHANGE_ME placeholder (play namespace catch)
+          ansible.builtin.assert:
+            that:
+              - system_timezone | default('CHANGE_ME') != 'CHANGE_ME'
+              - system_timezone | default('') | length > 0
+            fail_msg: >-
+              SECURITY: system_timezone is empty or still the CHANGE_ME placeholder in the
+              play namespace. Set system_timezone in config.yml before running make all.
+              Run 'timedatectl list-timezones' to find your zone, then add
+              system_timezone: <zone> to config.yml. This unconditional check prevents
+              -e _pf_is_molecule=true from bypassing the gated assertion.
+          tags: [always]
+          when: not _pf_is_molecule
 
         - name: Assert identity/gitconfig vars have safe characters (play namespace)
           ansible.builtin.assert:

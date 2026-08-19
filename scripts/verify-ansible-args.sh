@@ -138,7 +138,7 @@ export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing b
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so injected into ansible-playbook Python process at exec() time; sudo env_reset only strips these from become tasks, not the initial user-context process that decrypts the vault
-unset PYTHONHOME PYTHONUSERSITE PYTHONSTARTUP  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONUSERSITE enables ~/.local site-packages (bypasses PYTHONPATH unset); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth
+unset PYTHONHOME PYTHONSTARTUP && export PYTHONNOUSERSITE=1  # Python runtime injection — PYTHONHOME replaces stdlib entirely; PYTHONNOUSERSITE=1 disables ~/.local site-packages (PYTHONUSERSITE is a no-op variable; PYTHONNOUSERSITE is the real CPython control); PYTHONSTARTUP low-risk for non-interactive but cleared for defence-in-depth
 export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
 export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
@@ -147,6 +147,7 @@ export ANSIBLE_STDOUT_CALLBACK="default"  # pin stdout callback — prevents ANS
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
 unset CONTAINER_HOST DOCKER_HOST PODMAN_HOST  # prevent socket hijacking — attacker-set CONTAINER_HOST/DOCKER_HOST/PODMAN_HOST redirects podman API calls (including vault credential writes via podman login) to an attacker-controlled socket
+unset GIT_EXEC_PATH  # git-internal subcommand resolver — git resolves git-fetch/git-clone/git-remote via GIT_EXEC_PATH before PATH; a fake /tmp/evil/git-fetch can exfiltrate SSH agent sockets or silently patch cloned source before Ansible sees exit 0; not covered by the PATH pin below
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 
 # Verify collections integrity (defense-in-depth: supply chain verification)

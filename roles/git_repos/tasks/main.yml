@@ -177,6 +177,7 @@
     repo: "{{ item.url }}"
     dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
     update: false
+    recursive: false  # SECURITY: submodule URLs not validated by pre-flight TOFU guard; disable to prevent attacker-controlled .gitmodules redirect
     depth: "{{ item.depth | default(omit) }}"
     accept_newhostkey: true  # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) asserting every SSH git hostname is pre-seeded in ssh_work_keyscan_hosts (github.com exempt — always seeded via API); new hosts must be added to ssh_work_keyscan_hosts in config.yml
   environment:
@@ -213,7 +214,7 @@
 
 - name: Pull upstream changes (ff-only)  # noqa: command-instead-of-module
   ansible.builtin.command:
-    cmd: git pull --ff-only
+    cmd: git pull --ff-only -c core.hooksPath=/dev/null
     chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
   environment:
     LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
