@@ -3,7 +3,7 @@
 # Create Distrobox/Toolbx container + register for Play 3 provisioning.
 
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
-- name: SECURITY assert distrobox variables contain no injection characters (defense-in-depth)
+- name: SECURITY assert distrobox variables are injection-safe
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
   # Do NOT add tags: [always] as that allows --skip-tags always to bypass this check.
   # Duplicates the namespace assertion in pre_flight_checks.yml to protect against
@@ -34,7 +34,7 @@
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
 
-- name: SECURITY assert distrobox_host_exec_commands are in known-safe allowlist (host-exec escape guard, defense-in-depth)
+- name: SECURITY assert distrobox_host_exec_commands in known-safe allowlist (defense-in-depth)
   # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
   # Duplicates the allowlist check in pre_flight_checks.yml as defense-in-depth.
   vars:
@@ -153,7 +153,7 @@
 # Two distinct reasons to skip container creation when the container does not yet exist:
 # (1) packages_install_binaries=false — offline/no-download mode; pulling a new image would fail.
 # (2) fapolicyd_enforcing — CSB restricted mode; distrobox cannot pull images under fapolicyd enforcement.
-- name: Mark container unavailable when binary installs are disabled or fapolicyd is enforcing
+- name: Mark container unavailable — offline or fapolicyd enforcing
   ansible.builtin.set_fact:
     distrobox_tool: "none"
     distrobox_use_distrobox: false
