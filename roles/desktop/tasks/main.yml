@@ -45,6 +45,21 @@
       an unlocked desktop. Set display_timeout > lock_timeout in config.yml.
   when: desktop_effective in ['sway', 'i3']
 
+- name: Assert desktop_wm_hide_edge_borders is an allowlist value
+  ansible.builtin.assert:
+    that: >-
+      desktop_wm_hide_edge_borders | length == 0
+      or desktop_wm_hide_edge_borders in ['none', 'vertical', 'horizontal', 'both', 'smart', 'smart_no_gaps']
+    fail_msg: >-
+      SECURITY: desktop_wm_hide_edge_borders contains a disallowed value.
+      Input: '{{ desktop_wm_hide_edge_borders }}'
+      Mechanism: bare rendering in sway/i3 config templates allows newline injection.
+      Example: "smart\nexec xterm" injects an exec directive run at WM start/restart.
+      Impact: arbitrary commands execute as the user when the window manager starts.
+      Fix: set desktop_wm_hide_edge_borders to one of:
+        none, vertical, horizontal, both, smart, smart_no_gaps (or '' to omit).
+  tags: [always]
+
 - name: Install desktop packages (dnf)
   vars:
     _wm_pkgs: >-
