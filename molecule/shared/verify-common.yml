@@ -336,6 +336,18 @@
     fail_msg: "claude-privacy.conf tmpfiles config not deployed — ~/.claude permissions won't be enforced at boot"
   when: ansible_system == 'Linux'
 
+- name: Slurp claude-privacy.conf content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+  register: verify_claude_tmpfiles_content
+  when: ansible_system == 'Linux'
+
+- name: Assert claude-privacy.conf deploys 0700 tmpfiles rule
+  ansible.builtin.assert:
+    that: "'d %h/.claude 0700' in (verify_claude_tmpfiles_content.content | b64decode)"
+    fail_msg: "claude-privacy.conf missing 'd %h/.claude 0700' line — ~/.claude will not be mode-restricted at boot"
+  when: ansible_system == 'Linux'
+
 - name: Verify Claude CLAUDE.md deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
@@ -344,7 +356,19 @@
 - name: Assert Claude CLAUDE.md exists
   ansible.builtin.assert:
     that: verify_claude_md.stat.exists
-    fail_msg: "Claude CLAUDE.md not deployed"
+    fail_msg: "Claude CLAUDE.md not deployed at {{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+
+- name: Slurp Claude CLAUDE.md content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+  register: verify_claude_md_content
+  when: verify_claude_md.stat.exists
+
+- name: Assert Claude CLAUDE.md contains signoff instruction
+  ansible.builtin.assert:
+    that: "'--signoff' in (verify_claude_md_content.content | b64decode)"
+    fail_msg: "Claude CLAUDE.md at {{ ansible_user_dir }}/.claude-personal/CLAUDE.md missing '--signoff' instruction — template may have rendered empty"
+  when: verify_claude_md.stat.exists
 
 # --- Git hooks ---
 - name: Verify gitleaks pre-commit hook
@@ -357,7 +381,10 @@
     that:
       - verify_precommit.stat.exists
       - verify_precommit.stat.executable
-    fail_msg: "Gitleaks pre-commit hook missing or not executable"
+    fail_msg: >-
+      Gitleaks pre-commit hook missing or not executable
+      (exists={{ verify_precommit.stat.exists | default(false) }},
+      executable={{ verify_precommit.stat.executable | default(false) }})
 
 - name: Verify gh CLI config directory
   ansible.builtin.stat:
@@ -567,7 +594,7 @@
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
 
-- name: Check sysctl hardening config contains security-critical keys
+- name: Assert sysctl 90-hardening.conf contains expected security keys
   ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
@@ -591,7 +618,7 @@
     - verify_sysctl_file is not skipped
     - verify_sysctl_file.stat.exists
 
-- name: Check sysctl hardening config contains ip_forward keys
+- name: Assert sysctl 90-hardening.conf contains ip_forward keys
   ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
   loop:
     - 'net.ipv4.ip_forward = {{ system_enable_ip_forward | bool | int }}'
