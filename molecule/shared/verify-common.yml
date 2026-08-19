@@ -1477,10 +1477,10 @@
     - not (system_is_container | default(false))
     - verify_auditd_rules.stat.exists
 
-# --- auditd.conf coverage (deployed by system role on non-CSB Linux only) ---
-# auditd.conf is NOT deployed on any CSB tier (csb_detected=true): IT owns auditd.conf
-# on both RHEL CSB (csb_rhel=true) and Fedora hybrid CSB (csb_detected=true, csb_rhel=false).
-# Guard is 'not csb_detected' (matches auditd.yml when: not csb_detected).
+# --- auditd.conf coverage (deployed by system role on non-RHEL-CSB Linux) ---
+# auditd.conf is deployed on Fedora hybrid CSB (csb_detected=true, csb_rhel=false) but NOT
+# on RHEL CSB (csb_rhel=true) where IT manages auditd.conf via SCAP policies.
+# Guard is 'not csb_rhel' (matches auditd.yml when: not csb_rhel).
 - name: Stat /etc/audit/auditd.conf
   ansible.builtin.stat:
     path: /etc/audit/auditd.conf
@@ -1488,7 +1488,7 @@
   become: true
   when:
     - ansible_system == 'Linux'
-    - not csb_detected  # CSB IT owns auditd.conf on all CSB tiers; we do not deploy it
+    - not csb_rhel  # RHEL CSB IT manages auditd.conf; Fedora hybrid is user-managed
     - not (system_is_container | default(false))
 
 - name: Assert auditd.conf deployed with mode 0640

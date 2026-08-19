@@ -38,12 +38,12 @@
     - not csb_rhel
     - not system_is_container  # resolved restart crashes privileged Podman containers
 
-- name: Remove DNS-over-TLS config on CSB machines (corporate networks block outbound 1.1.1.1)
+- name: Remove DNS-over-TLS config on RHEL CSB (IT manages DNS via IPA/SSSD)
   ansible.builtin.file:
     path: /etc/systemd/resolved.conf.d/99-dot.conf
     state: absent
   when:
-    - csb_detected
+    - csb_rhel
     - not system_is_container
   notify: Restart systemd-resolved
 
@@ -57,33 +57,23 @@
     - csb_rhel
     - not system_is_container
 
-- name: Warn that DoT and catch-all routing domain are absent on CSB Fedora hybrid
-  ansible.builtin.debug:
-    msg: >-
-      CSB Fedora hybrid: 99-dot.conf removed. DNS-over-TLS and Domains=~. catch-all
-      are not applied. Tailscale MagicDNS uses per-link routing domains and works
-      correctly, but other DNS-over-TLS or catch-all DNS expectations are unmet.
-  when:
-    - csb_detected
-    - not csb_rhel
-    - not system_is_container
 
 - name: Assert system_dot_mode is valid
   ansible.builtin.assert:
     that: system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'opportunistic']
     fail_msg: "system_dot_mode='{{ system_dot_mode }}' is not a valid DNSOverTLS value — use yes, no, or opportunistic"
-  when: not csb_detected and not system_is_container
+  when: not csb_rhel and not system_is_container
 
 - name: Assert system_dnssec_mode is valid
   ansible.builtin.assert:
     that: system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'allow-downgrade']
     fail_msg: "system_dnssec_mode='{{ system_dnssec_mode }}' is not a valid DNSSEC value — use yes, no, or allow-downgrade"
-  when: not csb_detected and not system_is_container
+  when: not csb_rhel and not system_is_container
 
 # yamllint disable rule:line-length
-- name: DNS-over-TLS deploy and warnings (skipped on CSB and in containers)
+- name: DNS-over-TLS deploy and warnings (skipped on RHEL CSB and in containers)
   when:
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container
   block:
     - name: Deploy DNS-over-TLS resolved config
