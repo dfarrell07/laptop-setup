@@ -185,8 +185,8 @@
     # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
     - not csb_rhel
     - not system_is_container
-    - system_chage_inactive_days.rc | default(1) == 0
-    - system_chage_inactive_days.stdout | default('') | trim != system_inactive_days | string
+    - (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id] is not none
+    - (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id][5] | default('') | string != system_inactive_days | string
   changed_when: _chage_inactive_result.rc == 0
   failed_when: false
 
