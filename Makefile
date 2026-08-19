@@ -103,8 +103,7 @@ bootstrap: guard-not-root
 	@# Verify vault-pass-ci.sh integrity BEFORE copying (FATAL if check fails) — guards against supply chain tampering
 	@cd scripts && sha256sum -c vault-pass-ci.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass-ci.sh integrity verified" || { echo "ERROR: vault-pass-ci.sh failed integrity check — possible tampering. Run: sha256sum scripts/vault-pass-ci.sh > scripts/vault-pass-ci.sh.sha256" >&2; exit 1; }
 	@if [ ! -f scripts/vault-pass.sh ]; then \
-		cp scripts/vault-pass-ci.sh scripts/vault-pass.sh; \
-		sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256; \
+		cd scripts && cat vault-pass-ci.sh > vault-pass.sh && chmod 700 vault-pass.sh && sha256sum vault-pass.sh > vault-pass.sh.sha256 && cd .. && \
 		echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; \
 	fi
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
