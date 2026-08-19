@@ -74,6 +74,9 @@ done
 #                                 skewing CSB detection (csb_detect.yml reads cached facts before gather)
 #   ANSIBLE_INVENTORY_PLUGINS   — malicious inventory plugin injects host vars (e.g. ansible_python_interpreter)
 #                                 that override connection defaults, executing attacker-controlled binary
+#   ANSIBLE_VARS_PLUGINS        — vars plugins run before any play task at inventory/play precedence
+#                                 (higher than group_vars); injects/overrides variables before
+#                                 pre_flight_checks.yml runs, bypassing SSTI guards entirely
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
