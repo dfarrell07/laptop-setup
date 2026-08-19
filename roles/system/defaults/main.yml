@@ -256,25 +256,12 @@ system_sysrq: 0  # authoritative value in group_vars/all/vars.yml; kept here for
 # The Linux kernel suppresses RA processing when accept_ra<=1 AND forwarding=1 (always
 # set by this playbook for Kubernetes/OVN-K). Only value 2 accepts RAs with forwarding=1.
 system_ipv6_accept_ra: 0
-# BPF JIT hardening: 1=constant blinding for unprivileged users only (default here;
-# value 2=blind all callers including root — breaks bpftool prog dump jited).
-# Set 2 in config.yml for strict CIS/STIG compliance if you don't need JIT inspection.
-# NOTE: With system_unprivileged_bpf_disabled=2 (default), value 1 here provides no JIT
-# protection — unprivileged BPF is fully blocked so there are no unprivileged programs for
-# the JIT blinder to act on. Root-initiated BPF (bpftool, bpftrace, perf) runs with
-# unblinded JIT constants. To blind root BPF programs, set 2 in config.yml; the accepted
-# trade-off is that bpftool prog dump jited will no longer work.
+# BPF JIT hardening: 1=blind unprivileged callers; 2=blind all (breaks bpftool jit dump).
+# Value 1 is a no-op when system_unprivileged_bpf_disabled=2; set 2 in config.yml for CIS strict.
 system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 
-# NOTE: On stock Fedora 44 this sysctl is write-once locked to 2 at boot; any write returns EPERM.
-# The boot-time sysctl.d pass also always returns EPERM on Fedora 44 (kernel locks this during init
-# before sysctl.d runs); the entry in 90-hardening.conf is a no-op on stock Fedora 44 at all stages,
-# retained only for portability to kernels without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
-# Overriding to 1 requires a custom kernel (CONFIG_BPF_UNPRIV_DEFAULT_OFF=n). EPERM is tolerated
-# in failed_when; this value (2) is retained for custom-kernel portability.
-# Unprivileged BPF values: 0=allow all (insecure); 1=block unprivileged users (root can re-enable;
-# not achievable on stock Fedora 44); 2=write-once locked (Fedora 44 default via CONFIG_BPF_UNPRIV_DEFAULT_OFF=y).
-# Override in config.yml only if using a custom kernel without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
+# Write-once locked to 2 on stock Fedora 44 (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y); EPERM on write is tolerated.
+# Override in config.yml only for custom kernels built without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
 system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
 # OVN-K/Submariner performance tuning (profile: work only); not security hardening.
