@@ -34,7 +34,7 @@
     that:
       - "packages_gosumdb is not defined or (packages_gosumdb != 'off' and packages_gosumdb | length > 0)"
       - "packages_gosumdb is not defined or (packages_gosumdb | type_debug != 'str' or packages_gosumdb != '')"
-      - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*:[0-9]{1,5}$') is not none)"  # yamllint disable-line rule:line-length
+      - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+:[0-9]{1,5}$') is not none)"  # yamllint disable-line rule:line-length
     fail_msg: >-
       GOSUMDB must not be set to 'off' or empty string — both disable Go checksum database verification
       and allow GOPROXY tampering attacks with undetected init() code injection.
@@ -57,6 +57,17 @@
   environment:
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
+
+- name: Clear stale Go module cache (TOCTOU prevention)
+  # Prevents cache poisoning attack: attacker pre-populates module cache with
+  # backdoored binary, reachability check passes, then go install uses cached
+  # binary without GOSUMDB consultation. Clearing cache on each provision
+  # ensures GOSUMDB validation on every install (unless explicitly disabled).
+  # See SECURITY.md § "Go Module Supply Chain" for TOCTOU discussion.
+  ansible.builtin.command:
+    cmd: go clean -modcache
+  changed_when: false
+  become: false
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
