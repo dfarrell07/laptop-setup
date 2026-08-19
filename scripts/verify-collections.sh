@@ -201,11 +201,33 @@ for namespace_dir in extracted_root.glob('*/'):
         # Check fresh extraction against PYTHON_MANIFEST.json
         # This detects tarball tampering where new files are added but not in manifest
         tarball_base = None
+        expected_prefix = collection_name.replace('/', '-')
+
+        # Exact matching: look for manifest entries matching "namespace-collection-VERSION.tar"
         for key in manifest_data.keys():
-            # Match tarball filename to manifest key (e.g., 'ansible-posix-2.2.2.tar' matches namespace/collection)
-            if collection_name.replace('/', '-') in key:
-                tarball_base = key
+            if not key.endswith('.tar'):
+                continue
+            # Remove .tar suffix to get "namespace-collection-VERSION"
+            name_with_version = key[:-4]
+            # Split by hyphen; version is typically the last 1-3 numeric segments
+            # Try removing progressively more segments to find the prefix
+            parts = name_with_version.split('-')
+            for num_version_parts in range(1, 4):
+                if num_version_parts >= len(parts):
+                    break
+                key_prefix = '-'.join(parts[:-num_version_parts])
+                if key_prefix == expected_prefix:
+                    tarball_base = key
+                    break
+            if tarball_base:
                 break
+
+        # Warn if collection not found in manifest
+        if not tarball_base:
+            print(f"WARNING: {collection_name}: not found in PYTHON_MANIFEST.json", file=sys.stderr)
+            print(f"         This collection will not be validated against manifest.", file=sys.stderr)
+            # Continue without validation (benign — bootstrap may not have run yet)
+            tarball_base = None
 
         if tarball_base and manifest_data.get(tarball_base):
             manifest_files = get_manifest_files(manifest_data, tarball_base)
