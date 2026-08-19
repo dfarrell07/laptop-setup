@@ -203,9 +203,11 @@
   failed_when: false  # intentional: Warn checks ActiveState, not .failed — do NOT replace with ignore_errors: true
 
 - name: Warn if podman user socket failed to start
+  vars:
+    _socket_state: "{{ (containers_podman_socket.status | default({})).ActiveState | default('') }}"
   ansible.builtin.debug:
     msg: >-
-      WARNING: podman.socket failed to start ({{ (containers_podman_socket.status | default({})).ActiveState |
+      WARNING: podman.socket failed to start ({{ _socket_state |
       default(containers_podman_socket.msg | default('unknown')) }}).
       kind and docker-compatible CLIs will not work. Fix: systemctl --user enable --now podman.socket.
       If that fails: systemctl --user status podman.socket; journalctl --user -u podman.socket
@@ -213,7 +215,7 @@
   when:
     - is_linux
     - not (system_is_container)  # scope:user systemd crashes Podman container PID 1
-    - (containers_podman_socket.status | default({})).ActiveState | default('') not in ['active', 'activating']
+    - _socket_state not in ['active', 'activating']
 
 - name: Check if docker.socket unit file exists  # noqa: command-instead-of-module
   ansible.builtin.command: systemctl cat docker.socket
