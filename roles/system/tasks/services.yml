@@ -177,7 +177,7 @@
       register: system_usbguard_rules_stat
       when: not ansible_check_mode
 
-    - name: Assert USBGuard rules.conf exists and is non-empty (keyboard safety check)
+    - name: Assert USBGuard rules.conf non-empty (keyboard safety)
       ansible.builtin.assert:
         that:
           - system_usbguard_rules_stat.stat.exists | default(false)
