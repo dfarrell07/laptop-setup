@@ -534,17 +534,19 @@
     - not system_is_container  # target masking can trigger daemon-reload in privileged containers
   failed_when: false
 
-# OVN/openvswitch service masking — kind manages OVS in containers, system-level
-# OVS daemons conflict with kind's container-based OVS management for OVN-K dev.
-- name: Mask openvswitch services (ovs-vswitchd, ovsdb-server)
+# OVN/openvswitch service masking — kind manages OVS and OVN in containers, system-level
+# OVS/OVN daemons conflict with kind's container-based management for OVN-K dev.
+- name: Mask openvswitch and OVN services (ovs-vswitchd, ovsdb-server, ovn-controller, ovn-northd)
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: true
   loop:
     - ovs-vswitchd.service
     - ovsdb-server.service
+    - ovn-controller.service
+    - ovn-northd.service
   when:
     - profile == 'work'  # OVN-K/kind dev workstation
     - not csb_rhel  # User-managed Fedora hybrid CSB
     - not system_is_container
-  failed_when: false  # openvswitch package may not be installed
+  failed_when: false  # openvswitch/ovn packages may not be installed
