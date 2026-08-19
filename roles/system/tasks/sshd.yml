@@ -317,5 +317,25 @@
     - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
       _sshd_dropin_post_validation.stat.checksum
 
+- name: Check if provisioning session is over SSH on port 22 (connection safety check)
+  ansible.builtin.set_fact:
+    _ssh_connection_port: "{{ lookup('env', 'SSH_CONNECTION').split()[-1] | default('') }}"
+  when:
+    - ssh_port | int != 22
+    - lookup('env', 'SSH_CONNECTION') | length > 0
+
+- name: Fail if changing SSH port while connected over port 22 (prevents connection loss)
+  ansible.builtin.fail:
+    msg: >-
+      SAFETY: Cannot change sshd to port {{ ssh_port }} while provisioning session is
+      running over SSH port {{ _ssh_connection_port }}. The sshd restart will kill this
+      connection and abort provisioning mid-run. Run at the local console or inside tmux
+      (see CLAUDE.md Quick Reference step 4). To override this check and proceed anyway
+      (NOT recommended unless in tmux), set system_ssh_port_change_override: true in config.yml.
+  when:
+    - ssh_port | int != 22
+    - _ssh_connection_port | default('') == '22'
+    - not (system_ssh_port_change_override | default(false) | bool)
+
 - name: Flush sshd restart handler immediately after TOCTOU integrity check passes
   ansible.builtin.meta: flush_handlers
