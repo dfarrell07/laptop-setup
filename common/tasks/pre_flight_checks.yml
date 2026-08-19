@@ -1935,16 +1935,47 @@
               hyphen only (e.g., id_ed25519_sk, id_rsa_redhat, id_ed25519_sk_signing).
           tags: [always]
 
+        - name: Assert dotfiles_gonosumdb in play namespace contains only private domains (GONOSUMDB bypass guard)
+          vars:
+            _gonosumdb_play: "{{ dotfiles_gonosumdb | default('') | string }}"
+          ansible.builtin.assert:
+            that:
+              - >-
+                (_gonosumdb_play | length == 0) or
+                (_gonosumdb_play | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
+              - _gonosumdb_play | string is match('^[a-zA-Z0-9.,/_-]*$')
+            fail_msg: >-
+              SECURITY: dotfiles_gonosumdb in play namespace (set via -e flag or config.yml)
+              contains public module registry domains, bypassing Go checksum verification.
+              Command-line -e flags have higher precedence than config.yml validation, allowing:
+              make all -e dotfiles_gonosumdb='attacker.io,github.com'
+
+              When GONOSUMDB='github.com', the Go toolchain skips GOSUMDB (checksum database)
+              verification for ANY module whose path starts with github.com, allowing:
+              - github.com/attacker-control/backdoor@v1.0.0 to install without checksums
+              - init() code execution during compilation with provisioning privileges
+              - Undetected code injection (XZ Utils 2024 / CVE-2024-3156 vector)
+
+              MITIGATION: dotfiles_gonosumdb must ONLY contain PRIVATE domain patterns.
+              Reject all public registries: github.com, golang.org, mvdan.cc, sigs.k8s.io,
+              k8s.io, gopkg.in. Allow only internal corporate/air-gapped domains.
+
+              REQUIRED FIX: Either omit dotfiles_gonosumdb from -e flag (use config.yml default),
+              or set it ONLY to private domain prefixes:
+                - make all -e dotfiles_gonosumdb='pkgs.devel.redhat.com,internal.company.com'
+
+              Do NOT override dotfiles_gonosumdb via -e flag with public registries.
+              Current value (from -e flag or config.yml): '{{ _gonosumdb_play }}'.
+          tags: [always]
+
         - name: Assert environment vars in play namespace are safe (shell injection guard)
           ansible.builtin.assert:
             that:
-              - dotfiles_gonosumdb | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
               - dotfiles_goprivate | default('') | string is match('^[a-zA-Z0-9.,/_-]*$')
               - dotfiles_aws_profile | default('') | string is match('^[a-zA-Z0-9_-]*$')
               - dotfiles_claude_queue_repo | default('') | string is match('^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$|^$')
             fail_msg: >-
               SECURITY: Environment variables in the play namespace contain unsafe characters:
-              dotfiles_gonosumdb={{ dotfiles_gonosumdb | default('NOTSET') }},
               dotfiles_goprivate={{ dotfiles_goprivate | default('NOTSET') }},
               dotfiles_aws_profile={{ dotfiles_aws_profile | default('NOTSET') }},
               dotfiles_claude_queue_repo={{ dotfiles_claude_queue_repo | default('NOTSET') }}.
@@ -1952,7 +1983,7 @@
               can escape the double-quoted context to inject arbitrary commands (shell code injection via
               semicolon, backtick, dollar-paren, etc.; command chaining via pipe/logical operators).
               Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
-              (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
+              (dotfiles_goprivate); alphanumeric, underscore, hyphen
               (dotfiles_aws_profile); owner/repo format only (dotfiles_claude_queue_repo).
           tags: [always]
 
