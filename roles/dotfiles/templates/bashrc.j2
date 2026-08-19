@@ -9,7 +9,8 @@ export EDITOR=vim
 export VISUAL=vim
 HISTSIZE=50000
 HISTFILESIZE=50000
-HISTCONTROL=ignoredups:erasedups:ignorespace
+# Guard against readonly HISTCONTROL set by IT scripts (redhat-internal-infosec-config.sh on CSB/hybrid)
+[[ -z "${HISTCONTROL+x}" ]] && HISTCONTROL=ignoredups:erasedups:ignorespace
 shopt -s histappend
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
 export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output on every cd
