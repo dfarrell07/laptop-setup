@@ -18,6 +18,7 @@ unset BASH_ENV  # SECURITY: prevent BASH_ENV=/tmp/evil.sh sourcing before saniti
 #   8. verify-collections.sh — supply-chain integrity check before exec
 
 set -euo pipefail
+IFS=$'\n\t'  # SECURITY: reset IFS to safe value; prevents word-splitting bypass if a caller set IFS to a custom value before invoking this script
 
 # SECURITY: Defense-in-depth against BASH_ENV/ENV/ZDOTDIR shell-init injection.
 # The Makefile's 'unexport BASH_ENV ZDOTDIR ENV' is the load-bearing fix that prevents
@@ -27,6 +28,7 @@ set -euo pipefail
 # NOTE: By the time this line runs the BASH_ENV payload has already executed if the
 # variable was somehow inherited; this guard is strictly for child-process containment.
 unset BASH_ENV ZDOTDIR ENV
+unset CDPATH  # CDPATH injection: cd "scripts/.." searches CDPATH before CWD; poisons _repo_root and all downstream exports
 
 # Collect all command-line arguments after the script name
 args=("$@")
