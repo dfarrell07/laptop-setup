@@ -60,6 +60,13 @@
       loop_control:
         label: "subctl{{ item.item.suffix }}"
 
+    - name: Fail if any versioned subctl go install failed
+      ansible.builtin.fail:
+        msg: "go install failed for subctl version(s) — see warnings above"
+      when: >
+        packages_subctl_install_results.results | default([])
+        | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
+
     - name: Verify no symlinks in destination path (symlink attack prevention)
       ansible.builtin.assert:
         that:
@@ -244,6 +251,13 @@
            | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}
       loop_control:
         label: "{{ item.item.suffix }}"
+
+    - name: Fail if any versioned RH subctl install failed
+      ansible.builtin.fail:
+        msg: "RH subctl install failed for version(s) — see warnings above"
+      when: >
+        _pkg_subctl_install.results | default([])
+        | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
 
   rescue:
     - name: Clean up stale subctl tarballs from /tmp on failure
