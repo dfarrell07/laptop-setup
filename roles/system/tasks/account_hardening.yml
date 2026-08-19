@@ -165,14 +165,12 @@
 # useradd -D -f 30 only governs future accounts. Apply the same 30-day
 # inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
 - name: Check current inactive lockout setting for existing user account
-  # Read /etc/shadow field 7 (inactive-days integer) directly; chage -l prints
-  # a human-readable calendar date, not the raw integer, so regex_search('30') never matches.
-  ansible.builtin.command:
-    argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print $7} END{if (!found) exit 1}", /etc/shadow]
+  ansible.builtin.getent:
+    database: shadow
+    key: "{{ real_user_id }}"
+    fail_key: false
   register: system_chage_inactive_days
-  changed_when: false
-  failed_when: false
-  check_mode: false  # read-only probe — must run in check mode
+  check_mode: false
   when:
     - not csb_rhel
     - not system_is_container
@@ -250,11 +248,11 @@
     - not system_is_container
 
 - name: Check if real user account exists in system passwd database
-  ansible.builtin.command:
-    argv: [getent, passwd, "{{ real_user_id }}"]
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ real_user_id }}"
+    fail_key: false
   register: system_real_user_exists
-  changed_when: false
-  failed_when: false
   check_mode: false
   when:
     - real_user_id | length > 0
@@ -292,7 +290,7 @@
       register: _linger_result
       failed_when: false
       when:
-        - system_real_user_exists.rc | default(1) == 0
+        - (system_real_user_exists.ansible_facts.getent_passwd | default({}))[real_user_id] is not none
       # Without linger, systemd kills the user session (and podman.socket) when the
       # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
 
