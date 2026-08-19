@@ -663,3 +663,12 @@ system_udev_rules_d_allowlist: []
 # To allow a legitimate non-RPM file, add its full path to this list in config.yml.
 system_dbus_system_d_allowlist: []
 
+# dnf-automatic unattended update behavior: apply mode (install) vs download-only.
+# true: dnf-automatic applies security updates automatically (default for backward compatibility).
+# false: dnf-automatic downloads and stages updates but waits for manual `dnf upgrade`.
+# For dev laptops, set false in config.yml to prevent auto-installation of potentially
+# disruptive kernel/driver updates. Pre-reboot window: downloaded updates do not take effect
+# until the next `dnf upgrade` or system reboot. Applies to standard Fedora and hybrid CSB only
+# (RHEL CSB skips dnf-automatic entirely; IT manages updates via RHSM/Satellite).
+system_dnf_automatic_apply_updates: true
+

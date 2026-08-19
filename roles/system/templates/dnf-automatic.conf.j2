@@ -4,7 +4,7 @@
 
 [commands]
 # Apply all available updates (not just download)
-apply_updates = yes
+apply_updates = {{ 'yes' if system_dnf_automatic_apply_updates else 'no' }}
 download_updates = yes
 
 # Security advisories only — applies kernel, container runtime, and compiler security updates.
