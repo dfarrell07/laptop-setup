@@ -14,6 +14,7 @@
       - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
       - (container_image | default('') == '') or
         (container_image | default('') is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
+      - container_image | default('') == '' or '@sha256:' in (container_image | default(''))
       - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
     fail_msg: >-
@@ -24,9 +25,9 @@
         entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
         flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
       container_image={{ container_image | default('') }} --
-        must be from a trusted registry (registry.fedoraproject.org/, quay.io/,
-        registry.access.redhat.com/, registry.redhat.io/); untrusted registry controls image
-        content even with digest pin (CAP_BPF+CAP_PERFMON, $HOME bind-mount);
+        must be from a trusted registry with a pinned @sha256: digest; mutable tags let the
+        registry serve arbitrary content (CAP_BPF+CAP_PERFMON, $HOME bind-mounted —
+        vault-pass.sh/.ssh/.gnupg accessible); use registry/image:tag@sha256:<64-hex>;
       container_name={{ container_name | default('') }} --
         must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
       distrobox_packages={{ distrobox_packages | default([]) }} --

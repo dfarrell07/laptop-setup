@@ -2406,6 +2406,7 @@
               - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
               - (container_image | default('') == '') or
                 (container_image | default('') is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
+              - container_image | default('') == '' or '@sha256:' in (container_image | default(''))
               - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
               - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
             fail_msg: >-
@@ -2428,9 +2429,9 @@
               claude_queue_cpu_quota={{ claude_queue_cpu_quota | default('80%') }} --
                 must match ^[0-9]+%$ (newline injects systemd directive bypassing resource limit);
               container_image={{ container_image | default('') }} --
-                must be from a trusted registry (registry.fedoraproject.org/, quay.io/,
-                registry.access.redhat.com/, registry.redhat.io/); untrusted registry controls
-                image content even with digest pin (CAP_BPF+CAP_PERFMON, $HOME bind-mount);
+                must be from a trusted registry with a pinned @sha256: digest; mutable tag lets
+                registry serve arbitrary content (CAP_BPF+CAP_PERFMON, $HOME bind-mount exposes
+                vault-pass.sh/.ssh/.gnupg). Use: registry/image:tag@sha256:<digest>;
               container_name={{ container_name | default('') }} --
                 must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox);
               distrobox_packages={{ distrobox_packages | default([]) }} --
@@ -2626,15 +2627,17 @@
         that:
           - _cimage2 is match('^[a-zA-Z0-9._/:@-]*$|^$')
           - (_cimage2 == '') or (_cimage2 is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
+          - _cimage2 == '' or '@sha256:' in _cimage2
           - _raw.get('container_name', '') | string is match('^[a-zA-Z0-9_-]*$|^$')
           - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$|^$')
         fail_msg: >-
           SECURITY: container_image, container_name, or container_release in config.yml
-          contains unsafe characters or an untrusted registry. container_image must start
-          with registry.fedoraproject.org/, quay.io/, registry.access.redhat.com/, or
-          registry.redhat.io/ — untrusted registries control image content even with a
-          digest pin (CAP_BPF+CAP_PERFMON, $HOME bind-mount). container_name and
-          container_release must be alphanumeric/dot/underscore/hyphen only.
+          contains unsafe characters, an untrusted registry, or is missing @sha256: digest.
+          container_image must start with a trusted registry prefix and include @sha256:<digest>
+          — mutable tags let the registry serve arbitrary content at pull time; the container
+          runs with CAP_BPF+CAP_PERFMON and $HOME bind-mounted (vault-pass.sh, .ssh/, .gnupg/
+          accessible). container_name and container_release must be alphanumeric/dot/underscore/
+          hyphen only. Use: registry.fedoraproject.org/image:tag@sha256:<64-hex-chars>
 
     - name: Assert pwquality vars are non-negative integers
       when: _config_yml_raw.content is defined
