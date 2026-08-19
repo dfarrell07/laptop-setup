@@ -10,6 +10,18 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Check if required kernel modules are already loaded
+  ansible.builtin.shell:
+    cmd: lsmod | grep -qE '^(ip6_tables|ip6table_nat|ip_tables|iptable_nat|br_netfilter|nf_conntrack|overlay)'
+  register: _required_modules_loaded
+  changed_when: false
+  failed_when: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _modules_disabled_state.content is defined
+    - (_modules_disabled_state.content | b64decode | trim) == '1'
+
 - name: Fail if modules_disabled ratchet prevents module loading
   ansible.builtin.fail:
     msg: |
@@ -29,6 +41,7 @@
     - not system_is_container
     - _modules_disabled_state.content is defined
     - (_modules_disabled_state.content | b64decode | trim) == '1'
+    - _required_modules_loaded.rc != 0
 
 - name: Load iptables kernel modules for kind
   community.general.modprobe:
