@@ -54,6 +54,21 @@
           before re-running. All user overrides were silently dropped.
       tags: [always]
 
+    - name: Assert playbook is not running inside a container host (hardening bypass guard)
+      ansible.builtin.assert:
+        that:
+          - not system_is_container or ansible_connection == 'containers.podman.podman'
+        fail_msg: >-
+          SECURITY: system_is_container is true but ansible_connection is not 'containers.podman.podman'.
+          Threat: running make all inside a Podman/Docker container causes system_is_container=true,
+          silently skipping the entire hardening stack (SELinux, sysctl, firewall, PAM, auditd, AIDE).
+          Input: ansible_connection={{ ansible_connection }}, virtualization_type={{ ansible_facts['virtualization_type'] | default('unknown') }}.
+          Mechanism: system_is_container guards in roles/system/tasks/*.yml skip ~25 hardening sub-tasks when true.
+          Example: podman run --privileged fedora:40 bash; make all — play succeeds, zero hardening applied.
+          Impact: machine appears fully provisioned but carries no OS hardening.
+          Fix: run make all on a bare-metal host, VM, or WSL target — not from inside a container.
+      tags: [always]
+
     # SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
     # and check that identity variables do not contain Jinja2 expressions before any template
     # task can trigger lazy evaluation of the injected value.
@@ -433,6 +448,10 @@
           desktop_sway_output must match ^[a-zA-Z0-9*_-]+$ (e.g. '*' or 'eDP-1'); a newline
           payload injects an exec directive into sway.config (e.g. "*\nexec /bin/sh -c 'cmd'").
           desktop_sway_hidpi_scale must match ^[0-9]+\.?[0-9]*$ (e.g. '1' or '1.5').
+          desktop_sway_cursor_theme must match ^[a-zA-Z0-9_-]+$ (e.g. 'Adwaita'); shell
+          metacharacters allow injection into the exec dbus-update-activation-environment and
+          seat commands in sway.config (e.g. 'Adwaita; id>/tmp/pwned #' executes on WM start).
+          desktop_sway_cursor_size must be a non-negative integer (e.g. 24).
 
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
       when: _config_yml_raw.content is defined
