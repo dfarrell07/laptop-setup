@@ -2104,6 +2104,24 @@
               hyphen only (e.g., id_ed25519_sk, id_rsa_redhat, id_ed25519_sk_signing).
           tags: [always]
 
+        - name: Assert real_user_id in play namespace matches valid Linux username character set (ssh_config injection guard)
+          when: profile == 'work'
+          ansible.builtin.assert:
+            that:
+              - real_user_id | default('') | length > 0
+              - real_user_id | default('') is match('^[a-z_][a-z0-9_.@-]{0,31}$')
+            fail_msg: >-
+              SECURITY: real_user_id='{{ real_user_id | default("(empty)") }}' is empty or
+              contains characters outside the allowed set (^[a-z_][a-z0-9_.@-]{0,31}$).
+              Input: real_user_id from environment (USER) or -e override.
+              Mechanism: the value is rendered verbatim into 'User {{ real_user_id }}' in the
+              ssh_config.j2 'Host code.engineering.redhat.com' stanza (work profile only).
+              A newline in the value closes the User directive and injects an arbitrary
+              ssh_config keyword (e.g. ProxyCommand) into that stanza.
+              Impact: RCE on the next SSH connection to code.engineering.redhat.com.
+              Fix: ensure USER is a valid Linux username (lowercase, digits, _, @, ., -; max 32 chars).
+          tags: [always]
+
         - name: Assert dotfiles_gonosumdb in play namespace contains only private domains (GONOSUMDB bypass guard)
           vars:
             _gonosumdb_play: "{{ dotfiles_gonosumdb | default('') | string }}"
@@ -2168,6 +2186,20 @@
               This check catches -e overrides that bypass the file-based config.yml scan.
               Allowed characters: alphanumeric, underscore, hyphen.
               Received: "{{ dotfiles_oh_my_zsh_theme | default('') }}".
+          tags: [always]
+
+        - name: Assert dotfiles_homebrew_prefix in play namespace contains only safe path characters (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - dotfiles_homebrew_prefix | default('/opt/homebrew') | string is match('^[a-zA-Z0-9/_-]+$')
+            fail_msg: >-
+              SECURITY: dotfiles_homebrew_prefix in play namespace contains unsafe characters
+              (possibly set via -e flag, bypassing config.yml file-based check).
+              This value is interpolated unfiltered into double-quoted source and [[ -f ... ]]
+              expressions in .zshrc; shell metacharacters (e.g. $(cmd)) execute on every
+              interactive shell open on macOS. Allowed: alphanumeric, slash, underscore,
+              hyphen (e.g. /opt/homebrew or /usr/local).
+              Fix: omit the -e dotfiles_homebrew_prefix=... flag or set a safe value in config.yml.
           tags: [always]
 
         - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed

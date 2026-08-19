@@ -82,6 +82,20 @@
   when: is_dnf and not csb_rhel and not system_is_container
   tags: [always]
 
+- name: "SECURITY: Validate system_kernel_lockdown value (injection guard)"
+  ansible.builtin.assert:
+    that:
+      - system_kernel_lockdown | string is match('^(integrity|confidentiality|none|)$')
+    fail_msg: >-
+      SECURITY: system_kernel_lockdown has an invalid value: '{{ system_kernel_lockdown }}'.
+      Threat: a crafted -e override like "none' --update-kernel=ALL --args='" passes shlex
+      through the old cmd: string form and disables lockdown on all kernels after reboot.
+      Allowed values: integrity, confidentiality, none, or empty string (disabled).
+      Input: system_kernel_lockdown={{ system_kernel_lockdown }}.
+      Fix: remove the override or set system_kernel_lockdown to a permitted value in config.yml.
+  when: not (system_is_container or csb_rhel)
+  tags: [always]
+
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 

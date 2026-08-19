@@ -42,7 +42,10 @@
 
     - name: Enable kernel lockdown (integrity mode)
       ansible.builtin.command:
-        cmd: "grubby --args='lockdown={{ system_kernel_lockdown }}' --update-kernel=ALL"
+        argv:
+          - grubby
+          - "--args=lockdown={{ system_kernel_lockdown }}"
+          - --update-kernel=ALL
       register: system_lockdown_result
       when:
         - system_kernel_lockdown | length > 0

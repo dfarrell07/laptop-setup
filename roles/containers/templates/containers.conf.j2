@@ -3,3 +3,10 @@
 log_driver = "{{ containers_log_driver }}"
 pids_limit = {{ containers_pids_limit | int }}
 default_ulimits = ["nofile={{ containers_nofile_limit }}:{{ containers_nofile_hard_limit }}"]
+
+[network]
+# Explicit network backend — makes default network policy auditable and stable
+# across Podman upgrades. Does not prevent --network=host but ensures the
+# default network name and backend are Ansible-controlled, not compiled-in.
+network_backend = "netavark"
+default_network_name = "podman"

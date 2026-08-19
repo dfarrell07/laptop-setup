@@ -1,7 +1,16 @@
 # {{ ansible_managed }}
 [{{ distrobox_container_name | regex_replace('[\r\n]', '') }}]
 image={{ distrobox_container_image | regex_replace('[\r\n]', '') }}
-additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
+{% if distrobox_use_host_network %}
+# Host networking: container shares the host network namespace.
+# CAP_NET_ADMIN grants full iptables/nftables/routing control over the host stack.
+# Required for OVN-K/bpfman scenarios; set distrobox_use_host_network: false for general dev.
+additional_flags=--network=host --cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON
+{% else %}
+# Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
+# Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
+additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON
+{% endif %}
 
 additional_packages={{ distrobox_packages | map('regex_replace', '[\r\n]', '') | join(' ') }}
 
