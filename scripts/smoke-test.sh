@@ -1987,6 +1987,19 @@ if [[ -f /etc/NetworkManager/conf.d/99-dhcp-privacy.conf ]]; then
   else record "nm-dhcp-privacy" "WARN" "DHCP hostname privacy not configured (/etc/NetworkManager/conf.d/99-dhcp-privacy.conf) — run: make system"; fi
 fi
 
+# dispatcher.d unexpected-file check — provisioning installs no dispatcher scripts;
+# any file here is unexpected (IT-managed scripts are possible on CSB, hence WARN there)
+if $IS_LINUX && ! $USER_ONLY && [[ -z "$CONTAINER" ]] && [[ -d /etc/NetworkManager/dispatcher.d ]]; then
+  _dispatcher_files=$(find /etc/NetworkManager/dispatcher.d -maxdepth 1 -type f 2>/dev/null | sort | tr '\n' ' ')
+  if [[ -z "${_dispatcher_files// /}" ]]; then
+    record "nm-dispatcher-clean" "PASS"
+  elif $CSB_HOST; then
+    record "nm-dispatcher-clean" "WARN" "dispatcher scripts present (IT-managed on CSB may be expected): ${_dispatcher_files% }"
+  else
+    record "nm-dispatcher-clean" "FAIL" "unexpected dispatcher scripts in /etc/NetworkManager/dispatcher.d/ — provisioning installs none; investigate: ${_dispatcher_files% }"
+  fi
+fi
+
 # resolved.conf.d/99-dot.conf content check (file-gated; silently skips on macOS or where system role was not run)
 if [[ -f /etc/systemd/resolved.conf.d/99-dot.conf ]]; then
   if grep -qE '^DNSOverTLS=' /etc/systemd/resolved.conf.d/99-dot.conf && \
