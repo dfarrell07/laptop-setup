@@ -34,8 +34,22 @@ Solution: Use a scoped make target instead (make claude, make packages, make ssh
 EOF
         exit 1
     fi
-    # Block --skip-tags always: skips all [always]-tagged tasks including Play 0 assertions
-    if [[ "$arg" == '--skip-tags=always' || "$arg" == '--skip-tags always' ]]; then
+    # Block --skip-tags=always (single-arg form with =)
+    if [[ "$arg" == '--skip-tags=always' ]]; then
+        cat >&2 <<EOF
+ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
+Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
+        and all security assertions tagged [always] in pre_flight_checks.yml.
+Solution: Do not use --skip-tags always with site.yml.
+EOF
+        exit 1
+    fi
+done
+
+# Check for space-separated --skip-tags always (two separate args: --skip-tags <value>)
+# This requires scanning consecutive arg pairs since the loop above only sees individual args.
+for ((i=0; i<${#args[@]}-1; i++)); do
+    if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" == 'always' ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags always rejected by VERIFY_AND_RUN
 Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
