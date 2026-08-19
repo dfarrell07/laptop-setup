@@ -201,6 +201,42 @@
     - git-template-prepare-commit-msg
     - git-template-pre-push
 
+- name: Validate existing gh CLI config for non-standard aliases (security check)
+  when: is_linux or is_macos
+  block:
+    - name: Check if gh config exists
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
+      register: _gh_config_stat
+
+    - name: Read existing gh config if present
+      ansible.builtin.slurp:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
+      register: _gh_config_content
+      when: _gh_config_stat.stat.exists
+
+    - name: Parse gh config YAML
+      ansible.builtin.set_fact:
+        _gh_config_parsed: "{{ _gh_config_content.content | b64decode | from_yaml }}"
+      when: _gh_config_stat.stat.exists
+
+    - name: Check for non-standard gh aliases (security)
+      ansible.builtin.assert:
+        that:
+          - _gh_config_parsed.aliases is not defined or
+            (_gh_config_parsed.aliases | dict2items | selectattr('key', 'ne', 'co') | list | length == 0)
+        fail_msg: >-
+          SECURITY WARNING: Existing gh CLI config at {{ ansible_facts['user_dir'] }}/.config/gh/config.yml
+          contains non-standard aliases beyond 'co'.
+          Detected aliases: {{ _gh_config_parsed.aliases | dict2items | map(attribute='key') | list }}.
+          Non-standard aliases may execute arbitrary shell commands (e.g., 'gh exploit' could run
+          'touch /tmp/gh_exploit'). Review the config manually and remove malicious entries:
+          cat {{ ansible_facts['user_dir'] }}/.config/gh/config.yml
+          Then re-run provisioning. If aliases are legitimate, add them to the dotfiles role template.
+      when:
+        - _gh_config_stat.stat.exists
+        - _gh_config_parsed is defined
+
 - name: Deploy gh CLI config
   ansible.builtin.copy:
     content: |
