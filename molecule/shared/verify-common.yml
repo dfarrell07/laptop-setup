@@ -1482,8 +1482,10 @@
     - not (system_is_container | default(false))
 
 - name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
-  ansible.builtin.command: grep -q '^max_log_file = {{ system_auditd_max_log_file | default(8) }}' /etc/audit/auditd.conf
+  ansible.builtin.command: grep -E '^max_log_file = {{ system_auditd_max_log_file | default(8) }}' /etc/audit/auditd.conf
   changed_when: false
+  failed_when: false
+  register: _auditd_max_log_file_check
   become: true
   when:
     - ansible_system == 'Linux'
@@ -1491,10 +1493,36 @@
     - verify_auditd_conf.stat.exists
     - not (system_is_container | default(false))
 
+- name: Assert auditd.conf max_log_file value
+  ansible.builtin.assert:
+    that: _auditd_max_log_file_check.rc == 0
+    fail_msg: >-
+      auditd.conf max_log_file mismatch — expected '{{ system_auditd_max_log_file | default(8) }}';
+      found: {{ _auditd_max_log_file_check.stdout | default('(no match)') }}
+  when:
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+    - not (system_is_container | default(false))
+
 - name: Check auditd.conf log_format=ENRICHED (CIS 4.1.2.1)
-  ansible.builtin.command: grep -q '^log_format = ENRICHED' /etc/audit/auditd.conf
+  ansible.builtin.command: grep -E '^log_format = ENRICHED' /etc/audit/auditd.conf
   changed_when: false
+  failed_when: false
+  register: _auditd_log_format_check
   become: true
+  when:
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+    - not (system_is_container | default(false))
+
+- name: Assert auditd.conf log_format value
+  ansible.builtin.assert:
+    that: _auditd_log_format_check.rc == 0
+    fail_msg: >-
+      auditd.conf log_format mismatch — expected 'ENRICHED';
+      found: {{ _auditd_log_format_check.stdout | default('(no match)') }}
   when:
     - ansible_system == 'Linux'
     - not csb_detected
@@ -1746,7 +1774,11 @@
       - verify_usbguard_rules.stat.exists
       - verify_usbguard_rules.stat.mode == '0600'
       - verify_usbguard_rules.stat.size | default(0) > 0
-    fail_msg: "/etc/usbguard/rules.conf missing, wrong mode, or empty — system role USBGuard template regression"
+    fail_msg: >-
+      /etc/usbguard/rules.conf regression —
+      mode={{ verify_usbguard_rules.stat.mode | default('missing') }},
+      size={{ verify_usbguard_rules.stat.size | default('missing') }}
+      — system role USBGuard template regression
   when:
     - ansible_system == 'Linux'
     - usbguard_expected | default(false)
