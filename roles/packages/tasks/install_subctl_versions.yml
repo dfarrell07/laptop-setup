@@ -143,18 +143,88 @@
         label: "{{ item.image }}:{{ item.tag }} → subctl{{ item.suffix }}"
         index_var: loop_idx
 
-    - name: Extract and install versioned RH subctl to ~/.local/bin  # noqa: command-instead-of-module risky-shell-pipe
+    - name: Find RH subctl tarball in /tmp
+      ansible.builtin.find:
+        paths: /tmp
+        maxdepth: 1
+        patterns: "subctl-{{ item.tag }}-linux-amd64.tar.xz"
+        file_type: file
+      register: _subctl_exact_match
+      when: >-
+        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Find RH subctl tarball (wildcard fallback) in /tmp
+      ansible.builtin.find:
+        paths: /tmp
+        maxdepth: 1
+        patterns: "subctl-{{ item.tag }}*-linux-amd64.tar.xz"
+        file_type: file
+      register: _subctl_wildcard_match
+      when: >-
+        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))) and
+        _subctl_exact_match.results[loop_idx].files | default([]) | length == 0
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Set RH subctl tarball path (exact match or most recent)
+      ansible.builtin.set_fact:
+        _subctl_tarball_path: >-
+          {% set exact = _subctl_exact_match.results[loop_idx].files | default([]) %}
+          {% set wildcard = _subctl_wildcard_match.results[loop_idx].files | default([]) | sort(attribute='mtime', reverse=True) %}
+          {{ (exact + wildcard)[0].path if (exact + wildcard) | length > 0 else '' }}
+      when: >-
+        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Verify RH subctl tarball is not a symlink
+      ansible.builtin.stat:
+        path: "{{ _subctl_tarball_path }}"
+        follow: false
+      register: _subctl_tarball_stat
+      when: >-
+        _subctl_tarball_path and
+        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Fail if RH subctl tarball is a symlink (TOCTOU attack detected)
+      ansible.builtin.fail:
+        msg: "SECURITY: RH subctl tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+      when: >-
+        _subctl_tarball_path and
+        _subctl_tarball_stat.results[loop_idx].stat.islnk | default(false) and
+        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
+      loop: "{{ packages_subctl_rh_versions }}"
+      loop_control:
+        label: "{{ item.suffix }}"
+        index_var: loop_idx
+
+    - name: Extract and install versioned RH subctl to ~/.local/bin
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
-          # Prefer exact version match; fall back to most recent only if not found
-          # Mitigates TOCTOU attacks via mtime manipulation on world-writable /tmp
-          TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}-linux-amd64.tar.xz" \
-            -type f 2>/dev/null | head -1)
-          if [[ -z "$TARBALL" ]]; then
-            TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}*-linux-amd64.tar.xz" \
-              -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
-          fi
+          TARBALL="{{ _subctl_tarball_path }}"
           [[ -z "$TARBALL" ]] && exit 0
           TMPDIR=$(mktemp -d)
           tar -C "$TMPDIR" -xf "$TARBALL"
@@ -170,9 +240,10 @@
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
       failed_when: false
       when: >-
-        packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
+        _subctl_tarball_path and
+        (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
         item.tag not in (packages_subctl_rh_version_check.results[loop_idx].stdout | default('')) +
-                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default(''))
+                        (packages_subctl_rh_version_check.results[loop_idx].stderr | default('')))
       loop: "{{ packages_subctl_rh_versions }}"
       loop_control:
         label: "{{ item.suffix }}"
