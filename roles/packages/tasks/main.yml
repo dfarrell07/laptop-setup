@@ -79,8 +79,19 @@
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
 # on first provision bpfman is not yet installed when Play 1 runs, so that attempt
-# is a no-op. Both roles use failed_when: false because bpfman may be absent if the
-# package install was rescued on CSB; container/macOS already excluded by when: guards above.
+# is a no-op.
+- name: Detect bpfman.socket for packages role enable attempt (may not be installed)
+  ansible.builtin.command:
+    cmd: systemctl cat bpfman.socket
+  register: _packages_bpfman_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when:
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+
 - name: Enable bpfman.socket after package install (required for bpfman load/list to work)
   ansible.builtin.systemd:
     name: bpfman.socket
@@ -89,18 +100,11 @@
   become: true
   tags: [become]
   when:
+    - packages_bpfman_enabled | bool
     - is_dnf
     - not system_is_container  # bpfman.socket enable crashes container PID 1
-    - profile == 'work'  # bpfman is in packages_support_work (work-profile only)
-  failed_when: not csb_detected  # Silent failure only on CSB where package install may have been rescued
-  register: _bpfman_socket_enable
-
-- name: Debug bpfman.socket enable failure on non-CSB work hosts
-  ansible.builtin.debug:
-    msg: "bpfman.socket enable failed: {{ _bpfman_socket_enable.msg | default('unknown error') }}"
-  when:
-    - _bpfman_socket_enable.failed | default(false)
-    - not csb_rhel
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
 
 - name: Install virtualization packages and post-install setup
   ansible.builtin.include_tasks: install_virtualization.yml
