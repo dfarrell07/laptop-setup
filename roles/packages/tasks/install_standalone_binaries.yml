@@ -358,7 +358,7 @@
     SIGSTORE_REKOR_PUBLIC_KEY: ""
     COSIGN_EXPERIMENTAL: "0"
   changed_when: false
-  failed_when: false
+  failed_when: _cosign_verify_result.rc != 0 and (not network_proxied | bool)
   register: _cosign_verify_result
 
 
@@ -495,7 +495,7 @@
       - --certificate-oidc-issuer-regexp
       - "^https://accounts\\.google\\.com$"
   changed_when: false
-  failed_when: false
+  failed_when: _cosign_self_verify_result.rc != 0 and (not network_proxied | bool)
   register: _cosign_self_verify_result
 
 - name: Warn if cosign post-install self-attestation failed (offline or restricted environment)
