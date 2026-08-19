@@ -2023,6 +2023,9 @@
                 reject('match', '^[a-zA-Z0-9-]+$') | list | length == 0
               - claude_queue_memory_max | default('4G') | string is match('^[0-9]+(K|M|G|T|%)?$|^infinity$')
               - claude_queue_cpu_quota | default('80%') | string is match('^[0-9]+%$')
+              - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
+              - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
+              - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
             fail_msg: >-
               SECURITY: High-risk variable in play namespace contains unsafe value (possibly set
               via -e command-line override, bypassing config.yml-based preflight validation):
@@ -2041,7 +2044,16 @@
               claude_queue_memory_max={{ claude_queue_memory_max | default('4G') }} --
                 must match ^[0-9]+(K|M|G|T|%)?$|^infinity$ (newline injects systemd directive);
               claude_queue_cpu_quota={{ claude_queue_cpu_quota | default('80%') }} --
-                must match ^[0-9]+%$ (newline injects systemd directive bypassing resource limit).
+                must match ^[0-9]+%$ (newline injects systemd directive bypassing resource limit);
+              container_image={{ container_image | default('') }} --
+                must match OCI image reference format (alphanumeric/colon/slash/at/dot/hyphen);
+                space in value injects extra arguments into toolbox create (e.g. --privileged);
+              container_name={{ container_name | default('') }} --
+                must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox);
+              distrobox_packages={{ distrobox_packages | default([]) }} --
+                entries must be alphanumeric/dot/underscore/plus/hyphen (newline in an entry
+                injects arbitrary INI keys into distrobox.ini, enabling init_hooks RCE via
+                flatpak-spawn --host during distrobox assemble create).
           tags: [always]
 
         - name: Set namespace validation flag (internal, cannot be pre-set)

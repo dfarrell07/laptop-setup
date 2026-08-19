@@ -2,6 +2,34 @@
 # roles/distrobox/tasks/main.yml
 # Create Distrobox/Toolbx container + register for Play 3 provisioning.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: SECURITY assert distrobox variables contain no injection characters (defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
+  # Do NOT add tags: [always] as that allows --skip-tags always to bypass this check.
+  # Duplicates the namespace assertion in pre_flight_checks.yml to protect against
+  # --start-at-task bypassing play-level pre_tasks which contain that assertion.
+  ansible.builtin.assert:
+    that:
+      - distrobox_host_exec_commands | default([]) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list | length == 0
+      - container_image | default('') | string is match('^[a-zA-Z0-9:/@._-]*$|^$')
+      - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
+      - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
+    fail_msg: >-
+      SECURITY: distrobox variable contains unsafe value. This check is duplicated in
+      pre_flight_checks.yml; it runs again here to protect against --start-at-task
+      bypassing play-level pre_tasks.
+      distrobox_host_exec_commands={{ distrobox_host_exec_commands | default([]) }} --
+        entries must be alphanumeric/underscore/hyphen (newline injects shell commands into
+        flatpak-spawn wrapper scripts and init_hooks in distrobox.ini via container-provision.yml);
+      container_image={{ container_image | default('') }} --
+        must match OCI image reference format (alphanumeric/colon/slash/at/dot/hyphen; no spaces);
+        a space injects extra arguments into 'toolbox create --image', e.g. --privileged;
+      container_name={{ container_name | default('') }} --
+        must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
+      distrobox_packages={{ distrobox_packages | default([]) }} --
+        entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
+        an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
+
 # --- Detect container tool ---
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
@@ -271,7 +299,11 @@
 
     - name: Remove existing Toolbx container for replacement
       ansible.builtin.command:
-        cmd: "toolbox rm --force {{ distrobox_container_name }}"
+        argv:
+          - toolbox
+          - rm
+          - --force
+          - "{{ distrobox_container_name }}"
       changed_when: true
       when:
         - distrobox_container_replace | bool
@@ -279,10 +311,12 @@
 
     - name: Create Toolbx container
       ansible.builtin.command:
-        cmd: >-
-          toolbox create
-          --image {{ distrobox_container_image }}
-          {{ distrobox_container_name }}
+        argv:
+          - toolbox
+          - create
+          - --image
+          - "{{ distrobox_container_image }}"
+          - "{{ distrobox_container_name }}"
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_toolbox_create
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change
@@ -332,7 +366,10 @@
 
 - name: Start container
   ansible.builtin.command:
-    cmd: "podman start {{ distrobox_container_name }}"
+    argv:
+      - podman
+      - start
+      - "{{ distrobox_container_name }}"
   register: distrobox_start_result
   changed_when: distrobox_start_result.rc == 0
   failed_when: false  # intentional: Warn task below checks rc and surfaces failure; do NOT use ignore_errors

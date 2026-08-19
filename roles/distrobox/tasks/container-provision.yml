@@ -224,7 +224,7 @@
     mode: "0755"
     content: |
       #!/bin/sh
-      exec flatpak-spawn --host {{ item }} "$@"
+      exec flatpak-spawn --host {{ item | quote }} "$@"
   loop: "{{ distrobox_host_exec_commands }}"
   when: not container_host_exec.stat.exists
   become: true
