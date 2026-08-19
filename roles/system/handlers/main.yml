@@ -21,8 +21,8 @@
     name: firewalld
     state: reloaded
   become: true
-  when: not system_is_container  # firewalld reload crashes privileged Podman containers; ignore_errors cannot catch a process death
-  ignore_errors: true  # noqa: ignore-errors
+  when: not system_is_container  # firewalld reload crashes privileged Podman containers
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Apply sysctl  # noqa: command-instead-of-module
   listen: Sysctl config changed
@@ -90,8 +90,8 @@
     name: NetworkManager
     state: reloaded
   become: true
-  when: not system_is_container  # NM reload crashes privileged Podman containers; ignore_errors cannot catch a process death
-  ignore_errors: true  # noqa: ignore-errors
+  when: not system_is_container  # NM reload crashes privileged Podman containers
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart bluetooth
   ansible.builtin.systemd:
@@ -139,7 +139,7 @@
     state: restarted
   become: true
   when: not system_is_container  # USBGuard not applicable in containers
-  ignore_errors: true  # noqa: ignore-errors
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart sshd
   ansible.builtin.systemd:
@@ -165,8 +165,8 @@
     cmd: systemctl kill --signal=HUP systemd-logind
   become: true
   changed_when: true
-  when: not system_is_container  # logind SIGHUP crashes privileged Podman containers; ignore_errors cannot catch a process death
-  ignore_errors: true  # noqa: ignore-errors
+  when: not system_is_container  # logind SIGHUP crashes privileged Podman containers
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart chronyd
   ansible.builtin.systemd:
@@ -202,8 +202,8 @@
     name: systemd-journald
     state: restarted
   become: true
-  when: not system_is_container  # journald restart crashes privileged Podman containers; ignore_errors cannot catch a process death
-  ignore_errors: true  # noqa: ignore-errors
+  when: not system_is_container  # journald restart crashes privileged Podman containers
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Apply dconf schema database  # noqa: command-instead-of-module
   ansible.builtin.command:
