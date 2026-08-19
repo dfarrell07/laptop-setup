@@ -412,7 +412,7 @@
 - name: Assert direnv config deployed
   ansible.builtin.assert:
     that: verify_direnv.stat.exists
-    fail_msg: "direnv config not deployed"
+    fail_msg: "direnv config not deployed (exists={{ verify_direnv.stat.exists | default(false) }})"
 
 - name: Read direnv.toml content
   ansible.builtin.slurp:
@@ -450,6 +450,17 @@
     that: verify_ripgreprc.stat.exists
     fail_msg: "~/.config/ripgrep/config not deployed (ripgrep config missing)"
 
+- name: Read ripgrep config content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/ripgrep/config"
+  register: verify_ripgreprc_content
+
+- name: Assert ripgrep config contains expected options
+  ansible.builtin.assert:
+    that:
+      - "'--smart-case' in (verify_ripgreprc_content.content | b64decode) or '--follow' in (verify_ripgreprc_content.content | b64decode)"
+    fail_msg: "~/.config/ripgrep/config exists but contains no expected options (--smart-case or --follow)"
+
 - name: Verify git config-work exists (always deployed)
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/git/config-work"
@@ -459,6 +470,20 @@
   ansible.builtin.assert:
     that: verify_git_config_work.stat.exists
     fail_msg: "git config-work not deployed — work gitconfig includes missing"
+
+- name: Slurp git config-work content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/git/config-work"
+  register: verify_git_config_work_content
+  when: verify_git_config_work.stat.exists
+
+- name: Assert git config-work contains user identity
+  ansible.builtin.assert:
+    that: >-
+      '[user]' in (verify_git_config_work_content.content | b64decode) or
+      'email =' in (verify_git_config_work_content.content | b64decode)
+    fail_msg: "git config-work exists but contains no [user] section or email — work identity unset"
+  when: verify_git_config_work.stat.exists
 
 - name: Verify ssh-agent environment.d config deployed (Linux)
   ansible.builtin.stat:
@@ -470,6 +495,19 @@
   ansible.builtin.assert:
     that: verify_ssh_agent_envd.stat.exists
     fail_msg: "ssh-agent.conf not deployed — SSH_AUTH_SOCK will be missing in GUI processes"
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Read ssh-agent.conf content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
+  register: verify_ssh_agent_envd_content
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert ssh-agent.conf contains SSH_AUTH_SOCK assignment
+  ansible.builtin.assert:
+    that:
+      - "'SSH_AUTH_SOCK=' in (verify_ssh_agent_envd_content.content | b64decode)"
+    fail_msg: "ssh-agent.conf missing SSH_AUTH_SOCK= — systemd user session will not export SSH_AUTH_SOCK"
   when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
 # --- CSB detection: verify non-CSB test environments are correctly classified ---
