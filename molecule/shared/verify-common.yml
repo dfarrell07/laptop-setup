@@ -675,6 +675,18 @@
     - "install vivid /bin/false"
     - "install n_hdlc /bin/false"
   changed_when: false
+  failed_when: false
+  register: verify_modprobe_entries
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_modprobe_hardening.stat.exists
+
+- name: Assert modprobe hardening unconditional blacklist entries
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "modprobe hardening missing entry '{{ item.item }}' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
+  loop: "{{ verify_modprobe_entries.results }}"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -683,6 +695,18 @@
 - name: Check modprobe hardening contains usb_storage blacklist entry
   ansible.builtin.command: grep -qF 'install usb_storage /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
+  failed_when: false
+  register: verify_modprobe_usb_storage
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_usb_storage | default(false) | bool
+
+- name: Assert modprobe hardening usb_storage blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_usb_storage.rc == 0
+    fail_msg: "modprobe hardening missing 'install usb_storage /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -692,6 +716,18 @@
 - name: Check modprobe hardening contains udf blacklist entry
   ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
+  failed_when: false
+  register: verify_modprobe_udf
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_udf | default(true) | bool
+
+- name: Assert modprobe hardening udf blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_udf.rc == 0
+    fail_msg: "modprobe hardening missing 'install udf /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -701,6 +737,18 @@
 - name: Check modprobe hardening contains sctp blacklist entry
   ansible.builtin.command: grep -qF 'install sctp /bin/false' /etc/modprobe.d/hardening.conf
   changed_when: false
+  failed_when: false
+  register: verify_modprobe_sctp
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_sctp | default(false) | bool
+
+- name: Assert modprobe hardening sctp blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_sctp.rc == 0
+    fail_msg: "modprobe hardening missing 'install sctp /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
