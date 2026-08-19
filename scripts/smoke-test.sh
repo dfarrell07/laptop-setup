@@ -1250,6 +1250,18 @@ EOF
     else record "$_u_key" 'FAIL' "$_u_msg"; fi
   done
   unset _unit _u_svc _rest _u_key _u_msg
+
+  # iSCSI initiator masked (CIS 2.3.x — workstation must not act as iSCSI initiator; DNF hosts only)
+  if command -v rpm &>/dev/null; then
+    for _unit in \
+      'iscsid.service:iscsid-masked:iscsid.service not masked — iSCSI initiator daemon can be started (CIS 2.3.x)' \
+      'iscsid.socket:iscsid-socket-masked:iscsid.socket not masked — socket activation can start iscsid (CIS 2.3.x)'; do
+      _u_svc="${_unit%%:*}"; _rest="${_unit#*:}"; _u_key="${_rest%%:*}"; _u_msg="${_rest#*:}"
+      if [[ "$(systemctl show -p UnitFileState --value "$_u_svc" 2>/dev/null)" == 'masked' ]]; then record "$_u_key" 'PASS'
+      else record "$_u_key" 'FAIL' "$_u_msg"; fi
+    done
+    unset _unit _u_svc _rest _u_key _u_msg
+  fi
   # Cockpit web console masked (or intentionally enabled via system_enable_cockpit: true)
   _ck_svc=$(systemctl show -p UnitFileState --value cockpit.service 2>/dev/null)
   if [[ "$_ck_svc" == "masked" ]]; then record "cockpit-service-masked" "PASS"

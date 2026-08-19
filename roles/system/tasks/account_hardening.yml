@@ -1,4 +1,29 @@
 ---
+# --- Sudoers.d directory audit ---
+- name: Find unmanaged files in /etc/sudoers.d
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    file_type: file
+    excludes: "{{ system_sudoersd_whitelist }}"
+  register: system_sudoersd_files
+  failed_when: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Abort on unexpected /etc/sudoers.d files not in system_sudoersd_whitelist
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unexpected files in /etc/sudoers.d not in system_sudoersd_whitelist:
+      {{ system_sudoersd_files.files | map(attribute='path') | list }}.
+      These files grant sudo access and are read by sudo (lexicographic order).
+      Remove attacker-placed files or add legitimate package files to
+      system_sudoersd_whitelist in config.yml before re-running provisioning.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - (system_sudoersd_files.files | default([])) | length > 0
+
 # --- Sudoers hardening ---
 - name: Write /etc/sudoers.d/99-hardening (Defaults hardening)
   ansible.builtin.copy:
@@ -27,6 +52,7 @@
     mode: "0440"
     validate: visudo -cf %s
   when:
+    - system_go_env_sudoers | default(true)
     - not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
     - not system_is_container  # /etc/sudoers.d is not meaningful inside a container
   # TRUST BOUNDARY: env_keep re-propagates the caller's GOTMPDIR into every subsequent sudo
@@ -34,8 +60,15 @@
   # prevent an attacker-set value from being baked in here, but after provisioning any local
   # user can set GOTMPDIR and have it survive privilege escalation via this entry. Only retain
   # if go test/build under sudo is an active workflow on this machine; set
-  # system_go_env_sudoers: false in config.yml to remove (not yet wired — remove this task
-  # if the env_keep is not needed).
+  # system_go_env_sudoers: false in config.yml to remove.
+
+- name: Remove /etc/sudoers.d/go-env (system_go_env_sudoers disabled)
+  ansible.builtin.file:
+    path: /etc/sudoers.d/go-env
+    state: absent
+  when:
+    - not (system_go_env_sudoers | default(true))
+    - not system_is_container
 
 # --- Password aging ---
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local

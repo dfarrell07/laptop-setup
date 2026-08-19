@@ -77,3 +77,27 @@
     - not csb_rhel  # dnf-automatic not installed on CSB
     - not system_is_container
   notify: Restart dnf-automatic timer
+
+- name: Find unauthorised drop-ins in dnf-automatic service drop-in directory
+  ansible.builtin.find:
+    paths: "/etc/systemd/system/{{ _dnf_auto_svc }}.d"
+    file_type: file
+  register: _dnf_auto_dropin_files
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
+- name: Remove unauthorised drop-ins from dnf-automatic service drop-in directory
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _dnf_auto_dropin_files.files | default([]) | selectattr('path', '!=', '/etc/systemd/system/' + _dnf_auto_svc + '.d/aide-update.conf') | list }}"
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  notify: Restart dnf-automatic timer

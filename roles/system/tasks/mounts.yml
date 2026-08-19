@@ -29,6 +29,20 @@
         mode: "0644"
       notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
 
+    - name: Find all files in tmp.mount.d
+      ansible.builtin.find:
+        paths: /etc/systemd/system/tmp.mount.d
+        file_type: file
+      register: _tmp_dropin_files
+
+    - name: Remove unauthorized drop-ins from tmp.mount.d (keep only hardening.conf)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _tmp_dropin_files.files | default([]) }}"
+      when: item.path | basename != 'hardening.conf'
+      notify: Remount /tmp
+
     - name: Reload systemd after deploying tmp.mount drop-in
       ansible.builtin.systemd:
         daemon_reload: true

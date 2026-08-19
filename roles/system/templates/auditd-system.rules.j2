@@ -89,6 +89,9 @@
 -w /etc/NetworkManager/conf.d/ -p wa -k network-config
 -w /etc/firewalld/ -p wa -k network-config
 
+# Polkit rules (privilege escalation backdoor vector)
+-w /etc/polkit-1/rules.d/ -p wa -k polkit-rules
+
 # Persistence mechanisms (system)
 -w /etc/cron.d/ -p wa -k persistence
 -w /etc/cron.daily/ -p wa -k persistence
@@ -97,8 +100,13 @@
 -w /etc/cron.monthly/ -p wa -k persistence
 -w /etc/crontab -p wa -k persistence
 -w /etc/systemd/system/ -p wa -k persistence
+-w /etc/systemd/system/sshd.service.d/ -p wa -k persistence
+-w /etc/systemd/system/dnf-automatic.service.d/ -p wa -k persistence
+-w /etc/systemd/system/dnf5-automatic.service.d/ -p wa -k persistence
+-w /etc/systemd/system/tmp.mount.d/ -p wa -k persistence
 -w /etc/profile.d/ -p wa -k persistence
 -w /etc/ld.so.conf.d/ -p wa -k persistence
+-w /etc/udev/rules.d/ -p wa -k udev-rules
 -w /var/spool/cron/ -p wa -k persistence
 
 # User-level persistence

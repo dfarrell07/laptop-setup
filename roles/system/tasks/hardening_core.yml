@@ -54,6 +54,31 @@
           ansible.builtin.debug:
             msg: SELinux config set to enforcing — reboot required for change to take effect
 
+- name: Polkit rules directory scan
+  tags: [always]
+  when:
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Find files in /etc/polkit-1/rules.d
+      ansible.builtin.find:
+        paths: /etc/polkit-1/rules.d
+        file_type: file
+      register: _polkit_rules_found
+
+    - name: Fail on unexpected polkit rules
+      ansible.builtin.fail:
+        msg: >-
+          Unexpected file(s) in /etc/polkit-1/rules.d:
+          {{ _polkit_rules_found.files | map(attribute='path') | map('basename')
+             | difference(system_polkitd_whitelist) | join(', ') }}.
+          A backdoor .rules file grants all pkexec/systemctl/GNOME actions without
+          authentication. Remove the file or add its basename to
+          system_polkitd_whitelist in config.yml to permit it.
+      when: >-
+        (_polkit_rules_found.files | map(attribute='path') | map('basename')
+         | difference(system_polkitd_whitelist)) | length > 0
+
 - name: Mount hardening
   ansible.builtin.include_tasks: mounts.yml
 

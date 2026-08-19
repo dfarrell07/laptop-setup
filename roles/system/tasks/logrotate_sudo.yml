@@ -27,6 +27,28 @@
         dest: /etc/logrotate.d/sudo
         mode: "0644"
 
+    - name: Find all files in /etc/logrotate.d
+      ansible.builtin.find:
+        paths: /etc/logrotate.d
+        file_type: file
+      register: _logrotated_found
+
+    - name: Fail if unexpected files exist in /etc/logrotate.d
+      vars:
+        _unexpected: >-
+          {{ _logrotated_found.files
+             | map(attribute='path')
+             | map('basename')
+             | difference(system_logrotated_whitelist) }}
+      ansible.builtin.fail:
+        msg: >-
+          Unexpected files in /etc/logrotate.d: {{ _unexpected }}.
+          Each postrotate block runs as root via logrotate.timer — a planted file
+          gives persistent root code execution. Remove the unexpected file(s) or
+          add them to system_logrotated_whitelist in config.yml if they are
+          legitimate packages.
+      when: _unexpected | length > 0
+
 - name: Remove logrotate config for sudo.log on CSB RHEL
   ansible.builtin.file:
     path: /etc/logrotate.d/sudo

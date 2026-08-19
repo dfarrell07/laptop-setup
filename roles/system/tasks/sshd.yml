@@ -128,6 +128,20 @@
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
       when: item.path | basename != '00-hardening.conf'
 
+    - name: Remove unauthorized drop-ins from /etc/systemd/system/sshd.service.d  # noqa: command-instead-of-module
+      ansible.builtin.find:
+        paths: /etc/systemd/system/sshd.service.d
+        patterns: "*.conf"
+        file_type: file
+      register: _sshd_unit_dropin_files
+
+    - name: Delete all sshd.service.d drop-ins (none are playbook-owned)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _sshd_unit_dropin_files.files | default([]) }}"
+      notify: Restart sshd
+
     - name: Deploy sshd hardening config
       ansible.builtin.template:
         src: sshd-hardening.conf.j2

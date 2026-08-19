@@ -193,11 +193,18 @@ system_keymap: us
 system_logind_idle_sec: 600   # seconds of inactivity before logind locks the session (CIS max 900)
 
 # AIDE file integrity monitoring
+# Pre-provisioning blind spot: files planted in monitored paths (e.g. /etc/sudoers.d)
+# before 'aide --init' are baked into the initial DB as known-good and never alert.
+# Auditd write-watches (auditd-system.rules.j2) only cover writes after auditd starts,
+# so a pre-provisioning plant is invisible to both subsystems.
+# preflight.sh runs 'aide --check' when a DB exists to surface changes before provisioning.
 system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
 # Paths added to /etc/aide.conf as 'NORMAL' entries with insertbefore: '^/etc\s'.
 # Override in config.yml to add or remove monitored paths without editing tasks.
 system_aide_monitoring_etc_paths:
   - /etc/ssh/sshd_config.d      # sshd hardening drop-ins
+  - /etc/systemd/system/sshd.service.d # sshd unit override drop-ins (planted backdoors)
+  - /etc/systemd/system/tmp.mount.d  # /tmp hardening drop-in (override protection)
   - /etc/NetworkManager/conf.d      # MAC randomization and DNS policy
   - /etc/NetworkManager/dispatcher.d # root execution hooks (persistent scripts)
   - /etc/systemd/logind.conf.d   # session timeout policy
@@ -213,9 +220,13 @@ system_aide_monitoring_etc_paths:
   - /etc/audit                   # auditd rules integrity
   - /etc/modprobe.d              # kernel module blacklist integrity
   - /etc/sudoers.d               # sudo policy integrity
+  - /etc/udev                    # udev rules integrity (persistent implant vector)
   - /etc/aide.conf               # self-reference: detect config tampering
   - /etc/dconf                   # GNOME system hardening policy
   - /etc/dbus-1                  # D-Bus policy files (sha512+perms+owner+mtime via NORMAL)
+  - /etc/systemd/system/dnf-automatic.service.d   # dnf-automatic drop-ins (rogue ExecStartPost detection)
+  - /etc/systemd/system/dnf5-automatic.service.d  # dnf5-automatic drop-ins (rogue ExecStartPost detection)
+  - /etc/polkit-1                # polkit rules (privilege escalation backdoor vector)
 
 # AIDE check schedule
 system_aide_check_calendar: 'hourly'           # OnCalendar for aide-check.timer; override in config.yml
@@ -438,6 +449,11 @@ system_home_nosuid_force: false
 # CI gap: SELinux enforcement is NOT verified by Podman-based scenarios when set false.
 system_selinux_enforcing_required: true
 system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
+# Polkit rules directory scan: any file in /etc/polkit-1/rules.d not listed here
+# causes a hard failure. The directory is empty on a clean Fedora host. Add managed
+# rule filenames (basename only) in config.yml to permit them. Example:
+#   system_polkitd_whitelist: [10-wheel.rules]
+system_polkitd_whitelist: []
 # LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
 # LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
 # If rd.luks.key is active and you set this true, the machine will require manual LUKS
@@ -517,6 +533,7 @@ system_faillock_audit: true            # log failed auth attempts via audit subs
 system_faillock_local_users_only: true  # prevent double-lockout with SSSD/IPA domain users; set false to remove flag
 system_pam_wheel_su: true              # restrict su to wheel group via pam_wheel.so; set false to remove the restriction
 system_sudo_timestamp_timeout: 15     # sudo credential cache duration in minutes; 0 = re-auth on every sudo; range [0, 60]
+system_go_env_sudoers: true           # write /etc/sudoers.d/go-env (GOTMPDIR env_keep); set false to remove the drop-in
 install_vpn: true           # fallback; authoritative value in group_vars/all/vars.yml
 install_virtualization: true # fallback; authoritative value in group_vars/all/vars.yml
 network_proxied: false  # authoritative in group_vars/all/vars.yml; here for standalone invocability
@@ -544,6 +561,17 @@ system_crond_whitelist:            # filenames (not paths) permitted in /etc/cro
   - 0hourly                        # cronie base package
   - dailyjobs                      # cronie-noanacron
   - sysstat                        # sysstat package
+system_sudoersd_whitelist:         # filenames (not paths) permitted in /etc/sudoers.d; unknown files abort provisioning
+  - 99-hardening                   # sudo Defaults hardening drop-in (managed by this role)
+  - go-env                         # GOTMPDIR env_keep drop-in (managed by this role)
+system_profiled_whitelist:         # filenames (not paths) permitted in /etc/profile.d; unknown files abort provisioning
+  - lang.sh                        # glibc-common locale setup
+  - less.sh                        # less pager env
+  - colorls.sh                     # color ls aliases
+  - vim.sh                         # vim editor env
+  - bash_completion.sh             # bash-completion package
+  - tmout.sh                       # managed by this role (session timeout)
+  - TMout.sh                       # legacy capitalisation variant
 system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
 system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
 system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)
@@ -583,6 +611,18 @@ system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; 
                                    # (breaks perf stat/top/record for non-root users); set 3 in config.yml
                                    # for stricter posture on non-dev hosts
 
+# Logrotate /etc/logrotate.d whitelist — files allowed to exist after sudo config deploy.
+# Unexpected files are rejected by logrotate_sudo.yml to prevent planted postrotate root execution.
+# Extend in config.yml if your system installs additional logrotate drop-ins (e.g. chrony, sssd).
+system_logrotated_whitelist:
+  - sudo
+  - btmp
+  - wtmp
+  - dnf
+  - bootlog
+  - audit
+  - syslog
+
 # GRUB bootloader password (CIS 1.4.2)
 # Protects against physical console attacks that edit kernel parameters before lockdown=integrity activates.
 # Secure Boot + GRUB password = protection against pre-reboot window vulnerability.
@@ -590,4 +630,11 @@ system_grub_password_enabled: false  # set true in config.yml to enable CIS 1.4.
 system_grub_password_hash: ''        # pre-generated pbkdf2 hash from grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian)
                                      # Generate hash: echo 'password' | grub2-mkpasswd-pbkdf2
                                      # Then extract and set in config.yml or vault.yml
+
+# udev rules audit allowlist (SECURITY: pre-plant attack mitigation)
+# Basenames of files permitted in /etc/udev/rules.d/ — default empty because packages install
+# rules in /usr/lib/udev/rules.d/, not /etc/udev/rules.d/ (which is for local overrides only).
+# Provisioning fails if an unexpected file is found (pre-planted rule indicator).
+# To allow a legitimate file, add its basename to this list in config.yml.
+system_udev_rules_d_allowlist: []
 

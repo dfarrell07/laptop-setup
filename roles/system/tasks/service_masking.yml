@@ -1,4 +1,48 @@
 ---
+# Security: remove any pre-existing drop-in directories for units this file manages as masked.
+# An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
+# the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
+- name: Remove pre-existing drop-in directories for managed masked units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d"
+    state: absent
+  loop:
+    - bluetooth.service
+    - thermald.service
+    - ModemManager.service
+    - tuned-ppd.service
+    - tuned.service
+    - power-profiles-daemon.service
+    - cups-browsed.service
+    - cups.socket
+    - cups.path
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-pstoreoops.service
+    - abrt-xorg.service
+    - avahi-daemon.service
+    - avahi-daemon.socket
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+    - iscsi.service
+    - iscsid.service
+    - iscsi-init.service
+    - iscsi-onboot.service
+    - iscsi-shutdown.service
+    - iscsi-starter.service
+    - iscsid.socket
+    - iscsiuio.socket
+    - iscsiuio.service
+    - cockpit.service
+    - cockpit.socket
+    - ctrl-alt-del.target
+  when:
+    - not system_is_container
+    - not csb_rhel
+
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
 - name: Mask bluetooth service
   ansible.builtin.systemd:
@@ -217,6 +261,29 @@
     - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
+  register: _cups_browsed_mask_result
+
+- name: Verify cups-browsed masking succeeded (CVE-2024-47176 guard)
+  ansible.builtin.systemd_service:
+    name: cups-browsed
+  register: _cups_browsed_facts
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if cups-browsed is not masked (CVE-2024-47176 RCE risk)
+  ansible.builtin.fail:
+    msg: >-
+      cups-browsed masking failed: UnitFileState={{ _cups_browsed_facts.status.UnitFileState | default('unknown') }}.
+      cups-browsed must be masked when system_disable_printing=true (CVE-2024-47176).
+      Investigate: systemctl mask cups-browsed; journalctl -u cups-browsed.
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+    - _cups_browsed_facts.status is defined
+    - (_cups_browsed_facts.status.UnitFileState | default('')) != 'masked'
 
 - name: Unmask cups-browsed when printing enabled
   ansible.builtin.systemd:
@@ -342,10 +409,24 @@
   loop:
     - avahi-daemon.service
     - avahi-daemon.socket
+  register: _avahi_mask_result
   when:
     - not csb_rhel  # CSB: IT manages mDNS/avahi policy
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
+
+- name: Warn if avahi-daemon units failed to reach masked state
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: avahi-daemon masking failed for one or more units
+      ({{ _avahi_mask_result.results | selectattr('failed', 'equalto', true) | map(attribute='item') | list | join(', ') }}).
+      avahi-daemon may remain active, exposing mDNS on UDP 5353.
+  when:
+    - system_disable_avahi | bool
+    - not csb_rhel
+    - not system_is_container
+    - _avahi_mask_result.results is defined
+    - _avahi_mask_result.results | selectattr('failed', 'equalto', true) | list | length > 0
 
 # Note: NFS stays stopped/disabled even when unmasked — workstations never serve NFS.
 - name: Configure NFS server and rpcbind masking (CIS 2.2.7)
@@ -370,6 +451,7 @@
     masked: "{{ system_mask_iscsi | bool }}"
     enabled: false
     state: stopped
+    force: true
   loop:
     - iscsi.service
     - iscsid.service
