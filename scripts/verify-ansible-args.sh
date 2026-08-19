@@ -106,6 +106,22 @@ Solution: Do not override system_sysctl_hardening on the command line.
 EOF
         exit 1
     fi
+    # Block any --extra-vars containing common_project_root (key=value or JSON dict form)
+    # extra-vars (precedence 22) beats set_fact (18); injecting common_project_root redirects
+    # every include_tasks: "{{ common_project_root }}/..." to attacker-controlled task files,
+    # silently bypassing SSTI guards, vault_* assertions, URL validation, and CSB classification.
+    if [[ "$arg" == --extra-vars=*common_project_root* || "$arg" == -e*common_project_root* ]]; then
+        cat >&2 <<EOF
+ERROR: --extra-vars=common_project_root rejected by VERIFY_AND_RUN
+Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
+        include_tasks: "{{ common_project_root }}/..." security checks to attacker-
+        controlled task files, bypassing SSTI guards, vault_* key assertions, URL
+        validation, and CSB classification across Play 0, Play 1, and Play 2.
+SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
+Solution: Do not override common_project_root on the command line.
+EOF
+        exit 1
+    fi
 done
 
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
@@ -167,6 +183,20 @@ Reason: extra-vars (precedence 22) overrides the role-default hardening dict and
         and all other static hardening entries.
 SECURITY RISK: Full erasure of sysctl hardening baseline on the provisioned host.
 Solution: Do not override system_sysctl_hardening on the command line.
+EOF
+        exit 1
+    fi
+    # Block space-separated: -e common_project_root=<value> or JSON dict containing the key
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
+          "${args[$((i+1))]}" == *common_project_root* ]]; then
+        cat >&2 <<EOF
+ERROR: -e common_project_root rejected by VERIFY_AND_RUN
+Reason: extra-vars (precedence 22) override set_fact (18) and redirect all
+        include_tasks: "{{ common_project_root }}/..." security checks to attacker-
+        controlled task files, bypassing SSTI guards, vault_* key assertions, URL
+        validation, and CSB classification across Play 0, Play 1, and Play 2.
+SECURITY RISK: Empty YAML at attacker path silently passes all pre-flight checks.
+Solution: Do not override common_project_root on the command line.
 EOF
         exit 1
     fi
