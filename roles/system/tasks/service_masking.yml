@@ -280,7 +280,6 @@
     - not system_is_container
   failed_when: false
 
-# --- Mask ABRT crash reporter (redundant with systemd-coredump; skip on RHEL CSB where IT manages it via Satellite) ---
 - name: Mask ABRT services (redundant with systemd-coredump)
   ansible.builtin.systemd:
     name: "{{ item }}"
@@ -356,7 +355,6 @@
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
 
-# --- Mask NFS server and rpcbind (CIS 2.2.7 — no NFS server needed on a workstation) ---
 # Note: NFS stays stopped/disabled even when unmasked — workstations never serve NFS.
 - name: Configure NFS server and rpcbind masking (CIS 2.2.7)
   ansible.builtin.systemd:
@@ -373,7 +371,6 @@
     - not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
   failed_when: false
 
-# --- Mask iSCSI initiator daemons (CIS 2.3.x — no iSCSI storage on a developer workstation) ---
 # Note: iSCSI units stay stopped/disabled even when unmasked — workstations never initiate iSCSI sessions.
 - name: Configure iSCSI initiator masking (CIS 2.3.x)
   ansible.builtin.systemd:
@@ -430,7 +427,6 @@
     - _cockpit_stat.stat.exists
   failed_when: false
 
-# --- Disable Ctrl+Alt+Delete reboot ---
 - name: Mask Ctrl+Alt+Delete reboot target
   ansible.builtin.systemd:
     name: ctrl-alt-del.target
