@@ -34,14 +34,15 @@
   # Rejects: 'off', empty string, IP addresses, single-label hostnames (localhost)
   ansible.builtin.assert:
     that:
-      - "packages_gosumdb is not defined or (packages_gosumdb != 'off' and packages_gosumdb | length > 0)"
-      - "packages_gosumdb is not defined or packages_gosumdb | type_debug == 'str'"
-      - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*$|^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*:[0-9]{1,5}$') is not none)"  # yamllint disable-line rule:line-length
-      - "packages_gosumdb is not defined or (packages_gosumdb | regex_search('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}') is none)"
-      - "packages_gosumdb is not defined or packages_gosumdb not in ['localhost', 'localhost:']"
+      - "packages_gosumdb != 'off' and packages_gosumdb | length > 0"
+      - "packages_gosumdb | type_debug == 'str'"
+      - "packages_gosumdb | regex_search('^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*$|^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*:[0-9]{1,5}$') is not none"  # yamllint disable-line rule:line-length
+      - "packages_gosumdb | regex_search('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}') is none"
+      - "packages_gosumdb not in ['localhost', 'localhost:']"
     fail_msg: >-
       GOSUMDB must not be 'off' or empty (enables GOPROXY tampering/init() injection) and must
       be a valid FQDN or FQDN:port (not IP/localhost). Invalid value: {{ packages_gosumdb | default('(undefined)') }}
+  when: packages_gosumdb is defined
 
 - name: "Validate GONOSUMDB/GOSUMDB: (3/3) GOSUMDB server reachable (hijack mitigation)"
   ansible.builtin.uri:
