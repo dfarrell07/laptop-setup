@@ -271,6 +271,10 @@
           new="$current"
           # Append each missing hardening param (check by key prefix only)
           _add() {local p="$1" k="${1%%=*}" ke; ke="${k//./\\.}"; echo "$new" | grep -qE "(^| )${ke}(=| |$)" || new="$new $p";}
+          # NOTE: lockdown=integrity restricts kernel self-modification (kprobes, /dev/mem,
+          # unsigned modules, kexec) but has NO effect on userspace binary execution.
+          # Fedora's default IMA mode is measure-only; no IMA appraisal policy is deployed
+          # here. Do not rely on lockdown=integrity for userspace binary integrity enforcement.
           {% if system_kernel_lockdown in ['integrity', 'confidentiality', 'none'] %}_add "lockdown={{ system_kernel_lockdown }}"{% endif %}
           _add "vsyscall=none"
           {{ '_add "init_on_free=1"' if system_init_on_free | bool else '' }}

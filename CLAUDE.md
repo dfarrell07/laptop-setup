@@ -221,7 +221,7 @@ make repos-downstream # downstream repos only
   role-defaults vars overridable in `config.yml`. Key operational ones: `system_aide_enabled` (false —
   AIDE disabled by default; enable only with a log consumer), `system_tmout` (0 — disabled; set 1–900 to enforce CIS inactivity timeout),
   `system_disable_usb_storage` (false — USB drives allowed; set true to kernel-block usb_storage/uas), `system_kernel_lockdown`
-  (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging), `system_ipv6_accept_ra`
+  (integrity — kernel lockdown mode; set '' to disable for kdump/kgdb debugging; **note**: lockdown=integrity restricts kernel self-modification only — it does NOT enforce userspace binary integrity; Fedora default IMA mode is measure-only with no appraisal policy deployed), `system_ipv6_accept_ra`
   (0 — SLAAC disabled), `system_ssh_allow_tcp_forwarding` (local — set "no" to disable port forwarding; "yes" for both -L and -R),
   `system_ssh_allow_agent_forwarding` (no — set 'yes' to forward ssh-agent when SSHing into this machine; prefer ProxyJump for traversal),
   `system_dns_domains` (~. — catch-all for Tailscale MagicDNS), `system_ssh_max_sessions` (10),

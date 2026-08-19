@@ -568,6 +568,22 @@ See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SEC
   playbook emits an advisory warning when `system_grub_password_enabled: true` and fwupdmgr
   cannot confirm a UEFI admin password (`get-bios-setting` output checked for AdminPassword /
   BiosPassword / SetupPassword fields). Verify via your vendor's firmware setup utility.
+- **lockdown=integrity does NOT enforce userspace binary integrity** — `lockdown=integrity`
+  restricts kernel self-modification (hibernation, kprobes, /dev/mem writes, unsigned modules,
+  kexec of unverified kernels) but has **no effect on userspace binary execution**. It does not
+  verify executable hashes or signatures before `execve()`. Fedora's default IMA mode is
+  `measure-only` (audit log only, no enforcement); no IMA appraisal policy is deployed by this
+  playbook (`ima_appraise=enforce` is not set, no `/etc/ima/ima-policy` is written). An attacker
+  with write access to any executable path (e.g., a writable `/usr/local/bin` via a compromised
+  container, a rogue dnf plugin, or a build-tool path injection) can silently replace a binary;
+  on next `execve()` the kernel executes the replaced file without any hash or signature check.
+  **lockdown and IMA are orthogonal subsystems with no dependency relationship.** Do not rely on
+  `lockdown=integrity` for userspace binary integrity enforcement. Mitigations available but not
+  enabled by default: SELinux (blocks unexpected writes to labelled executables — active and
+  enforcing by default on Fedora/RHEL), AIDE file-integrity monitoring (`system_aide_enabled:
+  true`), and optional full IMA appraisal (deploy `/etc/ima/ima-policy` + `ima-evm-utils` +
+  `ima_appraise=enforce` kernel cmdline — not provided by this playbook; requires signed
+  executables across the whole userspace, which Fedora does not ship by default).
 - **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
   Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
   correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`
