@@ -61,10 +61,16 @@
         that: container_oc_sha256 | length == 64
         fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ distrobox_oc_version }})"
 
-    - name: Download OpenShift client tarball
+    - name: Create temporary directory for oc download
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: oc_
+      register: container_oc_tempdir
+
+    - name: Download OpenShift client tarball (SHA256-verified, randomized tempdir)
       ansible.builtin.get_url:
         url: "{{ distrobox_oc_mirror_url }}/{{ distrobox_oc_version }}/openshift-client-linux.tar.gz"
-        dest: /tmp/openshift-client-linux.tar.gz
+        dest: "{{ container_oc_tempdir.path }}/openshift-client-linux.tar.gz"
         checksum: "sha256:{{ container_oc_sha256 }}"
         mode: "0644"
         timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
@@ -73,9 +79,20 @@
       delay: "{{ distrobox_oc_fetch_delay | default(10) }}"
       until: container_oc_download is succeeded
 
+    - name: Verify oc tarball is not a symlink
+      ansible.builtin.stat:
+        path: "{{ container_oc_download.dest }}"
+        follow: false
+      register: container_oc_tarball_stat
+
+    - name: Fail if oc tarball is a symlink (TOCTOU attack detected)
+      ansible.builtin.fail:
+        msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+      when: container_oc_tarball_stat.stat.islnk
+
     - name: Extract oc and kubectl
       ansible.builtin.unarchive:
-        src: /tmp/openshift-client-linux.tar.gz
+        src: "{{ container_oc_download.dest }}"
         dest: /usr/local/bin
         remote_src: true
         extra_opts:
@@ -89,22 +106,19 @@
         mode: "0755"
       loop: [oc, kubectl]
 
-    - name: Clean up tarball
+  always:
+    - name: Clean up oc temporary directory
       ansible.builtin.file:
-        path: /tmp/openshift-client-linux.tar.gz
+        path: "{{ container_oc_tempdir.path }}"
         state: absent
-
-  rescue:
-    - name: Clean up OpenShift client tarball on failure
-      ansible.builtin.file:
-        path: /tmp/openshift-client-linux.tar.gz
-        state: absent
+      when: container_oc_tempdir is defined
       failed_when: false
 
-    - name: Warn that oc + kubectl download failed
+  rescue:
+    - name: Handle oc download failure
       ansible.builtin.debug:
         msg: >-
-          WARNING: Failed to download oc/kubectl from the OpenShift mirror.
+          WARNING: oc/kubectl download encountered an error.
           Error: {{ ansible_failed_result.msg | default('unknown error') | truncate(200) }}.
           Play 3 continues — oc will not be available until the next provision run.
 
