@@ -84,6 +84,14 @@
     - not system_is_container  # bpfman.socket enable crashes container PID 1
     - profile == 'work'  # bpfman is in packages_support_work (work-profile only)
   failed_when: false
+  register: _bpfman_socket_enable
+
+- name: Debug bpfman.socket enable failure on non-CSB work hosts
+  ansible.builtin.debug:
+    msg: "bpfman.socket enable failed: {{ _bpfman_socket_enable.msg | default('unknown error') }}"
+  when:
+    - _bpfman_socket_enable.failed | default(false)
+    - not csb_rhel
 
 - name: Install virtualization packages and post-install setup
   ansible.builtin.include_tasks: install_virtualization.yml
@@ -183,15 +191,11 @@
     - (is_dnf or is_apt or is_macos)
     - packages_install_binaries | bool
 
-# --- Go install tools ---
-
 - name: Install Go tools
   ansible.builtin.include_tasks: install_go_tools.yml
   when:
     - packages_install_binaries | bool
     - is_linux or is_macos
-
-# --- pip/pipx installs ---
 
 - name: Install pipx packages (yamllint, ansible-lint)
   ansible.builtin.include_tasks: install_pipx.yml
