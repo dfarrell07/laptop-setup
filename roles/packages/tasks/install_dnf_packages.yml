@@ -29,7 +29,7 @@
              + (packages_networking_work if profile == 'work' else [])
              + (packages_support_work if profile == 'work' else []) }}
 
-    - name: Install dnf packages
+    - name: Apply dnf package list to host
       ansible.builtin.dnf:
         name: "{{ _packages_dnf_all }}"
         state: present
@@ -37,7 +37,7 @@
       tags: [become]
       when: not system_is_container
 
-    - name: Install dnf packages (container — skip scriptlets to prevent systemd daemon-reload crash)  # noqa: command-instead-of-module
+    - name: Apply dnf package list (scriptlets suppressed)  # noqa: command-instead-of-module
       ansible.builtin.command:
         # --setopt=tsflags=noscripts,notriggers: suppresses all RPM script execution in the
         # DNF5 transaction. noscripts covers %pre/%post/%preun/%postun scriptlets;
