@@ -105,6 +105,7 @@ The playbook enables USBGuard by default (system_install_usbguard: true), which 
 See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboard" for detailed guidance.
 
 **First time on a new machine:**
+0. **Enable Secure Boot in firmware** — Required for lockdown=integrity physical access protection. Enter UEFI/BIOS setup (typically F1/F2/Del at boot), navigate to Security settings, enable Secure Boot. Without Secure Boot, an attacker with physical access can boot a custom kernel that strips lockdown= and other hardening parameters from the kernel cmdline. smoke-test will emit FAIL for secure-boot until enabled.
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)
 2. Copy `default.config.yml` to `config.yml` (`cp default.config.yml config.yml`) and replace
