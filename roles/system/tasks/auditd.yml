@@ -38,7 +38,7 @@
     - not system_is_container
     - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install.rc | default(0) == 0)
   block:
-    - name: Assert real_user_home is a valid absolute path before deploying auditd rules
+    - name: Assert real_user_home is a valid absolute path
       ansible.builtin.assert:
         that:
           - real_user_home is regex('^/[a-zA-Z0-9_/.:@-]+$')
@@ -51,7 +51,7 @@
           the auditd rules file. Ensure HOME is set correctly before running.
           real_user_home must not contain '..' or './' path traversal sequences.
 
-    - name: Detect audit rules files that sort after claude-code.rules and disable enforcement
+    - name: Detect late-sorting audit rules files with -e 0
       ansible.builtin.shell:
         cmd: |
           set -o pipefail
