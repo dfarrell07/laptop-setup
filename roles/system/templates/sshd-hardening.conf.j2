@@ -19,7 +19,7 @@ HostKeyAlgorithms {{ ssh_host_key_algorithms | regex_replace('[\r\n].*', '') }} 
 PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | map('regex_replace', '[\r\n].*', '') | join(',') }}  # ed25519 and FIDO2, plain and cert variants; cert auth requires cert-authority in authorized_keys or TrustedUserCAKeys; RSA/ECDSA rejected
 AuthorizedKeysFile .ssh/authorized_keys  # Fedora's sshd_config already restricts this; explicit here for auditability and resilience against base-config reset
 
-AllowUsers {{ ([real_user_id] + (system_ssh_extra_allow_users | default([]))) | join(' ') }}
+AllowUsers {{ ([real_user_id] + (system_ssh_extra_allow_users | default([]) | map('regex_replace', '[\r\n].*', '') | list)) | join(' ') }}
 MaxAuthTries 3
 MaxSessions {{ system_ssh_max_sessions | int }}  # OpenSSH default is 10; explicit so value is auditable and config.yml overrides are visible in the drop-in
 LoginGraceTime 30

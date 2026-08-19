@@ -110,6 +110,28 @@
 - name: Firmware updates
   ansible.builtin.import_tasks: firmware.yml
 
+- name: "SECURITY: Validate system_ssh_extra_allow_users entries (sshd AllowUsers injection guard)"
+  ansible.builtin.assert:
+    that:
+      - >-
+        system_ssh_extra_allow_users | default([])
+        | map('string') | select()
+        | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
+    fail_msg: >-
+      SECURITY: system_ssh_extra_allow_users contains an invalid entry.
+      Threat: a newline-embedded entry like "validuser\nPermitRootLogin yes" passes sshd -t
+      and loads a malicious directive overriding PermitRootLogin no.
+      Input: system_ssh_extra_allow_users={{ system_ssh_extra_allow_users | default([]) | to_json }}.
+      Mechanism: entries are joined verbatim into AllowUsers in sshd_config.d/00-hardening.conf;
+      a newline splits the directive and the next token is parsed as a top-level sshd directive.
+      Impact: PermitRootLogin or other hardened directives silently overridden; root SSH enabled.
+      Fix: each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username, 32 chars max).
+      Offending entries: {{ system_ssh_extra_allow_users | default([]) | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
+  when:
+    - not csb_rhel
+    - system_ssh_extra_allow_users | default([]) | length > 0
+  tags: [always]
+
 - name: SSHD hardening, SELinux port label, and crypto policy
   ansible.builtin.import_tasks: sshd.yml
 
