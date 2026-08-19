@@ -132,6 +132,29 @@
           (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
           (dotfiles_aws_profile).
 
+    - name: Assert GOSUMDB empty string is rejected (supply chain guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _gonosumdb: "{{ _raw.get('dotfiles_gonosumdb', '') | string }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_gonosumdb | length == 0) or
+            (_gonosumdb | string is not match('^[[:space:]]*$'))
+        fail_msg: >-
+          SECURITY: dotfiles_gonosumdb in config.yml must not be an empty or whitespace-only string.
+          Setting GOSUMDB="" (empty or whitespace) disables Go module sum database verification,
+          allowing attackers to inject malicious Go modules during compilation without detection.
+          This bypasses cryptographic verification of Go dependencies.
+
+          REQUIRED FIX: Either omit dotfiles_gonosumdb from config.yml (use the default),
+          or set it to a valid GOSUMDB value such as:
+            - sum.golang.org (default, public)
+            - An internal GOSUMDB endpoint for air-gapped environments
+          Do NOT set it to an empty string or whitespace-only value.
+          Current value: '{{ _gonosumdb }}'.
+
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:

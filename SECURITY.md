@@ -177,6 +177,81 @@ All PRs modifying `.githooks/*` undergo three layers of validation:
    - credential exports (AWS_*, GITHUB_TOKEN, etc.)
 3. **Code review (GitHub branch protection)** — mandatory human review before merge
 
+### Supply-Chain Commits: Critical Distinction Between -s and -S Flags
+
+**SECURITY ISSUE**: The error message conflating `-s` and `-S` creates dangerous confusion about what signatures are actually being verified.
+
+Commits modifying critical supply-chain files (scripts, SHA256SUMS, .githooks) require BOTH flags. These are TWO COMPLETELY DIFFERENT security mechanisms:
+
+| Flag | Full Name | Cryptographic? | What It Does | Location | Verified By |
+|------|-----------|---|---|---|---|
+| `-s` | `--signoff` | **NO** | Adds `Signed-off-by:` text line to commit message | Commit message body (plain text) | `.githooks/commit-msg` hook (text grep) + CI (regex) |
+| `-S` | `--gpg-sign` | **YES** | Creates GPG cryptographic signature on commit object | Commit object signature metadata | `git verify-commit` (cryptographic verification) |
+
+**What developers must understand:**
+- `-s` alone creates a **deceptive false sense of security** — it only adds text, not cryptography
+- `-S` alone verifies cryptographic integrity but does NOT prove developer authorship statement
+- **BOTH are required** for supply-chain commits: authorship commitment (-s) + integrity proof (-S)
+
+**Attack scenario illustrating the vulnerability:**
+1. Developer runs `git commit -s` (only the `-s` flag) on a supply-chain file
+2. The commit message contains `Signed-off-by: Developer Name`
+3. CI job checks `git verify-commit` which returns N (no GPG signature)
+4. CI **correctly rejects** the commit as unsigned
+5. **Problem**: The error message says "Sign your commits with: git commit -s -S" without explaining the difference
+6. **Confused developer** thinks `-s` *is* a signature, not realizing they need `-S` for cryptography
+7. They may resort to `git commit --no-verify -s` (dangerous bypass)
+
+**Why both mechanisms are critical:**
+- **-s (Signed-off-by) proves developer authorship** — Developer is committing to the content and taking responsibility
+- **-S (GPG signature) proves commit integrity** — Commit object has not been tampered with (unforgeable without private key)
+
+**Example: Correct supply-chain commit with both mechanisms:**
+```bash
+git commit -s -S -m "Scripts: update verify-collections.sh"
+
+# Result commit contains:
+#   - Commit message with: Signed-off-by: Your Name <you@example.com>
+#   - Commit object with: GPG signature (good signature from "Your Name")
+#   - git verify-commit returns: Good signature (status: G)
+#   - git log --format=%B shows: Signed-off-by: text trailer
+```
+
+**Local enforcement (.githooks/commit-msg):**
+- Lines 5-8: Rejects commits missing Signed-off-by text
+- Lines 21-31: Requires `commit.gpgsign=true` config for supply-chain files (enforces -S requirement)
+- Error messages clearly separate the checks
+
+**CI enforcement (linting.yml, gpg-signatures job):**
+- **GPG signature check** (cryptographic): `git verify-commit` validation
+- **Signed-off-by check** (text): grep for `^Signed-off-by:` in commit message
+- Both must pass; failure explains the distinction
+
+**Configuration (one-time setup):**
+```bash
+# Option 1: Configure git to ALWAYS GPG-sign (recommended for supply-chain work)
+git config --global commit.gpgsign true
+
+# Then all commits automatically get both mechanisms:
+git commit -s                    # -s is still needed; -S comes from config
+
+# Option 2: Sign supply-chain commits manually
+git commit -s -S -m "message"   # Explicit signoff + signature
+```
+
+**Post-deployment testing:**
+To verify a commit has both mechanisms:
+```bash
+commit_sha="abc123..."
+
+# Verify GPG signature (cryptographic)
+git verify-commit "$commit_sha"
+git show --format=%G? -s "$commit_sha"  # Should print: G (good), U (untrusted), or R (revoked)
+
+# Verify Signed-off-by trailer (text)
+git log -1 --format=%B "$commit_sha" | grep '^Signed-off-by:'
+```
+
 **Future enhancement: Hook signing** — planned for 2026:
 - Hooks will be cryptographically signed with developer keys
 - Bootstrap will verify signatures before installation

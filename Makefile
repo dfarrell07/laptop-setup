@@ -114,6 +114,17 @@ bootstrap: guard-not-root
 	cd collections-dist && sha256sum -c SHA256SUMS
 	@# Verify collections against Galaxy API to detect supply chain tampering
 	@scripts/verify-collections-galaxy.sh
+	@echo ""
+	@echo "SECURITY: GPG signature verification for SHA256SUMS.asc"
+	@echo "  The collections-dist/signing-key.asc contains documentation (stub placeholder)."
+	@echo "  To enable GPG signature verification:"
+	@echo "    1. Obtain the actual signing key from a trusted keyserver:"
+	@echo "       gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882"
+	@echo "    2. Verify the fingerprint matches the value in SECURITY.md"
+	@echo "    3. After import, verify-collections.sh will validate GPG signatures"
+	@echo ""
+	@echo "  See SECURITY.md § 'Ansible Collections Supply Chain' for complete details."
+	@echo ""
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
 		collections-dist/community-general-13.2.0.tar.gz \

@@ -16,9 +16,14 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Step 1: Verify SHA256SUMS.asc GPG signature (defense-in-depth)
 # Security model:
+#   - Good signature with key in keyring (exit 0): PASS
+#   - Bad signature with key in keyring (exit 1): FATAL (active tampering detected)
 #   - Key NOT in keyring (exit 2): WARNING only (TOFU — fresh machine, key not yet imported)
-#   - BAD signature with key in keyring (exit 1): FATAL (active tampering detected)
-# Making "key not found" fatal would break all fresh provisioning runs.
+#
+# Note: verify-collections.sh cannot make key import FATAL without breaking provisioning on
+# fresh machines (git clone → no keys → fail). However, if a key is present in the keyring,
+# signature validation IS mandatory (FATAL if invalid). This is checked in bootstrap target
+# in Makefile, which can enforce mandatory import before proceeding.
 cd "${REPO_DIR}/collections-dist"
 if [[ -f SHA256SUMS.asc ]]; then
   gpg_exit=0
@@ -27,15 +32,20 @@ if [[ -f SHA256SUMS.asc ]]; then
   if [[ $gpg_exit -eq 0 ]]; then
     echo "✓ SHA256SUMS.asc GPG signature verified"
   elif echo "$gpg_output" | grep -q "No public key\|public key not found\|can't check signature"; then
-    # Key not in keyring — advisory only (expected on fresh machines)
+    # Key not in keyring — advisory only (expected on fresh machines).
+    # Rationale: we cannot mandate key import during bootstrap because users need to clone
+    # the repo first and import keys from collections-dist/signing-key.asc. However, if a key
+    # IS present but signature is invalid, we treat that as FATAL (active tampering).
     echo "WARNING: SHA256SUMS.asc signing key not in GPG keyring" >&2
     echo "         Continuing with hash-only verification (TOFU model)" >&2
-    echo "         To enable signature verification: gpg --import <signing-key>" >&2
+    echo "         To enable signature verification: gpg --import collections-dist/signing-key.asc" >&2
+    echo "         See SECURITY.md § 'Ansible Collections Supply Chain' for details." >&2
   else
     # Bad signature with key present — FATAL (tampering detected)
-    echo "FATAL: SHA256SUMS.asc GPG signature verification failed" >&2
+    echo "FATAL: SHA256SUMS.asc GPG signature verification FAILED" >&2
     echo "       The signing key is in your keyring but the signature is invalid." >&2
-    echo "       This indicates possible tampering. Do not proceed." >&2
+    echo "       This indicates possible tampering or corrupted signature file." >&2
+    echo "       Do not proceed. Audit git log, review SECURITY.md, contact maintainers." >&2
     echo "       GPG output: ${gpg_output}" >&2
     exit 1
   fi
