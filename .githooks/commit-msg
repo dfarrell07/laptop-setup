@@ -51,6 +51,18 @@ if [ "$_sc_files_modified" -eq 1 ]; then
   fi
 fi
 
+# SECURITY: Validate that config.yml does not have empty GOSUMDB (supply-chain bypass)
+# Attack: Setting dotfiles_gonosumdb: "" in config.yml disables Go module verification
+# Defense: Reject commits that introduce empty GOSUMDB in staged files
+if git diff --cached --name-only | grep -q 'config.yml'; then
+  if git diff --cached -- 'config.yml' | grep -qE '^\+.*dotfiles_gonosumdb:[[:space:]]*['"'"'"]?[[:space:]]*['"'"'"]?[[:space:]]*$'; then
+    echo "ERROR: Commit introduces empty dotfiles_gonosumdb in config.yml" >&2
+    echo "       Empty GOSUMDB disables Go module verification, allowing supply-chain attacks" >&2
+    echo "       Set dotfiles_gonosumdb to a valid value (e.g. 'sum.golang.org' or corporate proxy)" >&2
+    exit 1
+  fi
+fi
+
 # Signed-off-by still required above; these prefixes skip scope/tense/length checks only
 case "$msg" in
   squash!*|fixup!*|amend!*) exit 0 ;;
