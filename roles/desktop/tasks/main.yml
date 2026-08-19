@@ -75,6 +75,7 @@
         state: present
       become: true
       tags: [become]
+      register: _desktop_dnf_install
   rescue:
     - name: Warn if desktop packages install failed
       ansible.builtin.debug:
@@ -98,7 +99,9 @@
 
 # --- Alacritty config ---
 - name: Deploy Alacritty configuration
-  when: desktop_terminal == 'alacritty'
+  when:
+    - desktop_terminal == 'alacritty'
+    - not (_desktop_dnf_install.failed | default(false))
   block:
     - name: Ensure Alacritty config directory
       ansible.builtin.file:
