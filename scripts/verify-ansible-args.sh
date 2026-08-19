@@ -62,6 +62,19 @@ Solution: Do not pass _pf_vault_asserted as an extra-var.
 EOF
         exit 1
     fi
+    # Block --extra-vars=csb_rhel=* and --extra-vars=_csb_molecule_force=* (single-arg = form)
+    # extra-vars precedence 22 beats set_fact precedence 18; injecting these facts bypasses CSB
+    # classification and silently skips hardening tasks (sysctl, cron, authselect, chrony, etc.)
+    if [[ "$arg" == --extra-vars=csb_rhel=* || "$arg" == --extra-vars=_csb_molecule_force=* ]]; then
+        cat >&2 <<EOF
+ERROR: --extra-vars=csb_rhel= or --extra-vars=_csb_molecule_force= rejected by VERIFY_AND_RUN
+Reason: these facts gate CSB/RHEL classification; injecting via --extra-vars silently
+        disables hardening tasks (sysctl, cron, authselect, firmware, chrony) on Fedora.
+SECURITY RISK: Misclassifies the host as RHEL CSB, bypassing the OS hardening stack.
+Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
+EOF
+        exit 1
+    fi
 done
 
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
@@ -85,6 +98,19 @@ Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key dete
         secret-key shadowing checks, claude security-policy checks, and the
         redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
 Solution: Do not pass _pf_vault_asserted as an extra-var.
+EOF
+        exit 1
+    fi
+    # Block space-separated: -e csb_rhel=<value>, --extra-vars csb_rhel=<value>,
+    # -e _csb_molecule_force=<value>, --extra-vars _csb_molecule_force=<value>
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
+          ( "${args[$((i+1))]}" == csb_rhel=* || "${args[$((i+1))]}" == _csb_molecule_force=* ) ]]; then
+        cat >&2 <<EOF
+ERROR: -e csb_rhel= or -e _csb_molecule_force= rejected by VERIFY_AND_RUN
+Reason: these facts gate CSB/RHEL classification; injecting via -e silently
+        disables hardening tasks (sysctl, cron, authselect, firmware, chrony) on Fedora.
+SECURITY RISK: Misclassifies the host as RHEL CSB, bypassing the OS hardening stack.
+Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
 EOF
         exit 1
     fi
