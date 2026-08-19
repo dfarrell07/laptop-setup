@@ -325,9 +325,9 @@ for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ "$_curl_ok" == true ]]; then
     _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
-    if [[ -n "$_http_code" ]]; then
-      record "net_${nlabel}" "pass" "$nurl reachable"
-    else record "net_${nlabel}" "fail" "$nurl unreachable"; fi
+    if [[ "$_http_code" =~ ^[23] ]]; then
+      record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
+    else record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else
     record "net_${nlabel}" "skip" "curl not installed"
   fi
