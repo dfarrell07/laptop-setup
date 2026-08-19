@@ -69,7 +69,7 @@ _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
-scripts/verify-collections.sh
+"${_repo_root}/scripts/verify-collections.sh"
 
 # All checks passed — exec the remaining arguments (ansible-playbook or molecule with its args).
 # Using exec replaces this script's process with the command, preserving exit codes and

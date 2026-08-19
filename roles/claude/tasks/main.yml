@@ -86,18 +86,18 @@
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:
-    # SECURITY: SHA256 verification is now MANDATORY. Pre-flight checks verify that
-    # claude_install_sha256 is set and is a valid 64-character hex string.
-    # Users must set this in config.yml before provisioning. Failure to verify allows
-    # CDN compromise, MITM, or supply-chain attacks to inject arbitrary code.
-    # Verification is performed by ansible.builtin.get_url (checksum parameter).
+    # SECURITY: SHA256 verification is used when claude_install_sha256 is set in config.yml.
+    # Anthropic does not publish stable hashes for install.sh (changes per release), so TOFU
+    # is the accepted model when unset. Domain restriction (claude.ai/anthropic.com) + HTTPS
+    # are the primary integrity controls. Set claude_install_sha256 in config.yml to opt into
+    # hash pinning once you've verified the hash of a specific installer version.
     - name: Download Claude Code install script
       ansible.builtin.get_url:
         url: "{{ claude_install_url }}"
         dest: /tmp/claude-install.sh
         mode: "0700"
         timeout: 60
-        checksum: "sha256:{{ claude_install_sha256 }}"
+        checksum: "{{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 | length > 0 else omit }}"
 
     - name: Run Claude Code install script
       ansible.builtin.command:  # noqa: no-changed-when
