@@ -27,15 +27,22 @@
       Installed golang must support go install with GOTOOLCHAIN=local before proceeding.
       Reinstall golang via dnf/apt/brew and re-run provisioning.
 
-- name: Verify golang binary exists in PATH
+- name: Find golang binary in PATH
+  ansible.builtin.command:
+    cmd: which go
+  register: _go_binary_path
+  changed_when: false
+  failed_when: _go_binary_path.rc != 0
+
+- name: Verify golang binary exists at detected path
   ansible.builtin.stat:
-    path: /usr/bin/go
+    path: "{{ _go_binary_path.stdout | trim }}"
   register: _go_binary_stat
   failed_when: not _go_binary_stat.stat.exists or _go_binary_stat.stat.size == 0
 
 - name: Log golang verification success
   ansible.builtin.debug:
     msg: >-
-      golang binary verified: {{ _golang_installed_version }} at /usr/bin/go
+      golang binary verified: {{ _golang_installed_version }} at {{ _go_binary_path.stdout | trim }}
       (size: {{ _go_binary_stat.stat.size }} bytes)
     verbosity: 1
