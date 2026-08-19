@@ -32,7 +32,7 @@ dotfiles_github_user: !unsafe 'CHANGE_ME'
 dotfiles_user_name: !unsafe 'CHANGE_ME'
 dotfiles_user_email_work: !unsafe 'CHANGE_ME'
 dotfiles_user_email_personal: !unsafe 'CHANGE_ME'
-system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
+system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
 # Additional toggles (authoritative source in parentheses; override in config.yml):
 #   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE
@@ -74,7 +74,7 @@ system_timezone: !unsafe CHANGE_ME  # e.g. America/Chicago, Europe/London; run: 
 #                                        start with 'allow', 'block', or 'reject' followed by a
 #                                        device selector — bare catch-alls and embedded newlines
 #                                        are rejected by pre_flight_checks.yml
-#   packages_install_binaries: true    (group_vars/all/vars.yml)
+#   packages_install_binaries: true    (group_vars/all/vars.yml) — set false to skip SHA256-verified binary downloads (kind, helm, kustomize, k9s, subctl, oc, opm, etc.)
 #   packages_cosign_install_enabled: true  (roles/packages/defaults) — set false to skip cosign installation
 #     (requires manual installation with alternative verification method, e.g. GPG signature verification from GitHub releases)
 #   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
