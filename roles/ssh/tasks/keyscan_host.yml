@@ -16,6 +16,7 @@
       check_mode: false
       timeout: 10
       changed_when: false
+      ignore_errors: true
       retries: 1
       delay: 5
       until: ssh_keyscan_result.rc == 0 and ssh_keyscan_result.stdout | length > 0
@@ -57,9 +58,10 @@
           SECURITY: SSH host key fingerprint mismatch for {{ _ks_host }}.
           Expected {{ _ks_fingerprint }} — aborting, possible MITM attack.
       when: "'Verify host key fingerprint' in (ansible_failed_task.name | default(''))"
-    - name: Warn — could not fetch host keys for {{ _ks_host }}
-      ansible.builtin.debug:
-        msg: >
-          WARNING: Could not fetch {{ _ks_host }} SSH host keys
-          (VPN may be required). known_hosts not pre-seeded.
-      when: "'Verify host key fingerprint' not in (ansible_failed_task.name | default(''))"
+
+- name: Warn — could not fetch host keys for {{ _keyscan_host.host | default(_keyscan_host) }}
+  ansible.builtin.debug:
+    msg: >
+      WARNING: Could not fetch {{ _keyscan_host.host | default(_keyscan_host) }} SSH host keys
+      (VPN may be required). known_hosts not pre-seeded.
+  when: ssh_keyscan_result is failed
