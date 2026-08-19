@@ -10,7 +10,35 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Abort on unexpected /etc/profile.d scripts not in system_profiled_whitelist
+- name: Find /etc/profile.d files not owned by any RPM (backdoor pre-plant detection)
+  ansible.builtin.shell: |
+    find /etc/profile.d -maxdepth 1 -type f | while IFS= read -r f; do
+      rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"
+    done
+  register: _profiled_unowned
+  failed_when: false
+  changed_when: false
+  when:
+    - is_dnf
+    - not system_is_container
+
+- name: Abort on unpackaged /etc/profile.d scripts not in system_profiled_whitelist
+  ansible.builtin.assert:
+    that: _unexpected | length == 0
+    fail_msg: >-
+      SECURITY: Unexpected unpackaged file(s) in /etc/profile.d: {{ _unexpected | join(', ') }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Pre-planted backdoors in
+      this directory execute at every interactive login. Remove the file or
+      add its basename to system_profiled_whitelist in config.yml before
+      re-running provisioning.
+  vars:
+    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+  when:
+    - is_dnf
+    - not system_is_container
+
+- name: Abort on unexpected /etc/profile.d scripts not in system_profiled_whitelist (Debian fallback)
   ansible.builtin.fail:
     msg: >-
       SECURITY: Unexpected file in /etc/profile.d: {{ item.path | basename }}
@@ -21,7 +49,7 @@
       re-running provisioning.
   loop: "{{ _profiled_files.files | default([]) }}"
   when:
-    - not csb_rhel
+    - is_apt
     - not system_is_container
     - item.path | basename not in system_profiled_whitelist
 
