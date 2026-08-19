@@ -58,11 +58,14 @@
   ansible.builtin.set_fact:
     ssh_github_ok: "{{ ssh_github_meta.status | default(0) == 200 and ssh_github_ed25519_keys | length > 0 }}"
 
-- name: Remove stale github.com known_hosts entries before seeding
-  ansible.builtin.known_hosts:
-    name: github.com
-    state: absent
-  ignore_errors: true
+- name: Set MITM guard flag when API ed25519 keys share no key with pinned fallback
+  ansible.builtin.set_fact:
+    _ssh_github_mitm_guard: "{{ ssh_github_ok and (ssh_github_ed25519_keys | intersect(ssh_github_known_hosts_fallback) | length == 0) }}"
+
+- name: Override ssh_github_ok when MITM guard triggered (reject untrusted API keys)
+  ansible.builtin.set_fact:
+    ssh_github_ok: false
+  when: _ssh_github_mitm_guard
 
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
@@ -80,7 +83,16 @@
       WARNING: Could not fetch GitHub SSH host keys from api.github.com
       (status: {{ ssh_github_meta.status | default('no response') }}).
       Seeded github.com known_hosts from pinned fallback keys instead.
-  when: not ssh_github_ok
+  when: not ssh_github_ok and not _ssh_github_mitm_guard | default(false)
+
+- name: Warn when MITM guard triggered for GitHub SSH API keys
+  ansible.builtin.debug:
+    msg: >-
+      SECURITY WARNING: GitHub API ed25519 keys share no key with pinned fallback (ssh_github_known_hosts_fallback).
+      A rogue CA or TLS MITM may have injected attacker-controlled SSH host keys via api.github.com.
+      Seeding github.com known_hosts from pinned fallback instead; API keys rejected.
+      If GitHub legitimately rotated keys, update ssh_github_known_hosts_fallback and re-provision.
+  when: _ssh_github_mitm_guard | default(false)
 
 - name: Pre-seed work git host known_hosts
   ansible.builtin.include_tasks: keyscan_host.yml
