@@ -438,8 +438,10 @@
 
 - name: Assert SSH agent service file present (all scenarios)
   ansible.builtin.assert:
-    that: verify_ssh_agent.stat.exists
-    fail_msg: "SSH agent service file not deployed to user config dir"
+    that:
+      - verify_ssh_agent.stat.exists
+      - verify_ssh_agent.stat.mode == '0644'
+    fail_msg: "SSH agent service file missing or wrong mode (exists={{ verify_ssh_agent.stat.exists | default(false) }}, mode={{ verify_ssh_agent.stat.mode | default('absent') }})"
   when: ansible_system == 'Linux'
 
 - name: Verify ripgrep config deployed
@@ -471,7 +473,7 @@
 - name: Assert git config-work deployed (always deployed)
   ansible.builtin.assert:
     that: verify_git_config_work.stat.exists
-    fail_msg: "git config-work not deployed — work gitconfig includes missing"
+    fail_msg: "git config-work not deployed — work gitconfig includes missing (exists={{ verify_git_config_work.stat.exists | default(false) }})"
 
 - name: Slurp git config-work content
   ansible.builtin.slurp:
@@ -496,14 +498,14 @@
 - name: Assert ssh-agent environment.d config deployed (Linux)
   ansible.builtin.assert:
     that: verify_ssh_agent_envd.stat.exists
-    fail_msg: "ssh-agent.conf not deployed — SSH_AUTH_SOCK will be missing in GUI processes"
+    fail_msg: "ssh-agent.conf not deployed — SSH_AUTH_SOCK will be missing in GUI processes (exists={{ verify_ssh_agent_envd.stat.exists | default(false) }})"
   when: ansible_system == 'Linux' and not (system_is_container | default(false))
 
-- name: Assert ssh-agent.conf file present (all scenarios)
+- name: Assert ssh-agent.conf file present (container)
   ansible.builtin.assert:
     that: verify_ssh_agent_envd.stat.exists
-    fail_msg: "ssh-agent.conf not deployed to user config dir"
-  when: ansible_system == 'Linux'
+    fail_msg: "ssh-agent.conf not deployed to user config dir (exists={{ verify_ssh_agent_envd.stat.exists | default(false) }})"
+  when: ansible_system == 'Linux' and (system_is_container | default(false))
 
 - name: Read ssh-agent.conf content
   ansible.builtin.slurp:
