@@ -8,13 +8,13 @@
     - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
   block:
-    - name: Install yamllint (pipx, version-pinned)
+    - name: yamllint present at {{ packages_yamllint_version }}
       community.general.pipx:
         name: "yamllint=={{ packages_yamllint_version }}"
         state: install
       timeout: 300
 
-    - name: Install ansible-lint (pipx, version-pinned)
+    - name: ansible-lint present at {{ packages_ansible_lint_version }}
       community.general.pipx:
         name: "ansible-lint=={{ packages_ansible_lint_version }}"
         state: install

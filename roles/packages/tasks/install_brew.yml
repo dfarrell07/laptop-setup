@@ -97,7 +97,7 @@
       and approve LuLu to activate the application firewall.
   when: is_macos and packages_brew_cask_lulu_enabled | bool and _packages_brew_casks.changed | default(false)
 
-- name: Install AeroSpace window manager (SHA256-verified direct download)
+- name: AeroSpace window manager present at {{ packages_aerospace_version }} (work profile)
   # Downloads the upstream GitHub Release zip and verifies against packages_aerospace_sha256,
   # an independent integrity anchor in our own repo. This eliminates the supply chain risk
   # on fresh provisioning that existed when the nikitabobko/tap cask was used: a tap owner
