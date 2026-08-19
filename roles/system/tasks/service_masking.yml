@@ -299,46 +299,38 @@
     - is_dnf
   failed_when: false
 
-- name: Unmask ABRT services when system_mask_abrt disabled
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
-    enabled: true
-    state: started
-  loop:
-    - abrtd.service
-    - abrt-journal-core.service
-    - abrt-oops.service
-    - abrt-xorg.service
+- name: Unmask ABRT services (system_mask_abrt disabled)
   when:
     - not (system_mask_abrt | bool)
     - not csb_rhel
     - not system_is_container
     - is_dnf
-  failed_when: false
+  block:
+    - name: Unmask ABRT services when system_mask_abrt disabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: false
+        enabled: true
+        state: started
+      loop:
+        - abrtd.service
+        - abrt-journal-core.service
+        - abrt-oops.service
+        - abrt-xorg.service
+      failed_when: false
 
-- name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
-  ansible.builtin.systemd:
-    name: abrt-vmcore.service
-    masked: false
-    enabled: true
-  when:
-    - not (system_mask_abrt | bool)
-    - not csb_rhel
-    - not system_is_container
-    - is_dnf
-  failed_when: false
+    - name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
+      ansible.builtin.systemd:
+        name: abrt-vmcore.service
+        masked: false
+        enabled: true
+      failed_when: false
 
-- name: Unmask abrt-pstoreoops (vendor default disabled; do not enable)
-  ansible.builtin.systemd:
-    name: abrt-pstoreoops.service
-    masked: false
-  when:
-    - not (system_mask_abrt | bool)
-    - not csb_rhel
-    - not system_is_container
-    - is_dnf
-  failed_when: false
+    - name: Unmask abrt-pstoreoops (vendor default disabled; do not enable)
+      ansible.builtin.systemd:
+        name: abrt-pstoreoops.service
+        masked: false
+      failed_when: false
 
 # --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
 - name: Configure avahi-daemon masking (mask when system_disable_avahi)
