@@ -60,16 +60,6 @@
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
 
-- name: Clear stale Go module cache (TOCTOU prevention)
-  # Prevents cache poisoning attack: attacker pre-populates module cache with
-  # backdoored binary, reachability check passes, then go install uses cached
-  # binary without GOSUMDB consultation. Clearing cache on each provision
-  # ensures GOSUMDB validation on every install (unless explicitly disabled).
-  # See SECURITY.md § "Go Module Supply Chain" for TOCTOU discussion.
-  ansible.builtin.command:
-    cmd: go clean -modcache
-  changed_when: false
-  become: false
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
