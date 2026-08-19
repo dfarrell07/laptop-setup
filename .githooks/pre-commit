@@ -101,9 +101,8 @@ if command -v gitleaks >/dev/null 2>&1; then
     failed=1
   fi
 else
-  # Soft-skip pre-bootstrap: gitleaks is installed by 'make all'; until then warn only.
-  # CI (linting.yml) enforces gitleaks as a hard gate — the hook is defence-in-depth.
-  echo "WARNING: gitleaks not found — secret scanning skipped (run 'make all' to install)" >&2
+  echo "ERROR: gitleaks not found — commit blocked (run 'make all' to install)" >&2
+  failed=1
 fi
 
 # YAML lint staged files

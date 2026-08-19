@@ -104,6 +104,22 @@ else
 fi
 unset _ssh_ret
 
+# Active non-console SSH session check (PAM handle constraint)
+# pam_handle_t is allocated at pam_start() and held for the session lifetime. Any SSH session
+# open before provisioning began retains the pre-hardening PAM stack (old faillock thresholds,
+# prior authselect profile, permissive pwquality). Warn so the operator closes those sessions
+# and logs in fresh under the new PAM stack. macOS: 'who' output differs; skip there.
+if $IS_LINUX && command -v who &>/dev/null; then
+  _pts_sessions=$(who 2>/dev/null | awk '$2 ~ /^pts\// {count++} END {print count+0}')
+  if [[ "$_pts_sessions" -gt 0 ]]; then
+    record "pam-session-continuity" "WARN" \
+      "${_pts_sessions} active SSH session(s) (pts) predate this provisioning run and retain the old PAM stack — log out and reconnect to activate new faillock/pwquality/authselect settings"
+  else
+    record "pam-session-continuity" "PASS"
+  fi
+  unset _pts_sessions
+fi
+
 # Dev tool presence
 # In a Molecule CI container (MOLECULE_PROJECT_DIRECTORY set), many tools are intentionally
 # absent (binary downloads skipped via packages_install_binaries: false, claude_install_method:
@@ -1160,8 +1176,8 @@ EOF
     if [[ "$_cd_priv_dumps" -eq 0 ]]; then
       record "coredump-no-vault-process-dumps" "PASS" "no ansible-playbook/gpg/ssh-agent coredumps found"
     else
-      record "coredump-no-vault-process-dumps" "WARN" \
-        "$_cd_priv_dumps coredump(s) from privileged process(es) found — may contain vault plaintext or SSH keys; inspect with: coredumpctl list; consider: coredumpctl clean"
+      record "coredump-no-vault-process-dumps" "FAIL" \
+        "$_cd_priv_dumps coredump(s) from privileged process(es) found — may contain vault plaintext or SSH keys; clean before proceeding: coredumpctl clean"
     fi
     unset _cd_priv_dumps
   else
@@ -1879,7 +1895,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
     record "podman-socket-enabled" "PASS"
   else record "podman-socket-enabled" "FAIL" "podman.socket not enabled — socket will not start on reboot; fix: systemctl --user enable podman.socket"; fi
 
-  _sysctl_check "kernel.kptr_restrict"               "1" "sysctl-kptr-restrict"
+  _sysctl_check "kernel.kptr_restrict"               "2" "sysctl-kptr-restrict"
   # kexec: read expected value from deployed config (system_kexec_load_disabled defaults to 0 in default.config.yml)
   _kexec_expected=$(awk -F' *= *' '/^kernel\.kexec_load_disabled/{print $2}' /etc/sysctl.d/90-hardening.conf 2>/dev/null || true)
   _sysctl_check "kernel.kexec_load_disabled" "${_kexec_expected:-0}" "sysctl-kexec-disabled"

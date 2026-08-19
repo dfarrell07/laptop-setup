@@ -130,12 +130,15 @@ system_libvirt_remove_tftp: true
 system_libvirt_open_ssh: false
 
 # Core dumps
-# external=compressed files in /var/lib/systemd/coredump/ (Fedora default, gdb/dlv friendly);
-# pinned to anchor against future upstream change
-system_coredump_storage: external
+# Default 'none' — prevents systemd-coredump from writing process memory to
+# /var/lib/systemd/coredump/ (mode 0640, systemd-journal group readable).
+# During provisioning, ansible-playbook/gpg/ssh-agent hold vault plaintext and
+# SSH private keys; a crash would expose them to any local user in systemd-journal.
+# Opt-in for developers needing crash diagnostics: set system_coredump_storage: external
+# in config.yml (compressed files in /var/lib/systemd/coredump/, gdb/dlv friendly).
+# 'journal' embeds core in journald (same group-readable risk as external).
 # NOTE: fs.suid_dumpable=0 suppresses SUID crashes regardless of this setting (CIS 1.5.1 req a).
-# 'none' disables collection entirely (set in config.yml on hosts where ssh-agent/gpg-agent hold
-# long-lived secrets and crash-dump leakage is a concern); 'journal' embeds core in journald.
+system_coredump_storage: none
 system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 disables
 system_coredump_compress: "yes"    # Compress — compress dumps (matches systemd compiled-in default; explicit to survive distro build flag changes)
 system_coredump_max_use: 2G        # MaxUse — max total coredump disk usage (upstream default: 10% of fs)
@@ -202,14 +205,17 @@ system_aide_monitoring_etc_paths:
   - /etc/selinux/config          # SELinux enforcement mode (enforcing/permissive/disabled)
   - /etc/sysctl.d                # kernel hardening parameters
   - /etc/kernel                  # kernel cmdline parameters (next-boot install)
+  - /etc/chrony.d                # chrony NTS drop-in configs (time sync tampering)
+  - /etc/systemd/resolved.conf.d # DNS-over-TLS config (DoT server substitution)
   - /etc/audit                   # auditd rules integrity
   - /etc/modprobe.d              # kernel module blacklist integrity
   - /etc/sudoers.d               # sudo policy integrity
   - /etc/aide.conf               # self-reference: detect config tampering
   - /etc/dconf                   # GNOME system hardening policy
+  - /etc/dbus-1                  # D-Bus policy files (sha512+perms+owner+mtime via NORMAL)
 
 # AIDE check schedule
-system_aide_check_calendar: '*-*-* 05:00:00'  # OnCalendar for aide-check.timer; override in config.yml
+system_aide_check_calendar: 'hourly'           # OnCalendar for aide-check.timer; override in config.yml
 system_aide_check_random_delay: 15m            # RandomizedDelaySec for aide-check.timer; override in config.yml
 
 # Setuid binary scan — runs weekly regardless of system_aide_enabled.

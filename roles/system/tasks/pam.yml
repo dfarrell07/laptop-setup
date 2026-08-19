@@ -3,6 +3,19 @@
 # CSB: faillock/pwhistory/pwquality govern local-account PAM policy. On RHEL CSB hybrid,
 # IT's security baseline sets lockout thresholds (NIST SP 800-53 AC-7); overwriting them
 # silently violates corporate policy. Fedora hybrid is owner-managed — apply hardening there.
+#
+# DESIGN CONSTRAINT — PAM session continuity:
+# pam_handle_t is allocated in each PAM consumer (sshd child, login, su) at pam_start() and
+# held for the entire lifetime of that session. PAM file changes written below do NOT affect
+# any session whose pam_start() was called before this provisioning run began. A terminal
+# opened via SSH before `make all` retains the pre-hardening PAM stack — including any
+# disabled faillock, permissive pwquality, and the prior authselect profile — until that
+# session exits. No playbook task can close the gap; it is a kernel-level PAM design constraint.
+#
+# Procedural mitigation (see CLAUDE.md "Quick Reference"):
+#   - Provision from the local console or inside tmux, not over a pre-existing SSH session.
+#   - After provisioning, run `make smoke-test`; it warns if active non-console (pts) sessions
+#     are detected so the operator knows to close them and log in fresh under the new PAM stack.
 
 # --- PAM faillock (account lockout after failed attempts) ---
 - name: Configure pam_faillock value settings
@@ -132,6 +145,45 @@
   when:
     - system_authselect_faillock_enable.rc | default(0) != 0
     - system_authselect_faillock_enable is not skipped
+    - not csb_rhel
+    - not system_is_container
+
+- name: Verify pam_faillock.so authfail appears after pam_unix.so in system-auth (authselect)
+  ansible.builtin.shell:
+    cmd: >-
+      awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+           END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/system-auth
+  changed_when: false
+  register: system_pam_faillock_authselect_order_check
+  failed_when: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if pam_faillock.so is not correctly ordered in system-auth (authselect)
+  ansible.builtin.fail:
+    msg: >-
+      pam_faillock.so is not in the correct position in /etc/pam.d/system-auth.
+      Required order: preauth < pam_unix.so < authfail. authselect enable-feature
+      with-faillock returned rc=0 but the PAM stack lacks the expected stanzas
+      (corrupted feature template or authselect version-specific silent-success bug?).
+      Inspect /etc/pam.d/system-auth and /usr/share/authselect/default/sssd/ then re-run.
+  when:
+    - system_pam_faillock_authselect_order_check.rc | default(1) != 0
+    - system_pam_faillock_authselect_order_check is not skipped
+    - not csb_rhel
+    - not system_is_container
+
+- name: Assert exactly one pam_faillock.so preauth line in system-auth (authselect)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so.*preauth' /etc/pam.d/system-auth
+  register: _pam_authselect_preauth_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_authselect_preauth_count.stdout | int != 1
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
 

@@ -47,6 +47,42 @@
     - not csb_rhel
     - not system_is_container
 
+# --- Immediately re-enable faillock and pwhistory after profile baseline change ---
+# authselect select sssd --force regenerates /etc/authselect/system-auth and password-auth
+# from the bare sssd template, stripping pam_faillock.so and pam_pwhistory.so from the PAM
+# stack. Without re-enabling here, local auth has no brute-force protection for the 30-120 s
+# until pam.yml runs (12 task-file imports later in main.yml). Re-enabling immediately closes
+# the window to sub-second scope within this single task file.
+# pam.yml retains its own enable-feature tasks (with the is-feature-enabled probe guard) to
+# handle the case where the profile was already sssd and the select above was skipped.
+- name: Enable authselect with-faillock immediately after profile baseline change
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-faillock
+  register: system_authselect_faillock_enable_early
+  when:
+    - system_authselect_bin.stat.exists
+    - is_dnf
+    - not csb_rhel
+    - not csb_detected
+    - not system_is_container
+    - system_authselect_select_result.rc | default(1) == 0
+  changed_when: system_authselect_faillock_enable_early.rc | default(1) == 0
+  failed_when: false
+
+- name: Enable authselect with-pwhistory immediately after profile baseline change
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-pwhistory
+  register: system_authselect_pwhistory_enable_early
+  when:
+    - system_authselect_bin.stat.exists
+    - is_dnf
+    - not csb_rhel
+    - not csb_detected
+    - not system_is_container
+    - system_authselect_select_result.rc | default(1) == 0
+  changed_when: system_authselect_pwhistory_enable_early.rc | default(1) == 0
+  failed_when: false
+
 # --- Fingerprint auth (bypasses pam_faillock; disable unless fingerprint reader is desired) ---
 - name: Probe authselect with-fingerprint feature state
   ansible.builtin.command:

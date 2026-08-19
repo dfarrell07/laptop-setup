@@ -3,17 +3,16 @@
 # --- Core dumps ---
 # inotify on /etc/systemd/coredump.conf.d triggers coredump service reload, crashes containers
 # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
-# NOTE: The default config (system_coredump_storage: external) is intentionally non-compliant
-# with full CIS 1.5.1 — developer workstation trade-off. CIS 1.5.1 requires both (a) fs.suid_dumpable=0
-# and (b) RLIMIT_CORE=0 via limits.d. Req b (limits.d) is only applied when storage: none.
-# Full CIS 1.5.1 compliance requires setting system_coredump_storage: none in config.yml.
+# CIS 1.5.1 requires both (a) fs.suid_dumpable=0 and (b) RLIMIT_CORE=0 via limits.d.
+# Both are now applied unconditionally (regardless of system_coredump_storage) so PAM-managed
+# sessions (interactive shells, su, sshd) cannot produce core dumps via the kernel limit path.
 - name: Configure coredumps (skip in containers)
   when: not system_is_container and not csb_rhel
   block:
     # NOTE: fs.suid_dumpable=0 is set unconditionally in system_sysctl_hardening (defaults/main.yml),
     # overriding Fedora's 50-coredump.conf fs.suid_dumpable=2. This prevents SUID process crashes
     # from reaching systemd-coredump regardless of system_coredump_storage (CIS 1.5.1 req a —
-    # SUID only; RLIMIT_CORE=0 req b applied only when system_coredump_storage=none).
+    # SUID only; RLIMIT_CORE=0 req b applied unconditionally via limits.d below).
     # SUID crash capture can be re-enabled via fs.suid_dumpable: 2 in system_sysctl_extra_additional (config.yml).
     - name: Create /etc/systemd/coredump.conf.d directory
       ansible.builtin.file:
@@ -27,37 +26,54 @@
         dest: /etc/systemd/coredump.conf.d/coredump.conf
         mode: "0644"
 
-    - name: "Set RLIMIT_CORE=0 in limits.d (CIS 1.5.1 req b, storage: none only)"
+    - name: "Set RLIMIT_CORE=0 in limits.d (CIS 1.5.1 req b, unconditional)"
       ansible.builtin.copy:
         content: |
           # {{ ansible_managed }}
           # CIS 1.5.1: restrict core dumps for PAM-managed sessions (interactive shells, su, sshd).
           # Systemd service daemons are covered by Storage=none in coredump.conf.j2.
           # Hard limit prevents users from overriding the soft limit.
+          # Applied unconditionally regardless of system_coredump_storage to limit blast radius:
+          # even with external storage, PAM-session processes (ansible-playbook, gpg, ssh-agent)
+          # will not write core dumps containing decrypted vault material.
           *    hard    core    0
           root hard    core    0
         dest: /etc/security/limits.d/90-coredump.conf
         mode: "0644"
-      when: system_coredump_storage == 'none'
 
-    # Security advisory: external storage captures full process memory of privileged tools.
-    # ansible-playbook, gpg, and ssh-agent crashes write decrypted vault material to
-    # /var/lib/systemd/coredump/ readable by the systemd-journal group via 'coredumpctl dump'.
-    # Set system_coredump_storage: none in config.yml to eliminate this exposure at the cost
-    # of losing crash diagnostics. See CLAUDE.md "Key Patterns" for the trade-off.
-    - name: WARN — coredump storage=external may capture decrypted vault/key material from privileged process crashes
+    # Security advisory: external storage may capture full process memory of privileged tools
+    # that are not PAM-session children. Set system_coredump_storage: none in config.yml to
+    # eliminate this exposure entirely at the cost of losing crash diagnostics.
+    - name: WARN — coredump storage=external may capture decrypted vault/key material from non-PAM process crashes
       ansible.builtin.debug:
         msg: >-
-          WARNING: system_coredump_storage is 'external'. Crashes of ansible-playbook, gpg,
-          or ssh-agent may write decrypted vault plaintext or SSH private keys to
-          /var/lib/systemd/coredump/. Any local user in the systemd-journal group can read
-          these via 'coredumpctl dump'. Set system_coredump_storage: none in config.yml
+          WARNING: system_coredump_storage is 'external'. Crashes of processes not covered
+          by PAM limits (e.g., systemd services) may write decrypted material to
+          /var/lib/systemd/coredump/. Set system_coredump_storage: none in config.yml
           to prevent this. The smoke-test will alert if such coredumps are found.
       when: system_coredump_storage == 'external'
 
-    # Cleanup path: no-op in default config; relevant only on re-provision when system_coredump_storage changes from none to external.
-    - name: Remove RLIMIT_CORE limits when coredump storage is active
+# RHEL CSB: deploy Storage=none drop-in unconditionally — IT manages diagnostics tooling;
+# provisioning runs hold long-lived vault/key material in memory, so external core capture
+# is a higher risk than on standard Fedora where the operator controls the full stack.
+- name: Enforce Storage=none coredumps on RHEL CSB (skip in containers)
+  when: not system_is_container and csb_rhel
+  block:
+    - name: Create /etc/systemd/coredump.conf.d directory (RHEL CSB)
       ansible.builtin.file:
-        path: /etc/security/limits.d/90-coredump.conf
-        state: absent
-      when: system_coredump_storage != 'none'
+        path: /etc/systemd/coredump.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Deploy coredump.conf drop-in with Storage=none (RHEL CSB)
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          # RHEL CSB: disable coredump capture to prevent vault/key material exposure.
+          # IT manages crash diagnostics; local capture of privileged process memory
+          # (ansible-playbook, gpg, ssh-agent) is not needed here.
+          [Coredump]
+          Storage=none
+          ProcessSizeMax=0
+        dest: /etc/systemd/coredump.conf.d/coredump.conf
+        mode: "0644"

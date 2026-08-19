@@ -349,6 +349,27 @@
         recurse: false
       register: _systemd_user_units
 
+    - name: Find transient unit files in user systemd transient directory
+      ansible.builtin.find:
+        paths: "/run/user/{{ ansible_facts['user_uid'] }}/systemd/transient"
+        patterns:
+          - "*.service"
+          - "*.timer"
+        file_type: file
+        recurse: false
+      register: _systemd_transient_units
+      failed_when: false
+
+    - name: Fail on transient systemd user unit files before daemon-reload
+      ansible.builtin.fail:
+        msg: >-
+          Transient systemd user unit file detected in
+          /run/user/{{ ansible_facts['user_uid'] }}/systemd/transient/:
+          {{ item.path }}. A transient unit pre-planted here can shadow
+          vendor or managed units before daemon-reload. Remove it before
+          re-running provisioning.
+      loop: "{{ _systemd_transient_units.files | default([]) }}"
+
     - name: Warn on unmanaged systemd user unit files before daemon-reload
       ansible.builtin.fail:
         msg: >-

@@ -7,6 +7,13 @@ OnFailure=aide-notify@%n.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/aide --check
+# Emit a SHA-256 fingerprint of the reference database to journald after each
+# clean run so that silent rebaselining (aide --init && mv aide.db.new.gz
+# aide.db.gz by an attacker) produces a hash-discontinuity visible in journal
+# history even if the local database has been overwritten.  Stdout of
+# ExecStartPost is captured by journald under SyslogIdentifier=aide-check;
+# no network socket is needed (RestrictAddressFamilies=none is preserved).
+ExecStartPost=/bin/sh -c 'sha256sum /var/lib/aide/aide.db.gz'
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

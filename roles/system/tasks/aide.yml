@@ -214,11 +214,11 @@
         state: present
       register: _aide_conf_r6b
 
-    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (PERMS)
+    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (NORMAL)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/grub2/grub\.cfg\s'
-        line: '/boot/grub2/grub.cfg PERMS'
+        line: '/boot/grub2/grub.cfg NORMAL'
         insertbefore: '^/boot\s'
         state: present
       register: _aide_conf_r6c
@@ -238,6 +238,49 @@
         insertbefore: '^/etc/NetworkManager\s'
         state: present
       register: _aide_conf_r6e
+
+    - name: Add /var/log/audit/audit.log to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/audit/audit\.log\s'
+        line: '/var/log/audit/audit.log NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6f
+
+    - name: Add /var/log/secure to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/secure\s'
+        line: '/var/log/secure NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6g
+
+    - name: Add /var/log/sudo.log to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/sudo\.log\s'
+        line: '/var/log/sudo.log NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6h
+
+    - name: Add /var/spool/cron to AIDE monitoring (crontab persistence)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/spool/cron\s'
+        line: '/var/spool/cron NORMAL'
+        state: present
+      register: _aide_conf_r6i
+
+    - name: Add user systemd unit directory to AIDE monitoring (user-level persistence)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: "^{{ (real_user_home + '/.config/systemd/user') | regex_escape }}\\s"
+        line: "{{ real_user_home }}/.config/systemd/user NORMAL"
+        state: present
+      register: _aide_conf_r6j
 
     - name: Check if AIDE database exists
       ansible.builtin.stat:
@@ -266,7 +309,12 @@
              or _aide_conf_r6b is changed
              or _aide_conf_r6c is changed
              or _aide_conf_r6d is changed
-             or _aide_conf_r6e is changed }}
+             or _aide_conf_r6e is changed
+             or _aide_conf_r6f is changed
+             or _aide_conf_r6g is changed
+             or _aide_conf_r6h is changed
+             or _aide_conf_r6i is changed
+             or _aide_conf_r6j is changed }}
 
     - name: Reinitialize AIDE database on config change
       when: _aide_conf_changed
