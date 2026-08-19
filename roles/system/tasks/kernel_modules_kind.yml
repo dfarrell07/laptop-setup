@@ -1,6 +1,35 @@
 ---
 # roles/system/tasks/kernel_modules_kind.yml
 # --- Kernel modules for kind ---
+- name: Check if modules_disabled ratchet is active
+  ansible.builtin.slurp:
+    src: /proc/sys/kernel/modules_disabled
+  register: _modules_disabled_state
+  failed_when: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if modules_disabled ratchet prevents module loading
+  ansible.builtin.fail:
+    msg: |
+      CANNOT LOAD KERNEL MODULES: kernel.modules_disabled=1 is active (one-way ratchet).
+      Cause: Previous provisioning run set modules_disabled=1 in /etc/sysctl.d/90-hardening.conf.
+      Fix: REBOOT to reset the ratchet, then re-run provisioning.
+      Impact: kind/Kubernetes networking will be broken until reboot.
+
+      Current state: {{ (_modules_disabled_state.content | b64decode | trim) if _modules_disabled_state.content is defined else 'unknown' }}
+
+      The modules_disabled=1 sysctl is a security hardening control that prevents all
+      kernel module loads after activation. It cannot be disabled without reboot.
+      This is expected behavior; the playbook must run BEFORE the ratchet activates,
+      which is why kernel_modules_kind.yml is imported before hardening_core.yml in main.yml.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _modules_disabled_state.content is defined
+    - (_modules_disabled_state.content | b64decode | trim) == '1'
+
 - name: Load iptables kernel modules for kind
   community.general.modprobe:
     name: "{{ item }}"
