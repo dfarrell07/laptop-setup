@@ -42,6 +42,40 @@
     list | length > 0)
   when: not system_is_container
 
+- name: Verify critical sysctl values applied (handler)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      # Verify sysctl keys that are vulnerable to EPERM on hardened kernels
+      declare -A intended_values
+      intended_values[kernel.unprivileged_bpf_disabled]="{{ system_unprivileged_bpf_disabled | default(2) }}"
+
+      errors=()
+      for key in "${!intended_values[@]}"; do
+        if [ -f "/proc/sys/${key//./\/}" ]; then
+          actual=$(cat "/proc/sys/${key//./\/}" | tr -d '\n')
+          intended="${intended_values[$key]}"
+          if [ "$actual" != "$intended" ]; then
+            errors+=("$key: intended=$intended, actual=$actual")
+          fi
+        fi
+      done
+
+      if [ ${#errors[@]} -gt 0 ]; then
+        echo "WARNING: Kernel sysctl values differ from intended config:" >&2
+        for error in "${errors[@]}"; do
+          echo "  $error" >&2
+        done
+        echo "This may indicate CONFIG_BPF_UNPRIV_DEFAULT_OFF or similar kernel-locking features." >&2
+      fi
+      exit 0
+  listen: Apply sysctl
+  become: true
+  when:
+    - not system_is_container
+    - system_unprivileged_bpf_disabled is defined
+  changed_when: false
+
 - name: Restart tlp
   ansible.builtin.systemd:
     name: tlp
