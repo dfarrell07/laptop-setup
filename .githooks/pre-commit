@@ -140,6 +140,28 @@ if [ "$_modified_hashes" -gt 0 ] && [ "$_modified_tarballs" -eq 0 ]; then
   echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- collections-dist/SHA256SUMS" >&2
 fi
 
+# SECURITY GUARD: Block commits that modify SHA256SUMS without updating SHA256SUMS.asc
+# Prevents stale GPG signatures that cause fresh machines to fall back to hash-only verification
+_sha256_modified=0
+_sha256asc_modified=0
+while IFS= read -r -d '' f; do
+  _sha256_modified=$(((_sha256_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS')
+while IFS= read -r -d '' f; do
+  _sha256asc_modified=$(((_sha256asc_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'collections-dist/SHA256SUMS.asc')
+
+if [ "$_sha256_modified" -gt 0 ] && [ "$_sha256asc_modified" -eq 0 ]; then
+  echo "ERROR: collections-dist/SHA256SUMS modified but SHA256SUMS.asc not updated" >&2
+  echo "       CRITICAL: Stale signature allows fallback to hash-only verification" >&2
+  echo "       Run: make vendor-collections (regenerates signature automatically)" >&2
+  failed=1
+fi
+
+if [ "$_sha256asc_modified" -gt 0 ] && [ "$_sha256_modified" -eq 0 ]; then
+  echo "WARN: SHA256SUMS.asc modified but SHA256SUMS not changed (unusual)" >&2
+fi
+
 # SECURITY GUARD: Block commits to vault-pass-ci.sh without xtrace protection
 # Protects against removal of 'set +x' that prevents shell tracing exposure of vault password
 _vpci_modified=0
