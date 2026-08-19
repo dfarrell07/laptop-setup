@@ -12,42 +12,43 @@
       register: redhat_ca_stat
       delegate_to: localhost
 
-    - name: Deploy Red Hat CA certificates
-      block:
-        - name: Copy CA cert files to anchors directory
-          ansible.builtin.copy:
-            src: "{{ item.item }}"
-            dest: "{{ redhat_ca_dest }}/{{ item.item }}"
-            mode: "0644"
-          loop: "{{ redhat_ca_stat.results }}"
-          loop_control:
-            label: "{{ item.item }}"
-          become: true
-          tags: [become]
-          notify: Update CA trust
-          when: item.stat.exists
-      rescue:
-        - name: Record CA certificate deploy failure
-          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-          vars:
-            _csb_role: redhat
-            _csb_task_name: "Deploy Red Hat CA certificates"
-            _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-            _csb_action: "Red Hat internal CA certs may be missing; verify {{ redhat_ca_dest }} exists and is writable"
-            _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
-            _csb_ticket_body: >-
-              Red Hat CA certificate files could not be copied to
-              {{ redhat_ca_dest }}/. Internal CA trust may be
-              broken, affecting access to internal HTTPS services.
-          when: csb_detected
-        - name: Warn CA certificate deploy failed (non-CSB)
-          ansible.builtin.debug:
-            msg: >-
-              TASK FAILED: Deploy Red Hat CA certificates in role redhat.
-              Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
-              Continuing playbook execution.
-          # non-CSB host: csb_detected=false means no ticket needed, log only
-          when: not csb_detected
+    - name: Copy CA cert files to anchors directory
+      ansible.builtin.copy:
+        src: "{{ item.item }}"
+        dest: "{{ redhat_ca_dest }}/{{ item.item }}"
+        mode: "0644"
+      loop: "{{ redhat_ca_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      become: true
+      tags: [become]
+      notify: Update CA trust
+      when: item.stat.exists
+      ignore_errors: true
+      register: _ca_copy_result
+
+    - name: Record CA certificate deploy failure
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: redhat
+        _csb_task_name: "Deploy Red Hat CA certificates"
+        _csb_error: "{{ _ca_copy_result.msg | default('unknown error') }}"
+        _csb_action: "Red Hat internal CA certs may be missing; verify {{ redhat_ca_dest }} exists and is writable"
+        _csb_ticket_summary: "Cannot deploy Red Hat CA certificates on CSB"
+        _csb_ticket_body: >-
+          Red Hat CA certificate files could not be copied to
+          {{ redhat_ca_dest }}/. Internal CA trust may be
+          broken, affecting access to internal HTTPS services.
+      when: _ca_copy_result is failed and csb_detected
+
+    - name: Warn CA certificate deploy failed (non-CSB)
+      ansible.builtin.debug:
+        msg: >-
+          TASK FAILED: Deploy Red Hat CA certificates in role redhat.
+          Error: {{ _ca_copy_result.msg | default('unknown') | truncate(200) }}.
+          Continuing playbook execution.
+      # non-CSB host: csb_detected=false means no ticket needed, log only
+      when: _ca_copy_result is failed and not csb_detected
 
     - name: Warn when no CA cert files found in role
       ansible.builtin.debug:
