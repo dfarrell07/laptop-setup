@@ -965,6 +965,26 @@
           Impact: persistent unauthorized SSH access, SSH config/known_hosts hijack after reboot.
           Fix: set git_repos_base_dir to a subdirectory of home (e.g. ~/src — the default).
 
+    - name: Assert git_repos_base_dir is within user home directory (path escape guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _base_dir: "{{ _raw.get('git_repos_base_dir', ansible_facts['user_dir'] ~ '/src') | string }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _base_dir is match('^' ~ ansible_facts['user_dir'] ~ '(/[a-zA-Z0-9_./-]+)?$')
+            or _base_dir is match('^~/[a-zA-Z0-9_./-]+$')
+        fail_msg: >-
+          SECURITY: git_repos_base_dir in config.yml resolves outside the user home directory.
+          Input: git_repos_base_dir={{ _base_dir }}; expected prefix {{ ansible_facts['user_dir'] }}.
+          Mechanism: git_repos_base_dir is the root path for all git_repos_list clones;
+          a value of /etc or / writes repo content into system directories during provisioning.
+          Example: git_repos_base_dir=/etc clones attacker-controlled repos into /etc, replacing
+          sshd_config, sudoers, and other system configs with malicious versions (GAP 2 + GAP 3).
+          Impact: arbitrary write to system paths under become:true — full privilege escalation.
+          Fix: set git_repos_base_dir to a path under your home directory (default: ~/src).
+
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
       when: _config_yml_raw.content is defined
       vars:
