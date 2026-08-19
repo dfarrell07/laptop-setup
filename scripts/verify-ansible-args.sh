@@ -76,6 +76,22 @@ Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
 EOF
         exit 1
     fi
+    # Block any --extra-vars containing system_sysctl_hardening (key=value or JSON dict form)
+    # extra-vars (precedence 22) beats set_fact (18); injecting system_sysctl_hardening replaces
+    # the role-default hardening dict before the merge set_fact runs, AND remains authoritative
+    # after it (22 > 18), so the deployed 90-hardening.conf silently drops all static entries.
+    if [[ "$arg" == --extra-vars=*system_sysctl_hardening* ]]; then
+        cat >&2 <<EOF
+ERROR: --extra-vars=system_sysctl_hardening rejected by VERIFY_AND_RUN
+Reason: extra-vars (precedence 22) overrides the role-default hardening dict and beats
+        set_fact (18); the deployed /etc/sysctl.d/90-hardening.conf would contain only
+        the injected keys, silently dropping kptr_restrict, dmesg_restrict, tcp_syncookies,
+        and all other static hardening entries.
+SECURITY RISK: Full erasure of sysctl hardening baseline on the provisioned host.
+Solution: Do not override system_sysctl_hardening on the command line.
+EOF
+        exit 1
+    fi
 done
 
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
@@ -112,6 +128,20 @@ Reason: these facts gate CSB/RHEL classification; injecting via -e silently
         disables hardening tasks (sysctl, cron, authselect, firmware, chrony) on Fedora.
 SECURITY RISK: Misclassifies the host as RHEL CSB, bypassing the OS hardening stack.
 Solution: Do not override csb_rhel or _csb_molecule_force on the command line.
+EOF
+        exit 1
+    fi
+    # Block space-separated: -e system_sysctl_hardening=* or JSON dict containing the key
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && \
+          "${args[$((i+1))]}" == *system_sysctl_hardening* ]]; then
+        cat >&2 <<EOF
+ERROR: -e system_sysctl_hardening rejected by VERIFY_AND_RUN
+Reason: extra-vars (precedence 22) overrides the role-default hardening dict and beats
+        set_fact (18); the deployed /etc/sysctl.d/90-hardening.conf would contain only
+        the injected keys, silently dropping kptr_restrict, dmesg_restrict, tcp_syncookies,
+        and all other static hardening entries.
+SECURITY RISK: Full erasure of sysctl hardening baseline on the provisioned host.
+Solution: Do not override system_sysctl_hardening on the command line.
 EOF
         exit 1
     fi
