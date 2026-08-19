@@ -102,6 +102,8 @@ bootstrap: guard-not-root
 	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256" >&2; exit 1; }
 	@# Verify verify-ansible-args.sh integrity (FATAL if check fails) — guards against pre-flight check bypass
 	@cd scripts && sha256sum -c verify-ansible-args.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-ansible-args.sh integrity verified" || { echo "ERROR: verify-ansible-args.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-ansible-args.sh > scripts/verify-ansible-args.sh.sha256" >&2; exit 1; }
+	@# Verify pre-commit hook integrity (FATAL if check fails) — guards against hook tampering
+	@cd .githooks && sha256sum -c pre-commit.sha256 > /dev/null 2>&1 && echo "✓ pre-commit hook integrity verified" || { echo "ERROR: .githooks/pre-commit failed integrity check — possible tampering. Run: sha256sum .githooks/pre-commit > .githooks/pre-commit.sha256" >&2; exit 1; }
 	@# Verify verify-collections-galaxy.sh integrity (FATAL if check fails) — guards against supply chain verification bypass
 	@cd scripts && sha256sum -c verify-collections-galaxy.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections-galaxy.sh integrity verified" || { echo "ERROR: verify-collections-galaxy.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections-galaxy.sh > scripts/verify-collections-galaxy.sh.sha256" >&2; exit 1; }
 	cd collections-dist && sha256sum -c SHA256SUMS

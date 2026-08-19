@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
 # Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
 
-Port {{ ssh_port }}
+Port {{ ssh_port | regex_replace('[\r\n].*', '') | int }}
 Banner /etc/issue.net
 # WARNING: password auth is disabled. Before running make all, ensure
 # ~/.ssh/authorized_keys holds at least one ssh-ed25519 or
