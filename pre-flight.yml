@@ -40,7 +40,7 @@
 
     - name: Capture real user identity for early checks
       ansible.builtin.set_fact:
-        real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_home: "{{ lookup('pipe', 'python3 -c \"import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)\" 2>/dev/null') | default(lookup('env', 'HOME'), true) }}"
         real_user_id: "{{ lookup('env', 'USER') }}"
 
     - name: Set project root for include paths

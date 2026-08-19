@@ -349,7 +349,7 @@ system_grub_password_hash: ""
 # locking out all users on the next sshd restart.
 # Must use lookup('env') not ansible_facts['user_id']/dir: those Ansible facts
 # resolve to root/root when the role runs with become: true at play level.
-real_user_home: "{{ lookup('env', 'HOME') }}"
+real_user_home: "{{ lookup('pipe', 'python3 -c \"import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)\" 2>/dev/null') | default(lookup('env', 'HOME'), true) }}"
 real_user_id: "{{ lookup('env', 'USER') }}"
 
 # Fallback for standalone invocation; authoritative value in group_vars/all/vars.yml.

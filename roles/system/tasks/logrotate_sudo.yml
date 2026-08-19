@@ -1,32 +1,31 @@
 ---
 # roles/system/tasks/logrotate_sudo.yml
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
-- name: Install logrotate
-  ansible.builtin.package:
-    name: logrotate
-    state: present
+- name: Install and configure logrotate for sudo.log
   when:
     - not csb_rhel
-    - not system_is_container  # apt install logrotate triggers deb-systemd-helper daemon-reload
+    - not system_is_container
+  block:
+    - name: Install logrotate
+      ansible.builtin.package:
+        name: logrotate
+        state: present
 
-- name: Deploy logrotate config for sudo.log
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      /var/log/sudo.log {
-          weekly
-          rotate 26
-          compress
-          delaycompress
-          missingok
-          notifempty
-          create 0600 root root
-      }
-    dest: /etc/logrotate.d/sudo
-    mode: "0644"
-  when:
-    - not csb_rhel  # only meaningful when sudoers hardening task below creates /var/log/sudo.log
-    - not system_is_container  # logrotate not installed in containers (guarded above); /etc/logrotate.d does not exist
+    - name: Deploy logrotate config for sudo.log
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          /var/log/sudo.log {
+              weekly
+              rotate 26
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0600 root root
+          }
+        dest: /etc/logrotate.d/sudo
+        mode: "0644"
 
 - name: Remove logrotate config for sudo.log on CSB RHEL
   ansible.builtin.file:

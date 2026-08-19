@@ -78,6 +78,28 @@ done
 #                                 (higher than group_vars); injects/overrides variables before
 #                                 pre_flight_checks.yml runs, bypassing SSTI guards entirely
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+# SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
+# An attacker setting HOME=/home/victim causes account_hardening.yml to chmod victim's home
+# as root (become: true) and routes ANSIBLE_COLLECTIONS_PATH through victim's ~/.ansible.
+_invoking_user="$(id -un)"
+_passwd_home=""
+if command -v getent &>/dev/null; then
+    _passwd_home="$(getent passwd "${_invoking_user}" 2>/dev/null | cut -d: -f6)"
+elif command -v dscl &>/dev/null; then
+    _passwd_home="$(dscl . -read "/Users/${_invoking_user}" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+fi
+if [[ -n "${_passwd_home}" && "${HOME}" != "${_passwd_home}" ]]; then
+    cat >&2 <<EOF
+ERROR: HOME mismatch — possible home directory hijack attempt
+  HOME env var : ${HOME}
+  Expected     : ${_passwd_home} (from /etc/passwd for ${_invoking_user})
+Do not set HOME to another user's directory before running make all.
+EOF
+    exit 1
+fi
+unset _invoking_user _passwd_home
+
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
