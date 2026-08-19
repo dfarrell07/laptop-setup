@@ -319,27 +319,7 @@ instead. If you must re-run a subset of tasks:
 
 ## Git Security
 
-**Do NOT use `git commit --no-verify`** — Bypasses critical pre-commit integrity guards:
-
-- **Collections supply chain** — `collections-dist/*.tar.gz` modifications must be
-  accompanied by `collections-dist/SHA256SUMS` update. The pre-commit hook enforces
-  this (lines 5-26 of `.githooks/pre-commit`). Using `--no-verify` bypasses the guard,
-  allowing tampered collection tarballs to be committed. CI enforces
-  `collections-integrity` as a required status check, but local `--no-verify` commits
-  can still reach the PR branch before CI runs.
-- **Secrets scanning** — `gitleaks pre-commit` detects leaked credentials. Using
-  `--no-verify` bypasses credential detection.
-- **Vault encryption** — `--no-verify` bypasses the check that `*vault.yml` files
-  are encrypted.
-
-**Mitigation** — All pre-commit guards are duplicated as required CI status checks
-(Ansible Lint, Vault Encryption Check, Secret Detection, Collections Integrity
-Check, Ansible Syntax Check). A `--no-verify` commit that modifies `collections-dist/`
-without updating `SHA256SUMS` will fail the PR merge gate.
-
-**Exception** — If a commit becomes stuck due to a faulty hook, fix the underlying
-issue (e.g. update `SHA256SUMS`, encrypt vault), then re-stage and commit normally.
-Do NOT use `--no-verify` as a workaround.
+See § "Unsafe Git Operations" above for complete guidance on `--no-verify` restrictions. This project's collections supply chain requires care — tampering with `collections-dist/*.tar.gz` without updating `SHA256SUMS` bypasses pre-commit hooks and reaches the PR branch before CI runs. Architectural detail on the hook-level pre-push bypass is in "Git Hooks Protection" § "Pre-push hook limitation: --no-verify bypass".
 
 ```bash
 # SAFE: Run from a specific role tag (full play pre_tasks still execute)
@@ -524,14 +504,13 @@ The `collections-dist/SHA256SUMS` file is signed with GPG. Before running `make 
 provisioning commands, verify the signature to ensure the hashes have not been tampered with:
 
 ```bash
-# 1. View the fingerprint documented in SHA256SUMS (see file header comment)
-grep -A 2 "SHA256SUMS.asc Signature" collections-dist/SHA256SUMS
+# 1. Get the fingerprint from § Cryptographic Identities Registry (Collections Signing row)
 
 # 2. Import the public key (if not already in your keyring)
-gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+gpg --keyserver keys.openpgp.org --recv-keys <fingerprint>
 
-# 3. Verify the fingerprint matches the documented value
-gpg --list-key AE97E86A1C807F5FA6A7987B68B6396B4E11D882 | grep fingerprint
+# 3. Verify the fingerprint matches the registry value
+gpg --list-key <fingerprint> | grep fingerprint
 
 # 4. Verify the signature on SHA256SUMS
 gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
