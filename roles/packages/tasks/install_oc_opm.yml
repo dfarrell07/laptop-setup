@@ -131,13 +131,13 @@
           become: true
           tags: [become]
 
-    - name: Stat oc binary
+    - name: Verify oc binary is present
       ansible.builtin.stat:
         path: /usr/local/bin/oc
       register: packages_oc_stat
       check_mode: false
 
-    - name: Stat kubectl binary (post-download)
+    - name: Verify kubectl binary is present
       ansible.builtin.stat:
         path: /usr/local/bin/kubectl
       register: packages_kubectl_stat_post
