@@ -284,7 +284,7 @@ if [[ "$profile" == "work" ]]; then
   if ! grep -q 'config-work' "$HOME/.config/git/config" 2>/dev/null; then
     record "gitconfig-includeif" "FAIL" "no includeIf referencing config-work in ~/.config/git/config — work identity routing absent; check dotfiles_work_src_dirs in config.yml and re-run: make dotfiles"
   else record "gitconfig-includeif" "PASS"; fi
-else record "gitconfig-includeif" "PASS"; fi  # personal profile: dotfiles_work_src_dirs may be empty by design
+else record "gitconfig-includeif" "SKIP" "not applicable on personal profile"; fi
 unset _gc_work _gc_personal
 
 # global gitignore — also referenced via core.excludesfile in gitconfig.j2 (belt-and-suspenders: XDG path is read automatically, explicit setting survives non-XDG git invocations)
