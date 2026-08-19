@@ -117,7 +117,7 @@
       failed_when: false
       check_mode: false
 
-    - name: Download and install AeroSpace
+    - name: AeroSpace present at {{ packages_aerospace_version }}
       when: packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
       block:
         - name: Create secure AeroSpace temp directory (TOCTOU guard)

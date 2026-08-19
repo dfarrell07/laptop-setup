@@ -33,7 +33,7 @@
       register: packages_kubectl_stat
       check_mode: false
 
-    - name: Download and install oc + kubectl
+    - name: oc + kubectl present at {{ packages_oc_version }}
       when: >-
         packages_oc_check.rc != 0 or
         packages_oc_version == 'stable' or
@@ -201,7 +201,7 @@
       register: packages_opm_marker
       failed_when: false
 
-    - name: Download and install opm
+    - name: opm present at {{ packages_oc_version }}
       when: >-
         packages_opm_check.rc != 0 or
         packages_oc_version == 'stable' or
