@@ -360,8 +360,8 @@ Upstream verification passed: Python modules match github.com/ansible-collection
 - actionlint, zizmor, and gitleaks run as SHA256-verified binary downloads
   (no third-party node actions — eliminates opaque `dist/index.js` supply chain risk)
 - OSSF Scorecard runs weekly with SARIF upload to Security tab
-- Branch protection on main: 5 required checks (Ansible Lint, Vault Encryption
-  Check, Secret Detection, Ansible Syntax Check, Vars Sync Check), force push blocked, linear history
+- Branch protection on main: 6 required checks (Ansible Lint, Vault Encryption
+  Check, Secret Detection, Ansible Syntax Check, Vars Sync Check, GPG Signature Verification), force push blocked, linear history
 - GitHub secret scanning + push protection enabled
 - **Ansible Galaxy collections (vendored + SHA256-verified + Python manifest)**: All four collections are vendored
   in `collections-dist/` and installed from there — CI and provisioning never contact Galaxy.

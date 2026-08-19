@@ -630,9 +630,16 @@ jobs:
           failed=0
           for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             if git show "$commit" --name-only | grep -qE '^(scripts/verify-|scripts/check-|\.githooks/|collections-dist/|Makefile|\.github/workflows/)'; then
-              if ! git verify-commit "$commit" 2>/dev/null; then
+              # Verify GPG signature with full verification output
+              if git verify-commit "$commit" 2>&1; then
                 sig_status=$(git show --format=%G? -s "$commit")
+                signer=$(git show --format=%GS -s "$commit")
+                echo "✓ Commit $commit: GPG-signed (status: $sig_status, signer: $signer)"
+              else
+                sig_status=$(git show --format=%G? -s "$commit")
+                modified_files=$(git show "$commit" --name-only | grep -E '^(scripts/verify-|scripts/check-|\.githooks/|collections-dist/|Makefile|\.github/workflows/)' | paste -sd ',' -)
                 echo "::error::Commit $commit modifies critical supply-chain files but is NOT GPG-signed (status: $sig_status)"
+                echo "::error::Modified files: $modified_files"
                 failed=1
               fi
             fi
