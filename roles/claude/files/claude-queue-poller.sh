@@ -13,9 +13,10 @@ HOST_LABEL="${CLAUDE_QUEUE_HOST_LABEL:-}"
 CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
 MAX_ISSUES_PER_RUN="${CLAUDE_QUEUE_MAX_ISSUES_PER_RUN:-5}"
 ALLOWED_AUTHORS="${CLAUDE_QUEUE_ALLOWED_AUTHORS:-}"  # Comma-separated GitHub logins; empty = allow all (insecure)
+LOG_RETENTION_DAYS="${CLAUDE_QUEUE_LOG_RETENTION_DAYS:-30}"
 
 # --- Repo maps (loaded from config file) ---
-REPO_CONFIG="${HOME}/.config/claude/queue-repos.conf"
+REPO_CONFIG="${CLAUDE_QUEUE_REPO_CONFIG:-${HOME}/.config/claude/queue-repos.conf}"
 if [[ ! -f "$REPO_CONFIG" ]]; then
   echo "Missing repo config: $REPO_CONFIG" >&2
   exit 1
@@ -64,7 +65,7 @@ mark_issue_failed() {
 mkdir -p "$LOG_DIR"
 
 # Prune old per-issue logs (>30 days)
-find "$LOG_DIR" -name "issue-*" -mtime +30 -delete 2>/dev/null || true
+find "$LOG_DIR" -name "issue-*" -mtime "+${LOG_RETENTION_DAYS}" -delete 2>/dev/null || true
 
 exec 200>"$LOCKFILE"
 if ! flock -n 200; then
@@ -212,7 +213,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     DURATION=$((END_TIME - START_TIME))
 
     if [[ "$CLAUDE_EXIT" -ne 0 ]]; then
-      mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`"
+      mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`. Re-open and re-label as \`queued\` to retry."
       git push origin "$BRANCH_NAME" 2>/dev/null || true
       exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
     fi
