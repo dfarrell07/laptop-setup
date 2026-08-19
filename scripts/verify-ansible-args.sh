@@ -210,8 +210,10 @@ done
 #   ANSIBLE_ROLES_PATH          — loads malicious roles (arbitrary become code execution)
 #   ANSIBLE_ACTION_PLUGINS      — action plugins run for every task; malicious = full intercept
 #   ANSIBLE_STRATEGY_PLUGINS    — strategy plugin controls task dispatch; malicious = intercept all
+#
 #   PYTHONPATH                  — injected module shadows ansible.* at Python import time (CRITICAL)
 #   ANSIBLE_PYTHON_INTERPRETER  — redirects Python used by Ansible to attacker binary
+#
 #   ANSIBLE_CACHE_PLUGIN*       — crafted facts cache plants spoofed ansible_distribution/ansible_fqdn,
 #                                 skewing CSB detection (csb_detect.yml reads cached facts before gather)
 #   ANSIBLE_INVENTORY           — malicious static inventory injects host_vars (e.g. ansible_python_interpreter)
@@ -222,6 +224,7 @@ done
 #   ANSIBLE_VARS_PLUGINS        — vars plugins run before any play task at inventory/play precedence
 #                                 (higher than group_vars); injects/overrides variables before
 #                                 pre_flight_checks.yml runs, bypassing SSTI guards entirely
+#
 #   LD_PRELOAD                  — injects attacker .so into ansible-playbook Python process at exec() time;
 #                                 hooks libc open()/read() to exfiltrate vault plaintext BEFORE sudo ever runs;
 #                                 sudo env_reset strips it from become tasks but the user-context process
@@ -231,6 +234,7 @@ done
 #   LD_AUDIT                    — silent rtld-audit hook (la_* interface) into every dynamic symbol call
 #                                 in every process; more covert than LD_PRELOAD (no symbol replacement,
 #                                 observation only) but sufficient to exfiltrate vault secrets
+#
 #   PYTHONHOME                  — completely replaces Python's stdlib search path before any Ansible code
 #                                 runs; attacker sets PYTHONHOME=/tmp/evil, plants os.py/hashlib.py/
 #                                 subprocess.py replacements — full Python interpreter redirection
