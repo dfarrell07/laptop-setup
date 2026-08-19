@@ -237,6 +237,18 @@ system_aide_monitoring_etc_paths:
 system_aide_check_calendar: 'hourly'           # OnCalendar for aide-check.timer; override in config.yml
 system_aide_check_random_delay: 15m            # RandomizedDelaySec for aide-check.timer; override in config.yml
 
+# Systemd drop-in directory whitelist (under /etc/systemd/system/*.d)
+# Directories found by the early SECURITY check in system/tasks/main.yml that are NOT in this
+# list cause an immediate play failure before any handler-triggering task runs. This blocks
+# pre-planted override.conf backdoors (e.g. sshd.service.d/override.conf ExecStartPre= payloads)
+# from executing when a handler restarts the service mid-play.
+# Extend in config.yml (system_systemd_dropin_whitelist) to add site-local entries.
+system_systemd_dropin_whitelist:
+  - tmp.mount.d            # /tmp hardening drop-in (mounts.yml)
+  - dnf-automatic.service.d   # AIDE update hook for dnf-automatic (dnf_automatic.yml)
+  - dnf5-automatic.service.d  # AIDE update hook for dnf5-automatic (dnf_automatic.yml)
+  - aide-check.service.d      # future AIDE check timer override slot
+
 # Setuid binary scan — runs weekly regardless of system_aide_enabled.
 # Detects new/removed setuid and setgid binaries (perm /6000) by diffing
 # against a stored baseline in /var/lib/setuid-scan/baseline.

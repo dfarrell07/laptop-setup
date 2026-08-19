@@ -119,6 +119,35 @@
   when: not system_is_container
   tags: [always]
 
+- name: "SECURITY: Find systemd drop-in directories under /etc/systemd/system"
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    file_type: directory
+    patterns: "*.d"
+  register: _systemd_dropin_find
+  when: not system_is_container
+  tags: [always]
+
+- name: "SECURITY: Fail on unexpected systemd drop-in directories (pre-plant backdoor guard)"
+  ansible.builtin.assert:
+    that:
+      - _unexpected_dropin_dirs | length == 0
+    fail_msg: |
+      SECURITY: Unexpected systemd drop-in dir(s) under /etc/systemd/system/.
+      Threat: a pre-planted override.conf with ExecStartPre= executes as root
+      when a handler restarts the service (sshd, NetworkManager, polkit, dbus).
+      Unexpected: {{ _unexpected_dropin_dirs | join(', ') }}
+      Whitelist: {{ system_systemd_dropin_whitelist | join(', ') }}
+      Fix: remove the unexpected director(ies), or add them to
+      system_systemd_dropin_whitelist in config.yml if they are legitimate.
+  vars:
+    _found_dropin_dirs: >-
+      {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
+    _unexpected_dropin_dirs: >-
+      {{ _found_dropin_dirs | reject('in', system_systemd_dropin_whitelist) | list }}
+  when: not system_is_container
+  tags: [always]
+
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
