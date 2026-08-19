@@ -17,11 +17,11 @@
         label: "subctl{{ item.suffix }}"
 
     - name: Create secure temp directory for subctl binary (TOCTOU mitigation)
-      ansible.builtin.command:
-        cmd: mktemp -d --tmpdir={{ ansible_facts['user_dir'] }}/.cache
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_subctl_
+        path: "{{ ansible_facts['user_dir'] }}/.cache"
       register: _subctl_tmpdir
-      changed_when: false
-      check_mode: false
 
     - name: Install subctl version with temp GOBIN
       ansible.builtin.command:
@@ -29,7 +29,7 @@
       timeout: 600
       environment:
         GOPATH: "{{ ansible_facts['user_dir'] }}/go"
-        GOBIN: "{{ _subctl_tmpdir.stdout }}/subctl-v{{ item.version }}-bin"
+        GOBIN: "{{ _subctl_tmpdir.path }}/subctl-v{{ item.version }}-bin"
         GOTOOLCHAIN: "{{ packages_gotoolchain }}"
         HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
         HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
@@ -42,7 +42,7 @@
         packages_subctl_version_check.results[loop_idx].rc != 0 or
         _subctl_installed != item.version
       changed_when: true
-      failed_when: false
+      ignore_errors: true
       register: packages_subctl_install_results
       loop: "{{ packages_subctl_versioned }}"
       loop_control:
