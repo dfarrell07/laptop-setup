@@ -618,19 +618,26 @@
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,noexec /boot/efi
   register: _boot_efi_remount_result
+  until: _boot_efi_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _boot_efi_remount_result.rc != 0
   changed_when: _boot_efi_remount_result.rc == 0
   when:
     - system_boot_efi_mountpoint.rc | default(-1) == 0
     - >-
       'nosuid' not in (system_boot_efi_opts.stdout | default('')) or
       'noexec' not in (system_boot_efi_opts.stdout | default(''))
-  failed_when: false
 
-- name: Warn if /boot/efi remount failed
-  ansible.builtin.debug:
-    msg: "WARNING: remount of /boot/efi failed (rc={{ _boot_efi_remount_result.rc }}); live nosuid/noexec may not be active"
-  when:
-    - _boot_efi_remount_result.rc | default(0) != 0
+- name: Verify /boot/efi hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /boot/efi
+  register: _boot_efi_verify
+  failed_when: >-
+    'nosuid' not in _boot_efi_verify.stdout or
+    'noexec' not in _boot_efi_verify.stdout
+  changed_when: false
+  when: system_boot_efi_mountpoint.rc | default(-1) == 0
 
 - name: Deploy boot-efi-harden.service (CSB — fstab not modified)
   ansible.builtin.copy:
