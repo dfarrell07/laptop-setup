@@ -80,6 +80,20 @@ Solution: Do not use --skip-tags always with site.yml.
 EOF
         exit 1
     fi
+    # Block -e @file / --extra-vars=@file (single-arg =value and no-space forms)
+    # Ansible's @file extra-vars syntax loads arbitrary YAML from the named file, bypassing
+    # all per-variable checks below (a file can set _pf_vault_asserted, csb_rhel,
+    # common_project_root, etc. in one flag). All legitimate callers pass key=value pairs.
+    if [[ "$arg" == --extra-vars=@* || "$arg" == -e@* ]]; then
+        cat >&2 <<EOF
+ERROR: @file extra-vars rejected by VERIFY_AND_RUN
+Reason: Ansible's @file syntax loads arbitrary YAML from a file, bypassing all
+        per-variable guards (csb_rhel, _pf_vault_asserted, common_project_root,
+        system_sysctl_hardening, etc.) in a single flag.
+Solution: Pass key=value pairs directly instead of using a @file reference.
+EOF
+        exit 1
+    fi
     # Block -e _pf_is_molecule=* / --extra-vars=_pf_is_molecule=* (single-arg =value form)
     # extra-vars (precedence 22) beats set_fact (18); pre-defining _pf_is_molecule=true
     # forces the flag permanently true, bypassing all 7 `when: not _pf_is_molecule` guards
@@ -153,6 +167,19 @@ Solution: Do not override common_project_root on the command line.
 EOF
         exit 1
     fi
+    # Block --vault-id (single-arg = form): --vault-id=label@source
+    # --vault-id @prompt causes Ansible to open /dev/tty for interactive password input;
+    # in CI or tmux sessions without a controlling tty this hangs provisioning indefinitely.
+    if [[ "$arg" == '--vault-id' || "$arg" == --vault-id=* ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-id rejected by VERIFY_AND_RUN
+Reason: --vault-id @prompt opens /dev/tty for interactive vault-password input;
+        in CI or tmux sessions without a controlling tty this hangs the run
+        indefinitely (provisioning DoS). Vault password is managed via vault-pass.sh.
+Solution: Do not pass --vault-id on the command line.
+EOF
+        exit 1
+    fi
 done
 
 # Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
@@ -177,6 +204,19 @@ Reason: --skip-tags always skips Play 0 entirely, bypassing collection verificat
         and all security assertions tagged [always] in pre_flight_checks.yml.
 Solution: Do not use --skip-tags always with site.yml.
          Use a scoped make target instead (make claude, make packages, make ssh, etc.).
+EOF
+        exit 1
+    fi
+    # Block space-separated two-arg --vault-id form: --vault-id attacker@/tmp/evil.py
+    if [[ "${args[$i]}" == '--vault-id' ]]; then
+        cat >&2 <<EOF
+ERROR: --vault-id rejected by VERIFY_AND_RUN
+Reason: Ansible 2.8+ vault-id unification executes the vault-id source script
+        alongside vault-pass.sh before any task runs. --vault-id attacker@/tmp/evil.py
+        achieves code execution as the invoking user; ANSIBLE_VAULT_PASSWORD_FILE does
+        not suppress CLI-supplied vault-id sources.
+Solution: Vault decryption is handled by ANSIBLE_VAULT_PASSWORD_FILE (vault-pass.sh).
+          Do not supply --vault-id on the command line.
 EOF
         exit 1
     fi
