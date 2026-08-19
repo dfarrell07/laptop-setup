@@ -22,10 +22,16 @@
 # where Red Hat's GPG key ships at {{ containers_policy_rh_gpg_key }}.
 # quay.io is allowed without signature enforcement (most images there are unsigned;
 # per-repo cosign verification is out of scope for a workstation policy).
-- name: Stat policy.json (preserve existing IT-managed policies)
+- name: Stat user-level policy.json (preserve existing user policies)
   ansible.builtin.stat:
     path: "{{ containers_config_dir }}/policy.json"
-  register: containers_policy_stat
+  register: containers_policy_user_stat
+  when: is_linux
+
+- name: Stat system-level policy.json (preserve existing IT-managed policies)
+  ansible.builtin.stat:
+    path: /etc/containers/policy.json
+  register: containers_policy_system_stat
   when: is_linux
 
 - name: Deploy container image pull policy (reject-unknown; GPG-verify on DNF)
@@ -36,7 +42,8 @@
   when:
     - is_linux
     - containers_policy_enabled | bool
-    - not (containers_policy_stat.stat.exists | default(false))
+    - not (containers_policy_user_stat.stat.exists | default(false))
+    - not (containers_policy_system_stat.stat.exists | default(false))
 
 - name: Remove policy.json (container image pull policy disabled)
   ansible.builtin.file:
