@@ -17,7 +17,7 @@ CONTAINER ?= fedora-dev
 # pre-flight checks (see PATCH: Ansible pre_tasks bypassed with --start-at-task)
 # Use exec to run ansible-playbook in the SAME process/shell context,
 # preventing attacker from modifying collections between verify and import.
-override VERIFY_AND_RUN := exec scripts/verify-ansible-args.sh &&
+override VERIFY_AND_RUN := scripts/verify-ansible-args.sh
 
 # Explicitly set ANSIBLE_COLLECTIONS_PATH to prevent environment variable override (CWE-426)
 # REQUIRED: guard against ANSIBLE_COLLECTIONS_PATH environment variable injection

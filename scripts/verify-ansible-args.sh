@@ -49,4 +49,10 @@ done
 # Verify collections integrity (defense-in-depth: supply chain verification)
 scripts/verify-collections.sh
 
-# All checks passed; caller should proceed with ansible-playbook
+# All checks passed — exec the remaining arguments (ansible-playbook or molecule with its args).
+# Using exec replaces this script's process with the command, preserving exit codes and
+# signals. The Makefile uses: scripts/verify-ansible-args.sh ansible-playbook site.yml ...
+# which passes the full command as $@.
+if [[ ${#args[@]} -gt 0 ]]; then
+    exec "${args[@]}"
+fi
