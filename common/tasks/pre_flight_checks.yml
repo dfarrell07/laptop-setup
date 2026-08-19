@@ -1001,6 +1001,45 @@
               then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
             tags: [always]
 
+    - name: SECURITY — Assert vault-pass.sh and vault.yml have restrictive permissions (distrobox $HOME exposure)
+      when: not _pf_is_molecule
+      tags: [always]
+      block:
+        - name: Stat vault-pass.sh
+          ansible.builtin.stat:
+            path: "{{ playbook_dir }}/scripts/vault-pass.sh"
+          register: _stat_vault_pass
+          tags: [always]
+
+        - name: Stat vault.yml
+          ansible.builtin.stat:
+            path: "{{ playbook_dir }}/group_vars/all/vault.yml"
+          register: _stat_vault_yml
+          tags: [always]
+
+        - name: Assert vault-pass.sh is mode 0700
+          when: _stat_vault_pass.stat.exists
+          ansible.builtin.assert:
+            that:
+              - _stat_vault_pass.stat.mode == '0700'
+            fail_msg: >-
+              SECURITY: scripts/vault-pass.sh has mode {{ _stat_vault_pass.stat.mode }}, expected 0700.
+              The distrobox container mounts $HOME, so any process inside the container can read this
+              file and extract the vault password. Restrict it: chmod 0700 scripts/vault-pass.sh.
+              The Makefile bootstrap target sets 0700; this check detects accidental permission drift.
+            tags: [always]
+
+        - name: Assert vault.yml is mode 0600
+          when: _stat_vault_yml.stat.exists
+          ansible.builtin.assert:
+            that:
+              - _stat_vault_yml.stat.mode == '0600'
+            fail_msg: >-
+              SECURITY: group_vars/all/vault.yml has mode {{ _stat_vault_yml.stat.mode }}, expected 0600.
+              The distrobox container mounts $HOME; mode 0600 limits read access to the owner only.
+              Restrict it: chmod 0600 group_vars/all/vault.yml.
+            tags: [always]
+
     - name: SECURITY — Assert SSH git repo hosts are all pre-seeded in keyscan (TOFU mitigation)
       when: not _pf_is_molecule
       vars:
