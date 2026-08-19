@@ -18,6 +18,22 @@
       against --start-at-task flag bypassing play-level pre_tasks. Allowed:
       https://claude.ai/* or https://anthropic.com/*.
 
+- name: SECURITY assert claude_log_dir contains only safe path characters (defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always
+  # (only --tags something would skip this, but that's acceptable). Do NOT add tags: [always]
+  # as that would allow --skip-tags always to bypass this defense-in-depth check.
+  ansible.builtin.assert:
+    that:
+      - claude_log_dir | default('') is match('^[a-zA-Z0-9/._~-]*$')
+    fail_msg: >-
+      SECURITY: claude_log_dir contains characters outside [a-zA-Z0-9/._~-].
+      An attacker can inject logrotate stanza syntax (braces, newlines) via
+      --start-at-task, bypassing pre_tasks guards. The injected postrotate
+      script executes as root when logrotate.timer fires, enabling shadow
+      exfiltration or arbitrary local privilege escalation.
+      This check duplicates pre_flight_checks.yml to protect against
+      --start-at-task bypass. Use only simple directory paths in claude_log_dir.
+
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed
   ansible.builtin.command:

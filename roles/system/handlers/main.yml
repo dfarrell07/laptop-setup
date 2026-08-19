@@ -126,7 +126,7 @@
   become: true
   changed_when: true
   when: not system_is_container  # auditd restart crashes privileged Podman containers; ignore_errors cannot catch a process death
-  ignore_errors: true  # noqa: ignore-errors
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart usbguard
   ansible.builtin.systemd:

@@ -428,11 +428,11 @@ if $IS_LINUX; then
   fi
 fi
 
+check_perms() { local key=$1 path=$2 expected=$3; local p; p=$(stat -c '%a' "$path" 2>/dev/null || stat -f '%Lp' "$path" 2>/dev/null || echo '?'); if [[ "$p" == "$expected" ]]; then record "$key" PASS; else record "$key" FAIL "permissions $p, expected $expected"; fi; }
+
 # SSH config and permissions
 if [[ -f "$HOME/.ssh/config" ]]; then
-  perms=$(stat -c '%a' "$HOME/.ssh/config" 2>/dev/null || stat -f '%Lp' "$HOME/.ssh/config" 2>/dev/null)
-  if [[ "$perms" == "600" ]]; then record "ssh-config" "PASS"
-  else record "ssh-config" "FAIL" "permissions $perms, expected 600"; fi
+  check_perms "ssh-config" "$HOME/.ssh/config" "600"
   # SSH config content assertions
   if grep -qE '^[[:space:]]*HashKnownHosts yes' "$HOME/.ssh/config"; then record "ssh-config-hash-known-hosts" "PASS"
   else record "ssh-config-hash-known-hosts" "FAIL" "HashKnownHosts yes missing from ~/.ssh/config — host list exposed in plaintext"; fi
@@ -449,10 +449,7 @@ else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make do
 if [[ -f "$HOME/.ssh/id_ed25519_sk_signing.pub" ]]; then record "ssh-signing-key-file" "PASS"
 else record "ssh-signing-key-file" "WARN" "$HOME/.ssh/id_ed25519_sk_signing.pub missing — git commit signing unavailable (YubiKey enrollment required or vault has no keys)"; fi
 
-sshdir_perms=$(stat -c '%a' "$HOME/.ssh" 2>/dev/null || stat -f '%Lp' "$HOME/.ssh" 2>/dev/null || echo "?")
-if [[ "$sshdir_perms" == "700" ]]; then record "ssh-dir-perms" "PASS"
-elif [[ "$sshdir_perms" == "?" ]]; then record "ssh-dir-perms" "FAIL" "$HOME/.ssh/ directory not deployed"
-else record "ssh-dir-perms" "FAIL" "permissions $sshdir_perms, expected 700"; fi
+check_perms "ssh-dir-perms" "$HOME/.ssh" "700"
 
 # authorized_keys: verify count and mode.
 # File absent is a WARN not FAIL: the authorized_key task is guarded by
@@ -461,9 +458,7 @@ _ak="$HOME/.ssh/authorized_keys"
 if [[ ! -f "$_ak" ]]; then
   record "authorized-keys-exists" "WARN" "$_ak missing — vault may have no auth key (ssh_auth_key_pub empty) or ssh role not yet run"
 else
-  _ak_perms=$(stat -c '%a' "$_ak" 2>/dev/null || stat -f '%Lp' "$_ak" 2>/dev/null || echo "?")
-  if [[ "$_ak_perms" == "600" ]]; then record "authorized-keys-perms" "PASS"
-  else record "authorized-keys-perms" "FAIL" "permissions $_ak_perms, expected 600"; fi
+  check_perms "authorized-keys-perms" "$_ak" "600"
   _ak_total=$(grep -cvE '^[[:space:]]*$|^#' "$_ak" 2>/dev/null || true)
   if [[ "$_ak_total" -gt 1 ]]; then
     record "authorized-keys-exclusive" "WARN" "$_ak_total keys present, expected 1 — extra keys beyond vault key; inspect: cat $_ak"
@@ -479,9 +474,7 @@ unset _ak _ak_perms _ak_total
 
 _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
-  _kh_perms=$(stat -c '%a' "$_kh" 2>/dev/null || stat -f '%Lp' "$_kh" 2>/dev/null || echo "?")
-  if [[ "$_kh_perms" == "600" ]]; then record "known-hosts-perms" "PASS"
-  else record "known-hosts-perms" "FAIL" "permissions $_kh_perms, expected 600 (HashKnownHosts hashes leak if world-readable)"; fi
+  check_perms "known-hosts-perms" "$_kh" "600"
   if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record 'known-hosts-github' 'PASS'
   else record 'known-hosts-github' 'WARN' 'github.com not in known_hosts — run: make ssh'; fi
 fi

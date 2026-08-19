@@ -1682,8 +1682,10 @@
           - _raw.get('system_journald_rate_interval', '') | string is match('^[0-9]+[smhd]?$|^$')
           - _raw.get('system_journald_rate_burst', 10000) | int >= 0
           - _raw.get('system_journald_compress', '') | string is match('^(yes|no|true|false|1|0|)$')
-          - _raw.get('system_auditd_max_log_file', 8) | int >= 0
-          - _raw.get('system_auditd_num_logs', 5) | int >= 0
+          - _raw.get('system_auditd_max_log_file', 8) | string is match('^[0-9]+$')
+          - _raw.get('system_auditd_max_log_file', 8) | int >= 1
+          - _raw.get('system_auditd_num_logs', 5) | string is match('^[0-9]+$')
+          - _raw.get('system_auditd_num_logs', 5) | int >= 1
           - _raw.get('system_aide_check_calendar', '') | string is match('^[a-zA-Z0-9:* _-]*$')
           - _raw.get('system_aide_check_random_delay', '') | string is match('^[0-9]+[smhd]?$|^$')
           - _raw.get('system_tlp_bat0_start', '20') | string is match('^[0-9]+$')
@@ -2152,6 +2154,20 @@
               Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
               (dotfiles_goprivate); alphanumeric, underscore, hyphen
               (dotfiles_aws_profile); owner/repo format only (dotfiles_claude_queue_repo).
+          tags: [always]
+
+        - name: Assert dotfiles_oh_my_zsh_theme in play namespace is safe (shell injection guard)
+          ansible.builtin.assert:
+            that:
+              - dotfiles_oh_my_zsh_theme | default('') | string | regex_search('^[a-zA-Z0-9_-]+$')
+            fail_msg: >-
+              SECURITY: dotfiles_oh_my_zsh_theme in the play namespace contains characters
+              outside [a-zA-Z0-9_-]. The value is rendered as ZSH_THEME="{{ '{{' }} dotfiles_oh_my_zsh_theme {{ '}}' }}"
+              in zshrc.j2; shell metacharacters (e.g. $(...), `, ;) inside the double-quoted
+              assignment are evaluated by zsh/bash at every interactive shell open (RCE).
+              This check catches -e overrides that bypass the file-based config.yml scan.
+              Allowed characters: alphanumeric, underscore, hyphen.
+              Received: "{{ dotfiles_oh_my_zsh_theme | default('') }}".
           tags: [always]
 
         - name: Assert USBGuard whitelist/extra_rules in play namespace are well-formed

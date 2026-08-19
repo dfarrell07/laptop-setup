@@ -61,7 +61,7 @@ EOF
 done
 
 # Override or clear critical env vars to prevent environment-injection attacks.
-# Covers eight vectors — SET known-safe values; UNSET those that must be clean:
+# Covers nine vectors — SET known-safe values; UNSET those that must be clean:
 #   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
 #   ANSIBLE_VAULT_PASSWORD_FILE — redirects vault decryption to an exfiltration script
 #   ANSIBLE_COLLECTIONS_PATH    — loads malicious collections (role 0 code execution)
@@ -70,6 +70,8 @@ done
 #   ANSIBLE_STRATEGY_PLUGINS    — strategy plugin controls task dispatch; malicious = intercept all
 #   PYTHONPATH                  — injected module shadows ansible.* at Python import time (CRITICAL)
 #   ANSIBLE_PYTHON_INTERPRETER  — redirects Python used by Ansible to attacker binary
+#   ANSIBLE_CACHE_PLUGIN*       — crafted facts cache plants spoofed ansible_distribution/ansible_fqdn,
+#                                 skewing CSB detection (csb_detect.yml reads cached facts before gather)
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
@@ -79,6 +81,8 @@ export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
+unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
+unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
