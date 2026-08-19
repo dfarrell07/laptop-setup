@@ -48,6 +48,8 @@ profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 _notes_enabled=false
 grep -qiE '^notes_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _notes_enabled=true
+_disable_bluetooth=true
+grep -qiE '^system_disable_bluetooth:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _disable_bluetooth=false
 _cfg_ssh_port=$(awk -F': ' '/^ssh_port:/{gsub(/[[:space:]"'"'"']/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 [[ -z "$_cfg_ssh_port" ]] && _cfg_ssh_port="722"
 # Validate ssh_port matches decimal format to prevent regex injection in grep patterns
@@ -1195,6 +1197,15 @@ EOF
     record "journald-maxuse" "PASS"
   elif $CSB_HOST; then record "journald-maxuse" "WARN" "skipped on CSB — journald config not deployed (IT may forward to SIEM; Ansible guard intentional)"
   else record "journald-maxuse" "FAIL" "journald SystemMaxUse=4G not configured — run: make system"; fi
+
+  # bluetooth: masked when system_disable_bluetooth: true (default); skip check when intentionally enabled
+  if $_disable_bluetooth && ! $CSB_HOST; then
+    if [[ "$(systemctl show -p UnitFileState --value bluetooth.service 2>/dev/null)" == 'masked' ]]; then
+      record 'bluetooth-masked' 'PASS'
+    else
+      record 'bluetooth-masked' 'FAIL' 'bluetooth.service not masked — run: make system (or set system_disable_bluetooth: false to allow bluetooth)'
+    fi
+  fi
 
   # cups-browsed: masked when system_disable_printing: true; disabled-but-unmasked when printing enabled
   # (CVE-2024-47176 risk only when running; disabled = not auto-starting = acceptable in printing-enabled mode)

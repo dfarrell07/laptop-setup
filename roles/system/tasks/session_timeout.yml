@@ -1,4 +1,30 @@
 ---
+# --- profile.d backdoor detection (runs before any write to /etc/profile.d) ---
+- name: Find all scripts in /etc/profile.d (backdoor pre-plant detection)
+  ansible.builtin.find:
+    paths: /etc/profile.d
+    patterns: "*.sh"
+    file_type: file
+  register: _profiled_files
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Abort on unexpected /etc/profile.d scripts not in system_profiled_whitelist
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unexpected file in /etc/profile.d: {{ item.path | basename }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Pre-planted backdoors in
+      this directory execute at every interactive login. Remove the file or
+      add its basename to system_profiled_whitelist in config.yml before
+      re-running provisioning.
+  loop: "{{ _profiled_files.files | default([]) }}"
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - item.path | basename not in system_profiled_whitelist
+
 # --- Session timeout (TMOUT via profile.d — Fedora /etc/bashrc sources profile.d, covering non-login interactive shells too) ---
 - name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL/macOS)
   ansible.builtin.copy:

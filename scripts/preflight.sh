@@ -488,6 +488,33 @@ else
   record "ptrace_scope" "skip" "YAMA not available (macOS or kernel without CONFIG_SECURITY_YAMA)"
 fi
 
+# --- AIDE pre-provisioning integrity check (Linux only) ---
+# Files planted in monitored paths before 'aide --init' are baked into the DB as
+# known-good. Running aide --check here surfaces any pre-provisioning changes before
+# the playbook starts. Skips when no DB exists (AIDE not yet initialized).
+if [[ "$OS_FAMILY" == "fedora" || "$OS_FAMILY" == "rhel" ]]; then
+  _aide_db="/var/lib/aide/aide.db.gz"
+  if [[ -f "$_aide_db" ]]; then
+    if command -v aide &>/dev/null; then
+      if sudo -n true &>/dev/null; then
+        _aide_rc=0
+        sudo -n aide --check &>/dev/null || _aide_rc=$?
+        if [[ $_aide_rc -eq 0 ]]; then
+          record "aide_check" "pass" "AIDE integrity check clean"
+        else
+          record "aide_check" "warn" "AIDE detected changes (exit ${_aide_rc}) — review before provisioning: sudo aide --check"
+        fi
+      else
+        record "aide_check" "warn" "passwordless sudo unavailable — verify manually: sudo aide --check"
+      fi
+    else
+      record "aide_check" "skip" "AIDE DB exists but 'aide' binary not found"
+    fi
+  else
+    record "aide_check" "skip" "no AIDE DB — AIDE not yet initialized or system_aide_enabled: false"
+  fi
+fi
+
 # --- Existing installations ---
 for tool in claude podman distrobox toolbox; do
   if command -v "$tool" &>/dev/null; then

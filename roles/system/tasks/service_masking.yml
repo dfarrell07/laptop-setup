@@ -48,6 +48,7 @@
   ansible.builtin.systemd:
     name: bluetooth.service
     masked: true
+    force: true
     state: stopped
   when:
     - system_disable_bluetooth | bool
