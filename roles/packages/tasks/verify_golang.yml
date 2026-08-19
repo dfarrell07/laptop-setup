@@ -4,17 +4,33 @@
 # Implements defense-in-depth: ensures system golang is present before GOTOOLCHAIN=local
 # forces its use in go install tasks. Validates version to detect compromised packages.
 
+- name: Check if golang binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/go
+  register: _go_binary_check
+
 - name: Verify golang is installed
   ansible.builtin.command:
     cmd: go version
   register: _golang_version_check
   changed_when: false
   failed_when: _golang_version_check.rc != 0
+  when: _go_binary_check.stat.exists
+
+- name: Warn if golang is missing (likely dnf install failure)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: golang binary not found at /usr/bin/go.
+      golang dnf install may have failed in install_dnf_packages.yml.
+      Skipping golang verification and go install tasks.
+      Re-run provisioning to retry golang installation.
+  when: not _go_binary_check.stat.exists
 
 - name: Extract installed golang version
   ansible.builtin.set_fact:
     _golang_installed_version: >-
       {{ _golang_version_check.stdout | regex_search('go([\d.]+)', '\1') | first | default('') }}
+  when: _go_binary_check.stat.exists
 
 - name: Assert golang version is acceptable
   ansible.builtin.assert:
@@ -26,6 +42,7 @@
       This may indicate a corrupted or incompatible golang installation.
       Installed golang must support go install with GOTOOLCHAIN=local before proceeding.
       Reinstall golang via dnf/apt/brew and re-run provisioning.
+  when: _go_binary_check.stat.exists
 
 - name: Find golang binary in PATH
   ansible.builtin.command:
@@ -33,12 +50,14 @@
   register: _go_binary_path
   changed_when: false
   failed_when: _go_binary_path.rc != 0
+  when: _go_binary_check.stat.exists
 
 - name: Verify golang binary exists at detected path
   ansible.builtin.stat:
     path: "{{ _go_binary_path.stdout | trim }}"
   register: _go_binary_stat
   failed_when: not _go_binary_stat.stat.exists or _go_binary_stat.stat.size == 0
+  when: _go_binary_check.stat.exists
 
 - name: Log golang verification success
   ansible.builtin.debug:
@@ -46,3 +65,4 @@
       golang binary verified: {{ _golang_installed_version }} at {{ _go_binary_path.stdout | trim }}
       (size: {{ _go_binary_stat.stat.size }} bytes)
     verbosity: 1
+  when: _go_binary_check.stat.exists

@@ -61,8 +61,8 @@
   delay: 3
   until: gosumdb_reachability.status == 200
   environment:
-    HTTPS_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
-    HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
 
 
 - name: Create GOTMPDIR directory for Go tool compilation
@@ -84,8 +84,8 @@
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
     GOTMPDIR: "{{ ansible_facts['user_dir'] }}/tmp"  # security: prevent /tmp noexec failures + explicit tmpdir for Go compiler
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-    HTTPS_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
-    HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
     GOPROXY: 'https://proxy.golang.org,direct'  # security-critical: pin proxy, prevent GOPROXY env injection
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
