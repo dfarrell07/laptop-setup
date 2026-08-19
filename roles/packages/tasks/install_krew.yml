@@ -65,7 +65,7 @@
     # Upgrade uses the same SHA256-pinned tarball as bootstrap rather than
     # `kubectl-krew upgrade krew`, which trusts krew's own index and is not
     # independently verified by this playbook.
-    - name: Upgrade krew via SHA256-verified tarball
+    - name: krew present at v{{ packages_krew_bootstrap_version }}
       when:
         - packages_krew_check.stat.exists
         - ("v" ~ packages_krew_bootstrap_version) not in (packages_krew_current_version.stdout | default(''))
