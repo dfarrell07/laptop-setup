@@ -187,16 +187,16 @@ fi
 yk_found=false
 yk_detect_possible=true
 if command -v lsusb &>/dev/null && lsusb 2>/dev/null | grep -qiE "yubico|1050:"; then
-  yk_found=true
+  yk_found=true; yk_detect_method="lsusb"
 elif command -v ykman &>/dev/null && ykman info &>/dev/null; then
-  yk_found=true
+  yk_found=true; yk_detect_method="ykman"
 else
   if ! command -v lsusb &>/dev/null && ! command -v ykman &>/dev/null; then
     yk_detect_possible=false
   fi
 fi
 if [[ "$yk_found" == true ]]; then
-  record "yubikey_present" "pass" "detected"
+  record "yubikey_present" "pass" "detected via ${yk_detect_method}"
   if command -v ykman &>/dev/null; then
     if [[ "$JSON" == false ]]; then
       if ! command -v timeout &>/dev/null; then
