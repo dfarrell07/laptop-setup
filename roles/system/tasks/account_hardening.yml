@@ -29,6 +29,13 @@
   when:
     - not csb_rhel  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance
     - not system_is_container  # /etc/sudoers.d is not meaningful inside a container
+  # TRUST BOUNDARY: env_keep re-propagates the caller's GOTMPDIR into every subsequent sudo
+  # invocation on this host. verify-ansible-args.sh unsets GOTMPDIR before provisioning to
+  # prevent an attacker-set value from being baked in here, but after provisioning any local
+  # user can set GOTMPDIR and have it survive privilege escalation via this entry. Only retain
+  # if go test/build under sudo is an active workflow on this machine; set
+  # system_go_env_sudoers: false in config.yml to remove (not yet wired — remove this task
+  # if the env_keep is not needed).
 
 # --- Password aging ---
 # CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
