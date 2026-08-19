@@ -658,6 +658,18 @@
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
+  failed_when: false
+  register: verify_tmp_options
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_tmp_hardening.stat.exists
+
+- name: Assert tmp.mount hardening.conf Options= contains all required flags
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "tmp.mount hardening.conf missing Options={{ item.item }} — mounts.yml template regression"
+  loop: "{{ verify_tmp_options.results }}"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -859,6 +871,17 @@
 - name: Assert 98-llmnr.conf contains correct LLMNR setting
   ansible.builtin.command: grep -q 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   changed_when: false
+  failed_when: false
+  register: verify_llmnr_setting
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_llmnr_conf.stat.exists
+
+- name: Assert 98-llmnr.conf LLMNR value matches expected
+  ansible.builtin.assert:
+    that: verify_llmnr_setting.rc == 0
+    fail_msg: '98-llmnr.conf missing LLMNR={{ system_resolved_llmnr | default("no") }} — dns_over_tls.yml LLMNR regression'
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -1120,7 +1143,7 @@
     that:
       - verify_logrotate_sudo.stat.exists
       - verify_logrotate_sudo.stat.mode == '0644'
-    fail_msg: "/etc/logrotate.d/sudo not deployed or wrong mode — system role logrotate task regression"
+    fail_msg: "/etc/logrotate.d/sudo not deployed or wrong mode (expected 0644, got {{ verify_logrotate_sudo.stat.mode | default('absent') }}) — system role logrotate task regression"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
