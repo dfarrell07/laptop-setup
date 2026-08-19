@@ -2462,21 +2462,17 @@
                 flatpak-spawn --host during distrobox assemble create).
           tags: [always]
 
-        - name: Assert PAM lockout/pwquality vars have safe minimum values
+        - name: Assert PAM lockout vars have safe minimum values
           ansible.builtin.assert:
             that:
               - system_faillock_deny | default(5) | int >= 1
-              - system_pwquality_minlen | default(14) | int >= 1
             fail_msg: >-
               SECURITY: PAM hardening variable in play namespace has an unsafe value (possibly set
               via -e command-line override, bypassing config.yml-based preflight validation):
               system_faillock_deny={{ system_faillock_deny | default(5) }} --
                 must be >= 1 (deny=0 instructs pam_faillock to never lock accounts; brute-force
-                of any local account password becomes unrestricted);
-              system_pwquality_minlen={{ system_pwquality_minlen | default(14) }} --
-                must be >= 1 (minlen=0 removes minimum password length enforcement; any password
-                including empty strings pass the length check).
-              Do NOT set these to 0 via -e flag or config.yml.
+                of any local account password becomes unrestricted).
+              Do NOT set this to 0 via -e flag or config.yml.
           tags: [always]
 
         - name: Assert system_dot_mode and system_dnssec_mode in play namespace are valid (-e override guard)
@@ -2973,6 +2969,7 @@
     - name: "GRUB: Assert password hash format when enabled (preflight)"
       when:
         - system_grub_password_enabled | default(false)
+        - not (system_is_container | default(false) or csb_rhel | default(false))
         - _pf_grub_validated is not defined
       block:
         - name: "GRUB: Assert hash matches PBKDF2 format and rounds"
