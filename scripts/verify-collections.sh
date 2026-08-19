@@ -15,27 +15,29 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Step 1: Verify SHA256SUMS.asc GPG signature (defense-in-depth)
-# Fail fatally if key is missing or signature is invalid
+# Security model:
+#   - Key NOT in keyring (exit 2): WARNING only (TOFU — fresh machine, key not yet imported)
+#   - BAD signature with key in keyring (exit 1): FATAL (active tampering detected)
+# Making "key not found" fatal would break all fresh provisioning runs.
 cd "${REPO_DIR}/collections-dist"
 if [[ -f SHA256SUMS.asc ]]; then
+  gpg_exit=0
   gpg_output=$(gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
-  gpg_exit=${gpg_exit:-0}
 
   if [[ $gpg_exit -eq 0 ]]; then
     echo "✓ SHA256SUMS.asc GPG signature verified"
+  elif echo "$gpg_output" | grep -q "No public key\|public key not found\|can't check signature"; then
+    # Key not in keyring — advisory only (expected on fresh machines)
+    echo "WARNING: SHA256SUMS.asc signing key not in GPG keyring" >&2
+    echo "         Continuing with hash-only verification (TOFU model)" >&2
+    echo "         To enable signature verification: gpg --import <signing-key>" >&2
   else
-    # Exit code 2: "Can't check signature: No public key" (missing key)
-    # Exit code 1: Bad signature / general verification failure
-    if echo "$gpg_output" | grep -q "No public key"; then
-      echo "FATAL: Collections signing key not found in GPG keyring" >&2
-      echo "       Import the signing key before proceeding:" >&2
-      echo "       gpg --import <keyfile>" >&2
-      exit 1
-    else
-      echo "FATAL: SHA256SUMS.asc GPG signature verification failed" >&2
-      echo "       Possible tampering detected. Do not proceed." >&2
-      exit 1
-    fi
+    # Bad signature with key present — FATAL (tampering detected)
+    echo "FATAL: SHA256SUMS.asc GPG signature verification failed" >&2
+    echo "       The signing key is in your keyring but the signature is invalid." >&2
+    echo "       This indicates possible tampering. Do not proceed." >&2
+    echo "       GPG output: ${gpg_output}" >&2
+    exit 1
   fi
 fi
 
