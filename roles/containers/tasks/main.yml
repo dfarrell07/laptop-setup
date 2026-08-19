@@ -22,7 +22,7 @@
 # where Red Hat's GPG key ships at {{ containers_policy_rh_gpg_key }}.
 # quay.io is allowed without signature enforcement (most images there are unsigned;
 # per-repo cosign verification is out of scope for a workstation policy).
-- name: Deploy container image pull policy (reject unknown; GPG-verify RH registries on DNF)
+- name: Deploy container image pull policy (reject-unknown; GPG-verify on DNF)
   ansible.builtin.template:
     src: policy.json.j2
     dest: "{{ containers_config_dir }}/policy.json"
