@@ -113,16 +113,7 @@ distrobox_packages:
   - ovn
   - openvswitch
 
-# SECURITY: $HOME trust model — distrobox hardcodes $HOME into the container mount.
-# The container user is the same UID as the host, so $HOME access is intentional by design.
-# However, this means any process inside the container (including pip/npm/cargo packages)
-# can read vault-pass.sh (scripts/vault-pass.sh) and vault.yml (group_vars/all/vault.yml),
-# which are inside $HOME. Mitigations enforced by the playbook:
-#   (1) vault-pass.sh must be mode 0700 (asserted in pre_flight_checks.yml)
-#   (2) vault.yml must be mode 0600 (asserted in pre_flight_checks.yml)
-#   (3) Consider moving vault-pass.sh to /etc/vault-pass (outside $HOME) on high-security
-#       hosts — this requires updating scripts/vault-pass.sh and the ansible.cfg vault_pass_file.
-# Install untrusted packages inside the container with this blast-radius in mind.
+# SECURITY: container shares $HOME (same UID); install untrusted packages with that in mind — see SECURITY.md § "$HOME trust model".
 distrobox_host_exec_commands:
   - podman
   - flatpak
