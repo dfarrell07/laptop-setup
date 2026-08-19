@@ -154,8 +154,8 @@ make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh
 make test-poller      # Unit tests for claude-queue-poller.sh helpers
-make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries); Podman only
-make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (adds test-macos over make test; uses lint+syntax-check instead of shellcheck)
+make test             # shellcheck + script syntax + poller unit tests + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries/ssti-guard); Podman only
+make ci               # Lint + syntax + test-scripts + test-poller + all non-VM molecule tests (adds test-macos over make test; uses lint+syntax-check instead of shellcheck + test-ssti-guard)
 make bootstrap-test   # Install libvirt + Vagrant box (required before make test-vm)
 make hooks            # Re-install git hooks without full bootstrap
 make commitlint       # Validate commit messages from origin/main..HEAD
@@ -276,10 +276,10 @@ make repos-downstream # downstream repos only
 - `make syntax-check` — Playbook syntax validation
 - `make test-scripts` — Bash syntax-check of 8 scripts/ files (preflight.sh, smoke-test.sh, backup.sh, vault-pass-ci.sh, test-queue-poller.sh, verify-collections.sh, verify-ansible-args.sh, test-hooks-security.sh) + executes test-hooks-security.sh
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
-- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries);
+- `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries/ssti-guard);
   Podman only, no libvirt required. CI molecule coverage minus macOS (omits lint/syntax-check from full ci)
 - `make ci` — Full CI pipeline locally: lint + syntax-check + test-scripts + test-poller + test-fedora
-  + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-container-offline-distrobox + test-distrobox-role + test-packages-binaries (macOS runner required)
+  + test-rocky + test-debian + test-macos + test-container + test-container-offline + test-container-offline-distrobox + test-distrobox-role + test-packages-binaries + test-ssti-guard (macOS runner required)
 - `make test-fedora` — Molecule Fedora 44 (system, repos_dnf, common, packages, dotfiles, ssh, git_repos, notes, redhat, containers, desktop, claude)
 - `make test-rocky` — Molecule Rocky Linux 10 (work profile, includes redhat role)
 - `make test-debian` — Molecule Debian 13 (system, common, packages, dotfiles, ssh, git_repos, notes, containers, desktop, claude)
