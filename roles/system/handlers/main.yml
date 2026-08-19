@@ -8,7 +8,7 @@
   failed_when: false
   when: not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
 
-- name: Warn if /tmp remount failed (handler)
+- name: Warn on /tmp remount failure
   ansible.builtin.debug:
     msg: "WARNING: remount of /tmp failed (rc={{ _tmp_remount_handler_result.rc }}); live nosuid/nodev options may not be active"
   listen: Remount /tmp
@@ -42,7 +42,7 @@
     list | length > 0)
   when: not system_is_container
 
-- name: Verify critical sysctl values applied (handler)
+- name: Verify critical sysctl values
   ansible.builtin.shell:
     cmd: |
       set -e
