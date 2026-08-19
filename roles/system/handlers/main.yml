@@ -143,22 +143,28 @@
   become: true
   when:
     - not system_is_container  # sshd restart kills Ansible SSH connection in containers
-    - ansible_connection != 'ssh'
-      # SSH-based provisioning: sshd reload on port change kills Ansible connection mid-play
-      # (CLAUDE.md requires local console or tmux, but no code enforcement existed until now)
+    - ansible_connection != 'ssh' or
+      lookup('env', 'TMUX') != '' or
+      lookup('env', 'STY') != ''
+      # SSH-based provisioning: sshd reload on port change kills Ansible connection mid-play.
+      # tmux/screen sessions survive sshd restart (preflight allows these at sshd.yml:339-340).
+      # Bare SSH sessions block reload to prevent mid-play connection loss.
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Warn on sshd handler skip
   ansible.builtin.debug:
     msg: |
-      WARNING: sshd reload skipped (SSH-based provisioning to remote host detected).
+      WARNING: sshd reload skipped (bare SSH provisioning session detected, no tmux/screen).
       sshd config changes written but not applied. Current sshd still on port {{ ansible_port | default(22) }}.
       Changes take effect after manual reboot or: systemctl reload sshd
       Next SSH connection must use port {{ ssh_port | default(722) }}.
+      To enable automatic reload: run provisioning inside tmux or GNU screen.
   listen: Restart sshd
   when:
     - not system_is_container
     - ansible_connection == 'ssh'
+    - lookup('env', 'TMUX') == ''
+    - lookup('env', 'STY') == ''
 
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
