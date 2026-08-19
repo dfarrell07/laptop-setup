@@ -80,7 +80,7 @@
           become: true
           tags: [become]
 
-        - name: Download OpenShift client tarball (SHA256-verified, randomized tempdir)
+        - name: Download OpenShift client tarball
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
             dest: "{{ packages_oc_tempdir.path }}/openshift-client-linux.tar.gz"
@@ -240,7 +240,7 @@
           become: true
           tags: [become]
 
-        - name: Download opm tarball (SHA256-verified, randomized tempdir)
+        - name: Download opm tarball
           ansible.builtin.get_url:
             url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"
             dest: "{{ packages_opm_tempdir.path }}/opm-linux.tar.gz"
