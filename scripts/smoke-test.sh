@@ -877,6 +877,33 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
         record "firewall-libvirt-no-ssh" "FAIL" "ssh service in libvirt zone — VMs on virbr0 can reach host sshd"
       else record "firewall-libvirt-no-ssh" "PASS"; fi
     fi
+    # FedoraWorkstation zone cleanup — broad port ranges and permissive services must be removed
+    # A mid-play failure before firewall.yml lines 75-112 leaves these rules intact; any NIC
+    # later assigned to FedoraWorkstation would expose all high ports.
+    if grep -qiE '^ID=fedora' /etc/os-release 2>/dev/null && ! $CSB_HOST; then
+      _fw_ports=$(firewall-cmd --zone=FedoraWorkstation --list-ports 2>/dev/null || true)
+      _fw_svcs=$(firewall-cmd --zone=FedoraWorkstation --list-services 2>/dev/null || true)
+      _fw_fail=false
+      _fw_msgs=()
+      if echo "$_fw_ports" | grep -qE '1025-65535/tcp'; then
+        _fw_fail=true; _fw_msgs+=("1025-65535/tcp still open")
+      fi
+      if echo "$_fw_ports" | grep -qE '1025-65535/udp'; then
+        _fw_fail=true; _fw_msgs+=("1025-65535/udp still open")
+      fi
+      for _svc in ssh dhcpv6-client samba-client; do
+        if echo "$_fw_svcs" | grep -qw "$_svc"; then
+          _fw_fail=true; _fw_msgs+=("service '$_svc' still present")
+        fi
+      done
+      if $_fw_fail; then
+        record "firewall-fedora-workstation-cleanup" "FAIL" \
+          "FedoraWorkstation zone not hardened — ${_fw_msgs[*]}; run: make system"
+      else
+        record "firewall-fedora-workstation-cleanup" "PASS"
+      fi
+      unset _fw_ports _fw_svcs _fw_fail _fw_msgs _svc
+    fi
   else
     if grep -qiE '^ID=debian' /etc/os-release 2>/dev/null; then
       record "firewall-present" "WARN" "firewalld not installed on Debian — apt systems use nftables without firewalld; firewall checks skipped"
