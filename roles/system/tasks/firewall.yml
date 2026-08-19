@@ -308,7 +308,7 @@
     'INVALID_ZONE' not in (_system_redhat_ssh_remove.msg | default(''))
   notify: Apply firewall rules
 
-- name: Remove ssh service from libvirt zone (upstream default opens port 22; sshd is on {{ ssh_port }})
+- name: Remove ssh service from libvirt zone
   ansible.posix.firewalld:
     zone: libvirt
     service: ssh
@@ -332,7 +332,7 @@
   # does prevent VMs from reaching sshd on port 22.
   notify: Apply firewall rules
 
-- name: Remove tftp service from libvirt zone (upstream default; not needed on this host)
+- name: Remove tftp service from libvirt zone
   ansible.posix.firewalld:
     zone: libvirt
     service: tftp
