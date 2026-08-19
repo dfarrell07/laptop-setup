@@ -38,6 +38,17 @@
       ignore_errors: true
       changed_when: false
 
+    - name: Check for CVE-risk blacklisted modules currently loaded
+      # Detect vivid/n_hdlc/firewire modules loaded before unload attempt so we can
+      # confirm unload success and fail hard if any remain (modules_disabled=1 set by
+      # sysctl.yml will prevent subsequent modprobe -r with EPERM).
+      ansible.builtin.shell:
+        cmd: >-
+          grep -E '^(vivid|n_hdlc|firewire_sbp2|firewire_net|firewire_ohci|firewire_core|nosy) '
+          /proc/modules | awk '{print $1}' || true
+      register: _blacklisted_modules_loaded
+      changed_when: false
+
     - name: Unload unconditionally blacklisted modules (best-effort, pre-reboot)
       # Modules already loaded at provisioning time remain exploitable until reboot.
       # Attempt immediate unload so CVEs (vivid OOB write, n_hdlc privesc, firewire DMA)
@@ -56,3 +67,28 @@
       failed_when: false
       ignore_errors: true
       changed_when: false
+
+    - name: Re-check CVE-risk modules still loaded after unload attempt
+      ansible.builtin.shell:
+        cmd: >-
+          grep -E '^(vivid|n_hdlc|firewire_sbp2|firewire_net|firewire_ohci|firewire_core|nosy) '
+          /proc/modules | awk '{print $1}' || true
+      register: _blacklisted_modules_post_unload
+      changed_when: false
+      when: _blacklisted_modules_loaded.stdout | length > 0
+
+    - name: Fail if CVE-risk modules remain loaded — reboot required to close exposure
+      # Silent ignore_errors on the unload loop masked active residual risk. If unload
+      # failed (module in-use, or modules_disabled=1 already active from sysctl.yml),
+      # the CVE is live until reboot. Hard-fail so the operator knows to reboot now.
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY ALERT: CVE-risk kernel modules remain loaded after unload attempt:
+          {{ _blacklisted_modules_post_unload.stdout_lines | join(', ') }}.
+          Modules could not be unloaded (in-use or modules_disabled=1 already active).
+          CVEs (vivid OOB write, n_hdlc privesc, firewire DMA) remain exploitable until
+          the next reboot. Reboot immediately to close the pre-reboot exposure window.
+      when:
+        - _blacklisted_modules_loaded.stdout | length > 0
+        - _blacklisted_modules_post_unload is not skipped
+        - _blacklisted_modules_post_unload.stdout | length > 0

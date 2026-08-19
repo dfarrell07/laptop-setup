@@ -278,15 +278,9 @@
               else 'reinitialization' }} triggered by config change — this takes
               5-10 minutes. Do not cancel.
 
-        - name: Reinitialize AIDE database — aide --init
-          ansible.builtin.command:
-            cmd: aide --init
-          changed_when: true
-          register: _aide_init_result
-
-        - name: Promote to active baseline
-          ansible.builtin.command:
-            cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+        - name: Reinitialize AIDE database and promote to active baseline
+          ansible.builtin.shell:  # noqa: command-instead-of-module
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
           changed_when: true
           register: system_aide_reinit_result
 
@@ -376,9 +370,7 @@
         path: /var/lib/aide/aide.db.gz
         state: absent
       ignore_errors: true
-      when: >-
-        (_aide_init_result is defined and _aide_init_result is failed) or
-        (system_aide_reinit_result is defined and system_aide_reinit_result is failed)
+      when: system_aide_reinit_result is defined and system_aide_reinit_result is failed
 
     - name: Stop and disable aide-check.timer after failed init
       ansible.builtin.systemd:

@@ -152,7 +152,7 @@ EOF
     # extra-vars (precedence 22) beats set_fact (18); injecting system_sysctl_hardening replaces
     # the role-default hardening dict before the merge set_fact runs, AND remains authoritative
     # after it (22 > 18), so the deployed 90-hardening.conf silently drops all static entries.
-    if [[ "$arg" == --extra-vars=*system_sysctl_hardening* ]]; then
+    if [[ "$arg" == --extra-vars=*system_sysctl_hardening* || "$arg" == -e*system_sysctl_hardening* ]]; then
         cat >&2 <<EOF
 ERROR: --extra-vars=system_sysctl_hardening rejected by VERIFY_AND_RUN
 Reason: extra-vars (precedence 22) overrides the role-default hardening dict and beats
@@ -397,7 +397,7 @@ fi
 unset _invoking_user _passwd_home
 
 unset LANG LC_ALL LC_CTYPE LC_MESSAGES LC_COLLATE LC_NUMERIC LC_TIME LC_MONETARY LANGUAGE NLSPATH
-export LC_ALL=C  # force C locale so gpg and other subprocesses emit English output; prevents locale-injected pattern-match failures in verify-collections.sh
+export LC_ALL=C.UTF-8  # pin locale to C.UTF-8: ASCII-compatible ordering and English output for grep/gpg pattern matching, while satisfying Ansible's UTF-8 encoding requirement; bare 'C' locale yields ANSI_X3.4-1968 encoding which Ansible rejects at startup
 
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
