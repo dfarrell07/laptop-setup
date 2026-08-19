@@ -252,7 +252,7 @@
             exit 0
           fi
           # Atomic rewrite: remove any stale faillock lines, re-insert both in one pass,
-          # write to a temp file in the same directory, then rename (atomic on Linux).
+          # write to a temp file in the same directory, validate, then rename (atomic on Linux).
           tmp=$(mktemp "${path}.XXXXXX")
           chmod 0644 "$tmp"
           trap 'rm -f "$tmp"' EXIT
@@ -262,6 +262,13 @@
             { print }
             /^auth.*pam_unix\.so/ { print authfail }
           ' "$path" > "$tmp"
+          # Validate temp file BEFORE committing
+          if ! awk '/pam_faillock\.so preauth/{p=NR} /pam_unix\.so/{u=NR} /pam_faillock\.so authfail/{f=NR} \
+                     END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$tmp"; then
+            rm -f "$tmp"
+            echo "ERROR: Generated PAM config missing required faillock lines or incorrect ordering" >&2
+            exit 1
+          fi
           trap - EXIT
           mv -f "$tmp" "$path"
           echo changed
