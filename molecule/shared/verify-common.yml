@@ -1298,7 +1298,7 @@
     - verify_journald_conf.stat.exists
 
 - name: Check sudoers drop-in has logfile=/var/log/sudo.log directive
-  ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening
+  ansible.builtin.command: grep -q 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
   register: verify_sudoers_logfile
   changed_when: false
   failed_when: false
@@ -1313,7 +1313,7 @@
 - name: Assert sudoers drop-in contains logfile=/var/log/sudo.log directive
   ansible.builtin.assert:
     that: verify_sudoers_logfile.rc == 0
-    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=' — sudo logging regression (rc={{ verify_sudoers_logfile.rc | default('?') }})"
+    fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=/var/log/sudo.log' — sudo logging regression (rc={{ verify_sudoers_logfile.rc | default('?') }})"
   when:
     - verify_sudoers_logfile is not skipped
 
