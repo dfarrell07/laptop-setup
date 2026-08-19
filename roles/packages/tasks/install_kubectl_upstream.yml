@@ -44,6 +44,23 @@
       delay: 10
       until: _kubectl_upstream_download is succeeded
 
+    - name: Create ansible-packages state directory
+      ansible.builtin.file:
+        path: /var/lib/ansible-packages
+        state: directory
+        mode: "0755"
+      become: true
+      tags: [become]
+
+    - name: Write kubectl source marker for upstream
+      ansible.builtin.copy:
+        content: "upstream"
+        dest: /var/lib/ansible-packages/kubectl-source
+        mode: "0644"
+      become: true
+      tags: [become]
+      when: _kubectl_upstream_download.changed
+
   rescue:
     - name: Record kubectl download failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
