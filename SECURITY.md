@@ -7,6 +7,26 @@ If you discover a security vulnerability, please report it privately via
 
 Do not open a public issue for security vulnerabilities.
 
+## Quick Reference
+
+Navigate to your task below:
+
+**Setup Workflows:**
+- [YubiKey + vault-pass.sh](https://github.com/dfarrell07/laptop-setup#setting-up-vault-passsh) — Program HMAC-SHA1 for vault encryption
+- [GPG key generation/import](https://github.com/dfarrell07/laptop-setup#gpg-key-import-and-setup) — Set up commit signing
+- [SSH key pair generation](https://github.com/dfarrell07/laptop-setup#ssh-key-rotation) — Create ed25519-sk FIDO2 keys
+- [Configure git signing](https://github.com/dfarrell07/laptop-setup#configuring-git-to-use-your-gpg-key) — Enable automatic GPG signatures
+
+**Security Incident Response:**
+- [Lost/compromised YubiKey](https://github.com/dfarrell07/laptop-setup#lost-or-compromised-yubikey) — Recovery via backup password or re-keying
+- [GPG key compromise](https://github.com/dfarrell07/laptop-setup#sha256sums-signing-key-management) — Key rotation procedure
+- [Vault password recovery](https://github.com/dfarrell07/laptop-setup#recovering-from-lost-yubikey-with-password-backup) — Restore vault access without YubiKey
+
+**Policy & Operations:**
+- [Git hook bypass rules](https://github.com/dfarrell07/laptop-setup#unsafe-git-operations) — When (and never) to use --no-verify
+- [Supply-chain commit requirements](https://github.com/dfarrell07/laptop-setup#supply-chain-commits-critical-distinction-between--s-and--s-flags) — -s and -S flag distinction
+- [Go module supply chain risk](https://github.com/dfarrell07/laptop-setup#go-module-supply-chain) — Mitigation tiers and hardening options
+
 ## Scope
 
 This is a personal workstation provisioning playbook. Security-relevant areas:
@@ -65,6 +85,17 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
   automount disabled, RDP/VNC disabled, idle lock at 300s (GNOME dconf,
   i3 via xss-lock + i3lock, Sway via swayidle + swaylock at 300s lock /
   600s display off)
+
+## Cryptographic Identities Registry
+
+This table documents the four distinct cryptographic keys used throughout provisioning and deployment. Refer to the appropriate row when updating keys or import instructions.
+
+| Identity | Purpose | Key ID / Comment |
+|---|---|---|
+| Collections signing | Verify `SHA256SUMS.asc` (Ansible vendored tarballs) | `AE97E86A1C807F5FA6A7987B68B6396B4E11D882` |
+| User GPG key | Commit signing (supply-chain files) | Generated during setup (§ GPG Key Import and Setup) |
+| SSH auth key | GitHub/internal git authentication | `ed25519-sk` (§ SSH Key Rotation) |
+| SSH signing key | Git commit signing via SSH | `ed25519-sk` (§ SSH Key Rotation) |
 
 ## Git Hooks Protection (core.hooksPath)
 
@@ -150,13 +181,7 @@ before merge, but it is still a violation of security policy.
 
 ## Unsafe Git Operations
 
-**NEVER use `git commit --no-verify` or `git push --no-verify` to bypass pre-commit hook validation.** The pre-commit hooks (.githooks/pre-commit) enforce three critical gates:
-
-1. **Vault encryption** — blocks accidental commits of plaintext vault files with real secrets
-2. **Secret scanning (gitleaks)** — detects hard-coded API keys, tokens, private keys
-3. **Code quality** — YAML, shell, JSON, and lockfile integrity validation
-
-Bypassing these checks can expose secrets to the git history and public repositories.
+**NEVER use `git commit --no-verify` or `git push --no-verify`.** See § "Git Hooks Protection" for architecture (why pre-push bypass is unpreventable) and risk analysis. The pre-commit hook enforces vault encryption, secrets scanning (gitleaks), and code quality; server-side CI validation compensates for `--no-verify` pushes via required status checks on all branches.
 
 **Exception: CI-only scenarios** — in GitHub Actions workflows, using `--no-verify` is acceptable ONLY when:
 - The workflow is part of a sealed CI system (no untrusted input)
@@ -326,7 +351,7 @@ bypasses cannot reach RCE without also modifying the role's validation.
 
 ## SHA256SUMS Signing Key Management
 
-**Signing key identity**: `AE97E86A1C807F5FA6A7987B68B6396B4E11D882` (collection vendoring GPG key)
+See § Cryptographic Identities Registry — Collections Signing row for the signing key fingerprint.
 
 The `collections-dist/SHA256SUMS` file is cryptographically signed with GPG to create
 `collections-dist/SHA256SUMS.asc`. This guards against accidental or malicious modifications
@@ -345,7 +370,7 @@ gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E1
 # (Future: make bootstrap will offer interactive key import)
 ```
 
-Verify the key fingerprint matches `AE97E86A1C807F5FA6A7987B68B6396B4E11D882` before
+Verify the key fingerprint matches the value in § Cryptographic Identities Registry before
 importing.
 
 **Verifying SHA256SUMS signature**:
@@ -670,86 +695,28 @@ then re-key with a new password source:
 ansible-vault rekey group_vars/all/vault.yml
 ```
 
-## GPG Key Import and Setup
+## GPG Key Requirements for Supply-Chain Commits
 
-Commits modifying supply-chain files (scripts, SHA256SUMS, collections) must be
-signed with a GPG key to prevent unsigned tampering.
+Commits modifying scripts, SHA256SUMS, collections, or .githooks require GPG cryptographic signatures to prevent unsigned tampering.
 
-### Generating a GPG Key
+**Key algorithm requirements:**
+- RSA 4096-bit or stronger (or ed25519)
+- Private key must be available locally (`gpg --list-secret-keys` to verify)
 
-If you don't have a GPG key yet:
-
+**Git configuration (one-time setup):**
 ```bash
-gpg --full-generate-key
-# Select: (1) RSA and RSA, 4096 bits (or higher), no expiration recommended for personal use
+git config --global commit.gpgsign true  # Always sign commits
+git config --global user.signingkey KEYID  # Set your key ID
 ```
 
-### Importing an Existing GPG Key
+**Enforcement**: The commit-msg hook (lines 21-31 in .githooks/commit-msg) enforces GPG signatures on supply-chain file changes. CI job `gpg-signatures` (linting.yml) validates all commits to main require both `-s` (--signoff text) and `-S` (--gpg-sign cryptographic signature).
 
-To import your GPG private key from backup:
+**Setup**: For detailed GPG key generation, importing, and verification procedures, see external resources:
+- [GnuPG Handbook](https://www.gnupg.org/gph/en/manual/) (official)
+- [GitHub GPG Key Setup](https://docs.github.com/en/authentication/managing-commit-signature-verification) (GitHub-specific)
+- [EFF Security Guide](https://ssd.eff.org/en) (beginner-friendly)
 
-```bash
-gpg --import /path/to/private-key.gpg
-```
-
-Verify the key was imported:
-
-```bash
-gpg --list-secret-keys
-```
-
-### Configuring Git to Use Your GPG Key
-
-1. Get your GPG key ID:
-   ```bash
-   gpg --list-secret-keys --keyid-format LONG
-   # Example output: sec   rsa4096/0123456789ABCDEF 2024-01-01 [SC]
-   #                           ^^^^^^^^^^^^^^^^^^ <- Use this
-   ```
-
-2. Configure git globally to use your GPG key:
-   ```bash
-   git config --global user.signingkey 0123456789ABCDEF
-   git config --global commit.gpgsign true
-   ```
-
-3. (Optional) Enable signing for all commits by default:
-   ```bash
-   git config --global commit.gpgsign true
-   git config --global gpg.format openpgp
-   ```
-
-### Signing Commits Manually
-
-If you haven't enabled `commit.gpgsign`, sign individual commits:
-
-```bash
-git commit -s -S  # Both --signoff and --gpg-sign
-```
-
-### Verifying Your Signatures
-
-Verify a commit is signed:
-
-```bash
-git verify-commit <commit-sha>
-```
-
-Show signature information:
-
-```bash
-git log --show-signature
-```
-
-### Exporting Your GPG Key
-
-To back up your GPG key securely:
-
-```bash
-gpg --export-secret-keys --armor YOUR_KEY_ID > private-key.gpg
-# Store in a secure backup location (e.g., encrypted USB, password manager, HSM)
-chmod 600 private-key.gpg
-```
+Cross-reference this requirement with § "Git Hook Security and Signing" for the distinction between `-s` and `-S` flags and enforcement mechanisms.
 
 ## Internal SSH Git Host Setup
 
