@@ -22,7 +22,7 @@
 #   download_timeout      — get_url timeout in seconds (default: 120)
 #   version_check_timeout — version check shell timeout in seconds (default: 10)
 
-- name: "Download and install {{ binary_name }}"
+- name: "{{ binary_name }}: fetch and install"
   block:
     - name: "Version check: {{ binary_name }}"
       ansible.builtin.command:
