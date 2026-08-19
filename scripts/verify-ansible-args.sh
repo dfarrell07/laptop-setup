@@ -186,6 +186,14 @@ done
 #                                 non-interactive invocations (no tty), so practical risk is low,
 #                                 but cleared for defence-in-depth
 
+# SECURITY: Unset NSS_WRAPPER and linker injection vars BEFORE the getent HOME check.
+# libnss_wrapper.so (invoked via LD_PRELOAD=libnss_wrapper.so NSS_WRAPPER_PASSWD=/tmp/evil)
+# intercepts getent passwd and returns an attacker-controlled home directory entry, making
+# HOME=/home/attacker appear valid. This poisons ANSIBLE_COLLECTIONS_PATH with an attacker
+# path before exec. Unset these here so getent reads the real /etc/passwd.
+unset NSS_WRAPPER_PASSWD NSS_WRAPPER_GROUP
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
+
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
 # SECURITY: Validate HOME matches /etc/passwd to prevent home directory hijacking.
