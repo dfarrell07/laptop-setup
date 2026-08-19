@@ -790,7 +790,7 @@
     - ansible_os_family != 'Debian'  # openssh-server not installed in Debian Podman CI (daemon-reload crash risk)
     - not csb_rhel
 
-- name: Check sshd hardening drop-in contains critical directives
+- name: Assert sshd hardening drop-in contains required directives
   ansible.builtin.command: grep -qE '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
   loop:
     - "PasswordAuthentication no"
@@ -829,6 +829,14 @@
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
 
+- name: Assert 98-llmnr.conf contains correct LLMNR setting
+  ansible.builtin.command: grep -q 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_llmnr_conf.stat.exists
+
 - name: Stat /etc/systemd/resolved.conf.d/99-dot.conf
   ansible.builtin.stat:
     path: /etc/systemd/resolved.conf.d/99-dot.conf
@@ -846,6 +854,29 @@
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
+
+- name: Slurp DNS-over-TLS drop-in content
+  ansible.builtin.slurp:
+    src: /etc/systemd/resolved.conf.d/99-dot.conf
+  register: verify_dot_conf_content
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+    - verify_dot_conf.stat.exists
+
+- name: Assert DNSOverTLS= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic')))
+      in (verify_dot_conf_content.content | b64decode)
+    fail_msg: >-
+      99-dot.conf missing expected DNSOverTLS={{ system_dot_mode | default('opportunistic') }} — template regression?
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - not (system_is_container | default(false))
+    - verify_dot_conf.stat.exists
 
 - name: Stat /etc/resolv.conf (symlink check)
   ansible.builtin.stat:
