@@ -1,6 +1,6 @@
 ---
 # --- Session timeout (TMOUT via profile.d — Fedora /etc/bashrc sources profile.d, covering non-login interactive shells too) ---
-- name: Deploy session timeout via profile.d (bash login and non-login interactive shells — Fedora /etc/bashrc sources profile.d)
+- name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL/macOS)
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
@@ -15,7 +15,7 @@
     - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
     - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
 
-- name: Deploy session timeout to /etc/bash.bashrc (Debian bash interactive shells)
+- name: Deploy TMOUT to /etc/bash.bashrc (Debian)
   ansible.builtin.blockinfile:
     path: /etc/bash.bashrc
     marker: "# {mark} ANSIBLE MANAGED BLOCK: CIS 5.5.5 session timeout"
@@ -76,7 +76,7 @@
     - is_apt
     - system_tmout | int <= 0
 
-- name: Remove session timeout from /etc/zshrc when disabled (Fedora/RHEL/macOS)
+- name: Remove TMOUT from /etc/zshrc when disabled (Fedora/RHEL/macOS)
   ansible.builtin.lineinfile:
     path: /etc/zshrc
     regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
