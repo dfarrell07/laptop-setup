@@ -1941,10 +1941,14 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   # vsyscall=none kernel param (ROP gadget mitigation, requires reboot after grubby)
   if grep -q 'vsyscall=none' /proc/cmdline 2>/dev/null; then record "vsyscall-none" "PASS"
   else record "vsyscall-none" "WARN" "vsyscall=none not in cmdline (requires reboot if grubby ran)"; fi
-  # IOMMU kernel param (AMD DMA protection — only applicable on AMD CPUs)
+  # IOMMU kernel param (DMA remapping — vendor-specific; absent = PCIe DMA unprotected until reboot)
   if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
     if grep -q 'amd_iommu=on' /proc/cmdline 2>/dev/null; then record "amd-iommu" "PASS"
     else record "amd-iommu" "WARN" "amd_iommu=on not in cmdline (requires reboot; AMD only)"; fi
+  fi
+  if grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+    if grep -q 'intel_iommu=on' /proc/cmdline 2>/dev/null; then record "intel-iommu" "PASS"
+    else record "intel-iommu" "WARN" "intel_iommu=on not in cmdline (requires reboot; Intel only)"; fi
   fi
   if grep -q 'iommu=pt' /proc/cmdline 2>/dev/null; then record "iommu-pt" "PASS"
   elif grep -q 'iommu=pt' /etc/kernel/cmdline 2>/dev/null; then record "iommu-pt" "WARN" "iommu=pt in /etc/kernel/cmdline but not active (requires reboot)"; fi

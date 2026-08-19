@@ -385,3 +385,65 @@
      (_system_lockdown_active_raw.content | b64decode) is search('\[(integrity|confidentiality)\]')) or
     system_kernel_lockdown | length == 0
   failed_when: false
+
+# Write /etc/motd.d/31-iommu-pending when IOMMU cmdline params have been written
+# by grubby but are not yet active in the running kernel. Between provisioning and
+# reboot, hardware DMA remapping is inactive: PCIe/Thunderbolt bus masters can
+# access arbitrary host physical memory. Analogous to the lockdown MOTD above.
+- name: Check whether IOMMU is active in the running kernel
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      _proc=$(cat /proc/cmdline 2>/dev/null || echo "")
+      _etc=$(cat /etc/kernel/cmdline 2>/dev/null || echo "")
+      _configured=false
+      _active=false
+      if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
+        [[ "$_etc" == *"amd_iommu=on"* ]] && _configured=true
+        [[ "$_proc" == *"amd_iommu=on"* ]] && _active=true
+      fi
+      if grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+        [[ "$_etc" == *"intel_iommu=on"* ]] && _configured=true
+        [[ "$_proc" == *"intel_iommu=on"* ]] && _active=true
+      fi
+      # /sys/class/iommu non-empty is a definitive runtime confirmation IOMMU is active
+      if [[ -d /sys/class/iommu ]] && [[ -n "$(ls -A /sys/class/iommu 2>/dev/null)" ]]; then
+        _active=true
+      fi
+      echo "configured=${_configured} active=${_active}"
+    executable: /bin/bash
+  register: _system_iommu_runtime_raw
+  failed_when: false
+  changed_when: false
+  when: not system_is_container
+
+- name: Write MOTD notice when IOMMU is configured but not active in running kernel
+  ansible.builtin.copy:
+    content: |
+      *** REBOOT REQUIRED ***
+      IOMMU (DMA remapping) has been written to the boot cmdline but is NOT active
+      on the running kernel. PCIe/Thunderbolt DMA protection is absent until reboot.
+      Run `make smoke-test` after reboot to confirm iommu PASS before using this machine.
+    dest: /etc/motd.d/31-iommu-pending
+    mode: "0644"
+  when:
+    - not system_is_container
+    - not csb_rhel
+    - _system_iommu_runtime_raw is not failed
+    - _system_iommu_runtime_raw.stdout is defined
+    - "'configured=true' in _system_iommu_runtime_raw.stdout"
+    - "'active=true' not in _system_iommu_runtime_raw.stdout"
+
+- name: Remove IOMMU MOTD notice once IOMMU is active or not configured
+  ansible.builtin.file:
+    path: /etc/motd.d/31-iommu-pending
+    state: absent
+  when: >-
+    system_is_container or
+    (_system_iommu_runtime_raw is not failed and
+     _system_iommu_runtime_raw.stdout is defined and
+     'active=true' in _system_iommu_runtime_raw.stdout) or
+    (_system_iommu_runtime_raw is not failed and
+     _system_iommu_runtime_raw.stdout is defined and
+     'configured=false' in _system_iommu_runtime_raw.stdout)
+  failed_when: false
