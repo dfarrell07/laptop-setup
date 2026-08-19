@@ -43,11 +43,11 @@ slugify() {
     sed 's/^-//;s/-$//' | cut -c1-50
 }
 
-parse_repo() {
+extract_issue_repo() {
   echo "$1" | tr -d '\r' | head -1 | sed -n 's/^repo:[[:space:]]*//p' | sed 's/[[:space:]]*$//'
 }
 
-parse_prompt() {
+extract_issue_body() {
   echo "$1" | tr -d '\r' | sed '1,/^$/d'
 }
 
@@ -118,7 +118,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   log "Processing issue #$ISSUE_NUM: $ISSUE_TITLE"
 
-  REPO_SHORT=$(parse_repo "$ISSUE_BODY")
+  REPO_SHORT=$(extract_issue_repo "$ISSUE_BODY")
   if [[ -z "$REPO_SHORT" ]]; then
     fail_issue "$ISSUE_NUM" "Missing \`repo:\` line in issue body."
     continue
@@ -133,7 +133,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   TARGET_REMOTE="${REPO_REMOTE[$REPO_SHORT]}"
   TOOLS="${REPO_ALLOWED_TOOLS[$REPO_SHORT]:-Read,Edit,Write,Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git diff *),Bash(git fetch *),Bash(git checkout *),Bash(git log *),Bash(git status),Bash(git pull *)}"
   DEFAULT_BRANCH="${REPO_DEFAULT_BRANCH[$REPO_SHORT]:-main}"
-  PROMPT=$(parse_prompt "$ISSUE_BODY")
+  PROMPT=$(extract_issue_body "$ISSUE_BODY")
 
   if [[ -z "$PROMPT" ]]; then
     fail_issue "$ISSUE_NUM" "Empty prompt after \`repo:\` line."
