@@ -2062,8 +2062,14 @@
       tags: [always]
 
     # NOTE: vault assertion is NOT gated by _pf_is_molecule — catching vault_* in config.yml is always an error, even in CI.
+    # NOTE: This block is unconditional (no _pf_vault_asserted is not defined guard) so that
+    # passing -e _pf_vault_asserted=true cannot bypass these security assertions. The guard was
+    # removed because extra-vars (precedence 22) can pre-define any simple variable, silently
+    # skipping all four checks below. verify-ansible-args.sh rejects _pf_vault_asserted= on the
+    # CLI as a first line of defence; this unconditional block is the Ansible-layer backstop.
+    # Running the assertions in both Play 1 and Play 2 is harmless — they are idempotent.
     - name: Assert config.yml vault and secret-key constraints
-      when: _user_config is defined and _pf_vault_asserted is not defined
+      when: _user_config is defined
       block:
         - name: Assert config.yml contains no vault_* keys
           ansible.builtin.assert:
@@ -2123,8 +2129,9 @@
           tags: [always]
 
         # set_fact for localhost persists across plays in the same playbook run (Ansible host-var cache).
-        # Play 1's include of this file sets _pf_vault_asserted; Play 2's include then sees it defined.
-        - name: Set vault asserted flag (suppresses duplicate assertions in Play 2)
+        # This flag is no longer used to gate the assertion block (the block is unconditional).
+        # It is retained only as a diagnostic marker visible in -vv output; it has no security role.
+        - name: Set vault asserted flag (diagnostic marker only — not a security gate)
           ansible.builtin.set_fact:
             _pf_vault_asserted: true
           tags: [always]

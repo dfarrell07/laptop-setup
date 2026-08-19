@@ -48,9 +48,23 @@ Solution: Do not use --skip-tags always with site.yml.
 EOF
         exit 1
     fi
+    # Block -e _pf_vault_asserted=* / --extra-vars=_pf_vault_asserted=* (single-arg =value form)
+    # Passing this via extra-vars (precedence 22) would pre-define the flag that gates the
+    # vault_*/secret-key/security-policy assertions in pre_flight_checks.yml, silently skipping
+    # all four checks and allowing vault_* keys in config.yml to shadow vault.yml undetected.
+    if [[ "$arg" == --extra-vars=_pf_vault_asserted=* || "$arg" == -e_pf_vault_asserted=* ]]; then
+        cat >&2 <<EOF
+ERROR: -e _pf_vault_asserted rejected by VERIFY_AND_RUN
+Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key detection,
+        secret-key shadowing checks, claude security-policy checks, and the
+        redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
+Solution: Do not pass _pf_vault_asserted as an extra-var.
+EOF
+        exit 1
+    fi
 done
 
-# Check for space-separated --skip-tags always (two separate args: --skip-tags <value>)
+# Check for space-separated two-arg forms: --skip-tags always, -e _pf_vault_asserted=*, --extra-vars _pf_vault_asserted=*
 # This requires scanning consecutive arg pairs since the loop above only sees individual args.
 for ((i=0; i<${#args[@]}-1; i++)); do
     if [[ "${args[$i]}" == '--skip-tags' && "${args[$((i+1))]}" == 'always' ]]; then
@@ -60,6 +74,17 @@ Reason: --skip-tags always skips Play 0 entirely, bypassing collection verificat
         and all security assertions tagged [always] in pre_flight_checks.yml.
 Solution: Do not use --skip-tags always with site.yml.
          Use a scoped make target instead (make claude, make packages, make ssh, etc.).
+EOF
+        exit 1
+    fi
+    # Block space-separated: -e _pf_vault_asserted=<value> and --extra-vars _pf_vault_asserted=<value>
+    if [[ ( "${args[$i]}" == '-e' || "${args[$i]}" == '--extra-vars' ) && "${args[$((i+1))]}" == _pf_vault_asserted=* ]]; then
+        cat >&2 <<EOF
+ERROR: -e _pf_vault_asserted rejected by VERIFY_AND_RUN
+Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key detection,
+        secret-key shadowing checks, claude security-policy checks, and the
+        redhat_splunk_nologin_shell assertion in pre_flight_checks.yml.
+Solution: Do not pass _pf_vault_asserted as an extra-var.
 EOF
         exit 1
     fi
