@@ -52,6 +52,26 @@
       become: false
       tags: [always]
 
+    # SECURITY: Close pre-hardening cron window.
+    # cronie is installed by default on Fedora and may already be running when provisioning
+    # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
+    # into provisioning), leaving a window in which pre-placed /var/spool/cron/<user>
+    # jobs fire freely. Writing cron.allow=root here — the earliest privileged step —
+    # eliminates that window before any role executes. Skip on RHEL CSB (IT managed
+    # cron jobs would be blocked) and containers (no crond).
+    - name: "SECURITY: Write cron.allow and at.allow before roles (close pre-hardening cron window)"
+      ansible.builtin.copy:
+        content: "root\n"
+        dest: "{{ item }}"
+        mode: "0600"
+      loop:
+        - /etc/cron.allow
+        - /etc/at.allow
+      when:
+        - not system_is_container
+        - not csb_rhel
+      tags: [always]
+
   roles:
     - role: repos_dnf
       tags: [repos_dnf]
