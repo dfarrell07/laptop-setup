@@ -82,7 +82,7 @@
     - is_dnf
     - not system_is_container  # bpfman.socket enable crashes container PID 1
     - profile == 'work'  # bpfman is in packages_support_work (work-profile only)
-  failed_when: csb_detected  # Silent failure only on CSB where package install may have been rescued
+  failed_when: not csb_detected  # Silent failure only on CSB where package install may have been rescued
   register: _bpfman_socket_enable
 
 - name: Debug bpfman.socket enable failure on non-CSB work hosts
