@@ -1,9 +1,10 @@
 ---
 # roles/system/tasks/dnf_automatic.yml
 # --- dnf-automatic ---
-# CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
-# maintenance windows. Running dnf-automatic in parallel could install packages
-# ahead of IT's approval cycle or outside maintenance windows.
+# CSB machines (both RHEL CSB and hybrid Fedora CSB) are managed by Red Hat IT
+# via RHSM/Satellite with their own maintenance windows. Running dnf-automatic in
+# parallel could install packages ahead of IT's approval cycle or outside
+# maintenance windows, creating package version drift from IT baseline.
 - name: Install dnf-automatic
   ansible.builtin.dnf:
     name: "{{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}"
@@ -11,7 +12,7 @@
   register: system_dnf_automatic_installed
   when:
     - is_dnf
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container  # RPM post-install calls systemctl daemon-reload, crashes Podman container systemd
   failed_when: false
 
@@ -23,7 +24,7 @@
   notify: Restart dnf-automatic timer
   when:
     - is_dnf
-    - not csb_rhel
+    - not csb_detected
     - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
 
 - name: Set dnf-automatic service/timer name facts
@@ -39,7 +40,7 @@
     enabled: true
   when:
     - is_dnf
-    - not csb_rhel
+    - not csb_detected
     - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
     - not system_is_container
   failed_when: false
@@ -53,7 +54,7 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container
   failed_when: false
 
@@ -74,7 +75,7 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
-    - not csb_rhel  # dnf-automatic not installed on CSB
+    - not csb_detected  # dnf-automatic not installed on CSB
     - not system_is_container
   notify: Restart dnf-automatic timer
 
@@ -86,7 +87,7 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container
   failed_when: false
 
@@ -98,6 +99,6 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container
   notify: Restart dnf-automatic timer
