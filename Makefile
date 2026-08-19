@@ -360,7 +360,7 @@ check-vars-sync: .venv
 
 # Regenerate the hash-pinned lockfile (run after editing requirements-test.txt)
 pip-lock: .venv
-	.venv/bin/pip-compile --generate-hashes --output-file=requirements-test.lock requirements-test.txt
+	.venv/bin/pip-compile --generate-hashes --allow-unsafe --output-file=requirements-test.lock requirements-test.txt
 
 # Sync .venv to match the lockfile exactly (removes packages not pinned in requirements-test.lock)
 pip-sync: .venv
