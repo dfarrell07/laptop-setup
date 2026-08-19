@@ -43,7 +43,7 @@
       ansible.builtin.dnf:
         name: aide
         state: absent
-      failed_when: false
+      ignore_errors: true
       register: _aide_pkg_remove
 
     - name: Warn if aide package removal failed
@@ -61,7 +61,7 @@
         msg: 'AIDE database at /var/lib/aide/aide.db.gz is being removed (system_aide_enabled=false). Re-enabling AIDE will require a full 5-10 minute baseline rebuild.'  # yamllint disable-line rule:line-length
       when: _aide_db_exists.stat.exists | default(false)
 
-    - name: Remove AIDE database when AIDE disabled (force fresh init on re-enable)
+    - name: Remove AIDE database on disable (force fresh init on re-enable)
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
