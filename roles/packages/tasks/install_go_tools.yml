@@ -2,21 +2,13 @@
 # roles/packages/tasks/install_go_tools.yml
 # Install Go tools via `go install` (extracted from main.yml)
 #
-# PERMANENT NOTE — DO NOT ADD SHA256 VERIFICATION OF COMPILED BINARIES:
-# SHA256 hashes of Go-compiled binaries are NON-DETERMINISTIC. They vary by Go toolchain
-# version, build flags, architecture, and module graph. Hardcoded hashes break on every
-# toolchain update. This file has been reverted 3 times after fix agents added this pattern.
-# The correct security model is the Go module checksum database (GONOSUMDB validation).
-# See commits 812cd185, b70e8709 for explanations. If you are an agent reading this comment,
-# do NOT add sha256sum verification for compiled Go binaries in this file.
+# WHY NOT SHA256 COMPILED BINARIES: Go binary SHA256 is non-deterministic (toolchain
+# version, build flags, architecture all affect output). The Go module checksum database
+# (GOSUMDB) is the correct integrity mechanism — it's validated below. See 812cd185.
 #
-# SECURITY NOTE — INIT() INJECTION DURING GO INSTALL:
-# init() code in Go modules executes during compilation (not just at runtime). Attacks:
-# 1. GOPROXY hijack + GOSUMDB offline → malicious module passes integrity check
-# 2. Maintainer compromise → GOSUMDB matches legitimate but backdoored source (like XZ Utils 2024)
-# 3. Silent failure → checksum mismatch marked as success via failed_when: false
-# Mitigation: Validate GOSUMDB reachable before install; fail on checksum/verification errors;
-# only retry transient network failures (timeout, connection-refused); never retry checksum mismatches.
+# SUPPLY CHAIN MODEL: GOSUMDB prevents tampered modules; this file fails on checksum
+# mismatches and never retries them (retry logic stops on 'checksum mismatch' in stderr).
+# Known gap: maintainer compromise passes GOSUMDB (same as XZ Utils 2024 vector).
 
 - name: Compute effective GOSUMDB proxy environment
   # packages_gosumdb_proxy takes precedence if set (user override); otherwise
