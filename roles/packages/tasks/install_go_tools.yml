@@ -18,6 +18,19 @@
 # Mitigation: Validate GOSUMDB reachable before install; fail on checksum/verification errors;
 # only retry transient network failures (timeout, connection-refused); never retry checksum mismatches.
 
+- name: Compute effective GOSUMDB proxy environment
+  # packages_gosumdb_proxy takes precedence if set (user override); otherwise
+  # use proxy_url if network_proxied=true (auto-detection); else use no proxy.
+  # This decouples GOSUMDB proxy from general network proxy detection, allowing
+  # users to specify a dedicated corporate proxy for packages_gosumdb when needed.
+  ansible.builtin.set_fact:
+    _gosumdb_proxy_env: >-
+      {{
+        packages_gosumdb_proxy if (packages_gosumdb_proxy | default('') | length > 0)
+        else (proxy_url if (network_proxied | bool) else '')
+      }}
+  become: false
+
 - name: Validate GONOSUMDB contains only private module domains
   ansible.builtin.assert:
     that:
@@ -36,6 +49,9 @@
       or define packages_gosumdb in group_vars/all/vars.yml to use a corporate proxy.
 
 - name: Verify GOSUMDB reachability before go install (GOPROXY hijack mitigation)
+  # Uses computed _gosumdb_proxy_env which prefers packages_gosumdb_proxy if set,
+  # else uses auto-detected proxy when network_proxied=true. This ensures the same
+  # proxy environment is used for validation and for the actual go install command.
   ansible.builtin.command:
     cmd: "timeout 5 curl -s -f https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
   changed_when: false
@@ -45,8 +61,8 @@
   delay: 3
   until: gosumdb_reachability.rc == 0
   environment:
-    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps in packages_go_install_work would be silently
@@ -66,8 +82,9 @@
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
     # auto: downloads newer toolchain on demand; local: installed Go toolchain only (module downloads still occur via GOPROXY)
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
-    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    # GOSUMDB-specific proxy: uses computed _gosumdb_proxy_env (prefers packages_gosumdb_proxy if set)
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
     # Explicit GOSUMDB enforcement (never omitted; security-critical).
