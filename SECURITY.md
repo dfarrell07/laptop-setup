@@ -584,6 +584,27 @@ See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SEC
   true`), and optional full IMA appraisal (deploy `/etc/ima/ima-policy` + `ima-evm-utils` +
   `ima_appraise=enforce` kernel cmdline — not provided by this playbook; requires signed
   executables across the whole userspace, which Fedora does not ship by default).
+- **Swap and vault memory remanence** — During provisioning, Ansible loads and decrypts
+  `group_vars/all/vault.yml` into Python heap memory. On hosts with active swap (default Fedora
+  uses zram; default RHEL allocates a swap partition), memory pressure can cause the kernel to
+  page these decrypted vault contents — SSH private keys, registry tokens, GRUB password hashes —
+  to the swap device. These pages persist in swap after the provisioning process exits and survive
+  a reboot unless the swap device is cryptographically wiped. Any process with block-device read
+  access (root, or a container escape from a privileged container) can recover these pages offline.
+  **Mitigations applied by this playbook**:
+  (1) `vm.swappiness: 1` in `system_sysctl_hardening` strongly minimizes swapping while preserving
+  swap as an OOM-killer last resort on memory-constrained hosts. Override to `vm.swappiness: 0` in
+  `config.yml` via `system_sysctl_extra_additional` if the host has full-disk encryption (LUKS) and
+  you want to eliminate swap entirely.
+  (2) Use full-disk encryption (LUKS/dm-crypt) on the swap partition or swap file so that any
+  pages written to swap are cryptographically protected at rest. Fedora Anaconda can configure
+  LUKS for the swap partition during install.
+  (3) Minimize the provisioning window: run `make all` on a local console (not over SSH), avoid
+  long-running interactive sessions after provisioning, and reboot promptly after `make all`
+  completes to flush swap.
+  **Note**: zram swap (Fedora default) compresses pages in RAM — data never leaves RAM — so
+  zram does not expose vault pages to block-device attacks. RHEL swap partitions do not use zram
+  by default; ensure LUKS encryption is active on RHEL hosts before provisioning with real secrets.
 - **LUKS TRIM/discard** — managed via Ansible `system_luks_discards_enabled: false` (default).
   Discard is disabled by default to mitigate SSD wear-pattern fingerprinting attacks that can
   correlate TRIM patterns with plaintext block locations. Set `system_luks_discards_enabled: true`
