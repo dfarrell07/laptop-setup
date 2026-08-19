@@ -81,13 +81,13 @@
       tags: [always]
 
     - name: Cache parsed config.yml dict for SSTI guard assertions
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       ansible.builtin.set_fact:
         _config_raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       tags: [always]
 
     - name: Comprehensively scan all config.yml values for Jinja2 template expressions (SSTI guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         # Serialize entire config dict to JSON for unified template marker scanning
         # This detects {{ or {% in ANY value (string, list element, dict value)
@@ -126,7 +126,7 @@
       tags: [always]
 
     - name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       ansible.builtin.assert:
         that:
           - _config_raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
@@ -142,7 +142,7 @@
           newlines or control characters from dotfiles_user_name in config.yml.
 
     - name: Assert dotfiles_gonosumdb contains only private domains (GONOSUMDB bypass guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
@@ -165,7 +165,7 @@
           variable entirely to use the default (empty, all modules go through GOSUMDB).
 
     - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       ansible.builtin.assert:
         that:
           - _config_raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
@@ -179,10 +179,9 @@
           (dotfiles_aws_profile).
 
     - name: Assert GOSUMDB empty string is rejected (supply chain guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _gonosumdb: "{{ _raw.get('dotfiles_gonosumdb', '') | string }}"
+        _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
           - >-
@@ -203,10 +202,9 @@
 
 
     - name: Assert packages_gosumdb is whitelisted (supply chain guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
-        _raw: "{{ _config_raw }}"
-        _packages_gosumdb: "{{ _raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
+        _packages_gosumdb: "{{ _config_raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
         _whitelisted_servers:
           - sum.golang.org
           - sum.redhat.com
@@ -245,7 +243,7 @@
           sum.internal.redhat.com.
 
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -259,7 +257,7 @@
           /usr/local).
 
     - name: Assert claude_log_dir contains only safe path characters (logrotate injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -273,7 +271,7 @@
           slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
 
     - name: Assert claude config dir vars contain only safe path characters (systemd unit injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
@@ -294,7 +292,7 @@
           characters). No newlines, spaces, or shell metacharacters.
 
     - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _install_method: "{{ _raw.get('claude_install_method', 'native') }}"
@@ -311,7 +309,7 @@
           To skip Claude install entirely, set claude_install_method: skip.
 
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -326,7 +324,7 @@
           Allowed: https://claude.ai/* or https://anthropic.com/*.
 
     - name: Assert claude plist path vars contain only safe path characters (macOS XML injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       tags: [always]
@@ -345,7 +343,7 @@
           non-negative integers (systemd timer directive injection guard).
 
     - name: Assert container_name contains only safe characters (INI injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -359,7 +357,7 @@
           underscore, hyphen (e.g., fedora-dev, my-dev-container).
 
     - name: Assert claude_queue service/plist vars in config.yml are safe (systemd/plist injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -388,7 +386,7 @@
           cpu_quota={{ _raw.get('claude_queue_cpu_quota', '80%') }}.
 
     - name: Assert desktop configuration vars in config.yml contain only safe characters (Xorg/WM injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _color_keys:
@@ -514,7 +512,7 @@
           a newline payload (e.g. "yes\nexec /bin/sh") injects a top-level sway directive executed at WM start.
 
     - name: Assert keyboard layout vars in config.yml are safe identifiers (sway input block injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
@@ -535,7 +533,7 @@
           Use plain values only (e.g. 'us', 'intl', 'ctrl:nocaps,compose:ralt').
 
     - name: Assert sway touchpad vars in config.yml are enabled, disabled, or empty (block-escape injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
@@ -556,7 +554,7 @@
           Fix: set each var to 'enabled', 'disabled', or leave empty (default).
 
     - name: Assert desktop idle timeout vars in config.yml are plain non-negative integers (swayidle injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -575,7 +573,7 @@
           Fix: use only digits (e.g. desktop_wm_idle_lock_timeout: 300).
 
     - name: Assert desktop_i3status_cpu_temp_path is a safe sysfs path (i3status config injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -595,7 +593,7 @@
           (e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input).
 
     - name: Assert desktop_sway_workspace_outputs entries contain only safe characters (sway config injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
@@ -624,7 +622,7 @@
           Bad workspaces: {{ _bad_workspaces }}. Bad outputs: {{ _bad_outputs }}.
 
     - name: Assert gitconfig vars in config.yml contain only safe characters (gitconfig injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -649,7 +647,7 @@
           alphanumeric, dot, slash, hyphen (dotfiles_internal_ca_path — filesystem path).
 
     - name: Assert SSH key basenames and claude_queue_repo in config.yml contain only safe characters (ssh_config injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -670,7 +668,7 @@
           (dotfiles_claude_queue_repo — matches GitHub owner/repo format).
 
     - name: Assert email identity vars in config.yml are valid email addresses (allowed_signers injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -705,7 +703,7 @@
           A blank value is permitted when the variable is not yet configured.
 
     - name: Assert dotfiles_work_src_dirs entries contain only safe characters (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _work_src_dirs: "{{ _raw.get('dotfiles_work_src_dirs', []) }}"
@@ -721,7 +719,7 @@
           hyphens, and underscores in dotfiles_work_src_dirs (e.g. my-org, not my-org$(id)).
 
     - name: Assert tmux vars in config.yml are safe (newline injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -737,7 +735,7 @@
           dotfiles_tmux_prefix must be a Ctrl or Meta key chord (e.g. C-a, M-b).
 
     - name: Assert dotfiles_ssh_agent_timeout is a non-negative integer (systemd ExecStart injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -779,7 +777,7 @@
           where ansible-playbook runs.
 
     - name: Assert repos_dnf_redhat_gpgkey targets expected internal domain (GPG key injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _redhat_gpgkey: "{{ _raw.get('repos_dnf_redhat_gpgkey', '') }}"
@@ -813,7 +811,7 @@
           needed for access to Red Hat internal package repositories.
 
     - name: Assert repos_dnf_acli_baseurl targets expected internal domain (package repository injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _acli_baseurl: "{{ _raw.get('repos_dnf_acli_baseurl', '') }}"
@@ -841,7 +839,7 @@
           internal Atlassian CLI package repository.
 
     - name: Assert dotfiles_oh_my_zsh_theme contains only safe characters (zshrc injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -855,7 +853,7 @@
           (e.g. gallois, robbyrussell, agnoster).
 
     - name: Assert dotfiles_oh_my_zsh_plugins entries contain only safe characters (zshrc injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _plugins: "{{ _raw.get('dotfiles_oh_my_zsh_plugins', []) | default([]) }}"
@@ -875,7 +873,7 @@
           Offending entries: {{ _plugins | reject('match', '^[a-zA-Z0-9_-]+$') | list }}
 
     - name: Assert dotfiles_ssh_agent_label contains only safe characters (launchd plist injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -890,7 +888,7 @@
           (e.g. com.username.ssh-agent). Leave unset to use the safe computed default.
 
     - name: Assert dotfiles_claude_queue_repo contains only safe characters (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -904,7 +902,7 @@
           (e.g. owner/repo).
 
     - name: Assert notes_repo_name and notes_repo_path in config.yml contain only safe characters (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -924,7 +922,7 @@
           Leave notes_repo_path unset to use the safe computed default.
 
     - name: Assert notes_remote_url and notes_remote_url_https are valid git URLs (path traversal guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _notes_ssh_url: "{{ _raw.get('notes_remote_url', '') }}"
@@ -952,7 +950,7 @@
           Current values: notes_remote_url='{{ _notes_ssh_url }}', notes_remote_url_https='{{ _notes_https_url }}'.
 
     - name: Assert system_gid0_allowed_accounts entries are safe usernames (account hardening guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _unsafe_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
@@ -974,7 +972,7 @@
           (e.g., root, service-account, bin_user).
 
     - name: Assert ssh_work_keyscan_hosts entries are safe hostnames (command injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _keyscan_hosts: "{{ _raw.get('ssh_work_keyscan_hosts', []) }}"
@@ -1118,7 +1116,7 @@
       tags: [always]
 
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _git_repos_list: "{{ _raw.get('git_repos_list', []) | default([]) }}"
@@ -1143,7 +1141,7 @@
           Offending entries: {{ _bad_dests }}
 
     - name: Assert git_repos_base_dir is not the home directory or a sensitive path (SSH takeover guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _base_dir: "{{ _raw.get('git_repos_base_dir', '') | string }}"
@@ -1180,7 +1178,7 @@
       tags: [always]
 
     - name: Assert git_repos_base_dir is within user home directory (path escape guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _base_dir: "{{ _raw.get('git_repos_base_dir', real_user_home ~ '/src') | string }}"
@@ -1200,7 +1198,7 @@
           Fix: set git_repos_base_dir to a path under your home directory (default: ~/src).
 
     - name: Assert container_name contains only safe characters (distrobox INI injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1218,7 +1216,7 @@
           No spaces, newlines, or special characters allowed.
 
     - name: Assert binary version variables match semantic versioning (URL path injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         # Semantic version pattern: major.minor.patch with optional prerelease
@@ -1274,7 +1272,7 @@
           Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
 
     - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1289,7 +1287,7 @@
           hyphen only (e.g. "opm-rhel8", "opm.v0.22.0"). No slashes or path separators.
 
     - name: Assert packages_subctl_versioned entries have safe version strings (go install injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
@@ -1310,7 +1308,7 @@
           Remove spaces and special characters from version and suffix fields.
 
     - name: Assert packages_subctl_rh_versions entries have safe version strings (oc image extract injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         # Enforce FULL semantic versioning (v0.18.0 format required) to prevent glob ambiguity
@@ -1343,7 +1341,7 @@
           Update all tag values to use complete semantic versioning (major.minor.patch).
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1363,7 +1361,7 @@
           decision and remove this assertion — do not silently accept the reduced security posture.
 
     - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set (sshd AllowUsers injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _extra_users: "{{ _raw.get('system_ssh_extra_allow_users', []) }}"
@@ -1384,7 +1382,7 @@
           Offending entries: {{ _extra_users | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
 
     - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1400,7 +1398,7 @@
           Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
 
     - name: Assert system_umask and system_keymap contain only safe characters (login.defs/vconsole injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1417,7 +1415,7 @@
           system_keymap must be alphanumeric, hyphen, or underscore (e.g. us, en_US, dvorak).
 
     - name: Assert password aging and home mode vars safe (login.defs injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1438,7 +1436,7 @@
           string (e.g. 0700, 0755). No newlines, spaces, or special characters allowed.
 
     - name: Assert system_tmout in config.yml contains only safe digits (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1452,7 +1450,7 @@
           integer (e.g. 300, 600, 900). No spaces, newlines, or special characters allowed.
 
     - name: Assert system_ssh_rekey_limit in config.yml has safe format (sshd config injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1467,7 +1465,7 @@
           No spaces, letters, or punctuation other than the unit suffixes are permitted.
 
     - name: Assert system_kernel_lockdown in config.yml is a safe mode name (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1481,7 +1479,7 @@
           'integrity', 'confidentiality', or '' (empty string to disable for kdump/kgdb/KASAN).
 
     - name: Assert system_crypto_policy_target and packages_brew_autoupdate_interval are safe (CLI arg injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1497,7 +1495,7 @@
           (seconds); non-integer values allow extra flag injection into 'brew autoupdate start'.
 
     - name: Assert SSH integer vars contain only plain non-negative integers (sshd injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1549,7 +1547,7 @@
           tags: [always]
 
     - name: Assert system_ssh_channel_timeout contains no unsafe characters (sshd injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1565,7 +1563,7 @@
           (e.g. "global=1h" or "session=30m direct-tcpip=1h").
 
     - name: Assert system_resolved_* DNS config vars are safe (systemd conf injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1584,7 +1582,7 @@
           system_resolved_multicast_dns={{ _raw.get('system_resolved_multicast_dns', 'no') }}
 
     - name: Assert systemd-coredump configuration vars contain only safe values (coredump.conf injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1602,7 +1600,7 @@
           (e.g. 2G, 1000M, 0). No spaces, newlines, or other characters allowed.
 
     - name: Assert SSH algorithm vars contain only safe characters (sshd injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1623,7 +1621,7 @@
           Allowed: alphanumeric, @, dot, comma, underscore, hyphen (algorithm name characters).
 
     - name: Assert direnv boolean vars in config.yml are plain booleans (toml injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _allowed: ['true', 'false', 'yes', 'no', 'on', 'off', '1', '0', true, false]
@@ -1639,7 +1637,7 @@
           evaluation (every cd into a managed directory).
 
     - name: Assert system_usbguard_extra_rules entries are well-formed (USBGuard injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _usbguard_extra: "{{ _raw.get('system_usbguard_extra_rules', []) }}"
@@ -1657,7 +1655,7 @@
           Invalid entries: {{ _usbguard_extra | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
 
     - name: Assert system_usbguard_whitelist entries are well-formed (USBGuard injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _usbguard_wl: "{{ _raw.get('system_usbguard_whitelist', []) }}"
@@ -1672,7 +1670,7 @@
           Invalid entries: {{ _usbguard_wl | map('string') | reject('match', '^(allow|block|reject)\s+.+') | list }}
 
     - name: Assert container_release and container_image contain only safe characters (distrobox tag injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _cimage: "{{ _raw.get('container_image', '') | string }}"
@@ -1694,7 +1692,7 @@
           container_release must be alphanumeric/dot/hyphen (e.g. 44, f39, custom).
 
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1713,7 +1711,7 @@
           Disallowed: embedded literal newlines from YAML block/folded scalars.
 
     - name: Assert system_chrony_* vars in config.yml contain only safe characters (chrony.conf injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1775,7 +1773,7 @@
           (time sync will fail if NTS-KE port 4460 is blocked on your network).
 
     - name: Assert system_dns_primary/fallback/domains contain no newlines (resolved.conf injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1798,7 +1796,7 @@
           metacharacters. Remove any prohibited characters from config.yml.
 
     - name: Assert journald/auditd/aide/TLP/PAM vars in config.yml are safe (conf injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -1842,7 +1840,7 @@
           Fix: see assert that: conditions above for per-variable allowed patterns.
 
     - name: Assert system_sudo_timestamp_timeout is an integer in [0, 60] (sudoers injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
@@ -1862,7 +1860,7 @@
           Fix: use a plain integer 0-60 (e.g., 0 for re-auth on every sudo, 15 for default).
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _aide_paths: "{{ _raw.get('system_aide_monitoring_etc_paths', []) }}"
@@ -1906,7 +1904,7 @@
           paths) or supply at least one explicit path such as /etc/ssh/sshd_config.d.
 
     - name: Assert packages_go_install entries are safe Go module paths (go install RCE guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _go_packages: "{{ _raw.get('packages_go_install', []) }}"
@@ -1940,7 +1938,7 @@
           Unsafe entries: {{ _unsafe_entries }}.
 
     - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _go_packages_work: "{{ _raw.get('packages_go_install_work', []) }}"
@@ -1973,7 +1971,7 @@
           Unsafe entries: {{ _unsafe_entries }}.
 
     - name: Assert distrobox_host_exec_commands entries are safe command names (shell injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
@@ -1992,7 +1990,7 @@
           metacharacters from distrobox_host_exec_commands entries.
 
     - name: Assert distrobox_host_exec_commands entries are in the known-safe allowlist (host-exec escape guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _host_exec_commands: "{{ _raw.get('distrobox_host_exec_commands', []) }}"
@@ -2021,7 +2019,7 @@
           and add it to the allowlist in common/tasks/pre_flight_checks.yml.
 
     - name: Assert containers_prune_schedule contains only safe systemd calendar characters (systemd timer injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -2040,7 +2038,7 @@
           No newlines or other special characters allowed.
 
     - name: Assert system_dot_mode and system_dnssec_mode in config.yml are valid enum values (resolved config guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -2060,7 +2058,7 @@
       tags: [always]
 
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
-      when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
+      when: _config_raw is defined and _pf_gh_check_done is not defined
       vars:
         _raw: "{{ _config_raw }}"
         _profile: "{{ _raw.get('profile', 'work') }}"
@@ -2792,7 +2790,7 @@
           tags: [always]
 
     - name: Assert container_* vars contain only safe characters (INI injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _cimage2: "{{ _raw.get('container_image', '') | string }}"
@@ -2813,7 +2811,7 @@
           hyphen only. Use: registry.fedoraproject.org/image:tag@sha256:<64-hex-chars>
 
     - name: Assert pwquality vars are non-negative integers
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -2833,7 +2831,7 @@
           Fix: use plain integers only, e.g. system_pwquality_minlen: 14.
 
     - name: Assert login.defs aging vars are non-negative integers
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -2850,7 +2848,7 @@
           Fix: plain integers/octal only, e.g. system_pass_max_days: 365, system_home_mode: '0700'.
 
     - name: Assert sysctl extra dicts contain no shell metacharacters
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
         _extra: "{{ _raw.get('system_sysctl_extra', {}) }}"
@@ -2878,7 +2876,7 @@
           shell metacharacters (&, |, ;, >, <, $, (, ), backtick, space, tab).
 
     - name: Assert SSH forwarding vars have safe enum values
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -2926,7 +2924,7 @@
       tags: [always]
 
     - name: Assert system_core_pattern contains only safe characters (sysctl VALUE injection guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
@@ -3058,7 +3056,7 @@
           tags: [always]
 
     - name: Assert desktop_gnome_hardening_dconf is a non-empty list with /org/gnome/* keys (CIS dconf hardening guard)
-      when: _config_yml_raw.content is defined
+      when: _config_raw is defined
       tags: [always]
       vars:
         _raw: "{{ _config_raw }}"
