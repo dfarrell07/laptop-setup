@@ -32,6 +32,12 @@ endif
 # Guard against MAKEFLAGS flag injection (CWE-426) — attacker-supplied -x flag exposes vault password in shell trace. MUST be AFTER ifneq above.
 override MAKEFLAGS :=
 
+# Guard against SHELL variable injection (CWE-426) — 'make SHELL=/tmp/evil_sh all' causes every
+# recipe line to be invoked via the attacker-controlled shell, bypassing verify-ansible-args.sh,
+# preflight checks, and the SSTI guard with become:true (root) execution. The 'override' directive
+# defeats command-line variable assignments, the same mechanism used to lock MAKEFLAGS above.
+override SHELL := /bin/bash
+
 # Guard against BASH_ENV/ENV/ZDOTDIR shell-init injection (CWE-454/CWE-426).
 # BASH_ENV=/tmp/evil.sh make all causes the Makefile recipe to spawn a bash process
 # (via #!/usr/bin/env bash shebang) that sources BASH_ENV before any script code runs,
