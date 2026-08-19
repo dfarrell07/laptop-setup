@@ -95,17 +95,9 @@
           tags: [become]
 
         - name: Verify oc tarball is not a symlink
-          ansible.builtin.stat:
-            path: "{{ packages_oc_download.dest }}"
-            follow: false
-          register: packages_oc_tarball_stat
-          become: true
-          tags: [become]
-
-        - name: Fail if oc tarball is a symlink (TOCTOU attack detected)
-          ansible.builtin.fail:
-            msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
-          when: packages_oc_tarball_stat.stat.islnk
+          ansible.builtin.assert:
+            that: "not (packages_oc_download.dest is symlink)"
+            fail_msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
           become: true
           tags: [become]
 
@@ -262,18 +254,10 @@
           become: true
           tags: [become]
 
-        - name: Verify opm tarball is not a symlink
-          ansible.builtin.stat:
-            path: "{{ packages_opm_download.dest }}"
-            follow: false
-          register: packages_opm_tarball_stat
-          become: true
-          tags: [become]
-
         - name: Fail if opm tarball is a symlink (TOCTOU attack detected)
-          ansible.builtin.fail:
-            msg: "SECURITY: opm tarball is a symlink — aborting extraction to prevent TOCTOU attack"
-          when: packages_opm_tarball_stat.stat.islnk
+          ansible.builtin.assert:
+            that: "not (packages_opm_download.dest is symlink)"
+            fail_msg: "SECURITY: opm tarball is a symlink — aborting extraction to prevent TOCTOU attack"
           become: true
           tags: [become]
 
