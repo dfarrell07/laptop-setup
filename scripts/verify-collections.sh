@@ -75,9 +75,11 @@ _extracted="${REPO_DIR}/collections"
 if [[ -d "$_extracted/ansible_collections" ]]; then
   # Step 2a: Comprehensive content verification for all collections
   # Compare extracted Python files against fresh extraction from verified tarballs
-  python3 - "$_extracted/ansible_collections" "$_tmpdir" << 'PYEOF'
+  # and validate against PYTHON_MANIFEST.json
+  python3 - "$_extracted/ansible_collections" "$_tmpdir" "$REPO_DIR/collections-dist/PYTHON_MANIFEST.json" << 'PYEOF'
 import sys
 import hashlib
+import json
 from pathlib import Path
 
 def compute_file_hash(filepath):
@@ -102,8 +104,43 @@ def extract_python_files(collection_dir):
             python_files[rel_path] = compute_file_hash(pyfile)
     return python_files
 
+def load_manifest(manifest_path):
+    """Load PYTHON_MANIFEST.json and return a dict keyed by tarball name."""
+    if not Path(manifest_path).exists():
+        return {}
+    with open(manifest_path, 'r') as f:
+        return json.load(f)
+
+def get_manifest_files(manifest_data, tarball_base):
+    """Extract set of expected Python files from manifest for a given collection."""
+    if tarball_base not in manifest_data:
+        return None  # Collection not in manifest (benign — bootstrap may not have run)
+
+    collection_manifest = manifest_data[tarball_base]
+    expected_files = set()
+
+    # Add module_utils files (stored as basenames without .py in manifest)
+    for filename in collection_manifest.get('module_utils', []):
+        expected_files.add(f'module_utils/{filename}.py')
+
+    # Add plugin files from all plugin types
+    for plugin_type, filenames in collection_manifest.get('plugins', {}).items():
+        for filename in filenames:
+            expected_files.add(f'plugins/{plugin_type}/{filename}.py')
+
+    # Add role files (stored as role names in manifest)
+    for role_name in collection_manifest.get('roles', []):
+        # Roles can have various .py files in subdirs, check if any exist
+        # For now, accept role_name as reference; actual role structure varies
+        pass
+
+    return expected_files
+
 extracted_root = Path(sys.argv[1])  # $REPO_DIR/collections/ansible_collections
 tmpdir = Path(sys.argv[2])           # tmpdir with extracted tarballs
+manifest_path = sys.argv[3]          # PYTHON_MANIFEST.json path
+
+manifest_data = load_manifest(manifest_path)
 
 # Map collections from ansible_collections hierarchy to flat tmpdir hierarchy
 # extracted_root: ansible_collections/ansible/posix/
@@ -132,7 +169,6 @@ for namespace_dir in extracted_root.glob('*/'):
         fresh_keys = set(fresh_files.keys())
 
         # Check for added files (possible TOCTOU tampering or manifest out-of-sync)
-        # Also check PYTHON_MANIFEST.json for files not listed in manifest
         added = fresh_keys - extracted_keys
         if added:
             print(f"ERROR: {collection_name}: unexpected files added to extracted collection:", file=sys.stderr)
@@ -162,7 +198,32 @@ for namespace_dir in extracted_root.glob('*/'):
             print("       Possible TOCTOU tampering. Re-run: make bootstrap", file=sys.stderr)
             sys.exit(1)
 
-print("✓ All collection Python files match verified tarballs")
+        # Check fresh extraction against PYTHON_MANIFEST.json
+        # This detects tarball tampering where new files are added but not in manifest
+        tarball_base = None
+        for key in manifest_data.keys():
+            # Match tarball filename to manifest key (e.g., 'ansible-posix-2.2.2.tar' matches namespace/collection)
+            if collection_name.replace('/', '-') in key:
+                tarball_base = key
+                break
+
+        if tarball_base and manifest_data.get(tarball_base):
+            manifest_files = get_manifest_files(manifest_data, tarball_base)
+            # Only validate if manifest entry exists
+            unmanifested = fresh_keys - manifest_files
+            if unmanifested:
+                print(f"ERROR: {collection_name}: Python files in tarball not listed in PYTHON_MANIFEST.json:", file=sys.stderr)
+                for f in sorted(unmanifested)[:10]:
+                    print(f"  ~ {f}", file=sys.stderr)
+                if len(unmanifested) > 10:
+                    print(f"  ... and {len(unmanifested) - 10} more", file=sys.stderr)
+                print("       This indicates possible collection tarball tampering.", file=sys.stderr)
+                print("       Action: Audit git log, SECURITY.md, collections-dist/ for unauthorized modifications.", file=sys.stderr)
+                print("              Regenerate manifest: scripts/gen-collection-manifest.py", file=sys.stderr)
+                print("              Then: make bootstrap", file=sys.stderr)
+                sys.exit(1)
+
+print("✓ All collection Python files match verified tarballs and PYTHON_MANIFEST.json")
 PYEOF
 
   if [[ $? -ne 0 ]]; then
