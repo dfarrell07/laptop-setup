@@ -791,6 +791,8 @@ or silently tries Docker instead of Podman.
 
 **Cause:** `KIND_EXPERIMENTAL_PROVIDER=podman` and `DOCKER_HOST` must be in the shell environment when `make` runs. `make` spawns `sh` (not `zsh`), so `.zshrc` is not sourced. The environment.d config at `~/.config/environment.d/containers.conf` injects these via the systemd user session manager — but only after a **fresh login**.
 
+**Note:** The environment.d file is NOT deployed by default. Set `containers_environment_d_enabled: true` in `config.yml` then re-run `make containers` (or `make all`) to deploy it. This is disabled by default for security — it prevents untrusted graphical applications from reaching the Podman socket. Only enable on machines where all graphical session processes are trusted (e.g., development workstations running OVN-K/Submariner `make kind` workflows).
+
 **Fix:**
 ```bash
 # Verify the environment.d config is deployed:
