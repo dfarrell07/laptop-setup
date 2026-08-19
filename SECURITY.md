@@ -253,7 +253,7 @@ git commit -s -S -m "Scripts: update verify-collections.sh"
 
 **Local enforcement (.githooks/commit-msg):**
 - Lines 5-8: Rejects commits missing Signed-off-by text
-- Lines 21-51: Detects supply-chain file changes (21-26) and requires `commit.gpgsign=true` (32-51)
+- Lines 21-26: Detect supply-chain file changes; lines 32-51 enforce `commit.gpgsign=true`
 - Error messages clearly separate the checks
 
 **CI enforcement (linting.yml, gpg-signatures job):**
