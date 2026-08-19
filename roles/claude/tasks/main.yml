@@ -53,34 +53,32 @@
     - packages_install_binaries | bool
     - claude_pinned_version | length == 0
 
-- name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
-  ansible.builtin.assert:
-    that:
-      - claude_install_sha256 | length > 0
-      - claude_install_sha256 | string is match('^[a-f0-9]{64}$')
-    fail_msg: >-
-      SECURITY: claude_install_sha256 is not set in config.yml or is invalid.
-      Integrity verification of the Claude Code installer is MANDATORY.
-      The installer downloaded from {{ claude_install_url }} MUST be
-      verified using SHA256 before execution to prevent CDN-layer
-      compromises or supply-chain attacks.
-
-      REQUIRED FIX: Set claude_install_sha256 in config.yml to a valid
-      SHA256 hash (64 lowercase hexadecimal characters) before running
-      make all. Obtain the official hash from Anthropic's documentation:
-      https://docs.anthropic.com/claude/reference/claude-installation
-
-      Example:
-          claude_install_sha256: "a7f8d1c6b2e5d4c3a1f8e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6"
-
-      If you are skipping Claude installation, set:
-          claude_install_method: skip
-
-      This mandatory validation prevents unverified execution of remote
-      installation scripts during provisioning.
+- name: Warn when claude_install_sha256 is unset (TOFU advisory — Anthropic does not publish installer hashes)
+  ansible.builtin.debug:
+    msg: >-
+      SUPPLY CHAIN ADVISORY: claude_install_sha256 is not set in config.yml.
+      The Claude Code installer at {{ claude_install_url }} will be downloaded
+      without SHA256 verification. Anthropic does not currently publish a stable
+      hash for install.sh (it changes with each Claude Code release), so TOFU
+      (trust on first use) is the accepted model here. The domain restriction
+      (claude.ai/anthropic.com) and HTTPS provide the primary integrity controls.
+      To pin the hash, set claude_install_sha256 in config.yml once verified.
   when:
     - claude_install_method == 'native'
     - packages_install_binaries | bool
+    - claude_install_sha256 | length == 0
+
+- name: Assert claude_install_sha256 format if set (format validation)
+  ansible.builtin.assert:
+    that:
+      - claude_install_sha256 | string is match('^[a-f0-9]{64}$')
+    fail_msg: >-
+      SECURITY: claude_install_sha256 in config.yml is not a valid SHA256 hash.
+      Must be 64 lowercase hexadecimal characters. Got: {{ claude_install_sha256 }}.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_install_sha256 | length > 0
 
 - name: Install Claude Code via native binary
   when:

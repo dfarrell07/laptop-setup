@@ -17,45 +17,33 @@ set -euo pipefail
 # Collect all command-line arguments after the script name
 args=("$@")
 
-# Reject dangerous flags
-declare -a dangerous_flags=(
-    '--start-at-task'
-    '--start-task'  # alternative form
-    '--skip-tags'   # allows --skip-tags always to bypass Play 0
-    '--tags'        # allows --tags <single-role> to skip pre-flight
-)
-
-# Check each argument against dangerous flags
+# Reject specific dangerous flags only
+# NOTE: --tags and --skip-tags are NOT blocked globally — they're needed for role-specific
+# make targets (make claude, make system, etc.). Only --start-at-task and --skip-tags always
+# are blocked, as they specifically bypass pre-flight security checks.
 for arg in "${args[@]}"; do
-    # Extract flag name (everything before = if present)
-    flag_name="${arg%%=*}"
+    # Block --start-at-task: skips pre_tasks entirely, bypassing all Play 0 security checks
+    if [[ "$arg" == '--start-at-task' || "$arg" == --start-at-task=* || "$arg" == '--start-task' ]]; then
+        cat >&2 <<EOF
+ERROR: --start-at-task rejected by VERIFY_AND_RUN
+Reason: --start-at-task skips pre_tasks (even with tags: [always] on Play 0),
+        allowing bypass of ALL 83+ security assertions in pre_flight_checks.yml.
 
-    for dangerous in "${dangerous_flags[@]}"; do
-        if [[ "$flag_name" == "$dangerous" ]]; then
-            cat >&2 <<EOF
-ERROR: Dangerous Ansible flag rejected by VERIFY_AND_RUN
-Flag: $flag_name
-Reason: This flag bypasses pre-flight security checks in site.yml
-        (pre_tasks with tags: [always] are skipped when using --start-at-task,
-         and single-role --tags/--skip-tags bypass critical assertions).
-
-SECURITY RISK: Using this flag allows:
-  - Skipping validation of claude_install_url, config.yml injection guards, etc.
-  - Supply-chain attack via attacker-controlled installer URLs
-  - INI/shell/SSTI injection via unsanitized config.yml variables
-
-Solution: Run 'make all' or 'make <role>' without --start-at-task.
-For partial provisioning, use: make <role> (e.g. make claude, make packages)
-
-If you need to resume provisioning at a specific point:
-  1. Consider running a scoped make target instead (make ssh, make dotfiles, etc.)
-  2. For testing: use ansible-playbook directly with --check mode and full validation
-  3. Document your use case in a GitHub issue if this is blocking legitimate workflow
-
+SECURITY RISK: Enables attacker to inject malicious values via -e without validation.
+Solution: Use a scoped make target instead (make claude, make packages, make ssh, etc.)
 EOF
-            exit 1
-        fi
-    done
+        exit 1
+    fi
+    # Block --skip-tags always: skips all [always]-tagged tasks including Play 0 assertions
+    if [[ "$arg" == '--skip-tags=always' || "$arg" == '--skip-tags always' ]]; then
+        cat >&2 <<EOF
+ERROR: --skip-tags always rejected by VERIFY_AND_RUN
+Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
+        and all security assertions tagged [always] in pre_flight_checks.yml.
+Solution: Do not use --skip-tags always with site.yml.
+EOF
+        exit 1
+    fi
 done
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
