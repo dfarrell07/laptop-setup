@@ -108,6 +108,40 @@ fapolicyd enforces a deny-all, permit-by-exception policy. Only binaries install
 
 ---
 
+## packages: nmap Network Scanning on Work Machines
+
+**Symptom:**
+Accidental or test `nmap` scans against Red Hat internal infrastructure (gitlab.cee.redhat.com, corporate VPN networks, internal subnets) trigger Intrusion Detection System (IDS) or Intrusion Prevention System (IPS) alerts, potentially resulting in IT incident response investigation or temporary network access suspension.
+
+**Cause:**
+The `packages` role installs `nmap` on work profile machines for OVN-Kubernetes and Submariner network debugging (roles/packages/defaults/main.yml:121). While nmap is a legitimate diagnostic tool for local cluster troubleshooting (kind clusters, test pods, home lab networks), corporate security monitoring systems flag nmap traffic patterns as reconnaissance activity.
+
+**Fix:**
+- **Use nmap ONLY on local networks:** kind clusters (127.0.0.1, 172.18.0.0/16), home lab environments, isolated test subnets, or explicitly approved penetration testing scenarios.
+- **Never scan Red Hat corporate infrastructure:** gitlab.cee.redhat.com, code.engineering.redhat.com, VPN-assigned subnets, or any host on the corporate network.
+- **For corporate host debugging, use approved tools instead:** `ping`, `traceroute`, `nc` (netcat), `ss`, `ip`, or `curl` for basic connectivity/port checks. These tools perform targeted single-connection tests and do not trigger IDS/IPS heuristics.
+- **If an accidental scan occurs:** Contact Red Hat IT immediately via ServiceNow to report the incident and prevent escalation. Include timestamp, source IP, and target range. Proactive disclosure typically results in a warning rather than access suspension.
+- **To remove nmap:** Set `packages_networking_work: []` in config.yml to override the default list, or selectively exclude nmap by filtering the list.
+
+**Example safe nmap usage:**
+```bash
+# Safe: scanning local kind cluster nodes
+nmap -p 10250,10256 172.18.0.2-172.18.0.5
+
+# Safe: scanning home lab Raspberry Pi cluster
+nmap -sV 192.168.1.100-192.168.1.105
+
+# UNSAFE — DO NOT RUN: corporate GitLab server
+nmap -p- gitlab.cee.redhat.com  # IDS ALERT, incident response likely
+
+# UNSAFE — DO NOT RUN: VPN subnet reconnaissance
+nmap 10.0.0.0/8  # IDS ALERT, may trigger access suspension
+```
+
+**CSB IT ticket:** Only if an IDS/IPS alert has already been generated and requires remediation. No ticket needed for preventive removal or safe local-only usage.
+
+---
+
 ## system: Failed to Restart firewalld
 
 **Symptom:**
