@@ -23,7 +23,7 @@ $(error ERROR: Provisioning with 'make -x' is forbidden — shell tracing expose
 	Use: make all  (no -x flag). For Ansible debugging: make all -- -vv)
 endif
 
-# Guard against MAKEFLAGS environment variable injection (CWE-426) — MUST be AFTER ifneq above.
+# Guard against MAKEFLAGS flag injection (CWE-426) — attacker-supplied -x flag exposes vault password in shell trace. MUST be AFTER ifneq above.
 override MAKEFLAGS :=
 
 CONTAINER ?= fedora-dev
@@ -35,8 +35,7 @@ CONTAINER ?= fedora-dev
 # or other --skip-tags values (needed for role-specific targets like make claude).
 override VERIFY_AND_RUN := scripts/verify-ansible-args.sh
 
-# Explicitly set ANSIBLE_COLLECTIONS_PATH to prevent environment variable override (CWE-426)
-# REQUIRED: guard against ANSIBLE_COLLECTIONS_PATH environment variable injection
+# Prevent ANSIBLE_COLLECTIONS_PATH injection (CWE-426) — guard against untrusted collections search path. REQUIRED: block environment variable override.
 export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:/usr/share/ansible/collections
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
