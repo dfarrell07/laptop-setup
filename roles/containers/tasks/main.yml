@@ -347,6 +347,12 @@
 # Clears unqualified-search-registries so `podman pull nginx` (short/unqualified name)
 # fails rather than silently querying docker.io where namespace squatting can deliver
 # a malicious image. Users must use full names (e.g. docker.io/library/nginx).
+- name: Stat system-level registries.conf (preserve existing IT-managed policies)
+  ansible.builtin.stat:
+    path: /etc/containers/registries.conf
+  register: containers_registries_system_stat
+  when: is_linux
+
 - name: Deploy registries.conf to enforce fully-qualified image references
   ansible.builtin.template:
     src: registries.conf.j2
@@ -355,6 +361,18 @@
   when:
     - is_linux
     - containers_enforce_fqin | bool
+    - not (containers_registries_system_stat.stat.exists | default(false))
+
+- name: Warn when system-level registries.conf takes precedence
+  ansible.builtin.debug:
+    msg: >-
+      System-level /etc/containers/registries.conf exists; user-level config not deployed
+      (IT policy preserved). User config would be ignored anyway — Podman reads system-level
+      /etc/containers first and stops when unqualified-search-registries is found there.
+  when:
+    - is_linux
+    - containers_enforce_fqin | bool
+    - containers_registries_system_stat.stat.exists | default(false)
 
 - name: Remove registries.conf (fully-qualified image enforcement disabled)
   ansible.builtin.file:
