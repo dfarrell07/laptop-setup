@@ -57,7 +57,7 @@
         - is_dnf
         - system_chrony_service_enabled | bool
         - not system_is_container
-        - not csb_detected
+        - not csb_rhel
 
     - name: Install chrony (Fedora/RHEL)
       ansible.builtin.dnf:
@@ -67,7 +67,7 @@
         - is_dnf
         - system_chrony_service_enabled | bool
         - not system_is_container
-        - not csb_detected
+        - not csb_rhel
   rescue:
     - name: Restore timesyncd if chrony install failed (Fedora)
       ansible.builtin.systemd:
@@ -80,7 +80,7 @@
       when:
         - is_dnf
         - not system_is_container
-        - not csb_detected
+        - not csb_rhel
 
     - name: Re-raise chrony install failure
       ansible.builtin.fail:
@@ -102,7 +102,7 @@
     - system_chrony_authselectmode == 'require'
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
-    - not csb_detected
+    - not csb_rhel
 
 - name: Assert minsources does not exceed NTS server count with authselectmode=require
   ansible.builtin.assert:
@@ -115,7 +115,7 @@
     - system_chrony_authselectmode == 'require'
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
-    - not csb_detected
+    - not csb_rhel
 
 - name: "Warn: sourcedir suppressed — DHCP sources incompatible with authselectmode=require"
   ansible.builtin.debug:
@@ -129,7 +129,7 @@
     - system_chrony_authselectmode == 'require'
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
-    - not csb_detected
+    - not csb_rhel
 
 - name: "Warn: no NTS servers configured — chrony uses unauthenticated pool only"
   ansible.builtin.debug:
@@ -142,7 +142,7 @@
     - system_chrony_nts_servers | length == 0
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
-    - not csb_detected
+    - not csb_rhel
 
 - name: Deploy NTS-authenticated chrony config
   ansible.builtin.template:
@@ -153,7 +153,7 @@
   when:
     # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
     # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
-    - not csb_detected
+    - not csb_rhel
     # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
     - system_chrony_service_enabled | bool
     # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
@@ -170,7 +170,7 @@
     - not (system_chrony_service_enabled | bool)
     - is_dnf or is_apt
     - not system_is_container
-    - not csb_detected
+    - not csb_rhel
   failed_when: false
 
 - name: Unmask systemd-timesyncd when chrony is disabled
@@ -195,7 +195,7 @@
     - is_dnf
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
-    - not csb_detected
+    - not csb_rhel
   register: _chrony_timesyncd_fallback
   ignore_errors: true
 
@@ -208,7 +208,7 @@
     - is_dnf
     - not (system_chrony_service_enabled | bool)
     - not system_is_container
-    - not csb_detected
+    - not csb_rhel
     - _chrony_timesyncd_fallback is not failed
 
 - name: "Warn: no time sync active (timesyncd not available on this host)"
@@ -220,7 +220,7 @@
       system_chrony_service_enabled: true in config.yml.
   when:
     - is_dnf
-    - not csb_detected
+    - not csb_rhel
     - not system_is_container
     - not (system_chrony_service_enabled | bool)
     - _chrony_timesyncd_fallback is failed
@@ -234,7 +234,7 @@
     - system_chrony_service_enabled | bool
     - is_dnf or is_apt
     - not system_is_container
-    - not csb_detected
+    - not csb_rhel
 
 - name: "Warn: NTS-KE may be blocked on CSB Fedora hybrid"
   ansible.builtin.debug:
@@ -245,7 +245,7 @@
   when:
     - system_chrony_service_enabled | bool
     - csb_detected
-    - not csb_detected
+    - not csb_rhel
 
 - name: "Warn: authselectmode require means no fallback if TCP 4460 blocked"
   ansible.builtin.debug:
@@ -256,7 +256,7 @@
   when:
     - system_chrony_service_enabled | bool
     - system_chrony_authselectmode == 'require'
-    - not csb_detected
+    - not csb_rhel
 
 - name: "Warn: authselectmode prefer — unauthenticated fallback active (standard deployment)"
   ansible.builtin.debug:
