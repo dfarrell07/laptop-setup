@@ -79,3 +79,25 @@
           This may be a transient network error or missing repo access.
           Continuing playbook execution.
       when: not csb_rhel
+
+# --- Post-install service masking ---
+# OVN/openvswitch service masking must run AFTER package installation.
+# System role's service_masking.yml runs in Play 1 (before packages), so ovn/openvswitch
+# services remain unmasked on first provision. This task ensures masking occurs in the
+# same provision run as package installation.
+- name: Mask openvswitch and OVN services after package installation
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - ovs-vswitchd.service
+    - ovsdb-server.service
+    - ovn-controller.service
+    - ovn-northd.service
+  become: true
+  tags: [become]
+  when:
+    - is_dnf
+    - profile == 'work'
+    - not csb_rhel
+    - not system_is_container
