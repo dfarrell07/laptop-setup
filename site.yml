@@ -82,7 +82,11 @@
       when: ansible_facts['system'] | default('Linux') == 'Linux'
 
   post_tasks:
-    # NetworkManager restart and systemd-resolved restart handlers fire here (end of Play 1).
+    - name: Flush handlers before DNS wait (ensure NetworkManager and systemd-resolved have restarted)
+      ansible.builtin.meta: flush_handlers
+      tags: [system]
+
+    # NetworkManager restart and systemd-resolved restart handlers have executed above.
     # Wait for DNS connectivity before Play 2 begins — Play 2 needs DNS for git clones,
     # binary downloads, and SSH host key fetches.
     - name: Wait for DNS resolution after NetworkManager and systemd-resolved restart
