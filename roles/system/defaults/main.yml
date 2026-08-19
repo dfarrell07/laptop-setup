@@ -227,9 +227,9 @@ system_power_key: lock  # HandlePowerKey action: lock (screen lock), suspend, po
 # restart the CUPS daemon even when cups.service is disabled. Set false if any
 # printing is needed — cups.socket is required for all print dialogs (native apps, browsers, GNOME, Flatpak).
 system_disable_printing: false
-# CIS 2.1.5: disable BT on machines with no BT peripherals. Set true in config.yml to
-# blacklist btusb/bluetooth kernel modules (requires reboot to take effect).
-system_disable_bluetooth: false
+# CIS 2.1.5: disable BT on machines with no BT peripherals. Set false in config.yml to
+# enable Bluetooth (requires reboot to take effect).
+system_disable_bluetooth: true
 system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
 # install/start bolt; false on VMs and containers
 # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
