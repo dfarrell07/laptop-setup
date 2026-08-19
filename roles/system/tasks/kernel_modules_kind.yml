@@ -22,12 +22,39 @@
     - _modules_disabled_state.content is defined
     - (_modules_disabled_state.content | b64decode | trim) == '1'
 
-- name: Fail if modules_disabled ratchet prevents module loading
+- name: Update sysctl config when transitioning modules_disabled 1→0
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.d/90-hardening.conf
+    regexp: '^kernel\.modules_disabled\s*='
+    line: 'kernel.modules_disabled=0'
+  become: true
+  tags: [become]
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - system_modules_disabled | int == 0
+    - _modules_disabled_state.content is defined
+    - (_modules_disabled_state.content | b64decode | trim) == '1'
+  failed_when: false
+
+- name: Inform user that reboot is required to apply modules_disabled=0
+  ansible.builtin.debug:
+    msg: >-
+      Updated /etc/sysctl.d/90-hardening.conf to set kernel.modules_disabled=0.
+      REBOOT NOW to reset the ratchet, then re-run provisioning to complete setup.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - system_modules_disabled | int == 0
+    - _modules_disabled_state.content is defined
+    - (_modules_disabled_state.content | b64decode | trim) == '1'
+
+- name: Fail gracefully after config update to require reboot
   ansible.builtin.fail:
     msg: |
       CANNOT LOAD KERNEL MODULES: kernel.modules_disabled=1 is active (one-way ratchet).
       Cause: Previous provisioning run set modules_disabled=1 in /etc/sysctl.d/90-hardening.conf.
-      Fix: REBOOT to reset the ratchet, then re-run provisioning.
+      Fix: Reboot required. Re-run 'make all' after reboot.
       Impact: kind/Kubernetes networking will be broken until reboot.
 
       Current state: {{ (_modules_disabled_state.content | b64decode | trim) if _modules_disabled_state.content is defined else 'unknown' }}
