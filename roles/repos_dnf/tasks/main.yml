@@ -229,7 +229,7 @@
   block:
     - name: Assert acli baseurl targets expected internal domain
       ansible.builtin.assert:
-        that: repos_dnf_acli_baseurl is match('^https://.*\.redhat\.com/.*')
+        that: repos_dnf_acli_baseurl is match('^https://[a-zA-Z0-9._-]+\.redhat\.com/.*')
         fail_msg: "repos_dnf_acli_baseurl must be an internal Red Hat URL (https://*.redhat.com/...)"
     - name: Add acli repo
       ansible.builtin.yum_repository:

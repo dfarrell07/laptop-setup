@@ -2,6 +2,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Reject hostile HOME overrides (e.g. HOME=/tmp/attacker make backup)
+_real_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+[[ "$HOME" == "$_real_home" ]] || { echo "ERROR: HOME mismatch (got '$HOME', expected '$_real_home')" >&2; exit 1; }
+
 DRY_RUN=false
 for arg in "$@"; do
   case $arg in
@@ -126,6 +130,10 @@ _backup_array() {
   local f src dest
   for f in "$@"; do
     src="${HOME}/${f}"
+    if [[ -L "$src" ]]; then
+      echo "[warn] skipping symlink: $src" >&2
+      continue
+    fi
     if [[ -f "$src" ]]; then
       dest="${BACKUP_DIR}/${f}"
       if [[ "$DRY_RUN" = true ]]; then
@@ -135,8 +143,6 @@ _backup_array() {
         cp -p "$src" "$dest"
       fi
       count=$((count + 1))
-    elif [[ -L "$src" ]]; then
-      echo "[warn] broken symlink, skipping: $src" >&2
     fi
   done
 }
@@ -149,6 +155,12 @@ if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT
   exit 1
 fi
 
+_vault_pass_sh="${SCRIPT_DIR}/vault-pass.sh"
+if [[ -f "$_vault_pass_sh" ]] && grep -q "pass='" "$_vault_pass_sh" && ! grep -q 'ykman\|hmac' "$_vault_pass_sh"; then
+  echo "ERROR: vault-pass.sh appears to contain a plaintext password; back up out-of-band and exclude from automated backup" >&2
+  exit 1
+fi
+
 _backup_array "${OPTIONAL_FILES[@]}"
 
 # Catch-all: any private key in ~/.ssh/ not explicitly listed above
@@ -157,6 +169,7 @@ for key in "${HOME}/.ssh"/id_*; do
     *.pub) continue ;;
     */id_ed25519_sk|*/id_ed25519_sk_signing|*/id_rsa_redhat) continue ;;
   esac
+  [[ -L "$key" ]] && { echo "[warn] skipping symlink: $key" >&2; continue; }
   [[ -f "$key" ]] || continue
   dest="${BACKUP_DIR}/.ssh/$(basename "$key")"
   if [[ "$DRY_RUN" = true ]]; then
@@ -190,6 +203,7 @@ fi
 _gpg_dir="${HOME}/.gnupg/private-keys-v1.d"
 if [[ -d "$_gpg_dir" ]]; then
   for key in "$_gpg_dir"/*.key; do
+    [[ -L "$key" ]] && { echo "[warn] skipping symlink: $key" >&2; continue; }
     [[ -f "$key" ]] || continue
     dest="${BACKUP_DIR}/.gnupg/private-keys-v1.d/$(basename "$key")"
     if [[ "$DRY_RUN" = true ]]; then

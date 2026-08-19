@@ -61,7 +61,7 @@ EOF
 done
 
 # Override or clear critical env vars to prevent environment-injection attacks.
-# Covers nine vectors — SET known-safe values; UNSET those that must be clean:
+# Covers eleven vectors — SET known-safe values; UNSET those that must be clean:
 #   ANSIBLE_CONFIG              — evil cfg replaces all plugin paths + vault_password_file
 #   ANSIBLE_VAULT_PASSWORD_FILE — redirects vault decryption to an exfiltration script
 #   ANSIBLE_COLLECTIONS_PATH    — loads malicious collections (role 0 code execution)
@@ -72,6 +72,8 @@ done
 #   ANSIBLE_PYTHON_INTERPRETER  — redirects Python used by Ansible to attacker binary
 #   ANSIBLE_CACHE_PLUGIN*       — crafted facts cache plants spoofed ansible_distribution/ansible_fqdn,
 #                                 skewing CSB detection (csb_detect.yml reads cached facts before gather)
+#   ANSIBLE_INVENTORY_PLUGINS   — malicious inventory plugin injects host vars (e.g. ansible_python_interpreter)
+#                                 that override connection defaults, executing attacker-controlled binary
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
@@ -79,10 +81,16 @@ export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/coll
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
 export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
+export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
+export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
+export ANSIBLE_INVENTORY_PLUGINS=""  # empty string forces compiled-in defaults only; prevents malicious inventory plugin from injecting host vars (e.g. ansible_python_interpreter) that bypass interpreter controls
+export ANSIBLE_VARS_PLUGINS=""  # block vars plugin path hijacking — vars plugins run before any play task at higher precedence than group_vars; a malicious plugin can override claude_install_url, dotfiles_repo_url, or any config toggle before pre_flight_checks.yml executes, bypassing SSTI guards entirely
 unset ANSIBLE_CACHE_PLUGIN ANSIBLE_CACHE_PLUGIN_CONNECTION ANSIBLE_CACHE_PLUGIN_TIMEOUT ANSIBLE_CACHE_PLUGIN_PREFIX  # facts-cache injection
+export ANSIBLE_CALLBACK_PLUGINS=""  # block callback plugin path hijacking — prevents exfiltration of slurp task results via malicious callback
 unset MOLECULE_PROJECT_DIRECTORY  # attacker-controlled path redirects include_tasks to bypass pre_flight_checks.yml
+export ANSIBLE_LOOKUP_PLUGINS=""  # shadowed env plugin can forge _pf_is_molecule=true, bypassing all security assertions
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 
 # Verify collections integrity (defense-in-depth: supply chain verification)

@@ -90,6 +90,7 @@
   loop: "{{ containers_vault_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item.registry | default('unknown') }}"
+  no_log: true
   when:
     - is_linux
     - registry_tokens | length > 0

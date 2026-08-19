@@ -7,3 +7,17 @@ Type=oneshot
 # because they are tagged (not dangling) — podman system prune without --all
 # skips non-dangling images regardless of the label filter
 ExecStart=/usr/bin/podman system prune --force --filter label!=manager=distrobox
+
+# Systemd sandbox options to limit privilege escalation via setuid helpers
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Rootless podman container storage and runtime directories
+ReadWritePaths=%h/.local/share/containers
+ReadWritePaths=%t/containers
+ProtectHostname=true
+ProtectClock=true
+LockPersonality=true
+RestrictRealtime=true
+# podman communicates over Unix sockets only (no network needed for prune)
+RestrictAddressFamilies=AF_UNIX

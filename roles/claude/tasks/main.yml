@@ -345,6 +345,26 @@
         mode: "0644"
       register: _queue_timer
 
+    - name: Find unmanaged unit files in ~/.config/systemd/user
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+        patterns:
+          - "*.service"
+          - "*.timer"
+        file_type: file
+        recurse: false
+      register: _systemd_user_units
+
+    - name: Warn on unmanaged systemd user unit files before daemon-reload
+      ansible.builtin.fail:
+        msg: >-
+          Unmanaged systemd user unit file detected before daemon-reload:
+          {{ item.path }}. This file is not managed by this playbook and may
+          have been planted by an attacker. Remove it or add it to the
+          allowlist before re-running provisioning.
+      loop: "{{ _systemd_user_units.files }}"
+      when: item.path | basename not in ['claude-queue.service', 'claude-queue.timer']
+
     - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler
       ansible.builtin.systemd:
         scope: user

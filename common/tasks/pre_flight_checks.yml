@@ -292,15 +292,18 @@
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_raw }}"
+      tags: [always]
       ansible.builtin.assert:
         that:
           - _raw.get('claude_bin_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
           - _raw.get('claude_remote_control_config_dir', '') | string is match('^[a-zA-Z0-9/._~-]*$')
+          - _raw.get('claude_queue_poller_path', '') | string is match('^[a-zA-Z0-9/._~-]*$')
           - _raw.get('claude_queue_boot_delay_sec', 60) | int >= 0
           - _raw.get('claude_queue_poll_interval_sec', 120) | int >= 0
         fail_msg: >-
-          SECURITY: claude_bin_path, claude_remote_control_config_dir must contain only
-          alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection guard).
+          SECURITY: claude_bin_path, claude_remote_control_config_dir, claude_queue_poller_path
+          must contain only alphanumeric/slash/dot/underscore/tilde/hyphen (plist XML injection
+          guard; systemd unit ExecStart newline injection guard).
           claude_queue_boot_delay_sec and claude_queue_poll_interval_sec must be
           non-negative integers (systemd timer directive injection guard).
 
@@ -781,7 +784,7 @@
         that:
           - >-
             (_acli_baseurl | length == 0) or
-            (_acli_baseurl is match('^https://.*\.redhat\.com/.*'))
+            (_acli_baseurl is match('^https://[a-zA-Z0-9._-]+\.redhat\.com/.*'))
         fail_msg: >-
           SECURITY: repos_dnf_acli_baseurl in config.yml is set but does not target a trusted
           internal Red Hat domain. This value is passed directly to dnf as a package repository
@@ -967,6 +970,7 @@
             src: "{{ playbook_dir }}/scripts/vault-pass.sh"
           register: _vault_pass_sh
           failed_when: false
+          no_log: true
           tags: [always]
 
         - name: Check if vault.yml exists and may be plaintext
@@ -974,6 +978,7 @@
             src: "{{ playbook_dir }}/group_vars/all/vault.yml"
           register: _vault_yml
           failed_when: false
+          no_log: true
           tags: [always]
 
         - name: Assert vault.yml is not encrypted with weak password stub

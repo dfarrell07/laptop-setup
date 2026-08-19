@@ -8,14 +8,14 @@ Wants=network-online.target
 Type=oneshot
 TimeoutStopSec={{ claude_queue_timeout | int + 300 }}
 RuntimeMaxSec={{ (claude_queue_max_issues_per_run | int) * (claude_queue_timeout | int) + 300 }}
-ExecStart={{ claude_queue_poller_path }}
+ExecStart={{ claude_queue_poller_path | regex_replace('[\r\n].*', '') }}
 Environment=CLAUDE_QUEUE_REPO={{ claude_queue_repo | regex_replace('[\r\n].*', '') }}
 Environment=CLAUDE_BIN={{ claude_bin_path }}
 Environment=CLAUDE_QUEUE_MAX_TURNS={{ claude_queue_max_turns | int }}
 Environment=CLAUDE_QUEUE_TIMEOUT={{ claude_queue_timeout | int }}
 Environment=CLAUDE_QUEUE_MAX_ISSUES_PER_RUN={{ claude_queue_max_issues_per_run | int }}
 Environment=CLAUDE_QUEUE_HOST_LABEL={{ claude_queue_host_label | regex_replace('[\r\n].*', '') }}
-Environment=CLAUDE_CONFIG_DIR={{ claude_queue_config_dir }}
+Environment=CLAUDE_CONFIG_DIR={{ claude_queue_config_dir | regex_replace('[\r\n].*', '') }}
 Environment=CLAUDE_QUEUE_LOG_DIR={{ claude_log_dir }}
 Environment=CLAUDE_QUEUE_ALLOWED_AUTHORS={{ claude_queue_allowed_authors | map('regex_replace', '[\r\n,=].*', '') | join(',') }}
 UnsetEnvironment=ANTHROPIC_BASE_URL HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
