@@ -14,14 +14,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Step 1: Verify SHA256SUMS.asc GPG signature if available (defense-in-depth)
+# Step 1: Verify SHA256SUMS.asc GPG signature (defense-in-depth)
+# Fail fatally if key is missing or signature is invalid
 cd "${REPO_DIR}/collections-dist"
 if [[ -f SHA256SUMS.asc ]]; then
-  if ! gpg --verify SHA256SUMS.asc SHA256SUMS 2>/dev/null; then
-    echo "WARNING: SHA256SUMS.asc GPG signature verification failed or key not found" >&2
-    echo "         Continuing with hash verification only (TOFU model)" >&2
-  else
+  gpg_output=$(gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
+  gpg_exit=${gpg_exit:-0}
+
+  if [[ $gpg_exit -eq 0 ]]; then
     echo "✓ SHA256SUMS.asc GPG signature verified"
+  else
+    # Exit code 2: "Can't check signature: No public key" (missing key)
+    # Exit code 1: Bad signature / general verification failure
+    if echo "$gpg_output" | grep -q "No public key"; then
+      echo "FATAL: Collections signing key not found in GPG keyring" >&2
+      echo "       Import the signing key before proceeding:" >&2
+      echo "       gpg --import <keyfile>" >&2
+      exit 1
+    else
+      echo "FATAL: SHA256SUMS.asc GPG signature verification failed" >&2
+      echo "       Possible tampering detected. Do not proceed." >&2
+      exit 1
+    fi
   fi
 fi
 
