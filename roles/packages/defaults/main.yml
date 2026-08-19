@@ -250,13 +250,8 @@ packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09c
 packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
-packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain
-  # downloads from dl.google.com and aligns with the SHA256-pinned pattern used for all other
-  # binary downloads. If a go install tool requires a newer Go than the system package provides,
-  # update the golang DNF/apt package first, then re-run. Set 'auto' in config.yml only when
-  # intentionally allowing toolchain self-replacement (e.g. on a developer workstation with
-  # unrestricted internet and an older distro Go). Note: module downloads still occur via
-  # GOPROXY — a full air-gap also needs GOPROXY=off or an internal proxy
+packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' pins to system Go.
+  # Set 'auto' in config.yml only to allow toolchain self-replacement (e.g. older distro Go).
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 # Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Go binary SHA256 is
