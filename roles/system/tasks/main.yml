@@ -45,6 +45,17 @@
       Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
   tags: [always]
 
+# --- Load kernel modules for kind BEFORE hardening_core applies modules_disabled ratchet ---
+# kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
+# sysctl.yml (included by hardening_core.yml) writes this value, and sshd.yml's
+# flush_handlers triggers sysctl --system mid-play. If kernel_modules_kind.yml runs
+# after that flush, modprobe commands fail with EPERM and kind networking is broken
+# until reboot. Moving kernel module loads to pre-flight phase (before any hardening)
+# eliminates the race entirely.
+- name: Kernel modules for kind (pre-hardening)
+  ansible.builtin.include_tasks: kernel_modules_kind.yml
+  when: profile == 'work' or install_virtualization | bool
+
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
@@ -232,10 +243,6 @@
 
 - name: SSHD hardening, SELinux port label, and crypto policy
   ansible.builtin.import_tasks: sshd.yml
-
-- name: Kernel modules for kind
-  ansible.builtin.include_tasks: kernel_modules_kind.yml
-  when: profile == 'work' or install_virtualization | bool
 
 - name: NetworkManager configuration
   ansible.builtin.import_tasks: nm.yml
