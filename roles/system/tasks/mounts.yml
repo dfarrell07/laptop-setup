@@ -44,7 +44,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when: not system_is_container
 
-- name: Apply /tmp hardening immediately via remount  # noqa: command-instead-of-module
+- name: Remount /tmp nosuid,nodev[,noexec] (CIS 1.1.2.x — live before reboot)  # noqa: command-instead-of-module
   vars:
     _noexec_opt: "{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }}"
   ansible.builtin.command:
@@ -92,7 +92,7 @@
   check_mode: false  # read-only probe — must run in check mode
   when: not system_is_container  # findmnt triggers systemd mount events that crash privileged Podman container PID 1
 
-- name: Apply /dev/shm hardening immediately via remount  # noqa: command-instead-of-module
+- name: Remount /dev/shm nosuid,nodev,noexec (CIS 1.1.7.x — live before reboot)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
   register: _devshm_remount_result
@@ -272,7 +272,7 @@
     - not csb_rhel or (system_home_nosuid_force | bool)
   failed_when: false
 
-- name: Apply /home nosuid immediately via remount (CIS 1.1.9)  # noqa: command-instead-of-module
+- name: Remount /home nosuid,nodev (CIS 1.1.9)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev /home
   register: _home_remount_result
@@ -389,7 +389,7 @@
     - system_boot_mountpoint.rc | default(-1) == 0
   failed_when: false
 
-- name: Apply /boot hardening immediately via remount  # noqa: command-instead-of-module
+- name: Remount /boot nosuid,nodev,noexec (live before reboot)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /boot
   register: _boot_remount_result
@@ -535,7 +535,7 @@
     - system_boot_efi_mountpoint.rc | default(-1) == 0
   failed_when: false
 
-- name: Apply /boot/efi hardening immediately via remount  # noqa: command-instead-of-module
+- name: Remount /boot/efi nosuid,noexec (live before reboot)  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,noexec /boot/efi
   register: _boot_efi_remount_result
