@@ -56,6 +56,18 @@
   # NOTE: no tags — see roles/claude/tasks/main.yml for explanation of why tags: [always]
   # is deliberately omitted here (to survive --skip-tags always bypass attempts).
 
+- name: SECURITY assert packages_kubectl_source is valid enum value
+  ansible.builtin.assert:
+    that:
+      - packages_kubectl_source in ['ocp', 'upstream']
+    fail_msg: >-
+      SECURITY: packages_kubectl_source must be either 'ocp' or 'upstream'.
+      Got: {{ packages_kubectl_source | default('UNDEFINED') }}.
+      'ocp' extracts kubectl from OCP tarball (tracks OCP release cadence).
+      'upstream' downloads kubectl from dl.k8s.io (tracks upstream Kubernetes).
+      An invalid value causes kubectl installation to be silently skipped.
+      Fix: Set packages_kubectl_source to 'ocp' or 'upstream' in config.yml.
+
 # On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
 # outside dnf won't be in fapolicyd's trust database and will be blocked at runtime.
 # Downloads would succeed but every invocation would fail with EPERM.
@@ -390,10 +402,30 @@
         name="${plugin%%@*}"
         if $krew list 2>/dev/null | grep -q "^$name "; then
           # Plugin exists - upgrade to pinned version (krew upgrade accepts @version)
-          $krew upgrade "$plugin" 2>&1 | grep -v "is the same as the current" || true
+          # Suppress expected "is the same as the current" message but let real errors fail
+          if ! output=$($krew upgrade "$plugin" 2>&1); then
+            if echo "$output" | grep -q "is the same as the current"; then
+              : # suppress expected message
+            else
+              echo "$output" >&2
+              exit 1
+            fi
+          else
+            echo "$output"
+          fi
         fi
         # Install (idempotent if already at version; fails only on true error)
-        $krew install "$plugin" 2>&1 | grep -v "is already installed" || true
+        # Suppress expected "is already installed" message but let real errors fail
+        if ! output=$($krew install "$plugin" 2>&1); then
+          if echo "$output" | grep -q "is already installed"; then
+            : # suppress expected message
+          else
+            echo "$output" >&2
+            exit 1
+          fi
+        else
+          echo "$output"
+        fi
       done
     executable: /bin/bash
   timeout: 120
