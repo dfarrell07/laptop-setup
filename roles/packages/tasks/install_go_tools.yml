@@ -65,6 +65,12 @@
     HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
 
 
+- name: Create GOTMPDIR directory for Go tool compilation
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/tmp"
+    state: directory
+    mode: "0700"
+
 - name: Install Go tools
   # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
   # with warm cache are fast. Every run reports as changed (false positive, accepted).
@@ -76,6 +82,7 @@
   environment:
     GOPATH: "{{ ansible_facts['user_dir'] }}/go"
     GOBIN: "{{ ansible_facts['user_dir'] }}/go/bin"
+    GOTMPDIR: "{{ ansible_facts['user_dir'] }}/tmp"  # security: prevent /tmp noexec failures + explicit tmpdir for Go compiler
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
     HTTPS_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
     HTTP_PROXY: "{{ _gosumdb_proxy_env }}"  # explicit empty string overrides inherited proxy when network_proxied=false
@@ -102,7 +109,7 @@
   delay: 5
   until: |-
     packages_go_results.rc == 0 or
-    'permission denied' in (packages_go_results.stderr | default(''))
+    (packages_go_results.rc != 0 and 'permission denied' not in (packages_go_results.stderr | default('')))
 
 - name: Collect failed Go tool names (checksum or permission errors)
   ansible.builtin.set_fact:
