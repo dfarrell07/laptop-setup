@@ -627,7 +627,7 @@
 - name: Assert sysctl hardening config deployed
   ansible.builtin.assert:
     that: verify_sysctl_file.stat.exists
-    fail_msg: "/etc/sysctl.d/90-hardening.conf not deployed — system role did not run"
+    fail_msg: "/etc/sysctl.d/90-hardening.conf not deployed — system role did not run (exists={{ verify_sysctl_file.stat.exists | default(false) }})"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
