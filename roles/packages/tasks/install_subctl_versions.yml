@@ -147,9 +147,14 @@
       ansible.builtin.shell:
         cmd: |
           set -eo pipefail
-          # Use find+sort to enforce version precedence over arbitrary filesystem ordering
-          TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}*-linux-amd64.tar.xz" \
-            -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+          # Prefer exact version match; fall back to most recent only if not found
+          # Mitigates TOCTOU attacks via mtime manipulation on world-writable /tmp
+          TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}-linux-amd64.tar.xz" \
+            -type f 2>/dev/null | head -1)
+          if [[ -z "$TARBALL" ]]; then
+            TARBALL=$(find /tmp -maxdepth 1 -name "subctl-{{ item.tag }}*-linux-amd64.tar.xz" \
+              -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+          fi
           [[ -z "$TARBALL" ]] && exit 0
           TMPDIR=$(mktemp -d)
           tar -C "$TMPDIR" -xf "$TARBALL"
@@ -185,6 +190,14 @@
         label: "{{ item.item.suffix }}"
 
   rescue:
+    - name: Clean up stale subctl tarballs from /tmp on failure
+      ansible.builtin.shell:
+        cmd: |
+          rm -f /tmp/subctl-*-linux-amd64.tar.xz
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
     - name: Record downstream RH subctl installation failure (CSB)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
