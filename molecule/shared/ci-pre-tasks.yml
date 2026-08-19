@@ -4,7 +4,7 @@
 # Molecule does not auto-load group_vars, so this is required in converge.yml for full-role scenarios
 # (fedora, rocky, debian, macos, vm, packages-binaries). Container-provisioning and
 # distrobox-role scenarios load vars directly or are self-contained — see those converge files.
-- name: Load configuration
+- name: Load default.config.yml
   ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
 
 - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
