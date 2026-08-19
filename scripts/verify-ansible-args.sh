@@ -60,13 +60,12 @@ EOF
     fi
 done
 
-# Override ANSIBLE_COLLECTIONS_PATH to always use the verified repo collections first.
-# This is stronger than validation: instead of checking what's set, we SET it to the
-# known-safe value. System paths (~/.ansible/collections, /usr/share/ansible/collections)
-# are included as fallbacks for non-Galaxy-managed collections, but the repo's verified
-# ./collections/ always takes precedence (leftmost wins in Ansible's path resolution).
+# Override ANSIBLE_COLLECTIONS_PATH and ANSIBLE_ROLES_PATH to always use verified repo
+# paths first. This is stronger than validation: instead of checking what's set, we SET
+# both to known-safe values. Callers cannot inject malicious paths via environment.
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
+export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"

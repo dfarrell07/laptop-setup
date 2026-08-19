@@ -51,6 +51,12 @@ check_modified_and_hash_baseline 'collections-dist/*.tar.gz' 'collections-dist/S
 check_modified_and_hash_baseline 'collections-dist/SHA256SUMS' 'collections-dist/SHA256SUMS.asc' \
   'collections-dist/SHA256SUMS' 'Stale signature allows fallback to hash-only verification'
 
+check_modified_and_hash_baseline 'scripts/vault-pass-ci.sh' 'scripts/vault-pass-ci.sh.sha256' \
+  'scripts/vault-pass-ci.sh' 'Attacker could disable xtrace protection or alter CI vault stub'
+
+check_modified_and_hash_baseline '.githooks/pre-commit' '.githooks/pre-commit.sha256' \
+  '.githooks/pre-commit' 'Attacker could disable security checks by modifying the pre-commit hook'
+
 # SECURITY GUARD: Block commits to vault-pass-ci.sh without xtrace protection
 # Protects against removal of 'set +x' that prevents shell tracing exposure of vault password
 _vpci_modified=0
