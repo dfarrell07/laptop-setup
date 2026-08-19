@@ -49,15 +49,17 @@
       to use a corporate proxy. Invalid value: {{ packages_gosumdb | default('(undefined)') }}
 
 - name: "Validate GONOSUMDB/GOSUMDB: (3/3) GOSUMDB server reachable (hijack mitigation)"
-  # Uses same proxy environment for validation and go install (consistency).
-  ansible.builtin.command:
-    cmd: "timeout 5 curl -s -f https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
+  ansible.builtin.uri:
+    url: "https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
+    timeout: 5
+    status_code: 200
+    return_content: false
   changed_when: false
   register: gosumdb_reachability
-  failed_when: gosumdb_reachability.rc != 0
+  failed_when: gosumdb_reachability.status != 200
   retries: 2
   delay: 3
-  until: gosumdb_reachability.rc == 0
+  until: gosumdb_reachability.status == 200
   environment:
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
     HTTP_PROXY: "{{ _gosumdb_proxy_env if (_gosumdb_proxy_env | length > 0) else omit }}"
