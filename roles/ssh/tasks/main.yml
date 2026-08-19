@@ -3,11 +3,12 @@
 # Deploy SSH keys from vault + pre-seed known_hosts.
 
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+# FAIL_MSG TEMPLATE (six elements for defense-in-depth assertions):
+# (1) SECURITY + threat, (2) input source, (3) injection mechanism, (4) attack example,
+# (5) impact, (6) allowed pattern. Guides rootcause diagnosis in remote/batch provisioning.
+
 - name: SECURITY assert ssh_work_keyscan_hosts entries are safe hostnames (SSH role guard)
-  # NOTE: deliberately NO tags — tasks with no tags survive --skip-tags always.
-  # tasks tagged [always] are SKIPPED by --skip-tags always, defeating the purpose.
-  # Primary bypass protection comes from Play 0 in site.yml (runs before any role).
-  # This provides defense-in-depth against --skip-tags always on individual role runs.
+  # Deliberately NO tags — only way to survive --skip-tags always.
   vars:
     _keyscan_hosts: "{{ ssh_work_keyscan_hosts | default([]) }}"
     _hostnames: >-
@@ -17,9 +18,12 @@
     that:
       - _hostnames | select('search', '[^a-zA-Z0-9._-]') | list | length == 0
     fail_msg: >-
-      SECURITY: ssh_work_keyscan_hosts in play namespace contains unsafe hostname characters.
-      This check provides defense-in-depth against --skip-tags always bypass.
-      Hostnames must match ^[a-zA-Z0-9._-]+$.
+      SECURITY: Command Injection via Unvalidated SSH Hostname.
+      Input: ssh_work_keyscan_hosts contains hostname outside [a-zA-Z0-9._-].
+      Mechanism: Unsafe hostnames in ProxyCommand or -R port forwarding expand via shell.
+      Example: "ProxyCommand ssh gateway -W localhost;rm%20-rf%20/:22" executes shell commands.
+      Impact: SSH session hijacking, key compromise, arbitrary code execution.
+      Fix: Hostnames must strictly match ^[a-zA-Z0-9._-]+$.
   when: ssh_work_keyscan_hosts | default([]) | length > 0
 
 - name: Ensure SSH directory exists
@@ -87,10 +91,13 @@
     that:
       - ssh_auth_key_pub.split()[0] in ssh_pubkey_accepted_algorithms
     fail_msg: >-
-      ssh_auth_key_pub has key type '{{ ssh_auth_key_pub.split()[0] }}'
-      which is not in PubkeyAcceptedAlgorithms (sshd-hardening.conf.j2).
-      Accepted: {{ ssh_pubkey_accepted_algorithms | join(', ') }}. Writing an incompatible key would cause SSH lockout —
-      sshd silently rejects non-accepted types at login time.
+      SECURITY: SSH Authentication Lockout via Incompatible Key Algorithm.
+      Input: ssh_auth_key_pub (vault) has key type '{{ ssh_auth_key_pub.split()[0] }}'.
+      Mechanism: sshd-hardening.conf.j2 PubkeyAcceptedAlgorithms restricts accepted types;
+      non-matching types silently rejected at auth time with no fallback.
+      Example: RSA key deployed when only ed25519/ecdsa accepted causes permanent lockout.
+      Impact: SSH login failure, potential lockout from provisioned machine.
+      Fix: Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
   when: ssh_auth_key_pub | trim | length > 0
   tags: [always]
 
