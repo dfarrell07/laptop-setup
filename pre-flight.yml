@@ -34,28 +34,34 @@
         cmd: scripts/verify-collections.sh
       changed_when: false
       check_mode: false  # always run even in --check mode; collection integrity must be verified
+      tags: [always]
 
     - name: Gather facts for early validation
       ansible.builtin.gather_facts:
+      tags: [always]
 
     - name: Capture real user identity for early checks
       ansible.builtin.set_fact:
         real_user_home: "{{ lookup('pipe', 'python3 -c \"import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)\" 2>/dev/null') | default(lookup('env', 'HOME'), true) }}"
         real_user_id: "{{ lookup('env', 'USER') }}"
+      tags: [always]
 
     - name: Set project root for include paths
       ansible.builtin.set_fact:
         common_project_root: >-
           {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
              | default(playbook_dir, true) }}
+      tags: [always]
 
     - name: Run early pre-flight checks (before any role execution)
+      tags: [always]
       block:
         - name: Include pre-flight checks
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
 
     - name: Run CSB detection early (makes csb_detected available to all subsequent plays)
       when: ansible_facts['system'] | default('Linux') == 'Linux'
+      tags: [always]
       block:
         - name: Include CSB detection
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"

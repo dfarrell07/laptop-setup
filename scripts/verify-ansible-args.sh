@@ -73,8 +73,9 @@ EOF
     if [[ "$arg" == '--skip-tags=always' || "$arg" == '--skip-tags=always,'* ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags=always rejected by VERIFY_AND_RUN
-Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
-        and all security assertions tagged [always] in pre_flight_checks.yml.
+Reason: --skip-tags=always bypasses Play 2's [always]-tagged pre_tasks (vault
+        healthcheck, CSB re-detection, identity assertions); Play 0 tasks are
+        untagged and are NOT skipped by --skip-tags=always.
 Solution: Do not use --skip-tags always with site.yml.
          Use a scoped make target instead (make claude, make packages, make ssh, etc.).
 EOF
@@ -187,8 +188,9 @@ EOF
     if [[ "${args[$i]}" == '--skip-tags' && ( "${args[$((i+1))]}" == 'always' || "${args[$((i+1))]}" == 'always,'* ) ]]; then
         cat >&2 <<EOF
 ERROR: --skip-tags always rejected by VERIFY_AND_RUN
-Reason: --skip-tags always skips Play 0 entirely, bypassing collection verification
-        and all security assertions tagged [always] in pre_flight_checks.yml.
+Reason: --skip-tags always bypasses Play 2's [always]-tagged pre_tasks (vault
+        healthcheck, CSB re-detection, identity assertions); Play 0 tasks are
+        untagged and are NOT skipped by --skip-tags=always.
 Solution: Do not use --skip-tags always with site.yml.
          Use a scoped make target instead (make claude, make packages, make ssh, etc.).
 EOF
