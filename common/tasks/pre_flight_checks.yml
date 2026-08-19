@@ -1428,6 +1428,7 @@
           - _raw.get('system_pwhistory_remember', 24) | string is match('^[0-9]+$')
           - _raw.get('system_pwhistory_remember', 24) | int >= 0
           - _raw.get('system_faillock_deny', 5) | string is match('^[0-9]+$')
+          - _raw.get('system_faillock_deny', 5) | int >= 1
           - _raw.get('system_faillock_unlock_time', 900) | string is match('^[0-9]+$')
           - _raw.get('system_faillock_audit', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
           - _raw.get('system_faillock_local_users_only', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
@@ -1441,7 +1442,9 @@
           system_tlp_platform_profile must be performance/balanced/low-power.
           system_tlp_cpu_energy_policy must be performance/balance_performance/balance_power/power.
           system_pwhistory_remember must be a non-negative integer.
-          system_faillock_deny and system_faillock_unlock_time must be digits only (no
+          system_faillock_deny must be a positive integer >= 1 (deny=0 disables lockout — pam_faillock
+          never locks accounts when deny=0; minimum value is 1) and digits only (no newlines).
+          system_faillock_unlock_time must be digits only (no
           newlines or special characters that allow faillock.conf directive injection).
           system_faillock_audit, system_faillock_local_users_only, and system_faillock_even_deny_root
           must be plain booleans. These values are rendered verbatim into system config files;
@@ -1973,6 +1976,23 @@
                 flatpak-spawn --host during distrobox assemble create).
           tags: [always]
 
+        - name: Assert PAM lockout/pwquality vars in play namespace have safe minimum values (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - system_faillock_deny | default(5) | int >= 1
+              - system_pwquality_minlen | default(14) | int >= 1
+            fail_msg: >-
+              SECURITY: PAM hardening variable in play namespace has an unsafe value (possibly set
+              via -e command-line override, bypassing config.yml-based preflight validation):
+              system_faillock_deny={{ system_faillock_deny | default(5) }} --
+                must be >= 1 (deny=0 instructs pam_faillock to never lock accounts; brute-force
+                of any local account password becomes unrestricted);
+              system_pwquality_minlen={{ system_pwquality_minlen | default(14) }} --
+                must be >= 1 (minlen=0 removes minimum password length enforcement; any password
+                including empty strings pass the length check).
+              Do NOT set these to 0 via -e flag or config.yml.
+          tags: [always]
+
         - name: Set namespace validation flag (internal, cannot be pre-set)
           ansible.builtin.set_fact:
             _pf_namespace_validated_internal: "{{ ansible_date_time.iso8601 }}"
@@ -2085,7 +2105,7 @@
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('system_pwquality_minlen', '14') | int >= 0
+          - _raw.get('system_pwquality_minlen', '14') | int >= 1
           - _raw.get('system_pwquality_dcredit', '-1') | int >= -1
           - _raw.get('system_pwquality_ucredit', '-1') | int >= -1
           - _raw.get('system_pwquality_lcredit', '-1') | int >= -1
@@ -2104,7 +2124,8 @@
           Affected vars: system_pwquality_minlen, system_pwquality_dcredit, system_pwquality_ucredit,
           system_pwquality_lcredit, system_pwquality_ocredit, system_pwquality_difok,
           system_pwquality_maxrepeat, system_pwquality_maxsequence.
-          Allowed: non-negative integers for minlen/difok/maxrepeat/maxsequence;
+          Allowed: system_pwquality_minlen >= 1 (minlen=0 disables minimum length enforcement;
+          minimum value is 1); non-negative integers for difok/maxrepeat/maxsequence;
           -1 or greater for credit variables (e.g., -1=disabled, 0+=required count).
           Examples: system_pwquality_minlen: 14, system_pwquality_dcredit: -1.
 
