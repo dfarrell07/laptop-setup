@@ -28,6 +28,14 @@ override MAKEFLAGS :=
 
 CONTAINER ?= fedora-dev
 
+define INSTALL_COLLECTIONS
+ansible-galaxy collection install -p ./collections \
+	collections-dist/ansible-posix-2.2.2.tar.gz \
+	collections-dist/community-general-13.2.0.tar.gz \
+	collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
+	collections-dist/containers-podman-1.20.2.tar.gz
+endef
+
 # Verify collections integrity, validate ANSIBLE_COLLECTIONS_PATH, and reject dangerous flags.
 # REQUIRED: guard against TOCTOU tampering and supply chain attacks.
 # SECURITY: Rejects --start-at-task (bypasses Play 0 pre-flight checks) and
@@ -134,16 +142,8 @@ bootstrap: guard-not-root
 	@# GUARD: Never import the stub signing-key.asc without error handling
 	@# If future changes add 'gpg --import', it MUST be: gpg --import ... || true
 	@# The stub key will fail GPG import with exit code 2 (CRC error). Unguarded import would break bootstrap.
-	ansible-galaxy collection install -p ./collections \
-		collections-dist/ansible-posix-2.2.2.tar.gz \
-		collections-dist/community-general-13.2.0.tar.gz \
-		collections-dist/community-library_inventory_filtering_v1-1.1.5.tar.gz \
-		collections-dist/containers-podman-1.20.2.tar.gz
-	@if command -v npm >/dev/null 2>&1; then \
-		npm ci --ignore-scripts; \
-	else \
-		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
-	fi
+	$(INSTALL_COLLECTIONS)
+	$(MAKE) npm
 	$(MAKE) hooks
 	@echo ""
 	@echo "Bootstrap complete. Git hooks active."
@@ -165,7 +165,7 @@ bootstrap: guard-not-root
 	@echo "  2. Set up GPG key for commit signing (REQUIRED for supply-chain commits):"
 	@echo "     - If you don't have a GPG key: gpg --full-generate-key"
 	@echo "     - If you have a key: gpg --import /path/to/key.gpg && git config --global commit.gpgsign true"
-	@echo "     - For details: see SECURITY.md § GPG Key Import and Setup"
+	@echo "     - For details: see SECURITY.md § GPG Key Requirements for Supply-Chain Commits"
 	@echo "  3. Run make setup-yubikeys — programs your YubiKeys with the same HMAC-SHA1 secret,"
 	@echo "     writes scripts/vault-pass.sh, and shows next steps including vault encryption."
 	@echo "     (For manual vault-pass.sh without hardware key, see SECURITY.md §Setting Up vault-pass.sh)"
@@ -251,11 +251,7 @@ setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
 
 update: guard-not-root preflight
-	@if command -v npm >/dev/null 2>&1; then \
-		npm ci --ignore-scripts; \
-	else \
-		echo "NOTE: npm not found — install nodejs for commitlint hooks"; \
-	fi
+	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
