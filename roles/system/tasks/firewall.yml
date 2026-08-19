@@ -21,7 +21,7 @@
       {{ ansible_facts.services['firewalld.service'] is defined and
          ansible_facts.services['firewalld.service'].state == 'running' }}
 
-- name: Warn that firewalld is not running — all firewall hardening tasks will be skipped
+- name: Warn: firewalld not running — hardening tasks skipped
   ansible.builtin.debug:
     msg: >-
       WARNING: firewalld is not running. Firewall hardening tasks in this file
