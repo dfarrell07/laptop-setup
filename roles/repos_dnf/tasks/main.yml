@@ -20,21 +20,6 @@
         gpgkey: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
         enabled: true
   rescue:
-    - name: Record gh-cli repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add GitHub CLI repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install gh binary manually or inside container"
-        _csb_ticket_summary: "Exception request: GitHub CLI RPM repository"
-        _csb_ticket_body: >-
-          GitHub CLI (gh) is the official command-line tool for GitHub, used for PR
-          creation/review, issue management, and CI workflow dispatch.
-          Repo URL: https://cli.github.com/packages/rpm.
-          RHEL/Rocky ship no gh package; Fedora ships gh in standard repos but this handler does not run on Fedora.
-          Blocked workflows: all PR review automation and CI trigger scripts.
-      when: csb_rhel
     - name: Warn gh-cli repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -60,21 +45,6 @@
         gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
         enabled: true
   rescue:
-    - name: Record Chrome repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Google Chrome repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
-        _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
-        _csb_ticket_body: >-
-          Google Chrome is the reference browser required for web development testing
-          against the dominant production browser engine.
-          Repo URL: https://dl.google.com/linux/chrome/rpm/stable/x86_64.
-          Chromium from Fedora repos lacks Widevine DRM and Google-specific APIs needed for compatibility testing.
-          Blocked workflows: web application testing, DRM-gated content, browser-specific debugging.
-      when: csb_rhel
     - name: Warn Google Chrome repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -192,21 +162,6 @@
              else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
              else 'rhel') }}
   rescue:
-    - name: Record Docker CE repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Docker CE repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Use rootless Podman instead (recommended)"
-        _csb_ticket_summary: "Exception request: Docker CE RPM repository"
-        _csb_ticket_body: >-
-          Docker CE provides the Docker daemon and CLI for container builds requiring Docker-specific APIs.
-          Repo URL: https://download.docker.com/linux/fedora/$releasever/$basearch/stable (rhel/ for RHEL hosts).
-          Rootless Podman satisfies most use cases but lacks Docker BuildKit and compose v2 features
-          required by upstream CI scripts that invoke docker directly.
-          Blocked workflows: building images with Docker-native CI pipelines, testing Docker-specific tooling.
-      when: csb_rhel
     - name: Warn Docker CE repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -501,22 +456,6 @@
         gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
         enabled: true
   rescue:
-    - name: Record Tailscale repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Tailscale repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: >-
-          Download from https://pkgs.tailscale.com/stable/ or use make container.
-        _csb_ticket_summary: "Exception request: Tailscale RPM repository"
-        _csb_ticket_body: >-
-          Tailscale provides a WireGuard-based mesh VPN for secure access to development infrastructure.
-          Repo URL: https://pkgs.tailscale.com/stable/fedora/$basearch (rhel/$releasever for RHEL hosts).
-          Fedora ships Tailscale but lags upstream by 1-3 releases; current releases include security patches
-          and WireGuard improvements not present in the Fedora-packaged version.
-          Blocked workflows: access to personal dev servers, home lab resources, cross-network development.
-      when: csb_rhel
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
