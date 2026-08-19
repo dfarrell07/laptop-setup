@@ -895,7 +895,7 @@
     - not (system_is_container | default(false))
 
 - name: Check 98-llmnr.conf for LLMNR setting
-  ansible.builtin.command: grep -q 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  ansible.builtin.command: grep 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
   changed_when: false
   failed_when: false
   register: verify_llmnr_setting
@@ -907,7 +907,7 @@
 - name: Assert 98-llmnr.conf LLMNR value matches expected
   ansible.builtin.assert:
     that: verify_llmnr_setting.rc == 0
-    fail_msg: '98-llmnr.conf missing LLMNR={{ system_resolved_llmnr | default("no") }} — dns_over_tls.yml LLMNR regression'
+    fail_msg: '98-llmnr.conf missing LLMNR={{ system_resolved_llmnr | default("no") }} — dns_over_tls.yml LLMNR regression — found: {{ verify_llmnr_setting.stdout | default("(empty)") }}'
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -1076,7 +1076,7 @@
     - verify_sudoers_conf.stat.exists
 
 - name: Assert logind drop-in has IdleAction=lock
-  ansible.builtin.command: grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
+  ansible.builtin.command: grep '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
   register: verify_logind_idle_action
   changed_when: false
   failed_when: false
@@ -1090,7 +1090,7 @@
 - name: Assert IdleAction=lock present in logind drop-in
   ansible.builtin.assert:
     that: verify_logind_idle_action.rc == 0
-    fail_msg: "logind 99-hardening.conf missing 'IdleAction=lock' — CIS session locking regression"
+    fail_msg: "logind 99-hardening.conf missing 'IdleAction=lock' — CIS session locking regression — found: {{ verify_logind_idle_action.stdout | default('(not found)') }}"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -1100,7 +1100,7 @@
 
 - name: Assert logind drop-in has HandlePowerKey={{ system_power_key | default("lock") }}
   ansible.builtin.command: >-
-    grep -q '^HandlePowerKey={{ system_power_key | default("lock") }}'
+    grep '^HandlePowerKey={{ system_power_key | default("lock") }}'
     /etc/systemd/logind.conf.d/99-hardening.conf
   register: verify_logind_power_key
   changed_when: false
@@ -1117,7 +1117,7 @@
     that: verify_logind_power_key.rc == 0
     fail_msg: >-
       logind 99-hardening.conf missing 'HandlePowerKey={{ system_power_key | default("lock") }}'
-      — expected HandlePowerKey={{ system_power_key | default("lock") }}
+      — found: {{ verify_logind_power_key.stdout | default('(not found)') }}
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))

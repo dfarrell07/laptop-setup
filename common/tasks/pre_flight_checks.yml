@@ -1664,20 +1664,19 @@
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_raw }}"
+        _cimage: "{{ _raw.get('container_image', '') | string }}"
       ansible.builtin.assert:
         that:
           - _raw.get('container_release', '') | string is match('^[a-zA-Z0-9._-]*$')
-          - _raw.get('container_image', '') | string is match('^[a-zA-Z0-9:/@._-]*$')
+          - _cimage is match('^[a-zA-Z0-9:/@._-]*$')
+          - (_cimage == '') or (_cimage is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
         fail_msg: >-
-          SECURITY: container_release or container_image in config.yml contains unsafe
-          characters. These values are interpolated directly into distrobox_container_image
-          and rendered into distrobox.ini (INI format) and shell commands without additional
-          escaping; embedded newlines break INI syntax or shell argument parsing.
+          SECURITY: container_image in config.yml is not from a trusted registry.
+          Allowed prefixes: registry.fedoraproject.org/, quay.io/,
+          registry.access.redhat.com/, registry.redhat.io/.
+          Got: {{ _cimage }}. Even with a digest pin the untrusted registry controls
+          image content and gains CAP_BPF+CAP_PERFMON and $HOME bind-mount access.
           container_release must be alphanumeric/dot/hyphen (e.g. 44, f39, custom).
-          container_image must match OCI image reference format (alphanumeric/colon/slash/at/
-          dot/hyphen only, no spaces or shell metacharacters). Allowed: alphanumeric, dot,
-          underscore, hyphen (container_release); alphanumeric, colon, slash, at, dot,
-          hyphen (container_image).
 
     - name: Assert system_bluetooth_* vars contain no newlines (BlueZ config injection guard)
       when: _config_yml_raw.content is defined
