@@ -9,7 +9,7 @@
     - not system_is_container
     - not csb_rhel
   block:
-    - name: Warn if non-root user crontabs exist before restricting cron access
+    - name: Find non-root crontabs in /var/spool/cron
       ansible.builtin.find:
         paths: /var/spool/cron
         excludes: root
