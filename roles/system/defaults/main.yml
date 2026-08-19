@@ -272,6 +272,15 @@ system_disable_printing: false
 # enable Bluetooth (requires reboot to take effect).
 system_disable_bluetooth: true
 system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
+# Basenames allowed in /etc/modprobe.d; unexpected entries fail provisioning (pre-plant attack guard).
+# Fedora baseline: hardening.conf (ours) + alsa-*.conf (sound subsystem defaults).
+# Add extra basenames here (or in config.yml) for CSB/IT-managed or site-specific drop-ins.
+system_modprobed_whitelist:
+  - hardening.conf
+  - alsa-base.conf
+  - alsa.conf
+  - dist-alsa.conf
+  - dist-oss.conf
 # install/start bolt; false on VMs and containers
 # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
 system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"

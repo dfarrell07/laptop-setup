@@ -1,5 +1,83 @@
 ---
 # --- Auditd (audit daemon + rules) ---
+
+# Pre-plant detection: scan /etc/udev/rules.d for files not owned by any package.
+# A backdoor rule planted before provisioning executes as root on every matching uevent.
+# auditd write-watches only cover future writes; this scan closes the pre-existing-file gap.
+- name: Scan /etc/udev/rules.d for unowned rules files (dnf)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      rogue=""
+      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      for f in /etc/udev/rules.d/*.rules; do
+        [ -f "$f" ] || continue
+        b=$(basename "$f")
+        in_wl=0
+        for w in $whitelist; do [ "$b" = "$w" ] && in_wl=1 && break; done
+        [ "$in_wl" -eq 1 ] && continue
+        rpm -qf "$f" &>/dev/null || rogue="${rogue:+$rogue }$b"
+      done
+      printf '%s' "$rogue"
+    executable: /bin/bash
+  register: _udev_unowned_dnf
+  changed_when: false
+  failed_when: false
+  when:
+    - is_dnf
+    - not system_is_container
+  tags: [always]
+
+- name: "Guard: no unowned udev rules files (dnf)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any RPM:
+      {{ _udev_unowned_dnf.stdout }}. These may be pre-planted backdoor rules that
+      execute as root on every matching uevent. Remove suspicious files, or add
+      known-good basenames to system_udev_rules_whitelist in config.yml.
+  when:
+    - is_dnf
+    - not system_is_container
+    - _udev_unowned_dnf.stdout | default('') | trim | length > 0
+  tags: [always]
+
+- name: Scan /etc/udev/rules.d for unowned rules files (apt)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      rogue=""
+      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      for f in /etc/udev/rules.d/*.rules; do
+        [ -f "$f" ] || continue
+        b=$(basename "$f")
+        in_wl=0
+        for w in $whitelist; do [ "$b" = "$w" ] && in_wl=1 && break; done
+        [ "$in_wl" -eq 1 ] && continue
+        dpkg -S "$f" &>/dev/null || rogue="${rogue:+$rogue }$b"
+      done
+      printf '%s' "$rogue"
+    executable: /bin/bash
+  register: _udev_unowned_apt
+  changed_when: false
+  failed_when: false
+  when:
+    - is_apt
+    - not system_is_container
+  tags: [always]
+
+- name: "Guard: no unowned udev rules files (apt)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any dpkg package:
+      {{ _udev_unowned_apt.stdout }}. These may be pre-planted backdoor rules that
+      execute as root on every matching uevent. Remove suspicious files, or add
+      known-good basenames to system_udev_rules_whitelist in config.yml.
+  when:
+    - is_apt
+    - not system_is_container
+    - _udev_unowned_apt.stdout | default('') | trim | length > 0
+  tags: [always]
+
 # CI gap: auditd install, config, and rules are NOT exercised in Podman-based molecule CI.
 # audit post-install scripts attempt to start auditd; the kernel audit subsystem is disabled
 # in privileged containers and auditd cannot set its priority (EPERM), causing cascading

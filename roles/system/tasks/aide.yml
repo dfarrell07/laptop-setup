@@ -326,6 +326,23 @@
               else 'reinitialization' }} triggered by config change — this takes
               5-10 minutes. Do not cancel.
 
+        - name: Find files in /etc/udev/rules.d before AIDE reinit (pre-planted rule guard)
+          ansible.builtin.find:
+            paths: /etc/udev/rules.d/
+            file_type: file
+          register: _aide_udev_reinit_precheck
+
+        - name: Assert /etc/udev/rules.d/ is empty before AIDE reinit
+          ansible.builtin.assert:
+            that: _aide_udev_reinit_precheck.files | length == 0
+            fail_msg: >-
+              AIDE reinit aborted: /etc/udev/rules.d/ contains
+              {{ _aide_udev_reinit_precheck.files | length }} unexpected file(s).
+              A pre-planted udev rule would be silently baselined as known-good,
+              making it permanently invisible to aide --check.
+              Inspect and remove unexpected files before re-running.
+              Files: {{ _aide_udev_reinit_precheck.files | map(attribute='path') | join(', ') }}
+
         - name: Reinitialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
             cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
@@ -359,6 +376,24 @@
         - name: Warn that AIDE initialization takes 5-10 minutes
           ansible.builtin.debug:
             msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+
+        - name: Find files in /etc/udev/rules.d before AIDE init (pre-planted rule guard)
+          ansible.builtin.find:
+            paths: /etc/udev/rules.d/
+            file_type: file
+          register: _aide_udev_init_precheck
+
+        - name: Assert /etc/udev/rules.d/ is empty before AIDE init
+          ansible.builtin.assert:
+            that: _aide_udev_init_precheck.files | length == 0
+            fail_msg: >-
+              AIDE init aborted: /etc/udev/rules.d/ contains
+              {{ _aide_udev_init_precheck.files | length }} unexpected file(s).
+              A pre-planted udev rule would be silently baselined as known-good,
+              making it permanently invisible to aide --check. aide --init must
+              run on a clean filesystem. Inspect and remove unexpected files
+              before re-running.
+              Files: {{ _aide_udev_init_precheck.files | map(attribute='path') | join(', ') }}
 
         - name: Initialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module

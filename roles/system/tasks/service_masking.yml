@@ -117,12 +117,35 @@
   ansible.builtin.systemd:
     name: ModemManager.service
     masked: true
+    force: true
     state: stopped
   when:
     - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
     - not csb_rhel  # CSB: IT manages modem hardware policy
     - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
   failed_when: false
+
+- name: Verify ModemManager masking succeeded (covert modem guard)
+  ansible.builtin.systemd_service:
+    name: ModemManager.service
+  register: _modemmanager_facts
+  when:
+    - not system_is_container
+    - not csb_rhel
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
+
+- name: Fail if ModemManager is not masked (covert cellular network risk)
+  ansible.builtin.fail:
+    msg: >-
+      ModemManager masking failed: UnitFileState={{ _modemmanager_facts.status.UnitFileState | default('unknown') }}.
+      ModemManager must be masked when no WWAN interface is present.
+      Investigate: systemctl mask --force ModemManager.service; journalctl -u ModemManager.
+  when:
+    - not system_is_container
+    - not csb_rhel
+    - (ansible_facts['interfaces'] | default([])) | select('match', '^wwan') | list | length == 0
+    - _modemmanager_facts.status is defined
+    - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
 
 - name: Unmask ModemManager (WWAN interface detected)
   ansible.builtin.systemd:

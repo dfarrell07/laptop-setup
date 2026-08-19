@@ -1251,6 +1251,18 @@ EOF
   else record "passim-masked" "FAIL" "not masked (state: $_passim_state) — unauthenticated HTTP server on 0.0.0.0:27500"; fi
   unset _passim_state
 
+  # ModemManager masked when no WWAN interfaces present (covert cellular modem guard)
+  _mm_state=$(systemctl show -p UnitFileState --value ModemManager.service 2>/dev/null)
+  _has_wwan=false
+  ls /sys/class/net/ 2>/dev/null | grep -q '^wwan' && _has_wwan=true
+  if [[ "$_has_wwan" == "true" ]]; then
+    record "modemmanager-masked" "WARN" "ModemManager not checked — WWAN interface detected (modem may be in use)"
+  elif [[ "$_mm_state" == "masked" ]]; then record "modemmanager-masked" "PASS"
+  elif [[ -z "$_mm_state" ]]; then record "modemmanager-masked" "WARN" "ModemManager unit not found — package not installed (no cellular modem exposure)"
+  elif $_csb_non_fedora; then record "modemmanager-masked" "WARN" "ModemManager masking skipped on RHEL CSB (state: $_mm_state) — IT manages modem policy"
+  else record "modemmanager-masked" "FAIL" "ModemManager not masked (state: '$_mm_state') — covert cellular modem access risk; run: systemctl mask --force ModemManager.service"; fi
+  unset _mm_state _has_wwan
+
   # NFS server and rpcbind masked (CIS 2.2.7 — workstation must not run an NFS server)
   for _unit in \
     'nfs-server.service:nfs-server-masked:nfs-server.service not masked (workstation should not serve NFS, CIS 2.2.7)' \

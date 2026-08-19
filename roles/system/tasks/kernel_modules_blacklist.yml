@@ -28,17 +28,15 @@
 
     - name: Fail on unexpected files in /etc/modprobe.d
       vars:
-        _it_allowlist: "{{ system_modprobe_d_allowlist | default([]) }}"
-        _expected: "{{ ['hardening.conf'] + (_it_allowlist if csb_detected else []) }}"
         _found: "{{ _modprobe_d_audit.files | map(attribute='path') | map('basename') | list }}"
-        _unexpected: "{{ _found | difference(_expected) }}"
+        _unexpected: "{{ _found | difference(system_modprobed_whitelist) }}"
       ansible.builtin.fail:
         msg: |
           Unexpected file(s) in /etc/modprobe.d — last-rule-wins ordering means any file
           sorted after hardening.conf can override 'install <module> /bin/false' guards.
           Unexpected: {{ _unexpected | join(', ') }}
-          Allowed:    {{ _expected | join(', ') }}
-          Remove the file(s) or add basenames to system_modprobe_d_allowlist in config.yml.
+          Allowed:    {{ system_modprobed_whitelist | join(', ') }}
+          Remove the file(s) or add basenames to system_modprobed_whitelist in config.yml.
       when: _unexpected | length > 0
 
     - name: Deploy kernel module blacklist
