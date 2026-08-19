@@ -291,6 +291,15 @@
       register: _pam_common_auth_atomic
       changed_when: "'changed' in _pam_common_auth_atomic.stdout"
 
+    - name: Record common-auth checksum immediately after atomic write (TOCTOU guard)
+      ansible.builtin.stat:
+        path: /etc/pam.d/common-auth
+        checksum_algorithm: sha256
+      register: _pam_common_auth_post_write
+      changed_when: false
+      check_mode: false  # read-only probe
+      when: is_apt
+
     - name: Verify pam_faillock.so authfail appears after pam_unix.so in common-auth (Debian)
       ansible.builtin.shell:
         cmd: >-
@@ -329,6 +338,34 @@
         line: 'password required                   pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember | int }} enforce_for_root'
         insertbefore: '^password.*pam_unix\.so'
         mode: "0644"
+
+# --- TOCTOU guard: re-verify common-auth integrity before assertions ---
+- name: Re-stat common-auth before assertions (TOCTOU guard)
+  ansible.builtin.stat:
+    path: /etc/pam.d/common-auth
+    checksum_algorithm: sha256
+  register: _pam_common_auth_pre_assertions
+  changed_when: false
+  check_mode: false  # read-only probe
+  when:
+    - is_apt
+    - _pam_common_auth_post_write is defined
+    - _pam_common_auth_post_write.stat is defined
+
+- name: Abort if common-auth changed after atomic write (TOCTOU guard)
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: /etc/pam.d/common-auth changed after atomic write validation —
+      possible TOCTOU file substitution. Aborting before assertions to prevent
+      validating a tampered PAM config. Re-run make system to recover.
+      Expected: {{ _pam_common_auth_post_write.stat.checksum }}
+      Found:    {{ _pam_common_auth_pre_assertions.stat.checksum | default('missing') }}
+  when:
+    - is_apt
+    - _pam_common_auth_post_write is defined
+    - _pam_common_auth_post_write.stat is defined
+    - (_pam_common_auth_pre_assertions.stat.checksum | default('')) !=
+      _pam_common_auth_post_write.stat.checksum
 
 # Assert exactly one preauth/authfail entry after lineinfile — detects duplicates
 # from libpam-runtime reconfiguration or repeated runs with whitespace drift.
