@@ -350,7 +350,7 @@
     'INVALID_ZONE' not in (_system_libvirt_tftp_remove.msg | default(''))
   notify: Apply firewall rules
 
-- name: Open/close SSH port in libvirt zone (enabled when system_libvirt_open_ssh is true)
+- name: Toggle SSH port in libvirt zone
   ansible.posix.firewalld:
     zone: libvirt
     port: "{{ ssh_port }}/tcp"
