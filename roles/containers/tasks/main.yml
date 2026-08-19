@@ -290,10 +290,14 @@
   when: is_linux
 
 # --- periodic container storage cleanup ---
+- name: Set systemd user unit directory fact
+  ansible.builtin.set_fact:
+    _containers_systemd_user_dir: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+
 - name: Deploy podman-prune.service
   ansible.builtin.copy:
     src: podman-prune.service
-    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/podman-prune.service"
+    dest: "{{ _containers_systemd_user_dir }}/podman-prune.service"
     mode: "0644"
   when:
     - is_linux
@@ -304,7 +308,7 @@
 - name: Deploy podman-prune.timer
   ansible.builtin.template:
     src: podman-prune.timer.j2
-    dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/podman-prune.timer"
+    dest: "{{ _containers_systemd_user_dir }}/podman-prune.timer"
     mode: "0644"
   when:
     - is_linux
@@ -384,7 +388,7 @@
 
 - name: Remove podman-prune systemd unit files (when disabled)
   ansible.builtin.file:
-    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/{{ item }}"
+    path: "{{ _containers_systemd_user_dir }}/{{ item }}"
     state: absent
   loop:
     - podman-prune.service
