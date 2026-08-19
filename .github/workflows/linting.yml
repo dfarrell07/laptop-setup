@@ -5,6 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -625,31 +626,83 @@ jobs:
 
       - name: Verify GPG signatures on commits modifying critical supply-chain files
         run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          # SECURITY: Enforce BOTH Signed-off-by trailer AND GPG signature on supply-chain commits.
+          # CRITICAL: git verify-commit checks cryptographic signatures ONLY — NOT Signed-off-by trailers.
+          #   - git commit -s adds Signed-off-by as plain text in commit message (enforced by .githooks/commit-msg)
+          #   - git commit -S adds cryptographic GPG signature to commit object (verified here via git verify-commit)
+          # Both mechanisms are required for supply-chain security.
+
+          # Handle both PR and push events
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For push events, verify the pushed commits against the previous commit
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.event.after }}"
+          fi
           failed=0
           for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
-            if git show "$commit" --name-only | grep -qE '^(scripts/verify-|scripts/check-|\.githooks/|collections-dist/|Makefile|\.github/workflows/)'; then
-              # Verify GPG signature with full verification output
+            # SECURITY: Use directory-prefix wildcard patterns (scripts/, .githooks/, collections-dist/, .github/workflows/)
+            # instead of hardcoded filenames. This automatically covers all current and future supply-chain files:
+            # - scripts/verify-collections.sh, scripts/verify-ansible-args.sh, scripts/check-vars-sync.py, etc.
+            # - .githooks/pre-commit, .githooks/pre-push, .githooks/commit-msg, etc.
+            # - collections-dist/* for vendored collections and SHA256SUMS
+            # - .github/workflows/* for CI/CD pipeline definitions
+            if git show "$commit" --name-only | grep -qE '^(scripts/|\.githooks/|collections-dist/|\.github/workflows/)'; do
+              # Check GPG signature (cryptographic verification via git verify-commit)
               if git verify-commit "$commit" 2>&1; then
                 sig_status=$(git show --format=%G? -s "$commit")
                 signer=$(git show --format=%GS -s "$commit")
                 echo "✓ Commit $commit: GPG-signed (status: $sig_status, signer: $signer)"
               else
                 sig_status=$(git show --format=%G? -s "$commit")
-                modified_files=$(git show "$commit" --name-only | grep -E '^(scripts/verify-|scripts/check-|\.githooks/|collections-dist/|Makefile|\.github/workflows/)' | paste -sd ',' -)
+                modified_files=$(git show "$commit" --name-only | grep -E '^(scripts/|\.githooks/|collections-dist/|\.github/workflows/)' | paste -sd ',' -)
                 echo "::error::Commit $commit modifies critical supply-chain files but is NOT GPG-signed (status: $sig_status)"
                 echo "::error::Modified files: $modified_files"
+                failed=1
+              fi
+              # Check Signed-off-by trailer (text-based, enforced by local .githooks/commit-msg hook)
+              if ! git log -1 --format=%B "$commit" | grep -q '^Signed-off-by:'; then
+                echo "::error::Commit $commit is missing Signed-off-by trailer (use git commit -s)"
                 failed=1
               fi
             fi
           done
           if [ $failed -eq 1 ]; then
             echo ""
-            echo "Supply-chain commits MUST be GPG-signed to prevent bypass attacks."
-            echo "Sign your commits with: git commit -s -S"
+            echo "Supply-chain commits MUST have BOTH security mechanisms:"
+            echo ""
+            echo "  1. Signed-off-by trailer (text in commit message) — use: git commit -s"
+            echo "  2. GPG signature (cryptographic on commit object) — use: git commit -S"
+            echo ""
+            echo "COMPLETE COMMAND: git commit -s -S"
+            echo ""
+            echo "IMPORTANT: These are TWO DIFFERENT flags with different purposes:"
+            echo "  -s (--signoff) adds text: Signed-off-by: Your Name"
+            echo "  -S (--gpg-sign) creates cryptographic GPG signature"
+            echo ""
+            echo "See SECURITY.md § 'Supply-Chain Commits: -s vs -S' for full explanation."
             exit 1
           fi
+
+      - name: Validate Go module checksum database (GOSUMDB)
+        run: |
+          # SECURITY: Reject empty or disabled GOSUMDB to prevent Go module tampering.
+          # Go binaries in the supply chain (kind, helm, kustomize, k9s, oc, etc.) must verify
+          # against the module checksum database. Setting GOSUMDB=off or leaving it empty disables
+          # this critical verification, allowing malicious module substitution attacks.
+          if [ -z "${GOSUMDB:-}" ]; then
+            echo "::error::GOSUMDB is unset or empty — Go module verification disabled"
+            exit 1
+          fi
+          case "${GOSUMDB}" in
+            "off"|"")
+              echo "::error::GOSUMDB is set to '${GOSUMDB}' — Go module verification disabled"
+              exit 1
+              ;;
+          esac
+          echo "✓ GOSUMDB validation passed: ${GOSUMDB}"
 
   node-lint:
     name: Node Lint

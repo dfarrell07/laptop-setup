@@ -479,6 +479,14 @@ Requirement" for the complete upgrade procedure and mandatory review checklist.
   in `config.yml` ONLY on machines where SSD longevity outweighs cryptographic remanence protection
   (e.g., temporary test environments with disposable data). Non-default setting requires explicit
   opt-in to ensure awareness of the security tradeoff. Smoke-test warns when discard is active.
+- **Vault password: HMAC-SHA1 has 80-bit post-quantum security** — The vault password is derived
+  from YubiKey HMAC-SHA1 (hardware-limited; HMAC-SHA256 unavailable in firmware). While vault
+  encryption (AES-256-CTR) is quantum-safe with 128-bit effective PQ security, the password itself
+  has only 80-bit effective post-quantum security (Grover's algorithm halvings). This is currently
+  acceptable (quantum computers in 2025 have ~2,000 noisy qubits, insufficient for Grover attacks).
+  **Migration path:** Documented in SECURITY.md § "Quantum Security Posture" — migrate to SOPS +
+  age-plugin-yubikey (P-384, 96-bit PQ security) when hardware PQ support arrives (~2027).
+  See § "Future Migration to SOPS + age" for setup instructions.
 - **Vault + CI** — encrypting vault.yml with a real YubiKey-derived password
   will break CI syntax-check (which uses the dummy password stub); this is
   a known design tradeoff, not a bug
@@ -899,14 +907,17 @@ Each module pulls in dozens of transitive dependencies, multiplying attack surfa
    (e.g., `packages_gofumpt_version`). Prevents silent upstream updates. Requires
    deliberate human review before version bumps. Does NOT prevent compromise of pinned version.
 
-2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:21-27) rejects any
-   GONOSUMDB configuration containing public domain patterns. Enforces explicit opt-in for
-   public modules. Does NOT prevent GOSUMDB bypass via account compromise.
+2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:21-27) validates that
+   GONOSUMDB is either unset (use sum.golang.org for all modules) or contains only private/internal
+   domain patterns (e.g., `*.internal.com`). Empty string `GONOSUMDB=""` is also rejected to prevent
+   accidental bypass of checksum verification. This enforces explicit opt-in for public modules
+   and prevents silent disabling of GOSUMDB. Does NOT prevent GOSUMDB bypass via account compromise.
 
 3. **GOSUMDB ENFORCEMENT** — Task sets `GOSUMDB=sum.golang.org` (or corporate proxy).
    Validates module checksums against a second hash database. Defense-in-depth against GOPROXY
-   tampering, but does NOT detect legitimate code that has been backdoored by a compromised
-   maintainer.
+   tampering. However, does NOT detect:
+   - Legitimate code that has been backdoored by a compromised maintainer
+   - Transitive dependency compromises (depends on sum.golang.org, which only validates direct modules)
 
 4. **RETRY LIMIT** — Retries only on transient network errors (timeout, connection-refused),
    not on checksum mismatches (install_go_tools.yml:73-78). Fails fast on integrity violations
