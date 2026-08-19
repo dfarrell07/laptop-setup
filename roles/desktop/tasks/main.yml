@@ -61,18 +61,27 @@
   tags: [always]
 
 - name: Install desktop packages (dnf)
-  vars:
-    _wm_pkgs: >-
-      {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
-         + (desktop_i3_packages if desktop_effective == 'i3' else [])
-         + (desktop_gnome_packages if desktop_effective == 'gnome' else [])
-         + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
-  ansible.builtin.dnf:
-    name: "{{ desktop_dnf_packages + _wm_pkgs }}"
-    state: present
-  become: true
-  tags: [become]
   when: is_dnf
+  block:
+    - name: Install desktop packages (dnf)
+      vars:
+        _wm_pkgs: >-
+          {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
+             + (desktop_i3_packages if desktop_effective == 'i3' else [])
+             + (desktop_gnome_packages if desktop_effective == 'gnome' else [])
+             + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
+      ansible.builtin.dnf:
+        name: "{{ desktop_dnf_packages + _wm_pkgs }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn if desktop packages install failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: desktop package installation failed (some packages may not be available in repos).
+          alacritty is not in Fedora 44 base repos — install via copr, flatpak, or use fallback terminal.
+          Continuing provisioning...
 
 - name: Install desktop packages (apt)
   vars:
