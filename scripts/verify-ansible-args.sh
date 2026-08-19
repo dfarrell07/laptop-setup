@@ -123,7 +123,7 @@ EOF
     # Passing this via extra-vars (precedence 22) would pre-define the flag that gates the
     # vault_*/secret-key/security-policy assertions in pre_flight_checks.yml, silently skipping
     # all four checks and allowing vault_* keys in config.yml to shadow vault.yml undetected.
-    if [[ "$arg" == --extra-vars=_pf_vault_asserted=* || "$arg" == -e_pf_vault_asserted=* ]]; then
+    if [[ "$arg" == --extra-vars=_pf_vault_asserted=* || "$arg" == -e_pf_vault_asserted=* ]] || [[ "$arg" == --extra-vars=*_pf_vault_asserted* ]]; then
         cat >&2 <<EOF
 ERROR: -e _pf_vault_asserted rejected by VERIFY_AND_RUN
 Reason: Pre-defining _pf_vault_asserted via extra-vars bypasses vault_* key detection,
