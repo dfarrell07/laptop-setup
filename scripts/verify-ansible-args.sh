@@ -346,7 +346,7 @@ done
 # path before exec. Unset these here so getent reads the real /etc/passwd.
 # LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT are also cleared here (early, before getent HOME check); the main sanitization block repeats this for defence-in-depth.
 unset NSS_WRAPPER_PASSWD NSS_WRAPPER_GROUP
-unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_ORIGIN_PATH GLIBC_TUNABLES MALLOC_CONF
 unset OPENSSL_CONF  # prevent attacker [provider_sect] loading a malicious .so into every OpenSSL-using process (Python ssl import, curl, gpg) before become:true strips env
 unset BASH_ENV  # prevent BASH_ENV payload executing in vault-pass.sh: non-interactive bash reads BASH_ENV before set +x; cleared here before exec so it does not propagate to the vault password subprocess
 
@@ -421,7 +421,7 @@ unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitra
 # "/tmp/evil python3" would cause Ansible to run /tmp/evil for module staging; with
 # become:true, the evil interpreter controls AnsiballZ content fed to sudo → root RCE.
 unset ANSIBLE_INTERPRETER_PYTHON_FALLBACK
-unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become
+unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_ORIGIN_PATH GLIBC_TUNABLES MALLOC_CONF  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become; GLIBC_TUNABLES/MALLOC_CONF inherited by SUID sudo (CVE-2023-4911 class)
 unset NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX  # Node/npm injection — NODE_OPTIONS=--require /tmp/evil.js loads into any npm/node child process (e.g. npx commitlint, future node tooling); NPM_CONFIG_REGISTRY/CACHE/PREFIX redirect package fetches or writes to attacker-controlled paths; defense-in-depth for ansible-playbook child processes (Makefile unexport is the load-bearing fix)
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
 unset ANSIBLE_LOCAL_TEMP ANSIBLE_REMOTE_TEMP  # Ansible-specific tmp overrides: these env vars take precedence over local_tmp/remote_tmp ini pins in ansible.cfg (confirmed via ansible-config list); attacker sets ANSIBLE_LOCAL_TEMP=/var/tmp (exec-capable) to redirect AnsiballZ module staging to an attacker-writable path, enabling the same inotifywait race-condition root RCE described above — unset TMPDIR/TEMP/TMP does NOT guard against these Ansible-specific vars
@@ -488,7 +488,7 @@ unset DBUS_SYSTEM_BUS_ADDRESS  # D-Bus system bus socket poisoning — libdbus r
 export ANSIBLE_BECOME_METHOD=sudo  # pin become_method — ANSIBLE_BECOME_METHOD=su activates the su plugin which reads its own executable path from ANSIBLE_SU_EXE; neither is constrained by become_exe=/usr/bin/sudo in ansible.cfg, so an attacker can route all become tasks (system, packages, repos_dnf roles) through an arbitrary binary; pinning to sudo ensures only the sudo plugin is used
 unset ANSIBLE_SU_EXE ANSIBLE_PFEXEC_EXE ANSIBLE_SUDO_EXE  # remove per-plugin exe escape paths — each alternative become plugin (su, pfexec, sudo) exposes its own executable env var; clearing all three prevents ANSIBLE_BECOME_METHOD override from activating a residual attacker-controlled executable even if pinning above is somehow circumvented
 unset WGETRC  # wget config injection — WGETRC=/tmp/evil.rc redirects wget output path or disables certificate checking; neither shell task has an environment: block so the var is fully inherited; unsetting forces wget to use compiled-in defaults (CURL_HOME already cleared above with CURL_CA_BUNDLE)
-unset EDITOR VISUAL  # editor injection — EDITOR/VISUAL inherited by ansible-vault edit, git hooks, and any task that invokes $EDITOR
+unset EDITOR VISUAL ANSIBLE_EDITOR GIT_EDITOR  # editor injection — ansible-vault consults ANSIBLE_EDITOR > VISUAL > EDITOR in priority order and passes the decrypted vault path as $1 to the chosen binary; a pre-set ANSIBLE_EDITOR=/tmp/evil.sh exfiltrates vault plaintext before re-encrypting cleanly with exit 0; GIT_EDITOR similarly hijacks interactive git operations; EDITOR/VISUAL also inherited by git hooks and any task that invokes $EDITOR
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 export ANSIBLE_SHELL_EXECUTABLE=/bin/bash  # pin shell binary — ANSIBLE_SHELL_EXECUTABLE overrides the shell used for every shell: task and AnsiballZ module invocation across all 13 roles, including become:true plays; ANSIBLE_BECOME_EXE does not constrain it; 'ANSIBLE_SHELL_EXECUTABLE=/tmp/evil_sh make all' routes all task execution through an arbitrary binary with full access to become-elevated module staging
 unset ANSIBLE_SHELL_TYPE                   # prevent shell negotiation override — ANSIBLE_SHELL_TYPE=fish/csh activates alternative quoting/escaping paths in shell plugins, potentially breaking module command construction or activating code paths with different security properties; always negotiate bash (default)

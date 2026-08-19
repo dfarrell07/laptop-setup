@@ -45,6 +45,7 @@ override SHELL := /bin/bash
 # 'unexport' strips the variable from every child process Make spawns — load-bearing fix.
 # ENV and ZDOTDIR are analogous vectors for sh/zsh child processes.
 unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX
+unexport EDITOR VISUAL ANSIBLE_EDITOR
 
 CONTAINER ?= fedora-dev
 
@@ -412,4 +413,4 @@ smoke-test-user:
 # --- Vault ---
 
 vault-edit:
-	$(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
+	EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault edit group_vars/all/vault.yml
