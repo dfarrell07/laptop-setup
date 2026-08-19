@@ -533,3 +533,18 @@
     - not csb_rhel  # CSB: IT manages Ctrl+Alt+Delete policy via Satellite
     - not system_is_container  # target masking can trigger daemon-reload in privileged containers
   failed_when: false
+
+# OVN/openvswitch service masking — kind manages OVS in containers, system-level
+# OVS daemons conflict with kind's container-based OVS management for OVN-K dev.
+- name: Mask openvswitch services (ovs-vswitchd, ovsdb-server)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - ovs-vswitchd.service
+    - ovsdb-server.service
+  when:
+    - profile == 'work'  # OVN-K/kind dev workstation
+    - not csb_rhel  # User-managed Fedora hybrid CSB
+    - not system_is_container
+  failed_when: false  # openvswitch package may not be installed

@@ -192,6 +192,17 @@
           system_ptrace_scope: 0 is set. Restore to 1 (CIS default) after dev work.
       when: system_ptrace_scope | int == 0
 
+    - name: Warn when io_uring is restricted (system_io_uring_disabled >= 1)
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: system_io_uring_disabled is {{ system_io_uring_disabled }} — io_uring is
+          restricted to CAP_SYS_ADMIN (value 1) or fully disabled (value 2). Non-root applications
+          using io_uring directly (Rust tokio, Node.js libuv, PostgreSQL 14+, some Go apps) will
+          receive ENOSYS on io_uring_setup() and either fall back to epoll (performance degradation)
+          or fail if no fallback is implemented. Test all critical workloads after provisioning.
+          If breakage occurs: set system_io_uring_disabled: 0 in config.yml and re-provision.
+      when: system_io_uring_disabled | int >= 1
+
     - name: Validate system_sysctl_hardening is a non-empty dict (defense-in-depth)
       # extra-vars (precedence 22) beats set_fact (18); -esystem_sysctl_hardening={}
       # replaces the role-default dict before this task runs.  A mapping check alone
