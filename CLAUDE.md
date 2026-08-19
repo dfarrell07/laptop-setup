@@ -67,6 +67,20 @@ Obtain fingerprints from internal IT via secure out-of-band channel. See `SECURI
 "Internal SSH Git Host Setup" for details. Omit `fingerprint` to use TOFU (first-use trust,
 no pinning). GitHub SSH keys are auto-seeded via API; this step is only needed for internal hosts.
 
+**⚠️ SECURITY WARNING: Vault Password Shell Tracing Exposure**
+
+The vault password from `scripts/vault-pass.sh` is a secret. If provisioning runs with shell
+tracing enabled (`set -x` or `bash -x make all`), the password is exposed in stderr and
+becomes visible in CI logs (public, permanent), SSH transcripts, or strace output.
+
+**Risk**: An attacker with access to CI logs or transcripts can extract the vault password
+and decrypt `group_vars/all/vault.yml` offline, compromising all SSH keys and credentials.
+
+**Mitigations**:
+1. **Makefile guard**: `make -x` is forbidden and fails early with error message
+2. **Script protection**: `scripts/vault-pass.sh` and `scripts/vault-pass-ci.sh` disable xtrace (`set +x`) before password output
+3. **Never do**: `bash -x make all` or `set -x; make all`
+
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)

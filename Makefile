@@ -13,6 +13,13 @@
 # REQUIRED: prevent attacker-controlled MAKEFLAGS from disabling targets
 override MAKEFLAGS :=
 
+# Guard against shell tracing exposure of vault password (CVE: vault-pass.sh shell tracing)
+# SECURITY: Provisioning with 'make -x' exposes vault password in stderr, visible in CI logs
+ifneq ($(findstring x,$(MAKEFLAGS)),)
+$(error ERROR: Provisioning with 'make -x' is forbidden — shell tracing exposes vault password. \
+	Use: make all  (no -x flag). For Ansible debugging: make all -- -vv)
+endif
+
 CONTAINER ?= fedora-dev
 
 # Verify collections integrity, validate ANSIBLE_COLLECTIONS_PATH, and reject dangerous flags.
