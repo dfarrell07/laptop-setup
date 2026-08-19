@@ -111,6 +111,12 @@
         path: /tmp/claude-install.sh
         state: absent
   rescue:
+    - name: Clean up Claude Code install script on failure
+      ansible.builtin.file:
+        path: /tmp/claude-install.sh
+        state: absent
+      failed_when: false
+
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:

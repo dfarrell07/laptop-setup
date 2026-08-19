@@ -95,6 +95,12 @@
         state: absent
 
   rescue:
+    - name: Clean up OpenShift client tarball on failure
+      ansible.builtin.file:
+        path: /tmp/openshift-client-linux.tar.gz
+        state: absent
+      failed_when: false
+
     - name: Warn that oc + kubectl download failed
       ansible.builtin.debug:
         msg: >-
