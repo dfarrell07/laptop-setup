@@ -4,17 +4,12 @@
     cmd: "mount -o remount,nosuid,nodev{{ ',noexec' if system_tmp_noexec | bool else '' }} /tmp"
   become: true
   register: _tmp_remount_handler_result
+  until: _tmp_remount_handler_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _tmp_remount_handler_result.rc != 0
   changed_when: _tmp_remount_handler_result.rc == 0
-  failed_when: false
   when: not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
-
-- name: Warn on /tmp remount failure
-  ansible.builtin.debug:
-    msg: "WARNING: remount of /tmp failed (rc={{ _tmp_remount_handler_result.rc }}); live nosuid/nodev options may not be active"
-  listen: Remount /tmp
-  when:
-    - _tmp_remount_handler_result is defined
-    - _tmp_remount_handler_result.rc | default(0) != 0
 
 - name: Apply firewall rules
   ansible.builtin.systemd:

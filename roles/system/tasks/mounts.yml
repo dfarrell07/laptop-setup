@@ -64,6 +64,10 @@
   ansible.builtin.command:
     cmd: "mount -o remount,nosuid,nodev{{ _noexec_opt }} /tmp"
   register: _tmp_remount_result
+  until: _tmp_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _tmp_remount_result.rc != 0
   changed_when: _tmp_remount_result.rc == 0
   when:
     - not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
@@ -71,15 +75,17 @@
       'nosuid' not in (system_tmp_opts.stdout | default('')) or
       'nodev' not in (system_tmp_opts.stdout | default('')) or
       (system_tmp_noexec | bool and 'noexec' not in (system_tmp_opts.stdout | default('')))
-  failed_when: false
 
-- name: Warn if /tmp remount failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: remount of /tmp failed (rc={{ _tmp_remount_result.rc }});
-      live nosuid/nodev{{ '/noexec' if system_tmp_noexec | bool else '' }} may not be active
-  when:
-    - _tmp_remount_result.rc | default(0) != 0
+- name: Verify /tmp hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /tmp
+  register: _tmp_verify
+  failed_when: >-
+    'nosuid' not in _tmp_verify.stdout or
+    'nodev' not in _tmp_verify.stdout or
+    (system_tmp_noexec | bool and 'noexec' not in _tmp_verify.stdout)
+  changed_when: false
+  when: not system_is_container
 
 - name: Warn that system_tmp_noexec may break Play 2 become tasks
   ansible.builtin.debug:
@@ -142,6 +148,10 @@
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
   register: _devshm_remount_result
+  until: _devshm_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _devshm_remount_result.rc != 0
   changed_when: _devshm_remount_result.rc == 0
   when:
     - not system_is_container
@@ -149,13 +159,17 @@
       'noexec' not in (system_devshm_opts.stdout | default('')) or
       'nosuid' not in (system_devshm_opts.stdout | default('')) or
       'nodev' not in (system_devshm_opts.stdout | default(''))
-  failed_when: false
 
-- name: Warn if /dev/shm remount failed
-  ansible.builtin.debug:
-    msg: "WARNING: remount of /dev/shm failed (rc={{ _devshm_remount_result.rc }}); live nosuid/nodev/noexec may not be active"
-  when:
-    - _devshm_remount_result.rc | default(0) != 0
+- name: Verify /dev/shm hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /dev/shm
+  register: _devshm_verify
+  failed_when: >-
+    'nosuid' not in _devshm_verify.stdout or
+    'nodev' not in _devshm_verify.stdout or
+    'noexec' not in _devshm_verify.stdout
+  changed_when: false
+  when: not system_is_container
 
 # On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
 # Deploy a one-shot service to re-apply hardening on every boot instead.
@@ -322,6 +336,10 @@
   ansible.builtin.command:
     cmd: mount -o remount,nosuid,nodev /home
   register: _home_remount_result
+  until: _home_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _home_remount_result.rc != 0
   changed_when: _home_remount_result.rc == 0
   when:
     - system_home_mountpoint.rc | default(-1) == 0
@@ -331,13 +349,20 @@
     - >-
       'nosuid' not in (system_home_opts.stdout | default(''))
       or 'nodev' not in (system_home_opts.stdout | default(''))
-  failed_when: false
 
-- name: Warn if /home nosuid remount failed
-  ansible.builtin.debug:
-    msg: "WARNING: remount of /home failed (rc={{ _home_remount_result.rc }}); live nosuid may not be active"
+- name: Verify /home hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /home
+  register: _home_verify
+  failed_when: >-
+    'nosuid' not in _home_verify.stdout or
+    'nodev' not in _home_verify.stdout
+  changed_when: false
   when:
-    - _home_remount_result.rc | default(0) != 0
+    - system_home_mountpoint.rc | default(-1) == 0
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
 
 # --- Harden /boot mount options ---
 # nosuid,nodev,noexec: no setuid binaries, device nodes, or executable code needs to
