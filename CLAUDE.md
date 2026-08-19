@@ -81,6 +81,29 @@ and decrypt `group_vars/all/vault.yml` offline, compromising all SSH keys and cr
 2. **Script protection**: `scripts/vault-pass.sh` and `scripts/vault-pass-ci.sh` disable xtrace (`set +x`) before password output
 3. **Never do**: `bash -x make all` or `set -x; make all`
 
+**⚠️ SECURITY WARNING: USBGuard First Provision - Enumerate Devices Before Running**
+
+The playbook enables USBGuard by default (system_install_usbguard: true), which will start enforcing USB device authorization on first provision. Devices present when USBGuard first starts are automatically allowed (PresentDevicePolicy=keep), but any device plugged in AFTERWARD will be blocked unless it matches a rule in /etc/usbguard/rules.conf.
+
+**ThinkPad P16v Gen 1 AMD caveat**: ACPI reports internal USB devices as connect_type 'not used' instead of 'hardwired', so the base hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
+
+**Before first provision:**
+1. Connect ALL USB devices you regularly use (external drives, hubs, docks, keyboards, mice, etc.)
+2. Run: lsusb
+3. For each device you want to allow, add a rule to config.yml system_usbguard_extra_rules:
+   ```yaml
+   system_usbguard_extra_rules:
+     - "allow id VVVV:PPPP"  # Replace VVVV:PPPP with VID:PID from lsusb
+   ```
+4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
+
+**After first provision, if a device is blocked:**
+1. Temporarily allow: `sudo usbguard allow-device <id>` (find id with: `sudo usbguard list-devices --blocked`)
+2. Permanently add: Add rule to config.yml and re-run make system
+3. To disable USBGuard entirely: Set system_install_usbguard: false in config.yml
+
+See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboard" for detailed guidance.
+
 **First time on a new machine:**
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from https://brew.sh first)
