@@ -22,14 +22,16 @@ fi
 
 # SECURITY ENHANCEMENT: Detect synchronized modifications to critical files
 # Attack pattern: modify script + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# Mitigation: BLOCK commits that synchronously modify both script and hash
 if [ "$_vc_modified" -gt 0 ] && [ "$_vc_hash_modified" -gt 0 ]; then
-  echo "WARN: Both scripts/verify-collections.sh and .sha256 modified in same commit" >&2
-  echo "      This pattern can bypass hash-based integrity checks if both are modified" >&2
-  echo "      MITIGATION: This commit MUST be GPG-signed with your YubiKey" >&2
-  echo "      (Signed commits provide cryptographic proof of committer identity)" >&2
-  # Note: We cannot enforce GPG signing here in pre-commit (no access to commit signature yet),
-  # but CI checks will verify. Continue to allow commit; CI will catch unsigned modifications.
+  echo "ERROR: Both scripts/verify-collections.sh and .sha256 modified in same commit" >&2
+  echo "       This pattern can bypass hash-based integrity checks" >&2
+  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
+  echo "       To update the script intentionally:" >&2
+  echo "         1. Create a separate commit with only the script change" >&2
+  echo "         2. Review and merge that commit" >&2
+  echo "         3. Then create a second commit to update the .sha256 hash" >&2
+  failed=1
 fi
 
 if [ "$_vc_hash_modified" -gt 0 ] && [ "$_vc_modified" -eq 0 ]; then
@@ -57,14 +59,16 @@ fi
 
 # SECURITY ENHANCEMENT: Detect synchronized modifications to critical files
 # Attack pattern: modify script + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# Mitigation: BLOCK commits that synchronously modify both script and hash
 if [ "$_vaa_modified" -gt 0 ] && [ "$_vaa_hash_modified" -gt 0 ]; then
-  echo "WARN: Both scripts/verify-ansible-args.sh and .sha256 modified in same commit" >&2
-  echo "      This pattern can bypass hash-based integrity checks if both are modified" >&2
-  echo "      MITIGATION: This commit MUST be GPG-signed with your YubiKey" >&2
-  echo "      (Signed commits provide cryptographic proof of committer identity)" >&2
-  # Note: We cannot enforce GPG signing here in pre-commit (no access to commit signature yet),
-  # but CI checks will verify. Continue to allow commit; CI will catch unsigned modifications.
+  echo "ERROR: Both scripts/verify-ansible-args.sh and .sha256 modified in same commit" >&2
+  echo "       This pattern can bypass hash-based integrity checks" >&2
+  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
+  echo "       To update the script intentionally:" >&2
+  echo "         1. Create a separate commit with only the script change" >&2
+  echo "         2. Review and merge that commit" >&2
+  echo "         3. Then create a second commit to update the .sha256 hash" >&2
+  failed=1
 fi
 
 if [ "$_vaa_hash_modified" -gt 0 ] && [ "$_vaa_modified" -eq 0 ]; then
@@ -91,13 +95,18 @@ if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -eq 0 ]; then
 fi
 
 # SECURITY ENHANCEMENT: Detect synchronized modifications to Makefile
+# SECURITY ENHANCEMENT: Detect synchronized modifications to Makefile
 # Attack pattern: modify Makefile + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# Mitigation: BLOCK commits that synchronously modify both Makefile and hash
 if [ "$_makefile_modified" -gt 0 ] && [ "$_makefile_hash_modified" -gt 0 ]; then
-  echo "WARN: Both Makefile and .sha256 modified in same commit" >&2
-  echo "      This pattern can bypass hash-based integrity checks if both are modified" >&2
-  echo "      MITIGATION: This commit MUST be GPG-signed with your YubiKey" >&2
-  echo "      (Signed commits provide cryptographic proof of committer identity)" >&2
+  echo "ERROR: Both Makefile and .sha256 modified in same commit" >&2
+  echo "       This pattern can bypass hash-based integrity checks" >&2
+  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
+  echo "       To update the Makefile intentionally:" >&2
+  echo "         1. Create a separate commit with only the Makefile change" >&2
+  echo "         2. Review and merge that commit" >&2
+  echo "         3. Then create a second commit to update the .sha256 hash" >&2
+  failed=1
 fi
 
 if [ "$_makefile_hash_modified" -gt 0 ] && [ "$_makefile_modified" -eq 0 ]; then
@@ -124,17 +133,19 @@ if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -eq 0 ]; then
 fi
 
 # SECURITY ENHANCEMENT: Detect synchronized modifications to supply chain files
+# SECURITY ENHANCEMENT: Detect synchronized modifications to supply chain files
 # Attack pattern: modify tarball + update hash in same commit to pass all checks
-# Mitigation: flag suspicious synchronized changes and require GPG signing
+# Mitigation: BLOCK commits that synchronously modify both tarballs and hashes
 if [ "$_modified_tarballs" -gt 0 ] && [ "$_modified_hashes" -gt 0 ]; then
-  echo "WARN: Both collections-dist/*.tar.gz and SHA256SUMS modified in same commit" >&2
-  echo "      This pattern can bypass hash-based integrity checks if both are modified" >&2
-  echo "      MITIGATION: This commit MUST be GPG-signed with your YubiKey" >&2
-  echo "      (Signed commits provide cryptographic proof of committer identity)" >&2
-  # Note: We cannot enforce GPG signing here in pre-commit (no access to commit signature yet),
-  # but CI checks will verify. Continue to allow commit; CI will catch unsigned modifications.
+  echo "ERROR: Both collections-dist/*.tar.gz and SHA256SUMS modified in same commit" >&2
+  echo "       This pattern can bypass hash-based integrity checks" >&2
+  echo "       SECURITY FIX: Synchronized modifications are blocked by this pre-commit hook" >&2
+  echo "       To update collections intentionally:" >&2
+  echo "         1. Create a separate commit with only the tarball changes" >&2
+  echo "         2. Review and merge that commit" >&2
+  echo "         3. Then create a second commit to update the SHA256SUMS hash" >&2
+  failed=1
 fi
-
 if [ "$_modified_hashes" -gt 0 ] && [ "$_modified_tarballs" -eq 0 ]; then
   echo "WARN: SHA256SUMS modified but no collections-dist/*.tar.gz changes detected" >&2
   echo "      This is unusual. Verify intentional by reviewing: git diff --cached -- collections-dist/SHA256SUMS" >&2
