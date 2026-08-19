@@ -25,6 +25,7 @@
   ignore_errors: true  # noqa: ignore-errors
 
 - name: Apply sysctl  # noqa: command-instead-of-module
+  listen: Sysctl config changed
   ansible.builtin.command:
     cmd: sysctl --system
   become: true
@@ -69,7 +70,7 @@
         echo "This may indicate CONFIG_BPF_UNPRIV_DEFAULT_OFF or similar kernel-locking features." >&2
       fi
       exit 0
-  listen: Apply sysctl
+  listen: Sysctl config changed
   become: true
   when:
     - not system_is_container
