@@ -441,59 +441,13 @@
           - _config_raw.get('desktop_sway_libva_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
           - _config_raw.get('desktop_sway_vdpau_driver', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
-          SECURITY: desktop_wm_hide_edge_borders must be one of: both, vertical, horizontal,
-          smart, smart_no_gaps, none, or empty. A newline payload (e.g. 'both\nexec /bin/sh')
-          injects a top-level sway/i3 directive executed on WM start or reload.
-          Impact: arbitrary command execution as the login user on WM start or reload.
-          Fix: use only an allowed keyword (e.g. desktop_wm_hide_edge_borders: both) or leave empty.
-          desktop_wm_border_width and desktop_wm_floating_border_width in config.yml
-          must be non-negative integers (^[0-9]+$). These values are rendered bare into sway/i3
-          config as 'default_border pixel <value>'; a payload like '1\nexec /bin/sh -c cmd'
-          injects a top-level exec directive executed when the WM starts.
-          Impact: arbitrary command execution as the login user on WM start or reload.
-          Fix: use a plain integer (e.g. 1, 2); no newlines or non-digit characters allowed.
-          desktop_alacritty_color_* and desktop_bar_* values must be 3- or 6-digit
-          hex colors (#RGB or #RRGGBB). desktop_wm_lock_color must be a 6-digit hex color
-          WITHOUT # (swaylock/i3lock format). desktop_alacritty_font_family and
-          desktop_wm_font_family must use only alphanumeric/space/underscore/hyphen
-          (no newlines — a newline injects a new sway/i3 directive, exec runs as the user). desktop_alacritty_font_size must be a positive
-          number. desktop_i3status_battery_num must be a non-negative integer or empty.
-          desktop_gtk_theme and desktop_gtk_icon_theme must be alphanumeric/space/dash/underscore.
-          desktop_wm_browser, desktop_sway_polkit_agent, desktop_i3_polkit_agent, desktop_terminal
-          must be safe executable paths (alphanumeric/slash/dot/dash/underscore only — no shell
-          metacharacters). desktop_i3_trackpoint_id must be alphanumeric/space/dot/underscore/hyphen
-          (Xorg device name characters). desktop_sway_trackpoint_id must be alphanumeric/space/
-          dot/colon/slash/underscore/hyphen (sway input device name e.g. '2:10:TPPS/2_IBM_TrackPoint');
-          a newline payload closes the input block and injects exec directives into sway config.
-          desktop_i3_trackpoint_accel_profile and desktop_sway_trackpoint_accel_profile must be flat or adaptive.
-          desktop_sway_trackpoint_pointer_accel and desktop_i3_trackpoint_pointer_accel must be in [-1.0, 1.0].
-          desktop_sway_trackpoint_scroll_factor must be >= 0.
-          These values are rendered into WM exec directives or Xorg
-          config; shell metacharacters, newlines, or special Xorg syntax (EndSection, MatchProduct)
-          allow command injection when the WM/Xorg starts (e.g., desktop_i3_trackpoint_id='device\nEndSection\nSection'
-          breaks Xorg parsing and injects arbitrary Xorg directives).
-          containers_log_driver must be one of k8s-file/journald/json-file/syslog/none.
-          desktop_wm_repeat_delay and desktop_wm_repeat_rate must be non-negative integers (^[0-9]+$).
-          Input: config.yml; Mechanism: i3/sway pass these to xset r rate / repeat_delay via sh -c;
-          shell metacharacters (e.g. "200; id>/tmp/pwned #") execute arbitrary code at WM startup.
-          Impact: local code execution as the user when the WM starts.
-          Fix: use only digits (e.g. desktop_wm_repeat_delay: 200, desktop_wm_repeat_rate: 50).
-          desktop_sway_output must match ^[a-zA-Z0-9*_-]+$ (e.g. '*' or 'eDP-1'); a newline
-          payload injects an exec directive into sway.config (e.g. "*\nexec /bin/sh -c 'cmd'").
-          desktop_sway_hidpi_scale must match ^[0-9]+\.?[0-9]*$ (e.g. '1' or '1.5').
-          desktop_sway_cursor_theme must match ^[a-zA-Z0-9_-]+$ (e.g. 'Adwaita'); shell
-          metacharacters allow injection into the exec dbus-update-activation-environment and
-          seat commands in sway.config (e.g. 'Adwaita; id>/tmp/pwned #' executes on WM start).
-          desktop_sway_cursor_size must be a non-negative integer (e.g. 24).
-          desktop_sway_libva_driver and desktop_sway_vdpau_driver must match ^[a-zA-Z0-9_-]*$
-          (e.g. 'radeonsi', 'iHD', 'va_gl', or empty). These are interpolated on the exec
-          dbus-update-activation-environment line in sway.config.j2; a newline (e.g.
-          'radeonsi\nexec /bin/sh -c cmd') terminates the exec continuation and injects a new
-          top-level sway directive executed as the login user on WM startup.
-          Impact: arbitrary command execution as the user on WM start or reload.
-          Fix: use only alphanumeric/underscore/hyphen driver names; no newlines or spaces.
-          desktop_sway_focus_follows_mouse must be one of yes/no/workspace or empty (^(yes|no|workspace|)$);
-          a newline payload (e.g. "yes\nexec /bin/sh") injects a top-level sway directive executed at WM start.
+          SECURITY: one or more desktop_* vars in config.yml failed validation.
+          Color values must be #RGB or #RRGGBB; wm_lock_color must be 6 hex digits without #.
+          Font/theme names: alphanumeric/space/underscore/hyphen. Driver names: alphanumeric/underscore/hyphen.
+          Numeric sizes must be positive integers or floats. Enum values (adaptive_sync, focus_follows_mouse,
+          xwayland, accel_profile, log_driver, hide_edge_borders) must be one of the listed keywords.
+          Trackpoint accel values must be in [-1.0, 1.0]; scroll_factor >= 0.
+          Fix: use plain safe values in config.yml for all desktop_* variables (no newlines, no shell metacharacters).
 
     - name: Assert keyboard layout vars in config.yml are safe identifiers (sway input block injection guard)
       when: _config_raw is defined
