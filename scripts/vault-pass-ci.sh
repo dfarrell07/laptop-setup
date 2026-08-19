@@ -1,4 +1,7 @@
 #!/bin/bash
+# Vault-pass dual-file architecture: This is the CI stub (bootstrap placeholder).
+# vault-pass.sh is the real provider (YubiKey HMAC-SHA1 or keyring).
+# bootstrap copies this → vault-pass.sh; setup-yubikeys replaces it with the real version.
 set -euo pipefail
 # CI-only dummy vault password. NEVER use this to encrypt group_vars/all/vault.yml —
 # the real vault must be encrypted with the YubiKey HMAC-SHA1 script (vault-pass.sh).
