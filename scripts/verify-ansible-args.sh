@@ -401,6 +401,8 @@ export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansib
 export ANSIBLE_INVENTORY="${_repo_root}/inventory"  # pin inventory; host_var inject bypasses ANSIBLE_PYTHON_INTERPRETER unset
 export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
 export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
+export ANSIBLE_HOME="${_repo_root}"  # pin ANSIBLE_HOME — ANSIBLE_HOME=/tmp/evil shifts DEFAULT_MODULE_UTILS_PATH to include /tmp/evil/plugins/module_utils before the installed package; Ansible's module loader searches that path first so a malicious basic.py at /tmp/evil/plugins/module_utils/ansible/module_utils/basic.py executes in root context (Play 1, become:true) for every ansible.builtin.* module across all 13 roles; pinning to _repo_root (validated, non-attacker-writable) prevents this prepend
+export ANSIBLE_MODULE_UTILS=""       # clear ANSIBLE_MODULE_UTILS — direct env var for module_utils search path; an attacker-set value prepends /tmp/evil/module_utils before built-in paths at PluginLoader resolution time; clearing forces Ansible to use only compiled-in module_utils from the installed package, regardless of ANSIBLE_HOME
 export ANSIBLE_LIBRARY=""         # prevent ANSIBLE_LIBRARY=/tmp/evil hijacking short-name module resolution (runs before builtins, become: true = root)
 export ANSIBLE_FILTER_PLUGINS=""  # no local filter plugins; prevent shadowing built-ins (e.g. from_yaml) via env injection
 export ANSIBLE_CONNECTION_PLUGINS=""  # prevent ANSIBLE_CONNECTION_PLUGINS=/tmp/evil hijacking: PluginLoader searches user paths before builtins; malicious local.py intercepts all localhost task execution (all 13 roles, including become:true plays)
