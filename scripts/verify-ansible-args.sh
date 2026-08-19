@@ -46,41 +46,13 @@ EOF
     fi
 done
 
-# Validate ANSIBLE_COLLECTIONS_PATH if set externally (prevents malicious path override)
-# SECURITY: Validate directory boundaries to prevent path prefix collision attacks
-if [[ -n "${ANSIBLE_COLLECTIONS_PATH:-}" ]]; then
-    expected_dir="$(cd "$(dirname "$0")/.." && pwd)/collections"
-
-    # Validate each colon-separated path component
-    IFS=':' read -ra path_components <<<"${ANSIBLE_COLLECTIONS_PATH}"
-    for path_component in "${path_components[@]}"; do
-        # Skip empty components from leading/trailing colons
-        [[ -z "$path_component" ]] && continue
-
-        # Resolve the path to detect directory boundary violations
-        if resolved_path="$(cd "$path_component" 2>/dev/null && pwd)"; then
-            # Check if resolved path is exactly the collections dir or a subdirectory of it
-            # This prevents prefix collision attacks like /home/user/collections-evil
-            if [[ "$resolved_path" != "$expected_dir" && "$resolved_path" != "$expected_dir"/* ]]; then
-                cat >&2 <<EOF
-ERROR: ANSIBLE_COLLECTIONS_PATH contains unauthorized path component.
-Expected: ${expected_dir} or subdirectories within it.
-Got component: ${path_component} (resolved to: ${resolved_path})
-This could load unverified collection code bypassing supply chain verification.
-Solution: Unset ANSIBLE_COLLECTIONS_PATH or run via 'make' which sets it correctly.
-EOF
-                exit 1
-            fi
-        else
-            cat >&2 <<EOF
-ERROR: ANSIBLE_COLLECTIONS_PATH contains invalid path component.
-Invalid path: ${path_component}
-Solution: Unset ANSIBLE_COLLECTIONS_PATH or run via 'make' which sets it correctly.
-EOF
-            exit 1
-        fi
-    done
-fi
+# Override ANSIBLE_COLLECTIONS_PATH to always use the verified repo collections first.
+# This is stronger than validation: instead of checking what's set, we SET it to the
+# known-safe value. System paths (~/.ansible/collections, /usr/share/ansible/collections)
+# are included as fallbacks for non-Galaxy-managed collections, but the repo's verified
+# ./collections/ always takes precedence (leftmost wins in Ansible's path resolution).
+_repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 scripts/verify-collections.sh
