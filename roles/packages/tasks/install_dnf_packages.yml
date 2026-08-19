@@ -60,9 +60,7 @@
         _csb_role: packages
         _csb_task_name: "Install dnf packages"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
-        _csb_action: >-
-          One or more dnf packages could not be installed;
-          check repo access or install manually (see ticket body for details)
+        _csb_action: "One or more dnf packages failed; see ticket body for package list and remediation details."
         _csb_ticket_summary: "Cannot install core dnf packages on CSB"
         _csb_ticket_body: >-
           One or more packages from packages_cli, packages_languages_work,

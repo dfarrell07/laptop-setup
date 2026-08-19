@@ -290,7 +290,7 @@ else
        ! grep -qE '^desktop_sway_hidpi_scale:[[:space:]]*["'"'"']?1\.[1-9]' "$CONFIG_FILE"; then
       record "config_sway_hidpi" "warn" "desktop_sway_hidpi_scale not set above 1.0 — if this is a HiDPI display (e.g. ThinkPad P16v 2560x1600) add 'desktop_sway_hidpi_scale: \"1.5\"' to config.yml to avoid microscopic fonts"
     else
-      record "config_sway_hidpi" "pass" "desktop_sway_hidpi_scale set"
+      record "config_sway_hidpi" "pass" "desktop_sway_hidpi_scale set to $(grep '^desktop_sway_hidpi_scale:' "$CONFIG_FILE" | cut -d: -f2- | sed 's/^[[:space:]]*//')"
     fi
   fi
 fi
@@ -308,7 +308,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
     elif grep -qE "^${_ivar}:[[:space:]]*['\"]?CHANGE_ME" "$CONFIG_FILE"; then
       record "identity_${_ivar}" "fail" "${_ivar} is still 'CHANGE_ME' in config.yml — set a real value before running make all"
     else
-      record "identity_${_ivar}" "pass" "${_ivar} is set in config.yml"
+      record "identity_${_ivar}" "pass" "${_ivar}=$(grep "^${_ivar}:" "$CONFIG_FILE" | cut -d: -f2- | sed 's/^[[:space:]]*//')"
     fi
   done
 fi
