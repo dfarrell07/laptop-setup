@@ -63,6 +63,8 @@ if grep -qE '^system_kernel_lockdown:' "$_cfg" 2>/dev/null; then
 else
   _lockdown_intended="integrity"  # role default
 fi
+# Read desktop_sway_trackpoint_id if configured (for TrackPoint device validation)
+_trackpoint_id=$(awk -F': ' '/^desktop_sway_trackpoint_id:/{gsub(/^[[:space:]]*["'"'"']|["'"'"'][[:space:]]*$/, "", $2); sub(/#.*$/, "", $2); print $2}' "$_cfg" 2>/dev/null)
 unset _cfg
 
 exec_cmd() { # execute locally or inside container
@@ -357,6 +359,31 @@ if command -v sway &>/dev/null; then
   # Sway also uses wpctl for audio keybindings (same as i3 after cycle-13 alignment)
   if command -v wpctl &>/dev/null; then record "sway-wpctl" "PASS"
   else record "sway-wpctl" "FAIL" "wpctl not installed — XF86AudioRaiseVolume/LowerVolume/Mute keybindings non-functional in Sway (run: make desktop)"; fi
+
+  # TrackPoint device ID validation (prevents silent scroll failure after device ID changes)
+  if [[ -n "$_trackpoint_id" ]]; then
+    # Extract device name from vendor:product:Name format (e.g., "2:10:TPPS/2_Elan_TrackPoint" → "TPPS/2_Elan_TrackPoint")
+    _tp_name="${_trackpoint_id##*:}"
+    _tp_found=false
+    if [[ -r /proc/bus/input/devices ]]; then
+      # Check if TrackPoint device exists in /proc/bus/input/devices
+      if grep -q "Name=.*$_tp_name" /proc/bus/input/devices 2>/dev/null; then
+        _tp_found=true
+      fi
+    fi
+    if $_tp_found; then
+      record "sway-trackpoint-device" "PASS"
+    else
+      # Get actual TrackPoint devices from system for remediation guidance
+      _tp_actual=$(grep -E 'Name=.*(TrackPoint|Pointing Stick)' /proc/bus/input/devices 2>/dev/null | sed 's/.*Name="\([^"]*\)".*/\1/' | head -1)
+      if [[ -n "$_tp_actual" ]]; then
+        record "sway-trackpoint-device" "WARN" "Configured device '$_tp_name' not found. Actual: '$_tp_actual'. Update desktop_sway_trackpoint_id in config.yml and run: make desktop"
+      else
+        record "sway-trackpoint-device" "WARN" "Configured device '$_tp_name' not found and no TrackPoint detected in /proc/bus/input/devices. Verify device or remove desktop_sway_trackpoint_id from config.yml."
+      fi
+    fi
+    unset _tp_name _tp_found _tp_actual
+  fi
 fi
 
 # vimrc quality (termguicolors + background=dark for correct colors)
