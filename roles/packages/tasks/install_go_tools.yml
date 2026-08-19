@@ -34,11 +34,13 @@
 - name: "Validate GONOSUMDB/GOSUMDB: (2/3) GOSUMDB not disabled and valid hostname"
   # Accepts: FQDN (e.g. sum.golang.org) and FQDN:port (e.g. sum.corp.com:443)
   # Rejects: 'off', empty string, IP addresses, single-label hostnames (localhost)
+  vars:
+    _gosumdb_fqdn_re: '^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*$|^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*:[0-9]{1,5}$'  # yamllint disable-line rule:line-length
   ansible.builtin.assert:
     that:
       - "packages_gosumdb != 'off' and packages_gosumdb | length > 0"
       - "packages_gosumdb | type_debug == 'str'"
-      - "packages_gosumdb | regex_search('^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*$|^[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.([a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+)*:[0-9]{1,5}$') is not none"  # yamllint disable-line rule:line-length
+      - "packages_gosumdb | regex_search(_gosumdb_fqdn_re) is not none"
       - "packages_gosumdb | regex_search('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}') is none"
       - "packages_gosumdb not in ['localhost', 'localhost:']"
     fail_msg: >-
