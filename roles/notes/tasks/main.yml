@@ -64,7 +64,7 @@
 
         - name: Detect transcrypt binary
           block:
-            - name: Check if transcrypt is available
+            - name: Stat transcrypt binary
               ansible.builtin.stat:
                 path: "{{ notes_transcrypt_bin_path }}"
               register: notes_transcrypt_bin
@@ -98,7 +98,7 @@
 
         - name: Check transcrypt initialization status
           block:
-            - name: Check if transcrypt is initialized
+            - name: Verify transcrypt initialized
               ansible.builtin.command:
                 argv:
                   - "{{ notes_transcrypt_bin_path }}"
