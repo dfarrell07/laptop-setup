@@ -2,7 +2,7 @@
 - name: Provision notes repo when notes_enabled
   when: notes_enabled | bool
   block:
-    - name: Stat notes repo
+    - name: Gather notes repo stat
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_stat
@@ -46,7 +46,7 @@
                   HTTPS clone failed:
                   {{ notes_https_clone_result.stderr | default('', true) or notes_https_clone_result.msg | default('unknown') }}
 
-    - name: Stat notes repo after clone
+    - name: Gather notes repo stat after clone
       ansible.builtin.stat:
         path: "{{ notes_repo_path }}/.git/config"
       register: notes_repo_post_clone
@@ -64,7 +64,7 @@
 
         - name: Detect transcrypt binary
           block:
-            - name: Stat transcrypt binary
+            - name: Gather transcrypt binary stat
               ansible.builtin.stat:
                 path: "{{ notes_transcrypt_bin_path }}"
               register: notes_transcrypt_bin
