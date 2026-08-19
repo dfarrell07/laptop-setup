@@ -37,9 +37,10 @@ if [[ -f SHA256SUMS.asc ]]; then
     # the repo first and import keys from collections-dist/signing-key.asc. However, if a key
     # IS present but signature is invalid, we treat that as FATAL (active tampering).
     echo "WARNING: SHA256SUMS.asc signing key not in GPG keyring" >&2
-    echo "         Continuing with hash-only verification (TOFU model)" >&2
-    echo "         To enable signature verification: gpg --import collections-dist/signing-key.asc" >&2
-    echo "         See SECURITY.md § 'Ansible Collections Supply Chain' for details." >&2
+    echo "         Continuing with hash-only verification (TOFU: Trust On First Use)" >&2
+    echo "         This is expected on fresh machines. On subsequent runs, import the key for" >&2
+    echo "         cryptographic verification: gpg --import collections-dist/signing-key.asc" >&2
+    echo "         For security context, see SECURITY.md § 'Ansible Collections Supply Chain'." >&2
   else
     # Bad signature with key present — FATAL (tampering detected)
     echo "FATAL: SHA256SUMS.asc GPG signature verification FAILED" >&2

@@ -403,8 +403,9 @@ VAULTPASS
   ok "vault-pass.sh written (mode 700, atomic rename)"
 
   # Update the SHA256 integrity reference to match the new YubiKey version
-  sha256sum "$VAULT_PASS_SH" > "$SCRIPT_DIR/vault-pass.sh.sha256"
-  ok "Updated vault-pass.sh.sha256 with new YubiKey version hash"
+  # Use relative path (basename only) so sha256sum -c works from any clone location
+  (cd "$SCRIPT_DIR" && sha256sum "$(basename "$VAULT_PASS_SH")" > vault-pass.sh.sha256)
+  ok "Updated vault-pass.sh.sha256 with new YubiKey version hash (relative path)"
 
   # Verify vault-pass.sh works (requires a key still inserted)
   printf "       Touch YubiKey to verify vault-pass.sh (%ds)... " "$CHALRESP_TIMEOUT"
