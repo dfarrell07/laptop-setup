@@ -111,88 +111,74 @@
     - system_firewall_manage_zone | bool
     - is_fedora
 
-- name: Enable ICMP block inversion on drop zone
-  ansible.posix.firewalld:
-    zone: drop
-    icmp_block_inversion: true
-    permanent: true
-    immediate: true
-    state: enabled
+- block:
+    - name: Enable ICMP block inversion on drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block_inversion: true
+        permanent: true
+        immediate: true
+        state: enabled
+      notify: Apply firewall rules
+
+    # NOTE: With icmp-block-inversion enabled, adding icmp-block ALLOWS these types
+    # (semantics are inverted). Without inversion, this command would block them.
+    - name: Allow essential ICMP types through drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ (system_firewall_icmp_types + system_firewall_icmp_extra_types) | unique }}"
+      notify: Apply firewall rules
+
+    - name: ICMPv6 router-advertisement in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block: router-advertisement
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
+      notify: Apply firewall rules
+
+    - name: Allow DHCPv6-client in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        service: dhcpv6-client
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
+      notify: Apply firewall rules
+
+    # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
+    # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
+    # Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
+    # via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
+    - name: Open SSH port in firewall
+      ansible.posix.firewalld:
+        port: "{{ ssh_port }}/tcp"
+        zone: drop
+        permanent: true
+        immediate: true
+        state: enabled
+      notify: Apply firewall rules
+
+    # On fresh provisioning with system_enable_cockpit=false (the default), this task is a
+    # no-op: state=disabled against a non-existent rule on the drop zone is always ok.
+    # The task only has an effect when transitioning from system_enable_cockpit: true → false
+    # (closing a previously opened port) or true → true (opening/ensuring the port is open).
+    - name: Toggle Cockpit port 9090/tcp in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        port: "9090/tcp"
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
+      notify: Apply firewall rules
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
-  notify: Apply firewall rules
-
-# NOTE: With icmp-block-inversion enabled, adding icmp-block ALLOWS these types
-# (semantics are inverted). Without inversion, this command would block them.
-- name: Allow essential ICMP types through drop zone
-  ansible.posix.firewalld:
-    zone: drop
-    icmp_block: "{{ item }}"
-    permanent: true
-    immediate: true
-    state: enabled
-  loop: "{{ (system_firewall_icmp_types + system_firewall_icmp_extra_types) | unique }}"
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op
-  notify: Apply firewall rules
-
-- name: ICMPv6 router-advertisement in drop zone
-  ansible.posix.firewalld:
-    zone: drop
-    icmp_block: router-advertisement
-    permanent: true
-    immediate: true
-    state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-  notify: Apply firewall rules
-
-- name: Allow DHCPv6-client in drop zone
-  ansible.posix.firewalld:
-    zone: drop
-    service: dhcpv6-client
-    permanent: true
-    immediate: true
-    state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-  notify: Apply firewall rules
-
-# On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
-# so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
-# Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
-# via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
-- name: Open SSH port in firewall
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    zone: drop
-    permanent: true
-    immediate: true
-    state: enabled
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-  notify: Apply firewall rules
-
-# On fresh provisioning with system_enable_cockpit=false (the default), this task is a
-# no-op: state=disabled against a non-existent rule on the drop zone is always ok.
-# The task only has an effect when transitioning from system_enable_cockpit: true → false
-# (closing a previously opened port) or true → true (opening/ensuring the port is open).
-- name: Toggle Cockpit port 9090/tcp in drop zone
-  ansible.posix.firewalld:
-    zone: drop
-    port: "9090/tcp"
-    permanent: true
-    immediate: true
-    state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-  notify: Apply firewall rules
 
 # Fallback for RHEL CSB machines where IT manages firewall zone policy
 # (system_firewall_manage_zone=false) and the primary interface stays in whatever
