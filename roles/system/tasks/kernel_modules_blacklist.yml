@@ -1,0 +1,132 @@
+---
+# roles/system/tasks/kernel_modules_blacklist.yml
+# --- Kernel module blacklist ---
+- name: Deploy kernel module blacklist (non-container)
+  # CSB posture: safe to deploy on RHEL CSB — blacklisted modules (hfs, cramfs, vivid, n_hdlc,
+  # etc.) are not used by IT workflows and do not conflict with SCAP baselines. The SCAP RHEL9
+  # profile independently blacklists most of the same modules (CIS 3.x); deploying this file
+  # is additive and does not override IT-managed modprobe.d entries.
+  when: not system_is_container  # modprobe.d is not applied in containers; skip to avoid template failures
+  block:
+    - name: Ensure /etc/modprobe.d exists
+      ansible.builtin.file:
+        path: /etc/modprobe.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Enumerate /etc/modprobe.d for unexpected files
+      # Pre-existing zzz-evil.conf processed after hardening.conf (lexicographic order,
+      # last-rule-wins) can override 'install firewire-ohci /bin/false' with a permissive
+      # rule, silently re-enabling DMA-capable modules. Enumerate before deploying so any
+      # attacker-placed conf is caught before it can shadow the hardening rules.
+      ansible.builtin.find:
+        paths: /etc/modprobe.d
+        file_type: file
+      register: _modprobe_d_audit
+
+    - name: "Find /etc/modprobe.d files not owned by any RPM (pre-plant audit)"
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          find /etc/modprobe.d -maxdepth 1 -type f \
+            | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+        executable: /bin/bash
+      register: _modprobe_unowned
+      changed_when: false
+      failed_when: false
+      when: is_dnf
+
+    - name: Fail on unexpected files in /etc/modprobe.d
+      vars:
+        _found: "{{ _modprobe_d_audit.files | map(attribute='path') | map('basename') | list }}"
+        _unowned_basenames: "{{ _modprobe_unowned.stdout_lines | default([]) | map('basename') | list }}"
+        _unexpected: "{{ _unowned_basenames | difference(system_modprobed_whitelist) }}"
+      ansible.builtin.fail:
+        msg: |
+          Unexpected file(s) in /etc/modprobe.d — last-rule-wins ordering means any file
+          sorted after hardening.conf can override 'install <module> /bin/false' guards.
+          Unexpected (unpackaged AND not whitelisted): {{ _unexpected | join(', ') }}
+          Allowed:    {{ system_modprobed_whitelist | join(', ') }}
+          Remove the file(s) or add basenames to system_modprobed_whitelist in config.yml.
+      when:
+        - is_dnf
+        - _unexpected | length > 0
+
+    - name: Deploy kernel module blacklist
+      ansible.builtin.template:
+        src: modprobe-hardening.conf.j2
+        dest: /etc/modprobe.d/hardening.conf
+        mode: "0644"
+
+    - name: Unload Bluetooth modules (best-effort, pre-reboot)
+      # rfcomm/bnep have user counts > 0 when bluetooth.service is stopped but modules remain loaded.
+      # Unload in dependency order so dependent modules release before bluetooth core.
+      # failed_when/ignore_errors handle never-loaded or in-use modules gracefully.
+      when: system_disable_bluetooth | bool
+      ansible.builtin.command:
+        cmd: modprobe -r {{ item }}
+      loop:
+        - rfcomm
+        - bnep
+        - btusb
+        - bluetooth
+      failed_when: false
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check for CVE-risk blacklisted modules currently loaded
+      # Detect vivid/n_hdlc/firewire modules loaded before unload attempt so we can
+      # confirm unload success and fail hard if any remain (modules_disabled=1 set by
+      # sysctl.yml will prevent subsequent modprobe -r with EPERM).
+      ansible.builtin.shell:
+        cmd: >-
+          grep -E '^(vivid|n_hdlc|firewire_sbp2|firewire_net|firewire_ohci|firewire_core|nosy) '
+          /proc/modules | awk '{print $1}' || true
+      register: _blacklisted_modules_loaded
+      changed_when: false
+
+    - name: Unload unconditionally blacklisted modules (best-effort, pre-reboot)
+      # Modules already loaded at provisioning time remain exploitable until reboot.
+      # Attempt immediate unload so CVEs (vivid OOB write, n_hdlc privesc, firewire DMA)
+      # are not exploitable during the pre-reboot window. failed_when/ignore_errors
+      # handle the common case where a module was never loaded.
+      ansible.builtin.command:
+        cmd: modprobe -r {{ item }}
+      loop:
+        - vivid
+        - n_hdlc
+        - firewire-sbp2
+        - firewire-net
+        - firewire-ohci
+        - firewire-core
+        - nosy
+      failed_when: false
+      ignore_errors: true
+      changed_when: false
+
+    - name: Re-check CVE-risk modules still loaded after unload attempt
+      ansible.builtin.shell:
+        cmd: >-
+          grep -E '^(vivid|n_hdlc|firewire_sbp2|firewire_net|firewire_ohci|firewire_core|nosy) '
+          /proc/modules | awk '{print $1}' || true
+      register: _blacklisted_modules_post_unload
+      changed_when: false
+      when: _blacklisted_modules_loaded.stdout | length > 0
+
+    - name: Fail if CVE-risk modules remain loaded — reboot required to close exposure
+      # Silent ignore_errors on the unload loop masked active residual risk. If unload
+      # failed (module in-use, or modules_disabled=1 already active from sysctl.yml),
+      # the CVE is live until reboot. Hard-fail so the operator knows to reboot now.
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY ALERT: CVE-risk kernel modules remain loaded after unload attempt:
+          {{ _blacklisted_modules_post_unload.stdout_lines | join(', ') }}.
+          Modules could not be unloaded (in-use or modules_disabled=1 already active).
+          CVEs (vivid OOB write, n_hdlc privesc, firewire DMA) remain exploitable until
+          the next reboot. Reboot immediately to close the pre-reboot exposure window.
+      when:
+        - _blacklisted_modules_loaded.stdout | length > 0
+        - _blacklisted_modules_post_unload is not skipped
+        - _blacklisted_modules_post_unload.stdout | length > 0
