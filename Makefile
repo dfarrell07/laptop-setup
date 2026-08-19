@@ -45,12 +45,14 @@ override SHELL := /bin/bash
 # 'unexport' strips the variable from every child process Make spawns — load-bearing fix.
 # ENV and ZDOTDIR are analogous vectors for sh/zsh child processes.
 unexport BASH_ENV ZDOTDIR ENV NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX CDPATH
+unexport KUBECONFIG KUBE_CONFIG_PATH KUBE_CONTEXT KUBE_APISERVER KUBE_TOKEN KUBE_CERT_AUTH KUBE_CLIENT_CERT KUBE_CLIENT_KEY
 unexport EDITOR VISUAL ANSIBLE_EDITOR
 unexport PAGER MANPAGER SYSTEMD_PAGER GIT_PAGER
 
 CONTAINER ?= fedora-dev
 
 define INSTALL_COLLECTIONS
+env ANSIBLE_GALAXY_SERVER='' ANSIBLE_GALAXY_SERVER_LIST='' ANSIBLE_GALAXY_TOKEN='' \
 ansible-galaxy collection install -p ./collections \
 	collections-dist/ansible-posix-2.2.2.tar.gz \
 	collections-dist/community-general-13.2.0.tar.gz \
@@ -230,7 +232,8 @@ vendor-collections: guard-not-root
 	@# Mitigations: version pinning, mandatory code review, CI integrity checks, runtime verification.
 	@# See SECURITY.md § "Ansible Collections Maintainer Identity Verification" for details.
 	@# Run when bumping versions in requirements.yml, then update SHA256SUMS and git commit.
-	ansible-galaxy collection download -r requirements.yml -p collections-dist/
+	env ANSIBLE_GALAXY_SERVER='' ANSIBLE_GALAXY_SERVER_LIST='' ANSIBLE_GALAXY_TOKEN='' \
+		ansible-galaxy collection download -r requirements.yml -p collections-dist/
 	@echo "Cross-verifying downloads against Galaxy API artifact.sha256 metadata..."; \
 	GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"; \
 	_fail=0; \

@@ -136,6 +136,10 @@
           - "registry.redhat.io/rhacm2/{{ item.image }}:{{ item.tag }}"
           - "--path=/dist/subctl-{{ item.tag }}*-linux-amd64.tar.xz:/tmp/"
           - "--confirm"
+          - "--registry-config={{ ansible_facts['user_dir'] }}/.config/containers/auth.json"
+      environment:
+        REGISTRY_AUTH_FILE: ""
+        DOCKER_CONFIG: ""
       timeout: 300
       register: _pkg_subctl_extract
       changed_when: _pkg_subctl_extract.rc == 0

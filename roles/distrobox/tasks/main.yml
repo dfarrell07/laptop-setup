@@ -259,6 +259,8 @@
       environment:
         CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
         DOCKER_HOST: ""
+        REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
+        DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_create_result
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change
