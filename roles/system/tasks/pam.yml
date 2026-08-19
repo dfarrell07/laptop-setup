@@ -187,6 +187,39 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Verify pam_faillock.so control flags in system-auth (functional guard)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      # Verify preauth has 'required' control flag (not 'optional' which would disable lockout)
+      grep -E '^auth[[:space:]]+required[[:space:]]+pam_faillock\.so[[:space:]]+preauth' /etc/pam.d/system-auth >/dev/null
+      # Verify authfail exists with a control flag that causes failure propagation
+      # (either 'required' or '[default=die]' — both enforce the lockout)
+      grep -E '^auth[[:space:]]+(required|\[default=die\])[[:space:]]+pam_faillock\.so[[:space:]]+authfail' /etc/pam.d/system-auth >/dev/null
+  changed_when: false
+  check_mode: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+  register: _pam_faillock_control_flags_check
+  failed_when: false
+
+- name: Fail if pam_faillock.so control flags are incorrect (functional guard)
+  ansible.builtin.fail:
+    msg: >-
+      pam_faillock.so control flags are incorrect in /etc/pam.d/system-auth.
+      Preauth MUST use 'required' (not 'optional' which would disable lockout).
+      Authfail MUST use 'required' or '[default=die]' to enforce account lockout.
+      The awk order check passed (modules are present and ordered correctly) but
+      control flags are wrong — faillock is syntactically present but functionally
+      inactive. Review /etc/pam.d/system-auth and authselect template, then re-run.
+  when:
+    - _pam_faillock_control_flags_check.rc | default(0) != 0
+    - _pam_faillock_control_flags_check is not skipped
+    - not csb_rhel
+    - not system_is_container
+
 # --- Debian PAM faillock (no authselect; direct PAM stack insertion) ---
 # On Debian, authselect is absent; pam_faillock.so must be added directly to
 # /etc/pam.d/common-auth and /etc/pam.d/common-account. faillock.conf (deployed
