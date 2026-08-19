@@ -63,7 +63,7 @@
       when: profile == 'work'
       register: _aide_conf_r2b
 
-    - name: Remove /etc/bpfman from AIDE monitoring (personal profile — bpfman not installed)
+    - name: Remove /etc/bpfman from AIDE monitoring (personal profile)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/etc/bpfman\s'
@@ -134,7 +134,7 @@
         state: present
       register: _aide_conf_r6
 
-    - name: Add /boot/loader/entries to AIDE monitoring (PERMS — content changes on every kernel update)
+    - name: Add /boot/loader/entries to AIDE monitoring (PERMS)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/loader/entries\s'
@@ -143,7 +143,7 @@
         state: present
       register: _aide_conf_r6b
 
-    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (PERMS — content changes on every kernel update)
+    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (PERMS)
       ansible.builtin.lineinfile:
         path: /etc/aide.conf
         regexp: '^/boot/grub2/grub\.cfg\s'
@@ -219,7 +219,7 @@
     # Reached when no DB exists and no reinit was triggered: either aide.conf was already fully configured
     # (zero lineinfile changes, _aide_conf_changed=false) on first run, or the rescue block deleted aide.db.gz
     # after a failed reinit and control returned here for a recovery re-init.
-    - name: Initialize AIDE database (no existing DB; first run or post-rescue recovery)
+    - name: Initialize AIDE database (first run or post-rescue)
       when:
         - not (system_aide_db.stat.exists | default(false))
         - not (system_aide_db_new.stat.exists | default(false))
@@ -282,7 +282,7 @@
         state: absent
       ignore_errors: true
 
-    - name: Remove stale aide.db.gz after failed reinit (force fresh baseline on re-run)
+    - name: Remove stale aide.db.gz after failed reinit
       ansible.builtin.file:
         path: /var/lib/aide/aide.db.gz
         state: absent
@@ -291,7 +291,7 @@
         (_aide_init_result is defined and _aide_init_result is failed) or
         (system_aide_reinit_result is defined and system_aide_reinit_result is failed)
 
-    - name: Stop and disable aide-check.timer after failed init (prevents spurious check failures)
+    - name: Stop and disable aide-check.timer after failed init
       ansible.builtin.systemd:
         name: aide-check.timer
         state: stopped
