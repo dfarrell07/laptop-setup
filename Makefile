@@ -98,6 +98,7 @@ bootstrap: guard-not-root
 	else \
 		sudo bash -c 'dnf install -y ansible-core git make; dnf install -y ykpers yubikey-manager ShellCheck || echo "WARN: ykpers/yubikey-manager/ShellCheck unavailable (RHEL: install EPEL first; Fedora: check repo availability) — continuing without optional tools"'; \
 	fi
+	@# --- Integrity verification: reject tampered security-critical scripts ---
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@# Verify vault-pass-ci.sh integrity BEFORE copying (FATAL if check fails) — guards against supply chain tampering
 	@cd scripts && sha256sum -c vault-pass-ci.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass-ci.sh integrity verified" || { echo "ERROR: vault-pass-ci.sh failed integrity check — possible tampering. Run: sha256sum scripts/vault-pass-ci.sh > scripts/vault-pass-ci.sh.sha256" >&2; exit 1; }

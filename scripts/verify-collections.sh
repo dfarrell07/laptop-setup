@@ -11,6 +11,12 @@
 # Usage: verify-collections.sh
 set -euo pipefail
 
+# Verification layers:
+#   1. SHA256SUMS.asc: GPG signature check (advisory — requires signing key in keyring)
+#   2. SHA256SUMS: tarball integrity (fatal on mismatch)
+#   3. Python manifest: extracted .py files match tarballs + PYTHON_MANIFEST.json (fatal)
+# Usage: called by verify-ansible-args.sh via VERIFY_AND_RUN in Makefile
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
