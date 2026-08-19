@@ -497,6 +497,70 @@
     - not csb_rhel
     - not system_is_container
 
+- name: Verify pam_pwhistory.so appears before pam_unix.so in system-auth (authselect)
+  ansible.builtin.shell:
+    cmd: >-
+      awk '/^password.*pam_pwhistory\.so/{hist=NR} /^password.*pam_unix\.so/ && !unix {unix=NR}
+           END{exit !(hist>0 && unix>0 && hist<unix)}' /etc/pam.d/system-auth
+  changed_when: false
+  register: system_pam_pwhistory_authselect_order_check
+  failed_when: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if pam_pwhistory.so is not correctly ordered in system-auth (authselect)
+  ansible.builtin.fail:
+    msg: >-
+      pam_pwhistory.so is not in the correct position in /etc/pam.d/system-auth.
+      Required order: pam_pwhistory.so < pam_unix.so in password section.
+      authselect enable-feature with-pwhistory returned rc=0 but the PAM stack
+      lacks the expected stanza (corrupted feature template or authselect bug?).
+      Inspect /etc/pam.d/system-auth and /usr/share/authselect/default/sssd/ then re-run.
+  when:
+    - system_pam_pwhistory_authselect_order_check.rc | default(1) != 0
+    - system_pam_pwhistory_authselect_order_check is not skipped
+
+- name: Assert exactly one pam_pwhistory.so line in system-auth (authselect)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_pwhistory\.so' /etc/pam.d/system-auth
+  register: _pam_authselect_pwhistory_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_authselect_pwhistory_count.stdout | int != 1
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Verify pam_pwhistory.so control flag in system-auth (functional guard)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      # Verify pwhistory has 'requisite' control flag (not 'optional' which would disable enforcement)
+      grep -E '^password[[:space:]]+requisite[[:space:]]+pam_pwhistory\.so' /etc/pam.d/system-auth >/dev/null
+  changed_when: false
+  check_mode: false
+  register: _pam_pwhistory_control_flag_check
+  failed_when: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if pam_pwhistory.so control flag is incorrect (functional guard)
+  ansible.builtin.fail:
+    msg: >-
+      pam_pwhistory.so control flag is incorrect in /etc/pam.d/system-auth.
+      MUST use 'requisite' (not 'optional' which would disable password reuse prevention).
+      The order check passed (module is present and ordered correctly) but the control
+      flag is wrong — pwhistory is syntactically present but functionally inactive.
+      Review /etc/pam.d/system-auth and authselect template, then re-run.
+  when:
+    - _pam_pwhistory_control_flag_check.rc | default(0) != 0
+    - _pam_pwhistory_control_flag_check is not skipped
+
 - name: Configure pam_pwhistory remember count (CIS 5.3.5)
   community.general.ini_file:
     path: /etc/security/pwhistory.conf
