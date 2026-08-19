@@ -1378,12 +1378,24 @@
   loop_control:
     label: "{{ item | split(' ') | first }}"
   changed_when: false
+  failed_when: false
+  register: verify_auditd_watch_keys
   become: true
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
     - not (system_is_container | default(false))
     - verify_auditd_rules.stat.exists
+
+- name: Assert auditd rules contain all required watch keys
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "claude-code.rules missing '-k {{ item.item }}' — audit watch key regression"
+  loop: "{{ verify_auditd_watch_keys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item is not skipped
 
 - name: Check auditd rules contain renameat2 exclusions for build tools (b32 and b64)
   ansible.builtin.command: >-
