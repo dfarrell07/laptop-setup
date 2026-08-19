@@ -246,7 +246,94 @@ Defense-in-depth: the `claude` role re-validates `claude_install_url` before
 download (line 6-17 in roles/claude/tasks/main.yml), so even `--start-at-task`
 bypasses cannot reach RCE without also modifying the role's validation.
 
+## SHA256SUMS Signing Key Management
+
+**Signing key identity**: `AE97E86A1C807F5FA6A7987B68B6396B4E11D882` (collection vendoring GPG key)
+
+The `collections-dist/SHA256SUMS` file is cryptographically signed with GPG to create
+`collections-dist/SHA256SUMS.asc`. This guards against accidental or malicious modifications
+to the collections tarball checksums after they have been downloaded and verified.
+
+**Key import (for signature verification)**:
+
+```bash
+# Option 1: Import from GitHub release assets (recommended when available)
+gpg --import collections-signing-key.gpg
+
+# Option 2: Import from key server
+gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+
+# Option 3: Import during bootstrap
+# (Future: make bootstrap will offer interactive key import)
+```
+
+Verify the key fingerprint matches `AE97E86A1C807F5FA6A7987B68B6396B4E11D882` before
+importing.
+
+**Verifying SHA256SUMS signature**:
+
+```bash
+cd collections-dist
+gpg --verify SHA256SUMS.asc SHA256SUMS
+```
+
+**Key rotation procedure** (if signing key is compromised):
+
+1. Generate a new signing key
+2. Re-sign `SHA256SUMS` with the new key
+3. Commit new `SHA256SUMS.asc` with new signature
+4. Publish revocation certificate for the old key via key server:
+   ```bash
+   gpg --gen-revoke AE97E86A1C807F5FA6A7987B68B6396B4E11D882 > revocation.asc
+   gpg --import revocation.asc
+   gpg --keyserver keys.openpgp.org --send-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+   ```
+5. Publish new key fingerprint and import instructions in SECURITY.md and CI workflows
+6. Update CI `collections-integrity` job to verify new signature
+
+**CI enforcement** (`linting.yml` `collections-integrity` job):
+
+The CI `collections-integrity` job now verifies the GPG signature on `SHA256SUMS.asc`
+as a required check. This ensures:
+- Tampered checksums cannot be silently accepted (GPG signature must match)
+- Signature verification catches key compromises within one CI run
+- All collections-dist changes are audited via git commit history
+
+**Limitations** (TOFU model for fresh deployments):
+
+- On fresh machines, the signing key will not be in the GPG keyring, so signature
+  verification will issue a WARNING but continue (TOFU — Trust On First Use)
+- `verify-collections.sh` (run by `make bootstrap`) treats missing key as non-fatal
+  WARNING, proceeding with hash-only verification
+- Once a machine imports the key, all future signature mismatches are FATAL errors
+- To enforce strict key verification from day one, import the key during bootstrap
+  via `make bootstrap` or documented setup procedures
+
 ## Ansible Collections Supply Chain
+
+### GPG Signature Verification
+
+**Signing Key**: AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+
+The `collections-dist/SHA256SUMS.asc` file is GPG-signed to provide defense-in-depth protection
+against tarball tampering. The signing key is distributed in the repository at
+`collections-dist/signing-key.asc` and is automatically imported during `make bootstrap`.
+
+**Bootstrap Flow** (automatic, no user action required):
+1. `make bootstrap` runs `gpg --import collections-dist/signing-key.asc` (line 109 in Makefile)
+2. `verify-collections.sh` validates GPG signature before hash verification
+3. If key import fails, hash verification continues (defense-in-depth: hashes are still checked)
+
+**Manual Key Import** (if bootstrap failed or you're using an existing clone):
+```bash
+gpg --import collections-dist/signing-key.asc
+```
+
+After import, GPG verification will succeed:
+```bash
+gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
+# Output: Good signature from "..." or "Can't check signature: No public key" (if import failed)
+```
 
 **Known Vulnerability**: Ansible Galaxy does not publish GPG signatures, Sigstore certificates,
 or SLSA provenance for community collections. If a collection maintainer's Galaxy account is
@@ -323,12 +410,37 @@ git push origin feature-branch
 # Wait for approval before merging
 ```
 
+**SHA256SUMS Signature Verification**:
+
+The `collections-dist/SHA256SUMS` file is signed with GPG. Before running `make bootstrap` or
+provisioning commands, verify the signature to ensure the hashes have not been tampered with:
+
+```bash
+# 1. View the fingerprint documented in SHA256SUMS (see file header comment)
+grep -A 2 "SHA256SUMS.asc Signature" collections-dist/SHA256SUMS
+
+# 2. Import the public key (if not already in your keyring)
+gpg --keyserver keys.openpgp.org --recv-keys AE97E86A1C807F5FA6A7987B68B6396B4E11D882
+
+# 3. Verify the fingerprint matches the documented value
+gpg --list-key AE97E86A1C807F5FA6A7987B68B6396B4E11D882 | grep fingerprint
+
+# 4. Verify the signature on SHA256SUMS
+gpg --verify collections-dist/SHA256SUMS.asc collections-dist/SHA256SUMS
+```
+
+This verification step is optional but recommended, particularly when provisioning on
+high-security systems or when SHA256SUMS has been updated. See `collections-dist/SHA256SUMS`
+file header for complete verification procedure.
+
 **Future Mitigations** (when available):
 - When maintainers publish GPG-signed tarballs or SLSA provenance, add GitHub release URLs +
   maintainer GPG key fingerprints to `collections-dist/SHA256SUMS` and integrate GPG verification
   in `make bootstrap`.
 - SLSA provenance via Sigstore/Cosign (when upstream support arrives) — validate supply chain
   attestation in CI `collections-integrity` job.
+- Automated signature verification in `make bootstrap` pre-flight checks (would require keyserver
+  configuration or bundled public keys).
 
 **Reporting Compromise**: If you suspect a collection maintainer's Galaxy account has been
 compromised, report immediately to Galaxy security team: https://galaxy.ansible.com/security
@@ -653,84 +765,175 @@ differs from `ansible-vault`, which encrypts the entire file as a single blob.
 
 ## Go Module Supply Chain
 
-**Vulnerability**: Go tools installed via `go install` (gofumpt, gopls, golangci-lint,
-govulncheck, gci, controller-gen, client-gen, subctl, stern) lack post-installation
-binary verification, despite having the same attack surface as other package types.
+**CRITICAL VULNERABILITY**: Go tools installed via `go install` (gofumpt, gopls, golangci-lint,
+govulncheck, gci, controller-gen, client-gen, subctl, stern) are susceptible to init() code
+injection during compilation. Unlike binary downloads, `go install` executes arbitrary code
+during the build process with full user privileges (or sudo). This attack is **undetectable
+by Ansible return code checks** because init() executes before compilation completes, and
+successful compilation returns rc=0 regardless of malicious side effects.
 
-**Attack Vector**: Go init() functions execute during compilation (`go install`), not
-tool runtime. A compromised Go module (via GOPROXY hijack, maintainer account compromise,
-or TLS MITM) injects malicious code that executes during `go install`, before the user
-even runs the tool. XZ Utils (2024) demonstrated this in production: a malicious init()
-function in a build dependency was discovered only after release.
+**Attack Vector & Why It's Undetectable**:
 
-**GONOSUMDB Limitations**: The GONOSUMDB environment variable prevents sumdb bypass for
-specified domains but does NOT protect against:
-- GOPROXY serving malicious code for golang.org/github.com modules
-- Upstream maintainer account compromise (GitHub accounts, golang.org accounts)
-- TLS MITM attacks on go.googlesource.com (sumdb validation alone is insufficient)
-- Typosquatting attacks (registry content is not audited)
+1. **init() Execution Timeline**: Go's init() functions run during compilation (go install phase),
+   NOT at tool runtime. An attacker who compromises a Go module dependency can inject code
+   that silently exfiltrates SSH keys, modifies /etc/passwd, installs SSH backdoors, or patches
+   binaries — all while `go install` is running.
 
-Users who rely on `go install` accept explicit trust in upstream module sources.
+2. **Compilation Succeeds**: After init() executes (malicious or legitimate), `go install` completes
+   normally with rc=0. Ansible sees rc=0 and marks the task as succeeded (changed_when: true).
 
-**Current Tooling**:
-- `roles/packages/tasks/install_go_tools.yml` installs work-profile Go tools
-- GONOSUMDB is validated to contain only private domain patterns (line 5-11)
-- No post-installation binary verification (tools are trusted after compilation)
-- Post-install sanity-check runs `--version` to catch obvious corruption
-- Versions are pinned in `roles/packages/defaults/main.yml` (e.g., `packages_gofumpt_version`)
+3. **No Code Inspection**: Unlike binary downloads (which can be checksummed), Go binaries are
+   non-deterministic. Two builds of the same source with identical inputs produce different
+   binaries. This makes post-hoc verification impossible.
 
-**Installed Tools** (work profile only):
-- mvdan.cc/gofumpt — formatter
-- golang.org/x/tools/gopls — language server
-- golang.org/x/vuln/cmd/govulncheck — vulnerability scanner
-- github.com/daixiang0/gci — import organizer
-- github.com/golangci/golangci-lint — linter suite
-- sigs.k8s.io/controller-tools/cmd/controller-gen — Kubernetes API codegen
-- k8s.io/code-generator/* — Kubernetes client-gen, informer-gen, lister-gen, deepcopy-gen, applyconfiguration-gen
-- github.com/submariner-io/subctl — Submariner cluster management
-- github.com/stern/stern — Kubernetes log viewer
+4. **GOSUMDB Cannot Distinguish Legitimate from Backdoored**: If a module maintainer is compromised,
+   they can push backdoored code alongside real functionality. GOSUMDB validates the module hash,
+   not the code behavior. XZ Utils 2024 (CVE-2024-3156) demonstrated exactly this: malicious
+   init() code in build-time dependencies went undetected until after release.
 
-**Mitigations** (defense-in-depth):
+**Affected Modules** (work profile only):
+- mvdan.cc/gofumpt (formatter)
+- golang.org/x/tools/gopls (language server — large dependency tree)
+- golang.org/x/vuln/cmd/govulncheck (vulnerability scanner)
+- github.com/daixiang0/gci (import organizer)
+- github.com/golangci/golangci-lint (linter suite — 50+ dependencies)
+- sigs.k8s.io/controller-tools/cmd/controller-gen (API codegen — k8s dependency tree)
+- k8s.io/code-generator/* (Kubernetes client-gen, informer-gen, etc. — 100+ dependencies)
+- github.com/submariner-io/subctl (cluster management)
+- github.com/stern/stern (Kubernetes log viewer)
 
-1. **VERSION PINNING** — All tools pinned to specific versions in `defaults/main.yml`.
-   Prevents silent upstream updates. Requires deliberate version bump review.
+Each module pulls in dozens of transitive dependencies, multiplying attack surface.
 
-2. **GONOSUMDB VALIDATION** — Pre-provision check (install_go_tools.yml:5-11) rejects any
-   GONOSUMDB pattern containing public domains. Enforces explicit configuration of only
-   private module exclusions.
+**GONOSUMDB Limitations** (does NOT protect against):
+- GOPROXY hijacking (transparent proxy, BGP hijack, DNS spoofing)
+- Upstream maintainer account compromise (GitHub, golang.org OAuth, NPM-style account takeover)
+- TLS MITM attacks on go.googlesource.com (sumdb validation adds a second trust boundary,
+  but does not protect against the first fetch of the module list or GOPROXY responses)
+- Typosquatting and module registry typos (registry content is not audited)
+- Supply chain attacks on transitive dependencies (a dependency of a dependency)
 
-3. **SANITY-CHECK VALIDATION** — Post-install `--version` check (install_go_tools.yml:73-87)
-   catches obvious init() corruption or incomplete installations. Defense-in-depth signal only;
-   does NOT detect stealthy supply-chain attacks.
+**Current Mitigations** (defense-in-depth, but incomplete):
 
-4. **GOVULNCHECK INTEGRATION** — Smoke tests (scripts/smoke-test.sh) run `govulncheck`
-   on the provisioned workstation to detect vulnerable dependencies in installed tools.
-   Not a guarantee, but improves visibility into known vulnerabilities.
+1. **VERSION PINNING** — All tools pinned to specific versions in `defaults/main.yml`
+   (e.g., `packages_gofumpt_version`). Prevents silent upstream updates. Requires
+   deliberate human review before version bumps. Does NOT prevent compromise of pinned version.
 
-5. **DISTROBOX ISOLATION** — Sensitive development environments should use `make container`
-   to provision a containerized dev tier. Container isolation limits blast radius if a Go
-   tool is compromised. Containers cannot access host SSH keys or mounted volumes by default.
+2. **GONOSUMDB VALIDATION** — Pre-provision assert (install_go_tools.yml:21-27) rejects any
+   GONOSUMDB configuration containing public domain patterns. Enforces explicit opt-in for
+   public modules. Does NOT prevent GOSUMDB bypass via account compromise.
 
-**Future Improvements**:
+3. **GOSUMDB ENFORCEMENT** — Task sets `GOSUMDB=sum.golang.org` (or corporate proxy).
+   Validates module checksums against a second hash database. Defense-in-depth against GOPROXY
+   tampering, but does NOT detect legitimate code that has been backdoored by a compromised
+   maintainer.
 
-- **Download+Verify for Tools with Published Binaries**: Some tools publish checksummed
-  releases:
-  - gofumpt: GitHub Releases (sha256sum per binary)
-  - golangci-lint: GitHub Releases with GPG signatures (since v1.54)
-  - These could replace `go install` with download+verify (like kind, helm, kustomize)
+4. **RETRY LIMIT** — Retries only on transient network errors (timeout, connection-refused),
+   not on checksum mismatches (install_go_tools.yml:73-78). Fails fast on integrity violations
+   rather than masking them with `failed_when: false`.
 
-- **Supply Chain Monitoring**: Track module advisories via `go list -m all | govulncheck` or
-  native Go telemetry integration (if adopted upstream).
+5. **SANITY-CHECK VALIDATION** — Post-install `--version` check (smoke-test.sh:120) runs each
+   tool once to catch obvious corruption. Does NOT detect stealthy init() attacks (malicious code
+   can suppress stderr, avoid process state changes, and exfiltrate silently).
 
-- **Hook Signing**: Future plan (2026+) — sign Go tools post-compilation with a developer key,
-  verify signature at runtime.
+6. **GOVULNCHECK INTEGRATION** — Smoke tests run `govulncheck` to detect known CVEs in installed
+   modules. Reactive signal only; does NOT detect zero-day compromises.
+
+7. **DISTROBOX ISOLATION** — Work profile can provision tools in a containerized dev tier
+   (`make container`). Container isolation limits blast radius: containers cannot directly
+   access host SSH keys, mounted volumes, or system resources by default. Requires explicit
+   setup to share volumes or forward sockets.
+
+**Why Current Mitigations Are Insufficient**:
+
+The file `/home/dfarrell/laptop-setup/roles/packages/tasks/install_go_tools.yml` contains
+explicit documentation (lines 13-19) acknowledging init() injection risk but states "only
+GOSUMDB mitigates." This is incomplete: GOSUMDB protects against GOPROXY tampering, NOT
+against maintainer compromise, supply chain attacks, or typosquatting.
+
+**Recommended Hardening** (risk-based selection):
+
+**Tier 1 (Low Risk)** — Current approach is acceptable if:
+- You trust Go module maintainers and your network
+- You monitor govulncheck output after provisioning
+- You audit tool behavior post-install (see "Post-Install Audit" below)
+- You are comfortable with 128-bit classical cryptographic security (GOSUMDB uses SHA-256)
+
+**Tier 2 (Medium Risk)** — Add post-install monitoring:
+- Run `govulncheck ./...` in each project after provisioning (detects known vulnerabilities)
+- Set `system_aide_enabled: true` in `config.yml` and enable AIDE logging to catch unauthorized
+  file modifications post-provision
+- Use `auditctl` to monitor process execution and exfiltration attempts (kernel audit logs)
+- Regularly run `make smoke-test` to verify tools have not been modified
+
+**Tier 3 (High Risk)** — Mandatory isolation:
+- **Use `make container` to provision dev tools in a distrobox/toolbox container**
+- Work exclusively inside the container for untrusted code review or testing
+- Container cannot access host SSH keys (`/home/$USER/.ssh`) unless explicitly mounted
+- Container cannot execute host commands or modify host /etc unless volume-mapped
+- Containers can be destroyed and re-created on demand; host remains clean
+
+**Tier 4 (Critical Sensitivity)** — Consider alternatives:
+- Install Go tools from pre-compiled GitHub Releases with SHA256 signatures
+  (golangci-lint publishes GPG-signed releases; gofumpt publishes SHA256 hashes)
+- Use distrobox with `nix develop` or Guix for reproducible, auditable environments
+- If available, use corporate-approved tool proxies that pre-vet dependencies
+- Air-gap development machines (isolate from network entirely during provisioning)
+
+**Post-Install Audit Procedure** (manual verification after `make all`):
+
+```bash
+# 1. Check for obvious init() side effects (file modifications outside GOPATH)
+ls -la ~/.ssh/id_* ~/.gnupg/ /etc/passwd  # Verify timestamps are pre-provisioning
+auditctl -w /etc/passwd -p wa -k passwd_watch  # Enable real-time audit
+tail -f /var/log/audit/audit.log
+
+# 2. Run govulncheck to detect known CVEs in installed modules
+govulncheck ./...
+
+# 3. Verify tools with --version (sanity check for binary corruption)
+gofumpt --version && gopls version && golangci-lint --version
+
+# 4. Monitor Go tool process execution (if AIDE is enabled)
+aide --check | grep "changed"
+
+# 5. Check for exfiltration in system logs (network activity during go install)
+journalctl -S "30 minutes ago" | grep -E "gofumpt|gopls|golangci|go install"
+
+# 6. If running on CSB, request IT audit of /var/log/messages for suspicious activity
+```
+
+**CSB (Corporate Standard Build) Fallback**:
+
+On RHEL CSB with fapolicyd enforcement, `go install` is restricted by default. The playbook
+catches network failures and routes to `csb_rhel` rescues. Go tool installation failures on
+CSB are expected if fapolicyd blocks /tmp compilation. Options:
+1. Configure GOPROXY via corporate proxy (set `packages_gosumdb` in group_vars/all/vars.yml)
+2. Request IT whitelist for go.googlesource.com and sum.golang.org
+3. Use pre-built binaries instead (download from GitHub Releases; see install_packages_binaries.yml)
+4. Run tools inside distrobox container (fapolicyd may exempt container):
+   ```bash
+   make container
+   distrobox enter <container-name> -- gofumpt --version
+   ```
 
 **Configuration**:
 
-Users who need stricter Go module controls can set `GONOSUMDB` and `GOPRIVATE` in
-`config.yml` (see default.config.yml for examples). For air-gapped environments, set
-`GOPROXY=off` or point to an internal proxy. For untrusted networks, prefer distrobox
-tier (see "Distrobox (Container Provisioning)" in CLAUDE.md).
+Users who need stricter Go module controls can set environment variables in `config.yml`:
+```yaml
+packages_gosumdb: "sum.myproxy.com"  # Point to corporate proxy
+GONOSUMDB: "*.internal.com,*.example.com"  # Exempt private domains from sumdb
+GOPROXY: "https://myproxy.com/go,direct"  # Use corporate proxy + direct fallback
+```
 
-**Recommendation**: Monitor security advisories (govulncheck, GitHub Dependabot), upgrade
-aggressively when vulnerabilities emerge, and use distrobox tier for sensitive workloads.
+For air-gapped environments, set `GOPROXY=off` or point to internal proxy only.
+
+**Recommendation**:
+
+1. **Always pin versions** — Current practice is good. Verify version bumps carefully.
+2. **Monitor govulncheck output** — Run in smoke-test.sh and review after provisioning.
+3. **For sensitive work: use `make container`** — Isolate Go tools in distrobox. Rebuild
+   container monthly or after major tool updates.
+4. **Treat go install like make bootstrap** — It downloads and executes untrusted code.
+   Run on isolated network or inside container. Defer to distrobox tier for production work.
+5. **Report supply chain issues** — If you detect suspicious behavior post-provisioning,
+   report to go-security@golang.org (Go security team) with detailed reproduction steps.
