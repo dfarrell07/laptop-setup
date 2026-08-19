@@ -300,7 +300,8 @@
           set -euo pipefail
           KEYFILE="{{ _redhat_gpg_tmp_dir.path }}/key.gpg"
           curl -fsSL "{{ repos_dnf_redhat_gpgkey }}" -o "$KEYFILE"
-          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ -z "$FP" ]; then exit 1; fi
           if [ "$FP" = "{{ repos_dnf_redhat_gpg_fingerprint | upper }}" ]; then
             rpm --import "$KEYFILE"
           else
@@ -375,7 +376,8 @@
           REL="{{ ansible_facts['distribution_major_version'] }}"
           URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-${REL}"  # yamllint disable-line
           curl -fsSL "$URL" -o "$KEYFILE"
-          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ -z "$FP" ]; then exit 1; fi
           if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
             rpm --import "$KEYFILE"
           else
@@ -439,7 +441,8 @@
           REL="{{ ansible_facts['distribution_major_version'] }}"
           URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-${REL}"  # yamllint disable
           curl -fsSL "$URL" -o "$KEYFILE"
-          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ -z "$FP" ]; then exit 1; fi
           if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
             rpm --import "$KEYFILE"
           else
