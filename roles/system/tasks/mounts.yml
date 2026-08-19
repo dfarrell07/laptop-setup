@@ -97,17 +97,37 @@
 # Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under
 # dev-shm.mount.d/ is silently ignored. Use fstab for persistence and a
 # direct remount for immediate effect.
+- name: Check if /etc/fstab exists with root entry
+  ansible.builtin.command:
+    cmd: grep -q '^[^#].*\s/\s' /etc/fstab
+  register: _fstab_root_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+
 - name: Ensure /dev/shm fstab entry has noexec (CIS 1.1.7.x)
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
     line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,x-systemd.graceful-option=usrquota 0 0'
-    create: true   # must be true on Fedora 44 — /dev/shm has no fstab line by default
+    create: false   # Changed from true — defensive: only add when fstab exists with root entry
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
   when:
     - not csb_rhel  # CSB (RHEL): IT-managed fstab
     - not system_is_container  # fstab writes trigger inotify/systemd re-evaluation; crashes container PID 1
+    - _fstab_root_check.rc == 0  # Only proceed if fstab has root entry
+
+- name: Warn if /dev/shm hardening skipped due to missing fstab
+  ansible.builtin.debug:
+    msg: "WARNING: /etc/fstab missing or has no root entry; skipping /dev/shm fstab hardening (live remount still applied)"
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _fstab_root_check.rc | default(1) != 0
 
 - name: Check /dev/shm current mount options
   ansible.builtin.command:
