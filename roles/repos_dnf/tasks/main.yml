@@ -183,7 +183,6 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
-      when: not csb_rhel
 
 - name: Add acli repo
   # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
