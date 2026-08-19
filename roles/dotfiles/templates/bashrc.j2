@@ -26,13 +26,13 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
 {% endif %}
 {% if profile == 'work' %}
 {% if dotfiles_aws_profile %}
-export AWS_PROFILE="{{ dotfiles_aws_profile | replace('"', '') | replace(';', '') | replace('`', '') }}"
+export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
 {% endif %}
 {% if dotfiles_gonosumdb %}
-export GONOSUMDB="{{ dotfiles_gonosumdb | replace('"', '') | replace(';', '') | replace('`', '') }}"
+export GONOSUMDB='{{ dotfiles_gonosumdb | replace("'", "'\''" ) }}'
 {% endif %}
 {% if dotfiles_goprivate %}
-export GOPRIVATE="{{ dotfiles_goprivate | replace('"', '') | replace(';', '') | replace('`', '') }}"
+export GOPRIVATE='{{ dotfiles_goprivate | replace("'", "'\''" ) }}'
 {% endif %}
 {% endif %}
 

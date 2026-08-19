@@ -19,6 +19,24 @@
       characters (0x00-0x1F). Remove any embedded newlines or control characters from dotfiles_user_name.
   tags: [always]
 
+- name: Assert AWS_PROFILE, GONOSUMDB, GOPRIVATE contain no shell metacharacters (shell injection guard)
+  vars:
+    _shell_metacharacters: '[$()`;&|<>]'
+  ansible.builtin.assert:
+    that:
+      - dotfiles_aws_profile | default('') | regex_search(_shell_metacharacters) is none
+      - dotfiles_gonosumdb | default('') | regex_search(_shell_metacharacters) is none
+      - dotfiles_goprivate | default('') | regex_search(_shell_metacharacters) is none
+    fail_msg: >-
+      SECURITY: dotfiles_aws_profile, dotfiles_gonosumdb, or dotfiles_goprivate (from config.yml)
+      contains shell metacharacters: $()`, ;, &, |, <, or >. These values are exported as
+      environment variables in bashrc/zshrc and sourced by the shell. An attacker-controlled value
+      like 'dev$(id>/tmp/pwned)' allows shell command injection via $() substitution, even with
+      quotes. Allowed: alphanumeric, dash, underscore, period, comma, and @ characters only.
+      Remove any shell metacharacters from these variables.
+  tags: [always]
+
+
 - name: Ensure user config directories exist
   ansible.builtin.file:
     path: "{{ item.path }}"
