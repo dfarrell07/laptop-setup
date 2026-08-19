@@ -1,4 +1,75 @@
 ---
+# --- Setuid binary scan (runs regardless of system_aide_enabled) ---
+# Deploys a weekly systemd timer that finds all perm /6000 binaries on local
+# filesystems, diffs against a stored baseline, and logs deviations to journald.
+# Catches setuid persistence that AIDE would miss when AIDE is disabled, and
+# that auditd execve rules miss because they fire on invocation, not file creation.
+- name: Setuid binary scan — deploy scan script
+  ansible.builtin.copy:
+    src: setuid-scan.sh
+    dest: /usr/local/lib/setuid-scan.sh
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Setuid binary scan — deploy systemd service
+  ansible.builtin.copy:
+    src: setuid-scan.service
+    dest: /etc/systemd/system/setuid-scan.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  notify: Reload systemd daemon
+
+- name: Setuid binary scan — deploy systemd timer
+  ansible.builtin.copy:
+    src: setuid-scan.timer
+    dest: /etc/systemd/system/setuid-scan.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  notify: Restart setuid-scan timer
+
+- name: Setuid binary scan — enable and start timer
+  ansible.builtin.systemd:
+    name: setuid-scan.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Setuid binary scan — remove when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/setuid-scan.timer
+    - /etc/systemd/system/setuid-scan.service
+    - /usr/local/lib/setuid-scan.sh
+  when:
+    - is_dnf
+    - not (system_setuid_scan_enabled | bool)
+    - not system_is_container
+
 # --- AIDE file integrity monitoring ---
 # Block-level guard: AIDE is DNF/RPM-only (aide package from Fedora/RHEL repos).
 # On non-DNF systems (Debian, macOS) this entire section skips cleanly.

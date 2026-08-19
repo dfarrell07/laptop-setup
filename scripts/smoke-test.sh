@@ -1259,6 +1259,30 @@ EOF
     else record "aide-service-no-network" "WARN" "aide-check.service not deployed"; fi
   fi  # (AIDE not deployed — system_aide_enabled: false; checks skipped)
 
+  # AIDE disabled on non-container, non-CSB dnf host — elevated to FAIL
+  # (AIDE disabled means filesystem integrity monitoring is absent; undetected
+  # setuid persistence is the primary risk on workstations with AIDE off)
+  if ! systemctl cat aide-check.timer &>/dev/null && ! $CSB_HOST; then
+    if grep -qiE '^ID=(fedora|rhel|centos|rocky|almalinux)' /etc/os-release 2>/dev/null; then
+      record "aide-disabled" "FAIL" "AIDE not deployed — filesystem integrity monitoring absent; enable system_aide_enabled: true in config.yml (or setuid-scan.timer covers setuid-only gap)"
+    fi
+  fi
+
+  # Setuid binary scan timer
+  if systemctl cat setuid-scan.timer &>/dev/null; then
+    if systemctl is-enabled setuid-scan.timer &>/dev/null && systemctl is-active setuid-scan.timer &>/dev/null; then
+      record "setuid-scan-timer" "PASS"
+    elif systemctl is-enabled setuid-scan.timer &>/dev/null; then
+      record "setuid-scan-timer" "WARN" "setuid-scan.timer enabled but not active (reboot or: systemctl start setuid-scan.timer)"
+    else record "setuid-scan-timer" "WARN" "setuid-scan.timer not enabled"; fi
+    if [[ -f /var/lib/setuid-scan/baseline ]]; then record "setuid-scan-baseline" "PASS"
+    else record "setuid-scan-baseline" "WARN" "setuid-scan baseline not yet created (timer has not fired; run: systemctl start setuid-scan.service)"; fi
+  elif ! $CSB_HOST; then
+    if grep -qiE '^ID=(fedora|rhel|centos|rocky|almalinux)' /etc/os-release 2>/dev/null; then
+      record "setuid-scan-timer" "WARN" "setuid-scan.timer not deployed — setuid binary scan absent; enable system_setuid_scan_enabled: true in config.yml"
+    fi
+  fi
+
   # Chrony NTS: first verify config, then verify actual NTS cookies established
   # (port 4460 is required for NTS-KE; may be blocked on CSB corporate networks)
   _chrony_conf="/etc/chrony.conf"
@@ -1269,6 +1293,23 @@ EOF
     else record "chrony-nts" "WARN" "NTS configured but chronyc authdata shows no authenticated sources — time sync may have fallen back to unauthenticated pool (TCP 4460 blocked? run: chronyc authdata)"; fi
   elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
   else record "chrony-nts" "FAIL" "NTS not configured in chrony.conf"; fi
+  # chrony-nts-active: verify the currently selected (*) reference source is NTS-authenticated.
+  # The chrony-nts check above verifies cookies exist for any source; this check
+  # specifically targets the selected source — if TCP 4460 is blocked after provisioning,
+  # chrony silently falls back to the unauthenticated pool as its active reference while
+  # potentially retaining stale cookies, so chrony-nts can PASS while this check WARNs.
+  if ! $CSB_HOST && command -v chronyc &>/dev/null; then
+    _chrony_active=$(chronyc -c sources 2>/dev/null | awk -F, '$2 == "*" {print $3; exit}')
+    if [[ -n "$_chrony_active" ]]; then
+      if chronyc -c authdata 2>/dev/null | awk -F, -v s="$_chrony_active" '$1 == s && $5+0 > 0 {found=1} END {exit !found}'; then
+        record "chrony-nts-active" "PASS"
+      else
+        record "chrony-nts-active" "WARN" \
+          "active time source '$_chrony_active' not NTS-authenticated — chrony may have silently fallen back to unauthenticated pool (TCP 4460 blocked or NTS-KE failed); check: chronyc sources -v && chronyc authdata"
+      fi
+    fi
+    unset _chrony_active
+  fi
   _chrony_svc="chronyd"
   grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && _chrony_svc="chrony"
   if systemctl is-enabled "$_chrony_svc" &>/dev/null && systemctl is-active "$_chrony_svc" &>/dev/null; then

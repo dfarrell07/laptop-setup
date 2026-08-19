@@ -166,6 +166,17 @@
   become: true
   when: system_chrony_service_enabled | bool  # skip when disabled (container default)
 
+- name: Restart setuid-scan timer
+  ansible.builtin.systemd:
+    name: setuid-scan.timer
+    state: restarted
+    daemon_reload: true
+  become: true
+  when:
+    - system_setuid_scan_enabled | bool
+    - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1
+  ignore_errors: true  # noqa: ignore-errors
+
 - name: Restart aide-check timer
   ansible.builtin.systemd:
     name: aide-check.timer

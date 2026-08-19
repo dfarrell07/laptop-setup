@@ -1,0 +1,13 @@
+# Ansible managed
+[Unit]
+Description=Weekly setuid/setgid binary scan timer
+
+[Timer]
+# Sunday 04:00 UTC — off-peak, before AIDE check at 05:00
+OnCalendar=Sun *-*-* 04:00:00
+# Run missed scan on next boot if system was off at scheduled time
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

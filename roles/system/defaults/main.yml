@@ -212,6 +212,15 @@ system_aide_monitoring_etc_paths:
 system_aide_check_calendar: '*-*-* 05:00:00'  # OnCalendar for aide-check.timer; override in config.yml
 system_aide_check_random_delay: 15m            # RandomizedDelaySec for aide-check.timer; override in config.yml
 
+# Setuid binary scan — runs weekly regardless of system_aide_enabled.
+# Detects new/removed setuid and setgid binaries (perm /6000) by diffing
+# against a stored baseline in /var/lib/setuid-scan/baseline.
+# Deviations are logged to journald (SyslogIdentifier=setuid-scan) and
+# are visible via: journalctl -t setuid-scan
+# Disabled automatically on containers and RHEL CSB hosts (IT manages baseline).
+# Set false in config.yml to opt out on hosts where the scan is not desired.
+system_setuid_scan_enabled: true
+
 # TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
 # Auto-detected from ansible_facts['form_factor'] (Notebook/Portable/Laptop = true, Desktop = false).
 # Override in config.yml: system_tlp_enabled: true/false

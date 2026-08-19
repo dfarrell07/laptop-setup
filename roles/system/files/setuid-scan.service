@@ -1,0 +1,30 @@
+# Ansible managed
+[Unit]
+Description=Weekly setuid/setgid binary scan
+Documentation=man:find(1)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/setuid-scan.sh
+Nice=15
+IOSchedulingClass=idle
+SyslogIdentifier=setuid-scan
+
+# Hardening: script runs as root but needs no privileges beyond file reads
+NoNewPrivileges=false
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+ProtectKernelLogs=true
+# Scan writes only to /var/lib/setuid-scan (baseline file)
+ReadWritePaths=/var/lib/setuid-scan
+ProtectSystem=strict
+UMask=0077
