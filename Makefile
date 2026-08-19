@@ -101,7 +101,7 @@ bootstrap: guard-not-root
 	@test -f scripts/vault-pass-ci.sh || { printf 'ERROR: scripts/vault-pass-ci.sh missing — restore with: git checkout scripts/vault-pass-ci.sh\n' >&2; exit 1; }
 	@# Verify vault-pass-ci.sh integrity BEFORE copying (FATAL if check fails) — guards against supply chain tampering
 	@cd scripts && sha256sum -c vault-pass-ci.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass-ci.sh integrity verified" || { echo "ERROR: vault-pass-ci.sh failed integrity check — possible tampering. Run: sha256sum scripts/vault-pass-ci.sh > scripts/vault-pass-ci.sh.sha256" >&2; exit 1; }
-	@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "Created stub vault-pass.sh (replace with YubiKey version for real secrets)"; }
+		@test -f scripts/vault-pass.sh || { cp scripts/vault-pass-ci.sh scripts/vault-pass.sh && echo "SECURITY: Created stub vault-pass.sh — you MUST replace with YubiKey/keyring/encrypted-file before encrypting vault.yml"; }
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)
 	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256" >&2; exit 1; }
