@@ -84,6 +84,8 @@ bootstrap: guard-not-root
 	@chmod 700 scripts/vault-pass.sh scripts/vault-pass-ci.sh
 	@# Verify vault-pass.sh integrity after creation/update (FATAL if check fails)
 	@cd scripts && sha256sum -c vault-pass.sh.sha256 > /dev/null 2>&1 && echo "✓ vault-pass.sh integrity verified" || { echo "ERROR: vault-pass.sh failed integrity check — possible tampering or stale .sha256 file. If expected (after make setup-yubikeys), the hash file should have been automatically updated. Run: sha256sum scripts/vault-pass.sh > scripts/vault-pass.sh.sha256" >&2; exit 1; }
+	@# Verify verify-collections.sh integrity (FATAL if check fails) — guards against supply chain tampering
+	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering. Run: sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256" >&2; exit 1; }
 	cd collections-dist && sha256sum -c SHA256SUMS
 	ansible-galaxy collection install -p ./collections \
 		collections-dist/ansible-posix-2.2.2.tar.gz \
@@ -267,6 +269,7 @@ diff: guard-not-root
 ci: lint syntax-check test-scripts test-poller test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role
 
 lint: .venv shellcheck markdownlint check-vars-sync
+	@cd scripts && sha256sum -c verify-collections.sh.sha256 > /dev/null 2>&1 && echo "✓ verify-collections.sh integrity verified" || { echo "ERROR: verify-collections.sh failed integrity check — possible tampering"; exit 1; }
 	$(VERIFY_AND_RUN) .venv/bin/ansible-lint
 	.venv/bin/yamllint --strict .
 	@if command -v actionlint >/dev/null 2>&1; then actionlint -color; else echo "SKIP: actionlint not installed (run: make packages)"; fi
@@ -316,6 +319,7 @@ test-scripts:
 	bash -n scripts/vault-pass-ci.sh
 	bash -n scripts/test-queue-poller.sh
 	bash -n scripts/verify-collections.sh
+	bash -n scripts/verify-ansible-args.sh
 	bash -n scripts/test-hooks-security.sh
 	bash scripts/test-hooks-security.sh
 	bash scripts/test-hooks-security.sh
