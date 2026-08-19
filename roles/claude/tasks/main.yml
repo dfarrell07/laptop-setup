@@ -451,7 +451,13 @@
     - is_linux
     - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
     - _claude_queue_unit_removal.changed
-  failed_when: false
+  ignore_errors: true
+  register: _claude_queue_daemon_reload_cleanup
+
+- name: Warn if systemd user daemon reload failed after unit removal
+  ansible.builtin.debug:
+    msg: "WARNING: daemon-reload after unit removal failed: {{ _claude_queue_daemon_reload_cleanup.msg | default('unknown error') }}"
+  when: _claude_queue_daemon_reload_cleanup is defined and _claude_queue_daemon_reload_cleanup.failed | default(false)
 
 - name: Remove logrotate config for claude-queue-poller.log (when disabled)
   ansible.builtin.file:
