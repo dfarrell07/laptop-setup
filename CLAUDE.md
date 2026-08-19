@@ -271,10 +271,10 @@ make repos-downstream # downstream repos only
 
 ## Testing
 
-- `make lint` — ansible-lint (production profile) + yamllint + check-vars-sync (shellcheck runs as a prerequisite target)
+- `make lint` — ansible-lint (production profile) + yamllint + check-vars-sync (shellcheck and markdownlint run as prerequisites; actionlint and zizmor run if installed)
 - `make check-vars-sync` — Verify security hardening vars in sync between group_vars/all/vars.yml and roles/system/defaults/main.yml
 - `make syntax-check` — Playbook syntax validation
-- `make test-scripts` — Bash syntax-check of scripts/ (bash -n on preflight, smoke-test, backup)
+- `make test-scripts` — Bash syntax-check of 8 scripts/ files (preflight.sh, smoke-test.sh, backup.sh, vault-pass-ci.sh, test-queue-poller.sh, verify-collections.sh, verify-ansible-args.sh, test-hooks-security.sh) + executes test-hooks-security.sh
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
 - `make test` — shellcheck + test-scripts + test-poller + molecule (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries);
   Podman only, no libvirt required. CI molecule coverage minus macOS (omits lint/syntax-check from full ci)
