@@ -125,6 +125,7 @@
           dict: "{{ system_sysctl_extra_additional }}"
       loop_control:
         loop_var: _item
+        label: "{{ _item.name }}"
 
     - name: Assert no hardening-critical keys in extra dicts
       ansible.builtin.assert:
@@ -177,6 +178,7 @@
           dict: "{{ system_sysctl_extra_additional }}"
       loop_control:
         loop_var: _item
+        label: "{{ _item.name }}"
 
     - name: Merge configurable sysctl values into hardening dict
       ansible.builtin.set_fact:
