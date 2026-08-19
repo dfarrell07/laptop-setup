@@ -52,13 +52,13 @@
           real_user_home must not contain '..' or './' path traversal sequences.
 
     - name: Deploy auditd rules
-      # File sorts as 'c' — before 'd'–'z' and digit-prefixed files. augenrules merges
+      # File sorts as 's' — before 'z' and digit-prefixed files. augenrules merges
       # rules.d/ in lexicographic order; the last -e directive wins. If IT later deploys
       # a z-finalize.rules or 99-it.rules ending with -e 2, it overrides our -e 1 intent
       # on csb_detected machines. Accepted risk: Fedora hybrid CSB has no IT-managed
       # SIEM pipeline (that is RHEL CSB only, blocked by the not csb_rhel guard above).
       ansible.builtin.template:
-        src: auditd-claude.rules.j2
+        src: auditd-system.rules.j2
         dest: /etc/audit/rules.d/claude-code.rules
         mode: "0640"
       notify: Restart auditd
