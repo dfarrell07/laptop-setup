@@ -1207,7 +1207,7 @@
 - name: Assert sudoers go-env drop-in deployed
   ansible.builtin.assert:
     that: verify_sudoers_go_env.stat.exists
-    fail_msg: "/etc/sudoers.d/go-env not deployed — system role sudoers go-env task regression"
+    fail_msg: "/etc/sudoers.d/go-env not deployed — system role sudoers go-env task regression (exists={{ verify_sudoers_go_env.stat.exists | default(false) }})"
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -1297,7 +1297,7 @@
     - not (system_is_container | default(false))
     - verify_journald_conf.stat.exists
 
-- name: Check sudoers drop-in has logfile directive
+- name: Check sudoers drop-in has logfile=/var/log/sudo.log directive
   ansible.builtin.command: grep -q 'logfile=' /etc/sudoers.d/99-hardening
   register: verify_sudoers_logfile
   changed_when: false
@@ -1310,7 +1310,7 @@
     - verify_sudoers_conf is not skipped
     - verify_sudoers_conf.stat.exists
 
-- name: Assert sudoers drop-in contains logfile= directive
+- name: Assert sudoers drop-in contains logfile=/var/log/sudo.log directive
   ansible.builtin.assert:
     that: verify_sudoers_logfile.rc == 0
     fail_msg: "/etc/sudoers.d/99-hardening missing 'logfile=' — sudo logging regression (rc={{ verify_sudoers_logfile.rc | default('?') }})"
