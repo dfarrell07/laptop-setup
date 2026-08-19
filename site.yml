@@ -90,8 +90,12 @@
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
 
     - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
-      # NOTE: tags: [always] ensures this runs before role tasks in Play 2, preventing
-      # --start-at-task from bypassing the checks. Play 0 ensures it also runs before Play 1.
+      # DEFENSE 1: Play 0 (pre-flight.yml via import_playbook) cannot be skipped with
+      # --start-at-task and runs before Play 1.
+      # DEFENSE 2: Users invoking ansible-playbook directly may target Play 2 and skip Play 0.
+      # This block re-validates vault health, placeholder guards, and CSB state using tags:
+      # [always], ensuring they are current regardless of invocation method (Make, direct
+      # ansible-playbook, molecule test).
       become: false
       tags: [always]
       block:

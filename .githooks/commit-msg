@@ -1,14 +1,23 @@
 #!/bin/bash
 # Reject past-tense/gerund first words in commit description (allows noun-phrase subjects per repo convention)
 msg=$(head -1 "$1")
-# Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
+
+# SECURITY: Require Signed-off-by trailer (text in commit message via 'git commit -s')
+# IMPORTANT: This is the TEXT check only. See note below about GPG signature (-S).
+# Checked before any early-exit so reverts are also covered
 if ! grep -q '^Signed-off-by:' "$1"; then
-  echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
+  echo "ERROR: Missing Signed-off-by trailer — use --signoff / -s with your git command" >&2
+  echo "" >&2
+  echo "NOTE: -s adds text only (not cryptographic). For supply-chain files, you ALSO need -S:" >&2
+  echo "  git commit -s -S" >&2
+  echo "" >&2
+  echo "See SECURITY.md § 'Supply-Chain Commits: -s vs -S' for the distinction." >&2
   exit 1
 fi
 
-# SECURITY: If critical supply-chain files are staged, require GPG signing
-# Prevents unsigned commits that modify scripts + hashes in the same commit
+# SECURITY: If critical supply-chain files are staged, require GPG signing configuration
+# Prevents unsigned commits that modify scripts + hashes in the same commit.
+# NOTE: This enforces 'git commit -S' (cryptographic GPG signature), complementary to -s above
 _sc_files_modified=0
 if git diff --cached --quiet --diff-filter=ACMR -- 'scripts/verify-collections.sh' 'scripts/verify-collections.sh.sha256' 'scripts/verify-ansible-args.sh' 'scripts/verify-ansible-args.sh.sha256' 'collections-dist/SHA256SUMS' 'collections-dist/*.tar.gz' 2>/dev/null; then
   : # No changes to critical files
@@ -16,15 +25,27 @@ else
   _sc_files_modified=1
 fi
 
-# SECURITY: Enforce GPG signing for critical supply-chain files
+# SECURITY: Enforce GPG signing (cryptographic signature via -S) for critical supply-chain files
+# NOTE: This is the CRYPTOGRAPHIC signature check (complement to -s Signed-off-by text check above)
 # Prevents unsigned commits that modify scripts + hashes in the same commit
 if [ "$_sc_files_modified" -eq 1 ]; then
   if ! git config --local --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
     if ! git config --global --bool commit.gpgsign 2>/dev/null | grep -q 'true'; then
-      echo "ERROR: Critical supply-chain files modified but commit.gpgsign not configured" >&2
-      echo "       This commit MUST be GPG-signed — use: git commit -s -S" >&2
-      echo "       Setup: import your GPG key (see SECURITY.md GPG Key Import section)" >&2
-      echo "       Then configure: git config --global commit.gpgsign true" >&2
+      echo "ERROR: Critical supply-chain files modified but GPG signing not configured" >&2
+      echo "" >&2
+      echo "This commit MUST have BOTH mechanisms:" >&2
+      echo "  1. Signed-off-by text (-s): enforced in previous check above" >&2
+      echo "  2. GPG signature (-S): requires configuration or explicit flag" >&2
+      echo "" >&2
+      echo "Option A (recommended): Configure git to always GPG-sign" >&2
+      echo "  git config --global commit.gpgsign true" >&2
+      echo "  Then: git commit -s  (GPG signing added automatically)" >&2
+      echo "" >&2
+      echo "Option B: Sign supply-chain commits explicitly" >&2
+      echo "  git commit -s -S  (both -s and -S flags)" >&2
+      echo "" >&2
+      echo "Setup: Import your GPG key first (see SECURITY.md § GPG Key Import section)" >&2
+      echo "See SECURITY.md § 'Supply-Chain Commits: -s vs -S' for full details." >&2
       exit 1
     fi
   fi

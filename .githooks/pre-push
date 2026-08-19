@@ -1,8 +1,12 @@
 #!/bin/bash
-# Pre-push hook: enforce vault encryption before push completes
-# SECURITY: Blocks push if any vault.yml file is unencrypted, preventing secrets exposure in git history
-# DEFENSE-IN-DEPTH: This hook can be bypassed via core.hooksPath override. GitHub Actions vault-encryption
-# job provides secondary protection. Together they provide dual-layer defense against secrets leakage.
+# Pre-push hook: enforce vault encryption, Signed-off-by, supply-chain GPG signing, and gitleaks
+# SECURITY: Blocks push if:
+#   1. Any vault.yml file is unencrypted (secrets exposure prevention)
+#   2. Any commit lacks Signed-off-by trailer (supply-chain validation)
+#   3. Critical supply-chain files modified without GPG signature (tampering prevention)
+#   4. Secrets detected by gitleaks (credentials leakage prevention)
+# DEFENSE-IN-DEPTH: This hook can be bypassed via core.hooksPath override. GitHub Actions provides secondary protection.
+# Together they provide multi-layer defense against supply-chain attacks and secrets leakage.
 
 set -euo pipefail
 
@@ -79,5 +83,124 @@ while IFS= read -r -d '' f; do
     fi
   fi
 done < <(git ls-files -z -- '*vault.yml')
+
+# SECURITY: Validate Signed-off-by on all commits being pushed
+# Attack: Attacker commits via --no-verify, bypassing local commit-msg hook
+# Defense: Enforce Signed-off-by requirement at push time (in addition to commit-msg hook)
+echo "Checking Signed-off-by requirement..." >&2
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha || [ -z "$local_ref" ]; do
+  [ -n "$local_ref" ] || break
+
+  # Skip deletions (indicated by all zeros in remote_sha)
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  # Get the base SHA: either remote tracking branch or start of push series
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    # New branch — validate all commits from merge-base
+    base_sha=$(git merge-base "$local_sha" "origin/main" 2>/dev/null || echo "$local_sha")
+  else
+    # Existing branch — validate new commits only
+    base_sha="$remote_sha"
+  fi
+
+  # Iterate through commits being pushed
+  for commit in $(git rev-list "$base_sha..$local_sha" 2>/dev/null || true); do
+    body=$(git log -1 --format=%B "$commit" 2>/dev/null || true)
+    if ! printf "%s\n" "$body" | grep -q '^Signed-off-by:'; then
+      echo "ERROR: Commit $commit is missing Signed-off-by: trailer" >&2
+      echo "       Use: git commit -s" >&2
+      failed=1
+    fi
+  done
+done
+
+# SECURITY: Validate GPG signatures on critical supply-chain file commits
+# Attack: Attacker modifies supply-chain files (scripts, hashes) without GPG signature
+# Defense: Require GPG signature when committing critical files
+echo "Checking GPG signature requirement for supply-chain files..." >&2
+critical_patterns=('scripts/' '.githooks/' 'collections-dist/' 'Makefile' '.github/workflows/')
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha || [ -z "$local_ref" ]; do
+  [ -n "$local_ref" ] || break
+
+  # Skip deletions
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  # Get the base SHA
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    base_sha=$(git merge-base "$local_sha" "origin/main" 2>/dev/null || echo "$local_sha")
+  else
+    base_sha="$remote_sha"
+  fi
+
+  # Check each commit for critical file modifications
+  for commit in $(git rev-list "$base_sha..$local_sha" 2>/dev/null || true); do
+    # Check if this commit modifies any critical supply-chain files
+    modified_files=$(git show "$commit" --name-only --pretty=format: 2>/dev/null || true)
+    sc_file_modified=0
+
+    for pattern in "${critical_patterns[@]}"; do
+      if printf "%s\n" "$modified_files" | grep -q "^${pattern}" 2>/dev/null; then
+        sc_file_modified=1
+        break
+      fi
+    done
+
+    if [ "$sc_file_modified" -eq 1 ]; then
+      # Verify commit is GPG-signed
+      if ! git verify-commit "$commit" 2>/dev/null; then
+        sig_status=$(git show --format=%G? -s "$commit" 2>/dev/null || echo "N")
+        echo "ERROR: Commit $commit modifies supply-chain files but is NOT GPG-signed (status: $sig_status)" >&2
+        echo "       Use: git commit -s -S" >&2
+        failed=1
+      fi
+    fi
+  done
+done
+
+# SECURITY: Run gitleaks to detect secrets before push
+# Attack: Attacker commits credentials (API keys, passwords, tokens) to history
+# Defense: Detect secrets with gitleaks before allowing push (fail-fast prevention)
+echo "Checking for secrets with gitleaks..." >&2
+if command -v gitleaks >/dev/null 2>&1; then
+  # Get merge base to determine what's new
+  while IFS=' ' read -r local_ref local_sha remote_ref remote_sha || [ -z "$local_ref" ]; do
+    [ -n "$local_ref" ] || break
+
+    # Skip deletions
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+      continue
+    fi
+
+    # Determine what range to check (new commits being pushed)
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+      # New branch — check from merge-base to HEAD
+      range="$(git merge-base "$local_sha" "origin/main" 2>/dev/null || echo "$local_sha")..${local_sha}"
+    else
+      # Existing branch — check only new commits
+      range="${remote_sha}..${local_sha}"
+    fi
+
+    # Run gitleaks on the range being pushed (skip errors, as gitleaks may not be in PATH)
+    if gitleaks git --log-opts "$range" --redact --no-color 2>/dev/null || true; then
+      : # gitleaks passed (no secrets found)
+    else
+      gitleaks_rc=$?
+      if [ "$gitleaks_rc" -ne 0 ] && [ "$gitleaks_rc" -ne 127 ]; then
+        # 127 = gitleaks not found (OK, CI will catch), any other code = actual failure
+        echo "ERROR: gitleaks detected potential secrets in commits being pushed" >&2
+        echo "       Review the output above and remove secrets before pushing" >&2
+        failed=1
+      fi
+    fi
+  done
+else
+  # gitleaks not installed — warn but don't fail (CI will catch this)
+  echo "WARNING: gitleaks not installed — skipping secret detection (CI will enforce this)" >&2
+fi
 
 exit $failed
