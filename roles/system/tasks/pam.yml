@@ -24,7 +24,7 @@
     - not csb_rhel
     - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
 
-- name: Configure pam_faillock audit flag
+- name: Enable pam_faillock audit flag (when system_faillock_audit is true)
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
@@ -49,7 +49,7 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Configure pam_faillock local_users_only flag
+- name: Enable pam_faillock local_users_only flag (when system_faillock_local_users_only is true)
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
@@ -74,7 +74,7 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Configure pam_faillock even_deny_root flag
+- name: Enable pam_faillock even_deny_root flag (when system_faillock_even_deny_root is true)
   community.general.ini_file:
     path: /etc/security/faillock.conf
     section: null
