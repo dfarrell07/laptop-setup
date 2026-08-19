@@ -150,9 +150,10 @@ def load_manifest(manifest_path):
 def get_manifest_files(manifest_data, tarball_base):
     """Extract set of expected file paths from manifest.
 
-    PYTHON_MANIFEST.json stores module_utils as a list of names and plugins
-    as {type: [name, ...]} — no content hashes. Returns a set of expected
-    relative paths for presence-checking only.
+    PYTHON_MANIFEST.json stores module_utils as {name: hash} and plugins
+    as {type: {name: hash}}. so_plugins and so_module_utils hold .so entries
+    with full filenames (including .so suffix) as keys.
+    Returns a set of expected relative paths for presence-checking.
     """
     if tarball_base not in manifest_data:
         return set()  # Collection not in manifest (benign — bootstrap may not have run)
@@ -160,17 +161,29 @@ def get_manifest_files(manifest_data, tarball_base):
     collection_manifest = manifest_data[tarball_base]
     expected_files = set()
 
-    # module_utils: list of filenames — stored at plugins/module_utils/ in tarballs
-    for filename in collection_manifest.get('module_utils', []):
+    # module_utils: dict of {name: hash} — stored at plugins/module_utils/ in tarballs
+    for filename in collection_manifest.get('module_utils', {}):
         expected_files.add(f'plugins/module_utils/{filename}.py')
 
-    # plugins: dict of {plugin_type: [filename, ...]}
+    # so_module_utils: dict of {filename.so: hash}
+    for filename in collection_manifest.get('so_module_utils', {}):
+        expected_files.add(f'plugins/module_utils/{filename}')
+
+    # plugins: dict of {plugin_type: {name: hash}}
     plugins = collection_manifest.get('plugins', {})
     if isinstance(plugins, dict):
         for plugin_type, names in plugins.items():
-            if isinstance(names, list):
+            if isinstance(names, dict):
                 for filename in names:
                     expected_files.add(f'plugins/{plugin_type}/{filename}.py')
+
+    # so_plugins: dict of {plugin_type: {filename.so: hash}}
+    so_plugins = collection_manifest.get('so_plugins', {})
+    if isinstance(so_plugins, dict):
+        for plugin_type, names in so_plugins.items():
+            if isinstance(names, dict):
+                for filename in names:
+                    expected_files.add(f'plugins/{plugin_type}/{filename}')
 
     return expected_files
 
@@ -248,7 +261,24 @@ for namespace_dir in extracted_root.glob('*/'):
             sys.exit(1)
 
         # Tarball-vs-disk comparison (extracted vs fresh) is the primary security check.
-        # PYTHON_MANIFEST.json verification is performed separately by gen-collection-manifest.py.
+        # PYTHON_MANIFEST.json provides a git-committed baseline to detect coordinated
+        # tarball+disk replacement (where disk-vs-tarball delta would be zero).
+        # Check: .so files on disk must be present in the committed manifest baseline.
+        ns = namespace_dir.name
+        col = collection_dir.name
+        prefix = f"{ns}-{col}-"
+        matching_keys = [k for k in manifest_data if k.startswith(prefix)]
+        if matching_keys:
+            manifest_files = get_manifest_files(manifest_data, matching_keys[0])
+            if manifest_files:
+                so_on_disk = {f for f in extracted_keys if f.endswith('.so')}
+                so_not_in_manifest = so_on_disk - manifest_files
+                if so_not_in_manifest:
+                    print(f"ERROR: {collection_name}: .so files on disk not in PYTHON_MANIFEST.json baseline (possible coordinated tarball+disk injection):", file=sys.stderr)
+                    for f in sorted(so_not_in_manifest)[:10]:
+                        print(f"  + {f}", file=sys.stderr)
+                    print("       Re-generate the manifest if this .so is legitimate: make gen-collection-manifest", file=sys.stderr)
+                    sys.exit(1)
 
 print("✓ All collection Python files match verified tarballs")
 PYEOF

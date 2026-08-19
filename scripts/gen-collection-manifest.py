@@ -51,6 +51,8 @@ def extract_collection_content(tarball_path):
     content = {
         'plugins': defaultdict(dict),
         'module_utils': {},
+        'so_plugins': defaultdict(dict),
+        'so_module_utils': {},
         'roles': set(),
         'runtime_requires_ansible': None,
     }
@@ -91,6 +93,21 @@ def extract_collection_content(tarball_path):
                                     file_hash)
                         except Exception:
                             pass
+            elif '/plugins/' in member and member.endswith('.so'):
+                parts = member.split('/plugins/', 1)[1].split('/')
+                if len(parts) >= 2:
+                    plugin_type = parts[0]
+                    # Store full filename (with .so) to distinguish from .py entries
+                    so_name = parts[-1]
+                    try:
+                        file_obj = tar.extractfile(member)
+                        if file_obj:
+                            file_content = file_obj.read()
+                            file_hash = compute_file_hash(file_content)
+                            content['so_plugins'][plugin_type][so_name] = (
+                                file_hash)
+                    except Exception:
+                        pass
 
         # Extract module_utils with content hashes
         for member in members:
@@ -106,6 +123,18 @@ def extract_collection_content(tarball_path):
                             content['module_utils'][module_name] = file_hash
                     except Exception:
                         pass
+            elif '/module_utils/' in member and member.endswith('.so'):
+                parts = member.split('/module_utils/', 1)[1].split('/')
+                # Store full filename (with .so) to distinguish from .py entries
+                so_name = parts[-1]
+                try:
+                    file_obj = tar.extractfile(member)
+                    if file_obj:
+                        file_content = file_obj.read()
+                        file_hash = compute_file_hash(file_content)
+                        content['so_module_utils'][so_name] = file_hash
+                except Exception:
+                    pass
 
         # Extract roles (names only — roles have complex structures)
         roles = set()
@@ -119,6 +148,7 @@ def extract_collection_content(tarball_path):
 
     # Convert defaultdict to regular dict for JSON serialization
     content['plugins'] = {k: dict(v) for k, v in content['plugins'].items()}
+    content['so_plugins'] = {k: dict(v) for k, v in content['so_plugins'].items()}
     return content
 
 
