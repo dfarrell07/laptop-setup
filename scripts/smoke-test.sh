@@ -95,7 +95,7 @@ if ! command -v timeout &>/dev/null; then
 else
   timeout 10 ssh -T git@github.com &>/dev/null || _ssh_ret=$?
   if [[ "$_ssh_ret" -eq 1 ]]; then
-    record "github-ssh-auth" "PASS"
+    record "github-ssh-auth" "PASS" "exit 1 = GitHub auth success"
   elif [[ "$_ssh_ret" -eq 124 ]]; then
     record "github-ssh-auth" "WARN" "ssh timed out after 10s — network slow or github.com unreachable; auth status unknown"
   else
