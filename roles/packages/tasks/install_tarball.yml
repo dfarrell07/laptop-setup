@@ -29,7 +29,7 @@
         cmd: "timeout {{ version_check_timeout | default(10) }} {{ version_check_cmd }}"
       register: _install_tarball_check
       changed_when: false
-      failed_when: false
+      failed_when: _install_tarball_check.rc not in [0, 1, 127]
       check_mode: false
 
     - name: "Download and extract {{ binary_name }}"
