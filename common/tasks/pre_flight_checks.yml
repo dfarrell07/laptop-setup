@@ -129,7 +129,7 @@
       when: _config_raw is defined
       ansible.builtin.assert:
         that:
-          - _config_config_raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
+          - _config_raw.get('dotfiles_user_name', '') | string is match('^[^\n\r\x00-\x1f]*$')
         fail_msg: >-
           SECURITY: dotfiles_user_name in config.yml contains newlines or control characters.
           This value is rendered verbatim into the [user] name field in .gitconfig (INI format);
@@ -144,7 +144,7 @@
     - name: Assert dotfiles_gonosumdb contains only private domains (GONOSUMDB bypass guard)
       when: _config_raw is defined
       vars:
-        _gonosumdb: "{{ _config_config_raw.get('dotfiles_gonosumdb', '') | string }}"
+        _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
           # Reject public registry patterns (github.com, golang.org, mvdan.cc, k8s.io, gopkg.in, etc.)
@@ -168,8 +168,8 @@
       when: _config_raw is defined
       ansible.builtin.assert:
         that:
-          - _config_config_raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
-          - _config_config_raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
+          - _config_raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
+          - _config_raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
           SECURITY: dotfiles_goprivate or dotfiles_aws_profile in config.yml
           contains unsafe characters. These values are written directly into shell export statements;
@@ -181,7 +181,7 @@
     - name: Assert GOSUMDB empty string is rejected (supply chain guard)
       when: _config_raw is defined
       vars:
-        _gonosumdb: "{{ _config_config_raw.get('dotfiles_gonosumdb', '') | string }}"
+        _gonosumdb: "{{ _config_raw.get('dotfiles_gonosumdb', '') | string }}"
       ansible.builtin.assert:
         that:
           - >-
@@ -204,7 +204,7 @@
     - name: Assert packages_gosumdb is whitelisted (supply chain guard)
       when: _config_raw is defined
       vars:
-        _packages_gosumdb: "{{ _config_config_raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
+        _packages_gosumdb: "{{ _config_raw.get('packages_gosumdb', 'sum.golang.org') | string }}"
         _whitelisted_servers:
           - sum.golang.org
           - sum.redhat.com
