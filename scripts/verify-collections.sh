@@ -38,7 +38,7 @@ if [[ -f SHA256SUMS.asc ]]; then
   # sign a malicious SHA256SUMS — gpg would exit 0 without this guard.
   unset GNUPGHOME GPG_AGENT_INFO
   gpg_exit=0
-  gpg_output=$(gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
+  gpg_output=$(LC_ALL=C gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
 
   if [[ $gpg_exit -eq 0 ]]; then
     echo "✓ SHA256SUMS.asc GPG signature verified"
