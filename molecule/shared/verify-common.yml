@@ -1352,7 +1352,7 @@
 - name: Assert auditd rules contain mutable flag -e 1
   ansible.builtin.assert:
     that: verify_auditd_e1.rc == 0
-    fail_msg: "claude-code.rules missing '-e 1' — hybrid CSB audit flag regression"
+    fail_msg: "claude-code.rules missing '-e 1' — hybrid CSB audit flag regression (rc={{ verify_auditd_e1.rc | default('?') }})"
   when:
     - verify_auditd_e1 is not skipped
 
@@ -1547,7 +1547,7 @@
     - not csb_rhel
     - not (system_is_container | default(false))
     - system_chrony_service_enabled | default(true) | bool
-    - (verify_chronyd.status.UnitFileState | default('')) != ''
+    - verify_chronyd is not skipped
 
 - name: Check chrony NTS config in /etc/chrony.conf
   ansible.builtin.command: grep -qE '^server.*[[:space:]]nts' /etc/chrony.conf
@@ -1587,6 +1587,13 @@
       {{ system_chrony_nts_servers | default(['time.cloudflare.com', 'nts.netnod.se', 'ptbtime1.ptb.de', 'ntppool1.time.nl']) }}
     system_chrony_fallback_pool: "{{ system_chrony_fallback_pool | default('2.fedora.pool.ntp.org') }}"
     system_chrony_minsources: "{{ system_chrony_minsources | default(2) }}"
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Verify chrony NTS template contains at least one NTS server line
+  ansible.builtin.command: grep -qE '^server.*nts' /tmp/molecule-chrony-nts-render-check.conf
+  changed_when: false
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
