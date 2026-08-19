@@ -364,7 +364,15 @@
         scope: user
         daemon_reload: true
       when: _queue_service.changed or _queue_timer.changed
-      failed_when: false
+      register: _daemon_reload
+      ignore_errors: true
+
+    - name: Warn if daemon reload failed (no active user systemd session)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: systemd user daemon-reload failed ({{ _daemon_reload.msg | default('unknown error') }}).
+          This is expected if there is no active user systemd session; the timer will be active after login.
+      when: _daemon_reload.failed | default(false)
 
     - name: Enable task queue timer
       ansible.builtin.systemd:
