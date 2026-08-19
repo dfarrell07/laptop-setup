@@ -145,7 +145,7 @@
     _system_usbguard_stop_result is failed and
     'Unit usbguard not found' not in (_system_usbguard_stop_result.msg | default(''))
 
-- name: Configure USBGuard
+- name: Install and enable USBGuard
   when:
     - system_install_usbguard | bool
     - is_dnf  # usbguard-selinux is Fedora/RHEL-only
