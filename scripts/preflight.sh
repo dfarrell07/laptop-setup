@@ -202,11 +202,12 @@ if [[ "$yk_found" == true ]]; then
       if ! command -v timeout &>/dev/null; then
         record "yubikey_chalresp" "skip" "timeout not available (install gnu-coreutils on macOS)"
       else
+        _yk_timeout=15
         echo "Touch your YubiKey for HMAC-SHA1 challenge-response test..." >&2
-        if timeout 15 ykman otp calculate 2 "$(printf '%s' 'preflight-test' | od -An -tx1 | tr -d ' \n')" &>/dev/null; then
+        if timeout "$_yk_timeout" ykman otp calculate 2 "$(printf '%s' 'preflight-test' | od -An -tx1 | tr -d ' \n')" &>/dev/null; then
           record "yubikey_chalresp" "pass" "Slot 2 HMAC-SHA1 responding"
         else
-          record "yubikey_chalresp" "warn" "Slot 2 no response within 15s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
+          record "yubikey_chalresp" "warn" "Slot 2 no response within ${_yk_timeout}s — touch YubiKey when prompted, or verify HMAC-SHA1 slot 2 is configured"
         fi
       fi
     else
@@ -465,8 +466,11 @@ fi
 # --- Existing installations ---
 for tool in claude podman distrobox toolbox; do
   if command -v "$tool" &>/dev/null; then
-    ver=$("$tool" --version 2>/dev/null | head -1) || ver="installed"
-    record "installed_${tool}" "pass" "$ver"
+    if ver=$("$tool" --version 2>/dev/null | head -1) && [[ -n "$ver" ]]; then
+      record "installed_${tool}" "pass" "$ver"
+    else
+      record "installed_${tool}" "warn" "found but --version failed or returned empty"
+    fi
   else
     record "installed_${tool}" "skip" "not found"
   fi
