@@ -441,8 +441,8 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   if grep -qE '^[[:space:]]*StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
   if grep -qE '^[[:space:]]*ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
-  else record "ssh-config-control-master" "WARN" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
-  if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
+  else record "ssh-config-control-master" "FAIL" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
+  if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "FAIL" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
   elif grep -qE 'hmac-sha2-(512|256)($|[^-])' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "WARN" "non-ETM MAC found in ~/.ssh/config MACs line — use ETM variants (hmac-sha2-512-etm@openssh.com, hmac-sha2-256-etm@openssh.com) only"
   else record "ssh-config-no-non-etm-macs" "PASS"; fi
 else record "ssh-config" "FAIL" "$HOME/.ssh/config not deployed — run: make dotfiles"; fi
@@ -478,7 +478,7 @@ _kh="$HOME/.ssh/known_hosts"
 if [[ -f "$_kh" ]]; then
   check_perms "known-hosts-perms" "$_kh" "600"
   if ssh-keygen -F github.com -f "$_kh" &>/dev/null; then record 'known-hosts-github' 'PASS'
-  else record 'known-hosts-github' 'WARN' 'github.com not in known_hosts — run: make ssh'; fi
+  else record 'known-hosts-github' 'FAIL' 'github.com not in known_hosts — run: make ssh'; fi
 fi
 unset _kh _kh_perms
 
@@ -903,7 +903,7 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
   if systemctl is-active tailscaled &>/dev/null; then record "tailscaled-active" "PASS"
   else record "tailscaled-active" "WARN" "tailscaled not running"; fi
   if systemctl is-enabled tailscaled &>/dev/null; then record "tailscaled-enabled" "PASS"
-  else record "tailscaled-enabled" "WARN" "tailscaled not enabled (won't start on reboot, VPN tunnel lost)"; fi
+  else record "tailscaled-enabled" "FAIL" "tailscaled not enabled (won't start on reboot, VPN tunnel lost)"; fi
 
   # USBGuard (verify both installed, active, and enabled)
   if command -v usbguard &>/dev/null; then
