@@ -248,6 +248,68 @@ make repos-downstream # downstream repos only
   `group_vars` (4-5), so any `vault_*` key in `config.yml` silently shadows the vault-encrypted
   value. A runtime `assert` in `common/tasks/pre_flight_checks.yml` (included by `site.yml`) enforces this.
 
+## Ansible Collections Supply Chain Security
+
+**CRITICAL VULNERABILITY: Galaxy Maintainer Account Compromise**
+
+Ansible Galaxy does NOT publish GPG signatures, Sigstore certificates, or SLSA provenance for community collections. If a collection maintainer's Galaxy account is compromised (phishing, credential theft, 2FA bypass), attacker can:
+1. Publish malicious collection version to Galaxy CDN
+2. Update Galaxy API `artifact.sha256` field to match malicious tarball
+3. Both CDN and API are controlled by same attacker — hash verification is defeated
+
+**Mitigations Implemented (defense-in-depth)**:
+1. VERSION PINNING — All collections pinned to specific versions in `requirements.yml`
+2. MANDATORY CODE REVIEW — Upstream CHANGELOG + module comparison required before committing
+3. CI INTEGRITY — `collections-integrity` job validates hashes, `upstream-collections-check` compares against GitHub
+4. RUNTIME VERIFICATION — `verify-collections.sh` guards against TOCTOU tampering
+5. AUDIT TRAIL — Collection tarballs committed to git (forensics + public record)
+
+**Mandatory Procedure When Bumping Collection Versions**:
+
+```bash
+# 1. Download and verify via Galaxy API (basic consistency check)
+make vendor-collections
+
+# 2. Verify upstream — REQUIRED, do NOT skip
+# This defends against Galaxy account compromise by comparing Python modules
+scripts/verify-vendor-tarball.sh
+
+# If script reports FAIL, investigate before committing:
+# - Check GitHub release for unexpected files
+# - Diff old vs. new CHANGELOG.rst for suspicious changes
+# - Contact collection maintainers if compromised: https://galaxy.ansible.com/security
+
+# 3. Review upstream CHANGELOG for suspicious changes
+tar -xzOf collections-dist/community-general-*.tar.gz CHANGELOG.rst | head -100
+# Look for: new tasks, plugins, external service calls, privilege escalation
+
+# 4. Commit with clear message (audit trail)
+git add requirements.yml collections-dist/ && git commit -s -m "Collections: upgrade community.general to 13.2.1
+
+Changelog reviewed: no suspicious changes detected.
+Upstream verification passed: Python modules match github.com/ansible-collections/community.general tag 13.2.1"
+
+# 5. CI will run two additional checks:
+# - upstream-collections-check: re-verifies Python modules match GitHub (PRs only)
+# - galaxy-recheck: re-verifies hashes against Galaxy API at CI time
+
+# 6. Request approval from security reviewer before merging PR
+```
+
+**What Each Check Guards Against**:
+- `make vendor-collections` — Basic Galaxy API consistency (incomplete; Galaxy control bypasses this)
+- `scripts/verify-vendor-tarball.sh` — **Detects malicious code injection** by comparing upstream GitHub tag
+- `upstream-collections-check` (CI) — Re-verifies Python modules match GitHub during PR review
+- `galaxy-recheck` (CI) — Detects Galaxy API changes (yanked versions, hash tampering)
+- `verify-collections.sh` (bootstrap) — Guards against TOCTOU tampering between download and execution
+
+**CI Behavior**:
+- `upstream-collections-check` runs only when `collections-dist/` or `requirements.yml` modified in PR
+- Returns WARN (not FAIL) if upstream GitHub tag unavailable (network issue, repository moved)
+- Manual verification required at https://github.com/{namespace}/{name}/releases/tag/{version}
+
+**See Also**: `SECURITY.md` § "Ansible Collections Supply Chain" for vulnerability details and remediation.
+
 ## Testing
 
 - `make lint` — ansible-lint (production profile) + yamllint + check-vars-sync (shellcheck runs as a prerequisite target)
