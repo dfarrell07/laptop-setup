@@ -664,3 +664,10 @@ system_grub_password_hash: ''        # pre-generated pbkdf2 hash from grub2-mkpa
 # To allow a legitimate file, add its basename to this list in config.yml.
 system_udev_rules_d_allowlist: []
 
+# D-Bus system.d allowlist (SECURITY: pre-plant attack mitigation)
+# Full paths of files in /etc/dbus-1/system.d/ that are NOT owned by any RPM package.
+# RPM-owned files are always permitted. Add non-RPM paths here only for locally-managed configs.
+# Provisioning fails if an unpackaged file is found (pre-planted policy indicator).
+# To allow a legitimate non-RPM file, add its full path to this list in config.yml.
+system_dbus_system_d_allowlist: []
+

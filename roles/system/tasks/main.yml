@@ -148,6 +148,38 @@
   when: not system_is_container
   tags: [always]
 
+- name: "SECURITY: Find /etc/dbus-1/system.d files not owned by any RPM (pre-plant audit)"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      find /etc/dbus-1/system.d -maxdepth 1 -type f \
+        | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+    executable: /bin/bash
+  register: _dbus_unowned
+  changed_when: false
+  failed_when: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  tags: [always]
+
+- name: "SECURITY: Fail on /etc/dbus-1/system.d files not owned by any RPM (pre-plant attack)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unpackaged file(s) in /etc/dbus-1/system.d/.
+      Attack: a pre-planted D-Bus policy grants an unprivileged process ownership of a
+      privileged bus name (e.g., org.freedesktop.PolicyKit1), enabling polkit impersonation
+      and privileged D-Bus message injection.
+      Unpackaged: {{ _dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list }}
+      Fix: remove the file(s) or add full path(s) to system_dbus_system_d_allowlist in config.yml.
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+    - (_dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list) | length > 0
+  tags: [always]
+
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
