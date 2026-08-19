@@ -91,31 +91,42 @@
     # is the accepted model when unset. Domain restriction (claude.ai/anthropic.com) + HTTPS
     # are the primary integrity controls. Set claude_install_sha256 in config.yml to opt into
     # hash pinning once you've verified the hash of a specific installer version.
-    - name: Download Claude Code install script
+    - name: Create secure temporary file for Claude Code install script
+      ansible.builtin.tempfile:
+        state: file
+        prefix: claude-install.
+        suffix: .sh
+      register: _claude_temp_file
+
+    - name: Download Claude Code install script to temporary file
       ansible.builtin.get_url:
         url: "{{ claude_install_url }}"
-        dest: /tmp/claude-install.sh
+        dest: "{{ _claude_temp_file.path }}"
         mode: "0700"
         timeout: 60
         checksum: "{{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 | length > 0 else omit }}"
 
     - name: Run Claude Code install script
       ansible.builtin.command:  # noqa: no-changed-when
-        cmd: bash /tmp/claude-install.sh
+        cmd: bash "{{ _claude_temp_file.path }}"
         chdir: /tmp
       environment: "{{ {'CLAUDE_VERSION': claude_pinned_version} if claude_pinned_version else {} }}"
       timeout: 150
 
+  always:
     - name: Remove Claude Code install script
       ansible.builtin.file:
-        path: /tmp/claude-install.sh
+        path: "{{ _claude_temp_file.path }}"
         state: absent
+      failed_when: false
+      when: _claude_temp_file is defined
   rescue:
     - name: Clean up Claude Code install script on failure
       ansible.builtin.file:
-        path: /tmp/claude-install.sh
+        path: "{{ _claude_temp_file.path }}"
         state: absent
       failed_when: false
+      when: _claude_temp_file is defined
 
     - name: Record Claude install failure (CSB restriction)
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"

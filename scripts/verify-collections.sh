@@ -14,8 +14,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Step 1: Verify source tarballs match recorded hashes
+# Step 1: Verify SHA256SUMS.asc GPG signature if available (defense-in-depth)
 cd "${REPO_DIR}/collections-dist"
+if [[ -f SHA256SUMS.asc ]]; then
+  if ! gpg --verify SHA256SUMS.asc SHA256SUMS 2>/dev/null; then
+    echo "WARNING: SHA256SUMS.asc GPG signature verification failed or key not found" >&2
+    echo "         Continuing with hash verification only (TOFU model)" >&2
+  else
+    echo "✓ SHA256SUMS.asc GPG signature verified"
+  fi
+fi
+
+# Step 1b: Verify source tarballs match recorded hashes
 if ! sha256sum -c SHA256SUMS; then
   echo "ERROR: Collection tarball integrity check failed" >&2
   exit 1
