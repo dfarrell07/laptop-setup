@@ -151,7 +151,8 @@
     GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
     HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
     HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOSUMDB: "sum.golang.org"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
   register: container_golangci_lint_result
   changed_when: container_golangci_lint_result.rc == 0
@@ -179,7 +180,8 @@
     GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
     HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
     HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
-    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOSUMDB: "sum.golang.org"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
   register: container_subctl_result
   changed_when: container_subctl_result.rc == 0

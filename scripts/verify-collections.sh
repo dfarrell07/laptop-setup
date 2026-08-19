@@ -33,6 +33,10 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # To bypass (non-production, CI without key material): set SKIP_GPG_VERIFY=1
 cd "${REPO_DIR}/collections-dist"
 if [[ -f SHA256SUMS.asc ]]; then
+  # Pin GPG to the real user keyring regardless of inherited environment.
+  # An attacker can set GNUPGHOME=/tmp/evil, pre-import their own key, and
+  # sign a malicious SHA256SUMS — gpg would exit 0 without this guard.
+  unset GNUPGHOME GPG_AGENT_INFO
   gpg_exit=0
   gpg_output=$(gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
 
