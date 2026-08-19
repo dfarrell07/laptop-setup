@@ -71,6 +71,7 @@
     - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
+    - _dnf_auto_svc is defined
   failed_when: false
 
 # NOTE: aide_cleanup.yml removes this drop-in when system_aide_enabled=false
@@ -92,6 +93,7 @@
     - system_aide_enabled | bool
     - not csb_rhel  # dnf-automatic not installed on CSB
     - not system_is_container
+    - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
 
 - name: Find unauthorised drop-ins in dnf-automatic service drop-in directory
@@ -104,6 +106,7 @@
     - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
+    - _dnf_auto_svc is defined
   failed_when: false
 
 - name: Remove unauthorised drop-ins from dnf-automatic service drop-in directory
@@ -116,4 +119,5 @@
     - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
+    - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
