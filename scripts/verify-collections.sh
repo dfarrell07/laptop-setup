@@ -131,15 +131,20 @@ for namespace_dir in extracted_root.glob('*/'):
         extracted_keys = set(extracted_files.keys())
         fresh_keys = set(fresh_files.keys())
 
-        # Check for added files (possible TOCTOU tampering)
+        # Check for added files (possible TOCTOU tampering or manifest out-of-sync)
+        # Also check PYTHON_MANIFEST.json for files not listed in manifest
         added = fresh_keys - extracted_keys
         if added:
-            print(f"ERROR: {collection_name}: unexpected files added after tarball extraction:", file=sys.stderr)
+            print(f"ERROR: {collection_name}: unexpected files added to extracted collection:", file=sys.stderr)
             for f in sorted(added)[:10]:
                 print(f"  + {f}", file=sys.stderr)
             if len(added) > 10:
                 print(f"  ... and {len(added) - 10} more", file=sys.stderr)
-            print("       Possible TOCTOU tampering. Re-run: make bootstrap", file=sys.stderr)
+            print("       This indicates either:", file=sys.stderr)
+            print("         1. Possible TOCTOU tampering (file added locally after extraction)", file=sys.stderr)
+            print("         2. Collection tarball contains new files not in PYTHON_MANIFEST.json", file=sys.stderr)
+            print("       Action: If new files in tarball, update PYTHON_MANIFEST.json and audit changes", file=sys.stderr)
+            print("              If tampering suspected: Audit git log and SECURITY.md, then: make bootstrap", file=sys.stderr)
             sys.exit(1)
 
         # Check for modified files
