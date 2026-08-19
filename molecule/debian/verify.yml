@@ -49,9 +49,91 @@
     - name: Import Claude queue verification tasks
       ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
-    # CI gap: all PAM assertions below are gated on not system_is_container; Debian Podman CI sets
-    # system_is_container=true so zero assertions run — make test-vm exercises these checks.
-    # --- PAM faillock (Debian) ---
+    # --- PAM file content checks via slurp (unconditional; no system_is_container gate) ---
+    # These run in Podman CI (system_is_container=true) by reading file bytes directly;
+    # no live PAM stack required.
+    - name: Slurp /etc/pam.d/common-auth for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-auth
+      register: verify_pam_common_auth
+      become: true
+
+    - name: Set _pam_auth_content fact (Debian)
+      ansible.builtin.set_fact:
+        _pam_auth_content: "{{ verify_pam_common_auth['content'] | b64decode }}"
+
+    - name: Assert pam_faillock.so preauth present in common-auth (Debian)
+      ansible.builtin.assert:
+        that: _pam_auth_content is search('(?m)^auth\s+required\s+pam_faillock\.so\s+preauth')
+        fail_msg: "pam_faillock.so preauth line missing in /etc/pam.d/common-auth"
+
+    - name: Assert pam_faillock.so authfail present in common-auth (Debian)
+      ansible.builtin.assert:
+        that: _pam_auth_content is search('(?m)^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail')
+        fail_msg: "pam_faillock.so authfail line missing in /etc/pam.d/common-auth"
+
+    - name: Assert pam_faillock preauth->pam_unix->authfail ordering in common-auth (Debian)
+      ansible.builtin.assert:
+        that: >-
+          _pam_auth_content is search(
+            '(?ms)^auth\s+required\s+pam_faillock\.so\s+preauth.*^auth\s+\S+\s+pam_unix\.so.*^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail'
+          )
+        fail_msg: "pam_faillock.so ordering wrong in /etc/pam.d/common-auth (expected preauth < pam_unix.so < authfail)"
+
+    - name: Slurp /etc/pam.d/common-account for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-account
+      register: verify_pam_common_account
+      become: true
+
+    - name: Assert pam_faillock.so account line present in common-account (Debian)
+      ansible.builtin.assert:
+        that: verify_pam_common_account['content'] | b64decode is search('(?m)^account\s+required\s+pam_faillock\.so$')
+        fail_msg: "pam_faillock.so account line missing in /etc/pam.d/common-account"
+
+    - name: Slurp /etc/security/faillock.conf for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/security/faillock.conf
+      register: verify_pam_faillock_conf
+      become: true
+
+    - name: Assert faillock.conf deny setting (Debian)
+      ansible.builtin.assert:
+        that: verify_pam_faillock_conf['content'] | b64decode is search('(?m)^deny = {{ system_faillock_deny }}$')
+        fail_msg: "faillock.conf deny={{ system_faillock_deny }} not found in /etc/security/faillock.conf"
+
+    - name: Slurp /etc/pam.d/common-password for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-password
+      register: verify_pam_common_password
+      become: true
+
+    - name: Assert pam_pwhistory.so present in common-password (Debian)
+      ansible.builtin.assert:
+        that: verify_pam_common_password['content'] | b64decode is search('(?m)^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+')
+        fail_msg: "pam_pwhistory.so line missing in /etc/pam.d/common-password"
+
+    - name: Slurp /etc/security/pwquality.conf for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/security/pwquality.conf
+      register: verify_pam_pwquality_conf
+      become: true
+
+    - name: Set _pam_pwquality_content fact (Debian)
+      ansible.builtin.set_fact:
+        _pam_pwquality_content: "{{ verify_pam_pwquality_conf['content'] | b64decode }}"
+
+    - name: Assert pwquality.conf minlen (Debian)
+      ansible.builtin.assert:
+        that: _pam_pwquality_content is search('(?m)^minlen = {{ system_pwquality_minlen }}$')
+        fail_msg: "pwquality.conf minlen={{ system_pwquality_minlen }} not found in /etc/security/pwquality.conf"
+
+    - name: Assert pwquality.conf enforce_for_root (Debian)
+      ansible.builtin.assert:
+        that: _pam_pwquality_content is search('(?m)^enforce_for_root')
+        fail_msg: "pwquality.conf enforce_for_root not found in /etc/security/pwquality.conf"
+
+    # --- PAM faillock (Debian, live-stack checks; skipped in Podman CI where system_is_container=true) ---
     - name: Check pam_faillock.so preauth line in common-auth (Debian)
       ansible.builtin.command:
         cmd: grep -qE '^auth\s+required\s+pam_faillock\.so\s+preauth' /etc/pam.d/common-auth

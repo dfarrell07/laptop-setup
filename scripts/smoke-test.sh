@@ -1704,6 +1704,14 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
   elif [[ ! -f /etc/dconf/db/gdm.d/03-hardening ]]; then
     record "dconf-gdm-user-list-lock" "WARN" "gdm.d/locks/03-hardening not checked (GDM not installed)"
   else record "dconf-gdm-user-list-lock" "FAIL" "disable-user-list not locked in /etc/dconf/db/gdm.d/locks/03-hardening"; fi
+  # XDMCP disabled (CIS 1.8.10) — prevents remote graphical session requests on UDP/TCP 177
+  if [[ ! -f /etc/gdm/custom.conf ]]; then
+    record "gdm-xdmcp-disabled" "FAIL" "/etc/gdm/custom.conf absent — XDMCP (CIS 1.8.10) not configured; UDP/TCP 177 may be enabled"
+  elif awk '/^\[xdmcp\]/{f=1} /^\[/ && !/^\[xdmcp\]/{f=0} f && /^[Ee]nable[[:space:]]*=[[:space:]]*false/{found=1} END{exit !found}' /etc/gdm/custom.conf 2>/dev/null; then
+    record "gdm-xdmcp-disabled" "PASS"
+  else
+    record "gdm-xdmcp-disabled" "FAIL" "Enable=false missing from [xdmcp] section in /etc/gdm/custom.conf (CIS 1.8.10)"
+  fi
   fi  # end GDM check
 
   # Unexpected listening ports (non-loopback)
