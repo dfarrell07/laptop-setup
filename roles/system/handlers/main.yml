@@ -153,6 +153,19 @@
       # (CLAUDE.md requires local console or tmux, but no code enforcement existed until now)
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
+- name: Warn on sshd handler skip
+  ansible.builtin.debug:
+    msg: |
+      WARNING: sshd reload skipped (SSH-based provisioning to remote host detected).
+      sshd config changes written but not applied. Current sshd still on port {{ ansible_port | default(22) }}.
+      Changes take effect after manual reboot or: systemctl reload sshd
+      Next SSH connection must use port {{ ssh_port | default(722) }}.
+  listen: Restart sshd
+  when:
+    - not system_is_container
+    - ansible_connection == 'ssh'
+    - inventory_hostname not in ['localhost', '127.0.0.1', '::1']
+
 - name: Restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
