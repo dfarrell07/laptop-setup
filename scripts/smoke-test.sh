@@ -1253,7 +1253,7 @@ EOF
   if grep -qE '^(pool|server|peer).*\bnts\b' "$_chrony_conf" 2>/dev/null; then
     if chronyc -c authdata 2>/dev/null | awk -F, '$5 > 0 {found=1} END {exit !found}'; then
       record "chrony-nts" "PASS"
-    else record "chrony-nts" "WARN" "NTS configured but no authenticated sources (port 4460 blocked? needs boot?)"; fi
+    else record "chrony-nts" "WARN" "NTS configured but chronyc authdata shows no authenticated sources — time sync may have fallen back to unauthenticated pool (TCP 4460 blocked? run: chronyc authdata)"; fi
   elif $CSB_HOST; then record "chrony-nts" "WARN" "skipped on CSB — IT manages chrony.conf (Kerberos NTP)"
   else record "chrony-nts" "WARN" "NTS not configured in chrony.conf"; fi
   _chrony_svc="chronyd"

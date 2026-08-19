@@ -463,7 +463,11 @@ system_chrony_minsources: 2
 system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
 system_chrony_service_enabled: "{{ not system_is_container }}"
 system_firewalld_running: false  # runtime set_fact in firewall.yml overrides; false ensures tag-isolated runs (--tags nm) are fail-safe
-system_chrony_authselectmode: prefer  # set 'require' for strict NTS (time sync fails on NTS-blocking networks)
+system_chrony_authselectmode: prefer  # deliberate trade-off: 'prefer' allows fallback to unauthenticated
+  # pool when TCP 4460 (NTS-KE) is blocked, keeping time sync on restricted networks at the cost of
+  # losing cryptographic verification (unauthenticated pool is spoofable by a network-adjacent attacker).
+  # smoke-test chrony-nts check catches fallback post-provisioning via chronyc authdata.
+  # Set 'require' to enforce NTS and halt sync entirely if NTS-KE is unreachable.
 system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use '-1' only when clock may be wildly wrong at boot
   # Security: '-1' means chrony steps on every sync cycle where offset >1.0 s — an attacker controlling
   # any chrony source can cause an arbitrarily large clock step on any update, bypassing Kerberos
