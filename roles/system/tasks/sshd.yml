@@ -114,6 +114,20 @@
     - not csb_rhel  # CSB: IT manages sshd via Satellite/SCAP; AllowUsers + non-FIPS algorithms conflict
     - not (system_fips_mode | default(false) | bool)  # FIPS: chacha20-poly1305 not FIPS-approved; let crypto-policies manage ciphers
   block:
+    - name: Remove unauthorized drop-ins from /etc/ssh/sshd_config.d  # noqa: command-instead-of-module
+      ansible.builtin.find:
+        paths: /etc/ssh/sshd_config.d
+        patterns: "*.conf"
+        file_type: file
+      register: _sshd_dropin_files
+
+    - name: Delete drop-ins that are not 00-hardening.conf
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _sshd_dropin_files.files | default([]) }}"
+      when: item.path | basename != '00-hardening.conf'
+
     - name: Deploy sshd hardening config
       ansible.builtin.template:
         src: sshd-hardening.conf.j2
