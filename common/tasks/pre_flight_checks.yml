@@ -1704,23 +1704,14 @@
           - _raw.get('system_faillock_local_users_only', true) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
           - _raw.get('system_faillock_even_deny_root', false) | bool in [True, False, 'true', 'false', 'yes', 'no', 'on', 'off', 1, 0]
         fail_msg: >-
-          SECURITY: journald/auditd/aide-check timer/TLP/PAM vars in config.yml contain
-          unsafe values. system_journald_storage must be persistent/volatile/auto/none.
-          system_journald_max_use/keep_free must be digits+optional K/M/G/T/P suffix.
-          system_journald_rate_burst and system_auditd_max_log_file/num_logs must be
-          non-negative integers. system_aide_check_calendar must use safe calendar chars.
-          system_tlp_platform_profile must be performance/balanced/low-power.
-          system_tlp_cpu_energy_policy must be performance/balance_performance/balance_power/power.
-          system_pwhistory_remember must be a non-negative integer.
-          system_faillock_deny must be a positive integer >= 1 (deny=0 disables lockout — pam_faillock
-          never locks accounts when deny=0; minimum value is 1) and digits only (no newlines).
-          system_faillock_unlock_time must be digits only (no
-          newlines or special characters that allow faillock.conf directive injection).
-          system_faillock_audit, system_faillock_local_users_only, and system_faillock_even_deny_root
-          must be plain booleans. These values are rendered verbatim into system config files;
-          embedded newlines allow directive injection (log erasure via MaxRetentionSec=1s, audit
-          dispatcher hijack via dispatcher=/tmp/evil, PAM policy bypass via extra pam_deny.so line,
-          faillock injection via deny=5\neven_deny_root bypassing faillock_even_deny_root: false policy).
+          SECURITY: conf-file variable contains unsafe value. Input: one of
+          system_journald_storage/max_use/rate_burst, system_auditd_max_log_file/num_logs,
+          system_aide_check_calendar, system_tlp_bat0_start/stop,
+          system_faillock_deny/unlock_time, system_pwhistory_remember. Mechanism: values
+          render verbatim into journald/auditd/TLP/PAM conf files; newlines inject
+          directives (e.g. system_faillock_deny='5\nevendenyroot' injects extra faillock
+          directive). Impact: lockout bypass, PAM policy override, audit dispatcher hijack.
+          Fix: see assert that: conditions above for per-variable allowed patterns.
 
     - name: Assert system_aide_monitoring_etc_paths contains only safe path characters (AIDE monitoring bypass guard)
       when: _config_yml_raw.content is defined
