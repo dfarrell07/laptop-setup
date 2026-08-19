@@ -220,23 +220,13 @@
           - >-
             _packages_gosumdb_effective in ['sum.golang.org', 'sum.redhat.com', 'sum.internal.redhat.com']
         fail_msg: >-
-          SECURITY: packages_gosumdb (from -e flag or play namespace) is not whitelisted.
-          Command-line -e flags have higher Ansible precedence than config.yml, allowing attackers
-          to bypass file-based validation via: make all -e packages_gosumdb=attacker.com.
-          The file-based preflight check validates only config.yml content, but the actual play
-          namespace uses the -e override, resulting in GOSUMDB hijacking during go install
-          without detection (GOPROXY tampering + init() code injection).
-
-          WHITELISTED VALUES (organization-owned domains only):
-            - sum.golang.org (Google-owned public Go module checksum server)
-            - sum.redhat.com (Red Hat-owned internal proxy)
-            - sum.internal.redhat.com (Red Hat-owned internal proxy variant)
-
-          REQUIRED FIX: Do NOT override packages_gosumdb via the -e flag. If you must use
-          a corporate proxy, define it permanently in group_vars/all/vars.yml or config.yml,
-          then commit and review the change.
-
-          Current effective value: '{{ _packages_gosumdb_effective }}'
+          SECURITY: packages_gosumdb not whitelisted (threat).
+          Input: packages_gosumdb='{{ _packages_gosumdb_effective }}' from -e flag.
+          Mechanism: -e overrides outrank config.yml; file-based check is bypassed.
+          Example: make all -e packages_gosumdb=attacker.com.
+          Impact: GOSUMDB hijack — go install accepts tampered modules; init() runs at compile time.
+          Fix: omit the -e flag; allowed values: sum.golang.org, sum.redhat.com,
+          sum.internal.redhat.com.
 
     - name: Assert dotfiles_homebrew_prefix in config.yml contains only safe path characters (shell injection guard)
       when: _config_yml_raw.content is defined
