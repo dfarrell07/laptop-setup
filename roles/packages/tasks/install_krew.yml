@@ -63,7 +63,6 @@
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
       register: packages_krew_current_version
       changed_when: false
-      failed_when: false
 
     # Upgrade uses the same SHA256-pinned tarball as bootstrap rather than
     # `kubectl-krew upgrade krew`, which trusts krew's own index and is not
