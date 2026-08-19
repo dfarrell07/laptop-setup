@@ -148,7 +148,7 @@
   become: true
   when:
     - not system_is_container  # sshd restart kills Ansible SSH connection in containers
-    - ansible_connection != 'ssh' or inventory_hostname in ['localhost', '127.0.0.1', '::1']
+    - ansible_connection != 'ssh'
       # SSH-based provisioning: sshd reload on port change kills Ansible connection mid-play
       # (CLAUDE.md requires local console or tmux, but no code enforcement existed until now)
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
