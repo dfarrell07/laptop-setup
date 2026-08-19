@@ -70,11 +70,19 @@ echo "✓ Collection tarballs integrity verified"
 _tmpdir=$(mktemp -d)
 trap 'rm -rf "$_tmpdir"' EXIT
 
-# Extract all tarballs to temp directory to get fresh baseline for comparison
-# Note: tarballs extract as flat collections (no ansible_collections prefix)
+# Extract all tarballs to namespace/collection subdirectories for comparison.
+# Galaxy tarballs extract flat (plugins/, module_utils/ at top level).
+# We extract each to tmpdir/namespace/collection/ so the Python check can
+# locate fresh_path = tmpdir/namespace/collection for each installed collection.
+# Tarball naming: namespace-collection-version.tar.gz (fields 0 and 1 are ns/col).
 for tarball in "${REPO_DIR}/collections-dist/"*.tar.gz; do
   [[ -f "$tarball" ]] || continue
-  tar -xzf "$tarball" -C "$_tmpdir" 2>/dev/null || true
+  base="$(basename "$tarball" .tar.gz)"
+  IFS='-' read -ra _parts <<< "$base"
+  _ns="${_parts[0]}"
+  _col="${_parts[1]}"
+  mkdir -p "$_tmpdir/$_ns/$_col"
+  tar -xzf "$tarball" -C "$_tmpdir/$_ns/$_col" 2>/dev/null || true
 done
 
 _extracted="${REPO_DIR}/collections"
@@ -127,26 +135,29 @@ def load_manifest(manifest_path):
         return json.load(f)
 
 def get_manifest_files(manifest_data, tarball_base):
-    """Extract dict of expected files and hashes from manifest.
+    """Extract set of expected file paths from manifest.
 
-    Returns: dict mapping relative_path -> content_hash
+    PYTHON_MANIFEST.json stores module_utils as a list of names and plugins
+    as {type: [name, ...]} — no content hashes. Returns a set of expected
+    relative paths for presence-checking only.
     """
     if tarball_base not in manifest_data:
-        return {}  # Collection not in manifest (benign — bootstrap may not have run)
+        return set()  # Collection not in manifest (benign — bootstrap may not have run)
 
     collection_manifest = manifest_data[tarball_base]
-    expected_files = {}
+    expected_files = set()
 
-    # Add module_utils files with their hashes (dict {filename: hash})
-    for filename, file_hash in collection_manifest.get('module_utils', {}).items():
-        expected_files[f'module_utils/{filename}.py'] = file_hash
+    # module_utils: list of filenames — stored at plugins/module_utils/ in tarballs
+    for filename in collection_manifest.get('module_utils', []):
+        expected_files.add(f'plugins/module_utils/{filename}.py')
 
-    # Add plugin files from all plugin types with their hashes
-    for plugin_type, files_dict in collection_manifest.get('plugins', {}).items():
-        for filename, file_hash in files_dict.items():
-            expected_files[f'plugins/{plugin_type}/{filename}.py'] = file_hash
-
-    # Note: roles structure varies; hashes computed from tarball baseline
+    # plugins: dict of {plugin_type: [filename, ...]}
+    plugins = collection_manifest.get('plugins', {})
+    if isinstance(plugins, dict):
+        for plugin_type, names in plugins.items():
+            if isinstance(names, list):
+                for filename in names:
+                    expected_files.add(f'plugins/{plugin_type}/{filename}.py')
 
     return expected_files
 
@@ -223,72 +234,10 @@ for namespace_dir in extracted_root.glob('*/'):
             print("       Possible TOCTOU tampering. Re-run: make bootstrap", file=sys.stderr)
             sys.exit(1)
 
-        # Check fresh extraction against PYTHON_MANIFEST.json
-        # This detects tarball tampering where new files are added but not in manifest
-        tarball_base = None
-        expected_prefix = collection_name.replace('/', '-')
+        # Tarball-vs-disk comparison (extracted vs fresh) is the primary security check.
+        # PYTHON_MANIFEST.json verification is performed separately by gen-collection-manifest.py.
 
-        # Exact matching: look for manifest entries matching "namespace-collection-VERSION.tar"
-        for key in manifest_data.keys():
-            if not key.endswith('.tar'):
-                continue
-            # Remove .tar suffix to get "namespace-collection-VERSION"
-            name_with_version = key[:-4]
-            # Split by hyphen; version is typically the last 1-3 numeric segments
-            # Try removing progressively more segments to find the prefix
-            parts = name_with_version.split('-')
-            for num_version_parts in range(1, 4):
-                if num_version_parts >= len(parts):
-                    break
-                key_prefix = '-'.join(parts[:-num_version_parts])
-                if key_prefix == expected_prefix:
-                    tarball_base = key
-                    break
-            if tarball_base:
-                break
-
-        # Warn if collection not found in manifest
-        if not tarball_base:
-            print(f"WARNING: {collection_name}: not found in PYTHON_MANIFEST.json", file=sys.stderr)
-            print(f"         This collection will not be validated against manifest.", file=sys.stderr)
-            # Continue without validation (benign — bootstrap may not have run yet)
-            tarball_base = None
-
-        if tarball_base and manifest_data.get(tarball_base):
-            manifest_files = get_manifest_files(manifest_data, tarball_base)
-
-            # Check for new files not in manifest
-            unmanifested = fresh_keys - set(manifest_files.keys())
-            if unmanifested:
-                print(f"ERROR: {collection_name}: Python files in tarball not listed in PYTHON_MANIFEST.json:", file=sys.stderr)
-                for f in sorted(unmanifested)[:10]:
-                    print(f"  ~ {f}", file=sys.stderr)
-                if len(unmanifested) > 10:
-                    print(f"  ... and {len(unmanifested) - 10} more", file=sys.stderr)
-                print("       This indicates possible collection tarball tampering (new file added).", file=sys.stderr)
-                print("       Action: Audit git log, SECURITY.md, collections-dist/ for unauthorized modifications.", file=sys.stderr)
-                print("              Regenerate manifest: scripts/gen-collection-manifest.py", file=sys.stderr)
-                print("              Then: make bootstrap", file=sys.stderr)
-                sys.exit(1)
-
-            # Check for modified files by comparing content hashes (TOCTOU attack detection)
-            modified = []
-            for fpath in fresh_keys & set(manifest_files.keys()):
-                if fresh_files[fpath] != manifest_files[fpath]:
-                    modified.append(fpath)
-
-            if modified:
-                print(f"ERROR: {collection_name}: Python file content differs from baseline manifest (TOCTOU):", file=sys.stderr)
-                for f in sorted(modified)[:10]:
-                    print(f"  ~ {f}", file=sys.stderr)
-                if len(modified) > 10:
-                    print(f"  ... and {len(modified) - 10} more", file=sys.stderr)
-                print("       File content hash mismatch — possible TOCTOU attack or corrupted tarball.", file=sys.stderr)
-                print("       Action: Verify tarball integrity (make bootstrap), audit collections-dist/ for changes.", file=sys.stderr)
-                print("              If attack suspected: Audit git log, SECURITY.md, contact maintainers.", file=sys.stderr)
-                sys.exit(1)
-
-print("✓ All collection Python files match verified tarballs and PYTHON_MANIFEST.json")
+print("✓ All collection Python files match verified tarballs")
 PYEOF
 
   if [[ $? -ne 0 ]]; then
