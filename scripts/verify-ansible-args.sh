@@ -62,16 +62,20 @@ done
 
 # Override critical ANSIBLE_* env vars to always use verified repo values.
 # Stronger than validation: SET known-safe values; callers cannot inject via environment.
-# Covers the four highest-impact override vectors:
-#   ANSIBLE_CONFIG             — could replace all plugin paths + vault_password_file via evil cfg
+# Covers the six highest-impact override vectors:
+#   ANSIBLE_CONFIG              — could replace all plugin paths + vault_password_file via evil cfg
 #   ANSIBLE_VAULT_PASSWORD_FILE — could redirect vault decryption to an exfiltration script
-#   ANSIBLE_COLLECTIONS_PATH   — could load malicious collections (role 0 code execution)
-#   ANSIBLE_ROLES_PATH         — could load malicious roles (arbitrary become code execution)
+#   ANSIBLE_COLLECTIONS_PATH    — could load malicious collections (role 0 code execution)
+#   ANSIBLE_ROLES_PATH          — could load malicious roles (arbitrary become code execution)
+#   ANSIBLE_ACTION_PLUGINS      — action plugins run for EVERY task; malicious plugin = full intercept
+#   ANSIBLE_STRATEGY_PLUGINS    — strategy plugin controls task dispatch; malicious plugin = intercept all
 _repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 export ANSIBLE_CONFIG="${_repo_root}/ansible.cfg"
 export ANSIBLE_VAULT_PASSWORD_FILE="${_repo_root}/scripts/vault-pass.sh"
 export ANSIBLE_COLLECTIONS_PATH="${_repo_root}/collections:${HOME}/.ansible/collections:/usr/share/ansible/collections"
 export ANSIBLE_ROLES_PATH="${_repo_root}/roles:${HOME}/.ansible/roles:/etc/ansible/roles"
+export ANSIBLE_ACTION_PLUGINS="${_repo_root}/action_plugins"
+export ANSIBLE_STRATEGY_PLUGINS="${_repo_root}/strategy_plugins"
 
 # Verify collections integrity (defense-in-depth: supply chain verification)
 "${_repo_root}/scripts/verify-collections.sh"
