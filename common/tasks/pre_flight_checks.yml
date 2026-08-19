@@ -1688,38 +1688,6 @@
           e.g. weekly, daily, *-*-* 00:00:00, Mon,Wed,Fri *-*-* 10:00:00).
           No newlines or other special characters allowed.
 
-    - name: Assert packages_go_tools_*_sha256 are well-formed SHA256 hashes (go install verification guard)
-      when: _config_yml_raw.content is defined
-      vars:
-        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-        _go_tool_sha256_vars:
-          - packages_gofumpt_sha256
-          - packages_govulncheck_sha256
-          - packages_gci_sha256
-          - packages_gopls_sha256
-          - packages_golangci_lint_sha256
-          - packages_controller_gen_sha256
-          - packages_code_generator_version_sha256
-          - packages_subctl_version_sha256
-          - packages_stern_sha256
-        _sha256_pattern: '^[a-f0-9]{64}$'
-      ansible.builtin.assert:
-        that:
-          - _go_tool_sha256_vars | map('extract', _raw) | select('defined') | list |
-            map('string') | select() | list |
-            reject('match', _sha256_pattern) | list | length == 0
-        fail_msg: >-
-          SECURITY: One or more Go tool SHA256 variables in config.yml contain invalid values.
-          Each packages_go_tools_*_sha256 variable must be a valid SHA256 hash (64 lowercase hex digits).
-          Go tool binaries are verified against these hashes after 'go install' compilation to prevent
-          TOFU (trust on first use) attacks via compromised GOPROXY or MITM interception.
-          Invalid pattern entries: {{ _go_tool_sha256_vars | map('extract', _raw) | select('defined') | list |
-          map('string') | select() | list | reject('match', _sha256_pattern) | list }}.
-          Expected format: 64 lowercase hexadecimal characters (e.g.,
-          'a7f8d1c6b2e5d4c3a1f8e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7').
-          If you need to override default hashes, recompute them via:
-          'go install <module@version> && sha256sum ~/.local/bin/<binary>'
-
     - name: Check GitHub CLI availability for attestation verification (packages_gh_available guard)
       when: _config_yml_raw.content is defined and _pf_gh_check_done is not defined
       vars:
@@ -2070,35 +2038,6 @@
               (no |, ;, &, $, `, or parentheses).
           tags: [always]
 
-
-        - name: Assert Go/Krew SHA256 variables in play namespace match strict pattern (verification bypass guard)
-          vars:
-            _sha256_pattern: '^[a-f0-9]{64}$'
-            _go_tool_sha256_vars:
-              - packages_gofumpt_sha256
-              - packages_govulncheck_sha256
-              - packages_gci_sha256
-              - packages_gopls_sha256
-              - packages_golangci_lint_sha256
-              - packages_controller_gen_sha256
-              - packages_code_generator_version_sha256
-              - packages_subctl_version_sha256
-              - packages_stern_sha256
-          ansible.builtin.assert:
-            that:
-              - _go_tool_sha256_vars | map('extract', vars()) | select('defined') | list |
-                map('string') | select() | list |
-                reject('match', _sha256_pattern) | list | length == 0
-            fail_msg: >-
-              SECURITY: One or more Go tool SHA256 variables in the play namespace
-              (set via -e overrides or config.yml) contain invalid values. These must be
-              64 lowercase hexadecimal characters (standard SHA256 hash format).
-              Invalid entries: {{ _go_tool_sha256_vars | map('extract', vars()) | select('defined') | list |
-              map('string') | select() | list | reject('match', _sha256_pattern) | list }}.
-              These hashes verify Go tool binaries after 'go install'; non-matching hashes
-              bypass verification and allow TOFU (trust on first use) attacks via
-              compromised GOPROXY or MITM interception.
-          tags: [always]
 
         - name: Assert high-risk vars in play namespace have safe values (-e override guard)
           ansible.builtin.assert:

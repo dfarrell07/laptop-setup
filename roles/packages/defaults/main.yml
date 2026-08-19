@@ -255,28 +255,16 @@ packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' prevents 
   # GOPROXY — a full air-gap also needs GOPROXY=off or an internal proxy
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
-# Post-compilation SHA256 verification required — see install_go_tools.yml SECURITY comments.
-# NOTE: When bumping versions, recompute hashes via:
-# GOPATH=~/.go-verify GOBIN=~/.go-verify/bin go install <module@version> &&
-# sha256sum ~/.go-verify/bin/<binary> && rm -rf ~/.go-verify
-# Hashes must be computed on the same OS+arch as deployment (Linux x86_64 for CI/work).
-# Keep version and hash in sync — mismatched pairs fail the assert task.
+# Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Go binary SHA256 is
+# non-deterministic (toolchain version, build flags, arch all vary); GOSUMDB is verified in
+# install_go_tools.yml before go install runs. See install_go_tools.yml for supply chain model.
 packages_golangci_lint_version: "2.12.2"
-packages_golangci_lint_sha256: "e7a2a0c9f7d1e3f0c8d5a9e2b6c1f4a8d2e5b9c3f6a1d4e7b0c3f6a9d2e5b"
 packages_gofumpt_version: "0.11.0"
-packages_gofumpt_sha256: "c1f4a8d2e5b9c3f6a1d4e7b0c3f6a9d2e5b8c1f4a7d0e3b6c9f2e5a8d1c4"
 packages_govulncheck_version: "1.6.0"
-packages_govulncheck_sha256: "d2f5a9e2b6c1f4a8d2e5b9c3f6a1d4e7b0c3f6a9d2e5b8c1f4a7d0e3b6c9"
 packages_gci_version: "0.14.0"
-packages_gci_sha256: "a1e4b7c0f3a6d9e2b5c8f1a4d7e0b3c6f9a2d5e8b1c4f7a0d3e6b9c2f5a8"
 packages_gopls_version: "0.23.0"
-packages_gopls_sha256: "b8c1f4a7d0e3b6c9f2e5a8d1c4f7a0d3e6b9c2f5a8d1c4f7a0d3e6b9c2f5"
 packages_controller_gen_version: "0.19.0"
-packages_controller_gen_sha256: "f9a2d5e8b1c4f7a0d3e6b9c2f5a8d1c4f7a0d3e6b9c2f5a8d1c4f7a0d3"
 packages_stern_version: "1.34.0"
-packages_stern_sha256: "e8b1c4f7a0d3e6b9c2f5a8d1c4f7a0d3e6b9c2f5a8d1c4f7a0d3e6b9c2"
-packages_code_generator_version_sha256: "a7d0e3b6c9f2e5a8d1c4f7a0d3e6b9c2f5a8d1c4f7a0d3e6b9c2f5a8"
-packages_subctl_version_sha256: "c3f6a9d2e5b8c1f4a7d0e3b6c9f2e5a8d1c4f7a0d3e6b9c2f5a8d1c4"
 
 packages_go_install_work:
   # Go IDE / CI tools — work profile only (not needed on personal workstations)
