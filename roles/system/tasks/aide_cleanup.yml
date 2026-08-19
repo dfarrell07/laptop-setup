@@ -2,9 +2,6 @@
 # roles/system/tasks/aide_cleanup.yml
 # AIDE cleanup when system_aide_enabled=false (prevents one-way ratchet).
 # Stops aide-check.timer, removes systemd units, and removes the aide package.
-# --- AIDE cleanup when disabled (prevents one-way ratchet) ---
-# When system_aide_enabled is toggled false, stop and remove the AIDE infrastructure
-# so aide-check.timer doesn't keep running on an unmanaged installation.
 - name: Remove AIDE infrastructure when disabled
   when:
     - is_dnf
