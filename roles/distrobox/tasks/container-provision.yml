@@ -129,6 +129,10 @@
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
+    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
   register: container_golangci_lint_result
   changed_when: container_golangci_lint_result.rc == 0
   timeout: 300
@@ -153,6 +157,10 @@
     GOPATH: "{{ ansible_env.HOME }}/go"
     GOBIN: "{{ ansible_env.HOME }}/go/bin"
     GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
+    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default(omit) }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
   register: container_subctl_result
   changed_when: container_subctl_result.rc == 0
   timeout: 600
@@ -163,7 +171,10 @@
 
 - name: Report go install failures
   ansible.builtin.debug:
-    msg: "go install FAILED (rc={{ item.rc }}): {{ item.stderr | default('no stderr') }}"
+    msg: |
+      go install FAILED (rc={{ item.rc }}): {{ item.stderr | default('no stderr') }}
+      On CSB networks: configure GOPROXY, GONOSUMDB, and GOPRIVATE in config.yml
+      See default.config.yml for dotfiles_gonosumdb and dotfiles_goprivate options.
   loop:
     - "{{ container_golangci_lint_result }}"
     - "{{ container_subctl_result }}"
