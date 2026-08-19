@@ -711,18 +711,14 @@
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
         _notes_ssh_url: "{{ _raw.get('notes_remote_url', '') }}"
         _notes_https_url: "{{ _raw.get('notes_remote_url_https', '') }}"
-        # SSH format: git@host:user/repo.git (no traversal sequences)
-        _notes_ssh_pattern: '^git@[a-zA-Z0-9._-]+:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'
-        # HTTPS format: https://host/user/repo.git (no traversal sequences)
-        _notes_https_pattern: '^https://[a-zA-Z0-9._-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$'
       ansible.builtin.assert:
         that:
           - >-
             _notes_ssh_url == ''
-            or _notes_ssh_url is match(_notes_ssh_pattern)
+            or _notes_ssh_url is match('^git@[a-zA-Z0-9._-]+:[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$')
           - >-
             _notes_https_url == ''
-            or _notes_https_url is match(_notes_https_pattern)
+            or _notes_https_url is match('^https://[a-zA-Z0-9._-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\.git$')
         fail_msg: >-
           SECURITY: notes_remote_url or notes_remote_url_https in config.yml contains an invalid
           or malicious URL. These values are passed directly to 'git clone' via the ansible.builtin.git
@@ -741,8 +737,7 @@
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
-        _gid0_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) }}"
-        _unsafe_accounts: "{{ _gid0_accounts | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
+        _unsafe_accounts: "{{ _raw.get('system_gid0_allowed_accounts', []) | map('string') | select('search', '[^a-zA-Z0-9_-]') | list }}"
       ansible.builtin.assert:
         that:
           - _unsafe_accounts | length == 0
