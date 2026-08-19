@@ -115,21 +115,65 @@
           except newlines (LF/CR) and control characters (0x00-0x1F). Remove any embedded
           newlines or control characters from dotfiles_user_name in config.yml.
 
+    - name: Assert dotfiles_gonosumdb contains only private domains (GONOSUMDB bypass guard)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _gonosumdb: "{{ _raw.get('dotfiles_gonosumdb', '') | string }}"
+      ansible.builtin.assert:
+        that:
+          # Reject public registry patterns (github.com, golang.org, mvdan.cc, k8s.io, gopkg.in, etc.)
+          - >-
+            (_gonosumdb | length == 0) or
+            (_gonosumdb | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
+          - _gonosumdb | string is match('^[a-zA-Z0-9.,/_-]*$')
+        fail_msg: >-
+          SECURITY: dotfiles_gonosumdb in config.yml contains public module registry domains.
+          GONOSUMDB is a comma-separated list of module path prefixes that skip Go checksum
+          verification (GOSUMDB). An attacker who overrides dotfiles_gonosumdb via -e flag
+          can add public domains like 'github.com' or 'golang.org' to the skip list, bypassing
+          Go module signature verification for legitimate packages:
+          make all -e dotfiles_gonosumdb='attacker.io,github.com'
+
+          This allows malicious github.com/attacker-control/module@v1.0.0 to install without
+          checksum verification, executing init() code during compilation with provisioning privileges.
+
+          GONOSUMDB BYPASS ATTACK:
+          1. Attacker adds attacker.io to dotfiles_gonosumdb via -e flag
+          2. Go skips GOSUMDB checks for attacker.io/* modules
+          3. GOPROXY (default: proxy.golang.org,direct) serves attacker-controlled module
+          4. go install executes attacker's init() code at compile time (RCE)
+
+          MITIGATION: dotfiles_gonosumdb must ONLY contain PRIVATE domain patterns
+          (internal corporate domains, air-gapped systems). Reject all public registries:
+          - github.com (public GitHub)
+          - golang.org (Go language repository)
+          - mvdan.cc (Go formatting tools)
+          - sigs.k8s.io (Kubernetes SIG repositories)
+          - k8s.io (Kubernetes core)
+          - gopkg.in (gopkg.in package mirrors)
+
+          REQUIRED FIX: Either omit dotfiles_gonosumdb from config.yml (use the default,
+          which is empty), or set it ONLY to private domain prefixes:
+            - dotfiles_gonosumdb: 'pkgs.devel.redhat.com,internal.company.com'
+
+          Do NOT set dotfiles_gonosumdb to public registries or use wildcards (*) that match all domains.
+          Current value: '{{ _gonosumdb }}'.
+
     - name: Assert Go/AWS env vars in config.yml contain only safe characters (shell injection guard)
       when: _config_yml_raw.content is defined
       vars:
         _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('dotfiles_gonosumdb', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
           - _raw.get('dotfiles_goprivate', '') | string is match('^[a-zA-Z0-9.,/_-]*$')
           - _raw.get('dotfiles_aws_profile', '') | string is match('^[a-zA-Z0-9_-]*$')
         fail_msg: >-
-          SECURITY: dotfiles_gonosumdb, dotfiles_goprivate, or dotfiles_aws_profile in config.yml
+          SECURITY: dotfiles_goprivate or dotfiles_aws_profile in config.yml
           contains unsafe characters. These values are written directly into shell export statements;
           unsafe characters can escape the double-quoted context to inject arbitrary commands.
           Allowed: alphanumeric, dot, comma, slash, underscore, hyphen
-          (dotfiles_gonosumdb / dotfiles_goprivate); alphanumeric, underscore, hyphen
+          (dotfiles_goprivate); alphanumeric, underscore, hyphen
           (dotfiles_aws_profile).
 
     - name: Assert GOSUMDB empty string is rejected (supply chain guard)
@@ -1547,6 +1591,22 @@
           These values are passed directly to 'go install'; init() functions execute
           at compile time (RCE during provisioning). Allowed: module.path/cmd@vX.Y.Z
           (semantic version required; reject @latest, @v1 without minor/patch).
+          Unsafe entries: {{ _unsafe_entries }}.
+
+    - name: Assert packages_go_install from -e flag (go install RCE guard)
+      vars:
+        _go_packages: "{{ packages_go_install | default([]) }}"
+        _go_module_regex: '^[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*/[a-zA-Z0-9/@._:-]+@v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9.]+)?$'  # yamllint disable-line rule:line-length
+        _unsafe_entries: "{{ _go_packages | map('string') | reject('match', _go_module_regex) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _go_packages | map('string') | select('search', '[^a-zA-Z0-9./@_:-]') | list | length == 0
+          - _unsafe_entries | length == 0
+        fail_msg: >-
+          SECURITY: packages_go_install (from environment or config.yml) contains unsafe Go module paths.
+          These values are passed directly to 'go install'; init() functions execute at compile time
+          (RCE during provisioning). This guard validates both file-based and environment variable sources.
+          Allowed: module.path/cmd@vX.Y.Z (semantic version required; reject @latest, @v1 without minor/patch).
           Unsafe entries: {{ _unsafe_entries }}.
 
     - name: Assert packages_go_install_work in config.yml entries are safe Go module paths (go install RCE guard)
