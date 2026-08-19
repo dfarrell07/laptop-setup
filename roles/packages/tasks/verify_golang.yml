@@ -17,6 +17,11 @@
   failed_when: _golang_version_check.rc != 0
   when: _go_binary_check.stat.exists
 
+- name: Set golang unavailable guard fact when binary is missing
+  ansible.builtin.set_fact:
+    _golang_available: false
+  when: not _go_binary_check.stat.exists
+
 - name: Warn if golang is missing (likely dnf install failure)
   ansible.builtin.debug:
     msg: >-
@@ -57,6 +62,11 @@
     path: "{{ _go_binary_path.stdout | trim }}"
   register: _go_binary_stat
   failed_when: not _go_binary_stat.stat.exists or _go_binary_stat.stat.size == 0
+  when: _go_binary_check.stat.exists
+
+- name: Set golang available guard fact after successful verification
+  ansible.builtin.set_fact:
+    _golang_available: true
   when: _go_binary_check.stat.exists
 
 - name: Log golang verification success
