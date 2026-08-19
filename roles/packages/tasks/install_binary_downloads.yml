@@ -4,6 +4,26 @@
 # _packages_linux_x86_work is set in main.yml before this file is imported.
 # --- Binary downloads (SHA256-verified, pinned versions) ---
 
+- name: kubectl source validation (prevent accidental replacement)
+  when: _packages_linux_x86_work
+  block:
+    - name: Read kubectl source marker
+      ansible.builtin.command:
+        cmd: cat /var/lib/ansible-packages/kubectl-source
+      register: _packages_kubectl_source_marker_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if kubectl source changed (requires manual intervention)
+      when:
+        - _packages_kubectl_source_marker_check.rc == 0
+        - _packages_kubectl_source_marker_check.stdout | trim != packages_kubectl_source
+      ansible.builtin.fail:
+        msg: >-
+          kubectl source change detected: {{ _packages_kubectl_source_marker_check.stdout | trim }} → {{ packages_kubectl_source }}.
+          This will replace the existing kubectl binary ({{ _packages_kubectl_source_marker_check.stdout | trim }}: potentially older/newer version).
+          To proceed, manually remove /var/lib/ansible-packages/kubectl-source and re-run.
+
 - name: Install oc, kubectl, and opm
   when: _packages_linux_x86_work
   ansible.builtin.include_tasks: install_oc_opm.yml
