@@ -16,7 +16,7 @@
 - name: Assert .zshrc exists
   ansible.builtin.assert:
     that: verify_zshrc.stat.exists
-    fail_msg: ".zshrc was not deployed"
+    fail_msg: ".zshrc was not deployed (exists={{ verify_zshrc.stat.exists | default(false) }})"
 
 - name: Verify git/config exists (XDG path)
   ansible.builtin.stat:
@@ -26,7 +26,7 @@
 - name: Assert git/config exists (XDG path)
   ansible.builtin.assert:
     that: verify_gitconfig.stat.exists
-    fail_msg: ".config/git/config was not deployed"
+    fail_msg: ".config/git/config was not deployed (exists={{ verify_gitconfig.stat.exists | default(false) }})"
 
 - name: Stat legacy ~/.gitconfig (should be absent after XDG migration)
   ansible.builtin.stat:
@@ -46,7 +46,7 @@
 - name: Assert .config/tmux/tmux.conf exists
   ansible.builtin.assert:
     that: verify_tmux.stat.exists
-    fail_msg: ".config/tmux/tmux.conf was not deployed"
+    fail_msg: ".config/tmux/tmux.conf was not deployed (exists={{ verify_tmux.stat.exists | default(false) }})"
 
 - name: Verify .vimrc exists
   ansible.builtin.stat:
@@ -56,7 +56,7 @@
 - name: Assert .vimrc exists
   ansible.builtin.assert:
     that: verify_vimrc.stat.exists
-    fail_msg: ".vimrc was not deployed"
+    fail_msg: ".vimrc was not deployed (exists={{ verify_vimrc.stat.exists | default(false) }})"
 
 - name: Verify bashrc deployed
   ansible.builtin.stat:
@@ -66,7 +66,7 @@
 - name: Assert bashrc exists
   ansible.builtin.assert:
     that: verify_bashrc.stat.exists
-    fail_msg: ".bashrc was not deployed"
+    fail_msg: ".bashrc was not deployed (exists={{ verify_bashrc.stat.exists | default(false) }})"
 
 - name: Check bashrc has Ansible managed marker
   ansible.builtin.command:
@@ -92,7 +92,7 @@
   ansible.builtin.assert:
     that:
       - verify_omz.stat.exists
-    fail_msg: "oh-my-zsh was not cloned — oh-my-zsh.sh sentinel missing"
+    fail_msg: "oh-my-zsh was not cloned — oh-my-zsh.sh sentinel missing (exists={{ verify_omz.stat.exists | default(false) }})"
 
 - name: Verify git config-personal exists
   ansible.builtin.stat:
@@ -963,6 +963,17 @@
     - not (system_is_container | default(false))
     - verify_llmnr_conf.stat.exists
 
+- name: Check 98-llmnr.conf disables LLMNR and mDNS
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  loop:
+    - "LLMNR={{ system_resolved_llmnr | default('no') }}"
+    - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not (system_is_container | default(false))
+    - verify_llmnr_conf.stat.exists
+
 - name: Stat /etc/systemd/resolved.conf.d/99-dot.conf
   ansible.builtin.stat:
     path: /etc/systemd/resolved.conf.d/99-dot.conf
@@ -1651,17 +1662,6 @@
     - ansible_system == 'Linux'
     - ansible_os_family == 'Debian'
     - system_tmout | int > 0
-
-- name: Check 98-llmnr.conf disables LLMNR and mDNS
-  ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
-  loop:
-    - "LLMNR={{ system_resolved_llmnr | default('no') }}"
-    - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
-  changed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - not (system_is_container | default(false))
-    - verify_llmnr_conf.stat.exists
 
 # --- System role: service masking (Linux container CI) ---
 # Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.
