@@ -601,7 +601,7 @@
     SIGSTORE_REKOR_PUBLIC_KEY: ""
     COSIGN_EXPERIMENTAL: "0"
   changed_when: false
-  failed_when: false
+  failed_when: _sops_checksums_verify_result.rc != 0 and (not network_proxied | bool)
   register: _sops_checksums_verify_result
 
 
@@ -637,7 +637,7 @@
   args:
     executable: /bin/bash
   changed_when: false
-  failed_when: false
+  failed_when: _sops_sha256_verify_result.rc != 0
   register: _sops_sha256_verify_result
 
 
