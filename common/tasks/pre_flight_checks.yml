@@ -1177,8 +1177,8 @@
       when: _config_raw is defined
       vars:
         _raw: "{{ _config_raw }}"
-        # Semantic version pattern: major.minor.patch with optional prerelease
-        _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+        # Semantic version pattern: major.minor.patch with optional prerelease and optional leading 'v'
+        _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
         # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
         _version_vars:
           - packages_kind_version
@@ -1222,7 +1222,7 @@
           Input: {{ _version_vars | map('extract', _raw) | select('defined') | list | map('string') | select() | list | reject('match', _semver_pattern) | list }}.
           Mechanism: version strings are interpolated directly into download URLs without sanitization.
           Impact: attacker-controlled path may access unintended paths on the download server.
-          Fix: use semver format (e.g. "1.2.3", "1.2.3-rc1"); no slashes, double-dots, or spaces.
+          Fix: use semver format (e.g. "1.2.3", "v0.11.0", "1.2.3-rc1", "v2.0.0-beta"); no slashes, double-dots, or spaces.
 
     - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
       when: _config_raw is defined
@@ -2680,7 +2680,7 @@
 
         - name: Assert binary version vars in play namespace match semver format (-e override guard)
           vars:
-            _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+            _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
             _version_vals_ns:
               - "{{ packages_kind_version | default('') | string }}"
               - "{{ packages_helm_version | default('') | string }}"
@@ -2719,7 +2719,7 @@
               semantic versioning format (possibly set via -e flag, bypassing config.yml check).
               Version strings are interpolated directly into download URLs; a value like
               "0.32.0/../../evil" performs URL path traversal to access unintended server paths.
-              Allowed: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ (e.g. "1.2.3", "0.32.0-rc1")
+              Allowed: ^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ (e.g. "1.2.3", "v0.11.0", "0.32.0-rc1", "v2.0.0-beta")
               Invalid values: {{ _version_vals_ns | select() | reject('match', _semver_pattern) | list }}.
           tags: [always]
 

@@ -5,7 +5,7 @@
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
 - name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
   vars:
-    _semver_pattern: '^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+    _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
     # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
     _version_vars:
       - packages_kind_version
@@ -50,8 +50,8 @@
       An attacker-controlled version string like "0.32.0/../../evil" could perform URL
       path traversal. This check is duplicated in pre_flight_checks.yml; it runs again
       here to protect against --start-at-task flag bypassing play-level pre_tasks.
-      Allowed pattern: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
-      (e.g. "0.32.0", "1.0.0-beta", "2.3.4-rc1")
+      Allowed pattern: ^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
+      (e.g. "0.32.0", "v0.11.0", "1.0.0-beta", "v2.3.4-rc1")
   # NOTE: no tags — see roles/claude/tasks/main.yml for explanation of why tags: [always]
   # is deliberately omitted here (to survive --skip-tags always bypass attempts).
 
