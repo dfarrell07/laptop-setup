@@ -138,7 +138,7 @@
     - system_firewall_manage_zone | bool  # drop zone has no interface on CSB — rule is a no-op
   notify: Apply firewall rules
 
-- name: ICMPv6 router-advertisement in drop zone (enabled when system_ipv6_accept_ra >= 2)
+- name: ICMPv6 router-advertisement in drop zone
   ansible.posix.firewalld:
     zone: drop
     icmp_block: router-advertisement
@@ -150,7 +150,7 @@
     - system_firewall_manage_zone | bool
   notify: Apply firewall rules
 
-- name: Allow DHCPv6-client in drop zone (enabled when system_ipv6_accept_ra >= 2)
+- name: Allow DHCPv6-client in drop zone
   ansible.posix.firewalld:
     zone: drop
     service: dhcpv6-client
@@ -182,7 +182,7 @@
 # no-op: state=disabled against a non-existent rule on the drop zone is always ok.
 # The task only has an effect when transitioning from system_enable_cockpit: true → false
 # (closing a previously opened port) or true → true (opening/ensuring the port is open).
-- name: Open/close Cockpit port in drop zone (9090/tcp — enabled when system_enable_cockpit is true)
+- name: Toggle Cockpit port 9090/tcp in drop zone
   ansible.posix.firewalld:
     zone: drop
     port: "9090/tcp"
@@ -200,7 +200,7 @@
 # drop zone tasks already handle port 722 and this task is skipped. The guard on
 # not(system_firewall_manage_zone) is the primary discriminator; the default-zone
 # guard prevents a redundant rule if the default zone is already drop.
-- name: Open SSH port in default firewall zone (fallback — zone management disabled in config)
+- name: Open SSH port in default zone (CSB fallback)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
@@ -224,7 +224,7 @@
 # After sshd.yml reconfigures sshd to port {{ ssh_port }}, SSH becomes unreachable externally.
 # This task is a safety net; the recommended setting is to leave system_firewall_manage_zone
 # at its default (not csb_rhel, which is true on plain Fedora).
-- name: Open SSH port in default firewall zone (non-CSB safety net — zone management disabled)
+- name: Open SSH port in default zone (non-CSB safety net)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
@@ -242,7 +242,7 @@
     'INVALID_ZONE' not in (_result_non_csb_ssh.msg | default(''))
   notify: Apply firewall rules
 
-- name: Warn that SSH port {{ ssh_port }} not opened — RHEL CSB drop zone requires IT policy
+- name: Warn: SSH port not opened — RHEL CSB drop zone
   ansible.builtin.debug:
     msg: >-
       WARNING: csb_rhel=true and the default firewall zone is 'drop'.
@@ -256,7 +256,7 @@
     - not (system_firewall_manage_zone | bool)
     - (system_firewall_info.firewalld_info.default_zone | default('')) == 'drop'
 
-- name: Open SSH port in redhat firewall zone (CSB Fedora — VPN tun0 uses this zone)
+- name: Open SSH port in redhat zone (CSB Fedora VPN)
   ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     zone: "redhat"
@@ -274,7 +274,7 @@
     'INVALID_ZONE' not in (_system_redhat_ssh_open.msg | default(''))
   notify: Apply firewall rules
 
-- name: Warn SSH port {{ ssh_port }} not opened in redhat zone (zone absent on this Fedora hybrid CSB host)
+- name: Warn: SSH port not opened in redhat zone (zone absent)
   ansible.builtin.debug:
     msg: >-
       WARNING: csb_detected=true, is_fedora=true and the 'redhat' firewall zone
@@ -289,7 +289,7 @@
     - _system_redhat_ssh_open is defined
     - "'INVALID_ZONE' in (_system_redhat_ssh_open.msg | default(''))"
 
-- name: Remove legacy ssh service (port 22) from redhat firewall zone (sshd moved to {{ ssh_port }})
+- name: Remove legacy ssh service from redhat zone
   ansible.posix.firewalld:
     zone: "redhat"
     service: ssh
