@@ -51,7 +51,7 @@ extract_issue_body() {
   echo "$1" | tr -d '\r' | sed '1,/^$/d'
 }
 
-fail_issue() {
+mark_issue_failed() {
   local issue_num="$1" message="$2"
   gh issue edit "$issue_num" --repo "$TASK_QUEUE_REPO" \
     --remove-label processing --remove-label queued --add-label failed 2>/dev/null || true
@@ -81,7 +81,7 @@ STALE_ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
 if [[ -n "$STALE_ISSUES" ]]; then
   while IFS= read -r STALE_NUM; do
     log "Recovering stuck issue #$STALE_NUM (processing >${STALE_THRESHOLD}s)"
-    fail_issue "$STALE_NUM" "Timed out in processing state (>${STALE_THRESHOLD}s); poller likely crashed. Re-open and re-label as queued to retry."
+    mark_issue_failed "$STALE_NUM" "Timed out in processing state (>${STALE_THRESHOLD}s); poller likely crashed. Re-open and re-label as queued to retry."
   done <<< "$STALE_ISSUES"
 fi
 
@@ -111,7 +111,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   # prompt content is parsed or executed.  Empty = allow all (insecure default).
   if [[ -n "$ALLOWED_AUTHORS" ]]; then
     if ! printf '%s' "$ALLOWED_AUTHORS" | tr ',' '\n' | grep -qx "$ISSUE_AUTHOR"; then
-      fail_issue "$ISSUE_NUM" "Unauthorized author: \`$ISSUE_AUTHOR\` is not in the allowed-authors list."
+      mark_issue_failed "$ISSUE_NUM" "Unauthorized author: \`$ISSUE_AUTHOR\` is not in the allowed-authors list."
       continue
     fi
   fi
@@ -120,12 +120,12 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   REPO_SHORT=$(extract_issue_repo "$ISSUE_BODY")
   if [[ -z "$REPO_SHORT" ]]; then
-    fail_issue "$ISSUE_NUM" "Missing \`repo:\` line in issue body."
+    mark_issue_failed "$ISSUE_NUM" "Missing \`repo:\` line in issue body."
     continue
   fi
 
   if [[ -z "${REPO_PATH[$REPO_SHORT]+x}" ]]; then
-    fail_issue "$ISSUE_NUM" "Unknown repo: \`$REPO_SHORT\`. Known: ${!REPO_PATH[*]}"
+    mark_issue_failed "$ISSUE_NUM" "Unknown repo: \`$REPO_SHORT\`. Known: ${!REPO_PATH[*]}"
     continue
   fi
 
@@ -136,12 +136,12 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   PROMPT=$(extract_issue_body "$ISSUE_BODY")
 
   if [[ -z "$PROMPT" ]]; then
-    fail_issue "$ISSUE_NUM" "Empty prompt after \`repo:\` line."
+    mark_issue_failed "$ISSUE_NUM" "Empty prompt after \`repo:\` line."
     continue
   fi
 
   if [[ ! -d "$TARGET_DIR" ]]; then
-    fail_issue "$ISSUE_NUM" "Repo path not found: \`$TARGET_DIR\`"
+    mark_issue_failed "$ISSUE_NUM" "Repo path not found: \`$TARGET_DIR\`"
     continue
   fi
 
@@ -153,8 +153,8 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
   # deterministic tiebreak, which in turn requires those labels to already
   # exist in the target repo and cleanup on every exit path — too invasive
   # for a minimal fix.  Practical worst-case: the slower host's subshell
-  # fails at git push --force-with-lease and calls fail_issue on an already-
-  # closed issue; fail_issue uses || true on all gh calls so concurrent
+  # fails at git push --force-with-lease and calls mark_issue_failed on an already-
+  # closed issue; mark_issue_failed uses || true on all gh calls so concurrent
   # invocation is safe (cosmetic label noise only).  The stale-recovery
   # threshold (TIMEOUT_SECONDS+300) cannot fire on a closed issue because
   # --state open filters it out.
@@ -212,14 +212,14 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     DURATION=$((END_TIME - START_TIME))
 
     if [[ "$CLAUDE_EXIT" -ne 0 ]]; then
-      fail_issue "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`"
+      mark_issue_failed "$ISSUE_NUM" "Task failed (exit $CLAUDE_EXIT, ${DURATION}s). Branch: \`$BRANCH_NAME\`"
       git push origin "$BRANCH_NAME" 2>/dev/null || true
-      exit 0  # already handled — exit 0 prevents outer || handler from double-calling fail_issue
+      exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
     fi
 
     if git diff --quiet "$DEFAULT_BRANCH"..."$BRANCH_NAME" 2>/dev/null; then
-      fail_issue "$ISSUE_NUM" "Claude completed but made no changes (${DURATION}s)."
-      exit 0  # already handled — exit 0 prevents outer || handler from double-calling fail_issue
+      mark_issue_failed "$ISSUE_NUM" "Claude completed but made no changes (${DURATION}s)."
+      exit 0  # already handled — exit 0 prevents outer || handler from double-calling mark_issue_failed
     fi
 
     git push -u --force-with-lease origin "$BRANCH_NAME"
@@ -243,7 +243,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
     log "Issue #$ISSUE_NUM: subshell failed"
-    fail_issue "$ISSUE_NUM" "Internal error: git-push or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
+    mark_issue_failed "$ISSUE_NUM" "Internal error: git-push or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
     rm -f "$TMPFILE"
   }
 done
