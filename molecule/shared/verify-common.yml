@@ -686,7 +686,7 @@
 - name: Assert sysctl 90-hardening.conf ip_forward keys match expected value
   ansible.builtin.assert:
     that: item.rc == 0
-    fail_msg: "90-hardening.conf missing '{{ item.item }}' — sysctl.yml ip_forward regression"
+    fail_msg: "90-hardening.conf missing '{{ item.item }}' — sysctl.yml ip_forward regression (rc={{ item.rc | default('?') }})"
   loop: "{{ verify_ip_forward_keys.results }}"
   when:
     - ansible_system == 'Linux'
@@ -730,7 +730,7 @@
 - name: Assert tmp.mount hardening.conf Options= contains all required flags
   ansible.builtin.assert:
     that: item.rc == 0
-    fail_msg: "tmp.mount hardening.conf missing Options={{ item.item }} — mounts.yml template regression"
+    fail_msg: "tmp.mount hardening.conf missing Options={{ item.item }} — mounts.yml template regression (rc={{ item.rc | default('?') }})"
   loop: "{{ verify_tmp_options.results }}"
   when:
     - ansible_system == 'Linux'
@@ -786,7 +786,7 @@
 - name: Assert modprobe hardening unconditional blacklist entries
   ansible.builtin.assert:
     that: item.rc == 0
-    fail_msg: "modprobe hardening missing entry '{{ item.item }}' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
+    fail_msg: "modprobe hardening missing entry '{{ item.item }}' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression (rc={{ item.rc | default('?') }})"
   loop: "{{ verify_modprobe_entries.results }}"
   when:
     - ansible_system == 'Linux'
@@ -918,7 +918,7 @@
 - name: Verify sshd directives found in drop-in
   ansible.builtin.assert:
     that: item.rc == 0
-    fail_msg: "sshd drop-in missing directive {{ item.item }} (expected in /etc/ssh/sshd_config.d/00-hardening.conf, got: {{ item.stdout | default('(no match)') }})"
+    fail_msg: "sshd drop-in missing directive {{ item.item }} (rc={{ item.rc | default('?') }}, expected in /etc/ssh/sshd_config.d/00-hardening.conf, got: {{ item.stdout | default('(no match)') }})"
   loop: "{{ verify_sshd_directives.results }}"
   when:
     - ansible_system == 'Linux'
