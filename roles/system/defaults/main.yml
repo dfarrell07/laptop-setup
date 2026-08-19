@@ -93,6 +93,17 @@ system_sysctl_hardening:
   # simultaneously activates both SLAAC and privacy extensions without a second pass.
   net.ipv6.conf.all.use_tempaddr: 2
   net.ipv6.conf.default.use_tempaddr: 2
+  # Swap minimization: minimize swap use to reduce the window during which decrypted
+  # vault material, Python heap pages, and other sensitive provisioning memory can be
+  # paged out to a persistent swap device (HDD/SSD/zram). Value 1 keeps swap as
+  # emergency OOM relief while strongly preferring RAM; value 0 disables swap entirely
+  # (risks OOM-killer on memory-constrained hosts during long provisioning runs).
+  # Swap pages written during provisioning persist across process exit and survive a
+  # reboot unless the swap device is cryptographically wiped (dm-crypt/LUKS). On
+  # default Fedora (zram) and RHEL (swap partition) hosts, any process with block
+  # device read access can recover these pages offline. Override to 0 in config.yml
+  # via system_sysctl_extra_additional if the host has full-disk encryption.
+  vm.swappiness: 1
 
 # Firewall
 # True on standard Fedora and Fedora hybrid (csb_detected, not RHEL). False on RHEL CSB (csb_rhel) where IT manages zone policy.

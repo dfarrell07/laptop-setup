@@ -463,6 +463,31 @@ else
   record "ssh_session" "pass" "local console (not over SSH)"
 fi
 
+# --- kernel ptrace_scope live-value check (Linux only) ---
+# Warn when /proc/sys/kernel/yama/ptrace_scope is 0 so the user knows secrets
+# are unprotected before sysctl.yml runs and applies system_ptrace_scope.
+if [[ -f /proc/sys/kernel/yama/ptrace_scope ]]; then
+  _live_ptrace=$(< /proc/sys/kernel/yama/ptrace_scope)
+  if [[ "$_live_ptrace" == "0" ]]; then
+    _cfg_ptrace_zero=false
+    if [[ -f "$CONFIG_FILE" ]]; then
+      grep -qE '^system_ptrace_scope:[[:space:]]*0([[:space:]]|$)' "$CONFIG_FILE" 2>/dev/null \
+        && _cfg_ptrace_zero=true
+    fi
+    if [[ "$_cfg_ptrace_zero" == true ]]; then
+      record "ptrace_scope" "warn" \
+        "live kernel ptrace_scope=0 and system_ptrace_scope: 0 in config.yml — YAMA ptrace restrictions intentionally disabled; any same-UID process can ptrace ansible-playbook and read vault secrets from memory. Set system_ptrace_scope: 1 after dev work."
+    else
+      record "ptrace_scope" "warn" \
+        "live kernel ptrace_scope=0 — YAMA ptrace unrestricted; any same-UID process can ptrace ansible-playbook and extract vault secrets from memory during this run. The playbook will harden this to system_ptrace_scope=1 via sysctl.yml, but secrets are unprotected until that task executes."
+    fi
+  else
+    record "ptrace_scope" "pass" "live kernel ptrace_scope=${_live_ptrace}"
+  fi
+else
+  record "ptrace_scope" "skip" "YAMA not available (macOS or kernel without CONFIG_SECURITY_YAMA)"
+fi
+
 # --- Existing installations ---
 for tool in claude podman distrobox toolbox; do
   if command -v "$tool" &>/dev/null; then
