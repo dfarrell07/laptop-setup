@@ -420,4 +420,6 @@ vault-view:
 	PAGER= ANSIBLE_PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault view group_vars/all/vault.yml
 
 vault-diff:
-	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) ansible-vault decrypt --output=- group_vars/all/vault.yml | diff - group_vars/all/vault.yml || true
+	PAGER= MANPAGER= SYSTEMD_PAGER= EDITOR= VISUAL= ANSIBLE_EDITOR= $(VERIFY_AND_RUN) bash -c \
+		'diff <(ansible-vault decrypt --output=- <(git show HEAD:group_vars/all/vault.yml)) \
+		<(ansible-vault decrypt --output=- group_vars/all/vault.yml) || true'

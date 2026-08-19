@@ -688,7 +688,7 @@ password to your password manager during setup:
 4. Use it to decrypt/rekey the vault:
    ```bash
    export ANSIBLE_VAULT_PASSWORD_FILE=/tmp/vault-pass-temp.sh
-   ansible-vault view group_vars/all/vault.yml
+   make vault-view
    # or to migrate to a new password source:
    ansible-vault rekey group_vars/all/vault.yml
    ```

@@ -165,7 +165,7 @@
         fail_msg: >-
           vault.yml missing or empty SSH key vars. Expected:
           vault_ssh_auth_key, vault_ssh_auth_key_pub, vault_ssh_signing_key, vault_ssh_signing_key_pub.
-          Run: ansible-vault view group_vars/all/vault.yml | grep vault_ssh
+          Run: make vault-view | grep vault_ssh
       when: >-
         vault_ssh_auth_key is defined or
         vault_ssh_auth_key_pub is defined or
