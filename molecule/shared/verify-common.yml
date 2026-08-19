@@ -808,7 +808,7 @@
 - name: Assert modprobe hardening usb_storage blacklist entry
   ansible.builtin.assert:
     that: verify_modprobe_usb_storage.rc == 0
-    fail_msg: "modprobe hardening missing 'install usb_storage /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
+    fail_msg: "modprobe hardening missing 'install usb_storage /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression (rc={{ verify_modprobe_usb_storage.rc | default('?') }})"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -829,7 +829,7 @@
 - name: Assert modprobe hardening udf blacklist entry
   ansible.builtin.assert:
     that: verify_modprobe_udf.rc == 0
-    fail_msg: "modprobe hardening missing 'install udf /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
+    fail_msg: "modprobe hardening missing 'install udf /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression (rc={{ verify_modprobe_udf.rc | default('?') }})"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -850,7 +850,7 @@
 - name: Assert modprobe hardening sctp blacklist entry
   ansible.builtin.assert:
     that: verify_modprobe_sctp.rc == 0
-    fail_msg: "modprobe hardening missing 'install sctp /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression"
+    fail_msg: "modprobe hardening missing 'install sctp /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template regression (rc={{ verify_modprobe_sctp.rc | default('?') }})"
   when:
     - ansible_system == 'Linux'
     - not (system_is_container | default(false))
@@ -895,16 +895,16 @@
 - name: Check sshd hardening drop-in for required directives
   ansible.builtin.command: grep -E '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
   loop:
-    - "PasswordAuthentication no"
-    - "PermitRootLogin no"
-    - "KbdInteractiveAuthentication no"
-    - "PermitEmptyPasswords no"
-    - "X11Forwarding no"
-    - "HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
-    - "ClientAliveInterval {{ system_ssh_client_alive_interval | default(300) }}"
-    - "ClientAliveCountMax {{ system_ssh_client_alive_count_max | default(2) }}"
+    - "^PasswordAuthentication no"
+    - "^PermitRootLogin no"
+    - "^KbdInteractiveAuthentication no"
+    - "^PermitEmptyPasswords no"
+    - "^X11Forwarding no"
+    - "^HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
+    - "^ClientAliveInterval {{ system_ssh_client_alive_interval | default(300) }}"
+    - "^ClientAliveCountMax {{ system_ssh_client_alive_count_max | default(2) }}"
     - "^Port {{ ssh_port }}$"
-    - "AllowUsers "
+    - "^AllowUsers "
   loop_control:
     label: "{{ item | split(' ') | first }}"
   failed_when: false
