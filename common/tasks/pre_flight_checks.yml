@@ -1259,17 +1259,12 @@
             map('string') | select() | list |
             reject('match', _semver_pattern) | list | length == 0
         fail_msg: >-
-          SECURITY: One or more binary version variables in config.yml do not match
-          semantic versioning format (e.g. "1.2.3" or "1.2.3-alpha"). Version variables
-          are directly interpolated into download URLs without additional validation. An
-          attacker-controlled version string like "0.32.0/../../evil" could perform URL
-          path traversal, accessing unintended paths on the same host or exploiting
-          upstream path-traversal bugs.
-          Allowed pattern: ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
-          (e.g. "0.32.0", "1.0.0-beta", "2.3.4-rc1")
-          Invalid version variables: {{ _version_vars | map('extract', _raw) | select('defined') | list |
-          map('string') | select() | list | reject('match', _semver_pattern) | list }}.
-          Remove any slashes, double-dots, spaces, or special characters from version overrides in config.yml.
+          SECURITY: One or more binary version variables in config.yml fail semver validation.
+          Threat: a value like "0.32.0/../../evil" performs URL path traversal during binary download.
+          Input: {{ _version_vars | map('extract', _raw) | select('defined') | list | map('string') | select() | list | reject('match', _semver_pattern) | list }}.
+          Mechanism: version strings are interpolated directly into download URLs without sanitization.
+          Impact: attacker-controlled path may access unintended paths on the download server.
+          Fix: use semver format (e.g. "1.2.3", "1.2.3-rc1"); no slashes, double-dots, or spaces.
 
     - name: Assert packages_opm_binary_name contains no path traversal (LPE guard)
       when: _config_raw is defined
@@ -1344,19 +1339,12 @@
           - _subctl_rh_entries | map(attribute='suffix') | map('string') | select() |
             reject('match', '^[a-zA-Z0-9]+$') | list | length == 0
         fail_msg: >-
-          SECURITY: packages_subctl_rh_versions in config.yml contains unsafe version/image/suffix strings.
-          Each tag MUST be a COMPLETE semantic version with major.minor.patch format
-          (e.g. "v0.18.0", "0.22.1", not partial versions like "v0.18" or "0.22").
-          Partial versions cause glob expansion ambiguity: when tag="v0.18" matches multiple
-          tarballs in /tmp (v0.18.0, v0.18.1), filesystem ordering (inode traversal) may cause
-          selection of an attacker-controlled file instead of the legitimate extraction.
-          Complete three-part versions prevent this attack via exact-match tarball lookup.
-          Each image must be alphanumeric/dot/hyphen only (e.g. "subctl-rhel8").
-          Each suffix must be alphanumeric only (e.g. "RH18").
-          These values are interpolated directly into oc image extract commands and shell globs;
-          spaces or special characters allow command injection via shlex tokenization or glob expansion.
-          Invalid entries: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern_strict) | list }}.
-          Update all tag values to use complete semantic versioning (major.minor.patch).
+          SECURITY: packages_subctl_rh_versions tag/image/suffix contains an unsafe value.
+          tag must be major.minor.patch (e.g. v0.18.0); partial tags cause /tmp glob ambiguity and may select an attacker-controlled file.
+          image: alphanumeric/dot/hyphen; suffix: alphanumeric.
+          Values are interpolated into oc image extract commands; spaces allow shlex injection.
+          Invalid: {{ _subctl_rh_entries | rejectattr('tag', 'match', _semver_pattern_strict) | list }}.
+          Fix: use complete major.minor.patch for every tag.
 
     - name: Assert ssh_port in config.yml is a plain decimal port number (sshd injection guard)
       when: _config_raw is defined
@@ -1389,15 +1377,11 @@
             reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
         fail_msg: >-
           SECURITY: system_ssh_extra_allow_users in config.yml contains an invalid entry.
-          Threat: a newline-embedded value like "validuser\nPermitRootLogin yes" passes sshd -t
-          and loads a malicious directive that silently overrides PermitRootLogin no.
-          Input: system_ssh_extra_allow_users={{ _extra_users | to_json }} in config.yml.
-          Mechanism: entries are joined verbatim into AllowUsers in sshd_config.d/00-hardening.conf;
-          a newline splits the directive and the next token is parsed as a top-level sshd directive.
-          Example: ["validuser\nPermitRootLogin yes"] → AllowUsers … validuser\nPermitRootLogin yes.
+          Threat: a newline-embedded value passes sshd -t and injects a top-level sshd directive.
+          Input: {{ _extra_users | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
+          Mechanism: entries are joined verbatim into AllowUsers; a newline splits the value into a new directive.
           Impact: PermitRootLogin or other hardened directives silently overridden; root SSH enabled.
           Fix: each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username, 32 chars max).
-          Offending entries: {{ _extra_users | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
 
     - name: Assert system_selinux_enforcing_required is not disabled in config.yml (SELinux bypass guard)
       when: _config_raw is defined
