@@ -5,6 +5,13 @@
 
 - name: Install krew
   block:
+    - name: Create secure krew temp directory (TOCTOU guard)
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .tar.gz
+        prefix: krew_
+      register: _krew_tmpfile
+
     - name: Check if krew is installed
       ansible.builtin.command:
         cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew version"
@@ -18,9 +25,9 @@
         - name: Download krew tarball
           ansible.builtin.get_url:
             url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
-            dest: /tmp/krew.tar.gz
+            dest: "{{ _krew_tmpfile.path }}"
             checksum: "sha256:{{ packages_krew_sha256 }}"
-            mode: "0644"
+            mode: "0600"
             timeout: 120
           register: packages_krew_download
           retries: 3
@@ -35,7 +42,7 @@
 
         - name: Extract krew installer
           ansible.builtin.unarchive:
-            src: /tmp/krew.tar.gz
+            src: "{{ _krew_tmpfile.path }}"
             dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
             remote_src: true
 
@@ -69,9 +76,9 @@
         - name: Download krew tarball for upgrade
           ansible.builtin.get_url:
             url: "https://github.com/kubernetes-sigs/krew/releases/download/v{{ packages_krew_bootstrap_version }}/krew-linux_amd64.tar.gz"
-            dest: /tmp/krew.tar.gz
+            dest: "{{ _krew_tmpfile.path }}"
             checksum: "sha256:{{ packages_krew_sha256 }}"
-            mode: "0644"
+            mode: "0600"
             timeout: 120
           register: packages_krew_upgrade_download
           retries: 3
@@ -80,7 +87,7 @@
 
         - name: Extract krew installer for upgrade
           ansible.builtin.unarchive:
-            src: /tmp/krew.tar.gz
+            src: "{{ _krew_tmpfile.path }}"
             dest: "{{ ansible_facts['user_dir'] }}/.local/bin"
             remote_src: true
 
@@ -132,7 +139,7 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - /tmp/krew.tar.gz
+        - "{{ _krew_tmpfile.path | default('') }}"
         - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64"
         - "{{ ansible_facts['user_dir'] }}/.local/bin/krew-linux_amd64.yaml"
         - "{{ ansible_facts['user_dir'] }}/.local/bin/LICENSE"
