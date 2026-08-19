@@ -360,26 +360,31 @@
     - is_fedora
     - not csb_detected
   block:
-    - name: Fetch RPM Fusion free GPG key from HTTPS
-      ansible.builtin.get_url:
-        url: >-
-          https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-{{
-          ansible_facts['distribution_major_version'] }}
-        dest: "/tmp/rpmfusion-free-gpg-key.gpg"
-        mode: "0644"
-    - name: Verify RPM Fusion free GPG key fingerprint
+    - name: Create secure temporary directory for RPM Fusion free GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _rpmfusion_free_gpg
+      register: _rpmfusion_free_gpg_tmp_dir
+    - name: Fetch and verify RPM Fusion free GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          gpg --with-colons /tmp/rpmfusion-free-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+          set -e
+          KEYFILE="{{ _rpmfusion_free_gpg_tmp_dir.path }}/key.gpg"
+          REL="{{ ansible_facts['distribution_major_version'] }}"
+          URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-free-fedora-${REL}"  # yamllint disable-line
+          curl -fsSL "$URL" -o "$KEYFILE"
+          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
       changed_when: false
-      register: _rpmfusion_free_fp
-      failed_when: |
-        _rpmfusion_free_fp.stdout_lines | length == 0 or
-        repos_dnf_rpmfusion_gpg_fingerprint not in _rpmfusion_free_fp.stdout | upper
-    - name: Import RPM Fusion free GPG key
-      ansible.builtin.command:
-        cmd: "rpm --import /tmp/rpmfusion-free-gpg-key.gpg"
-      changed_when: false
+    - name: Clean up RPM Fusion free GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
+        state: absent
+      when: _rpmfusion_free_gpg_tmp_dir is defined
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
@@ -391,6 +396,14 @@
       register: _rpmfusion_free_verify
       failed_when: "_rpmfusion_free_verify.rc != 0"
   rescue:
+    - name: Remove RPM Fusion free GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
+        state: absent
+      failed_when: false
+      when:
+        - _rpmfusion_free_gpg_tmp_dir is defined
+        - _rpmfusion_free_gpg_tmp_dir.path is defined
     - name: Remove rpmfusion-free-release after signing check failure
       ansible.builtin.dnf:
         name: rpmfusion-free-release
@@ -411,26 +424,31 @@
     - is_fedora
     - not csb_detected
   block:
-    - name: Fetch RPM Fusion nonfree GPG key from HTTPS
-      ansible.builtin.get_url:
-        url: >-
-          https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-
-          {{ ansible_facts['distribution_major_version'] }}
-        dest: "/tmp/rpmfusion-nonfree-gpg-key.gpg"
-        mode: "0644"
-    - name: Verify RPM Fusion nonfree GPG key fingerprint
+    - name: Create secure temporary directory for RPM Fusion nonfree GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _rpmfusion_nonfree_gpg
+      register: _rpmfusion_nonfree_gpg_tmp_dir
+    - name: Fetch and verify RPM Fusion nonfree GPG key atomically
       ansible.builtin.shell:
         cmd: |
-          gpg --with-colons /tmp/rpmfusion-nonfree-gpg-key.gpg 2>/dev/null | grep "^fpr" | cut -d: -f10
+          set -e
+          KEYFILE="{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}/key.gpg"
+          REL="{{ ansible_facts['distribution_major_version'] }}"
+          URL="https://rpmfusion.org/keys?action=AttachFile&do=get&target=RPM-GPG-KEY-rpmfusion-nonfree-fedora-${REL}"  # yamllint disable
+          curl -fsSL "$URL" -o "$KEYFILE"
+          FP=$(gpg --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
       changed_when: false
-      register: _rpmfusion_nonfree_fp
-      failed_when: |
-        _rpmfusion_nonfree_fp.stdout_lines | length == 0 or
-        repos_dnf_rpmfusion_gpg_fingerprint not in _rpmfusion_nonfree_fp.stdout | upper
-    - name: Import RPM Fusion nonfree GPG key
-      ansible.builtin.command:
-        cmd: "rpm --import /tmp/rpmfusion-nonfree-gpg-key.gpg"
-      changed_when: false
+    - name: Clean up RPM Fusion nonfree GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
+        state: absent
+      when: _rpmfusion_nonfree_gpg_tmp_dir is defined
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
         name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"  # yamllint disable-line rule:line-length
@@ -442,6 +460,14 @@
       register: _rpmfusion_nonfree_verify
       failed_when: "_rpmfusion_nonfree_verify.rc != 0"
   rescue:
+    - name: Remove RPM Fusion nonfree GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
+        state: absent
+      failed_when: false
+      when:
+        - _rpmfusion_nonfree_gpg_tmp_dir is defined
+        - _rpmfusion_nonfree_gpg_tmp_dir.path is defined
     - name: Remove rpmfusion-nonfree-release after signing check failure
       ansible.builtin.dnf:
         name: rpmfusion-nonfree-release
