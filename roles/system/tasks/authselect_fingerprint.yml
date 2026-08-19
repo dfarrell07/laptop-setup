@@ -128,3 +128,32 @@
     - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_enable_fp_result.rc == 0
   failed_when: false
+
+# Post-disable verification: confirm with-fingerprint is absent from the live authselect profile.
+# Both the authselect disable-feature and fprintd masking paths can fail silently; this probe
+# catches any remaining with-fingerprint activation regardless of which path failed.
+- name: Probe authselect profile for residual with-fingerprint feature
+  ansible.builtin.command:
+    cmd: authselect current --raw
+  register: system_authselect_post_fp_probe
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_disable_fingerprint | bool
+    - system_authselect_bin.stat.exists
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if with-fingerprint is still active in authselect profile after disable
+  ansible.builtin.fail:
+    msg: >-
+      with-fingerprint is still present in the active authselect profile after the disable attempt.
+      Fingerprint auth bypasses pam_faillock deny counting entirely.
+      Fix the authselect profile (must be sssd without with-fingerprint) and re-run.
+  when:
+    - system_disable_fingerprint | bool
+    - system_authselect_bin.stat.exists
+    - not csb_rhel
+    - not system_is_container
+    - system_authselect_post_fp_probe is not skipped
+    - system_authselect_post_fp_probe.stdout | default('') is search('with-fingerprint')
