@@ -1768,7 +1768,7 @@ assert p.get('SafeBrowsingProtectionLevel', 0) >= 1, 'SafeBrowsingProtectionLeve
 
   # Console keymap
   if grep -q "^KEYMAP=${_system_keymap}$" /etc/vconsole.conf 2>/dev/null; then record "vconsole-keymap" "PASS"
-  else record "vconsole-keymap" "WARN" "KEYMAP=${_system_keymap} not set in /etc/vconsole.conf"; fi
+  else record "vconsole-keymap" "FAIL" "KEYMAP=${_system_keymap} not set in /etc/vconsole.conf"; fi
 
   # logind IdleAction=lock (physical security)
   if grep -q '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf 2>/dev/null; then
