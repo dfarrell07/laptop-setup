@@ -133,7 +133,8 @@ def extract_python_files(collection_dir):
             if pyfile.suffix not in ('.py', '.so'):
                 continue
             if pyfile.is_symlink():
-                continue
+                print(f"FATAL: symlink detected in vendored collection — possible tampering: {pyfile}", file=sys.stderr)
+                sys.exit(1)
             if pyfile.is_file():
                 rel_path = str(pyfile.relative_to(collection_dir))
                 python_files[rel_path] = compute_file_hash(pyfile)

@@ -469,15 +469,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Import collection signing key
+        run: gpg --import collections-dist/signing-key.asc
+
       - name: Verify SHA256SUMS GPG signature
         run: |
           cd collections-dist
-          [ -f SHA256SUMS.asc ] || { echo "::warning::SHA256SUMS.asc not found"; exit 0; }
+          [ -f SHA256SUMS.asc ] || { echo "::error::SHA256SUMS.asc not found"; exit 1; }
           gpg_output=$(gpg --verify SHA256SUMS.asc SHA256SUMS 2>&1) || gpg_exit=$?
           if [ $gpg_exit -eq 0 ]; then
             echo "✓ SHA256SUMS.asc GPG signature verified"
           elif echo "$gpg_output" | grep -q "No public key\|public key not found"; then
-            echo "::warning::SHA256SUMS.asc signing key not in CI keyring"
+            echo "::error::SHA256SUMS.asc signing key not in CI keyring"
+            exit 1
           else
             echo "::error::SHA256SUMS.asc GPG signature FAILED"
             exit 1

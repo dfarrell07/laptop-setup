@@ -192,7 +192,8 @@ system_aide_enabled: false  # 5-10 min init on first provision; enable only when
 # Override in config.yml to add or remove monitored paths without editing tasks.
 system_aide_monitoring_etc_paths:
   - /etc/ssh/sshd_config.d      # sshd hardening drop-ins
-  - /etc/NetworkManager/conf.d   # MAC randomization and DNS policy
+  - /etc/NetworkManager/conf.d      # MAC randomization and DNS policy
+  - /etc/NetworkManager/dispatcher.d # root execution hooks (persistent scripts)
   - /etc/systemd/logind.conf.d   # session timeout policy
   - /etc/systemd/journald.conf.d # log persistence policy
   - /etc/systemd/coredump.conf.d # coredump config integrity
