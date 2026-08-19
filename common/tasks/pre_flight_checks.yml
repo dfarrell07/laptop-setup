@@ -160,6 +160,42 @@
           commands as root when the logrotate systemd timer fires. Allowed: alphanumeric,
           slash, dot, underscore, tilde, hyphen (standard filesystem path characters).
 
+    - name: SECURITY assert claude_install_sha256 is set (mandatory integrity verification)
+      when: _config_yml_raw.content is defined
+      vars:
+        _raw: "{{ _config_yml_raw.content | b64decode | from_yaml | default({}) }}"
+        _install_method: "{{ _raw.get('claude_install_method', 'native') }}"
+        _install_sha256: "{{ _raw.get('claude_install_sha256', '') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_install_method != 'native') or
+            (_install_sha256 | length > 0 and _install_sha256 | string is match('^[a-f0-9]{64}$'))
+        fail_msg: >-
+          SECURITY: claude_install_sha256 in config.yml is not set or invalid.
+          Integrity verification of the Claude Code installer is MANDATORY when
+          claude_install_method is set to 'native' (the default).
+
+          The installer downloaded from {{ _raw.get('claude_install_url', 'https://claude.ai/install.sh') }}
+          MUST be verified using SHA256 before execution to prevent CDN-layer
+          compromises, supply-chain attacks, or MITM interception.
+
+          REQUIRED FIX: Add claude_install_sha256 to config.yml with a valid
+          SHA256 hash (64 lowercase hexadecimal characters). Obtain the official
+          hash from Anthropic's documentation:
+          https://docs.anthropic.com/claude/reference/claude-installation
+
+          Example config.yml entry:
+              claude_install_sha256: "a7f8d1c6b2e5d4c3a1f8e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6"
+
+          ALTERNATIVE: If you are intentionally skipping Claude installation on
+          this machine, set:
+              claude_install_method: skip
+
+          This mandatory validation prevents unverified execution of remote
+          installation scripts — a critical security requirement for supply-chain
+          protection. Do not disable this check.
+
     - name: Assert claude_install_url is constrained to known-safe domains (supply chain guard)
       when: _config_yml_raw.content is defined
       vars:

@@ -1,0 +1,61 @@
+---
+# Pre-flight security validation (Play 0)
+# CRITICAL: This playbook is statically imported via import_playbook in site.yml,
+# which guarantees execution order and prevents --start-at-task from bypassing
+# pre-flight security checks.
+#
+# Runs before all other plays to ensure:
+#   1. Collection integrity is verified (prevents TOCTOU tampering)
+#   2. Config.yml injection guards are validated
+#   3. Identity variables are not placeholder values
+#
+# Defense-in-depth against multiple attack vectors:
+#   - Direct ansible-playbook invocation (bypassing Makefile guard)
+#   - --start-at-task flag (skipping pre_tasks in normal plays)
+#   - --skip-tags always (bypassing task-level always tags)
+#
+# import_playbook cannot be skipped with --start-at-task, making this
+# enforcement unbypassable at the Ansible layer.
+- name: Pre-flight security validation (always runs via import_playbook)
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  tasks:
+    # CRITICAL: Collection verification runs BEFORE any include_tasks/import_tasks/roles
+    # that would parse Python files from collections/. This prevents TOCTOU tampering
+    # where an attacker modifies collection files after Makefile verification but
+    # before ansible-playbook imports them. Running at task level (after Makefile verify)
+    # AND before any imports provides defense-in-depth against both direct ansible-playbook
+    # invocations (bypassing Makefile) and process boundary attacks (exec ensures same
+    # shell context between verify-collections.sh and ansible-playbook in CI/Makefile).
+    - name: SECURITY CRITICAL — Verify collection integrity before any imports
+      ansible.builtin.command:
+        cmd: scripts/verify-collections.sh
+      changed_when: false
+      check_mode: false  # always run even in --check mode; collection integrity must be verified
+
+    - name: Gather facts for early validation
+      ansible.builtin.gather_facts:
+
+    - name: Capture real user identity for early checks
+      ansible.builtin.set_fact:
+        real_user_home: "{{ lookup('env', 'HOME') }}"
+        real_user_id: "{{ lookup('env', 'USER') }}"
+
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
+
+    - name: Run early pre-flight checks (before any role execution)
+      block:
+        - name: Include pre-flight checks
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+
+    - name: Run CSB detection early (makes csb_detected available to all subsequent plays)
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
+      block:
+        - name: Include CSB detection
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"

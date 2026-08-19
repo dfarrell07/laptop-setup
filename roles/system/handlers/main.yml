@@ -168,3 +168,11 @@
   become: true
   when: not system_is_container  # dnf-automatic not applicable in containers; daemon_reload: true crashes Podman containers
   ignore_errors: true  # noqa: ignore-errors
+
+- name: Regenerate GRUB configuration  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "{{ 'grub2-mkconfig -o /boot/grub2/grub.cfg' if is_dnf else 'grub-mkconfig -o /boot/grub/grub.cfg' }}"
+  become: true
+  changed_when: true
+  when: not system_is_container  # GRUB not applicable in containers
+  ignore_errors: true  # noqa: ignore-errors

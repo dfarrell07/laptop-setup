@@ -16,7 +16,11 @@ runs:
       run: pip install --require-hashes -r requirements-test.lock
       shell: bash
 
-    - name: Verify and install Ansible collections from vendored tarballs
+    - name: Comprehensive collection verification (TOCTOU check before install)
+      run: scripts/verify-collections.sh
+      shell: bash
+
+    - name: Install Ansible collections from vendored tarballs
       run: |
         cd collections-dist
         sha256sum -c SHA256SUMS

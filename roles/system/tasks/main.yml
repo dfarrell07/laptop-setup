@@ -70,6 +70,9 @@
 - name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
   ansible.builtin.import_tasks: hardening_core.yml
 
+- name: "GRUB bootloader password (CIS 1.4.2)"
+  ansible.builtin.import_tasks: grub_password.yml
+
 # --- Auditd ---
 - name: Auditd tasks
   ansible.builtin.import_tasks: auditd.yml

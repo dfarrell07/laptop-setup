@@ -220,6 +220,15 @@ elif [[ "$_ssh_add_rc" -eq 1 ]]; then
   record "ssh-agent-key" "WARN" "no keys loaded in ssh-agent"
 else record "ssh-agent-key" "WARN" "key loaded but not sk-ssh-ed25519 type"; fi
 
+# LUKS discard protection (Linux only — mitigates SSD wear-pattern fingerprinting attacks)
+if $IS_LINUX; then
+  if grep -q 'rd\.luks\.options=discard\|rd\.luks\.allow-discards' /proc/cmdline 2>/dev/null; then
+    record "luks-discard-protection" "WARN" "LUKS discard enabled (rd.luks.options=discard or rd.luks.allow-discards in kernel cmdline) — SSD wear-patterns may leak plaintext locations"
+  else
+    record "luks-discard-protection" "PASS"
+  fi
+fi
+
 # --- Editor checks ---
 if command -v vim &>/dev/null; then record "vim-binary" "PASS"
 elif $IS_LINUX; then record "vim-binary" "FAIL" "vim not found — run: make packages"

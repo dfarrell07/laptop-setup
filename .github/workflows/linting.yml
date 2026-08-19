@@ -349,6 +349,29 @@ jobs:
           sys.exit(1 if failed else 0)
           PYEOF
 
+  script-integrity:
+    name: Script Integrity Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify verify-collections.sh integrity
+        run: |
+          cd scripts
+          if ! sha256sum -c verify-collections.sh.sha256; then
+            echo "::error::verify-collections.sh integrity check failed"
+            echo "The verify-collections.sh script has been tampered with or the .sha256 file is out of sync."
+            echo "If changes to verify-collections.sh are intentional, regenerate the hash:"
+            echo "  sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256"
+            echo "Then commit both files together to prevent supply chain tampering."
+            exit 1
+          fi
+          echo "✓ verify-collections.sh integrity verified"
+
   collections-integrity:
     name: Collections Integrity Check
     runs-on: ubuntu-24.04
@@ -779,6 +802,7 @@ jobs:
       - ansible-lint
       - check-vars-sync
       - shell-checks
+      - script-integrity
       - vault-encryption
       - collections-integrity
       - syntax-check

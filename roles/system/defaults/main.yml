@@ -335,6 +335,14 @@ system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; 
 # workflows (KGDB, /sys/kernel/debug access, hibernate, etc.).
 system_kernel_lockdown: integrity
 
+# GRUB bootloader password (CIS 1.4.2) — protects against kernel param tampering
+# with physical console access (prevents removing lockdown=integrity before boot).
+# Default: false (opt-in). Set true in config.yml + configure system_grub_password_hash.
+system_grub_password_enabled: false
+# Generate via: grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian)
+# Recommend storing in vault-encrypted config.yml (vault_grub_password_hash) for deployments.
+system_grub_password_hash: ""
+
 # Identity fallbacks — site.yml always sets these via set_fact from env,
 # but role defaults guard against standalone invocation or empty env vars.
 # An empty real_user_id would produce AllowUsers with no token in sshd,
@@ -423,6 +431,11 @@ system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
 # If rd.luks.key is active and you set this true, the machine will require manual LUKS
 # passphrase entry on every reboot after provisioning. Default: false (preserve keyfile auth).
 system_remove_luks_key: false
+# LUKS TRIM/discard: set true ONLY to enable discard on full-disk encryption for SSD longevity.
+# WARNING: enabling discard allows SSD wear-leveling patterns to leak encrypted data locations;
+# only recommended for machines with disposable/non-sensitive data. CIS compliance mandates
+# false (default) to prevent wear-pattern fingerprinting attacks on sensitive systems.
+system_luks_discards_enabled: false
 # IOMMU passthrough mode for VFIO/libvirt PCI passthrough: set true only when actively
 # assigning PCI devices to VMs. Enabling iommu=pt bypasses DMA remapping for all devices
 # not assigned to a VM, trading full DMA isolation for passthrough performance.
@@ -524,3 +537,10 @@ system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in co
 system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; value 3 requires CAP_SYS_ADMIN
                                    # (breaks perf stat/top/record for non-root users); set 3 in config.yml
                                    # for stricter posture on non-dev hosts
+
+# GRUB bootloader password (CIS 1.4.2)
+# Protects against physical console attacks that edit kernel parameters before lockdown=integrity activates.
+# Secure Boot + GRUB password = protection against pre-reboot window vulnerability.
+# If empty (default), GRUB password protection is disabled. Set in config.yml to enable:
+# system_grub_password: 'your-secure-password'  # recommend vault_grub_password from vault.yml for production
+system_grub_password: ''  # empty = disabled; set in config.yml to enable CIS 1.4.2

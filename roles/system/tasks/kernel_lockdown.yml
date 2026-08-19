@@ -178,6 +178,33 @@
         - system_remove_luks_key | bool
       failed_when: false
 
+    - name: Remove rd.luks.allow-discards grub parameter (mitigates SSD wear-pattern fingerprinting)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="rd.luks.allow-discards" --update-kernel=ALL
+      register: system_luks_allow_discards_remove
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.allow-discards' in (system_grubby_info.stdout)"
+        - not (system_luks_discards_enabled | bool)
+      changed_when: system_luks_allow_discards_remove.rc == 0
+      failed_when: false
+
+    - name: Remove rd.luks.options=discard grub parameter (mitigates SSD wear-pattern fingerprinting)
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if grep -q 'rd\.luks\.options.*discard' /etc/default/grub 2>/dev/null; then
+            grubby --remove-args='rd.luks.options' --update-kernel=ALL 2>/dev/null || true
+          fi
+        executable: /bin/bash
+      register: system_luks_options_discard_remove
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.options' in (system_grubby_info.stdout)"
+        - not (system_luks_discards_enabled | bool)
+      changed_when: system_luks_options_discard_remove.rc == 0
+      failed_when: false
+
     # Merge security hardening params into /etc/kernel/cmdline so new kernel installs
     # via 'dnf update kernel' include them automatically. Uses append-only logic to
     # PRESERVE existing essential boot params (root=UUID, rd.luks.uuid, rootflags, etc.)
@@ -248,12 +275,14 @@
           init_on_free_remove: "{{ system_init_on_free_remove_result | default({}) }}"
           page_shuffle: "{{ system_page_shuffle_result | default({}) }}"
           luks_key_cleanup: "{{ system_luks_key_cleanup | default({}) }}"
+          luks_allow_discards_remove: "{{ system_luks_allow_discards_remove | default({}) }}"
+          luks_options_discard_remove: "{{ system_luks_options_discard_remove | default({}) }}"
           kernel_cmdline: "{{ system_kernel_cmdline_result | default({}) }}"
 
 
 - name: Notify that reboot is required for kernel parameters
   ansible.builtin.debug:
-    msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key). Reboot."
+    msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key/luks-discard). Reboot."
   when: >-
     system_lockdown_result is changed or
     system_lockdown_stale_remove_result is changed or
@@ -267,4 +296,6 @@
     system_init_on_free_remove_result is changed or
     system_page_shuffle_result is changed or
     system_luks_key_cleanup is changed or
+    system_luks_allow_discards_remove is changed or
+    system_luks_options_discard_remove is changed or
     system_kernel_cmdline_result is changed
