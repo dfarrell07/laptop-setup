@@ -91,16 +91,10 @@
         that: verify_pam_common_account['content'] | b64decode is search('(?m)^account\s+required\s+pam_faillock\.so$')
         fail_msg: "pam_faillock.so account line missing in /etc/pam.d/common-account"
 
-    - name: Slurp /etc/security/faillock.conf for content assertions (Debian)
-      ansible.builtin.slurp:
-        src: /etc/security/faillock.conf
-      register: verify_pam_faillock_conf
-      become: true
-
-    - name: Assert faillock.conf deny setting (Debian)
-      ansible.builtin.assert:
-        that: verify_pam_faillock_conf['content'] | b64decode is search('(?m)^deny = {{ system_faillock_deny }}$')
-        fail_msg: "faillock.conf deny={{ system_faillock_deny }} not found in /etc/security/faillock.conf"
+    # faillock.conf (deny=N) and pwquality.conf are written by ini_file tasks guarded by
+    # not system_is_container — those writes are unsafe in Podman CI (crash risk documented in
+    # pam.yml). The /etc/pam.d/ assertions above cover the critical stack-ordering checks.
+    # faillock.conf and pwquality.conf value assertions remain in the VM-gated block below.
 
     - name: Slurp /etc/pam.d/common-password for content assertions (Debian)
       ansible.builtin.slurp:
@@ -112,26 +106,6 @@
       ansible.builtin.assert:
         that: verify_pam_common_password['content'] | b64decode is search('(?m)^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+')
         fail_msg: "pam_pwhistory.so line missing in /etc/pam.d/common-password"
-
-    - name: Slurp /etc/security/pwquality.conf for content assertions (Debian)
-      ansible.builtin.slurp:
-        src: /etc/security/pwquality.conf
-      register: verify_pam_pwquality_conf
-      become: true
-
-    - name: Set _pam_pwquality_content fact (Debian)
-      ansible.builtin.set_fact:
-        _pam_pwquality_content: "{{ verify_pam_pwquality_conf['content'] | b64decode }}"
-
-    - name: Assert pwquality.conf minlen (Debian)
-      ansible.builtin.assert:
-        that: _pam_pwquality_content is search('(?m)^minlen = {{ system_pwquality_minlen }}$')
-        fail_msg: "pwquality.conf minlen={{ system_pwquality_minlen }} not found in /etc/security/pwquality.conf"
-
-    - name: Assert pwquality.conf enforce_for_root (Debian)
-      ansible.builtin.assert:
-        that: _pam_pwquality_content is search('(?m)^enforce_for_root')
-        fail_msg: "pwquality.conf enforce_for_root not found in /etc/security/pwquality.conf"
 
     # --- PAM faillock (Debian, live-stack checks; skipped in Podman CI where system_is_container=true) ---
     - name: Check pam_faillock.so preauth line in common-auth (Debian)
