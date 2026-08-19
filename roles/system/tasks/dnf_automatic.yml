@@ -4,45 +4,61 @@
 # CSB machines are managed by Red Hat IT via RHSM/Satellite with their own
 # maintenance windows. Running dnf-automatic in parallel could install packages
 # ahead of IT's approval cycle or outside maintenance windows.
-- name: Install dnf-automatic
-  ansible.builtin.dnf:
-    name: "{{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}"
-    state: present
-  register: system_dnf_automatic_installed
+- name: Install and enable dnf-automatic
   when:
     - is_dnf
     - not csb_rhel
     - not system_is_container  # RPM post-install calls systemctl daemon-reload, crashes Podman container systemd
-  failed_when: false
+  block:
+    - name: Install dnf-automatic
+      ansible.builtin.dnf:
+        name: "{{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}"
+        state: present
+      register: system_dnf_automatic_installed
 
-- name: Deploy dnf-automatic config
-  ansible.builtin.template:
-    src: dnf-automatic.conf.j2
-    dest: /etc/dnf/automatic.conf
-    mode: "0644"
-  notify: Restart dnf-automatic timer
-  when:
-    - is_dnf
-    - not csb_rhel
-    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
+    - name: Deploy dnf-automatic config
+      ansible.builtin.template:
+        src: dnf-automatic.conf.j2
+        dest: /etc/dnf/automatic.conf
+        mode: "0644"
+      notify: Restart dnf-automatic timer
 
-- name: Set dnf-automatic service/timer name facts
-  ansible.builtin.set_fact:
-    _dnf_auto_svc: "{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}"
-    _dnf_auto_timer: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
-  when: is_dnf
+    - name: Set dnf-automatic service/timer name facts
+      ansible.builtin.set_fact:
+        _dnf_auto_svc: "{{ 'dnf5-automatic.service' if is_dnf5 else 'dnf-automatic.service' }}"
+        _dnf_auto_timer: "{{ 'dnf5-automatic.timer' if is_dnf5 else 'dnf-automatic.timer' }}"
 
-- name: Enable dnf-automatic timer
-  ansible.builtin.systemd:
-    name: "{{ _dnf_auto_timer }}"
-    state: started
-    enabled: true
-  when:
-    - is_dnf
-    - not csb_rhel
-    - system_dnf_automatic_installed.rc is defined and system_dnf_automatic_installed.rc == 0
-    - not system_is_container
-  failed_when: false
+    - name: Enable dnf-automatic timer
+      ansible.builtin.systemd:
+        name: "{{ _dnf_auto_timer }}"
+        state: started
+        enabled: true
+
+  rescue:
+    - name: Record dnf-automatic install/enable failure (CSB restriction)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: system
+        _csb_task_name: "Install and enable dnf-automatic"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Check repo connectivity and re-run provisioning. Automatic security updates
+          are disabled until dnf-automatic is installed and enabled.
+        _csb_ticket_summary: "Cannot install dnf-automatic on CSB"
+        _csb_ticket_body: >-
+          Attempted to install {{ 'dnf5-plugin-automatic' if is_dnf5 else 'dnf-automatic' }}
+          but installation failed. Error: {{ ansible_failed_result.msg | default('unknown error') }}.
+          This may indicate repo connectivity issues or package unavailability.
+          Automatic security updates are disabled without dnf-automatic.
+      when: csb_detected
+
+    - name: Fail on dnf-automatic install/enable failure (standard Fedora)
+      ansible.builtin.fail:
+        msg: >-
+          dnf-automatic install or enable failed. Automatic security updates are a critical
+          hardening requirement. Error: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Fix repo connectivity and re-run provisioning.
+      when: not csb_detected
 
 # --- AIDE database update after dnf-automatic (prevent false-positive alerts) ---
 - name: Ensure dnf-automatic service drop-in directory exists
