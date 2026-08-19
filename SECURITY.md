@@ -552,6 +552,20 @@ See also: `CLAUDE.md` § "CI Security" for vendored collections context and `SEC
   verification; Anthropic uses a rolling installer without pinned releases
   (note: binary SHA256 verification in the Scope section refers to other
   tools; the Claude Code installer is the deliberate exception)
+- **SHA256-only verification for tkn, ec, and operator-sdk** — Three work-profile
+  binaries (tkn, ec, operator-sdk) use SHA256 checksum verification without cryptographic
+  signatures or Sigstore attestations. **tkn** (Tekton CLI): tektoncd/cli releases publish
+  only plain `checksums.txt` with no cosign bundles or GPG signatures. **ec** (Enterprise
+  Contract CLI): conforma/cli releases publish only plain `.sha256` files with no Sigstore
+  attestations. **operator-sdk**: operator-framework/operator-sdk releases publish GPG-signed
+  `checksums.txt.asc` but the playbook does not yet verify GPG signatures (no public key
+  pinning). In contrast, properly verified binaries (sops, cosign, actionlint, zizmor) use
+  full cosign bundle verification or GitHub attestation via `gh CLI`. SHA256-only verification
+  defends against CDN corruption but NOT against a compromised GitHub releases CDN or
+  maintainer account (attacker can upload matching binary + updated SHA256 pair). Mitigation:
+  inspect upstream releases manually in high-security environments before updating SHA256
+  values in `roles/packages/defaults/main.yml`. See `roles/packages/tasks/install_standalone_binaries.yml`
+  TODO comments at lines 655 (tkn), 691 (ec), and 213 (operator-sdk) for upstream tracking.
 - **Secure Boot + GRUB bootloader password (CIS 1.4.2)** — Kernel `lockdown=integrity`
   without Secure Boot is weakened by an unprotected GRUB bootloader. Ansible now enforces GRUB
   superuser password protection (opt-in via `system_grub_password_enabled` in config.yml) to prevent
