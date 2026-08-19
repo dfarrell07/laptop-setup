@@ -23,7 +23,7 @@
         path: "{{ ansible_facts['user_dir'] }}/.cache"
       register: _subctl_tmpdir
 
-    - name: Install subctl version with temp GOBIN
+    - name: Install subctl version
       ansible.builtin.command:
         cmd: go install github.com/submariner-io/subctl/cmd/subctl@v{{ item.version }}
       timeout: 600
@@ -221,7 +221,7 @@
           TMPDIR=$(mktemp -d)
           tar -C "$TMPDIR" -xf "$TARBALL"
           BINARY=$(find "$TMPDIR" -name "subctl-{{ item.tag }}*-linux-amd64" -type f | head -1)
-          [[ -z "$BINARY" ]] && exit 0
+          [[ -z "$BINARY" ]] && { echo "ERROR: subctl binary not found in extracted tarball"; exit 1; }
           install -m755 "$BINARY" "{{ ansible_facts['user_dir'] }}/.local/bin/subctl{{ item.suffix }}"
           rm -rf "$TMPDIR"
           # Clean up all matching extracted tarballs to prevent orphans
@@ -230,7 +230,6 @@
         executable: /bin/bash
       register: _pkg_subctl_install
       changed_when: '"INSTALLED" in _pkg_subctl_install.stdout'
-      failed_when: false
       when: >-
         _subctl_tarball_path and
         (packages_subctl_rh_version_check.results[loop_idx].rc != 0 or
