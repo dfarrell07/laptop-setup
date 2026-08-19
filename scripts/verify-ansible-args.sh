@@ -411,6 +411,16 @@ export ANSIBLE_BECOME_PLUGINS=""      # prevent ANSIBLE_BECOME_PLUGINS=/tmp/evil
 export ANSIBLE_TERMINAL_PLUGINS=""    # defence-in-depth; terminal plugins process connection output; unguarded path allows attacker hook into output stream
 unset PYTHONPATH          # attacker-set PYTHONPATH can shadow ansible.* modules at import time
 unset ANSIBLE_PYTHON_INTERPRETER  # attacker-controlled interpreter runs arbitrary code as Ansible
+# SECURITY: clear ANSIBLE_INTERPRETER_PYTHON_FALLBACK — the ordered candidate list that
+# discover_interpreter() walks under interpreter_python=auto_silent when no concrete
+# ansible_python_interpreter is present in task_vars. For connection:local this is blocked
+# by the inventory pin (ansible_python_interpreter: "{{ ansible_playbook_python }}")
+# which causes get_config_value('INTERPRETER_PYTHON', variables=task_vars) to return a
+# concrete path, never reaching discover_interpreter(). This unset is defence-in-depth:
+# if the inventory pin were absent or circumvented, ANSIBLE_INTERPRETER_PYTHON_FALLBACK=
+# "/tmp/evil python3" would cause Ansible to run /tmp/evil for module staging; with
+# become:true, the evil interpreter controls AnsiballZ content fed to sudo → root RCE.
+unset ANSIBLE_INTERPRETER_PYTHON_FALLBACK
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT  # linker injection — .so hijacks user-context ansible-playbook before sudo strips it from become
 unset NODE_OPTIONS NODE_PATH NPM_CONFIG_REGISTRY NPM_CONFIG_CACHE NPM_CONFIG_PREFIX  # Node/npm injection — NODE_OPTIONS=--require /tmp/evil.js loads into any npm/node child process (e.g. npx commitlint, future node tooling); NPM_CONFIG_REGISTRY/CACHE/PREFIX redirect package fetches or writes to attacker-controlled paths; defense-in-depth for ansible-playbook child processes (Makefile unexport is the load-bearing fix)
 unset TMPDIR TEMP TMP  # TMPDIR redirection attack: attacker sets TMPDIR=/tmp/evil; Python tempfile.gettempdir() checks TMPDIR first, so Ansible AnsiballZ module staging writes .py files into attacker-controlled dir; inotifywait race replaces module between write and sudo exec, achieving root code execution
@@ -478,6 +488,7 @@ unset DBUS_SYSTEM_BUS_ADDRESS  # D-Bus system bus socket poisoning — libdbus r
 export ANSIBLE_BECOME_METHOD=sudo  # pin become_method — ANSIBLE_BECOME_METHOD=su activates the su plugin which reads its own executable path from ANSIBLE_SU_EXE; neither is constrained by become_exe=/usr/bin/sudo in ansible.cfg, so an attacker can route all become tasks (system, packages, repos_dnf roles) through an arbitrary binary; pinning to sudo ensures only the sudo plugin is used
 unset ANSIBLE_SU_EXE ANSIBLE_PFEXEC_EXE ANSIBLE_SUDO_EXE  # remove per-plugin exe escape paths — each alternative become plugin (su, pfexec, sudo) exposes its own executable env var; clearing all three prevents ANSIBLE_BECOME_METHOD override from activating a residual attacker-controlled executable even if pinning above is somehow circumvented
 unset WGETRC  # wget config injection — WGETRC=/tmp/evil.rc redirects wget output path or disables certificate checking; neither shell task has an environment: block so the var is fully inherited; unsetting forces wget to use compiled-in defaults (CURL_HOME already cleared above with CURL_CA_BUNDLE)
+unset EDITOR VISUAL  # editor injection — EDITOR/VISUAL inherited by ansible-vault edit, git hooks, and any task that invokes $EDITOR
 export PATH=/usr/local/bin:/usr/bin:/bin  # pin PATH — prevents PATH=/attacker:$PATH hijacking args[0] resolution
 export ANSIBLE_SHELL_EXECUTABLE=/bin/bash  # pin shell binary — ANSIBLE_SHELL_EXECUTABLE overrides the shell used for every shell: task and AnsiballZ module invocation across all 13 roles, including become:true plays; ANSIBLE_BECOME_EXE does not constrain it; 'ANSIBLE_SHELL_EXECUTABLE=/tmp/evil_sh make all' routes all task execution through an arbitrary binary with full access to become-elevated module staging
 unset ANSIBLE_SHELL_TYPE                   # prevent shell negotiation override — ANSIBLE_SHELL_TYPE=fish/csh activates alternative quoting/escaping paths in shell plugins, potentially breaking module command construction or activating code paths with different security properties; always negotiate bash (default)
