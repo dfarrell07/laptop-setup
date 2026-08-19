@@ -533,7 +533,7 @@
 # Guard-logic regression tests only — they catch future false-positive bugs in csb_detect.yml, not gaps in coverage today.
 - name: Assert csb_detected is false on non-CSB test host
   ansible.builtin.assert:
-    that: not (csb_detected)
+    that: not (csb_detected | default(false))
     fail_msg: "csb_detected is true on non-CSB molecule host — csb_detect.yml regression"
   when:
     - ansible_distribution in ['Fedora', 'Debian']
@@ -549,7 +549,7 @@
 
 - name: Assert fapolicyd is not running on non-CSB molecule host
   ansible.builtin.assert:
-    that: not (fapolicyd_installed)
+    that: not (fapolicyd_installed | default(false))
     fail_msg: "fapolicyd_installed is true on non-CSB molecule host — CSB detection false positive"
   when:
     - ansible_distribution in ['Fedora', 'Debian']
@@ -573,6 +573,7 @@
     fail_msg: >-
       fstab entry for /dev/shm absent or missing nosuid (CIS 1.1.7.1) —
       expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_nosuid.rc | default('skipped') }})
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -595,6 +596,7 @@
     fail_msg: >-
       fstab entry for /dev/shm absent or missing nodev (CIS 1.1.7.2) —
       expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_nodev.rc | default('skipped') }})
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
@@ -617,6 +619,7 @@
     fail_msg: >-
       fstab entry for /dev/shm absent or missing noexec (CIS 1.1.7.3) —
       expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_noexec.rc | default('skipped') }})
   when:
     - ansible_system == 'Linux'
     - not csb_rhel
