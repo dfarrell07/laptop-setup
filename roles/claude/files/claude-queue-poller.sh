@@ -91,7 +91,7 @@ ISSUES=$(gh issue list --repo "$TASK_QUEUE_REPO" \
   --label queued --state open \
   --json number,title,body,author \
   --jq 'sort_by(.number) | .[]' 2>/dev/null) || {
-  log "Failed to fetch issues (network error?), exiting"
+  log "Failed to fetch issues (network error?), exiting (will retry on next timer fire; check: gh auth status)"
   exit 0
 }
 
@@ -180,7 +180,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
   gh issue edit "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --remove-label queued --add-label processing \
-    || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping"; continue; }
+    || { log "WARNING: could not label #$ISSUE_NUM as processing, skipping (check: gh auth status, repo write permission, 'processing' label exists)"; continue; }
   gh issue comment "$ISSUE_NUM" --repo "$TASK_QUEUE_REPO" \
     --body "Processing started at $(date -Iseconds)${HOST_LABEL:+ on ${HOST_LABEL}}" || true
 
@@ -242,7 +242,7 @@ echo "$ISSUES" | jq -c '.' | while IFS= read -r ISSUE; do
 
     log "Issue #$ISSUE_NUM completed: $PR_URL"
   ) || {
-    log "Issue #$ISSUE_NUM: subshell failed"
+    log "Issue #$ISSUE_NUM: subshell failed — see $LOG_DIR/issue-${ISSUE_NUM}-stderr.log"
     mark_issue_failed "$ISSUE_NUM" "Internal error: git-push or PR creation failed (post-PR label/comment/close may also have failed). Check logs at $LOG_DIR/issue-${ISSUE_NUM}-stderr.log."
     rm -f "$TMPFILE"
   }
