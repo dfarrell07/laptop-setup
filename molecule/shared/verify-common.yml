@@ -432,13 +432,19 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
   register: verify_ssh_agent
-  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+  when: ansible_system == 'Linux'
 
 - name: Assert SSH agent service deployed
   ansible.builtin.assert:
     that: verify_ssh_agent.stat.exists
     fail_msg: "SSH agent systemd user service not deployed"
   when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert SSH agent service file present (all scenarios)
+  ansible.builtin.assert:
+    that: verify_ssh_agent.stat.exists
+    fail_msg: "SSH agent service file not deployed to user config dir"
+  when: ansible_system == 'Linux'
 
 - name: Verify ripgrep config deployed
   ansible.builtin.stat:
@@ -489,13 +495,19 @@
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
   register: verify_ssh_agent_envd
-  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+  when: ansible_system == 'Linux'
 
 - name: Assert ssh-agent environment.d config deployed (Linux)
   ansible.builtin.assert:
     that: verify_ssh_agent_envd.stat.exists
     fail_msg: "ssh-agent.conf not deployed — SSH_AUTH_SOCK will be missing in GUI processes"
   when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert ssh-agent.conf file present (all scenarios)
+  ansible.builtin.assert:
+    that: verify_ssh_agent_envd.stat.exists
+    fail_msg: "ssh-agent.conf not deployed to user config dir"
+  when: ansible_system == 'Linux'
 
 - name: Read ssh-agent.conf content
   ansible.builtin.slurp:
