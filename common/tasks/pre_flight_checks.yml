@@ -2640,6 +2640,25 @@
               system_resolved_multicast_dns={{ system_resolved_multicast_dns | default('DEFAULT') }}.
           tags: [always]
 
+        - name: Assert chrony vars in play namespace contain only safe characters (-e override guard)
+          ansible.builtin.assert:
+            that:
+              - system_chrony_nts_servers | default([]) | map('string') | select('search', '[^a-zA-Z0-9._:-]') | list | length == 0
+              - system_chrony_authselectmode | default('') | string is match('^(prefer|require)$|^$')
+              - system_chrony_fallback_pool | default('') | string is match('^[a-zA-Z0-9._-]*$')
+              - system_chrony_makestep | default('') | string is match('^[0-9. -]*$')
+            fail_msg: >-
+              SECURITY: system_chrony_nts_servers, system_chrony_authselectmode,
+              system_chrony_fallback_pool, or system_chrony_makestep in the play namespace
+              contains an unsafe value (possibly set via -e flag, bypassing config.yml
+              pre-flight validation and the system_chrony_nts_servers_confirmed gate, which
+              only fires when the variable appears in config.yml). These values are rendered
+              verbatim into /etc/chrony.conf; an attacker-controlled NTS hostname enables
+              authenticated-timestamp manipulation (TLS time-window attacks, TOTP bypasses).
+              Allowed: NTS hostnames alphanumeric/dot/hyphen/colon; authselectmode prefer|require;
+              fallback_pool alphanumeric/dot/hyphen; makestep digits/dot/space/hyphen.
+          tags: [always]
+
         - name: Assert notes_repo_path in play namespace is a safe path (-e override guard)
           ansible.builtin.assert:
             that:

@@ -50,7 +50,7 @@
         fail_msg: "system_sysctl_extra_additional must be a dict, not {{ system_sysctl_extra_additional | type_debug }}"
       when: system_sysctl_extra_additional is defined
 
-    - name: Validate system_core_pattern is a plain file path (no pipe = no RCE via coredump handler)
+    - name: Validate system_core_pattern is a safe file path (no pipe)
       # Bare | enables kernel pipe mode (RCE risk); |/path also rejected — playbook default uses
       # role-level default (systemd-coredump); config.yml overrides must use safe file paths only.
       ansible.builtin.assert:
@@ -221,7 +221,7 @@
       # EPERM for kernel.unprivileged_bpf_disabled (write-locked on Fedora 44) is
       # tolerated in the handler's failed_when (handlers/main.yml).
 
-- name: Set ip_forward on RHEL CSB (Tailscale/kind require it; SCAP does not set it)
+- name: Set ip_forward on RHEL CSB (Tailscale/kind; SCAP skip)
   ansible.builtin.sysctl:
     name: "{{ item.key }}"
     value: "{{ item.value | string }}"
