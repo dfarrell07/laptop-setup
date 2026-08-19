@@ -303,6 +303,27 @@
     mode: "0644"
   when: is_linux
 
+# SECURITY: Deploy registries.conf to enforce fully-qualified image references.
+# Clears unqualified-search-registries so `podman pull nginx` (short/unqualified name)
+# fails rather than silently querying docker.io where namespace squatting can deliver
+# a malicious image. Users must use full names (e.g. docker.io/library/nginx).
+- name: Deploy registries.conf to enforce fully-qualified image references
+  ansible.builtin.template:
+    src: registries.conf.j2
+    dest: "{{ containers_config_dir }}/registries.conf"
+    mode: "0644"
+  when:
+    - is_linux
+    - containers_enforce_fqin | bool
+
+- name: Remove registries.conf (fully-qualified image enforcement disabled)
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/registries.conf"
+    state: absent
+  when:
+    - is_linux
+    - not (containers_enforce_fqin | bool)
+
 # --- periodic container storage cleanup ---
 - name: Set systemd user unit directory fact
   ansible.builtin.set_fact:

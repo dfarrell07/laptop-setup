@@ -10,7 +10,7 @@
 #   1. Makefile VERIFY_AND_RUN calls this script (Makefile layer — blocks direct users)
 #   2. site.yml Play 0 has tags: [always] with pre-flight checks (Ansible layer)
 #   3. site.yml Play 2 re-runs pre-flight checks (Ansible layer — survives --skip-tags always)
-#   4. roles/claude/tasks/main.yml has no-tag defense-in-depth assertion (role layer)
+#   4. Each role's tasks/main.yml has a no-tag defense-in-depth assertion (role layer)
 
 set -euo pipefail
 
