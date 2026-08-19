@@ -19,7 +19,7 @@
 
 # On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
 # /etc/kernel/cmdline edits are skipped. Fedora hybrid CSB runs its own kernel — lockdown applies.
-- name: Skip grubby kernel param tasks on CSB (IT manages boot config)
+- name: Log RHEL CSB: grubby/kernel-cmdline hardening skipped (IT-managed)
   ansible.builtin.debug:
     verbosity: 1
     msg: "RHEL CSB detected — skipping grubby/kernel-cmdline hardening (IT manages RHEL boot config)"
