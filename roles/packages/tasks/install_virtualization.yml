@@ -102,8 +102,8 @@
   when:
     - real_user_id is defined
     - real_user_id | length > 0
-    - "'libvirt' in ansible_etc_group"
-    - "'kvm' in ansible_etc_group"
+    - "'libvirt' in ansible_facts.getent_group"
+    - "'kvm' in ansible_facts.getent_group"
   # No failed_when:false — groups are confirmed present, failures are real errors.
   register: _virt_group_add
 
