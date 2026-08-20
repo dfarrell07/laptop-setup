@@ -184,6 +184,13 @@
   ansible.builtin.import_tasks: hardening_core.yml
 
 # --- Load kernel modules for kind AFTER sysctl.yml deploys 90-hardening.conf ---
+# WARNING: system_modules_disabled defaults to 1 (ratchet ENABLED). After provisioning
+# completes and handlers flush (triggering sysctl --system), ALL kernel module loading
+# is blocked until reboot. For dev machines that load modules at runtime (VirtualBox
+# vboxdrv, kvm, custom DKMS drivers, hot-plug devices), set system_modules_disabled: 0
+# in config.yml BEFORE first provision. See roles/system/defaults/main.yml:626 for
+# security rationale (closes pre-reboot init_module() attack window).
+#
 # kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
 # Task order satisfies two constraints:
 # 1. kernel_modules_kind.yml runs AFTER sysctl.yml deploys 90-hardening.conf

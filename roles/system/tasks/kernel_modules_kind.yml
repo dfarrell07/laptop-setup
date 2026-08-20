@@ -93,6 +93,10 @@
     - br_netfilter
     - nf_conntrack  # explicit load so nf_conntrack_max sysctl applies even if firewalld fails to start
     - overlay
+    - kvm_amd  # KVM virtualization (AMD) — preload before modules_disabled ratchet; failed_when:false below tolerates kvm_intel mismatch
+    - kvm_intel  # KVM virtualization (Intel) — preload before modules_disabled ratchet; failed_when:false below tolerates kvm_amd mismatch
+    - vhost_net  # vhost kernel acceleration for VMs
+    - vhost_vsock  # VM sockets for host-guest communication
   when:
     - not csb_rhel  # kind runs inside dev container on CSB; persistent modules on host unnecessary
     - not system_is_container
