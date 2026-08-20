@@ -2,6 +2,10 @@
 # roles/packages/tasks/install_krew.yml
 # Install krew (kubectl plugin manager) — bootstrap and upgrade.
 # Included from main.yml with when: _packages_linux_x86_work.
+#
+# NOTE: krew plugin installation (ctx, ns) and their post-install SHA256
+# assertions are in main.yml in the "Krew post-install" block (after the
+# install_subctl_versions.yml include). Audit plugin integrity there.
 
 - name: Install krew
   block:

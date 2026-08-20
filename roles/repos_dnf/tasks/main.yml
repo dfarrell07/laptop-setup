@@ -357,6 +357,11 @@
           Continuing playbook execution.
       when: not csb_rhel
 
+# RPM Fusion free provides multimedia codecs (H.264/AAC, ffmpeg, VLC) and is allowed
+# on hybrid Fedora CSB (csb_detected=true, csb_rhel=false) where the user manages their
+# own Fedora install. Guard is 'not csb_rhel' (not 'not csb_detected') intentionally:
+# hybrid CSB Fedora is user-managed and IT does not restrict third-party Fedora repos here.
+# If your IT policy prohibits RPM Fusion, set repo_rpmfusion_free: false in config.yml.
 - name: Enable RPM Fusion free repo
   when:
     - repo_rpmfusion_free
@@ -422,6 +427,10 @@
           installs on Fedora 41+ before the release package can deliver its key) or a
           transient network error (DNS timeout, connectivity). Continuing playbook execution.
 
+# RPM Fusion nonfree provides proprietary firmware and drivers (NVIDIA, Broadcom) and
+# is allowed on hybrid Fedora CSB for the same reason as the free repo above.
+# Guard is 'not csb_rhel' intentionally. Set repo_rpmfusion_nonfree: false in config.yml
+# to opt out if your IT policy prohibits nonfree repos.
 - name: Enable RPM Fusion nonfree repo
   when:
     - repo_rpmfusion_nonfree
@@ -443,7 +452,7 @@
           curl -fsSL "$URL" -o "$KEYFILE"
           FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
           if [ -z "$FP" ]; then exit 1; fi
-          if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
+          if [ "$FP" = "{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint | upper }}" ]; then
             rpm --import "$KEYFILE"
           else
             exit 1
@@ -492,6 +501,31 @@
     - repo_tailscale
     - not csb_rhel
   block:
+    - name: Create secure temporary directory for Tailscale GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _tailscale_gpg
+      register: _tailscale_gpg_tmp_dir
+    - name: Fetch and verify Tailscale GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          TS_PATH="{{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}"
+          KEYFILE="{{ _tailscale_gpg_tmp_dir.path }}/key.gpg"
+          curl -fsSL "https://pkgs.tailscale.com/stable/${TS_PATH}/repo.gpg" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null | grep "^fpr" | cut -d: -f10)
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ repos_dnf_tailscale_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+    - name: Clean up Tailscale GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _tailscale_gpg_tmp_dir.path }}"
+        state: absent
+      when: _tailscale_gpg_tmp_dir is defined
     - name: Add Tailscale stable repo
       vars:
         _ts_path: >-
@@ -506,6 +540,14 @@
         gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
         enabled: true
   rescue:
+    - name: Remove Tailscale GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _tailscale_gpg_tmp_dir.path }}"
+        state: absent
+      failed_when: false
+      when:
+        - _tailscale_gpg_tmp_dir is defined
+        - _tailscale_gpg_tmp_dir.path is defined
     - name: Warn Tailscale repo failed (non-CSB network error)
       ansible.builtin.debug:
         msg: >-
@@ -514,3 +556,53 @@
           This is likely a transient network error (DNS timeout, expired GPG key).
           Continuing playbook execution.
       when: not csb_rhel
+
+# Cleanup: remove stale .repo files for repos whose boolean was flipped to false.
+# yum_repository state: absent deletes /etc/yum.repos.d/<name>.repo idempotently.
+- name: Remove gh-cli repo when disabled
+  ansible.builtin.yum_repository:
+    name: gh-cli
+    state: absent
+  when: not repo_gh_cli
+
+- name: Remove google-chrome repo when disabled
+  ansible.builtin.yum_repository:
+    name: google-chrome
+    state: absent
+  when: not repo_google_chrome
+
+- name: Remove google-cloud-cli repo when disabled
+  ansible.builtin.yum_repository:
+    name: google-cloud-cli
+    state: absent
+  when: not repo_google_cloud_sdk
+
+- name: Remove mullvad repo when disabled
+  ansible.builtin.yum_repository:
+    name: mullvad
+    state: absent
+  when: not repo_mullvad
+
+- name: Remove docker-ce repo when disabled
+  ansible.builtin.yum_repository:
+    name: docker-ce
+    state: absent
+  when: not repo_docker_ce
+
+- name: Remove tailscale-stable repo when disabled
+  ansible.builtin.yum_repository:
+    name: tailscale-stable
+    state: absent
+  when: not repo_tailscale
+
+- name: Remove acli repo when disabled
+  ansible.builtin.yum_repository:
+    name: acli
+    state: absent
+  when: repos_dnf_acli_baseurl is not defined
+
+- name: Remove redhat-internal repo when disabled
+  ansible.builtin.yum_repository:
+    name: redhat-internal
+    state: absent
+  when: not (repo_redhat and repos_dnf_redhat_baseurl is defined)

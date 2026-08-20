@@ -65,11 +65,75 @@
     HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
 
 
+- name: "Validate GOTOOLCHAIN=auto: probe proxy.golang.org for toolchain reachability"
+  # When GOTOOLCHAIN=auto and the installed Go is older than work tools require (1.26+
+  # for gopls; 1.25+ for gofumpt/govulncheck), go install silently downloads a newer
+  # toolchain from proxy.golang.org mid-loop.
+  # If that endpoint is blocked on the CSB network (even via HTTP proxy), the failure
+  # message is an opaque go-module error with no indication to set GOTOOLCHAIN=local.
+  # Probe early so the user gets an actionable message before the install loop starts.
+  ansible.builtin.uri:
+    url: "https://proxy.golang.org/golang.org/toolchain/@latest"
+    timeout: 10
+    return_content: false
+  changed_when: false
+  failed_when: false
+  register: _gotoolchain_proxy_probe
+  environment:
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+  when:
+    - packages_gotoolchain == 'auto'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
+    - _golang_installed_version is version('1.26', '<')
+
+- name: "Fail early: proxy.golang.org unreachable with GOTOOLCHAIN=auto (toolchain download required)"
+  ansible.builtin.fail:
+    msg: >-
+      GOTOOLCHAIN=auto but proxy.golang.org is unreachable
+      (HTTP status: {{ _gotoolchain_proxy_probe.status | default('network error') }}).
+      The installed Go ({{ _golang_installed_version }}) is older than the Go 1.26+ required
+      by gopls. Without proxy.golang.org, `go install` will fail mid-provisioning
+      with an opaque toolchain download error.
+      Fix options:
+        1. Set packages_gotoolchain: local in config.yml and upgrade golang to Go 1.26+
+           (dnf upgrade golang).
+        2. Ensure proxy.golang.org is reachable, directly or via HTTPS_PROXY.
+  when:
+    - packages_gotoolchain == 'auto'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
+    - _golang_installed_version is version('1.26', '<')
+    - _gotoolchain_proxy_probe is defined
+    - _gotoolchain_proxy_probe.status | default(-1) | int != 200
+
 - name: Create GOTMPDIR directory for Go tool compilation
   ansible.builtin.file:
     path: "{{ ansible_facts['user_dir'] }}/tmp"
     state: directory
     mode: "0700"
+
+- name: Assert Go version sufficient for work tools when GOTOOLCHAIN=local
+  # gopls requires Go 1.26+; gofumpt/govulncheck require Go 1.25+. Fedora 44 ships Go 1.24.
+  # With GOTOOLCHAIN=local, go install exits non-zero for modules requiring a newer toolchain,
+  # causing an opaque "Go tool install failed" error.  Fail early with an actionable message.
+  ansible.builtin.assert:
+    that:
+      - _golang_installed_version is version('1.26', '>=')
+    fail_msg: >-
+      GOTOOLCHAIN=local (packages_gotoolchain default) but the installed Go toolchain
+      ({{ _golang_installed_version }}) is older than the minimum required by work-profile tools
+      (gopls@v{{ packages_gopls_version }} needs Go 1.26+).
+      Set packages_gotoolchain: auto in config.yml to allow automatic toolchain download,
+      or upgrade the golang package to Go 1.26+.
+  when:
+    - packages_gotoolchain == 'local'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
 
 - name: Install Go tools
   # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
@@ -87,7 +151,7 @@
     GOTOOLCHAIN: "{{ packages_gotoolchain }}"
     HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
     HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"  # omit preserves inherited proxy; only override when explicitly configured
-    GOPROXY: 'https://proxy.golang.org,direct'  # security-critical: pin proxy, prevent GOPROXY env injection
+    GOPROXY: "{{ packages_goproxy }}"  # security-critical: pin proxy, prevent GOPROXY env injection; override packages_goproxy in config.yml for corporate mirrors
     GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
     GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
     GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical

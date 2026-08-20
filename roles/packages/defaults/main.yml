@@ -126,6 +126,9 @@ packages_support_work:
   - gdb      # GNU debugger; general debugging (attach to processes, coredumps)
   - perf     # kernel performance profiling
   - bpftrace # eBPF dynamic tracing; requires CAP_SYS_ADMIN for kernel tracing
+             # NOTE: kernel lockdown=integrity (active by default) blocks kprobe/kretprobe programs
+             # (BPF_PROG_TYPE_KPROBE) with EPERM; use tracepoints (tracepoint:...) or uprobes instead,
+             # or set system_kernel_lockdown: '' in config.yml + re-run make system for a debug session
   - bpftool  # eBPF program/map introspection
 
 packages_apt:
@@ -349,6 +352,7 @@ packages_krew_plugin_ns_sha256: "bf81b4a515e96bfb1878e3b85950bd5742d96a5d6b398e7
 
 packages_gosumdb: 'sum.golang.org'  # GOSUMDB server; override with corporate proxy (e.g. sum.myproxy.com)
 packages_gosumdb_proxy: ''  # GOSUMDB-specific proxy (optional; independent of network_proxied); if set, overrides network_proxied proxy detection
+packages_goproxy: 'https://proxy.golang.org,direct'  # GOPROXY value for go install; override with corporate mirror (e.g. 'https://goproxy.corp.com,direct')
 
 packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
 install_virtualization: true  # fallback; authoritative value in group_vars/all/vars.yml

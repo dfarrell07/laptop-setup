@@ -18,11 +18,17 @@ repo_tailscale: true
 
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 
-# RPM Fusion GPG key fingerprint (free and nonfree repos share the same key)
-# Pinned to detect MITM attacks on initial key fetch from rpmfusion.org.
-# If GPG key is compromised at fetch time, subsequent package verification fails.
-# Fingerprint valid for: RPM Fusion free and nonfree repos (Fedora 44+)
+# RPM Fusion GPG key fingerprints — pinned to detect MITM on initial key fetch.
+# As of Fedora 44+, free and nonfree share the same signing key; both vars are
+# intentionally identical. If RPM Fusion ever re-splits keys (as they did pre-F38),
+# override repos_dnf_rpmfusion_nonfree_gpg_fingerprint independently in config.yml.
 repos_dnf_rpmfusion_gpg_fingerprint: "79BDB8874A068716907325C664A4849E4C7033EA"
+repos_dnf_rpmfusion_nonfree_gpg_fingerprint: "{{ repos_dnf_rpmfusion_gpg_fingerprint }}"
+
+# Tailscale GPG key fingerprint — pinned to detect MITM on initial key fetch.
+# Fingerprint valid for: https://pkgs.tailscale.com/stable/fedora/repo.gpg
+# To refresh: curl -fsSL https://pkgs.tailscale.com/stable/fedora/repo.gpg | gpg --show-keys --with-colons | grep "^fpr" | cut -d: -f10 | head -1
+repos_dnf_tailscale_gpg_fingerprint: "2596A99EAAB33821893C0A79458CA832957F5868"
 
 # Red Hat internal GPG key fingerprint (work profile only)
 # Pinned to detect MITM attacks on initial key fetch from internal Red Hat domains.
