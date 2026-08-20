@@ -371,7 +371,7 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ _dotfiles_envd_files.files }}"
-      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf']
+      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf', 'xdg.conf']
       register: _dotfiles_envd_removed
 
     - name: Warn on removed unmanaged files in ~/.config/environment.d
