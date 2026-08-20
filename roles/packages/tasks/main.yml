@@ -128,6 +128,27 @@
 - name: Install dnf packages
   ansible.builtin.include_tasks: install_dnf_packages.yml
 
+# Re-check GitHub CLI availability POST-install to overwrite pre-flight false value.
+# Pre-flight checks run BEFORE packages role installs gh via DNF; the idempotency
+# guard prevents re-checking. Attestation verification tasks (actionlint, zizmor)
+# gate on packages_gh_available; without this post-install check they skip on first
+# provision even after gh is successfully installed.
+- name: Check GitHub CLI availability post-install (attestation verification prerequisite)
+  when:
+    - is_dnf
+    - profile == 'work'
+  block:
+    - name: Check GitHub CLI in PATH after package installation
+      ansible.builtin.command: which gh
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      register: _packages_gh_postinstall_check
+
+    - name: Set packages_gh_available fact (overwrite pre-flight value)
+      ansible.builtin.set_fact:
+        packages_gh_available: "{{ _packages_gh_postinstall_check.rc == 0 }}"
+
 # Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
 # was just installed in this play. The system role (Play 1) also attempts this, but
 # on first provision bpfman is not yet installed when Play 1 runs, so that attempt
