@@ -50,7 +50,7 @@
     fail_msg: >-
       claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
 
-- name: Warn when claude_pinned_version is unset (supply chain advisory)
+- name: Warn when claude_pinned_version is unset (supply chain advisory — sha256 also unset)
   ansible.builtin.debug:
     msg: >-
       SUPPLY CHAIN ADVISORY: claude_pinned_version is not set in config.yml.
@@ -61,6 +61,39 @@
     - claude_install_method == 'native'
     - packages_install_binaries | bool
     - claude_pinned_version | length == 0
+    - claude_install_sha256 | length == 0  # sha256 fail gate fires next; this is informational context
+
+- name: Fail when claude_install_sha256 is set but claude_pinned_version is unset (incomplete version pin)
+  ansible.builtin.fail:
+    msg: >-
+      SUPPLY CHAIN: claude_install_sha256 is set in config.yml but claude_pinned_version is not.
+      The sha256 hash verifies the installer script content but does not pin the Claude Code
+      binary version that script installs — install.sh may download "latest" internally, so
+      different binary versions are installed across provisioning runs even when sha256 passes.
+      Set claude_pinned_version (e.g. "1.0.3") alongside claude_install_sha256 to pin both the
+      installer content and the installed binary version. The CLAUDE_VERSION environment variable
+      is forwarded to the installer when claude_pinned_version is set (main.yml line 143).
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_pinned_version | length == 0
+    - claude_install_sha256 | length > 0
+
+- name: Warn when claude_install_sha256 is unset and Claude already installed (integrity gap)
+  ansible.builtin.debug:
+    msg: >-
+      SUPPLY CHAIN ADVISORY: claude_install_sha256 is not set in config.yml and Claude Code
+      is already installed. SHA256 verification is only enforced on first install or
+      version-pinned upgrades. The currently installed binary has not been hash-verified
+      by Ansible and may have been updated via 'claude update' outside Ansible control.
+      Obtain the SHA256 for the currently installed release and set claude_install_sha256
+      in config.yml, together with claude_pinned_version, so future re-provisions
+      re-verify the installer before running it.
+  when:
+    - claude_install_method == 'native'
+    - claude_install_sha256 | length == 0
+    - claude_version_check.rc == 0
+    - claude_pinned_version | length == 0
 
 - name: Fail when claude_install_sha256 is unset (hash required for integrity verification)
   ansible.builtin.fail:
@@ -68,7 +101,9 @@
       SECURITY: claude_install_sha256 is not set in config.yml.
       Provisioning requires a SHA256 hash for the Claude Code installer to guard against
       CDN compromise, rogue certificates, or DNS/BGP hijacks that could deliver arbitrary
-      shell code. Per-release hash-fetch workflow:
+      shell code. This check runs regardless of whether Claude is already installed — a
+      binary updated via 'claude update' outside Ansible is unverified until a hash is set.
+      Per-release hash-fetch workflow:
         curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
         sha256sum /tmp/claude-install.sh
       Set claude_install_sha256: <hash> in config.yml and re-run provisioning.
@@ -115,7 +150,10 @@
         dest: "{{ _claude_temp_file.path }}"
         mode: "0700"
         timeout: 60
-        checksum: "{{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 | length > 0 else omit }}"
+        # SECURITY: omit branch replaced with a deliberately-invalid dummy hash so that
+        # if the ansible.builtin.fail guard above is bypassed (e.g. --start-at-task),
+        # get_url fails at checksum mismatch rather than silently downloading unverified.
+        checksum: "{{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 | length > 0 else 'sha256:0000000000000000000000000000000000000000000000000000000000000000' }}"
 
     - name: Run Claude Code install script
       ansible.builtin.command:  # noqa: no-changed-when

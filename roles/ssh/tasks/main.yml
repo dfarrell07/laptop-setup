@@ -150,6 +150,26 @@
       Remove the symlink and re-run provisioning.
   tags: [always]
 
+- name: Assert — vault empty and no authorized_keys present (SSH lockout risk after reboot)
+  ansible.builtin.assert:
+    that:
+      - ssh_allow_empty_authorized_keys | default(false)
+    fail_msg: >-
+      CRITICAL: SSH Lockout Risk — Vault Empty + No authorized_keys.
+      vault_ssh_auth_key_pub is not populated AND ~/.ssh/authorized_keys does not exist.
+      After reboot, sshd will be on port 722 with PubkeyAcceptedAlgorithms restricted to
+      ed25519/FIDO2 and PasswordAuthentication disabled. You will have NO SSH access.
+      REQUIRED ACTIONS BEFORE RUNNING 'make all':
+      (1) Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local
+      (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_local.pub >> ~/.ssh/authorized_keys
+      OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
+      To acknowledge this risk and continue without a key (first provision without vault keys),
+      set ssh_allow_empty_authorized_keys: true in config.yml.
+  when:
+    - ssh_auth_key_pub | trim | length == 0
+    - not _ssh_authkeys_stat.stat.exists
+  tags: [always]
+
 - name: Validate existing authorized_keys key types when vault is empty
   when:
     - ssh_auth_key_pub | trim | length == 0  # vault empty
@@ -164,7 +184,7 @@
       ansible.builtin.set_fact:
         _existing_key_types: >-
           {{ (_existing_authkeys.content | b64decode).split('\n')
-             | select('match', '^ssh-')
+             | select('match', '^(ssh|ecdsa|sk-ssh|sk-ecdsa)-')
              | map('regex_replace', '^([^ ]+).*', '\\1')
              | list }}
 
@@ -185,6 +205,31 @@
           (3) Test login with ed25519 key before rebooting
           OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
       when: _existing_key_types | length > 0
+
+- name: Slurp authorized_keys to detect backup keys that exclusive write will remove
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+  register: _pre_excl_authkeys_slurp
+  no_log: true
+  when:
+    - ssh_auth_key_pub | trim | length > 0
+    - _ssh_authkeys_stat.stat.exists
+
+- name: Warn when exclusive authorized_keys write will remove existing backup keys
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: authorized_keys contains keys beyond the vault key that exclusive: true will remove.
+      After this run, authorized_keys will contain ONLY the vault key.
+      If the YubiKey is temporarily unavailable (firmware update, re-programming),
+      SSH login requires physical console access — no backup key will remain.
+  when:
+    - ssh_auth_key_pub | trim | length > 0
+    - _ssh_authkeys_stat.stat.exists
+    - >-
+      (_pre_excl_authkeys_slurp.content | b64decode).split('\n')
+      | map('trim') | reject('eq', '') | reject('match', '^#')
+      | reject('eq', ssh_auth_key_pub | trim)
+      | list | length > 0
 
 - name: Add SSH auth public key to authorized_keys
   ansible.posix.authorized_key:

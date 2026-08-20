@@ -31,6 +31,15 @@
       failed_when: _ks_fingerprint not in _ks_fp_result.stdout
       when: _ks_fingerprint | length > 0
 
+    - name: Warn — TOFU key acceptance (no fingerprint configured) for {{ _ks_host }}
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: SSH host key for {{ _ks_host }} accepted on first-use (TOFU) —
+          no fingerprint pin configured. To guard against MITM on first provision,
+          obtain the expected SHA256 fingerprint via an out-of-band channel and set
+          it in ssh_work_keyscan_hosts as: {host: {{ _ks_host }}, fingerprint: "SHA256:..."}.
+      when: _ks_fingerprint | length == 0 and ssh_keyscan_result.rc == 0
+
     - name: Seed known_hosts entries for {{ _ks_host }}
       ansible.builtin.known_hosts:
         name: "{{ _ks_host }}"

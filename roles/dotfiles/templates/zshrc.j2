@@ -28,7 +28,7 @@ export GOPRIVATE='{{ dotfiles_goprivate | replace("'", "'\''" ) }}'
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
-export GOTOOLCHAIN={{ packages_gotoolchain }}  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
+export GOTOOLCHAIN='{{ packages_gotoolchain }}'  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
 export KUBECONFIG="$HOME/.kube/config"
 HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
 HISTSIZE=50000
@@ -132,7 +132,7 @@ ccp() {
   _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="personal-${dir}"
-  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; export CLAUDE_CONFIG_DIR=$HOME/.claude-personal; claude; zsh"
+  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; export CLAUDE_CONFIG_DIR={{ claude_personal_config_dir }}; claude; zsh"
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
@@ -176,7 +176,8 @@ alias notes="cd {{ notes_repo_path }}"
 # --- Task queue ---
 cq() {
   [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
-  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace(';', '') | replace('`', '') }}" --title "$1" --body "$2"
+  [[ -z "${1:-}" ]] && { echo "Usage: cq <title> [body]" >&2; return 1; }
+  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace(';', '') | replace('`', '') }}" --title "$1" --body "${2:-}"
 }
 
 # --- Kubernetes ---

