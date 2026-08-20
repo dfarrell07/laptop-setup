@@ -3,7 +3,7 @@
 # --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
 - name: Install and configure logrotate for sudo.log
   when:
-    - not csb_rhel
+    - not csb_detected  # CSB: IT manages sudoers on all CSB tiers; 99-hardening (Defaults logfile=) is skipped on csb_detected — no sudo.log will ever be written
     - not system_is_container
   block:
     - name: Install logrotate
@@ -58,10 +58,10 @@
         - is_dnf
         - _unexpected | length > 0
 
-- name: Remove logrotate config for sudo.log on CSB RHEL
+- name: Remove logrotate config for sudo.log on CSB (all tiers)
   ansible.builtin.file:
     path: /etc/logrotate.d/sudo
     state: absent
   when:
-    - csb_rhel
+    - csb_detected
     - not system_is_container

@@ -167,7 +167,17 @@
           contain '-e 0', which overrides audit enforcement after augenrules merge:
           {{ _auditd_late_e0_files.stdout }}. Remove or rename so they sort before
           claude-code.rules, then re-run provisioning.
-      when: _auditd_late_e0_files.stdout | trim | length > 0
+      when: _auditd_late_e0_files.stdout | trim | length > 0 and not csb_detected
+
+    - name: "Warn: late-sorting audit rules with -e 0 detected on hybrid CSB (accepted risk)"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: file(s) in /etc/audit/rules.d/ sort after claude-code.rules and
+          contain '-e 0': {{ _auditd_late_e0_files.stdout }}. On hybrid CSB the guard
+          does not abort, but augenrules will merge these last and may override the
+          -e 1 enforcement directive. Review and rename offending files to sort before
+          claude-code.rules, or add them to the audit whitelist if IT-managed.
+      when: _auditd_late_e0_files.stdout | trim | length > 0 and csb_detected
 
     - name: Deploy auditd rules
       # File sorts as 's' — before 'z' and digit-prefixed files. augenrules merges
@@ -189,9 +199,9 @@
         group: root
         mode: "0640"
       notify: Restart auditd
-      when: not csb_rhel  # RHEL CSB IT owns auditd.conf via SCAP; Fedora hybrid is user-managed
+      when: not csb_detected  # IT owns auditd.conf on all csb_detected machines (RHEL CSB via SCAP; hybrid Fedora CSB via osquery/Kolide Fleet)
         # no drop-in mechanism exists — last writer wins with no merge. Deploying our
-        # SUSPEND disk-space settings would conflict with RHEL CSB IT's STIG AU-5 HALT/SINGLE baseline.
+        # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline on both tiers.
 
     - name: Ensure auditd is enabled and started
       ansible.builtin.systemd:

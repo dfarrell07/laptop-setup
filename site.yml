@@ -57,7 +57,7 @@
     # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
     # into provisioning), leaving a window in which pre-placed /var/spool/cron/<user>
     # jobs fire freely. Writing cron.allow=root here — the earliest privileged step —
-    # eliminates that window before any role executes. Skip on RHEL CSB (IT managed
+    # eliminates that window before any role executes. Skip on any CSB machine (IT managed
     # cron jobs would be blocked) and containers (no crond).
     - name: "SECURITY: Write cron.allow and at.allow before roles (close pre-hardening cron window)"
       ansible.builtin.copy:
@@ -69,7 +69,7 @@
         - /etc/at.allow
       when:
         - not system_is_container
-        - not csb_rhel
+        - not csb_detected
       tags: [always]
 
   roles:
@@ -173,21 +173,11 @@
       when: not _pf_is_molecule
       tags: [always]
 
-    - name: Vault healthcheck — assert SSH keys are populated when container provisioning is enabled
-      ansible.builtin.assert:
-        that:
-          - vault_ssh_auth_key | length > 0
-          - vault_ssh_auth_key_pub | length > 0
-        fail_msg: >-
-          Container provisioning requires populated vault SSH keys. vault_ssh_auth_key
-          and vault_ssh_auth_key_pub cannot be empty when distrobox_enabled: true.
-          Run 'make setup-yubikeys' to populate vault, or set distrobox_enabled: false
-          in config.yml to skip container provisioning.
-      when:
-        - not _pf_is_molecule
-        - distrobox_enabled | bool
-        - ansible_facts['system'] | default('Linux') == 'Linux'
-      tags: [always]
+    # NOTE: vault SSH key population check for distrobox is enforced inside
+    # roles/distrobox/tasks/main.yml (lines 63-74) as defense-in-depth against
+    # --start-at-task bypasses. Keeping the check there (not here) limits the
+    # blast radius to the distrobox role on first provision with an empty vault,
+    # allowing dotfiles, ssh, git_repos, notes, and claude roles to succeed.
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other
@@ -248,12 +238,12 @@
     - role: desktop
       tags: [desktop]
 
+    - role: claude
+      tags: [claude]
+
     - role: distrobox
       tags: [distrobox]
       when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
-
-    - role: claude
-      tags: [claude]
 
   post_tasks:
     - name: Remove stale CSB report

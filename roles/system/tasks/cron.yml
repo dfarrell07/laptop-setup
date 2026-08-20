@@ -1,13 +1,13 @@
 ---
 # --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
-# RHEL CSB: Satellite katello-agent, Insights client, and IT monitoring agents commonly run
-# cron jobs under dedicated non-root system users. Creating cron.allow with only 'root'
-# would silently block those IT management jobs. Skip on RHEL CSB only.
-# Fedora hybrid: those IT tools are absent — cron.allow=root is safe CIS 5.1.8/5.1.9 hardening.
-- name: Cron access restriction (skip on RHEL CSB and containers)
+# Any CSB machine: Satellite katello-agent, Insights client, IT monitoring agents, and other
+# IT-provisioned tools may run cron jobs under dedicated non-root system users. Creating
+# cron.allow with only 'root' would silently block those IT management jobs. Skip on all
+# CSB machines (both RHEL CSB and hybrid Fedora CSB) to avoid conflicting with IT cron policy.
+- name: Cron access restriction (skip on CSB and containers)
   when:
     - not system_is_container
-    - not csb_rhel
+    - not csb_detected
   block:
     - name: Find non-root crontabs in /var/spool/cron
       ansible.builtin.find:
@@ -107,3 +107,27 @@
           in config.yml before re-running provisioning.
       when:
         - (system_crond_files.files | default([])) | length > 0
+
+# CSB machines skip the block above (IT manages cron policy) but still need visibility into
+# unexpected /etc/cron.d files that IT may have dropped. This block runs only on CSB machines.
+- name: Check /etc/cron.d for unexpected files on CSB machines (warn-only)
+  when:
+    - csb_detected
+    - not system_is_container
+  block:
+    - name: Find unmanaged files in /etc/cron.d (CSB)
+      ansible.builtin.find:
+        paths: /etc/cron.d
+        file_type: file
+        excludes: "{{ system_crond_whitelist }}"
+      register: system_crond_files_csb
+      failed_when: false
+
+    - name: Warn on unexpected /etc/cron.d files not in system_crond_whitelist (CSB — IT may drop files)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Unexpected files in /etc/cron.d not in system_crond_whitelist:
+          {{ system_crond_files_csb.files | map(attribute='path') | list }}.
+          These files execute as cron system jobs (cron.allow does not restrict /etc/cron.d).
+          Add IT-managed basenames to system_crond_whitelist in config.yml to suppress this warning.
+      when: (system_crond_files_csb.files | default([])) | length > 0

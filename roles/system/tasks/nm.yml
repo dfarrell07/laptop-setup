@@ -52,11 +52,23 @@
       # {{ ansible_managed }}
       [connection.wifi-mac-rand]
       match-device=type:wifi
-      wifi.cloned-mac-address={{ 'stable-ssid' if system_wifi_mac_rand | bool else 'preserve' }}
+      wifi.cloned-mac-address={{ 'stable-ssid' if (system_wifi_mac_rand | bool and not csb_detected) else 'preserve' }}
     dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
     mode: "0644"
   when: not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
   notify: Restart NetworkManager
+
+- name: Warn that system_wifi_mac_rand is ignored on CSB-detected machines
+  ansible.builtin.debug:
+    msg: >-
+      system_wifi_mac_rand=true is set in config.yml, but CSB-detected machines enforce
+      preserve (hardware MAC) for 802.1X RADIUS NAC compatibility regardless of this variable.
+      stable-ssid MAC randomization is NOT active. Remove system_wifi_mac_rand from config.yml
+      or accept that the hardware MAC is used on all WiFi associations.
+  when:
+    - system_wifi_mac_rand | bool
+    - csb_detected
+    - not system_is_container
 
 - name: NM Tailscale-unmanaged and systemd-resolved DNS deployed (non-CSB)
   when:
@@ -68,7 +80,7 @@
         content: |
           # {{ ansible_managed }}
           [keyfile]
-          unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*,interface-name:wg*,interface-name:wt*,interface-name:ovn-k8s-mp0
+          unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*{{ ',interface-name:wg*' if not csb_detected else '' }},interface-name:wt*,interface-name:ovn-k8s-mp0
         dest: /etc/NetworkManager/conf.d/tailscale.conf
         mode: "0644"
       notify: Restart NetworkManager

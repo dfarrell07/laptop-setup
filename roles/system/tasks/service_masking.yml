@@ -2,6 +2,64 @@
 # Security: remove any pre-existing drop-in directories for units this file manages as masked.
 # An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
 # the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
+- name: Probe drop-in dirs for content before removal (csb_detected advisory)
+  ansible.builtin.find:
+    paths: "/etc/systemd/system/{{ item }}.d"
+    file_type: any
+    recurse: false
+  loop:
+    - bluetooth.service
+    - thermald.service
+    - ModemManager.service
+    - tuned-ppd.service
+    - tuned.service
+    - power-profiles-daemon.service
+    - cups-browsed.service
+    - cups.socket
+    - cups.path
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-pstoreoops.service
+    - abrt-xorg.service
+    - avahi-daemon.service
+    - avahi-daemon.socket
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+    - iscsi.service
+    - iscsid.service
+    - iscsi-init.service
+    - iscsi-onboot.service
+    - iscsi-shutdown.service
+    - iscsi-starter.service
+    - iscsid.socket
+    - iscsiuio.socket
+    - iscsiuio.service
+    - cockpit.service
+    - cockpit.socket
+    - ctrl-alt-del.target
+  register: _dropin_probe
+  when:
+    - csb_detected | bool
+    - not system_is_container
+    - not csb_rhel
+  failed_when: false
+
+- name: Warn on non-empty drop-in dirs before removal (possible IT-placed config on csb_detected)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /etc/systemd/system/{{ item.item }}.d contains {{ item.matched }} file(s)
+      and will be removed by security hardening. Verify no IT-managed drop-in exists here
+      before continuing; re-add any legitimate IT config after provisioning.
+  loop: "{{ _dropin_probe.results | default([]) }}"
+  when:
+    - csb_detected | bool
+    - not system_is_container
+    - not csb_rhel
+    - item.matched | default(0) | int > 0
+
 - name: Remove pre-existing drop-in directories for managed masked units
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ item }}.d"
@@ -42,6 +100,7 @@
   when:
     - not system_is_container
     - not csb_rhel
+    - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; probe+warn above handles that path
 
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
 - name: Mask bluetooth service
@@ -52,14 +111,14 @@
     state: stopped
   when:
     - system_disable_bluetooth | bool
-    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
     - not system_is_container  # bluetooth not present in containers; mask+stop crash container systemd
   failed_when: false
 
 - name: Bluetooth service enable and configure (system_disable_bluetooth disabled)
   when:
     - not (system_disable_bluetooth | bool)
-    - not csb_rhel  # CSB: IT manages bluetooth hardware policy
+    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
     - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
   block:
     - name: Unmask bluetooth service when system_disable_bluetooth disabled
@@ -108,7 +167,7 @@
     state: "{{ 'stopped' if not _intel else 'started' }}"
   when:
     - not system_is_container  # thermald not present in containers; mask/stop crash container systemd
-    - not csb_rhel  # CSB: IT manages power management daemons
+    - not csb_rhel  # RHEL CSB: IT manages power management daemons
     - is_dnf
   failed_when: false
 
@@ -122,7 +181,7 @@
   when:
     - system_disable_modemmanager | bool
     - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
-    - not csb_rhel  # CSB: IT manages modem hardware policy
+    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
   failed_when: false
 
 - name: Verify ModemManager masking succeeded (covert modem guard)
@@ -154,7 +213,7 @@
   when:
     - not (system_disable_modemmanager | bool)
     - not system_is_container  # no WWAN interfaces in containers
-    - not csb_rhel  # CSB: IT manages modem hardware policy
+    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
   failed_when: false
 
 # --- TLP battery charge management (ThinkPad) ---
@@ -188,7 +247,7 @@
   check_mode: false
   when:
     - not (system_tlp_enabled | bool)
-    - not csb_rhel  # CSB: IT manages power daemons; do not stop
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
     - not system_is_container
     - is_dnf
 
@@ -199,7 +258,7 @@
     enabled: false
   when:
     - not (system_tlp_enabled | bool)
-    - not csb_rhel  # CSB: IT manages power daemons; do not stop
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
     - not system_is_container
     - is_dnf
     - (_system_tlp_disable_check.rc | default(-1)) == 0
@@ -282,7 +341,7 @@
     state: stopped
   when:
     - system_disable_printing | bool
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
   register: _cups_browsed_mask_result
@@ -316,7 +375,7 @@
     # intentionally not started: CVE-2024-47176 RCE risk; start manually if network discovery required
   when:
     - not (system_disable_printing | bool)
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -327,7 +386,7 @@
     enabled: false
   when:
     - system_disable_printing | bool
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
   failed_when: false
 
@@ -338,7 +397,7 @@
     enabled: true
   when:
     - not (system_disable_printing | bool)
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -352,7 +411,7 @@
     - cups.path
   when:
     - system_disable_printing | bool
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
   failed_when: false
 
@@ -367,7 +426,7 @@
     - cups.path
   when:
     - not (system_disable_printing | bool)
-    - not csb_rhel  # CSB: IT manages CUPS/printing via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
     - not system_is_container
   failed_when: false
 
@@ -435,7 +494,7 @@
     - avahi-daemon.socket
   register: _avahi_mask_result
   when:
-    - not csb_rhel  # CSB: IT manages mDNS/avahi policy
+    - not csb_rhel  # RHEL CSB: IT manages mDNS/avahi policy
     - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
   failed_when: false
 
@@ -506,7 +565,7 @@
     - cockpit.service
     - cockpit.socket
   when:
-    - not csb_rhel  # CSB: IT manages cockpit access; do not mask
+    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
     - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
     - _cockpit_stat.stat.exists
   failed_when: false
@@ -520,7 +579,7 @@
     - cockpit.service
     - cockpit.socket
   when:
-    - not csb_rhel  # CSB: IT manages cockpit access; do not mask
+    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
     - not system_is_container
     - _cockpit_stat.stat.exists
   failed_when: false
@@ -530,7 +589,7 @@
     name: ctrl-alt-del.target
     masked: true
   when:
-    - not csb_rhel  # CSB: IT manages Ctrl+Alt+Delete policy via Satellite
+    - not csb_rhel  # RHEL CSB: IT manages Ctrl+Alt+Delete policy via Satellite
     - not system_is_container  # target masking can trigger daemon-reload in privileged containers
   failed_when: false
 

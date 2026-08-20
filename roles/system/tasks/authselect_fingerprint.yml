@@ -94,6 +94,7 @@
   when:
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not csb_detected  # hybrid Fedora CSB: IT manages authselect/fprintd; skip fingerprint management
 
 - name: Disable authselect with-fingerprint feature
   ansible.builtin.command:
@@ -104,6 +105,7 @@
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc == 0
     - not csb_rhel  # CSB: IT manages authselect profile; all other authselect action tasks carry this guard
+    - not csb_detected  # Hybrid CSB: IT may have enabled fingerprint as access policy; don't disable
     - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_disable_fp_result.rc == 0
   failed_when: false
@@ -119,6 +121,7 @@
     - system_authselect_disable_fp_result.rc | default(0) != 0
     - system_authselect_disable_fp_result is not skipped
     - not csb_rhel
+    - not csb_detected
     - not system_is_container
 
 - name: Probe fprintd.service unit file existence
@@ -127,6 +130,7 @@
   register: fprintd_unit_stat
   when:
     - not csb_rhel
+    - not csb_detected
     - not system_is_container
 
 - name: Mask or unmask fprintd.service (masked when system_disable_fingerprint is true)
@@ -136,6 +140,7 @@
     state: "{{ 'stopped' if system_disable_fingerprint | bool else omit }}"
   when:
     - not csb_rhel  # CSB: IT manages fprintd/fingerprint auth
+    - not csb_detected  # Hybrid CSB: IT may manage fprintd; don't mask
     - not system_is_container  # systemctl mask writes to /etc/systemd/system/, triggers inotify → daemon-reload → crashes containers
     - fprintd_unit_stat.stat.exists | default(false)
 
@@ -149,6 +154,7 @@
   when:
     - system_disable_fingerprint | bool
     - not csb_rhel
+    - not csb_detected
     - not system_is_container
     - fprintd_unit_stat.stat.exists | default(false)
 
@@ -160,7 +166,8 @@
     - not (system_disable_fingerprint | bool)
     - system_authselect_bin.stat.exists
     - system_authselect_fingerprint_check.rc != 0
-    - not csb_rhel  # CSB: IT manages authselect; all authselect action tasks carry this guard
+    - not csb_rhel
+    - not csb_detected  # CSB: IT manages authselect; all authselect action tasks skip on CSB
     - not system_is_container  # authselect enable/disable-feature triggers PAM reload → inotify → daemon-reload → crashes container
   changed_when: system_authselect_enable_fp_result.rc == 0
   failed_when: false
@@ -178,6 +185,7 @@
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not csb_detected  # Hybrid CSB: IT manages authselect; skip post-disable verification
     - not system_is_container
 
 - name: Fail if with-fingerprint is still active in authselect profile after disable
@@ -190,6 +198,7 @@
     - system_disable_fingerprint | bool
     - system_authselect_bin.stat.exists
     - not csb_rhel
+    - not csb_detected
     - not system_is_container
     - system_authselect_post_fp_probe is not skipped
     - system_authselect_post_fp_probe.stdout | default('') is search('with-fingerprint')

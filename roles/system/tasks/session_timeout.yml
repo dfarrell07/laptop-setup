@@ -22,6 +22,21 @@
     - is_dnf
     - not system_is_container
 
+- name: Warn on unpackaged /etc/profile.d scripts not in system_profiled_whitelist (CSB — IT may deploy scripts)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected unpackaged file(s) in /etc/profile.d: {{ _unexpected | join(', ') }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Add the basename to
+      system_profiled_whitelist in config.yml to suppress this warning.
+  vars:
+    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+  when:
+    - is_dnf
+    - not system_is_container
+    - csb_detected
+    - _unexpected | length > 0
+
 - name: Abort on unpackaged /etc/profile.d scripts not in system_profiled_whitelist
   ansible.builtin.assert:
     that: _unexpected | length == 0
@@ -37,6 +52,7 @@
   when:
     - is_dnf
     - not system_is_container
+    - not csb_detected
 
 - name: Abort on unexpected /etc/profile.d scripts not in system_profiled_whitelist (Debian fallback)
   ansible.builtin.fail:
