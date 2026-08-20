@@ -221,6 +221,17 @@
       ansible.builtin.dnf:
         name: acli
         state: present
+    - name: Warn when acli first-install SHA256 check is not configured
+      # repos_dnf_acli_binary_sha256 is not set — no integrity check on the downloaded binary.
+      # Obtain the expected SHA256 out-of-band from IT and set it in config.yml to close
+      # the first-install window.  See default.config.yml for the variable name.
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY ADVISORY: repos_dnf_acli_binary_sha256 is not set in config.yml.
+          The acli binary was installed from an unsigned repo with no integrity check.
+          Obtain the SHA256 hash out-of-band from IT and add
+          repos_dnf_acli_binary_sha256 to config.yml to enable first-install verification.
+      when: repos_dnf_acli_binary_sha256 is not defined
     - name: Stat acli binary for SHA256 first-install integrity check
       # Only runs when repos_dnf_acli_binary_sha256 is set in config.yml.
       # This is the sole guard against a compromised first-install payload;

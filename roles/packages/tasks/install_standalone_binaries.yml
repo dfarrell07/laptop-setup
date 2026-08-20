@@ -299,7 +299,7 @@
   # failure is unexpected and should be surfaced. operator-sdk is installed via pinned
   # SHA256 (packages_operator_sdk_sha256), but GPG provides the independent trust root
   # confirming that hardcoded hash matches the operator-framework release team's signature.
-  failed_when: _operator_sdk_gpg_import.rc != 0 and not csb_rhel
+  failed_when: _operator_sdk_gpg_import.rc != 0 and not csb_detected
   register: _operator_sdk_gpg_import
 
 - name: Verify operator-sdk checksums file GPG signature

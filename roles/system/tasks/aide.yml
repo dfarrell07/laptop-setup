@@ -324,7 +324,10 @@
             msg: >-
               AIDE {{ 'initialization' if not (system_aide_db.stat.exists | default(false))
               else 'reinitialization' }} triggered by config change — this takes
-              5-10 minutes. Do not cancel.
+              5-10 minutes on a minimal filesystem; machines with OCI images, container
+              layers, or large source trees may take 20-30+ minutes. No output appears
+              during the scan — this is normal. Do not cancel.
+              Monitor in another terminal: watch -n 10 'ls -lh /var/lib/aide/aide.db.new.gz 2>/dev/null || echo not yet created'
 
         - name: Find files in /etc/udev/rules.d before AIDE reinit (pre-planted rule guard)
           ansible.builtin.find:
@@ -376,7 +379,12 @@
       block:
         - name: Warn that AIDE initialization takes 5-10 minutes
           ansible.builtin.debug:
-            msg: "Starting AIDE database initialization — this scans the filesystem and takes 5-10 minutes. Do not cancel."
+            msg: >-
+              Starting AIDE database initialization — this scans the filesystem and takes
+              5-10 minutes on a minimal filesystem; machines with OCI images, container
+              layers, or large source trees may take 20-30+ minutes. No output appears
+              during the scan — this is normal. Do not cancel.
+              Monitor in another terminal: watch -n 10 'ls -lh /var/lib/aide/aide.db.new.gz 2>/dev/null || echo not yet created'
 
         - name: Find files in /etc/udev/rules.d before AIDE init (pre-planted rule guard)
           ansible.builtin.find:

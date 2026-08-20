@@ -74,6 +74,22 @@
   when: not (_pf_is_molecule | default(false))
 
 # --- Detect container tool ---
+- name: Warn when container_release overrides but digest may be stale
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: container_release={{ container_release }} differs from the default release
+      (distrobox_fedora_release={{ distrobox_fedora_release }}).
+      The pinned distrobox_container_digest is for Fedora {{ distrobox_fedora_release }} and will
+      cause a Podman pull failure for Fedora {{ container_release }} (tag and digest refer to different
+      manifests). Set container_image to a fully-qualified image+digest for the target release instead:
+        container_image: 'registry.fedoraproject.org/fedora-toolbox:{{ container_release }}@sha256:<digest>'
+      Obtain the correct digest with:
+        skopeo inspect --no-tags docker://registry.fedoraproject.org/fedora-toolbox:{{ container_release }}
+  when:
+    - container_release is defined
+    - container_release != distrobox_fedora_release
+    - (container_image | default('')) == ''
+
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: which distrobox

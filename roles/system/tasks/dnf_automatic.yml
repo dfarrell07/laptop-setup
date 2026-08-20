@@ -133,7 +133,6 @@
   register: _dnf_auto_dropin_files
   when:
     - is_dnf
-    - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
@@ -148,7 +147,6 @@
           | list) }}
   when:
     - is_dnf
-    - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
@@ -162,7 +160,6 @@
   loop: "{{ _dnf_auto_dropin_files.files | default([]) | rejectattr('path', 'in', _dnf_auto_preserved_paths | default([])) | list }}"
   when:
     - is_dnf
-    - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
@@ -174,7 +171,6 @@
   loop: "{{ _dnf_auto_dropin_files.files | default([]) | rejectattr('path', 'in', _dnf_auto_preserved_paths | default([])) | list }}"
   when:
     - is_dnf
-    - system_aide_enabled | bool
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
@@ -186,7 +182,6 @@
     state: absent
   when:
     - is_dnf
-    - system_aide_enabled | bool  # find/warn tasks above must have run before silent removal
     - not (system_dnf_automatic_apply_updates | bool)
     - not csb_rhel
     - not system_is_container

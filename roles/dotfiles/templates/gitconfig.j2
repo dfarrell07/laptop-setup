@@ -117,6 +117,8 @@
 
 {% endfor %}{% endif %}
 {% if dotfiles_github_user != 'CHANGE_ME' %}
+# Personal email override — only active for repos under ~/src/{{ dotfiles_github_user }}/
+# Repos cloned elsewhere (~/personal/, ~/tmp/, etc.) use the work email above.
 [includeIf "gitdir:~/src/{{ dotfiles_github_user | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-personal
 {% endif %}
