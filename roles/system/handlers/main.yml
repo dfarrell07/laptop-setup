@@ -105,7 +105,7 @@
     state: restarted
   become: true
   when: not system_is_container  # tailscale not in containers
-  ignore_errors: true  # noqa: ignore-errors
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Reload systemd daemon
   ansible.builtin.systemd:
@@ -197,7 +197,7 @@
   when:
     - system_setuid_scan_enabled | bool
     - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1
-  ignore_errors: true  # noqa: ignore-errors
+  ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -234,7 +234,6 @@
     daemon_reload: true
   become: true
   when: not system_is_container  # dnf-automatic not applicable in containers; daemon_reload: true crashes Podman containers
-  ignore_errors: true  # noqa: ignore-errors
 
 - name: Regenerate GRUB configuration  # noqa: command-instead-of-module
   ansible.builtin.shell: |
