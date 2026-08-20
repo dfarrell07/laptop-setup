@@ -43,20 +43,22 @@
     - is_linux
     - containers_policy_enabled | bool
     - not (containers_policy_user_stat.stat.exists | default(false))
-    - not (containers_policy_system_stat.stat.exists | default(false))
+    # Note: system-level /etc/containers/policy.json is NOT checked here — user-level
+    # ~/.config/containers/policy.json takes precedence over the system file in Podman's
+    # containers/image library. Deploy the user-level policy regardless of system file
+    # presence so GPG verification is enforced.
 
-- name: Warn when system-level policy.json takes precedence
+- name: Note system-level policy.json present (user-level policy overrides it)
   ansible.builtin.debug:
     msg: >-
-      WARNING: System-level /etc/containers/policy.json exists; user-level policy not deployed
-      (preserving existing config). User policy would enforce GPG signature verification for
-      registry.redhat.io and registry.access.redhat.com. Current system policy uses
-      insecureAcceptAnything (no signature verification). If /etc/containers/policy.json is
-      from containers-common RPM (check: rpm -qf /etc/containers/policy.json), consider
-      removing it with: sudo rm /etc/containers/policy.json && make containers
+      NOTE: System-level /etc/containers/policy.json exists; deploying user-level policy to
+      {{ containers_config_dir }}/policy.json which takes precedence. GPG signature
+      verification for registry.redhat.io and registry.access.redhat.com will be enforced
+      at user scope. (System file owner: rpm -qf /etc/containers/policy.json)
   when:
     - is_linux
     - containers_policy_enabled | bool
+    - not (containers_policy_user_stat.stat.exists | default(false))
     - containers_policy_system_stat.stat.exists | default(false)
 
 - name: Remove policy.json (container image pull policy disabled)
@@ -367,6 +369,16 @@
   register: containers_registries_system_stat
   when: is_linux
 
+- name: Read system registries.conf unqualified-search-registries (FQIN audit)
+  ansible.builtin.command:
+    cmd: grep -E '^\s*unqualified-search-registries\s*=' /etc/containers/registries.conf
+  register: containers_fqin_it_uqsr
+  changed_when: false
+  failed_when: false
+  when:
+    - is_linux
+    - containers_registries_system_stat.stat.exists | default(false)
+
 - name: Deploy registries.conf to enforce fully-qualified image references
   ansible.builtin.template:
     src: registries.conf.j2
@@ -376,17 +388,31 @@
     - is_linux
     - containers_enforce_fqin | bool
     - not (containers_registries_system_stat.stat.exists | default(false))
+      or (containers_enforce_fqin_override | bool)
 
-- name: Warn when system-level registries.conf takes precedence
+- name: Warn when system-level registries.conf skips FQIN enforcement
   ansible.builtin.debug:
+    # NOTE: user-level registries.conf TAKES PRECEDENCE over the system-level file
+    # (Podman uses ~/.config/containers/registries.conf if it exists, otherwise falls
+    # back to /etc/containers/registries.conf — they are mutually exclusive, not merged).
+    # We intentionally do NOT deploy user-level FQIN enforcement here because overriding
+    # IT's unqualified-search-registries would break short-name pulls from corporate
+    # registries. If IT's system file does not define unqualified-search-registries,
+    # FQIN enforcement can safely be deployed — set containers_enforce_fqin_override: true
+    # in config.yml to force user-level deployment even when the system file exists.
+    # Verify IT's file: grep unqualified-search-registries /etc/containers/registries.conf
     msg: >-
-      System-level /etc/containers/registries.conf exists; user-level config not deployed
-      (IT policy preserved). User config would be ignored anyway — Podman reads system-level
-      /etc/containers first and stops when unqualified-search-registries is found there.
+      WARN: System-level /etc/containers/registries.conf exists; user-level FQIN enforcement
+      not deployed to avoid overriding IT-managed unqualified-search-registries policy.
+      IT unqualified-search-registries: {{ containers_fqin_it_uqsr.stdout | default('(not set — FQIN enforced by IT)') }}.
+      If IT allows short-name pulls (docker.io listed above), namespace-squatting attacks are possible.
+      Set containers_enforce_fqin_override: true in config.yml to force user-level enforcement.
+    verbosity: 0
   when:
     - is_linux
     - containers_enforce_fqin | bool
     - containers_registries_system_stat.stat.exists | default(false)
+    - not (containers_enforce_fqin_override | bool)
 
 - name: Remove registries.conf (fully-qualified image enforcement disabled)
   ansible.builtin.file:
@@ -547,10 +573,10 @@
 # extensions, language servers, browser-spawned helpers — inherits DOCKER_HOST and can
 # reach the Podman socket without any explicit configuration. A malicious extension or
 # plugin can use the Docker/Podman API against the host daemon.
-# This is enabled by default because 'make kind' (OVN-K/Submariner) requires DOCKER_HOST
-# to be set for sh-spawned Make sub-processes (sh does not source .zshrc/.bashrc).
-# Set containers_environment_d_enabled: false in config.yml to opt out on hosts where
-# untrusted code runs in the graphical session. KIND_EXPERIMENTAL_PROVIDER is low-risk
+# This is opt-in (containers_environment_d_enabled: false by default). Enable in config.yml
+# when 'make kind' (OVN-K/Submariner) is required: DOCKER_HOST must be set for sh-spawned
+# Make sub-processes (sh does not source .zshrc/.bashrc). Only enable on hosts where all
+# graphical session processes are trusted. KIND_EXPERIMENTAL_PROVIDER is low-risk
 # (a provider hint only), but is scoped alongside DOCKER_HOST as they are used together.
 - name: Deploy containers environment.d config (KIND and Podman socket)
   ansible.builtin.copy:

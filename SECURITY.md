@@ -38,7 +38,11 @@ This is a personal workstation provisioning playbook. Security-relevant areas:
 - **System hardening** — firewall (drop zone), sysctl (49 settings),
   auditd (user persistence monitoring, immutable rules), kernel lockdown,
   SELinux enforcing (targeted), USBGuard, crypto policy DEFAULT:NO-SHA1,
-  DNS-over-TLS/DNSSEC (FallbackDNS: Quad9 + Google DoT), core dump disable,
+  DNS-over-TLS/DNSSEC (FallbackDNS: Quad9 + Google DoT; default opportunistic DoT +
+  allow-downgrade DNSSEC — on untrusted networks an on-path attacker can block TCP 853
+  to force plain UDP 53, then strip DNSSEC records to bypass validation; set
+  `system_dot_mode: yes` + `system_dnssec_mode: yes` in config.yml for strict
+  enforcement, noting strict mode breaks captive portals), core dump disable,
   io_uring restricted to CAP_SYS_ADMIN (kernel.io_uring_disabled=1; set 2 in config.yml to disable for all users), kernel
   module blacklist (incl. usb-storage/uas when system_disable_usb_storage: true), cups-browsed/avahi masking,
   dnf-automatic, /tmp nosuid/nodev/noexec (CIS 1.1.2.x), /var/tmp nosuid/nodev/noexec (CIS 1.1.8, bind-mount), /dev/shm nosuid/nodev/noexec (CIS 1.1.7.x), /home nosuid/nodev (CIS 1.1.9), /boot nosuid/nodev/noexec, /boot/efi nosuid/noexec (vfat — nodev not applicable), home directory 0750 (CIS 6.2.x, non-RHEL-CSB), NFS server /

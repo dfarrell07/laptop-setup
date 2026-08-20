@@ -1172,7 +1172,35 @@ system_dot_mode: "no"
 
 **Fix (VPN split-DNS issue):** If internal hostnames fail on VPN, check whether the VPN pushes DNS search domains via `resolvectl status`. VPN-pushed specific domains (e.g., `~redhat.com`) win over the `~.` catch-all automatically — if split-DNS is failing, the VPN may not be integrating with systemd-resolved correctly. Run `make system` with `system_dns_domains: ""` to remove the catch-all if needed.
 
-**CSB note:** This resolved config is skipped entirely on CSB hosts (the task has `when: not csb_detected`).
+**Fix (standalone wg-quick DNS):** `wg-quick` tunnels with a `DNS =` line in the config are not managed by NetworkManager (`wg*` interfaces are NM-unmanaged). When `/etc/resolv.conf` is the stub symlink, wg-quick may push a per-link nameserver via resolvconf, but without a matching routing domain the global `~.` catch-all wins and internal VPN domain lookups go to Cloudflare (NXDOMAIN). Register the VPN nameserver as a per-link resolver with a routing domain in the wg-quick `PostUp` hook:
+
+```ini
+# In /etc/wireguard/wg0.conf
+[Interface]
+PostUp = resolvectl dns %i <vpn-nameserver-ip>; resolvectl domain %i ~<internal-domain>
+PreDown = resolvectl revert %i
+```
+
+For example, for an internal `corp.example.com` domain with nameserver `10.0.0.53`:
+```ini
+PostUp = resolvectl dns %i 10.0.0.53; resolvectl domain %i ~corp.example.com
+PreDown = resolvectl revert %i
+```
+
+Alternatively, migrate the WireGuard profile to a NetworkManager keyfile so NM pushes routing domains via resolvectl automatically (`nmcli connection import type wireguard file /etc/wireguard/wg0.conf`).
+
+**Fix (standalone wg-quick VPN — DNS= not registering):** Standalone `wg-quick` tunnels that use `DNS=` in their config cannot write the nameserver to `/etc/resolv.conf` (it is a symlink to the systemd-resolved stub, and `wg*` interfaces are NM-unmanaged). The VPN nameserver is never registered with resolved, so internal hostname lookups silently fail (queries go to Cloudflare/Quad9 and return NXDOMAIN). Fix this by adding `resolvectl` calls to the tunnel's `PostUp`/`PreDown`:
+
+```ini
+[Interface]
+DNS = 10.x.x.x
+PostUp = resolvectl dns %i 10.x.x.x; resolvectl domain %i ~internal.example.com
+PreDown = resolvectl revert %i
+```
+
+Replace `10.x.x.x` with the VPN nameserver and `~internal.example.com` with the routing domain (prefix `~` routes only that domain; omit for a catch-all). Alternatively, migrate the WireGuard profile to NetworkManager (NM WireGuard keyfile) so NM pushes DNS routing domains via resolvectl automatically.
+
+**CSB note:** This resolved config is skipped on **RHEL CSB** hosts only (`csb_rhel=true`; IT manages DNS via IPA/SSSD). On **Fedora hybrid CSB** hosts (`csb_detected=true`, `csb_rhel=false`), `99-dot.conf` and the stub symlink are both active — the split-DNS and wg-quick workarounds above apply.
 
 ---
 
@@ -1285,6 +1313,42 @@ trade-off, and prefer rebooting with the sysctl override in the kernel cmdline f
 rather than persisting a lower value in `config.yml`.
 
 **CSB IT ticket:** No. This is expected behavior; no provisioning change needed.
+
+## system: bpftrace kprobe/kretprobe Programs Fail With EPERM (lockdown=integrity)
+
+**Symptom:** `sudo bpftrace -e 'kprobe:vfs_read { ... }'` or any script using `kprobe:`/`kretprobe:` probes returns `ERROR: Could not attach probe` or exits with EPERM, even when run as root.
+
+**Root Cause:** The Linux kernel lockdown LSM (`LOCKDOWN_KPROBES`) blocks kprobe attachment at `lockdown=integrity` level, even for root. `lockdown=integrity` is applied via `grubby` by the system role on Fedora and hybrid CSB hosts. bpftrace programs using `kprobe:` or `kretprobe:` probe types (`BPF_PROG_TYPE_KPROBE`) are unconditionally rejected.
+
+**Workaround (no lockdown change needed):** Use `tracepoint:` or `uprobe:` probes instead where possible — these are not blocked by lockdown=integrity:
+
+```bash
+# Instead of kprobe:vfs_read, use the equivalent tracepoint:
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_read { ... }'
+# List available tracepoints:
+sudo bpftrace -l 'tracepoint:*'
+```
+
+**Temporary fix (debug session only):** Disable lockdown for the current boot, then re-enable by rebooting:
+
+```bash
+# Check current lockdown state:
+cat /sys/kernel/security/lockdown
+
+# Disable lockdown for this boot (requires reboot to restore integrity):
+sudo grubby --update-kernel=ALL --remove-args="lockdown"
+sudo reboot
+```
+
+Or set in `config.yml` and re-run `make system` + reboot:
+
+```yaml
+system_kernel_lockdown: ''   # disable lockdown; default is 'integrity'
+```
+
+**Note:** Do not leave lockdown disabled on machines where physical access is a concern. Lockdown=integrity prevents kernel self-modification and is a meaningful protection on mobile workstations.
+
+**CSB IT ticket:** No. This is expected behavior from `lockdown=integrity`; no provisioning change needed.
 
 ## system: SSH Fails to Legacy RHEL 7 / Old Servers After Provisioning
 

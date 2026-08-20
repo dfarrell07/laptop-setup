@@ -203,6 +203,17 @@ if [[ "$profile" == "work" ]] && command -v podman &>/dev/null && [[ -x /usr/loc
   fi
 fi
 
+# FQIN enforcement: containers_enforce_fqin=true is a no-op when /etc/containers/registries.conf
+# (system-level) defines unqualified-search-registries — Podman stops at system-level and ignores
+# user-level config entirely.
+if $IS_LINUX && command -v podman &>/dev/null; then
+  if [[ -f /etc/containers/registries.conf ]] && grep -qE '^unqualified-search-registries\s*=' /etc/containers/registries.conf; then
+    record "fqin-enforcement" "WARN" "system /etc/containers/registries.conf allows unqualified image names — containers_enforce_fqin=true has no effect (Podman ignores user-level config when system-level exists; 'podman pull nginx' resolves against docker.io)"
+  else
+    record "fqin-enforcement" "PASS"
+  fi
+fi
+
 # YubiKey
 if exec_cmd ykman info &>/dev/null; then record "yubikey" "PASS"
 else record "yubikey" "WARN" "not detected (plugged in?)"; fi

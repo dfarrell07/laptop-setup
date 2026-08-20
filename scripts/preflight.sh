@@ -261,7 +261,7 @@ if [[ -f "$VAULT_FILE" ]]; then
     record "vault_encrypted" "pass" "vault.yml is encrypted"
   else
     if grep -q 'vault_placeholder' "$VAULT_FILE" 2>/dev/null; then
-      record "vault_encrypted" "warn" "vault.yml is plaintext stub — populate with real secrets then encrypt (see CLAUDE.md step 3)"
+      record "vault_encrypted" "warn" "vault.yml is plaintext stub — vault_ssh_auth_key will be empty; 'make container' aborts mid-play at SECURITY assert. Run: make setup-yubikeys (see CLAUDE.md step 3)"
     else
       record "vault_encrypted" "warn" "vault.yml is plaintext without vault_placeholder sentinel — encrypt or add vault_placeholder stub"
     fi

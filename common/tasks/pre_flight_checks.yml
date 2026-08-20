@@ -1073,6 +1073,24 @@
           Missing hosts: {{ _missing_keyscan_hosts }}
       tags: [always]
 
+    - name: SECURITY WARN — keyscan hosts without fingerprint pinning (TOFU risk)
+      when: not _pf_is_molecule
+      vars:
+        _keyscan_raw: "{{ _config_raw.get('ssh_work_keyscan_hosts', []) }}"
+        # Dict entries missing a fingerprint field, plus all plain-string entries (no fingerprint possible)
+        _unfingerprinted: >-
+          {{ (_keyscan_raw | selectattr('host', 'defined') | rejectattr('fingerprint', 'defined')
+              | map(attribute='host') | list)
+             + (_keyscan_raw | selectattr('host', 'undefined') | map('string') | select() | list) }}
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY WARN: ssh_work_keyscan_hosts entries lack fingerprint pinning: {{ _unfingerprinted }}.
+          These hosts are trusted via TOFU (Trust On First Use). An MITM on first provision can seed
+          a malicious key transparently. Obtain ed25519 fingerprints from IT via out-of-band channel
+          and add fingerprint: "SHA256:..." to each entry in config.yml to eliminate TOFU risk.
+      when: _unfingerprinted | length > 0
+      tags: [always]
+
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
       when: _config_raw is defined
       vars:

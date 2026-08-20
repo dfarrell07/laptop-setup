@@ -58,3 +58,10 @@ is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
 # squatting can deliver a malicious image. Use full names (e.g. docker.io/library/nginx).
 # Set to false in config.yml only if short image names are genuinely required.
 containers_enforce_fqin: true
+# SECURITY: Force user-level FQIN enforcement even when /etc/containers/registries.conf
+# (system-level) exists. User-level registries.conf takes precedence in Podman, so setting
+# this true deploys ~/.config/containers/registries.conf with unqualified-search-registries=[]
+# regardless of IT's system file. WARNING: this will break short-name pulls from corporate
+# registries listed in IT's file (e.g. registry.access.redhat.com, registry.fedoraproject.org).
+# Only set true if you are certain all images you pull are fully-qualified.
+containers_enforce_fqin_override: false

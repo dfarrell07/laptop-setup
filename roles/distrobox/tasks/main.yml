@@ -16,6 +16,7 @@
         (container_image | default('') is match('^(registry\.fedoraproject\.org/|quay\.io/|registry\.access\.redhat\.com/|registry\.redhat\.io/)'))
       - container_image | default('') == '' or '@sha256:' in (container_image | default(''))
       - container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
+      - distrobox_container_name | default('') | string is match('^[a-zA-Z0-9_-]*$|^$')
       - distrobox_packages | default([]) | map('string') | select('search', '[^a-zA-Z0-9_.+-]') | list | length == 0
     fail_msg: >-
       SECURITY: distrobox variable contains unsafe value. This check is duplicated in
@@ -30,6 +31,9 @@
         vault-pass.sh/.ssh/.gnupg accessible); use registry/image:tag@sha256:<64-hex>;
       container_name={{ container_name | default('') }} --
         must be alphanumeric/underscore/hyphen (space injects extra argument to toolbox create/rm);
+      distrobox_container_name={{ distrobox_container_name | default('') }} --
+        must be alphanumeric/underscore/hyphen; validated separately from container_name to cover
+        direct overrides of distrobox_container_name in config.yml (normally derived from container_name);
       distrobox_packages={{ distrobox_packages | default([]) }} --
         entries must be alphanumeric/dot/underscore/plus/hyphen; a newline in any entry injects
         an arbitrary INI key into distrobox.ini (init_hooks RCE via flatpak-spawn --host).
@@ -49,6 +53,25 @@
       Unlisted: {{ _unlisted_exec }}.
       A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
       Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
+
+- name: SECURITY assert vault SSH keys are populated for container provisioning
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
+  # Duplicates the vault healthcheck in site.yml pre_tasks to protect against
+  # --start-at-task bypassing play-level pre_tasks (documented bypass in CLAUDE.md).
+  # _pf_is_molecule is set by pre_flight_checks.yml; default(false) ensures the
+  # assertion fires when pre_tasks are skipped via --start-at-task.
+  ansible.builtin.assert:
+    that:
+      - vault_ssh_auth_key is defined
+      - vault_ssh_auth_key | length > 0
+      - vault_ssh_auth_key_pub is defined
+      - vault_ssh_auth_key_pub | length > 0
+    fail_msg: >-
+      Container provisioning requires populated vault SSH keys. vault_ssh_auth_key
+      and vault_ssh_auth_key_pub cannot be empty when distrobox_enabled: true.
+      Run 'make setup-yubikeys' to populate vault, or set distrobox_enabled: false
+      in config.yml to skip container provisioning.
+  when: not (_pf_is_molecule | default(false))
 
 # --- Detect container tool ---
 - name: Probe distrobox binary availability  # noqa: command-instead-of-module
@@ -329,6 +352,11 @@
           - rm
           - --force
           - "{{ distrobox_container_name }}"
+      environment:
+        CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
+        DOCKER_HOST: ""
+        REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
+        DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
       changed_when: true
       when:
         - distrobox_container_replace | bool
@@ -342,6 +370,11 @@
           - --image
           - "{{ distrobox_container_image }}"
           - "{{ distrobox_container_name }}"
+      environment:
+        CONTAINER_HOST: ""  # defense-in-depth: clear rogue socket paths (primary clear in verify-ansible-args.sh)
+        DOCKER_HOST: ""
+        REGISTRY_AUTH_FILE: ""  # prevent attacker-set auth file from redirecting podman pull credentials
+        DOCKER_CONFIG: ""  # prevent attacker-set config dir from overriding registry auth
       timeout: "{{ distrobox_create_timeout }}"
       register: distrobox_toolbox_create
       changed_when: true  # outer when guard ensures container is absent or replace=true; create always constitutes a change

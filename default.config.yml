@@ -191,7 +191,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_kexec_load_disabled: 1      (group_vars/all/vars.yml) — default 1 blocks legacy kexec_load() (CIS defense-in-depth);
 #                                        set 0 in config.yml only when kdump requires kexec_load() and lockdown is also disabled
 #   system_io_uring_disabled: 1        (group_vars/all/vars.yml) — value=1 restricts to CAP_SYS_ADMIN;
-#                                        set 2 in config.yml to fully disable for all users
+#                                        set 0 in config.yml for dev workstations needing non-root io_uring
+#                                        (tokio-uring, libuv, PostgreSQL 14+); set 2 to fully disable for all users
 #   system_remove_luks_key: false       (roles/system/defaults) — set true ONLY if machine does NOT use
 #                                        rd.luks.key for LUKS auto-unlock at boot; removing the param forces
 #                                        manual LUKS passphrase entry on each reboot
@@ -232,9 +233,8 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                            'remote' for ssh -R, 'yes' for both
 #   system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
 #                                                ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
-#   system_ssh_unused_connection_timeout: 600 (roles/system/defaults) — seconds before idle connection with no open channels is
-#     closed; set "" to disable (long-running SSH-multiplexing clients such as VS Code Remote or Claude Code may need a higher
-#     value or "" if they hold idle control masters between commands for more than 600 s)
+#   system_ssh_unused_connection_timeout: 3600 (roles/system/defaults) — seconds before idle connection with no open channels is
+#     closed; 3600 (1h) tolerates VS Code Remote SSH and Claude Code idle control masters; set "" to disable (omits directive)
 #   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
 #   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks);
 #                                        for full enforcement set BOTH system_dot_mode: yes AND system_dnssec_mode: yes together
@@ -279,8 +279,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #                                        disabled regardless of host policy (e.g. geerlingguy Rocky images in Podman)
 #   system_iommu_passthrough: false    (roles/system/defaults) — set true only for VFIO/libvirt PCI passthrough; enables
 #                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
-#   system_wifi_mac_rand: "{{ not csb_detected }}"  (roles/system/defaults) — defaults true on non-CSB, false on CSB; set true in config.yml
-#                                        on hybrid Fedora CSB machines to opt in to stable-ssid MAC randomization
+#   system_wifi_mac_rand: "{{ not csb_detected }}"  (roles/system/defaults) — defaults true on non-CSB, false on CSB; on any
+#                                        csb_detected machine (including hybrid Fedora CSB) nm.yml unconditionally deploys
+#                                        preserve (hardware MAC) for 802.1X RADIUS NAC compatibility — setting true here has
+#                                        no effect and a provisioning warning is emitted; do not set this in config.yml on CSB
 #   system_wifi_powersave_disabled: "{{ not csb_rhel }}"  (roles/system/defaults) — defaults true
 #                                        (disable powersave, wifi.powersave=2) on non-csb_rhel;
 #                                        set false in config.yml to allow power saving on power-critical machines
@@ -337,6 +339,15 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
 #                                        list without replacing the default; use this instead of
 #                                        overriding containers_registries
+#   containers_enforce_fqin_override: false  (roles/containers/defaults) — set true to deploy user-level
+#                                        registries.conf (unqualified-search-registries=[]) even when
+#                                        /etc/containers/registries.conf already exists. By default the
+#                                        role skips FQIN enforcement when a system-level file is present
+#                                        to avoid breaking IT-managed corporate registry short-name pulls.
+#                                        On hybrid CSB Fedora machines the system file is the stock OS
+#                                        default (not IT-managed), so this override is safe. Verify first:
+#                                          grep unqualified /etc/containers/registries.conf
+#                                        If the output is non-empty, set this to true in config.yml.
 #   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
 #   desktop_sway_cursor_size: auto     (roles/desktop/defaults) — computed as
 #                                        (24 * desktop_sway_hidpi_scale | float) | int; override only if formula is wrong
@@ -406,6 +417,10 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
 #     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
 #   claude_pinned_version: ""           (roles/claude/defaults) — pin a specific Claude version (e.g. "1.0.3"); empty = latest
+#   claude_install_sha256: ""           (roles/claude/defaults) — REQUIRED for fresh installs; SHA256 of the installer script.
+#     Provisioning hard-fails when unset and Claude is not yet installed. Fetch with:
+#       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
+#     Update this hash after each upstream Claude Code release.
 #   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
 #     (test-queue-poller.sh systemd user service)
 #   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
