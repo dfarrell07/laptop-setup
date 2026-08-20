@@ -246,6 +246,7 @@
     - system_chrony_service_enabled | bool
     - csb_detected
     - not csb_rhel
+    - system_chrony_authselectmode != 'require'
 
 - name: "Warn: authselectmode require means no fallback if TCP 4460 blocked"
   ansible.builtin.debug:

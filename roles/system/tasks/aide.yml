@@ -346,6 +346,7 @@
         - name: Reinitialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
             cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
           changed_when: true
           register: system_aide_reinit_result
 
@@ -398,6 +399,7 @@
         - name: Initialize AIDE database and promote to active baseline
           ansible.builtin.shell:  # noqa: command-instead-of-module
             cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
           changed_when: true
 
     - name: Deploy AIDE failure notification unit

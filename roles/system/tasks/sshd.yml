@@ -50,6 +50,70 @@
           system_ssh_allow_agent_forwarding='{{ system_ssh_allow_agent_forwarding }}' is not
           a valid AllowAgentForwarding value. Accepted: yes, no.
 
+    - name: Probe openssh version for ChannelTimeout bz3827 guard
+      ansible.builtin.command:
+        cmd: rpm -q openssh --qf '%{VERSION}'
+      register: _sshd_rpm_version
+      changed_when: false
+      check_mode: false
+      failed_when: false
+      when:
+        - system_ssh_channel_timeout | default('') | length > 0
+        - is_dnf
+
+    - name: Fail if ChannelTimeout is set and OpenSSH version probe inconclusive (bz3827 guard)
+      ansible.builtin.fail:
+        msg: >-
+          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
+          rpm -q openssh returned rc={{ _sshd_rpm_version.rc | default('n/a') }} — cannot verify
+          OpenSSH >= 10.3 required for bz3827 safety. Set system_ssh_channel_timeout: ""
+          in config.yml until the OpenSSH version can be confirmed.
+      when:
+        - system_ssh_channel_timeout | default('') | length > 0
+        - is_dnf
+        - _sshd_rpm_version.rc | default(1) != 0
+
+    - name: Fail if ChannelTimeout is set on OpenSSH < 10.3 (bz3827 guard)
+      ansible.builtin.fail:
+        msg: >-
+          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
+          detected OpenSSH {{ _sshd_rpm_version.stdout | default('unknown') }} < 10.3.
+          bz3827 causes UnusedConnectionTimeout to fire prematurely even with open channels,
+          producing silent SSH disconnects (VS Code Remote, tmux). sshd -t accepts this config
+          as valid, masking the problem. Set system_ssh_channel_timeout: "" in config.yml until
+          all targets run OpenSSH >= 10.3.
+      when:
+        - system_ssh_channel_timeout | default('') | length > 0
+        - is_dnf
+        - _sshd_rpm_version.rc | default(1) == 0
+        - _sshd_rpm_version.stdout | default('0') is version('10.3', '<', version_type='loose')
+
+    - name: Probe openssh version for ChannelTimeout bz3827 guard (apt)
+      ansible.builtin.shell:
+        cmd: dpkg-query -W -f='${Version}' openssh-server | grep -oE '[0-9]+\.[0-9]+'
+      register: _sshd_apt_version
+      changed_when: false
+      check_mode: false
+      failed_when: false
+      when:
+        - system_ssh_channel_timeout | default('') | length > 0
+        - is_apt
+
+    - name: Fail if ChannelTimeout is set on OpenSSH < 10.3 on apt targets (bz3827 guard)
+      ansible.builtin.fail:
+        msg: >-
+          system_ssh_channel_timeout={{ system_ssh_channel_timeout | quote }} is set but
+          detected OpenSSH {{ _sshd_apt_version.stdout | default('unknown') }} < 10.3 on this apt target.
+          bz3827 causes UnusedConnectionTimeout to fire prematurely even with open channels,
+          producing silent SSH disconnects (VS Code Remote, tmux). sshd -t accepts this config
+          as valid, masking the problem. Set system_ssh_channel_timeout: "" in config.yml until
+          all targets run OpenSSH >= 10.3.
+      when:
+        - system_ssh_channel_timeout | default('') | length > 0
+        - is_apt
+        - _sshd_apt_version.rc | default(1) == 0
+        - _sshd_apt_version.stdout | default('0') is version('10.3', '<', version_type='loose')
+
     - name: Assert system_ssh_extra_allow_users entries match valid Linux username character set
       ansible.builtin.assert:
         that:

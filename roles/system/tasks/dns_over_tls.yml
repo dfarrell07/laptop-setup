@@ -110,6 +110,9 @@
           is a symlink to the stub, so those writes are ignored or break the symlink. VPN
           DNS will not work unless the VPN is integrated with NetworkManager or pushes
           per-link routing domains to resolved via resolvectl.
+          Verify after VPN connects: resolvectl status (VPN interface must show a per-link
+          DNS entry with routing domains, e.g. ~corp.example.com). Fix steps in
+          references/troubleshooting.md under 'standalone wg-quick DNS'.
       when: system_dns_domains == '~.'
 
     - name: "Warn: per-link DNS resolvers bypass DNSOverTLS"

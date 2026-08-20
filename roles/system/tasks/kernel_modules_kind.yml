@@ -12,7 +12,9 @@
 
 - name: Check if required kernel modules are already loaded
   ansible.builtin.shell:
-    cmd: lsmod | grep -qE '^(ip6_tables|ip6table_nat|ip_tables|iptable_nat|br_netfilter|nf_conntrack|overlay)'
+    cmd: >-
+      lsmod | grep -cE '^(ip6_tables|ip6table_nat|ip_tables|iptable_nat|br_netfilter|nf_conntrack|overlay) '
+      | grep -q '^7$'
   register: _required_modules_loaded
   changed_when: false
   failed_when: false
@@ -70,8 +72,9 @@
 
       The modules_disabled=1 sysctl is a security hardening control that prevents all
       kernel module loads after activation. It cannot be disabled without reboot.
-      This is expected behavior; the playbook must run BEFORE the ratchet activates,
-      which is why kernel_modules_kind.yml is imported before hardening_core.yml in main.yml.
+      This is expected behavior; modprobe runs AFTER hardening_core.yml deploys
+      90-hardening.conf but BEFORE flush_handlers activates modules_disabled=1 in /proc
+      (sshd.yml triggers the handler flush; see main.yml for the ordering rationale).
   when:
     - not csb_rhel
     - not system_is_container
@@ -102,6 +105,10 @@
     - not system_is_container
     # Loading iptables modules in a Podman container disrupts host iptables/networking
     # and kills the container connection; modules are managed by the host on container hosts.
+    # Skip cross-vendor KVM modules: attempting kvm_intel on AMD (or kvm_amd on Intel) returns
+    # rc=1 and would trigger the spurious "networking may be broken" warning below.
+    - not (item == 'kvm_intel' and ansible_processor | join(' ') | lower is search('amd'))
+    - not (item == 'kvm_amd' and ansible_processor | join(' ') | lower is search('intel'))
   failed_when: false
 
 - name: Apply module-dependent sysctl values immediately  # noqa: command-instead-of-module
@@ -160,4 +167,7 @@
        | list }}
   loop_control:
     label: "{{ item.item }}"
-  when: not csb_rhel
+  when:
+    - not csb_rhel
+    - not (item.item == 'kvm_intel' and 'amd' in (ansible_facts['processor'] | join(' ') | lower))
+    - not (item.item == 'kvm_amd' and 'intel' in (ansible_facts['processor'] | join(' ') | lower))

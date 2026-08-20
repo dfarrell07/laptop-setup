@@ -42,5 +42,5 @@
     - is_dnf
     - system_bolt_enabled
     - not system_is_container
-  changed_when: true
+  changed_when: "'already' not in _boltctl_result.stderr"
   failed_when: _boltctl_result.rc != 0 and 'already' not in _boltctl_result.stderr

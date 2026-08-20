@@ -114,11 +114,13 @@
     - not csb_rhel
     - not system_is_container
 
-- name: Ensure /dev/shm fstab entry has noexec (CIS 1.1.7.x)
+- name: Ensure /dev/shm fstab entry has nosuid,nodev[,noexec] (CIS 1.1.7.x)
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: '^tmpfs\s+/dev/shm\s+'
-    line: 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec,x-systemd.graceful-option=usrquota 0 0'
+    line: "tmpfs /dev/shm tmpfs defaults,nosuid,nodev{{ _devshm_noexec_opt }},x-systemd.graceful-option=usrquota 0 0"
     create: false   # Changed from true — defensive: only add when fstab exists with root entry
     backup: true   # fstab corruption causes non-recoverable boot failure without console access
     mode: "0644"
@@ -144,9 +146,11 @@
   check_mode: false  # read-only probe — must run in check mode
   when: not system_is_container  # findmnt triggers systemd mount events that crash privileged Podman container PID 1
 
-- name: Remount /dev/shm nosuid,nodev,noexec (CIS 1.1.7.x — live before reboot)  # noqa: command-instead-of-module
+- name: Remount /dev/shm nosuid,nodev[,noexec] (CIS 1.1.7.x — live before reboot)  # noqa: command-instead-of-module
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
   ansible.builtin.command:
-    cmd: mount -o remount,nosuid,nodev,noexec /dev/shm
+    cmd: "mount -o remount,nosuid,nodev{{ _devshm_noexec_opt }} /dev/shm"
   register: _devshm_remount_result
   until: _devshm_remount_result.rc == 0
   retries: 3
@@ -156,9 +160,9 @@
   when:
     - not system_is_container
     - >-
-      'noexec' not in (system_devshm_opts.stdout | default('')) or
       'nosuid' not in (system_devshm_opts.stdout | default('')) or
-      'nodev' not in (system_devshm_opts.stdout | default(''))
+      'nodev' not in (system_devshm_opts.stdout | default('')) or
+      (system_devshm_noexec | bool and 'noexec' not in (system_devshm_opts.stdout | default('')))
 
 - name: Verify /dev/shm hardening is active
   ansible.builtin.command:
@@ -167,18 +171,20 @@
   failed_when: >-
     'nosuid' not in _devshm_verify.stdout or
     'nodev' not in _devshm_verify.stdout or
-    'noexec' not in _devshm_verify.stdout
+    (system_devshm_noexec | bool and 'noexec' not in _devshm_verify.stdout)
   changed_when: false
   when: not system_is_container
 
 # On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
 # Deploy a one-shot service to re-apply hardening on every boot instead.
 - name: Deploy dev-shm-harden.service (CSB — fstab not modified)
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
   ansible.builtin.copy:
     content: |
       # {{ ansible_managed }}
       # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
-      # /dev/shm with nosuid,nodev,noexec at every boot (CIS 1.1.7.x).
+      # /dev/shm with nosuid,nodev[,noexec] at every boot (CIS 1.1.7.x).
       [Unit]
       Description=Harden /dev/shm mount options (CIS 1.1.7.x)
       DefaultDependencies=no
@@ -187,7 +193,7 @@
 
       [Service]
       Type=oneshot
-      ExecStart=/usr/bin/mount -o remount,nosuid,nodev,noexec /dev/shm
+      ExecStart=/usr/bin/mount -o remount,nosuid,nodev{{ _devshm_noexec_opt }} /dev/shm
       RemainAfterExit=yes
 
       [Install]

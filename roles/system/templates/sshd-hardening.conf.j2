@@ -34,13 +34,14 @@ ClientAliveInterval {{ system_ssh_client_alive_interval | int }}
 ClientAliveCountMax {{ system_ssh_client_alive_count_max | int }}  # compiled default 3; tightened to 2 — disconnect after 2 unacknowledged keepalive probes (10 min with ClientAliveInterval 300)
 # ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
 # Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both well above minimum.
-# NOTE: this only matters if you enable ChannelTimeout — the OpenSSH 10.3 (bz3827) bug fixed
-# UnusedConnectionTimeout firing prematurely; API-style clients on OpenSSH < 10.3 may disconnect early.
+# NOTE: UCT closes connections with no open channels after N seconds regardless of ChannelTimeout
+# or OpenSSH version. bz3827: ChannelTimeout + UCT together caused UCT to fire prematurely (even
+# with channels open) on < 10.3; that is why ChannelTimeout is disabled here until all targets run >= 10.3.
 # Default: disabled (system_ssh_channel_timeout: ""); set e.g. "global 1h" in config.yml once all targets run OpenSSH >= 10.3.
 {% if system_ssh_channel_timeout %}
 ChannelTimeout {{ system_ssh_channel_timeout | regex_replace('[\r\n].*', '') }}
 {% endif %}
-# system_ssh_unused_connection_timeout: default 600 — directive is always emitted; set '' in config.yml to omit directive; integer 0 is also falsy and omits it (not emitted as UnusedConnectionTimeout 0).
+# system_ssh_unused_connection_timeout: default 3600 (1h, tolerates VS Code Remote SSH idle) — directive is always emitted; set '' in config.yml to omit directive; integer 0 is also falsy and omits it (not emitted as UnusedConnectionTimeout 0).
 {% if system_ssh_unused_connection_timeout %} {# '' or 0 to omit/disable #}
 UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout | int }}
 {% endif %}

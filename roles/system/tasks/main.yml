@@ -53,6 +53,21 @@
   when: not system_is_container
   tags: [always]
 
+- name: "SECURITY: Warn on unexpected files in /etc/udev/rules.d/ (CSB — IT may deploy rules)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected file(s) in /etc/udev/rules.d/.
+      On CSB machines IT may deploy udev rules — verify these are IT-managed.
+      Unexpected: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list }}
+      To suppress: add basename(s) to system_udev_rules_d_allowlist in config.yml.
+  when:
+    - csb_detected
+    - not system_is_container
+    - _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list | length > 0
+  tags: [always]
+
 - name: "SECURITY: Assert no unauthorized files in /etc/udev/rules.d/ (pre-plant attack)"
   ansible.builtin.assert:
     that:
@@ -65,7 +80,9 @@
       Unauthorized: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
       | difference(system_udev_rules_d_allowlist) | list }}
       Fix: add the basename(s) to system_udev_rules_d_allowlist in config.yml, then re-run.
-  when: not system_is_container
+  when:
+    - not csb_detected
+    - not system_is_container
   tags: [always]
 
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
@@ -128,6 +145,25 @@
   when: not system_is_container
   tags: [always]
 
+- name: "SECURITY: Warn on unexpected systemd drop-in directories (CSB — IT may deploy drop-ins)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected systemd drop-in dir(s) under /etc/systemd/system/.
+      On CSB machines IT may deploy service drop-ins — verify these are IT-managed.
+      Unexpected: {{ _unexpected_dropin_dirs | join(', ') }}
+      Whitelist: {{ system_systemd_dropin_whitelist | join(', ') }}
+      To suppress: add dir name(s) to system_systemd_dropin_whitelist in config.yml.
+  vars:
+    _found_dropin_dirs: >-
+      {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
+    _unexpected_dropin_dirs: >-
+      {{ _found_dropin_dirs | reject('in', system_systemd_dropin_whitelist) | list }}
+  when:
+    - csb_detected
+    - not system_is_container
+    - _unexpected_dropin_dirs | length > 0
+  tags: [always]
+
 - name: "SECURITY: Fail on unexpected systemd drop-in directories (pre-plant backdoor guard)"
   ansible.builtin.assert:
     that:
@@ -145,7 +181,9 @@
       {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
     _unexpected_dropin_dirs: >-
       {{ _found_dropin_dirs | reject('in', system_systemd_dropin_whitelist) | list }}
-  when: not system_is_container
+  when:
+    - not csb_detected
+    - not system_is_container
   tags: [always]
 
 - name: "SECURITY: Find /etc/dbus-1/system.d files not owned by any RPM (pre-plant audit)"
@@ -164,6 +202,20 @@
     - is_dnf
   tags: [always]
 
+- name: "SECURITY: Warn on /etc/dbus-1/system.d files not owned by any RPM (CSB — IT may deploy policies)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unpackaged file(s) in /etc/dbus-1/system.d/.
+      On CSB machines IT may deploy non-RPM D-Bus policy files — verify these are IT-managed.
+      Unpackaged: {{ _dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list }}
+      To suppress: add full path(s) to system_dbus_system_d_allowlist in config.yml.
+  when:
+    - csb_detected
+    - not system_is_container
+    - is_dnf
+    - (_dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list) | length > 0
+  tags: [always]
+
 - name: "SECURITY: Fail on /etc/dbus-1/system.d files not owned by any RPM (pre-plant attack)"
   ansible.builtin.fail:
     msg: >-
@@ -174,7 +226,7 @@
       Unpackaged: {{ _dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list }}
       Fix: remove the file(s) or add full path(s) to system_dbus_system_d_allowlist in config.yml.
   when:
-    - not csb_rhel
+    - not csb_detected
     - not system_is_container
     - is_dnf
     - (_dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list) | length > 0
@@ -299,7 +351,7 @@
     mode: "0644"
   loop: [/etc/issue, /etc/issue.net]
   when:
-    - not csb_rhel  # no IT banner at home
+    - not csb_detected  # CSB: IT maintains compliant login banner on all CSB tiers
     - not system_is_container  # /etc/issue writes trigger getty inotify; crashes privileged Podman container PID 1
   failed_when: false
 

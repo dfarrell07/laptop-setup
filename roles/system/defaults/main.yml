@@ -195,7 +195,10 @@ system_udev_rules_whitelist: []
 # Locale, timezone, keymap
 system_locale: en_US.UTF-8
 system_keymap: us
-system_logind_idle_sec: 600   # seconds of inactivity before logind locks the session (CIS max 900)
+system_logind_idle_sec: 900   # seconds of inactivity before logind locks the session (CIS max 900)
+  # Set to 900 (15 min) by default to stagger with TMOUT (typically 600 s): shells time out first,
+  # giving a visible shell-exit cue before the screen locks. Lower to 600 in config.yml if you
+  # want simultaneous firing, or set equal to system_tmout for lock-then-shell-die ordering.
 
 # AIDE file integrity monitoring
 # Pre-provisioning blind spot: files planted in monitored paths (e.g. /etc/sudoers.d)
@@ -374,7 +377,7 @@ system_disable_udf: true          # kernel-blocks udf module; set false if UDF m
 # (sysctl.d uses lexicographic ordering; 90- wins over any competing file except 99-*).
 system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
 system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
-# Non-root apps using io_uring directly (tokio, libuv, some DB clients) will receive ENOSYS or
+# Non-root apps using io_uring directly (tokio-uring, not standard tokio which uses epoll via mio; libuv, some DB clients) will receive ENOSYS or
 # fall back to epoll — test affected workloads before applying on dev machines
 # Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules, some
 # debug interfaces (debugfs under lockdown), and hibernate-to-disk
@@ -411,7 +414,7 @@ system_ssh_client_alive_count_max: 2  # unacknowledged probes before server disc
 # standard ssh(1) unaffected, but API-style clients may disconnect;
 # set e.g. "global 1h" once all targets run >= 10.3
 system_ssh_channel_timeout: ""
-system_ssh_unused_connection_timeout: 600  # seconds before idle connection with no channels is closed ("" to omit directive/disable)
+system_ssh_unused_connection_timeout: 3600  # seconds before idle connection with no channels is closed ("" to omit directive/disable); 3600=1h tolerates VS Code Remote SSH idle periods; use '' to rely solely on ClientAlive keepalive
 system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
 system_ssh_extra_allow_users: []  # users added to AllowUsers beyond real_user_id; set in config.yml for IT accounts
 system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
@@ -434,6 +437,10 @@ ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; 
 system_dot_mode: opportunistic
 # allow-downgrade: try DNSSEC validation, accept downgrade if unavailable (default)
 # yes: strict DNSSEC — pairs with system_dot_mode: yes; set both for full DNSSEC enforcement
+# SECURITY TRADE-OFF: opportunistic + allow-downgrade (both defaults) allows an active on-path
+# attacker to simultaneously strip TLS transport and DNSSEC validation with no visible error.
+# Changing both to 'yes' closes the gap but breaks captive portals and corporate WiFi.
+# Verify internal DNS resolvers support port 853 before enabling strict mode.
 system_dnssec_mode: allow-downgrade
 system_dns_primary: >-
   1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
@@ -458,6 +465,12 @@ system_crypto_policy_target: DEFAULT:NO-SHA1
 # cargo, rustup, npm (native addons), and any tool that compiles and execs a binary from /tmp.
 # Set true in config.yml for stricter postures (CIS 1.1.2.x compliance); nosuid/nodev are always applied.
 system_tmp_noexec: false
+# /dev/shm mount hardening (CIS 1.1.7.x): noexec,nosuid,nodev via fstab + live remount.
+# Default true: CIS 1.1.7.x requires noexec on /dev/shm; nosuid/nodev are always applied.
+# Set false in config.yml when QEMU needs executable shared memory (memfd_create with MFD_EXEC
+# on Linux 6.3+ respects noexec on /dev/shm and returns EACCES), or when a JVM is configured
+# with -XX:+PerfDataSaveToFile writing executables to /dev/shm.
+system_devshm_noexec: true
 # /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
 # Default false: the bind-mount makes /var/tmp a tmpfs alias of /tmp — all contents are silently
 # lost on reboot, breaking dracut on kernel updates (FHS requires /var/tmp to persist across boots).
@@ -672,4 +685,8 @@ system_dbus_system_d_allowlist: []
 # until the next `dnf upgrade` or system reboot. Applies to standard Fedora and hybrid CSB only
 # (RHEL CSB skips dnf-automatic entirely; IT manages updates via RHSM/Satellite).
 system_dnf_automatic_apply_updates: true
+# Filenames inside the dnf-automatic service drop-in directory that must not be removed
+# by the unauthorised-drop-in purge tasks. Add IT-managed filenames here when present.
+# Example: system_dnf_automatic_dropin_whitelist: [satellite-hook.conf]
+system_dnf_automatic_dropin_whitelist: []
 

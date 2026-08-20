@@ -68,10 +68,10 @@
   when:
     - is_dnf
     - system_aide_enabled | bool
+    - system_dnf_automatic_apply_updates | bool
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
-  failed_when: false
 
 # NOTE: aide_cleanup.yml removes this drop-in when system_aide_enabled=false
 - name: Deploy AIDE update hook for dnf-automatic
@@ -84,18 +84,48 @@
       # train operators to ignore them, defeating the purpose of AIDE.
       # The '-' prefix makes this advisory — AIDE failures won't block updates.
       [Service]
-      ExecStartPost=-/usr/bin/bash -c 'aide --update && [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
+      ExecStartPost=-/usr/bin/bash -c 'aide --update; [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
     dest: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"
   when:
     - is_dnf
     - system_aide_enabled | bool
+    - system_dnf_automatic_apply_updates | bool  # hook only meaningful when packages are applied
     - not csb_rhel  # dnf-automatic not installed on CSB
     - not system_is_container
     - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
 
+- name: Remove AIDE update hook when dnf-automatic is download-only
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
+    state: absent
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not (system_dnf_automatic_apply_updates | bool)
+    - not csb_rhel
+    - not system_is_container
+    - _dnf_auto_svc is defined
+  notify: Restart dnf-automatic timer
+
+- name: Remove stale drop-in from non-active dnf-automatic variant (dnf4↔dnf5 transition)
+  ansible.builtin.file:
+    path: >-
+      /etc/systemd/system/{{ 'dnf-automatic.service.d' if is_dnf5 else 'dnf5-automatic.service.d' }}/aide-update.conf
+    state: absent
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+# NOTE: The three tasks below intentionally run regardless of system_dnf_automatic_apply_updates.
+# If the drop-in directory exists from a prior apply_updates=true provisioning run, any
+# unauthorised files should be detected and warned about even in download-only mode.
+# The directory itself is removed wholesale by the task below (line 163), so the end state
+# is always correct; these tasks provide an early warning for unexpected IT-managed files.
 - name: Find unauthorised drop-ins in dnf-automatic service drop-in directory
   ansible.builtin.find:
     paths: "/etc/systemd/system/{{ _dnf_auto_svc }}.d"
@@ -109,11 +139,39 @@
     - _dnf_auto_svc is defined
   failed_when: false
 
+- name: Compute preserved drop-in paths (aide-update.conf + system_dnf_automatic_dropin_whitelist)
+  ansible.builtin.set_fact:
+    _dnf_auto_preserved_paths: >-
+      {{ ['/etc/systemd/system/' + _dnf_auto_svc + '.d/aide-update.conf'] +
+         (system_dnf_automatic_dropin_whitelist | default([])
+          | map('regex_replace', '^', '/etc/systemd/system/' + _dnf_auto_svc + '.d/')
+          | list) }}
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+    - _dnf_auto_svc is defined
+
+- name: Warn about unexpected drop-ins to be removed from dnf-automatic drop-in directory
+  ansible.builtin.debug:
+    msg: >-
+      Removing unexpected drop-in from {{ _dnf_auto_svc }}.d: {{ item.path }}.
+      If this file is IT-managed, add its filename to system_dnf_automatic_dropin_whitelist
+      in config.yml to preserve it.
+  loop: "{{ _dnf_auto_dropin_files.files | default([]) | rejectattr('path', 'in', _dnf_auto_preserved_paths | default([])) | list }}"
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+    - _dnf_auto_svc is defined
+
 - name: Remove unauthorised drop-ins from dnf-automatic service drop-in directory
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ _dnf_auto_dropin_files.files | default([]) | selectattr('path', '!=', '/etc/systemd/system/' + _dnf_auto_svc + '.d/aide-update.conf') | list }}"
+  loop: "{{ _dnf_auto_dropin_files.files | default([]) | rejectattr('path', 'in', _dnf_auto_preserved_paths | default([])) | list }}"
   when:
     - is_dnf
     - system_aide_enabled | bool
@@ -121,3 +179,16 @@
     - not system_is_container
     - _dnf_auto_svc is defined
   notify: Restart dnf-automatic timer
+
+- name: Remove drop-in directory when dnf-automatic is download-only
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ _dnf_auto_svc }}.d"
+    state: absent
+  when:
+    - is_dnf
+    - system_aide_enabled | bool  # find/warn tasks above must have run before silent removal
+    - not (system_dnf_automatic_apply_updates | bool)
+    - not csb_rhel
+    - not system_is_container
+    - _dnf_auto_svc is defined
+    - system_dnf_automatic_dropin_whitelist | default([]) | length == 0

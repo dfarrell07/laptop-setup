@@ -8,9 +8,12 @@
 # vivid, n_hdlc. These are considered universally safe to blacklist on workstations
 # (no legitimate use case, confirmed CVE history, or CIS/STIG mandate). This is an
 # intentional one-way ratchet — if a specific unconditional entry must be re-enabled
-# (e.g., rds for cluster testing), drop a file under /etc/modprobe.d/ that overrides
-# the install directive with the real path (e.g., install rds /sbin/modprobe --ignore-install rds)
-# rather than modifying this template. Conditional entries (udf, sctp, thunderbolt,
+# (e.g., rds for cluster testing), BOTH steps are required:
+# 1. Drop a file under /etc/modprobe.d/ that overrides the install directive with the real path
+#    (e.g., install rds /sbin/modprobe --ignore-install rds).
+# 2. Add the basename of that file to system_modprobed_whitelist in config.yml.
+# Without step 2, 'make system' aborts with 'Unexpected file(s) in /etc/modprobe.d'.
+# Conditional entries (udf, sctp, thunderbolt,
 # usb_storage, bluetooth) retain their config.yml toggles for legitimate use cases.
 
 # Unused filesystems — attack surface via crafted images
