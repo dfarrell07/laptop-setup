@@ -199,7 +199,10 @@
 #    (sshd.yml flush at line 334 triggers sysctl --system; after that modprobe fails with EPERM)
 - name: Kernel modules for kind
   ansible.builtin.include_tasks: kernel_modules_kind.yml
-  when: profile == 'work' or install_virtualization | bool
+  when: not system_is_container and not csb_rhel
+  # Always load on non-container hosts — unused modules are harmless; NOT loading them
+  # when needed is catastrophic with modules_disabled=1. The include file already uses
+  # failed_when:false to tolerate Intel/AMD mismatch.
 
 - name: "GRUB bootloader password (CIS 1.4.2)"
   ansible.builtin.import_tasks: grub_password.yml
