@@ -159,15 +159,15 @@
         - name: Re-run pre-flight checks (ensures --start-at-task cannot bypass)
           ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
 
-    - name: Vault healthcheck — assert required SSH key variables are defined and non-empty
+    - name: Vault healthcheck — assert required SSH key variables are defined (allows empty on first provision)
       ansible.builtin.assert:
         that:
-          - vault_ssh_auth_key is defined and vault_ssh_auth_key | length > 0
-          - vault_ssh_auth_key_pub is defined and vault_ssh_auth_key_pub | length > 0
-          - vault_ssh_signing_key is defined and vault_ssh_signing_key | length > 0
-          - vault_ssh_signing_key_pub is defined and vault_ssh_signing_key_pub | length > 0
+          - vault_ssh_auth_key is defined
+          - vault_ssh_auth_key_pub is defined
+          - vault_ssh_signing_key is defined
+          - vault_ssh_signing_key_pub is defined
         fail_msg: >-
-          vault.yml missing or empty SSH key vars. Expected:
+          vault.yml missing SSH key vars. Expected:
           vault_ssh_auth_key, vault_ssh_auth_key_pub, vault_ssh_signing_key, vault_ssh_signing_key_pub.
           Run: make vault-view | grep vault_ssh
       when: not _pf_is_molecule
