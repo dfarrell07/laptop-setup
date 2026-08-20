@@ -173,6 +173,22 @@
       when: not _pf_is_molecule
       tags: [always]
 
+    - name: Vault healthcheck — assert SSH keys are populated when container provisioning is enabled
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_auth_key | length > 0
+          - vault_ssh_auth_key_pub | length > 0
+        fail_msg: >-
+          Container provisioning requires populated vault SSH keys. vault_ssh_auth_key
+          and vault_ssh_auth_key_pub cannot be empty when distrobox_enabled: true.
+          Run 'make setup-yubikeys' to populate vault, or set distrobox_enabled: false
+          in config.yml to skip container provisioning.
+      when:
+        - not _pf_is_molecule
+        - distrobox_enabled | bool
+        - ansible_facts['system'] | default('Linux') == 'Linux'
+      tags: [always]
+
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other
     # warning. preflight.sh alone is not sufficient. This block is protected
