@@ -45,6 +45,20 @@
     - not (containers_policy_user_stat.stat.exists | default(false))
     - not (containers_policy_system_stat.stat.exists | default(false))
 
+- name: Warn when system-level policy.json takes precedence
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: System-level /etc/containers/policy.json exists; user-level policy not deployed
+      (preserving existing config). User policy would enforce GPG signature verification for
+      registry.redhat.io and registry.access.redhat.com. Current system policy uses
+      insecureAcceptAnything (no signature verification). If /etc/containers/policy.json is
+      from containers-common RPM (check: rpm -qf /etc/containers/policy.json), consider
+      removing it with: sudo rm /etc/containers/policy.json && make containers
+  when:
+    - is_linux
+    - containers_policy_enabled | bool
+    - containers_policy_system_stat.stat.exists | default(false)
+
 - name: Remove policy.json (container image pull policy disabled)
   ansible.builtin.file:
     path: "{{ containers_config_dir }}/policy.json"
