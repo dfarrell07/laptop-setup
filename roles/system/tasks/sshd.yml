@@ -173,7 +173,7 @@
       ansible.builtin.command:
         cmd: sshd -t
       changed_when: false
-      check_mode: false
+      when: not ansible_check_mode  # Skip in dry-run - template/copy don't write in check mode
       # If this fails, rescue block removes 00-hardening.conf before sshd restart
 
     - name: Remove temp file
