@@ -170,11 +170,7 @@
           vault.yml missing or empty SSH key vars. Expected:
           vault_ssh_auth_key, vault_ssh_auth_key_pub, vault_ssh_signing_key, vault_ssh_signing_key_pub.
           Run: make vault-view | grep vault_ssh
-      when: >-
-        vault_ssh_auth_key is defined or
-        vault_ssh_auth_key_pub is defined or
-        vault_ssh_signing_key is defined or
-        vault_ssh_signing_key_pub is defined
+      when: not _pf_is_molecule
       tags: [always]
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
@@ -289,7 +285,7 @@
           - vault_ssh_auth_key_pub is defined and vault_ssh_auth_key_pub | length > 0
         fail_msg: vault.yml missing or empty SSH key vars (required for container provisioning)
       delegate_to: localhost
-      when: vault_ssh_auth_key is defined or vault_ssh_auth_key_pub is defined
+      when: not _pf_is_molecule
       tags: [always]
 
     - name: Assert identity vars are not CHANGE_ME placeholders
