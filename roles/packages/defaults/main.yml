@@ -267,8 +267,8 @@ packages_kubectl_sha256: "096dd0c0c6e169f8476d9cfb1eb5c5ac23a929fa5f84a22ccd0023
 packages_kubectl_sha256_arm64: "5fe5855e815d13e8e4c76e4c0a71cffc23befa21a47e81c5ad25a9975fb77c66"  # arm64 Linux
 
 packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
-packages_gotoolchain: auto  # GOTOOLCHAIN env for go install; 'auto' allows toolchain self-replacement.
-  # Fedora 44 ships Go 1.24; gofumpt needs 1.25, gopls needs 1.26. Auto-download on demand.
+packages_gotoolchain: local  # GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
+  # Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement (Fedora 44 Go 1.24 < gofumpt/gopls needs).
 
 # Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
 # Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Go binary SHA256 is

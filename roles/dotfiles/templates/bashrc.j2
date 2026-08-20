@@ -3,7 +3,7 @@
 export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
-export GOTOOLCHAIN=auto  # auto-download toolchain when go.mod requires a newer version than system Go
+export GOTOOLCHAIN={{ packages_gotoolchain }}  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
 export KUBECONFIG="$HOME/.kube/config"
 export EDITOR=vim
 export VISUAL=vim
