@@ -82,8 +82,9 @@
       # Run aide --update after dnf-automatic applies security updates.
       # Without this, every update causes AIDE false-positive alerts that
       # train operators to ignore them, defeating the purpose of AIDE.
+      # The '-' prefix makes this advisory — AIDE failures won't block updates.
       [Service]
-      ExecStartPost=/usr/bin/bash -c 'aide --update && [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
+      ExecStartPost=-/usr/bin/bash -c 'aide --update && [ -f /var/lib/aide/aide.db.new.gz ] && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz'
     dest: "/etc/systemd/system/{{ _dnf_auto_svc }}.d/aide-update.conf"
     # yamllint enable rule:line-length
     mode: "0644"
