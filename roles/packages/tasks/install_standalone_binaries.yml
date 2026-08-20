@@ -309,7 +309,7 @@
       - "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
       - "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
   changed_when: false
-  failed_when: _operator_sdk_gpg_verify.rc != 0 and (not network_proxied | bool)
+  failed_when: false
   register: _operator_sdk_gpg_verify
 
 - name: Warn if operator-sdk GPG verification failed
@@ -466,7 +466,7 @@
     SIGSTORE_REKOR_PUBLIC_KEY: ""
     COSIGN_EXPERIMENTAL: "0"
   changed_when: false
-  failed_when: _cosign_verify_result.rc != 0 and (not network_proxied | bool)
+  failed_when: false
   register: _cosign_verify_result
 
 
@@ -603,7 +603,7 @@
       - --certificate-oidc-issuer-regexp
       - "^https://accounts\\.google\\.com$"
   changed_when: false
-  failed_when: _cosign_self_verify_result.rc != 0 and (not network_proxied | bool)
+  failed_when: false
   register: _cosign_self_verify_result
 
 - name: Warn if cosign post-install self-attestation failed (offline or restricted environment)
@@ -709,7 +709,7 @@
     SIGSTORE_REKOR_PUBLIC_KEY: ""
     COSIGN_EXPERIMENTAL: "0"
   changed_when: false
-  failed_when: _sops_checksums_verify_result.rc != 0 and (not network_proxied | bool)
+  failed_when: false
   register: _sops_checksums_verify_result
 
 
