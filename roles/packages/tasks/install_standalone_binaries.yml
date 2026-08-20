@@ -780,6 +780,7 @@
   # (plain SHA256 hashes); no cosign bundles, .sig files, or Sigstore attestations
   # are published. SHA256 pinned in packages_tkn_sha256 / packages_tkn_sha256_arm64
   # is the sole integrity control. cosign verify-blob cannot be used here.
+  # Last checked for Sigstore support: 2026-08-19 (v0.46.0 — no attestations)
   # TODO: Add post-install cosign verification once tektoncd/cli publishes Sigstore attestations.
   when:
     - is_linux
@@ -816,6 +817,7 @@
   # The SHA256 in packages_ec_sha256 / packages_ec_sha256_arm64 (defaults/main.yml) is
   # the primary integrity control; a compromised release requires both a tampered GitHub
   # release AND an independent SHA256 update to this repo.
+  # Last checked for Sigstore support: 2026-08-19 (v0.9.96 — no attestations)
   # TODO: Add post-install cosign verification once conforma/cli publishes Sigstore attestations.
   when:
     - is_linux
