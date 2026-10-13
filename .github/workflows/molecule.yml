@@ -12,9 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: vm
-          runner: ubuntu-22.04
-          timeout: 90
+        - scenario: macos
+          runner: macos-15
+          timeout: 60
     env:
       SKIP_GPG_VERIFY: '1'
     steps:
@@ -29,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '9c5f3a5a0f2f541a1df69eabb3db6686111aa78a240746aed099b888e71947f5',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'f15983b3858fd25bd4bac2bf1eaa641ad129c8645435a850eee3c2f17fc78d45',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: 6607fce5bdbb4bd951a6fe274527b19ca68c55a4')\nPY_SNAPSHOT\n"
+        \ candidate tree: ac4b2c8f16ce2744f1972af88b4a5ddab82f253e')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
@@ -73,6 +73,14 @@ jobs:
         \ []).extend([\n        \"driver = 'qemu'\", \"cpu_mode = 'maximum'\",\n    ])\n    platform.setdefault('instance_raw_config_args',\
         \ []).append('vm.boot_timeout = 600')\npath.write_text(yaml.safe_dump(config, sort_keys=False))\nPY_VM\nfi\nvirsh\
         \ -c qemu:///system list --all\n"
+    - name: Show native macOS firewall state
+      if: matrix.scenario == 'macos'
+      shell: bash
+      run: 'sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+
+        sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
+
+        '
     - name: Run complete Molecule scenario
       shell: bash
       env:
