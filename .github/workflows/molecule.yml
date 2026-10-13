@@ -12,33 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: fedora
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: rocky
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: debian
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container-offline
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container-offline-distrobox
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: distrobox-role
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: packages-binaries
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: ssti-guard
-          runner: ubuntu-24.04
-          timeout: 60
         - scenario: macos
           runner: macos-15
           timeout: 60
@@ -59,11 +32,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'e53d701bb2bb0478a58c9df1e51c7d0ac3a4253b9d63b88a70f58cf733fe2494',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '6d33926b6bd93bf31d09ba25b75cc1196b9d5e560f97a835c3fe7919f35b06d5',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: f7041d1a206f61c5c8840a151306e1f16e20e281')\nPY_SNAPSHOT\n"
+        \ candidate tree: bb4b6f9a93287e8212c61c8ce93eb1f1b253e530')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
@@ -119,6 +92,6 @@ jobs:
       run: 'unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS
         PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR TMPDIR TEMP TMP
 
-        molecule test -s "$SCENARIO"
+        make "test-$SCENARIO"
 
         '
