@@ -1,0 +1,29 @@
+---
+# roles/claude/tasks/launchd_cleanup.yml
+# Unload and remove a launchd agent when it is disabled (macOS only).
+# Vars: _launchd_label, _launchd_plist_path, _launchd_enabled
+- name: Check launchd plist exists (macOS) — {{ _launchd_label }}
+  ansible.builtin.stat:
+    path: "{{ _launchd_plist_path }}"
+  register: _launchd_plist_stat
+  when: not (_launchd_enabled | bool)
+
+- name: Unload disabled launchd agent (macOS) — {{ _launchd_label }}
+  ansible.builtin.command:
+    cmd: >-  # yamllint disable-line rule:line-length
+      launchctl bootout gui/{{ ansible_facts['user_uid'] }}
+      {{ _launchd_plist_path }}
+  register: _launchd_bootout_result
+  when:
+    - not (_launchd_enabled | bool)
+    - _launchd_plist_stat.stat.exists
+  changed_when: _launchd_bootout_result.rc == 0
+  failed_when: false
+
+- name: Remove disabled launchd plist (macOS) — {{ _launchd_label }}
+  ansible.builtin.file:
+    path: "{{ _launchd_plist_path }}"
+    state: absent
+  when:
+    - not (_launchd_enabled | bool)
+    - _launchd_plist_stat.stat.exists

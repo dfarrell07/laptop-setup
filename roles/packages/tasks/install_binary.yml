@@ -1,0 +1,66 @@
+---
+# roles/packages/tasks/install_binary.yml
+# Shared block/rescue skeleton for direct-binary get_url downloads.
+#
+# Required vars (pass via include_tasks vars:):
+#   binary_name        — display name, e.g. "kind"
+#   url                — download URL (Jinja2 evaluated in caller context)
+#   dest               — install path, e.g. /usr/local/bin/kind
+#   checksum           — e.g. "sha256:{{ computed_sha }}"
+#   version_check_cmd  — shell command to test installed version
+#   version_string     — expected string in version output
+#   csb_action         — manual install instructions (used in both CSB and non-CSB messages)
+#   csb_ticket_summary — CSB ticket one-liner
+#   csb_ticket_body    — CSB ticket detail
+#
+# Optional vars:
+#   download_timeout        — get_url timeout in seconds (default: 120)
+#   version_check_timeout   — version check shell timeout in seconds (default: 10)
+
+- name: Fetch and install binary — {{ binary_name }}
+  block:
+    - name: "Version check: {{ binary_name }}"
+      ansible.builtin.command:
+        cmd: "timeout {{ version_check_timeout | default(10) }} {{ version_check_cmd }}"
+      register: _install_binary_check
+      changed_when: false
+      failed_when: _install_binary_check.rc not in [0, 1, 127]
+      check_mode: false
+
+    - name: Fetch and SHA256-verify binary — {{ binary_name }}
+      when: version_string not in (_install_binary_check.stdout + _install_binary_check.stderr)
+      ansible.builtin.get_url:
+        url: "{{ url }}"
+        dest: "{{ dest }}"
+        checksum: "{{ checksum }}"
+        mode: "0755"
+        timeout: "{{ download_timeout | default(120) }}"
+      environment:
+        HTTP_PROXY: ''
+        HTTPS_PROXY: ''
+        http_proxy: ''
+        https_proxy: ''
+      become: true
+      tags: [become]
+      register: _install_binary_download
+      retries: 3
+      delay: 10
+      until: _install_binary_download is succeeded
+
+  rescue:
+    - name: "CSB failure record: {{ binary_name }}"
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "{{ binary_name }}"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: "{{ csb_action }}"
+        _csb_ticket_summary: "{{ csb_ticket_summary }}"
+        _csb_ticket_body: "{{ csb_ticket_body }}"
+      when: csb_rhel
+    - name: "Download failure warning: {{ binary_name }}"
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download {{ binary_name }}: {{ ansible_failed_result.msg | default('unknown error') }}.
+          {{ csb_action }}
+      when: not csb_rhel

@@ -1,0 +1,174 @@
+---
+# roles/system/tasks/dns_over_tls.yml
+# --- DNS-over-TLS ---
+- name: Enable systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: started
+    enabled: true
+  # container detection is unreliable in Molecule; starting resolved triggers
+  # systemd re-exec, crashing undetected privileged Podman containers
+  when:
+    - is_dnf or is_apt
+    - not system_is_container
+    - not csb_rhel
+
+- name: Ensure resolved drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+  when:
+    - is_dnf or is_apt
+    - not system_is_container  # inotify on /etc/systemd/resolved.conf.d triggers resolved restart, crashes containers
+    - not csb_rhel
+
+- name: Disable LLMNR and mDNS via resolved drop-in
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [Resolve]
+      LLMNR={{ system_resolved_llmnr }}
+      MulticastDNS={{ system_resolved_multicast_dns }}
+    dest: /etc/systemd/resolved.conf.d/98-llmnr.conf
+    mode: "0644"
+  notify: Restart systemd-resolved
+  when:
+    - is_dnf or is_apt
+    - not csb_rhel
+    - not system_is_container  # resolved restart crashes privileged Podman containers
+
+- name: Remove DNS-over-TLS config on RHEL CSB (IT manages DNS via IPA/SSSD)
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/99-dot.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container
+  notify: Restart systemd-resolved
+
+- name: Warn that DoT and resolved are unmanaged on RHEL CSB
+  ansible.builtin.debug:
+    msg: >-
+      RHEL CSB: systemd-resolved and DNS-over-TLS are not managed by this role
+      (IT controls DNS via IPA/SSSD); 99-dot.conf removed if present
+  when:
+    - csb_detected
+    - csb_rhel
+    - not system_is_container
+
+
+- name: Assert system_dot_mode is valid
+  ansible.builtin.assert:
+    that: system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'opportunistic']
+    fail_msg: "system_dot_mode='{{ system_dot_mode }}' is not a valid DNSOverTLS value — use yes, no, or opportunistic"
+  when: not csb_rhel and not system_is_container
+
+- name: Assert system_dnssec_mode is valid
+  ansible.builtin.assert:
+    that: system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') in ['yes', 'no', 'allow-downgrade']
+    fail_msg: "system_dnssec_mode='{{ system_dnssec_mode }}' is not a valid DNSSEC value — use yes, no, or allow-downgrade"
+  when: not csb_rhel and not system_is_container
+
+# yamllint disable rule:line-length
+- name: DNS-over-TLS deploy and warnings (skipped on RHEL CSB and in containers)
+  when:
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Deploy DNS-over-TLS resolved config
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          [Resolve]
+          DNS={{ system_dns_primary | regex_replace("[\n\r].*", "") }}
+          Domains={{ system_dns_domains | regex_replace("[\n\r].*", "") }}
+          DNSOverTLS={{ system_dot_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
+          DNSSEC={{ system_dnssec_mode | string | lower | replace('true', 'yes') | replace('false', 'no') }}
+          FallbackDNS={{ system_dns_fallback | regex_replace("[\n\r].*", "") }}
+          # NOTE: In strict DNSOverTLS mode (yes), FallbackDNS also uses port 853 — no plain-UDP fallback available on networks blocking port 853. In opportunistic mode, FallbackDNS falls back to plain UDP 53 if port 853 fails.
+        dest: /etc/systemd/resolved.conf.d/99-dot.conf
+        mode: "0644"
+      notify: Restart systemd-resolved
+      register: _dot_conf_result
+
+    - name: Warn on strict DoT mode
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_dot_mode=yes (strict) — DNS will fail on networks blocking
+          port 853 (captive portals, hotel/conference Wi-Fi). FallbackDNS also uses
+          port 853 in strict mode, so it will not help on networks that block port 853.
+          It WILL help if the primary server is temporarily unreachable.
+      when: system_dot_mode | string | lower in ['yes', 'true', '1']
+
+    - name: "Warn: Domains=~. catch-all breaks non-NM VPN split DNS"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_dns_domains=~. (catch-all) routes all DNS through the resolved
+          stub on 127.0.0.53. Non-NetworkManager VPNs (e.g. wg-quick, openconnect outside
+          NM) configure split DNS by writing nameservers to /etc/resolv.conf, but that path
+          is a symlink to the stub, so those writes are ignored or break the symlink. VPN
+          DNS will not work unless the VPN is integrated with NetworkManager or pushes
+          per-link routing domains to resolved via resolvectl.
+          Verify after VPN connects: resolvectl status (VPN interface must show a per-link
+          DNS entry with routing domains, e.g. ~corp.example.com). Fix steps in
+          references/troubleshooting.md under 'standalone wg-quick DNS'.
+      when: system_dns_domains == '~.'
+
+    - name: "Warn: per-link DNS resolvers bypass DNSOverTLS"
+      ansible.builtin.debug:
+        msg: >-
+          Per-link DNS resolvers pushed by VPN/Tailscale via resolvectl bypass DNSOverTLS
+          — systemd-resolved sends those queries to the per-link resolver using its native
+          transport (typically plain UDP 53). system_dot_mode: yes does not encrypt
+          per-link DNS.
+      when: system_dot_mode | string | lower not in ['no', 'false', '0']
+
+    - name: Warn on strict DNSSEC without strict DoT
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_dnssec_mode=yes (strict) without system_dot_mode=yes — in
+          opportunistic DoT mode, systemd-resolved may fall back to plain UDP on port 853
+          failure, allowing a network-path adversary to strip DNSSEC records. Set
+          system_dot_mode: yes alongside system_dnssec_mode: yes for a protected channel.
+      when:
+        - system_dnssec_mode | string | lower in ['yes', 'true', '1']
+        - system_dot_mode | string | lower not in ['yes', 'true', '1']
+
+    - name: Warn on opportunistic DoT with allow-downgrade DNSSEC (default full-downgrade risk)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_dot_mode={{ system_dot_mode }} + system_dnssec_mode={{ system_dnssec_mode }} —
+          an on-path attacker can silently strip both TLS encryption and DNSSEC validation from DNS
+          responses simultaneously. Set system_dot_mode: yes and system_dnssec_mode: yes for a
+          fully protected channel.
+      when:
+        - system_dot_mode | string | lower not in ['yes', 'true', '1']
+        - system_dnssec_mode | string | lower not in ['yes', 'true', '1']
+        - system_dot_mode | string | lower not in ["no", "false", "0"]
+
+    - name: Warn when DoT is explicitly disabled (system_dot_mode=no)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: system_dot_mode={{ system_dot_mode }} — DNS-over-TLS is fully disabled.
+          All DNS queries travel in plaintext and are visible to on-path observers.
+          Set system_dot_mode: yes (strict) or omit the variable (opportunistic) to enable
+          transport encryption.
+      when: system_dot_mode | string | lower in ["no", "false", "0"]
+# yamllint enable rule:line-length
+
+# --- Verify resolv.conf symlink for split DNS ---
+- name: Ensure resolv.conf points to systemd-resolved stub (required for split DNS/MagicDNS)
+  ansible.builtin.file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
+  when:
+    - is_dnf or is_apt
+    # csb_detected NOT guarded: resolved runs on Fedora hybrid; stub is valid
+    # even without 99-dot.conf (DoT removed but stub is interface-agnostic).
+    # On CSB Fedora hybrid: 99-dot.conf is absent but stub is still valid for
+    # Tailscale MagicDNS per-link routing and NM DHCP DNS. No DoT or catch-all is active.
+    - not csb_rhel
+    - not system_is_container  # dangling symlink breaks DNS when resolved is not running in containers

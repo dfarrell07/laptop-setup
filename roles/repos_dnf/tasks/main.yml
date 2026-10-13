@@ -4,7 +4,11 @@
 # Uses block/rescue to handle CSB restrictions gracefully.
 
 - name: Add GitHub CLI repo
-  when: repo_gh_cli | default(true)
+  # gh is in standard Fedora repos (F43+) — third-party repo only needed for RHEL/Rocky
+  when:
+    - repo_gh_cli
+    - not is_fedora
+    - not csb_rhel  # CSB: external repo write succeeds silently; gh available in container
   block:
     - name: Add gh-cli repo
       ansible.builtin.yum_repository:
@@ -12,23 +16,24 @@
         description: GitHub CLI
         baseurl: "https://cli.github.com/packages/rpm"
         gpgcheck: true
-        gpgkey: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x23F3D4EA75716059"
+        repo_gpgcheck: true
+        gpgkey: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
         enabled: true
   rescue:
-    - name: Record gh-cli repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add GitHub CLI repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install gh binary manually or inside container"
-        _csb_ticket_summary: "Exception request: GitHub CLI RPM repository"
-        _csb_ticket_body: "GitHub CLI repo needed for PR workflows"
+    - name: Warn gh-cli repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add GitHub CLI repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
 
 - name: Add Google Chrome repo
   when:
-    - repo_google_chrome | default(true)
-    - ansible_architecture == 'x86_64'
+    - repo_google_chrome
+    - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   block:
     - name: Add google-chrome repo
       ansible.builtin.yum_repository:
@@ -36,32 +41,70 @@
         description: Google Chrome
         baseurl: "{{ repos_dnf_google_chrome_repo }}"
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
         enabled: true
   rescue:
-    - name: Record Chrome repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Google Chrome repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Download Chrome RPM directly or use Chromium from Fedora repos"
-        _csb_ticket_summary: "Exception request: Google Chrome RPM repository"
-        _csb_ticket_body: "Google Chrome needed for web development and testing"
+    - name: Warn Google Chrome repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Google Chrome repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
 
 - name: Add Google Cloud SDK repo
   when:
-    - repo_google_cloud_sdk | default(true)
-    - ansible_architecture == 'x86_64'
+    - repo_google_cloud_sdk
+    - ansible_facts['architecture'] == 'x86_64'
+    - not csb_rhel  # CSB: external consumer repo not permitted on RHEL CSB
   block:
-    - name: Add google-cloud-sdk repo
+    - name: Add google-cloud-cli repo
+      vars:
+        _gcloud_use_el10: >-
+          {{ (is_fedora and ansible_facts['distribution_major_version'] | int >= 40)
+             or (not is_fedora and ansible_facts['distribution_major_version'] | int >= 10) }}
       ansible.builtin.yum_repository:
-        name: google-cloud-sdk
+        name: google-cloud-cli
         description: Google Cloud CLI
-        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64"
+        baseurl: "https://packages.cloud.google.com/yum/repos/cloud-sdk-{{ 'el10' if _gcloud_use_el10 else 'el9' }}-x86_64"
         gpgcheck: true
-        gpgkey: "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+        repo_gpgcheck: false  # packages.cloud.google.com does not sign repomd.xml;
+          # residual risk: MITM can manipulate repo metadata (version list, package
+          # names) without detection — e.g. downgrade to a vulnerable version.
+          # RPM-level gpgcheck above remains the effective guard against malicious
+          # payload delivery. Mitigated by versionlock pinning (see tasks below).
+        # yamllint disable-line rule:line-length
+        gpgkey: "https://packages.cloud.google.com/yum/doc/{{ 'rpm-package-key-v10.gpg' if _gcloud_use_el10 else 'rpm-package-key.gpg' }}"
         enabled: true
+    - name: Install dnf versionlock plugin for google-cloud-cli pin
+      ansible.builtin.dnf:
+        name: python3-dnf-plugin-versionlock
+        state: present
+    - name: Install google-cloud-cli to enable versionlock protection on first install
+      ansible.builtin.dnf:
+        name: google-cloud-cli
+        state: present
+    # noqa: command-instead-of-module — query installed RPM version without modifying packages
+    - name: Query installed google-cloud-cli version
+      ansible.builtin.command:
+        cmd: rpm -q --queryformat '%{VERSION}' google-cloud-cli
+      changed_when: false
+      register: _gcloud_installed_version
+    - name: Assert google-cloud-cli meets minimum version floor (MITM downgrade guard)
+      ansible.builtin.assert:
+        that: _gcloud_installed_version.stdout is version(repos_dnf_gcloud_min_version, '>=')
+        fail_msg: >-
+          google-cloud-cli {{ _gcloud_installed_version.stdout }} is below minimum
+          floor {{ repos_dnf_gcloud_min_version }}. A MITM may have substituted an
+          older version via unsigned repomd.xml. Remove
+          /etc/yum.repos.d/google-cloud-cli.repo, investigate, and re-run. Override
+          repos_dnf_gcloud_min_version in config.yml if intentionally downgrading.
+    - name: Pin google-cloud-cli version to limit MITM downgrade exposure
+      community.general.dnf_versionlock:
+        name: google-cloud-cli
+        state: present
   rescue:
     - name: Record Google Cloud SDK repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -71,36 +114,30 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install gcloud manually or inside container"
         _csb_ticket_summary: "Exception request: Google Cloud SDK RPM repository"
-        _csb_ticket_body: "Google Cloud SDK needed for GCP workflows"
+        _csb_ticket_body: >-
+          Google Cloud SDK (gcloud/gsutil/bq) provides CLI tools for Google Cloud Platform resource management.
+          Repo URL: https://packages.cloud.google.com/yum/repos/cloud-sdk-el10-x86_64 (el9 on older releases).
+          Fedora does not ship gcloud; pip install lacks some SDK components and shell integration scripts.
+          Blocked workflows: GCP resource management, container image publishing to GCR, GKE cluster access.
+      when: csb_rhel
+    - name: Warn Google Cloud SDK repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Google Cloud SDK repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
 
-- name: Add Slack repo
-  when:
-    - repo_slack | default(true)
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Add slack repo
-      ansible.builtin.yum_repository:
-        name: slack
-        description: Slack Desktop
-        baseurl: "https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64"
-        gpgcheck: true
-        gpgkey: "https://packagecloud.io/slacktechnologies/slack/gpgkey"
-        enabled: true
-  rescue:
-    - name: Record Slack repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Slack repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install Slack via Flatpak or download RPM directly"
-        _csb_ticket_summary: "Exception request: Slack RPM repository"
-        _csb_ticket_body: "Slack desktop app for team communication"
-
+# Mullvad is a personal privacy VPN whose purpose is to bypass network monitoring —
+# adding it on CSB could trigger SIEM/DLP alerts and violates corporate policy intent.
+# Skip entirely on CSB (not just rescue-on-failure) unlike other consumer repos.
 - name: Add Mullvad VPN repo
   when:
-    - repo_mullvad | default(true)
-    - ansible_distribution == 'Fedora'
+    - repo_mullvad
+    - is_fedora
+    - profile == 'personal'
+    - not csb_detected
   block:
     - name: Add mullvad repo
       ansible.builtin.yum_repository:
@@ -108,60 +145,122 @@
         description: Mullvad VPN
         baseurl: "https://repository.mullvad.net/rpm/stable/$basearch"
         gpgcheck: true
+        repo_gpgcheck: true
         gpgkey: "https://repository.mullvad.net/rpm/mullvad-keyring.asc"
         enabled: true
   rescue:
-    - name: Record Mullvad repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
-      vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Mullvad VPN repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Download Mullvad RPM directly from mullvad.net"
-        _csb_ticket_summary: "Exception request: Mullvad VPN RPM repository"
-        _csb_ticket_body: "Mullvad VPN for privacy-preserving internet access"
+    # Block-level 'when' (not csb_detected) excludes CSB machines,
+    # so csb_detected is always false when rescue runs.
+    - name: Warn Mullvad VPN repo failed (network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Mullvad VPN repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
 
 - name: Add Docker CE repo
-  when: repo_docker_ce | default(false)
+  when:
+    - repo_docker_ce
+    - not csb_rhel  # CSB: Podman is the corporate standard; Docker CE repo not permitted on RHEL CSB
   block:
     - name: Add docker-ce repo
       ansible.builtin.yum_repository:
         name: docker-ce
         description: Docker CE Stable
-        baseurl: >-
-          https://download.docker.com/linux/{{
-          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
-          }}/$releasever/$basearch/stable
+        baseurl: "https://download.docker.com/linux/{{ _docker_distro }}/$releasever/$basearch/stable"
         gpgcheck: true
-        gpgkey: >-
-          https://download.docker.com/linux/{{
-          'fedora' if ansible_distribution == 'Fedora' else 'rhel'
-          }}/gpg
+        repo_gpgcheck: true
+        gpgkey: "https://download.docker.com/linux/{{ _docker_distro }}/gpg"
         enabled: true
-  rescue:
-    - name: Record Docker CE repo failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Add Docker CE repository"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Use rootless Podman instead (recommended)"
-        _csb_ticket_summary: "Exception request: Docker CE RPM repository"
-        _csb_ticket_body: "Docker CE for container builds requiring Docker-specific features"
+        _docker_distro: >-
+          {{ 'fedora' if is_fedora
+             else ('centos' if ansible_facts['distribution'] in ['Rocky', 'AlmaLinux', 'CentOS']
+             else 'rhel') }}
+  rescue:
+    - name: Warn Docker CE repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Docker CE repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
 
 - name: Add acli repo
+  # URL-as-toggle: task is enabled by defining repos_dnf_acli_baseurl in config.yml
+  # (not a repo_X boolean, because the URL is an internal secret)
+  # Risk acceptance: gpgcheck and repo_gpgcheck are disabled — this internal Red Hat repo
+  # publishes no GPG key or signed metadata. Mitigations: opt-in only (explicit baseurl in
+  # config.yml), profile==work scoped, URL assert enforces *.redhat.com domain.
+  # SECURITY — first-install window: versionlock (below) only guards against post-provision
+  # unauthenticated updates; it does NOT protect the first-install window. A compromised repo
+  # host at first provision delivers a malicious package which versionlock then pins permanently.
+  # Mitigate by setting repos_dnf_acli_binary_sha256 in config.yml (gitignored) to the SHA256
+  # of the trusted acli binary — the play fails immediately if it mismatches. Obtain the hash
+  # out-of-band from IT or internal release notes before provisioning.
   when:
-    - repo_acli | default(true)
     - profile == 'work'
     - repos_dnf_acli_baseurl is defined
   block:
+    - name: Assert acli baseurl targets expected internal domain
+      ansible.builtin.assert:
+        that: repos_dnf_acli_baseurl is match('^https://[a-zA-Z0-9._-]+\.redhat\.com/.*')
+        fail_msg: "repos_dnf_acli_baseurl must be an internal Red Hat URL (https://*.redhat.com/...)"
     - name: Add acli repo
       ansible.builtin.yum_repository:
         name: acli
         description: Atlassian CLI
         baseurl: "{{ repos_dnf_acli_baseurl }}"
-        gpgcheck: false
+        gpgcheck: false  # Internal Red Hat repo does not publish a GPG key
+        repo_gpgcheck: false  # metadata also unsigned — same limitation as gpgcheck above
         enabled: true
+    - name: Install dnf versionlock plugin for acli pin
+      ansible.builtin.dnf:
+        name: python3-dnf-plugin-versionlock
+        state: present
+    - name: Install acli to enable versionlock protection on first install
+      ansible.builtin.dnf:
+        name: acli
+        state: present
+    - name: Warn when acli first-install SHA256 check is not configured
+      # repos_dnf_acli_binary_sha256 is not set — no integrity check on the downloaded binary.
+      # Obtain the expected SHA256 out-of-band from IT and set it in config.yml to close
+      # the first-install window.  See default.config.yml for the variable name.
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY ADVISORY: repos_dnf_acli_binary_sha256 is not set in config.yml.
+          The acli binary was installed from an unsigned repo with no integrity check.
+          Obtain the SHA256 hash out-of-band from IT and add
+          repos_dnf_acli_binary_sha256 to config.yml to enable first-install verification.
+      when: repos_dnf_acli_binary_sha256 is not defined
+    - name: Stat acli binary for SHA256 first-install integrity check
+      # Only runs when repos_dnf_acli_binary_sha256 is set in config.yml.
+      # This is the sole guard against a compromised first-install payload;
+      # versionlock below only prevents unauthenticated updates after this point.
+      ansible.builtin.stat:
+        path: /usr/bin/acli
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: _acli_stat
+      when: repos_dnf_acli_binary_sha256 is defined
+    - name: Assert acli binary SHA256 matches expected hash
+      ansible.builtin.assert:
+        that: _acli_stat.stat.checksum == repos_dnf_acli_binary_sha256
+        fail_msg: >-
+          SECURITY: acli binary SHA256 mismatch.
+          Expected: {{ repos_dnf_acli_binary_sha256 }}
+          Got:      {{ _acli_stat.stat.checksum | default('unavailable') }}
+          The installed binary does not match the trusted hash in config.yml.
+          Possible supply-chain compromise — do not proceed. Re-obtain the binary
+          hash out-of-band from IT or internal release notes before re-running.
+      when: repos_dnf_acli_binary_sha256 is defined
+    - name: Pin acli version to limit unauthenticated update exposure
+      # NOTE: this pin only protects against post-provision tampering (future dnf updates).
+      # First-install integrity depends on repos_dnf_acli_binary_sha256 being set above.
+      community.general.dnf_versionlock:
+        name: acli
+        state: present
   rescue:
     - name: Record acli repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
@@ -169,25 +268,90 @@
         _csb_role: repos_dnf
         _csb_task_name: "Add acli repository"
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "Install acli via pip: pip install atlassian-cli"
+        _csb_action: "Install acli via pipx: pipx install atlassian-cli"
         _csb_ticket_summary: "Exception request: acli RPM repository"
-        _csb_ticket_body: "acli for Atlassian CLI workflows"
+        _csb_ticket_body: >-
+          acli is a Red Hat-internal command-line tool for Jira and Confluence automation.
+          Repo URL: {{ repos_dnf_acli_baseurl }} (internal Red Hat package repository).
+          No public RPM is available; the internal repo is the only supported distribution channel.
+          pip install atlassian-cli is a different third-party project and not a drop-in replacement.
+          Blocked workflows: Jira ticket management, Confluence updates, sprint planning scripts.
+      when: csb_rhel
+    - name: Warn acli repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add acli repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
 
 - name: Add Red Hat internal repos
   when:
-    - repo_redhat | default(true)
+    - repo_redhat
     - profile == 'work'
     - repos_dnf_redhat_baseurl is defined
   block:
+    - name: Assert Red Hat internal repo URLs target expected internal domain
+      ansible.builtin.assert:
+        that:
+          - repos_dnf_redhat_baseurl is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*')
+          - repos_dnf_redhat_gpgkey is match('^https://(pkgs\.devel|repo|keys)\.redhat\.com/.*\.gpg$')
+        fail_msg: >-
+          repos_dnf_redhat_baseurl and repos_dnf_redhat_gpgkey must target known Red Hat
+          internal domains (pkgs.devel.redhat.com, repo.redhat.com, or keys.redhat.com);
+          this prevents subdomain hijacking attacks. Do not use arbitrary redhat.com subdomains.
+    - name: Create secure temporary directory for Red Hat GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _redhat_gpg
+      register: _redhat_gpg_tmp_dir
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+    - name: Fetch and verify Red Hat internal GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          KEYFILE="{{ _redhat_gpg_tmp_dir.path }}/key.gpg"
+          curl -fsSL "{{ repos_dnf_redhat_gpgkey }}" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
+            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
+              $1 == "fpr" && primary {print $10; primary=0}')
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ repos_dnf_redhat_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+    - name: Clean up Red Hat GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _redhat_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      when:
+        - repos_dnf_redhat_gpg_fingerprint | length > 0
+        - _redhat_gpg_tmp_dir is defined
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
         description: Red Hat Internal Tools
         baseurl: "{{ repos_dnf_redhat_baseurl }}"
         gpgcheck: "{{ repos_dnf_redhat_gpgkey | default('') | length > 0 }}"
+        repo_gpgcheck: "{{ repos_dnf_redhat_gpgkey | default('') | length > 0 }}"
         gpgkey: "{{ repos_dnf_redhat_gpgkey | default(omit) }}"
         enabled: true
   rescue:
+    - name: Remove Red Hat GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _redhat_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      failed_when: false
+      when:
+        - _redhat_gpg_tmp_dir is defined
+        - _redhat_gpg_tmp_dir.path is defined
     - name: Record Red Hat repo failure
       ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
       vars:
@@ -196,29 +360,285 @@
         _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
         _csb_action: "Install Red Hat internal tools manually or request VPN access"
         _csb_ticket_summary: "Exception request: Red Hat internal RPM repository"
-        _csb_ticket_body: "Internal tools repo needed for Red Hat development workflows"
+        _csb_ticket_body: >-
+          The Red Hat internal tools repository provides packages for Red Hat engineering workflows.
+          Repo URL: {{ repos_dnf_redhat_baseurl }} (internal Red Hat package repository).
+          Internal packages are not available through RHSM, EPEL, or any public repository.
+          Blocked workflows: internal tooling installation, debugging packages, Red Hat-specific dev utilities.
+      when: csb_rhel
+    - name: Warn Red Hat internal repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Red Hat internal repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
 
-- name: Enable RPM Fusion repos
+# RPM Fusion free provides multimedia codecs (H.264/AAC, ffmpeg, VLC) and is allowed
+# on hybrid Fedora CSB (csb_detected=true, csb_rhel=false) where the user manages their
+# own Fedora install. Guard is 'not csb_rhel' (not 'not csb_detected') intentionally:
+# hybrid CSB Fedora is user-managed and IT does not restrict third-party Fedora repos here.
+# If your IT policy prohibits RPM Fusion, set repo_rpmfusion_free: false in config.yml.
+- name: Enable RPM Fusion free repo
   when:
-    - repo_rpmfusion | default(true)
-    - ansible_distribution == 'Fedora'
+    - repo_rpmfusion_free
+    - is_fedora
+    - not csb_rhel
   block:
+    - name: Create secure temporary directory for RPM Fusion free GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _rpmfusion_free_gpg
+      register: _rpmfusion_free_gpg_tmp_dir
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+    - name: Fetch and verify RPM Fusion free GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          KEYFILE="{{ _rpmfusion_free_gpg_tmp_dir.path }}/key.gpg"
+          URL="https://download1.rpmfusion.org/free/fedora/RPM-GPG-KEY-rpmfusion-free-fedora-2020"
+          curl -fsSL "$URL" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
+            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
+              $1 == "fpr" && primary {print $10; primary=0}')
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ repos_dnf_rpmfusion_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+    - name: Clean up RPM Fusion free GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      when: _rpmfusion_free_gpg_tmp_dir is defined
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
-        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        # yamllint disable-line rule:line-length
+        name: "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
         state: present
+    # noqa: command-instead-of-module — verify RPM signature without installing
+    - name: Verify RPM Fusion free release cryptographic signature
+      ansible.builtin.command:
+        cmd: rpm --verify --verbose --nofiles --nomtime rpmfusion-free-release
+      changed_when: false
+      register: _rpmfusion_free_verify
+      failed_when: "_rpmfusion_free_verify.rc != 0"
+  rescue:
+    - name: Remove RPM Fusion free GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      failed_when: false
+      when:
+        - _rpmfusion_free_gpg_tmp_dir is defined
+        - _rpmfusion_free_gpg_tmp_dir.path is defined
+    - name: Remove rpmfusion-free-release after signing check failure
+      ansible.builtin.dnf:
+        name: rpmfusion-free-release
+        state: absent
+      failed_when: false
+    - name: Warn RPM Fusion free failed (network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Enable RPM Fusion free repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a GPG bootstrap failure (libdnf5 enforces GPG on @commandline
+          installs on Fedora 41+ before the release package can deliver its key) or a
+          transient network error (DNS timeout, connectivity). Continuing playbook execution.
 
+# RPM Fusion nonfree provides proprietary firmware and drivers (NVIDIA, Broadcom) and
+# is allowed on hybrid Fedora CSB for the same reason as the free repo above.
+# Guard is 'not csb_rhel' intentionally. Set repo_rpmfusion_nonfree: false in config.yml
+# to opt out if your IT policy prohibits nonfree repos.
+- name: Enable RPM Fusion nonfree repo
+  when:
+    - repo_rpmfusion_nonfree
+    - is_fedora
+    - not csb_rhel
+  block:
+    - name: Create secure temporary directory for RPM Fusion nonfree GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _rpmfusion_nonfree_gpg
+      register: _rpmfusion_nonfree_gpg_tmp_dir
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+    - name: Fetch and verify RPM Fusion nonfree GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          KEYFILE="{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}/key.gpg"
+          URL="https://download1.rpmfusion.org/nonfree/fedora/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020"
+          curl -fsSL "$URL" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
+            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
+              $1 == "fpr" && primary {print $10; primary=0}')
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ repos_dnf_rpmfusion_nonfree_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+    - name: Clean up RPM Fusion nonfree GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      when: _rpmfusion_nonfree_gpg_tmp_dir is defined
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
-        name: "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+        name: >-  # yamllint disable-line rule:line-length
+          https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version']
+          }}.noarch.rpm
         state: present
+    # noqa: command-instead-of-module — verify RPM signature without installing
+    - name: Verify RPM Fusion nonfree release cryptographic signature
+      ansible.builtin.command:
+        cmd: rpm --verify --verbose --nofiles --nomtime rpmfusion-nonfree-release
+      changed_when: false
+      register: _rpmfusion_nonfree_verify
+      failed_when: "_rpmfusion_nonfree_verify.rc != 0"
   rescue:
-    - name: Record RPM Fusion failure
-      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+    - name: Remove RPM Fusion nonfree GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      failed_when: false
+      when:
+        - _rpmfusion_nonfree_gpg_tmp_dir is defined
+        - _rpmfusion_nonfree_gpg_tmp_dir.path is defined
+    - name: Remove rpmfusion-nonfree-release after signing check failure
+      ansible.builtin.dnf:
+        name: rpmfusion-nonfree-release
+        state: absent
+      failed_when: false
+    - name: Warn RPM Fusion nonfree failed (network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Enable RPM Fusion nonfree repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a GPG bootstrap failure (libdnf5 enforces GPG on @commandline
+          installs on Fedora 41+ before the release package can deliver its key) or a
+          transient network error (DNS timeout, connectivity). Continuing playbook execution.
+
+- name: Add Tailscale repo
+  when:
+    - repo_tailscale
+    - not csb_rhel
+  block:
+    - name: Create secure temporary directory for Tailscale GPG key
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _tailscale_gpg
+      register: _tailscale_gpg_tmp_dir
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+    - name: Fetch and verify Tailscale GPG key atomically
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          TS_PATH="{{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}"
+          KEYFILE="{{ _tailscale_gpg_tmp_dir.path }}/key.gpg"
+          curl -fsSL "https://pkgs.tailscale.com/stable/${TS_PATH}/repo.gpg" -o "$KEYFILE"
+          FP=$(gpg --show-keys --with-colons "$KEYFILE" 2>/dev/null |
+            awk -F: '$1 == "pub" {primary=1} $1 == "sub" {primary=0}
+              $1 == "fpr" && primary {print $10; primary=0}')
+          if [ -z "$FP" ]; then exit 1; fi
+          if [ "$FP" = "{{ repos_dnf_tailscale_gpg_fingerprint | upper }}" ]; then
+            rpm --import "$KEYFILE"
+          else
+            exit 1
+          fi
+      changed_when: false
+    - name: Clean up Tailscale GPG temporary directory
+      ansible.builtin.file:
+        path: "{{ _tailscale_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      when: _tailscale_gpg_tmp_dir is defined
+    - name: Add Tailscale stable repo
       vars:
-        _csb_role: repos_dnf
-        _csb_task_name: "Enable RPM Fusion repositories"
-        _csb_error: "{{ ansible_failed_result.msg | default('unknown') }}"
-        _csb_action: "RPM Fusion provides multimedia codecs and drivers. Not critical for development."
-        _csb_ticket_summary: "Exception request: RPM Fusion repositories"
-        _csb_ticket_body: "RPM Fusion needed for multimedia codecs and NVIDIA drivers"
+        _ts_path: >-
+          {{ 'rhel/' ~ ansible_facts['distribution_major_version'] if not is_fedora else 'fedora' }}
+      ansible.builtin.yum_repository:
+        name: tailscale-stable
+        description: Tailscale stable
+        # Tailscale uses a single static 'fedora' path for all Fedora releases (no per-version subdirectory)
+        baseurl: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/$basearch"
+        gpgcheck: true
+        repo_gpgcheck: true
+        gpgkey: "https://pkgs.tailscale.com/stable/{{ _ts_path }}/repo.gpg"
+        enabled: true
+  rescue:
+    - name: Remove Tailscale GPG temp directory on failure
+      ansible.builtin.file:
+        path: "{{ _tailscale_gpg_tmp_dir.path }}"
+        state: absent
+      changed_when: false  # scratch storage is removed within this key-verification transaction
+      failed_when: false
+      when:
+        - _tailscale_gpg_tmp_dir is defined
+        - _tailscale_gpg_tmp_dir.path is defined
+    - name: Warn Tailscale repo failed (non-CSB network error)
+      ansible.builtin.debug:
+        msg: >-
+          REPO SETUP FAILED: Add Tailscale repository in role repos_dnf.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This is likely a transient network error (DNS timeout, expired GPG key).
+          Continuing playbook execution.
+      when: not csb_rhel
+
+# Cleanup: remove stale .repo files for repos whose boolean was flipped to false.
+# yum_repository state: absent deletes /etc/yum.repos.d/<name>.repo idempotently.
+- name: Remove gh-cli repo when disabled
+  ansible.builtin.yum_repository:
+    name: gh-cli
+    state: absent
+  when: not repo_gh_cli
+
+- name: Remove google-chrome repo when disabled
+  ansible.builtin.yum_repository:
+    name: google-chrome
+    state: absent
+  when: not repo_google_chrome
+
+- name: Remove google-cloud-cli repo when disabled
+  ansible.builtin.yum_repository:
+    name: google-cloud-cli
+    state: absent
+  when: not repo_google_cloud_sdk
+
+- name: Remove mullvad repo when disabled
+  ansible.builtin.yum_repository:
+    name: mullvad
+    state: absent
+  when: not repo_mullvad
+
+- name: Remove docker-ce repo when disabled
+  ansible.builtin.yum_repository:
+    name: docker-ce
+    state: absent
+  when: not repo_docker_ce
+
+- name: Remove tailscale-stable repo when disabled
+  ansible.builtin.yum_repository:
+    name: tailscale-stable
+    state: absent
+  when: not repo_tailscale
+
+- name: Remove acli repo when disabled
+  ansible.builtin.yum_repository:
+    name: acli
+    state: absent
+  when: repos_dnf_acli_baseurl is not defined
+
+- name: Remove redhat-internal repo when disabled
+  ansible.builtin.yum_repository:
+    name: redhat-internal
+    state: absent
+  when: not (repo_redhat and repos_dnf_redhat_baseurl is defined)

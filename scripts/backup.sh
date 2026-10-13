@@ -1,14 +1,41 @@
 #!/bin/bash
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Reject hostile HOME overrides (e.g. HOME=/tmp/attacker make backup)
+_real_home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+[[ "$HOME" == "$_real_home" ]] || { echo "ERROR: HOME mismatch (got '$HOME', expected '$_real_home')" >&2; exit 1; }
+
+DRY_RUN=false
+for arg in "$@"; do
+  case $arg in
+    --dry-run) DRY_RUN=true ;;
+    -h|--help) echo "Usage: $0 [--dry-run]"; exit 0 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# Derive GitHub username from config.yml (user override) falling back to role defaults (used in macOS plist filenames)
+GITHUB_USER="$(grep '^dotfiles_github_user:' "$SCRIPT_DIR/../config.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || grep '^dotfiles_github_user:' "$SCRIPT_DIR/../roles/dotfiles/defaults/main.yml" 2>/dev/null | awk '{print $2}' | tr -d "'\"" || true)"
+[[ -n "$GITHUB_USER" && "$GITHUB_USER" != "CHANGE_ME" ]] || GITHUB_USER=""
+# Validate GitHub username: alphanumeric, hyphens, underscores only (prevents directory traversal)
+if [[ -n "$GITHUB_USER" && ! "$GITHUB_USER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "[warn] Invalid GitHub username (contains invalid characters), skipping macOS LaunchAgent plists" >&2
+  GITHUB_USER=""
+fi
 
 BACKUP_DIR="${HOME}/laptop-setup-backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP_DIR"
+if [[ "$DRY_RUN" = false ]]; then
+  mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
+fi
 
 DOTFILES=(
   .zshrc
-  .gitconfig
-  .tmux.conf
+  .config/git/config
+  .config/tmux/tmux.conf
   .vimrc
+  .config/nvim/init.vim
   .bashrc
   .ssh/config
   .ssh/known_hosts
@@ -17,38 +44,196 @@ DOTFILES=(
   .ssh/id_ed25519_sk_signing
   .ssh/id_ed25519_sk_signing.pub
   .ssh/id_rsa_redhat
+  .ssh/id_rsa_redhat.pub
   .config/direnv/direnv.toml
+  .config/direnv/direnvrc
+  .config/environment.d/ssh-agent.conf
+  .config/environment.d/containers.conf
+  .config/environment.d/gotmpdir.conf
   .config/git/config-work
   .config/git/config-personal
   .config/git/allowed_signers
+  .config/git/ignore
+  .config/git/template/hooks/pre-commit
+  .config/git/template/hooks/commit-msg
+  .config/git/template/hooks/prepare-commit-msg
+  .config/git/template/hooks/pre-push
+  .local/state/zsh/history
+  .config/ripgrep/config
   .config/alacritty/alacritty.toml
   .config/gh/config.yml
   .config/gh/hosts.yml
+  .claude/settings.json
+  .claude/settings.local.json
+  .claude/CLAUDE.md
   .claude-personal/settings.json
+  .claude-personal/settings.local.json
   .claude-personal/CLAUDE.md
   .claude-work/settings.json
+  .claude-work/settings.local.json
   .claude-work/CLAUDE.md
   .config/i3/config
   .config/sway/config
-  .config/i3status-rust/config.toml
+  .config/swaylock/config
+  .config/i3status/config
+  .config/gtk-3.0/settings.ini
+  .config/gtk-4.0/settings.ini
+  .config/autostart/gnome-keyring-ssh.desktop
+  .config/xdg-desktop-portal/portals.conf
   .config/aerospace/aerospace.toml
   .config/systemd/user/ssh-agent.service
   .config/systemd/user/claude-queue.service
   .config/systemd/user/claude-queue.timer
-  Library/LaunchAgents/com.dfarrell07.ssh-agent.plist
-  Library/LaunchAgents/com.dfarrell07.claude-queue.plist
-  Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist
+  .config/user-tmpfiles.d/ssh-sockets.conf
+  .config/user-tmpfiles.d/tmux-sockets.conf
+  .config/user-tmpfiles.d/claude-privacy.conf
+)
+if [[ -n "$GITHUB_USER" ]]; then
+  DOTFILES+=(
+    "Library/LaunchAgents/com.${GITHUB_USER}.ssh-agent.plist"
+    "Library/LaunchAgents/com.${GITHUB_USER}.claude-queue.plist"
+    "Library/LaunchAgents/com.${GITHUB_USER}.claude-remote-control.plist"
+  )
+else
+  echo "[warn] dotfiles_github_user not set; skipping macOS LaunchAgent plists" >&2
+fi
+
+# Machine-specific overrides and secrets (gitignored — not in the repo)
+OPTIONAL_FILES=(
+  .ssh/config.local
+  laptop-setup/config.yml
+  laptop-setup/scripts/vault-pass.sh
+  laptop-setup/group_vars/all/vault.yml
+  laptop-setup/CLAUDE.local.md
+  .config/claude/work-env
+  .config/claude/queue-repos.conf
+  .npmrc
+  .boto
+  .claude.json
+  .config/gcloud/application_default_credentials.json
+  .config/gcloud/credentials.db
+  .kube/config
+  .aws/credentials
+  .aws/config
+  .config/containers/auth.json
+  .claude/.credentials.json
+  .claude/history.jsonl
+  .claude-work/.claude.json
+  .claude-work/.credentials.json
+  .claude-personal/.credentials.json
+  .gnupg/trustdb.gpg
+  .gnupg/common.conf
 )
 
 count=0
-for f in "${DOTFILES[@]}"; do
-  src="${HOME}/${f}"
-  if [ -f "$src" ]; then
-    dest="${BACKUP_DIR}/${f}"
-    mkdir -p "$(dirname "$dest")"
-    cp "$src" "$dest"
-    count=$((count + 1))
+_backup_array() {
+  local f src dest
+  for f in "$@"; do
+    src="${HOME}/${f}"
+    if [[ -L "$src" ]]; then
+      echo "[warn] skipping symlink: $src" >&2
+      continue
+    fi
+    if [[ -f "$src" ]]; then
+      dest="${BACKUP_DIR}/${f}"
+      if [[ "$DRY_RUN" = true ]]; then
+        echo "[dry-run] would copy $src -> $dest"
+      else
+        mkdir -p "$(dirname "$dest")"
+        cp -p "$src" "$dest"
+      fi
+      count=$((count + 1))
+    fi
+  done
+}
+
+_backup_array "${DOTFILES[@]}"
+
+_vault_yml="${SCRIPT_DIR}/../group_vars/all/vault.yml"
+if [[ -f "$_vault_yml" ]] && ! head -1 "$_vault_yml" | grep -q '^\$ANSIBLE_VAULT'; then
+  echo "ERROR: vault.yml is not encrypted; run: ansible-vault encrypt group_vars/all/vault.yml" >&2
+  exit 1
+fi
+
+_vault_pass_sh="${SCRIPT_DIR}/vault-pass.sh"
+if [[ -f "$_vault_pass_sh" ]] && grep -q "pass='" "$_vault_pass_sh" && ! grep -q 'ykman\|hmac' "$_vault_pass_sh"; then
+  echo "ERROR: vault-pass.sh appears to contain a plaintext password; back up out-of-band and exclude from automated backup" >&2
+  exit 1
+fi
+
+_backup_array "${OPTIONAL_FILES[@]}"
+
+# Catch-all: any private key in ~/.ssh/ not explicitly listed above
+for key in "${HOME}/.ssh"/id_*; do
+  case "$key" in
+    *.pub) continue ;;
+    */id_ed25519_sk|*/id_ed25519_sk_signing|*/id_rsa_redhat) continue ;;
+  esac
+  [[ -L "$key" ]] && { echo "[warn] skipping symlink: $key" >&2; continue; }
+  [[ -f "$key" ]] || continue
+  dest="${BACKUP_DIR}/.ssh/$(basename "$key")"
+  if [[ "$DRY_RUN" = true ]]; then
+    echo "[dry-run] would copy $key -> $dest"
+    [[ -f "${key}.pub" ]] && { echo "[dry-run] would copy ${key}.pub -> ${dest}.pub"; count=$((count + 1)); }
+  else
+    mkdir -p "${BACKUP_DIR}/.ssh"
+    cp -p "$key" "$dest"
+    [[ -f "${key}.pub" ]] && { cp -p "${key}.pub" "${dest}.pub"; count=$((count + 1)); }
   fi
+  count=$((count + 1))
 done
 
-echo "Backed up ${count} files to ${BACKUP_DIR}"
+# ~/.claude/projects/ (per-project Claude memories and history — recurse subdirs)
+_claude_projects_dir="${HOME}/.claude/projects"
+if [[ -d "$_claude_projects_dir" ]]; then
+  while IFS= read -r -d '' proj_file; do
+    rel="${proj_file#"${HOME}/"}"
+    dest="${BACKUP_DIR}/${rel}"
+    if [[ "$DRY_RUN" = true ]]; then
+      echo "[dry-run] would copy $proj_file -> $dest"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp -p "$proj_file" "$dest"
+    fi
+    count=$((count + 1))
+  done < <(find "$_claude_projects_dir" -maxdepth 3 -type f -print0)
+fi
+
+# ~/.gnupg/private-keys-v1.d/ (directory of subkeys — copy all files)
+_gpg_dir="${HOME}/.gnupg/private-keys-v1.d"
+if [[ -d "$_gpg_dir" ]]; then
+  for key in "$_gpg_dir"/*.key; do
+    [[ -L "$key" ]] && { echo "[warn] skipping symlink: $key" >&2; continue; }
+    [[ -f "$key" ]] || continue
+    dest="${BACKUP_DIR}/.gnupg/private-keys-v1.d/$(basename "$key")"
+    if [[ "$DRY_RUN" = true ]]; then
+      echo "[dry-run] would copy $key -> $dest"
+    else
+      mkdir -p "${BACKUP_DIR}/.gnupg/private-keys-v1.d"
+      cp -p "$key" "$dest"
+    fi
+    count=$((count + 1))
+  done
+fi
+
+# ~/.gnupg/public-keys.d/ (keyboxd public key database — GnuPG 2.3+)
+_gpg_pub_dir="${HOME}/.gnupg/public-keys.d"
+if [[ -d "$_gpg_pub_dir" ]]; then
+  for db in "$_gpg_pub_dir"/*.db; do
+    [[ -f "$db" ]] || continue
+    dest="${BACKUP_DIR}/.gnupg/public-keys.d/$(basename "$db")"
+    if [[ "$DRY_RUN" = true ]]; then
+      echo "[dry-run] would copy $db -> $dest"
+    else
+      mkdir -p "${BACKUP_DIR}/.gnupg/public-keys.d"
+      cp -p "$db" "$dest"
+    fi
+    count=$((count + 1))
+  done
+fi
+
+if [[ "$DRY_RUN" = true ]]; then
+  echo "[dry-run] would back up ${count} files to ${BACKUP_DIR}"
+else
+  echo "Backed up ${count} files to ${BACKUP_DIR}"
+fi

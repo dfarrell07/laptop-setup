@@ -2,33 +2,83 @@
 - name: Converge — System setup (VM)
   hosts: all
   become: true
-  gather_facts: true
+  gather_facts: false
 
   pre_tasks:
-    - name: Capture real user identity
-      ansible.builtin.set_fact:
-        real_user_home: "{{ ansible_user_dir }}"
-        real_user_id: "{{ ansible_user_id }}"
+    - name: Gather guest facts as the SSH user (matches production)
+      ansible.builtin.gather_facts:
       become: false
 
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+    - name: Read the guest SSH user's account
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ ansible_user }}"
+      become: false
+
+    - name: Capture real user identity
+      ansible.builtin.set_fact:
+        real_user_home: "{{ ansible_facts['getent_passwd'][ansible_user][4] }}"
+        real_user_id: "{{ ansible_user }}"
+      become: false
+
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
+
+    - name: Detect guest OS and managed-host restrictions
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb_detect.yml"
 
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
 
-    - name: Set project root for include paths
+    - name: Signal that usbguard is expected (system role included in this scenario)
       ansible.builtin.set_fact:
-        common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
-
-    - name: Gather service facts
-      ansible.builtin.service_facts:
+        usbguard_expected: true
+        system_aide_enabled: true        # VM scenario exercises AIDE (full kernel access, real timer)
+        system_tlp_enabled: true         # VM scenario exercises TLP/ppd masking path (laptop form_factor not auto-detected in VMs)
+        system_timezone: UTC             # CHANGE_ME sentinel invalid here; VM has no system-container-overrides.yml
+        system_coredump_storage: none    # VM verify asserts Storage=none; match defaults that ship None for hardened CI
+        system_coredump_process_size_max: 0  # VM verify asserts ProcessSizeMax=0; disable coredumps in hardened CI
+        # Exercise even_deny_root=true path (default.config.yml sets false; no other scenario tests true)
+        system_faillock_even_deny_root: true
+        system_disable_bluetooth: true        # VM scenario exercises BT masking + module blacklist path
+        system_disable_printing: true        # VM scenario exercises cups masking path (cups-browsed/socket/path)
+        system_disable_usb_storage: true     # VM scenario exercises usb_storage kernel-block path
+        system_disable_fingerprint: true     # explicit (role default=true); VM verify asserts fprintd masked unconditionally
+        system_tmout: 600                    # VM scenario exercises session timeout deployment path
+        system_sudoersd_whitelist: [99-hardening, go-env, vagrant]  # validated test transport fixture in prepare.yml
+        is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
 
   roles:
     - role: repos_dnf
       when: ansible_pkg_mgr in ['dnf', 'dnf5']
     - role: system
+
+  post_tasks:
+    - name: Apply SSH and firewall handlers before changing transport
+      ansible.builtin.meta: flush_handlers
+
+    - name: Select the hardened SSH port
+      ansible.builtin.set_fact:
+        ansible_port: "{{ ssh_port | int }}"
+
+    - name: Reset the connection to verify the hardened port
+      ansible.builtin.meta: reset_connection
+
+    - name: Verify SSH works through the hardened firewall
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+
+    - name: Save the hardened port for idempotence and verify
+      ansible.builtin.copy:
+        dest: "{{ molecule_instance_config }}"
+        content: >-
+          {{ lookup('file', molecule_instance_config) | from_yaml
+             | map('combine', {'port': ansible_port}) | list | to_yaml }}
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      run_once: true
 
 - name: Converge — User setup (VM)
   hosts: all
@@ -36,29 +86,77 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
+        notes_enabled: true
+        # Full VM coverage retains these dependencies suppressed in container CI.
+        packages_containers: [podman, distrobox]
+        packages_security_yubikey: [yubikey-manager]
+        packages_networking: [tailscale]  # exercise daemon startup after first installation
+        # Full audited DNF initialization on constrained nested VMs is slow.
+        distrobox_create_timeout: 3600
+        dotfiles_github_user: "molecule-ci"
+        # Enable git signing configuration with a valid public-only fixture.
+        ssh_git_signing_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
+        # Facts must override the vault-backed value loaded by include_vars.
+        ssh_signing_key_pub: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
+
+    - name: Create mock notes repo structure for CI
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"
 
   roles:
     - role: common
-    - role: dotfiles
     - role: packages
+    - role: dotfiles
     - role: ssh
     - role: git_repos
     - role: notes
       vars:
         notes_transcrypt_password: ""
     - role: containers
-    - role: desktop
-      vars:
-        desktop_environment: 'unknown'
-        desktop_common_packages: []
-        desktop_sway_packages: []
-        desktop_i3_packages: []
+    - role: distrobox
     - role: claude
       vars:
         claude_install_method: skip
+
+  post_tasks:
+    # Desktop role called via include_role so vars: are at role-params precedence (p20),
+    # overriding desktop role default (desktop_environment: auto from roles/desktop/defaults/main.yml).
+    # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
+    - name: Converge desktop role
+      ansible.builtin.include_role:
+        name: desktop
+      vars:
+        desktop_environment: 'unknown'
+        desktop_dnf_packages: []
+        desktop_sway_packages: []
+        desktop_i3_packages: []
+        desktop_deploy_chrome_policies: true
+        is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+
+    - name: Capture persistent boot arguments after package installation
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [grubby, '--info=ALL']
+        - [grub2-editenv, list]
+        - [cat, /etc/kernel/cmdline]
+      register: vm_boot_arguments
+      become: true
+      changed_when: false
+      failed_when: false
+
+    - name: Show boot arguments for repeat-run diagnostics
+      ansible.builtin.debug:
+        msg: "{{ item.stdout | default('') }} {{ item.stderr | default('') }}"
+      loop: "{{ vm_boot_arguments.results }}"
+      loop_control:
+        label: "{{ item.item | join(' ') }}"
+
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb-report.yml"
+      tags: [always]

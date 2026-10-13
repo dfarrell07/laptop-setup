@@ -3,37 +3,533 @@
 # Uses Geerling's config override pattern:
 #   default.config.yml (this file, checked in)
 #   config.yml (gitignored, per-machine overrides)
+#
+# WARNING: Do NOT define vault_* prefixed variables in config.yml.
+# Those names are reserved for group_vars/all/vault.yml. config.yml is
+# loaded via include_vars (precedence level 17) which outranks group_vars
+# (level 4-5), so any vault_* key here would shadow the vault-encrypted
+# value silently, leaking secrets in plaintext. A runtime assert in
+# site.yml enforces this — it will fail the play if any vault_* key
+# appears in config.yml.
 
-# Valid values: work, personal
-profile: work
-ssh_port: 722
+desktop_environment: CHANGE_ME  # set sway, i3, or gnome; auto detection fails before any WM is installed
 
-# Feature toggles (naming: install_<feature>)
-install_docker: false
-install_vpn: true
-install_virtualization: true
+# ============================================================
+# USER IDENTITY — override ALL of these in config.yml
+# ============================================================
+# These drive git commit attribution, SSH key comments, shell aliases
+# that reference your GitHub username, and the notes repo clone URL.
+# Without overriding them, you will get commits attributed to
+# the config owner's full name, aliases pointing to dotfiles_github_user's repos, and a
+# notes clone that fails (private repo).
+#
+# !unsafe: Ansible include_vars loads config.yml with trusted_as_template=True, so any
+# Jinja2 expression ({{ ... }}) in a string value executes as a template (SSTI risk).
+# !unsafe marks these strings as non-template data, preventing execution.
+# !unsafe is supported for literal values. The preflight scan rejects {{ and {%
+# markers even in !unsafe values; plain names and emails do not need the tag.
+dotfiles_github_user: !unsafe 'CHANGE_ME'
+dotfiles_user_name: !unsafe 'CHANGE_ME'
+dotfiles_user_email_work: !unsafe 'CHANGE_ME'
+dotfiles_user_email_personal: !unsafe 'CHANGE_ME'
+system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago, Europe/London; run: timedatectl list-timezones
 
-# Additional toggles available via role defaults (override in config.yml):
-#   system_install_usbguard: true      (roles/system/defaults)
-#   system_aide_enabled: true          (roles/system/defaults)
-#   packages_install_binaries: true    (roles/packages/defaults)
-#   desktop_deploy_chrome_policies: true (roles/desktop/defaults)
-#   desktop_environment: auto          (roles/desktop/defaults)
+# Additional toggles (authoritative source in parentheses; override in config.yml):
+#   install_docker: false              (group_vars/all/vars.yml) — mask docker.socket; set true when repo_docker_ce installs Docker CE
+#   install_vpn: true                  (group_vars/all/vars.yml) — Mullvad on Fedora + corporate VPN packages on RHEL/CSB
+#   install_virtualization: true       (group_vars/all/vars.yml) — libvirt, KVM, Vagrant; set false to skip
+#   packages_yubikey_enabled: true     (roles/packages/defaults) — yubikey-manager + ykpers; set false on machines without a YubiKey
+#   packages_bpfman_enabled: false     (roles/packages/defaults) — bpfman eBPF program manager daemon; opt-in only;
+#     WARNING: bpfman requires CAP_SYS_ADMIN (kernel-level privilege) to load eBPF programs. Fedora 44 ships NO
+#     SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode. Without Mandatory
+#     Access Control, a compromised bpfman can load arbitrary kernel code via eBPF. Only enable on machines where
+#     eBPF development explicitly requires the daemon; prefer manual bpftool for one-off debugging.
+#   packages_brew_yubikey: [ykman]               (roles/packages/defaults) — macOS YubiKey brew packages;
+#     ykpers unavailable on Homebrew; use ykman otp calculate (hex challenge) in vault-pass.sh — see SECURITY.md
+#     ssh-askpass removed: macOS Keychain (UseKeychain yes in ssh_config) is the Apple-native passphrase store
+#   repo_gh_cli: true                  (group_vars/all/vars.yml) — no-op on all Fedora (gh in standard repos); activates on RHEL/Rocky
+#   repo_google_chrome: false          (group_vars/all/vars.yml) — opt in; Chrome repo adds dnf metadata overhead
+#   repo_google_cloud_sdk: false       (group_vars/all/vars.yml) — opt in when gcloud needed; GCP repo adds dnf metadata overhead
+#   repo_rpmfusion_free: true          (group_vars/all/vars.yml) — Fedora-only; multimedia codecs (H.264/AAC), ffmpeg, VLC
+#   repo_rpmfusion_nonfree: false      (group_vars/all/vars.yml) — Fedora-only; NVIDIA drivers, non-free firmware; opt in explicitly
+#   # repo_slack removed — packagecloud repo had gpgcheck=false (no RPM signing); use Flatpak: flatpak install flathub com.slack.Slack
+#   repo_tailscale: true               (group_vars/all/vars.yml) — VPN mesh; skip on air-gapped machines or when using a different VPN
+#   repo_docker_ce: false              (group_vars/all/vars.yml) — prefer Podman; also set install_docker: true to unmask docker.socket
+#   repo_mullvad: true                 (group_vars/all/vars.yml) — Fedora-only, skipped on RHEL/Rocky and CSB
+#   repo_redhat: true                  (group_vars/all/vars.yml) — internal Red Hat RPM mirror; needs repos_dnf_redhat_baseurl set
+#   system_install_usbguard: true      (group_vars/all/vars.yml) — USBGuard USB device authorization; set false on VM/USB-less machines
+#   system_bolt_enabled: true/false    (group_vars/all/vars.yml) — auto-detected on VMs/containers; override only if misidentified
+#   system_aide_enabled: false         (roles/system/defaults) — set true only when a SIEM/log aggregator consumes aide-notify output
+#   packages_gotoolchain: local        (roles/packages/defaults) — GOTOOLCHAIN env for go install; default
+#                                        'local' prevents runtime toolchain downloads (aligns with SHA256-pinned
+#                                        pattern). Set 'auto' in config.yml only when intentionally allowing
+#                                        toolchain self-replacement; update the golang DNF/apt package instead
+#   system_auditd_max_log_file: 8      (group_vars/all/vars.yml) — MB per audit log file; may want 32–64 MB for
+#                                        kind clusters or bpfman workloads. NOTE: silently ignored when
+#                                        csb_detected=true (auditd.conf deploy skipped; IT owns the file)
+#   system_auditd_num_logs: 5          (group_vars/all/vars.yml) — rotated files to keep; total = max_log_file *
+#                                        num_logs (40 MB default). Same CSB caveat as system_auditd_max_log_file.
+#   system_aide_check_calendar: '*-*-* 05:00:00'  (roles/system/defaults) — OnCalendar for aide-check.timer
+#   system_usbguard_extra_rules: []    (roles/system/defaults) — append per-machine USB rules
+#   system_usbguard_whitelist: [...]  (roles/system/defaults) — base USB allow-rules (YubiKey,
+#                                        Moonlander, hardwired ports); REPLACES the entire base list
+#                                        on override (config.yml precedence beats role defaults);
+#                                        prefer system_usbguard_extra_rules to append per-machine
+#                                        rules without discarding the base set; each entry must
+#                                        start with 'allow', 'block', or 'reject' followed by a
+#                                        device selector — bare catch-alls and embedded newlines
+#                                        are rejected by pre_flight_checks.yml
+# packages_install_binaries: true    (group_vars/all/vars.yml) — set false to skip SHA256-verified binary downloads (kind, helm,
+# kustomize, k9s, subctl, oc, opm, etc.)
+#   packages_cosign_install_enabled: true  (roles/packages/defaults) — set false to skip cosign installation
+#     (requires manual installation with alternative verification method, e.g. GPG signature verification from GitHub releases)
+#   packages_brew_update: false        (roles/packages/defaults) — set true to refresh Homebrew package index before install (macOS only)
+#   packages_brew: [ansible, git, git-lfs, openssh, tmux, mosh, jq, yq, direnv, fzf, zoxide, ...]  (roles/packages/defaults) —
+#     universal Homebrew packages (all profiles on macOS); override in config.yml to add/remove packages
+#   packages_brew_cask: [ghostty, google-chrome, bitwarden, keepassxc, slack, lulu, nikitabobko/tap/aerospace] (roles/packages/defaults) —
+#     GUI Homebrew Cask apps (all profiles on macOS); override in config.yml to add/remove
+#   packages_brew_taps: [nikitabobko/tap]  (roles/packages/defaults) —
+#     Homebrew third-party taps (required by aerospace cask); override in config.yml to add/remove
+#   packages_brew_work: [golang, kubectl, kind, helm, kustomize, socat, nmap, transcrypt, sops, iperf3, wireshark, k9s, krew]
+#     (roles/packages/defaults) — work Homebrew pkgs
+#   packages_containers_work: [buildah, skopeo]  (roles/packages/defaults) — work-profile-only OCI build tools;
+#     personal profile gets podman/distrobox only
+#   packages_apt_work: [golang, gcc, nmap, socat, iperf3, tshark, conntrack-tools, buildah, skopeo]
+#     (roles/packages/defaults) — work-profile-only apt packages (Debian/Ubuntu);
+#   packages_security_rhel: [libfido2]  (roles/packages/defaults) — RHEL/Rocky-only: libssh on Fedora
+#     pulls libfido2.so.1 as a cap dep; RHEL/Rocky does not, so explicit install required; set [] to skip
+#   packages_languages_work: [golang, gcc]  (roles/packages/defaults) — work-profile-only compiler toolchain (CGO builds);
+#     personal profile installs no additional language runtimes (python3-pip is in packages_languages for all profiles)
+#   packages_containers_kubectl: [kubectl]  (roles/packages/defaults) — kubectl dnf package; installed via dnf only when
+#     OCP tarball is skipped (personal profile, non-x86_64, or packages_install_binaries=false); set [] to skip entirely
+#   packages_networking_work: [ovn, iproute-tc,
+#     wireshark-cli, conntrack-tools, iperf3, socat, nmap]  (roles/packages/defaults) — work-profile-only networking tools
+#     (OVN-K dev); override in config.yml to add/remove packages for this profile.
+#     WARNING: nmap is installed for local/test network debugging only (kind clusters, home lab).
+#     DO NOT scan production Red Hat infrastructure (gitlab.cee, code.engineering, etc.) — triggers IT IDS/IPS alerts and SOC investigation.
+#   packages_support_work: [sos, strace, gdb, perf, bpfman, bpftrace, bpftool]  (roles/packages/defaults)
+#     — work-profile-only diagnostic/debugging tools; override in config.yml to add/remove
+#   packages_networking: [tailscale]  (roles/packages/defaults) — universal networking tools
+#     (VPN daemon only; network dev tools are work-profile-only in packages_networking_work)
+#   packages_go_install: []               (roles/packages/defaults) — universal Go tools installed on all profiles;
+#     all role-default tools are in packages_go_install_work (work-profile only); add cross-profile tools here
+#   packages_go_install_work: [gofumpt@v..., govulncheck@v..., golangci-lint@v..., controller-gen@v..., ...]  (roles/packages/defaults) —
+#     work-profile-only Go IDE/CI tools + OVN-K codegen + Submariner tools; entries need full module paths
+#     (go install MODULE@VERSION); pin versions match OVN-K update-codegen.sh (not go.mod —
+#     controller-tools is not a go.mod dep) — bump together when OVN-K upgrades k8s
+#   desktop_deploy_chrome_policies: false (roles/desktop/defaults) — set true to deploy managed Chrome policy JSON
+#   system_locale: en_US.UTF-8        (roles/system/defaults) — set system locale
+#   system_disable_printing: false     (roles/system/defaults) — set true to mask cups.socket/path,
+#                                        disable cups.service, and mask cups-browsed (CVE-2024-47176)
+#   system_disable_bluetooth: true     (roles/system/defaults) — true to blacklist BT modules (CIS RHEL 9 2.1.5);
+#                                        set false in config.yml to enable Bluetooth on machines with BT peripherals
+#   system_disable_thunderbolt: false  (roles/system/defaults) — true to blacklist thunderbolt/thunderbolt_net;
+#                                        mitigates Thunderspy DMA attacks; only set on machines with no Thunderbolt peripherals
+#   system_disable_sctp: false         (group_vars/all/vars.yml) — default false (OVN-K/Submariner use SCTP);
+#                                        set true for strict CIS 3.4.1 on hosts that do not need SCTP
+#   system_disable_fingerprint: true   (roles/system/defaults) — mask fprintd.service and disable authselect fingerprint feature; set false
+#                                        on machines with a fingerprint reader if fingerprint auth is desired
+#   system_disable_avahi: true         (group_vars/all/vars.yml) — true to mask avahi-daemon (mDNS/DNS-SD); false to restore for .local
+#                                        resolution or DNS-SD lab tooling
+#   system_bluetooth_privacy: device   (roles/system/defaults) — BlueZ Privacy= in /etc/bluetooth/main.conf; 'off' disables
+#   system_mask_abrt: true             (roles/system/defaults) — mask ABRT crash reporter daemons (redundant
+#                                        with systemd-coredump); set false on RHEL CSB machines (IT manages via Satellite)
+#   system_mask_nfs_server: true     (group_vars/all/vars.yml) — masks nfs-server and rpcbind (CIS 2.2.7);
+#                                        set false if Vagrant NFS synced folders, NFS exports, or rpcbind are needed
+#   system_mask_iscsi: true          (group_vars/all/vars.yml) — mask iSCSI initiator units (CIS 2.3.x); set false on iSCSI storage machines
+#   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
+#   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
+#   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
+#   system_tlp_platform_profile_ac: performance   (roles/system/defaults) — ACPI platform profile on AC
+#   system_tlp_platform_profile_bat: balanced     (roles/system/defaults) — ACPI platform profile on battery
+#   system_tlp_cpu_energy_policy_ac: balance_performance  (roles/system/defaults) — CPU EPP on AC
+#   system_tlp_cpu_energy_policy_bat: balance_power       (roles/system/defaults) — CPU EPP on battery
+#   system_keymap: us                  (role default: us) — console keymap for /etc/vconsole.conf
+#   system_sysrq: 0                    (group_vars/all/vars.yml) — 0=disabled (CIS), 176=emergency recovery
+#   system_tmout: 0                    (group_vars/all/vars.yml) — session inactivity timeout seconds; 0=disabled; 1–900 valid (CIS<=900)
+#   system_faillock_deny: 5            (group_vars/all/vars.yml) — failed logins before lockout (CIS); lower for shared machines
+#   system_faillock_unlock_time: 900   (group_vars/all/vars.yml) — seconds until auto-unlock (CIS); 0=permanent until admin reset
+#   system_faillock_even_deny_root: false (group_vars/all/vars.yml) — lock root on failed logins; set true on shared/multi-user machines
+#                                        (root SSH blocked by PermitRootLogin no; false reduces lockout risk)
+#   system_ipv6_accept_ra: 0           (roles/system/defaults) — 0=SLAAC disabled (CIS); use 2 (not 1) to enable SLAAC
+#                                        (value 1 is suppressed by the kernel when forwarding=1, which this playbook always sets)
+#   system_bpf_jit_harden: 1           (group_vars/all/vars.yml) — BPF JIT hardening (1=unprivileged only, default here;
+#                                        2=all incl root for strict CIS/STIG but breaks bpftool prog dump jited)
+#   system_unprivileged_bpf_disabled: 2 (group_vars/all/vars.yml) — unprivileged BPF block (1=block non-root, root can re-enable;
+#                                        2=write-once locked, even root cannot re-enable; 0=allow all;
+#                                        NOTE: on stock Fedora 44 (BPF_UNPRIV_DEFAULT_OFF=y) only 0 and 2 are
+#                                        effective — value 1 requires a custom kernel with CONFIG_BPF_UNPRIV_DEFAULT_OFF=n)
+#   system_sysctl_extra: <profile-conditional>  (roles/system/defaults) — work profile default:
+#                                        {net.netfilter.nf_conntrack_max: 524288, net.core.rmem_max: 16777216,
+#                                        net.core.wmem_max: 16777216, net.bridge.bridge-nf-call-iptables: 1,
+#                                        net.bridge.bridge-nf-call-ip6tables: 1}; personal profile: performance
+#                                        sysctls only (no OVN-K/conntrack tuning). All profiles always get
+#                                        _system_sysctl_performance_defaults: {fs.inotify.max_user_watches: 1048576,
+#                                        fs.inotify.max_user_instances: 8192, vm.max_map_count: 1048576}.
+#                                        WARNING: setting this in config.yml REPLACES the default entirely —
+#                                        all 5 work keys AND the 3 performance keys will be lost. Prefer
+#                                        system_sysctl_extra_additional to add keys without clobbering defaults.
+#                                        Example: system_sysctl_extra_additional: {"vm.swappiness": 10}
+#   system_sysctl_extra_additional: {}   (roles/system/defaults) — safe per-machine append merged AFTER system_sysctl_extra;
+#                                        use this to add a single key without re-copying all work-profile defaults.
+#                                        Example: system_sysctl_extra_additional: {"vm.swappiness": 10}
+#   system_firewall_icmp_types: [fragmentation-needed, packet-too-big, parameter-problem,
+#                                        neighbour-solicitation, neighbour-advertisement]
+#                                        (roles/system/defaults) — base ICMP allow-list merged with
+#                                        system_firewall_icmp_extra_types; override the full list in config.yml to remove entries
+#                                        (e.g. drop neighbour-solicitation/advertisement when IPv6 is fully disabled)
+#   system_firewall_icmp_extra_types: [] (roles/system/defaults) — additional ICMP types merged with system_firewall_icmp_types;
+#                                        with icmp-block-inversion on the drop zone, each entry ALLOWS that type through.
+#                                        echo-request (ping) is intentionally excluded from the default list; add it here on
+#                                        OVN-K/kind machines where pod-to-host-gw connectivity testing requires ping reachability.
+#                                        Example: system_firewall_icmp_extra_types: [echo-request]
+#   system_firewall_manage_zone: "{{ not csb_rhel }}"  (roles/system/defaults) — true manages drop zone and SSH port in
+#                                        firewalld; set false on hybrid Fedora CSB where IT manages firewall zone policy
+#   system_kernel_panic: 0            (group_vars/all/vars.yml) — dev workstation default; CIS target is 10 (auto-reboot after panic);
+#                                        set 10 in config.yml for CIS compliance
+#   system_kernel_panic_on_oops: 0     (group_vars/all/vars.yml) — dev workstation default; CIS 1.5.3 target is 1 (halt on oops);
+#                                        set 1 in config.yml for CIS compliance
+#   system_kexec_load_disabled: 1      (group_vars/all/vars.yml) — default 1 blocks legacy kexec_load() (CIS defense-in-depth);
+#                                        set 0 in config.yml only when kdump requires kexec_load() and lockdown is also disabled
+#   system_io_uring_disabled: 1        (group_vars/all/vars.yml) — value=1 restricts to CAP_SYS_ADMIN;
+#                                        set 0 in config.yml for dev workstations needing non-root io_uring
+#                                        (tokio-uring, libuv, PostgreSQL 14+); set 2 to fully disable for all users
+#   system_remove_luks_key: false       (roles/system/defaults) — set true ONLY if machine does NOT use
+#                                        rd.luks.key for LUKS auto-unlock at boot; removing the param forces
+#                                        manual LUKS passphrase entry on each reboot
+#   system_luks_discards_enabled: false  (roles/system/defaults) — set true ONLY for SSD longevity on
+#                                        machines with full-disk encryption AND non-sensitive data. WARNING:
+#                                        enabling discard allows SSD wear-leveling patterns to leak encrypted
+#                                        data locations; CIS compliance mandates false (default) to prevent
+#                                        wear-pattern fingerprinting attacks on sensitive systems
+#   system_kernel_lockdown: integrity   (roles/system/defaults) — kernel lockdown mode; set "" to disable for
+#                                        kdump/kgdb/KASAN/UBSAN debugging; "confidentiality" for strict
+#   system_grub_password_enabled: false  (roles/system/defaults) — set true to enforce CIS 1.4.2 bootloader
+#                                        password; prevents kernel parameter tampering (lockdown=integrity removal)
+#                                        with physical console access; requires system_grub_password_hash
+#   system_grub_password_hash: ""        (roles/system/defaults) — password hash generated by grub2-mkpasswd-pbkdf2
+#                                        (Fedora) or grub-mkpasswd-pbkdf2 (Debian); user must set in config.yml;
+#                                        recommend vault encryption or .gitignored config storage
+#   system_ptrace_scope: 1             (group_vars/all/vars.yml) — CIS-compliant default (parent-only YAMA);
+#                                        set 0 in config.yml for unrestricted ptrace (dev workstation default)
+#   system_perf_event_paranoid: 2      (roles/system/defaults) — CIS-compliant (>=2) and Fedora 44 default;
+#                                        value 3 requires CAP_SYS_ADMIN for all perf operations, breaking
+#                                        perf stat/top/record for non-root users; set 3 in config.yml for
+#                                        stricter posture on non-dev hosts
+#   system_init_on_free: true          (group_vars/all/vars.yml) — zero freed memory pages on kernel free (init_on_free=1);
+#                                        set false in config.yml to skip (e.g. on performance-sensitive machines)
+#   system_enable_ip_forward: true      (group_vars/all/vars.yml) — enables net.ipv4.ip_forward + net.ipv6.conf.all.forwarding
+#                                        for Kubernetes/kind/Tailscale subnet routing; set false on terminal-only hosts
+#   system_bluetooth_name: "Bluetooth"  (roles/system/defaults) — BlueZ Name= shown to Bluetooth scanners; set to hostname
+#                                        or team alias to avoid broadcasting the machine's FQDN
+#   system_crypto_policy_target: DEFAULT:NO-SHA1  (roles/system/defaults) — crypto policy applied by update-crypto-policies;
+#                                        override in config.yml e.g. DEFAULT:NO-SHA1:NO-RSASSA-PSS for stricter SHA-1 removal;
+#                                        use FUTURE for TLS 1.3-only enforcement system-wide (removes TLS 1.2 — may break non-TLS-1.3 apps)
+#   system_disable_usb_storage: false  (group_vars/all/vars.yml) — set true to kernel-block usb_storage/uas (no override via USBGuard)
+#   system_disable_udf: true             (group_vars/all/vars.yml) — true to kernel-block the udf module (CIS);
+#                                        set false if UDF media (optical discs, UDF-formatted drives) is needed
+#   system_ssh_max_sessions: 10        (roles/system/defaults) — max concurrent SSH sessions per connection
+#                                        (VS Code Remote needs >=10)
+#   system_ssh_allow_tcp_forwarding: "local" (roles/system/defaults) — 'local' for VS Code port panel/ssh -L,
+#                                            'remote' for ssh -R, 'yes' for both
+#   system_ssh_channel_timeout: ""             (roles/system/defaults) — disabled (bz3827: sshd 10.2p1 drops VS Code on
+#                                                ChannelTimeout+UnusedConnectionTimeout); set "session=60m" once openssh >= 10.3
+#   system_ssh_unused_connection_timeout: 3600 (roles/system/defaults) — seconds before idle connection with no open channels is
+#     closed; 3600 (1h) tolerates VS Code Remote SSH and Claude Code idle control masters; set "" to disable (omits directive)
+#   system_ssh_allow_agent_forwarding: "no" (roles/system/defaults) — set 'yes' to forward ssh-agent to remote hosts
+#   system_dot_mode: opportunistic     (roles/system/defaults) — DNSOverTLS mode; 'yes' for strict (fails on port-853-blocked networks);
+#                                        for full enforcement set BOTH system_dot_mode: yes AND system_dnssec_mode: yes together
+#   system_dnssec_mode: allow-downgrade (roles/system/defaults) — DNSSEC validation; 'yes' for strict (pairs with system_dot_mode: yes;
+#                                        opportunistic DoT + allow-downgrade allows silent strip of both TLS and DNSSEC by on-path attacker)
+#   system_dns_primary: "1.1.1.1#cloudflare-dns.com ..."  (roles/system/defaults) — primary DNS-over-TLS servers
+#   system_dns_domains: "~."                (roles/system/defaults) — routing domains; "~." catch-all needed for Tailscale MagicDNS
+#   system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net"  (roles/system/defaults) — fallback DoT (IP#hostname)
+#   system_resolved_llmnr: 'no'            (roles/system/defaults) — LLMNR= in 98-llmnr.conf; 'no' disables (default);
+#                                        'yes' or 'resolve' to enable (rarely needed — avahi-daemon handles .local on most hosts)
+#   system_resolved_multicast_dns: 'no'    (roles/system/defaults) — MulticastDNS= in 98-llmnr.conf; 'no' disables (default);
+#                                        set 'yes' or 'resolve' when system_disable_avahi: true and .local resolution via
+#                                        resolved is desired (lightweight avahi-daemon replacement without the daemon)
+#   system_chrony_nts_servers: [time.cloudflare.com, nts.netnod.se, ptbtime1.ptb.de, ntppool1.time.nl]
+#                                        (roles/system/defaults) — NTS-capable time sources; override for corporate NTP or regional servers
+#     SECURITY: pre-flight validates hostnames by character allowlist only ([a-zA-Z0-9._:-]).
+#     No domain-allowlist check is performed. config.yml integrity is the sole guard against
+#     NTS server substitution. With system_chrony_authselectmode: require, a rogue NTS entry
+#     fully controls the clock. Only list hostnames you explicitly trust.
+#   system_chrony_fallback_pool: 2.fedora.pool.ntp.org  (roles/system/defaults) — plain NTP pool fallback when NTS sources unreachable
+#                                        SECURITY: this pool is unauthenticated (no NTS); an attacker-controlled
+#                                        value silently redirects time sync on networks where NTS (TCP 4460) is
+#                                        blocked. Use only pools from the pool.ntp.org project or your
+#                                        organisation's trusted NTP infrastructure (e.g. 2.fedora.pool.ntp.org).
+#   system_chrony_minsources: 2          (roles/system/defaults) — minimum sources before clock is considered synchronized
+#   system_chrony_service_enabled: "{{ not system_is_container }}"
+#                                        (roles/system/defaults) — auto-disabled in containers; set true to force-enable
+#   system_chrony_authselectmode: require (roles/system/defaults) — NTS auth select mode; default 'require' surfaces NTS-KE
+#                                        failure as a chrony error rather than silent fallback to unauthenticated NTP.
+#                                        Set 'prefer' on restricted networks where TCP 4460 is blocked; also set
+#                                        system_chrony_authselectmode_prefer_confirmed: true to acknowledge the trade-off.
+#   system_tmp_noexec: false           (roles/system/defaults) — noexec on /tmp disabled by default; set true for CIS 1.1.2.x compliance
+#                                        (breaks pip, cargo, rustup, npm native addons that exec from /tmp; nosuid/nodev preserved)
+#   system_var_tmp_noexec: false       (roles/system/defaults) — bind /var/tmp to /tmp with noexec — WARNING: also makes /var/tmp volatile
+#                                        (data lost on reboot); default false — set true only on hardened non-dev hosts where
+#                                        /var/tmp persistence is not needed and dracut kernel updates are not a concern
+#   system_home_nosuid_force: false    (roles/system/defaults) — set true on RHEL CSB machines where /home is a known local
+#                                        mount; nosuid already applies unconditionally on Fedora hybrid (task condition is
+#                                        true regardless of this flag); use only when /home is btrfs/ext4 under your control
+#   system_selinux_enforcing_required: true  (roles/system/defaults) — assert SELinux is Enforcing before security-sensitive
+#                                        tasks; set false in molecule/CI container scenarios where the image reports SELinux
+#                                        disabled regardless of host policy (e.g. geerlingguy Rocky images in Podman)
+#   system_iommu_passthrough: false    (roles/system/defaults) — set true only for VFIO/libvirt PCI passthrough; enables
+#                                        iommu=pt which bypasses DMA remapping for non-VM devices (trades isolation for perf)
+#   system_wifi_mac_rand: "{{ not csb_detected }}"  (roles/system/defaults) — defaults true on non-CSB, false on CSB; on any
+#                                        csb_detected machine (including hybrid Fedora CSB) nm.yml unconditionally deploys
+#                                        preserve (hardware MAC) for 802.1X RADIUS NAC compatibility — setting true here has
+#                                        no effect and a provisioning warning is emitted; do not set this in config.yml on CSB
+#   system_wifi_powersave_disabled: "{{ not csb_rhel }}"  (roles/system/defaults) — defaults true
+#                                        (disable powersave, wifi.powersave=2) on non-csb_rhel;
+#                                        set false in config.yml to allow power saving on power-critical machines
+#   system_enable_cockpit: false       (roles/system/defaults) — set true to unmask cockpit web console (port 9090); drop zone still blocks
+#                                        external access
+#   system_remove_luks_key: false      (roles/system/defaults) — set true ONLY if this machine does NOT use rd.luks.key
+#                                        for LUKS auto-unlock (e.g. no keyfile partition). WARNING: setting true when
+#                                        rd.luks.key is active will require manual LUKS passphrase on every reboot.
+#   system_coredump_storage: external  (roles/system/defaults) — where systemd-coredump stores cores; 'external' writes
+#                                        compressed files to /var/lib/systemd/coredump/ (Fedora default, pass directly to
+#                                        gdb/dlv or use coredumpctl debug); 'none' disables; 'journal' embeds in journald
+#                                        NOTE: SUID process crashes are always suppressed by fs.suid_dumpable=0 (set in
+#                                        system_sysctl_hardening). To capture SUID crashes, add fs.suid_dumpable: 2 to
+#                                        system_sysctl_extra in config.yml.
+#   system_coredump_process_size_max: 2G  (roles/system/defaults) — max core dump size; 0 disables collection;
+#                                           2G matches systemd upstream default
+#   system_core_pattern: "|/usr/lib/systemd/systemd-coredump ..."  (roles/system/defaults) — kernel core_pattern sysctl;
+#                                        override to '|/bin/false' to fully disable crash collection at the kernel level (CIS strict)
+#   system_pwquality_dcredit: -1          (group_vars/all/vars.yml) — digit requirement (-1=require 1, 0=none)
+#   system_pwquality_ucredit: -1          (group_vars/all/vars.yml) — uppercase requirement (-1=require 1, 0=none)
+#   system_pwquality_lcredit: -1          (group_vars/all/vars.yml) — lowercase requirement (-1=require 1, 0=none)
+#   system_pwquality_ocredit: -1          (group_vars/all/vars.yml) — special-char requirement (-1=require 1, 0=none)
+#                                           set all four to 0 to disable composition requirements while preserving minlen=14
+#   system_pwquality_minlen: 14           (group_vars/all/vars.yml) — minimum password length (CIS 5.3.2)
+#   system_pwquality_difok: 4             (group_vars/all/vars.yml) — characters that must differ from previous password
+#   system_pwquality_maxrepeat: 3         (group_vars/all/vars.yml) — maximum consecutive repeated characters
+#   system_pwquality_maxsequence: 3       (group_vars/all/vars.yml) — maximum consecutive characters in a
+#                                           monotonic sequence (e.g. "abcd", "1234")
+#   system_pwhistory_remember: 24         (group_vars/all/vars.yml) — previous passwords remembered (CIS 5.3.5)
+#   system_pass_max_days: 365             (group_vars/all/vars.yml) — login.defs PASS_MAX_DAYS; max password age in days
+#   system_pass_min_days: 1               (group_vars/all/vars.yml) — login.defs PASS_MIN_DAYS; minimum days between changes
+#   system_pass_warn_age: 7               (group_vars/all/vars.yml) — login.defs PASS_WARN_AGE; days warning before expiry
+#   system_umask: "027"                   (group_vars/all/vars.yml) — login.defs UMASK; set 022 to allow group reads
+#   system_inactive_days: 30              (group_vars/all/vars.yml) — days inactive before account lock (login.defs INACTIVE,
+#                                           useradd -D -f, chage -I); CIS 5.5.1.5
+#   system_gid0_allowed_accounts: [root, sync, shutdown, halt, operator]  (roles/system/defaults) — accounts exempt from
+#                                           the CIS 6.2.x GID-0 primary-group assert; add custom service accounts here
+#                                           if they legitimately use GID 0
+#   system_logind_idle_sec: 600           (roles/system/defaults) — seconds idle before logind locks screen
+#   containers_log_driver: k8s-file  (roles/containers/defaults) — log driver (global; set for kind compatibility)
+#   containers_pids_limit: 65536  (roles/containers/defaults) — global pids limit (required by kind nodes)
+#   containers_nofile_limit: 65536  (roles/containers/defaults) — global soft open-file limit
+#   containers_nofile_hard_limit: '{{ containers_nofile_limit | int * 8 }}'  (roles/containers/defaults) — hard-limit override;
+#                                        change only when the 8x ratio is wrong
+#   containers_prune_enabled: false  (roles/containers/defaults) — enable periodic podman image/volume/container prune timer;
+#                                        set true to remove stopped non-distrobox containers and unused images/volumes weekly
+#   containers_prune_schedule: weekly  (roles/containers/defaults) — OnCalendar for podman-prune.timer; any systemd calendar expression
+#                                        e.g. "daily", "*-*-* 03:00:00", "Mon *-*-* 04:00:00"
+#   DO NOT override containers_registries directly — use containers_registries_extra to append
+#                                        without replacing the computed default. Overriding
+#                                        containers_registries in config.yml (include_vars precedence 17)
+#                                        silently replaces the entire computed list, dropping the
+#                                        work-profile registry.redhat.io entry.
+#   containers_registries_extra: []  (roles/containers/defaults) — append registries to the default
+#                                        list without replacing the default; use this instead of
+#                                        overriding containers_registries
+#   containers_enforce_fqin_override: false  (roles/containers/defaults) — set true to deploy user-level
+#                                        registries.conf (unqualified-search-registries=[]) even when
+#                                        /etc/containers/registries.conf already exists. By default the
+#                                        role skips FQIN enforcement when a system-level file is present
+#                                        to avoid breaking IT-managed corporate registry short-name pulls.
+#                                        On hybrid CSB Fedora machines the system file is the stock OS
+#                                        default (not IT-managed), so this override is safe. Verify first:
+#                                          grep unqualified /etc/containers/registries.conf
+#                                        If the output is non-empty, set this to true in config.yml.
+#   desktop_sway_hidpi_scale: "1.0"    (roles/desktop/defaults) — override for HiDPI (e.g. "1.5" for 2560x1600)
+#   desktop_sway_cursor_size: auto     (roles/desktop/defaults) — computed as
+#                                        (24 * desktop_sway_hidpi_scale | float) | int; override only if formula is wrong
+#   desktop_sway_cursor_theme: Adwaita (roles/desktop/defaults) — cursor theme name (propagated to seat config and XCURSOR_THEME)
+#   desktop_sway_libva_driver: ""       (roles/desktop/defaults) — VA-API driver; "" = auto-detect; radeonsi (AMD) or iHD (Intel)
+#   desktop_sway_vdpau_driver: ""       (roles/desktop/defaults) — VDPAU driver; "" = auto-detect; radeonsi (AMD) or va_gl/nvidia
+#   desktop_sway_xwayland: ''           (roles/desktop/defaults) — '' = on (default); "disable" = pure-Wayland (breaks XWayland apps)
+#   desktop_wm_idle_lock_timeout: 300  (roles/desktop/defaults) — idle before screen lock; swaylock (Sway)/i3lock (i3); 0 to disable
+#   desktop_wm_idle_display_timeout: 600  (roles/desktop/defaults) — seconds idle before display off
+#   desktop_wm_lock_color: "000000"  (roles/desktop/defaults) — screen lock background hex color (no #) — swaylock (Sway) and i3lock (i3)
+#   desktop_sway_keyboard_layout: ''   (roles/desktop/defaults) — XKB layout; empty = inherit system locale (e.g. us, de, fr)
+#   desktop_sway_keyboard_variant: ''   (roles/desktop/defaults) — XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
+#   desktop_sway_keyboard_options: ''   (roles/desktop/defaults) — XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
+#   desktop_wm_repeat_delay: 200     (roles/desktop/defaults) — ms before key repeat starts
+#   desktop_wm_repeat_rate: 50       (roles/desktop/defaults) — key repeats per second
+#   desktop_wm_browser: firefox      (roles/desktop/defaults) — browser for $mod+Shift+b (firefox ships in Fedora)
+#   desktop_i3status_battery_num: 0   (roles/desktop/defaults) — battery device number in i3status; most laptops use 0 (BAT0)
+#   desktop_i3status_show_battery: false  (roles/desktop/defaults) — set true on laptops with a battery
+#   desktop_i3status_cpu_temp_path: ""  (roles/desktop/defaults) — empty disables the CPU temp block; set correct
+#     hwmon sysfs path in config.yml, e.g. /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon8/temp1_input on ThinkPad P16v AMD.
+#     hwmon index varies by machine/kernel. Verify: ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
+#   desktop_sway_output: "*"            (roles/desktop/defaults) — built-in display identifier
+#   desktop_sway_adaptive_sync: "disabled"  (roles/desktop/defaults) — VRR/FreeSync;
+#     set "enabled" to enable on VRR/FreeSync displays
+#   desktop_sway_workspace_outputs: []     (roles/desktop/defaults) — multi-monitor
+#     workspace-to-output assignments; empty = no assignments written;
+#     example: [{workspace: 1, output: eDP-1}, {workspace: 2, output: HDMI-A-1}]
+#   desktop_sway_trackpoint_id: ''        (roles/desktop/defaults) — empty disables TrackPoint config; set to device id found via:
+#     swaymsg -t get_inputs | grep -A2 TrackPoint
+#   desktop_i3_trackpoint_id: ""   (roles/desktop/defaults) — empty disables TrackPoint config;
+#     set to e.g. "TPPS/2 Elan TrackPoint" (find with: xinput list | grep -i track)
+#   desktop_sway_trackpoint_accel_profile: flat   (roles/desktop/defaults) — flat avoids adaptive curve (default: flat)
+#   desktop_sway_trackpoint_pointer_accel: "-0.5" (roles/desktop/defaults) — cursor speed; tune -0.4 to -0.6 (default: -0.5)
+#   desktop_sway_trackpoint_scroll_factor: 0.5    (roles/desktop/defaults) — TrackPoint scroll speed; lower = slower
+#   desktop_sway_touchpad_tap: enabled            (roles/desktop/defaults) — tap-to-click; set disabled to require physical click
+#   desktop_sway_touchpad_natural_scroll: enabled (roles/desktop/defaults) — natural (reverse) scroll direction
+#   desktop_sway_touchpad_dwt: ''  # empty = omit; libinput default is enabled  (roles/desktop/defaults) — disable-while-typing
+#   desktop_sway_touchpad_middle_emulation: enabled (roles/desktop/defaults) — three-finger tap as middle click
+#   desktop_sway_gaps_inner: 0                    (roles/desktop/defaults) — inner gap between windows (pixels)
+#   desktop_sway_gaps_outer: 0                    (roles/desktop/defaults) — outer gap between windows and screen edge
+#   desktop_wm_border_width: 1                  (roles/desktop/defaults) — window border width (pixels)
+#   desktop_wm_floating_border_width: 1         (roles/desktop/defaults) — floating window border width (pixels)
+#   desktop_wm_hide_edge_borders: none     (roles/desktop/defaults) — hide edge borders; none/smart/both/vertical/horizontal
+#   desktop_sway_focus_follows_mouse: ''  (roles/desktop/defaults) — empty omits directive, set yes/no/workspace to override
+#   desktop_terminal: alacritty          (roles/desktop/defaults) — Linux terminal; macOS defaults to ghostty (or terminal)
+#   desktop_gtk_theme: Adwaita-dark    (roles/desktop/defaults) — GTK theme for Sway (written to gtk-3.0/4.0 settings.ini)
+#   desktop_gtk_icon_theme: Adwaita    (roles/desktop/defaults) — GTK icon theme
+#   desktop_alacritty_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — Alacritty font family
+#   desktop_alacritty_font_size: 12.0   (roles/desktop/defaults) — Alacritty font size
+#   desktop_wm_font_family: "DejaVu Sans Mono"  (roles/desktop/defaults) — WM status-bar font
+#   desktop_wm_font_size: 10            (roles/desktop/defaults) — WM status-bar font size
+#   desktop_alacritty_color_bg / _fg / _normal_* / _bright_*  (roles/desktop/defaults) — Catppuccin Mocha terminal
+#     palette (bg #1e1e2e, fg #cdd6f4); override individual keys in config.yml to switch themes
+#   system_lid_switch: suspend         (roles/system/defaults) — action on lid close (suspend/lock/ignore)
+#   system_lid_switch_external: lock   (roles/system/defaults) — lid close action when external monitor connected
+#   system_lid_switch_docked: ignore   (roles/system/defaults) — lid close action when docked (ignore keeps display on)
+#   system_power_key: lock             (roles/system/defaults) — power button action: lock/suspend/poweroff/ignore
+#   git_repos_pull: false              (roles/git_repos/defaults) — clone-once by default;
+#     set true to fetch upstream with --ff-only (done automatically by `make update`)
+#   git_repos_work_categories: [personal, bpfman, ...]     (roles/git_repos/defaults) — repo categories cloned on work profile
+#   git_repos_personal_categories: [personal, ovnk]        (roles/git_repos/defaults) — repo categories cloned on personal profile;
+#     this list replaces (not appends to) the default — dropping ovnk here removes OVN-K repo clones on personal profile
+#   git_repos_vpn_check_host: ''  (roles/git_repos/defaults) — set to internal GitLab FQDN to enable
+#     VPN pre-check before cloning downstream/konflux repos
+#   notes_enabled: false               (roles/notes/defaults) — opt-in: set true in config.yml
+#     opt-in: requires a GitHub repo named 'notes' under dotfiles_github_user (or override notes_remote_url) with SSH access
+#   claude_install_method: native      (roles/claude/defaults) — native (default) or skip
+#     (bypasses install; useful for CI/testing or machines where Claude should not be installed)
+#   claude_pinned_version: ""           (roles/claude/defaults) — pin a specific Claude version (e.g. "1.0.3"); empty = latest
+#   claude_install_sha256: ""           (roles/claude/defaults) — REQUIRED for fresh installs; SHA256 of the installer script.
+#     Provisioning hard-fails when unset and Claude is not yet installed. Fetch with:
+#       curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh && sha256sum /tmp/claude-install.sh
+#     Update this hash after each upstream Claude Code release.
+#   claude_queue_enabled: false        (roles/claude/defaults) — enable Claude queue poller
+#     (test-queue-poller.sh systemd user service)
+#   claude_queue_repo: ""              (roles/claude/defaults) — REQUIRED when claude_queue_enabled: true;
+#     GitHub repo to poll for task issues (e.g. "myuser/claude-tasks"); role asserts non-empty when enabled
+#   claude_queue_host_label: ""        (roles/claude/defaults) — optional label posted in issue comments to
+#     identify which host handled the task; empty = no label posted
+#   claude_queue_poll_interval_sec: 120  (roles/claude/defaults) — seconds between queue polls
+#   claude_queue_boot_delay_sec: 60    (roles/claude/defaults) — delay after boot before first poll
+#   claude_cleanup_period_days: 7      (roles/claude/defaults) — cleanupPeriodDays written to settings.local.json
+#   claude_queue_memory_max: '4G'      (roles/claude/defaults) — MemoryMax for queue poller unit; lower on 8 GiB machines
+#   claude_queue_cpu_quota: '80%'      (roles/claude/defaults) — CPUQuota for queue poller unit; lower when running kind clusters
+#   claude_queue_max_turns: 50  (roles/claude/defaults) — --max-turns cap passed to claude per session; limits runaway sessions
+#   claude_queue_timeout: 1800  (roles/claude/defaults) — seconds before SIGTERM is sent to claude process; increase for long-running tasks
+#   claude_remote_control_enabled: false  (roles/claude/defaults) — deploy remote-control hooks
+#     that allow external triggering of Claude sessions (macOS-only; no-op warning on Linux)
+#   claude_enable_all_project_mcp_servers: false  (roles/claude/defaults) — set true to auto-trust
+#     all project-local MCP servers; false = prompt per server (more secure)
+#   distrobox_enabled: true               (roles/distrobox/defaults) — set false to skip
+#     container creation and Play 3 entirely (Linux users who do not want a dev container)
+#   Dotfiles / shell preferences (roles/dotfiles/defaults) — override in config.yml:
+#   dotfiles_oh_my_zsh_theme: gallois     — oh-my-zsh theme name
+#   dotfiles_oh_my_zsh_plugins: [git, kubectl, forgit, python, history-substring-search]  — oh-my-zsh plugin list
+#   dotfiles_tmux_prefix: "C-a"           — tmux prefix key (e.g. "C-b" for default)
+#   dotfiles_tmux_history_limit: 50000    — tmux scrollback buffer size
+#   dotfiles_ssh_agent_timeout: 28800     — ssh-agent key lifetime in seconds (8 h)
+#   dotfiles_aws_profile: ""   — AWS CLI named profile (default: ""; e.g. "aws-acm-subm"); empty omits export
+#   dotfiles_laptop_tailscale_host: ""  — Tailscale hostname for laptop mosh/tmux alias (e.g. laptop.tail); empty disables
+#   dotfiles_mac_tailscale_host: ""  — Tailscale hostname for desktop mosh/tmux alias (e.g. mac-desktop.tail); empty disables
+#   dotfiles_internal_git_host: ""        — internal HTTPS git hostname (e.g. git.internal.corp); when set,
+#     gitconfig.j2 adds [http "https://<host>"] sslCAInfo pointing to dotfiles_internal_ca_path and
+#     ssh_config.j2 adds a Host stanza using id_rsa_redhat for SSH access.
+#   dotfiles_internal_ca_path: (conditional: /etc/ssl/certs/ca-certificates.crt on apt,
+#     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem on rpm)  — CA cert for internal HTTPS hosts;
+#     do not set this in config.yml to restore the default — simply remove any override;
+#     override only to pin a specific anchor, e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
+#   dotfiles_homebrew_prefix: /opt/homebrew  — macOS Homebrew prefix; Intel Macs use /usr/local
+#   ssh_work_keyscan_hosts: []  (roles/ssh/defaults) — work-profile internal git hosts to pre-seed in known_hosts;
+#     set in config.yml as dicts with optional fingerprint pinning, e.g.:
+#       [{host: gitlab.example.com, fingerprint: "SHA256:..."}, {host: code.example.com}]
+#     plain strings also accepted (TOFU, no pinning): [gitlab.example.com, code.example.com]
+#     empty = no work host keyscan
+#   ssh_pubkey_accepted_algorithms: [sk-ssh-ed25519@openssh.com, sk-ssh-ed25519-cert-v01@openssh.com, ssh-ed25519]
+#     (group_vars/all/vars.yml) — key types accepted for SSH auth and SSHD PubkeyAcceptedAlgorithms;
+#     add ssh-rsa or ecdsa-sha2-nistp256 to support legacy or non-FIDO2 keys
+#   ssh_ciphers: 'aes256-gcm@openssh.com,...'  (group_vars/all/vars.yml) — cipher list for both ssh client and sshd
+#   ssh_macs: 'hmac-sha2-512-etm@openssh.com,...'  (group_vars/all/vars.yml) — MAC list for both ssh client and sshd
+#   ssh_kex_algorithms: 'mlkem768x25519-sha256,...'  (group_vars/all/vars.yml) — KexAlgorithms for sshd
+#     only; ssh client uses a capability-detected list in ssh_config.j2 (dotfiles_ssh_kex_pq_enabled)
+#   ssh_host_key_algorithms: ssh-ed25519  (group_vars/all/vars.yml) — HostKeyAlgorithms for sshd;
+#     override to add ecdsa-sha2-nistp256 for servers that do not offer ed25519 host keys
+#   ssh_signing_key_basename: id_ed25519_sk_signing  — basename of the SSH signing key files (no extension)
+#   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
+#   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
+#   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.redhat.com,*.engineering.redhat.com")
+#   dotfiles_goprivate: ""   — GOPRIVATE for internal Go repos (default: ""; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com")
+#   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
+#   dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; routes those dirs to work git identity
+#     (gitconfig.j2 includeIf) and Claude personal guard (zshrc.j2);
+#     add new orgs here instead of editing templates
+#   dotfiles_direnv_warn_timeout: "10s"  (roles/dotfiles/defaults) — how long
+#     direnv waits before warning on slow .envrc; upstream default 5s
+#   dotfiles_direnv_strict_env: true   (roles/dotfiles/defaults) — set -euo pipefail
+#     in .envrc; upstream default false; set false if .envrc uses unset vars
+#   dotfiles_direnv_disable_stdin: true  (roles/dotfiles/defaults) — block stdin
+#     in .envrc; upstream default false; set false if .envrc needs stdin
+#   ssh_git_signing_pubkey: ""            (group_vars/all/vars.yml) — SSH public key for
+#     git commit signing; set in config.yml to the literal pubkey or
+#     a lookup('file', ...) expression until vault.yml is populated with vault_ssh_signing_key_pub and encrypted.
+#     IMPORTANT: remove ssh_git_signing_pubkey from config.yml after vault.yml is populated with vault_ssh_signing_key_pub
+#     and encrypted — config.yml (include_vars precedence 17) silently overrides group_vars (precedence 4-5), so a stale
+#     entry here will shadow the vault-backed value without any warning.
+#   Binary version pins (roles/packages/defaults and roles/distrobox/defaults) — override in config.yml:
+#     packages_kind_version, packages_helm_version, packages_kustomize_version, packages_oc_version,
+#     packages_k9s_version, packages_transcrypt_version, packages_sops_version, packages_gitleaks_version,
+#     packages_actionlint_version, packages_zizmor_version, packages_operator_sdk_version,
+#     packages_cosign_version, packages_tkn_version, packages_ec_version, packages_yamllint_version,
+#     packages_ansible_lint_version, packages_golangci_lint_version, packages_gofumpt_version,
+#     packages_govulncheck_version, packages_gci_version, packages_gopls_version,
+#     packages_controller_gen_version, packages_stern_version, packages_code_generator_version,
+#     packages_subctl_version, packages_aerospace_version, packages_krew_bootstrap_version,
+#     packages_krew_plugin_ctx_version, packages_krew_plugin_ns_version, and others in
+#     roles/packages/defaults/main.yml; distrobox_oc_version, distrobox_golangci_lint_version
+#     in roles/distrobox/defaults/main.yml.
+#     SECURITY: All version strings must be semantic versioning only (e.g. "1.2.3" or "1.2.3-beta").
+#     Versions are interpolated directly into download URLs without additional path validation.
+#     Invalid version strings (containing forward slashes, double-dots, spaces, or special chars)
+#     permit URL path traversal attacks (e.g. "0.32.0/../../evil" produces
+#     https://kind.sigs.k8s.io/dl/v0.32.0/../../evil/...). Pre-flight checks validate all
+#     version variables match the pattern ^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$ and reject invalid
+#     formats. Use semantic version strings only (major.minor.patch with optional prerelease suffix).
+#     NOTE: packages_oc_version: 'stable' uses a co-located sha256sum.txt (no GPG verification);
+#     a compromised mirror.openshift.com can serve a matching malicious binary+hash pair.
+#     Prefer a pinned version with a hardcoded packages_oc_sha256 in defaults/main.yml.
+#     packages_subctl_version: "<see roles/packages/defaults/main.yml>"  (single source of truth; governs distrobox container)
+#     packages_subctl_versioned: [{version, suffix}]  (go install older versions as subctlXX)
+#     packages_subctl_rh_versions: [{tag, image, suffix}]  (RH downstream via oc image extract)
 
-# Third-party repos (naming: repo_<name>, dnf-based OS only)
-repo_gh_cli: true
-repo_google_chrome: true
-repo_google_cloud_sdk: true
-repo_rpmfusion: true
-repo_slack: true
-repo_acli: true
-repo_docker_ce: false
-repo_mullvad: true
-repo_redhat: true
+# Internal Red Hat repo URLs — absent here intentionally (gitignored secrets).
+# Set these in config.yml to activate the acli and redhat-internal repo tasks:
+#   repos_dnf_acli_baseurl: "https://..."        # acli/rosa CLI internal mirror
+#   repos_dnf_redhat_baseurl: "https://..."      # Red Hat internal RPM repo
+#   repos_dnf_redhat_gpgkey: "https://..."       # GPG key URL for the above repo
+# Without them the tasks are silently skipped (guarded by `is defined`).
 
 # Container settings
-container_name: fedora-dev
-container_image: "registry.fedoraproject.org/fedora-toolbox:43"
-container_distro: fedora
-container_release: "43"
-container_replace: false
+# container_image and container_release fall back to the host OS major version
+# (e.g. 9 on RHEL 9), which is wrong on RHEL — there is no fedora-toolbox:9.
+# RHEL users must override both explicitly in config.yml, e.g.:
+#   container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
+#   container_release: '44'
+#   distrobox_create_timeout: 600       (roles/distrobox/defaults) — seconds before container create is killed; raise on slow networks

@@ -1,0 +1,29 @@
+---
+# Prepare: wait for systemd to stabilize before converge.
+# Rocky Linux 10 runs /usr/sbin/init (systemd) as PID 1; Ansible connects
+# before all late-init units have activated, which can disrupt
+# /root/.ansible/tmp or the connection itself and cause non-deterministic
+# UNREACHABLE failures at different task offsets.
+#
+# Key fix: systemctl is-system-running returns rc=1 for "degraded" state,
+# so the until condition must NOT require rc==0. Use stdout-only match.
+# ignore_unreachable: true allows retries when the container is briefly
+# unreachable during early systemd startup (Podman connection plugin does not
+# support wait_for_connection, which times out on this image).
+#
+# NOTE: do NOT install packages here and do NOT modify /etc/systemd/ —
+# both trigger inotify daemon-reload events that crash the container.
+- name: Prepare (wait for systemd)
+  hosts: all
+  gather_facts: false
+  ignore_unreachable: true  # allow systemctl retry loop to handle brief unreachability
+
+  tasks:
+    - name: Wait for systemd to reach running or degraded state  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-system-running
+      register: systemd_state
+      retries: 30
+      delay: 2
+      until: systemd_state.stdout in ['running', 'degraded']
+      failed_when: false
+      changed_when: false

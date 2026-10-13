@@ -1,0 +1,780 @@
+---
+# --- Harden /tmp mount options (CIS 1.1.2.x) ---
+# Writing to /etc/systemd/system/ triggers inotify → /tmp remount → clears Ansible temp files
+- name: Harden /tmp mount options (CIS 1.1.2.x)
+  # CSB posture: safe to deploy on RHEL CSB — the drop-in adds nosuid/nodev to /tmp (matching
+  # IT's SCAP baseline). Unlike /boot and /dev/shm, /tmp uses a pure drop-in (no boot service
+  # workaround needed) because systemd merges tmp.mount.d/*.conf at mount time, not at boot,
+  # so there is no fstab conflict with IT-managed entries.
+  when: not system_is_container
+  block:
+    - name: Ensure tmp.mount drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/tmp.mount.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure /tmp hardening drop-in (nosuid/nodev always; noexec when system_tmp_noexec)
+      vars:
+        _noexec_opt: "{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }}"
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          # IMPORTANT: Options= replaces all base unit options (no merge).
+          # Must include all options from tmp.mount base unit.
+          # Base: mode=1777,strictatime,nosuid,nodev,size=50%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+          [Mount]
+          Options=mode=1777,strictatime,nosuid,nodev{{ _noexec_opt }},size=50%%,nr_inodes=1m,x-systemd.graceful-option=usrquota
+        dest: /etc/systemd/system/tmp.mount.d/hardening.conf
+        mode: "0644"
+      notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
+
+    - name: Find all files in tmp.mount.d
+      ansible.builtin.find:
+        paths: /etc/systemd/system/tmp.mount.d
+        file_type: file
+      register: _tmp_dropin_files
+
+    - name: Remove unauthorized drop-ins from tmp.mount.d (keep only hardening.conf)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _tmp_dropin_files.files | default([]) }}"
+      when: item.path | basename != 'hardening.conf'
+      notify: Remount /tmp
+
+    - name: Reload systemd after deploying tmp.mount drop-in
+      ansible.builtin.systemd:
+        daemon_reload: true
+      changed_when: false
+      failed_when: false
+
+- name: Check /tmp current mount options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /tmp
+  register: system_tmp_opts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container
+
+- name: Remount /tmp nosuid,nodev[,noexec] (CIS 1.1.2.x — live before reboot)  # noqa: command-instead-of-module
+  vars:
+    _noexec_opt: "{{ ',noexec' if (system_tmp_noexec | bool and not csb_rhel) else '' }}"
+  ansible.builtin.command:
+    cmd: "mount -o remount,nosuid,nodev{{ _noexec_opt }} /tmp"
+  register: _tmp_remount_result
+  until: _tmp_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _tmp_remount_result.rc != 0
+  changed_when: _tmp_remount_result.rc == 0
+  when:
+    - not system_is_container  # noexec on /tmp breaks Ansible temp-dir creation in containers
+    - >-
+      'nosuid' not in (system_tmp_opts.stdout | default('')) or
+      'nodev' not in (system_tmp_opts.stdout | default('')) or
+      (system_tmp_noexec | bool and 'noexec' not in (system_tmp_opts.stdout | default('')))
+
+- name: Verify /tmp hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /tmp
+  register: _tmp_verify
+  failed_when: >-
+    'nosuid' not in _tmp_verify.stdout or
+    'nodev' not in _tmp_verify.stdout or
+    (system_tmp_noexec | bool and 'noexec' not in _tmp_verify.stdout)
+  changed_when: false
+  when: not system_is_container
+
+- name: Warn that system_tmp_noexec may break Play 2 become tasks
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: system_tmp_noexec is enabled — /tmp is now mounted noexec on this host.
+      Ansible Play 2 (user play) tasks that use become: true write AnsiballZ modules to
+      /tmp before exec; with noexec active those tasks will fail with exec errors.
+      Recommended two-pass approach: run Play 1 only (make system), reboot, then run the
+      full playbook (make all). Alternatively disable system_tmp_noexec in config.yml.
+  when:
+    - system_tmp_noexec | bool
+    - not system_is_container
+
+# --- Harden /dev/shm mount options ---
+# Fedora 44 does NOT ship a dev-shm.mount systemd unit, so a drop-in under
+# dev-shm.mount.d/ is silently ignored. Use fstab for persistence and a
+# direct remount for immediate effect.
+- name: Check if /etc/fstab exists with root entry
+  ansible.builtin.command:
+    cmd: grep -q '^[^#].*\s/\s' /etc/fstab
+  register: _fstab_root_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Ensure /dev/shm fstab entry has nosuid,nodev[,noexec] (CIS 1.1.7.x)
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^tmpfs\s+/dev/shm\s+'
+    line: "tmpfs /dev/shm tmpfs defaults,nosuid,nodev{{ _devshm_noexec_opt }},x-systemd.graceful-option=usrquota 0 0"
+    create: false   # Changed from true — defensive: only add when fstab exists with root entry
+    backup: true   # fstab corruption causes non-recoverable boot failure without console access
+    mode: "0644"
+  when:
+    - not csb_rhel  # CSB (RHEL): IT-managed fstab
+    - not system_is_container  # fstab writes trigger inotify/systemd re-evaluation; crashes container PID 1
+    - _fstab_root_check.rc == 0  # Only proceed if fstab has root entry
+
+- name: Warn if /dev/shm hardening skipped due to missing fstab
+  ansible.builtin.debug:
+    msg: "WARNING: /etc/fstab missing or has no root entry; skipping /dev/shm fstab hardening (live remount still applied)"
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - _fstab_root_check.rc | default(1) != 0
+
+- name: Check /dev/shm current mount options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /dev/shm
+  register: system_devshm_opts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # findmnt triggers systemd mount events that crash privileged Podman container PID 1
+
+- name: Remount /dev/shm nosuid,nodev[,noexec] (CIS 1.1.7.x — live before reboot)  # noqa: command-instead-of-module
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
+  ansible.builtin.command:
+    cmd: "mount -o remount,nosuid,nodev{{ _devshm_noexec_opt }} /dev/shm"
+  register: _devshm_remount_result
+  until: _devshm_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _devshm_remount_result.rc != 0
+  changed_when: _devshm_remount_result.rc == 0
+  when:
+    - not system_is_container
+    - >-
+      'nosuid' not in (system_devshm_opts.stdout | default('')) or
+      'nodev' not in (system_devshm_opts.stdout | default('')) or
+      (system_devshm_noexec | bool and 'noexec' not in (system_devshm_opts.stdout | default('')))
+
+- name: Verify /dev/shm hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /dev/shm
+  register: _devshm_verify
+  failed_when: >-
+    'nosuid' not in _devshm_verify.stdout or
+    'nodev' not in _devshm_verify.stdout or
+    (system_devshm_noexec | bool and 'noexec' not in _devshm_verify.stdout)
+  changed_when: false
+  when: not system_is_container
+
+# On CSB, fstab is IT-managed so we cannot add the /dev/shm entry for persistence.
+# Deploy a one-shot service to re-apply hardening on every boot instead.
+- name: Deploy dev-shm-harden.service (CSB — fstab not modified)
+  vars:
+    _devshm_noexec_opt: "{{ ',noexec' if (system_devshm_noexec | bool) else '' }}"
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
+      # /dev/shm with nosuid,nodev[,noexec] at every boot (CIS 1.1.7.x).
+      [Unit]
+      Description=Harden /dev/shm mount options (CIS 1.1.7.x)
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=sysinit.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/mount -o remount,nosuid,nodev{{ _devshm_noexec_opt }} /dev/shm
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=sysinit.target
+    dest: /etc/systemd/system/dev-shm-harden.service
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - csb_rhel
+    - not system_is_container
+
+- name: Enable dev-shm-harden.service (CSB)
+  ansible.builtin.systemd:
+    name: dev-shm-harden.service
+    enabled: true
+    daemon_reload: true
+  when:
+    - csb_rhel
+    - not system_is_container
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
+  ignore_errors: true
+  register: system_dev_shm_enable
+
+- name: Warn if dev-shm-harden.service could not be enabled (CSB)
+  ansible.builtin.debug:
+    msg: >-
+      dev-shm-harden.service could not be enabled (systemd policy restriction or
+      daemon-reload failure). /dev/shm hardening will NOT persist across reboots.
+  when:
+    - csb_rhel
+    - system_dev_shm_enable.failed | default(false)
+
+# --- Pre-initialize mount check results for container environments ---
+# The three root findmnt probe tasks (home/boot/boot/efi) carry when: not system_is_container
+# so they are skipped in containers. A skipped register result has no 'rc' attribute;
+# downstream when conditions like system_home_mountpoint.rc == 0 would raise a Jinja2
+# error. Pre-seeding rc=1 ('not found') makes all dependent tasks skip safely.
+- name: Pre-initialize mountpoint check results for container environments
+  ansible.builtin.set_fact:
+    system_home_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
+    system_boot_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
+    system_boot_efi_mountpoint: "{{ {'rc': 1, 'stdout': '', 'stderr': ''} }}"
+  when: system_is_container
+
+# --- Harden /home mount options (CIS 1.1.9) ---
+# nosuid prevents any setuid binary a user copies into their home directory from
+# gaining elevated privileges on exec. No standard Fedora package installs setuid
+# binaries in /home; the only setuid files found there are container image overlay
+# layers (~/.local/share/containers/storage/overlay/) which are unaffected because:
+# (1) overlayfs/fuse-overlayfs creates independent submounts with their own flags —
+# nosuid on /home does NOT propagate to those submounts; (2) rootless Podman uses
+# user namespaces so setuid inside containers has no host-level effect regardless.
+#
+# CSB: RHEL CSB home directories may be NFS/autofs-mounted for LDAP users.
+# fstab is IT-managed and remounting NFS with nosuid may break home directory
+# access entirely. Skip on RHEL CSB — IT's mount policy governs /home there.
+# Fedora hybrid (csb_detected=true, Fedora distribution): /home is a local
+# btrfs partition from the Fedora installer; nosuid is safe and applied.
+# Set system_home_nosuid_force: true in config.yml to override this skip when
+# /home is a known local mount on a RHEL CSB machine (does not affect Fedora hybrid).
+#
+# Implementation uses backrefs (not create: true) because /home has an existing
+# fstab entry from the Fedora installer; we append nosuid to the options field.
+# Separate fstab vs live-mount checks allow the fstab and remount tasks to be
+# independently idempotent (e.g. fstab updated on prior run but not yet rebooted).
+- name: Check if /home is a separate mountpoint (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n /home
+  register: system_home_mountpoint
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # pre-initialized above (rc=1); skip in container — findmnt output unused and can trigger systemd reactions
+
+- name: Check /home fstab options (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS --fstab /home
+  register: system_home_fstab_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - not csb_rhel or (system_home_nosuid_force | bool)
+  failed_when: false
+
+- name: Warn if /home has no fstab entry — fstab hardening cannot persist (CIS 1.1.9)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /home is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/nodev
+      is applied for this session but will not survive a reboot. Add /home to /etc/fstab
+      or set system_home_nosuid_force: false to suppress this block.
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - not csb_rhel or (system_home_nosuid_force | bool)
+    - system_home_fstab_opts.rc | default(-1) != 0
+
+- name: Add nosuid to /home fstab entry (CIS 1.1.9)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nosuid\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
+    - >-
+      'nosuid' not in (system_home_fstab_opts.stdout | default(''))
+
+- name: Add nodev to /home fstab entry (CIS 1.1.9)
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/home\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nodev\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
+    - >-
+      'nodev' not in (system_home_fstab_opts.stdout | default(''))
+
+- name: Check /home current mount options (CIS 1.1.9)
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /home
+  register: system_home_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - not csb_rhel or (system_home_nosuid_force | bool)
+  failed_when: false
+
+- name: Remount /home nosuid,nodev (CIS 1.1.9)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: mount -o remount,nosuid,nodev /home
+  register: _home_remount_result
+  until: _home_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _home_remount_result.rc != 0
+  changed_when: _home_remount_result.rc == 0
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
+    - >-
+      'nosuid' not in (system_home_opts.stdout | default(''))
+      or 'nodev' not in (system_home_opts.stdout | default(''))
+
+- name: Verify /home hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /home
+  register: _home_verify
+  failed_when: >-
+    'nosuid' not in _home_verify.stdout or
+    'nodev' not in _home_verify.stdout
+  changed_when: false
+  when:
+    - system_home_mountpoint.rc | default(-1) == 0
+    - >-
+      not csb_rhel
+      or (system_home_nosuid_force | bool)
+
+# --- Harden /boot mount options ---
+# nosuid,nodev,noexec: no setuid binaries, device nodes, or executable code needs to
+# be invoked from /boot at runtime. grubby and kernel-install write kernel/initramfs
+# images there but do not exec from /boot, so noexec is safe.
+#
+# Implementation mirrors /home: separate fstab and live-mount idempotency checks so
+# that each task can run independently (e.g. fstab updated on prior run but not yet
+# rebooted). Uses backrefs to append to the installer's existing fstab entry.
+#
+# CSB: fstab is IT-managed; skip fstab modification on CSB and deploy a one-shot
+# service to re-apply hardening at every boot instead (same pattern as dev-shm-harden.service).
+# The live remount runs unconditionally to harden the current boot session.
+- name: Check if /boot is a separate mountpoint
+  ansible.builtin.command:
+    cmd: findmnt -n /boot
+  register: system_boot_mountpoint
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # pre-initialized above (rc=1); skip in container — /boot absent in container images
+
+- name: Check /boot fstab options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS --fstab /boot
+  register: system_boot_fstab_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+  failed_when: false
+
+- name: Warn if /boot has no fstab entry — fstab hardening cannot persist
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /boot is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/nodev/noexec
+      is applied for this session but will not survive a reboot. Add /boot to /etc/fstab
+      to make hardening persistent.
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - system_boot_fstab_opts.rc | default(-1) != 0
+
+- name: Add nosuid to /boot fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nosuid\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - "'nosuid' not in (system_boot_fstab_opts.stdout | default(''))"
+
+- name: Add nodev to /boot fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nodev\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - "'nodev' not in (system_boot_fstab_opts.stdout | default(''))"
+
+- name: Add noexec to /boot fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,noexec\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - "'noexec' not in (system_boot_fstab_opts.stdout | default(''))"
+
+- name: Check /boot current mount options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /boot
+  register: system_boot_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+  failed_when: false
+
+- name: Remount /boot nosuid,nodev,noexec (live before reboot)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: mount -o remount,nosuid,nodev,noexec /boot
+  register: _boot_remount_result
+  until: _boot_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _boot_remount_result.rc != 0
+  changed_when: _boot_remount_result.rc == 0
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - >-
+      'nosuid' not in (system_boot_opts.stdout | default('')) or
+      'nodev' not in (system_boot_opts.stdout | default('')) or
+      'noexec' not in (system_boot_opts.stdout | default(''))
+
+- name: Verify /boot hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /boot
+  register: _boot_verify
+  failed_when: >-
+    'nosuid' not in _boot_verify.stdout or
+    'nodev' not in _boot_verify.stdout or
+    'noexec' not in _boot_verify.stdout
+  changed_when: false
+  when: system_boot_mountpoint.rc | default(-1) == 0
+
+- name: Deploy boot-harden.service (CSB — fstab not modified)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
+      # /boot with nosuid,nodev,noexec at every boot.
+      [Unit]
+      Description=Harden /boot mount options
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=sysinit.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/mount -o remount,nosuid,nodev,noexec /boot
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=sysinit.target
+    dest: /etc/systemd/system/boot-harden.service
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+    - not system_is_container
+
+- name: Enable boot-harden.service (CSB)
+  ansible.builtin.systemd:
+    name: boot-harden.service
+    enabled: true
+    daemon_reload: true
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
+  ignore_errors: true
+  register: system_boot_harden_enable
+
+- name: Warn if boot-harden.service could not be enabled (CSB)
+  ansible.builtin.debug:
+    msg: >-
+      boot-harden.service could not be enabled (systemd policy restriction or
+      daemon-reload failure). /boot hardening will NOT persist across reboots.
+  when:
+    - system_boot_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+    - system_boot_harden_enable.failed | default(false)
+
+# --- Harden /boot/efi mount options ---
+# vfat does not support device nodes, so nodev is omitted (the kernel ignores it for
+# vfat, but the canonical approach is to omit it). nosuid and noexec are valid and
+# meaningful: no EFI binaries need setuid or exec from a running Linux system.
+#
+# CSB: same fstab management constraint as /boot — deploy one-shot service for persistence.
+- name: Check if /boot/efi is a separate mountpoint
+  ansible.builtin.command:
+    cmd: findmnt -n /boot/efi
+  register: system_boot_efi_mountpoint
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # pre-initialized above (rc=1); skip in container — /boot/efi absent in container images
+
+- name: Check /boot/efi fstab options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS --fstab /boot/efi
+  register: system_boot_efi_fstab_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+  failed_when: false
+
+- name: Warn if /boot/efi has no fstab entry — fstab hardening cannot persist
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /boot/efi is a separate mountpoint but has no /etc/fstab entry.
+      The fstab lineinfile tasks will silently no-op (backrefs: true). Live nosuid/noexec
+      is applied for this session but will not survive a reboot. Add /boot/efi to /etc/fstab
+      to make hardening persistent.
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - system_boot_efi_fstab_opts.rc | default(-1) != 0
+
+- name: Add nosuid to /boot/efi fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot/efi\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,nosuid\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - "'nosuid' not in (system_boot_efi_fstab_opts.stdout | default(''))"
+
+- name: Add noexec to /boot/efi fstab entry
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^(\S+\s+/boot/efi\s+\S+\s+)(\S+)(\s+\d+\s+\d+\s*)$'
+    backrefs: true
+    line: '\1\2,noexec\3'
+    backup: true
+    mode: "0644"
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - not csb_rhel
+    - not system_is_container  # fstab writes trigger systemd fstab inotify → daemon-reload → crashes containers
+    - "'noexec' not in (system_boot_efi_fstab_opts.stdout | default(''))"
+
+- name: Check /boot/efi current mount options
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /boot/efi
+  register: system_boot_efi_opts
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+  failed_when: false
+
+- name: Remount /boot/efi nosuid,noexec (live before reboot)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: mount -o remount,nosuid,noexec /boot/efi
+  register: _boot_efi_remount_result
+  until: _boot_efi_remount_result.rc == 0
+  retries: 3
+  delay: 2
+  failed_when: _boot_efi_remount_result.rc != 0
+  changed_when: _boot_efi_remount_result.rc == 0
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - >-
+      'nosuid' not in (system_boot_efi_opts.stdout | default('')) or
+      'noexec' not in (system_boot_efi_opts.stdout | default(''))
+
+- name: Verify /boot/efi hardening is active
+  ansible.builtin.command:
+    cmd: findmnt -n -o OPTIONS /boot/efi
+  register: _boot_efi_verify
+  failed_when: >-
+    'nosuid' not in _boot_efi_verify.stdout or
+    'noexec' not in _boot_efi_verify.stdout
+  changed_when: false
+  when: system_boot_efi_mountpoint.rc | default(-1) == 0
+
+- name: Deploy boot-efi-harden.service (CSB — fstab not modified)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # On CSB, /etc/fstab is IT-managed. This one-shot service remounts
+      # /boot/efi with nosuid,noexec at every boot.
+      [Unit]
+      Description=Harden /boot/efi mount options
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=sysinit.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/mount -o remount,nosuid,noexec /boot/efi
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=sysinit.target
+    dest: /etc/systemd/system/boot-efi-harden.service
+    mode: "0644"
+    owner: root
+    group: root
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+    - not system_is_container
+
+- name: Enable boot-efi-harden.service (CSB)
+  ansible.builtin.systemd:
+    name: boot-efi-harden.service
+    enabled: true
+    daemon_reload: true
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+  # ignore_errors (not failed_when: false): RHEL CSB IT policy may reject custom unit enables;
+  # failed_when: false would set .failed=False and silently suppress the downstream warning.
+  ignore_errors: true
+  register: system_boot_efi_harden_enable
+
+- name: Warn if boot-efi-harden.service could not be enabled (CSB)
+  ansible.builtin.debug:
+    msg: >-
+      boot-efi-harden.service could not be enabled (systemd policy restriction or
+      daemon-reload failure). /boot/efi hardening will NOT persist across reboots.
+  when:
+    - system_boot_efi_mountpoint.rc | default(-1) == 0
+    - csb_rhel
+    - system_boot_efi_harden_enable.failed | default(false)
+
+# --- Harden /var/tmp via bind-mount to /tmp (CIS 1.1.8) ---
+# A complete unit file is required — /var/tmp has no base unit on Fedora
+# so a drop-in directory would be silently ignored.
+- name: Deploy var-tmp.mount unit (bind /var/tmp to /tmp)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # /var/tmp bind-mounted to /tmp so it inherits noexec,nosuid,nodev.
+      [Unit]
+      Description=Bind mount /var/tmp to /tmp
+      After=tmp.mount
+      Requires=tmp.mount
+
+      [Mount]
+      What=/tmp
+      Where=/var/tmp
+      Type=none
+      Options=bind,noexec,nosuid,nodev
+
+      [Install]
+      WantedBy=local-fs.target
+    dest: /etc/systemd/system/var-tmp.mount
+    mode: "0644"
+  when:
+    - system_var_tmp_noexec | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Enable and start var-tmp.mount
+  when:
+    - system_var_tmp_noexec | bool
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Enable and start var-tmp.mount
+      ansible.builtin.systemd:
+        name: var-tmp.mount
+        enabled: true
+        state: started
+        daemon_reload: true
+  rescue:
+    - name: Warn that /var/tmp is not hardened
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: var-tmp.mount could not be enabled or started. /var/tmp is NOT
+          hardened — world-writable space can execute code. Check: systemctl status
+          var-tmp.mount; journalctl -u var-tmp.mount.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+
+- name: Check if var-tmp.mount unit file exists
+  ansible.builtin.stat:
+    path: /etc/systemd/system/var-tmp.mount
+  register: system_var_tmp_unit_stat
+  when: not (system_var_tmp_noexec | bool)
+
+- name: Remove var-tmp.mount when system_var_tmp_noexec disabled
+  when:
+    - not (system_var_tmp_noexec | bool)
+    - system_var_tmp_unit_stat.stat.exists
+  block:
+    - name: Stop and disable var-tmp.mount
+      ansible.builtin.systemd:
+        name: var-tmp.mount
+        state: stopped
+        enabled: false
+        daemon_reload: true
+      failed_when: false
+
+    - name: Remove var-tmp.mount unit file
+      ansible.builtin.file:
+        path: /etc/systemd/system/var-tmp.mount
+        state: absent
+      register: system_var_tmp_unit_removal
+      when: not system_is_container
+
+    - name: Reload systemd after removing var-tmp.mount  # noqa: no-handler
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when:
+        - system_var_tmp_unit_removal.changed
+        - not system_is_container
+      failed_when: false

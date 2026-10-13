@@ -1,8 +1,67 @@
 ---
-containers_auth_file: "{{ ansible_user_dir }}/.config/containers/auth.json"
+containers_auth_file: "{{ containers_config_dir }}/auth.json"
 
-containers_registries:
-  - registry.redhat.io
-  - quay.io
+containers_config_dir: "{{ ansible_facts['user_dir'] }}/.config/containers"
 
-containers_config_dir: "{{ ansible_user_dir }}/.config/containers"
+# kind host prerequisites (OVN-K/Submariner testing); settings apply globally to all Podman containers
+# k8s-file is intentional: kubelet requires file-based logs; side effect: `journalctl --user` does not
+# aggregate container logs — use `podman logs <container>` instead for container log inspection
+containers_log_driver: "k8s-file"
+containers_pids_limit: 65536  # sized for kind node process density; Podman default is 2048
+containers_nofile_limit: 65536
+# hard limit for all Podman containers; 8× nofile_limit; per-container burst ceiling
+# If overriding this, ensure it is >= containers_nofile_limit or Podman will reject the config.
+containers_nofile_hard_limit: "{{ containers_nofile_limit | int * 8 }}"
+
+install_docker: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+
+# WARNING: overriding this in config.yml REPLACES the full list (drops quay.io and registry.redhat.io).
+# Use containers_registries_extra to append instead.
+containers_registries: []  # authoritative value in group_vars/all/vars.yml; empty here for standalone role invocation
+
+# Extra registries appended to containers_registries without replacing the computed default list.
+# Set in config.yml to add registries beyond quay.io (and registry.redhat.io for work profile).
+# Example:
+#   containers_registries_extra:
+#     - docker.io
+containers_registries_extra: []
+
+registry_tokens: []  # fallback; authoritative in group_vars/all/vars.yml
+
+containers_prune_enabled: false
+containers_prune_schedule: weekly  # OnCalendar value for podman-prune.timer; any systemd calendar expression
+
+# SECURITY: environment.d/containers.conf exports DOCKER_HOST system-wide via
+# systemd-environment-d-generator. All graphical applications (VS Code extensions,
+# language servers, browser-spawned processes) inherit DOCKER_HOST and can reach the
+# Podman socket without any explicit configuration. Disabled by default; enable only
+# if 'make kind' (OVN-K/Submariner) is used and only on hosts where all graphical
+# session processes are trusted. Set containers_environment_d_enabled: true in
+# config.yml to opt in.
+containers_environment_d_enabled: false
+
+# Container image pull policy (policy.json).
+# Default policy rejects pulls from unrecognized registries; GPG-verified for RH
+# registries on DNF hosts. Set false to disable (reverts to system default).
+containers_policy_enabled: true
+# Path to the Red Hat GPG key used to verify registry.redhat.io / registry.access.redhat.com images.
+# Only referenced on DNF-based hosts (Fedora/RHEL); unused on Debian/macOS.
+containers_policy_rh_gpg_key: /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+
+is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
+
+# SECURITY: Enforce fully-qualified image references by deploying a registries.conf
+# that sets unqualified-search-registries = []. This prevents `podman pull nginx`
+# (short/unqualified name) from silently resolving to docker.io where namespace
+# squatting can deliver a malicious image. Use full names (e.g. docker.io/library/nginx).
+# Set to false in config.yml only if short image names are genuinely required.
+containers_enforce_fqin: true
+# SECURITY: Force user-level FQIN enforcement even when /etc/containers/registries.conf
+# (system-level) exists. User-level registries.conf takes precedence in Podman, so setting
+# this true deploys ~/.config/containers/registries.conf with unqualified-search-registries=[]
+# regardless of IT's system file. WARNING: this will break short-name pulls from corporate
+# registries listed in IT's file (e.g. registry.access.redhat.com, registry.fedoraproject.org).
+# Only set true if you are certain all images you pull are fully-qualified.
+containers_enforce_fqin_override: false

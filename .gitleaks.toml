@@ -1,4 +1,94 @@
-[allowlist]
-  paths = [
-    '''scripts/vault-pass-ci\.sh''',
-  ]
+[extend]
+  useDefault = true
+
+[[rules]]
+  id = "claude-skill-sensitive-path"
+  description = "Sensitive path reference in Claude skill file"
+  regex = '''(~/\.(ssh|aws|gnupg|kube|vault_pass)|/etc/shadow|private_key)'''
+  path = '''(^|/)\.claude/.*\.js$'''
+
+[[rules.allowlists]]
+  description = "Audit prompts list key filenames without reading private key contents"
+  condition = "AND"
+  regexTarget = "line"
+  regexes = ['''ls ~/\.ssh/ 2>/dev/null''']
+  paths = ['''(^|/)\.claude/(concrete-changes-audit|make-audit)\.js$''']
+
+[[rules]]
+  id = "generic-api-key"
+
+  [[rules.allowlists]]
+    description = "Known dummy CI vault password"
+    condition = "AND"
+    regexes = ['''ci-dummy-vault-password''']
+    paths = ['''(^|/)scripts/vault-pass-ci[.]sh$''']
+
+  [[rules.allowlists]]
+    description = "Literal GRUB hash examples and the hash-generation command"
+    condition = "AND"
+    regexTarget = "match"
+    regexes = [
+      '''system_grub_password_hash:[\s]*"grub\.pbkdf2\.sha512\.(10000|200000)\.\.\.\."''',
+      '''password hash via: grub2-mkpasswd-pbkdf2''',
+    ]
+    paths = ['''(^|/)(common/tasks/pre_flight_checks|roles/system/tasks/grub_password)\.yml$''']
+
+  [[rules.allowlists]]
+    description = "Systemd sandbox directive is a configuration key, not a credential"
+    condition = "AND"
+    regexes = ['''^NoNewPrivileges(=true)?$''']
+    paths = ['''(^|/)roles/system/(files/aide-check\.service|templates/aide-check\.service\.j2)$''']
+
+  [[rules.allowlists]]
+    description = "Public signing key fingerprint in the documented placeholder"
+    condition = "AND"
+    regexTarget = "match"
+    regexes = ['''Key fingerprint: [A-Fa-f0-9]{40}''']
+    paths = ['''(^|/)collections-dist/signing-key\.asc$''']
+
+  [[rules.allowlists]]
+    description = "Generated public runtime SHA256 digest row"
+    condition = "AND"
+    regexTarget = "line"
+    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
+
+[[rules]]
+  id = "bitbucket-client-secret"
+
+  [[rules.allowlists]]
+    description = "Generated public runtime SHA256 digest row"
+    condition = "AND"
+    regexTarget = "line"
+    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
+
+[[rules]]
+  id = "discord-api-token"
+
+  [[rules.allowlists]]
+    description = "Generated public runtime SHA256 digest row"
+    condition = "AND"
+    regexTarget = "line"
+    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
+
+[[rules]]
+  id = "new-relic-user-api-id"
+
+  [[rules.allowlists]]
+    description = "Generated public runtime SHA256 digest row"
+    condition = "AND"
+    regexTarget = "line"
+    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']
+
+[[rules]]
+  id = "sumologic-access-token"
+
+  [[rules.allowlists]]
+    description = "Generated public runtime SHA256 digest row"
+    condition = "AND"
+    regexTarget = "line"
+    regexes = ['''(?m)^[ \t]*"(plugins|module_utils|roles)/[^"\r\n]+[.](py|so)": "[0-9a-f]{64}",?[ \t\r]*$''']
+    paths = ['''(^|/)collections-dist/PYTHON_MANIFEST[.]json$''']

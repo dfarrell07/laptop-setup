@@ -2,13 +2,15 @@
 name: Molecule
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "37 5 * * 1"
 
 concurrency:
-  group: molecule-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -16,15 +18,15 @@ permissions:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       ansible: ${{ steps.filter.outputs.ansible }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name != 'pull_request' && 1 || 0 }}
           persist-credentials: false
 
       - name: Check changed paths
@@ -34,124 +36,102 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "${EVENT_NAME}" = "push" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "schedule" ]; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep -qE '^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml|requirements\.yml|requirements-test\.txt|molecule/|scripts/)'; then
+          ANSIBLE_PATHS='^(roles/|common/|group_vars/|site\.yml|ansible\.cfg|default\.config\.yml'
+          ANSIBLE_PATHS+='|requirements\.yml|requirements-test\.(txt|lock)|molecule/|scripts/'
+          ANSIBLE_PATHS+='|\.github/workflows/molecule\.yml|\.github/actions/)'
+          changed_paths=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          if grep -Eq "$ANSIBLE_PATHS" <<< "$changed_paths"; then
             echo "ansible=true" >> "$GITHUB_OUTPUT"
           else
             echo "ansible=false" >> "$GITHUB_OUTPUT"
           fi
 
-  fedora:
-    name: Molecule (Fedora)
+  molecule:
+    name: Molecule (${{ matrix.name }})
     needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {scenario: fedora, runner: ubuntu-24.04, timeout: 30, name: Fedora}
+          - {scenario: rocky, runner: ubuntu-24.04, timeout: 30, name: Rocky Linux 10}
+          - {scenario: debian, runner: ubuntu-24.04, timeout: 30, name: Debian}
+          - {scenario: container, runner: ubuntu-24.04, timeout: 30, name: container provisioning}
+          - {scenario: container-offline, runner: ubuntu-24.04, timeout: 30, name: container-offline rescue path}
+          - {scenario: container-offline-distrobox, runner: ubuntu-24.04, timeout: 30, name: container-offline-distrobox rescue path}
+          - {scenario: distrobox-role, runner: ubuntu-24.04, timeout: 30, name: distrobox-role}
+          - {scenario: packages-binaries, runner: ubuntu-24.04, timeout: 45, name: packages-binaries}
+          - {scenario: ssti-guard, runner: ubuntu-24.04, timeout: 10, name: config template injection}
+          - {scenario: macos, runner: macos-15, timeout: 30, name: macOS}
+    steps:
+      - name: Check out the repository
+        if: needs.changes.outputs.ansible == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI environment
+        if: needs.changes.outputs.ansible == 'true'
+        uses: ./.github/actions/ci-setup
+
+      - name: Run Molecule ${{ matrix.name }} scenario
+        if: needs.changes.outputs.ansible == 'true'
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Sanitize env vars that could be injected on a self-hosted or compromised runner.
+          # Mirrors linting.yml sanitization; ANSIBLE_LIBRARY is the critical path for
+          # malicious setup.py execution via gather_facts on a poisoned runner.
+          unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS \
+                ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS \
+                PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR \
+                TMPDIR TEMP TMP
+          molecule test -s "$SCENARIO"
+
+  all-molecule-pass:
+    name: All Molecule Checks Pass
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - changes
+      - molecule
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
+      # Documentation-only PRs report successful platform jobs without provisioning.
+      - name: Verify no required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more required jobs failed or were cancelled"
+          exit 1
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install test dependencies
-        run: pip install -r requirements-test.txt
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Run Molecule Fedora scenario
-        run: molecule test -s fedora
-
-  centos:
-    name: Molecule (CentOS Stream)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
+  notify-failure:
+    name: Create Issue on Failure
+    needs: [all-molecule-pass]
+    if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
+    permissions:
+      issues: write
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install test dependencies
-        run: pip install -r requirements-test.txt
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Run Molecule CentOS Stream scenario
-        run: molecule test -s centos
-
-  debian:
-    name: Molecule (Debian)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install test dependencies
-        run: pip install -r requirements-test.txt
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Run Molecule Debian scenario
-        run: molecule test -s debian
-
-  macos:
-    name: Molecule (macOS)
-    needs: changes
-    if: needs.changes.outputs.ansible == 'true' || github.event_name == 'push'
-    runs-on: macos-14
-    timeout-minutes: 30
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install test dependencies
-        run: pip install -r requirements-test.txt
-
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Run Molecule macOS scenario
-        run: molecule test -s macos
+      - name: Create issue on failure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Molecule tests failed (scheduled run)"
+          BODY="Weekly Molecule run failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          EXISTING=$(gh issue list --label bug --state open \
+            --search "$TITLE in:title" --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "bug" || \
+              echo '::warning::gh issue create failed — check token permissions and label existence'
+          fi

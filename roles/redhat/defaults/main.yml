@@ -1,4 +1,11 @@
 ---
+csb_detected: false  # fallback; authoritative value in group_vars/all/vars.yml
+csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
+is_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
+is_fedora: false  # fallback; authoritative value in group_vars/all/vars.yml
+install_vpn: true  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+
 redhat_ca_certs:
   - 2022-IT-Root-CA.pem
   - Eng-CA.crt
@@ -6,7 +13,14 @@ redhat_ca_certs:
 redhat_ca_dest: /etc/pki/ca-trust/source/anchors
 
 redhat_vpn_packages:
-  - redhat-internal-openvpn-profiles
+  - "{{ 'redhat-internal-globalprotect-ui'
+       if (is_fedora
+           or (ansible_facts['distribution'] == 'RedHat'
+               and ansible_facts['distribution_major_version'] | int >= 10))
+       else 'redhat-internal-openvpn-profiles' }}"
 
 redhat_cert_packages:
   - redhat-internal-cert-install
+
+redhat_splunk_service_account: splunk
+redhat_splunk_nologin_shell: /sbin/nologin

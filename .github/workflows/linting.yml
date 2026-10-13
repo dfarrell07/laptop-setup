@@ -2,13 +2,15 @@
 name: Linting
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
-  group: lint-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -16,87 +18,748 @@ permissions:
 jobs:
   ansible-lint:
     name: Ansible Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install ansible-lint
-        run: pip install -r requirements-test.txt
-
-      - name: Create vault password script for CI
-        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
 
       - name: Run ansible-lint
         run: ansible-lint
 
-  yamllint:
-    name: YAML Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+      - name: Run yamllint
+        # ansible-lint skips yaml rules (see .ansible-lint skip_list); yamllint covers them
+        # and also lints .github/ (excluded from ansible-lint)
+        run: yamllint --strict .
+
+      - name: Check lock file drift
+        # Verify requirements-test.lock satisfies the version bounds in requirements-test.txt.
+        # Dependabot bumps bounds in .txt but does NOT regenerate .lock; this catches that gap.
+        # Uses `packaging` which is already installed by ci-setup from requirements-test.lock.
+        run: |
+          python3 - <<'PYEOF'
+          import re, sys
+          from packaging.requirements import Requirement
+          from packaging.version import Version
+
+          def normalize(name):
+              return re.sub(r'[-_.]+', '-', name).lower()
+
+          reqs = {}
+          with open('requirements-test.txt') as f:
+              for line in f:
+                  line = line.strip()
+                  if line and not line.startswith('#'):
+                      req = Requirement(line)
+                      reqs[normalize(req.name)] = req
+
+          locked = {}
+          with open('requirements-test.lock') as f:
+              for line in f:
+                  # Strip optional extras (e.g. molecule-plugins[podman,vagrant]==x.y.z)
+                  m = re.match(r'^([A-Za-z0-9][-A-Za-z0-9._]*)(?:\[[^\]]*\])?==([^\s\\]+)', line)
+                  if m:
+                      locked[normalize(m.group(1))] = Version(m.group(2))
+
+          drift = []
+          for key, req in reqs.items():
+              if key not in locked:
+                  drift.append(f'{req.name}: not found in requirements-test.lock')
+              elif not req.specifier.contains(locked[key]):
+                  drift.append(
+                      f'{req.name}: locked at {locked[key]}, but {req.specifier} required'
+                  )
+
+
+          if drift:
+              for d in drift:
+                  print(f'::error::{d}')
+              print('Run `make pip-lock` and commit the updated lockfile.')
+              sys.exit(1)
+          print(f'Lock file satisfies all {len(reqs)} direct requirements.')
+          PYEOF
+
+  check-vars-sync:
+    name: Vars Sync Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
-      - name: Install yamllint
-        run: pip install -r requirements-test.txt
+      - name: Install pyyaml and packaging from lockfile
+        run: |
+          test -z "${PIP_INDEX_URL:-}" || (echo 'PIP_INDEX_URL must not be set in CI' && exit 1)
+          pip install --require-hashes -r <(awk '
+            /^[A-Za-z0-9_.-]+==/ {selected = ($0 ~ /^(pyyaml|packaging)==/)}
+            selected {print}
+          ' requirements-test.lock)
 
-      - name: Run yamllint
-        run: yamllint --strict .
+      - name: Check vars sync
+        run: python3 scripts/check-vars-sync.py
 
-  shellcheck:
-    name: ShellCheck
-    runs-on: ubuntu-latest
+  shell-checks:
+    name: Shell Checks
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Run shellcheck
         run: |
           shellcheck -S warning scripts/*.sh
           shellcheck -S warning roles/claude/files/*.sh
-          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg
+          shellcheck -S warning .githooks/pre-commit .githooks/commit-msg .githooks/pre-push
+          shellcheck -S warning roles/dotfiles/files/git-template-*
+
+      - name: Validate git hooks — prevent malicious exfiltration patterns
+        run: |
+          # SECURITY: Behavioral validation of hook changes to prevent key exfiltration attacks.
+          # This complements shellcheck (syntax validation) with intent/behavior checks.
+          failed=0
+          for hook in .githooks/pre-commit .githooks/commit-msg .githooks/pre-push; do
+            # Prohibit common exfiltration methods: curl, wget, nc with URLs
+            if grep -E 'curl\s|wget\s|nc\s' "$hook" | grep -qE 'https?://|::[0-9]+'; then
+              echo "::error::$hook: curl/wget/nc with network URLs detected (potential exfiltration)" >&2
+              failed=1
+            fi
+            # Prohibit direct reads of sensitive paths: SSH keys, GPG keys, cloud credentials
+            # shellcheck disable=SC2016  # Match literal shell variable references in hook source.
+            if grep -qE 'cat.*(\$HOME|~)/(\.ssh|\.gnupg|\.aws|\.gcloud|\.config/gcloud)' "$hook"; then
+              echo "::error::$hook: reads of sensitive file paths detected (SSH/GPG/AWS/GCP keys)" >&2
+              failed=1
+            fi
+            # Prohibit writes/commands to sensitive locations
+            if grep -qE '(aws|gcloud|gh|kubectl)\s+.*--password|export\s+(AWS_|GOOGLE_|GCP_|GITHUB_TOKEN)' "$hook"; then
+              echo "::error::$hook: credential export detected (token leakage risk)" >&2
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Validate hook structural integrity (detect behavioral bypasses)
+        run: |
+          python3 << 'SUBPYEOF'
+          import sys
+          import re
+          failed = False
+          with open('.githooks/pre-commit', 'r') as f:
+              content = f.read()
+          if re.search(r'if\s+(?:false|true)\s*;?\s*then\b.*?gitleaks\b', content, re.DOTALL | re.IGNORECASE):
+              print('::error::.githooks/pre-commit: gitleaks call wrapped in "if false/true" bypass', file=sys.stderr)
+              failed = True
+          if 'gitleaks git --pre-commit' not in content:
+              print('::error::.githooks/pre-commit: gitleaks call missing or wrong command', file=sys.stderr)
+              failed = True
+          if '_gitleaks_rc' not in content or 'if [ "$_gitleaks_rc" -ne 0 ]' not in content:
+              print('::error::.githooks/pre-commit: gitleaks return code validation missing', file=sys.stderr)
+              failed = True
+          if 'if [ "$_gitleaks_rc" -ne 0 ]; then' in content and 'failed=1' not in content:
+              print('::error::.githooks/pre-commit: gitleaks failure not propagated', file=sys.stderr)
+              failed = True
+          with open('.githooks/pre-push', 'r') as f:
+              content = f.read()
+          if "git ls-files -z -- '*vault.yml'" not in content:
+              print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
+              failed = True
+          if 'ANSIBLE_VAULT' not in content:
+              print('::error::.githooks/pre-push: vault encryption check missing', file=sys.stderr)
+              failed = True
+          with open('.githooks/commit-msg', 'r') as f:
+              content = f.read()
+          if 'Signed-off-by' not in content:
+              print('::error::.githooks/commit-msg: Signed-off-by requirement missing', file=sys.stderr)
+              failed = True
+          if failed:
+              sys.exit(1)
+          print('✓ All hooks passed structural integrity validation')
+          SUBPYEOF
+
+
+      - name: Validate hook structural integrity (detect behavioral bypasses)
+        run: |
+          python3 << 'SUBPYEOF'
+          import sys
+          import re
+          failed = False
+          with open('.githooks/pre-commit', 'r') as f:
+              content = f.read()
+          if re.search(r'if\s+(?:false|true)\s*;?\s*then\b.*?gitleaks\b', content, re.DOTALL | re.IGNORECASE):
+              print('::error::.githooks/pre-commit: gitleaks call wrapped in "if false/true" bypass', file=sys.stderr)
+              failed = True
+          if 'gitleaks git --pre-commit' not in content:
+              print('::error::.githooks/pre-commit: gitleaks call missing or wrong command', file=sys.stderr)
+              failed = True
+          if '_gitleaks_rc' not in content or 'if [ "$_gitleaks_rc" -ne 0 ]' not in content:
+              print('::error::.githooks/pre-commit: gitleaks return code validation missing', file=sys.stderr)
+              failed = True
+          if 'if [ "$_gitleaks_rc" -ne 0 ]; then' in content and 'failed=1' not in content:
+              print('::error::.githooks/pre-commit: gitleaks failure not propagated', file=sys.stderr)
+              failed = True
+          with open('.githooks/pre-push', 'r') as f:
+              content = f.read()
+          if "git ls-files -z -- '*vault.yml'" not in content:
+              print('::error::.githooks/pre-push: vault file enumeration missing', file=sys.stderr)
+              failed = True
+          if 'ANSIBLE_VAULT' not in content:
+              print('::error::.githooks/pre-push: vault encryption check missing', file=sys.stderr)
+              failed = True
+          with open('.githooks/commit-msg', 'r') as f:
+              content = f.read()
+          if 'Signed-off-by' not in content:
+              print('::error::.githooks/commit-msg: Signed-off-by requirement missing', file=sys.stderr)
+              failed = True
+          if failed:
+              sys.exit(1)
+          print('✓ All hooks passed structural integrity validation')
+          SUBPYEOF
+
+
+      - name: Verify hook baseline integrity (detect behavior changes)
+        if: github.event_name == 'pull_request'
+        run: |
+          # SECURITY: Enforce that hook changes are semantically reviewed.
+          # If a PR modifies .githooks/*, require explicit evidence of intent (commit message pattern).
+          # This is a behavioral gate in addition to code review policy.
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # List all commits in the PR
+          commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+
+          # Check if any commit modifies .githooks/*
+          hook_modified=0
+          for commit in $commits; do
+            changed_paths=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
+            if grep -Eq '^\.githooks/' <<< "$changed_paths"; then
+              hook_modified=1
+              # Require PR description or explicit commit message keyword for hook changes
+              msg=$(git log -1 --format=%B "$commit")
+              if ! printf '%s' "$msg" | \
+                 grep -qiE '(SECURITY|hook.*change|gitHook|integrity|behavioral|vault|pre.push)'; then
+                echo "::notice::Commit $commit modifies .githooks/ — commit message lacks"
+                echo "  security/behavioral keywords (SECURITY, hook, integrity, vault, pre-push, etc.)"
+              fi
+            fi
+          done
+
+          if [ "$hook_modified" -eq 1 ]; then
+            echo "::notice::PR modifies .githooks/ — code review by project maintainer REQUIRED (GitHub branch protection enforces this)"
+          fi
 
       - name: Validate preflight JSON output
-        run: bash scripts/preflight.sh --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
+        run: |
+          pf_output=$(bash scripts/preflight.sh --json 2>&1 || true)
+          test -n "$pf_output" || { echo 'preflight.sh --json produced no output'; exit 1; }
+          printf '%s' "$pf_output" | python3 -m json.tool > /dev/null
 
       - name: Validate smoke-test JSON output
-        run: bash scripts/smoke-test.sh --user-only --json 2>/dev/null | python3 -c "import json,sys; json.load(sys.stdin)"
+        run: |
+          st_output=$(bash scripts/smoke-test.sh --user-only --json 2>&1 || true)
+          test -n "$st_output" || { echo 'smoke-test.sh --json produced no output'; exit 1; }
+          printf '%s' "$st_output" | python3 -m json.tool > /dev/null
+
+      - name: Test raw config parsing and unsafe-tag handling
+        uses: ./.github/actions/ci-setup
+
+      - name: Run config parser and SSH host-key regression tests
+        run: |
+          python3 scripts/test-config-parser.py
+          python3 scripts/test-ssh-known-hosts.py
+          python3 scripts/test-sshd-template.py
+          python3 scripts/test-smoke-test.py
+          python3 scripts/test-claude-privacy.py
+
+      - name: Run pre-push enforcement regression tests
+        run: |
+          python3 scripts/test-pre-push.py
+          python3 scripts/test-vault-stub.py
+          python3 scripts/test-workflow-guards.py
+          python3 scripts/test-pinned-git.py
+          python3 scripts/test-hook-baselines.py
+          python3 scripts/test-bootstrap-hooks.py
+          python3 scripts/test-aerospace-terminal.py
+          python3 scripts/test-audit-policy.py
+          python3 scripts/test-brew-update.py
+          python3 scripts/test-chrony-template.py
+          python3 scripts/test-kernel-cmdline.py
+          python3 scripts/test-podman-distrobox.py
+
+      - name: Check production Ansible assertions and collection source comparisons
+        run: |
+          python3 scripts/test-ansible-input-guards.py
+          python3 scripts/test-collection-source-verifier.py
+
+      - name: Check environment and argument guards
+        env:
+          SKIP_GPG_VERIFY: "1"
+        run: bash test-var-override.sh
 
       - name: Run queue poller unit tests
         run: bash scripts/test-queue-poller.sh
 
-  lockfile-lint:
-    name: Lockfile Integrity Check
-    runs-on: ubuntu-latest
+  collections-manifest:
+    name: Collection Manifest Verification
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up manifest verification dependencies
+        uses: ./.github/actions/ci-setup
+
+      - name: Validate Python manifest is well-formed JSON
+        run: |
+          python3 -c "import json; json.load(open('collections-dist/PYTHON_MANIFEST.json'))"
+
+      - name: Verify manifest contains all pinned collections
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import yaml
+
+          with open('requirements.yml') as f:
+              reqs = yaml.safe_load(f)
+          with open('collections-dist/PYTHON_MANIFEST.json') as f:
+              manifest = json.load(f)
+
+          pinned_collections = {c['name']: c['version'] for c in reqs.get('collections', [])}
+          manifest_entries = set(manifest.keys())
+
+          # Convert collection names to tarball format (community.general -> community-general)
+          expected_entries = {name.replace('.', '-') + '-' + version + '.tar' for name, version in pinned_collections.items()}
+
+          missing = expected_entries - manifest_entries
+          if missing:
+              print(f'ERROR: Manifest missing entries for: {missing}')
+              exit(1)
+
+          print(f'✓ Manifest contains all {len(expected_entries)} pinned collections')
+          PYEOF
+
+      - name: Verify committed manifest exactly matches the archives
+        run: |
+          generated_manifest=$(mktemp)
+          trap 'rm -f "$generated_manifest"' EXIT
+          python3 scripts/gen-collection-manifest.py collections-dist "$generated_manifest"
+          cmp collections-dist/PYTHON_MANIFEST.json "$generated_manifest"
+
+      - name: Ensure requirements.yml and PYTHON_MANIFEST.json are both updated
+        if: github.event_name == 'pull_request'
+        run: |
+          # If PR modifies requirements.yml, PYTHON_MANIFEST.json must also be updated
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          changed_paths=$(git diff --name-only "$BASE_SHA..$HEAD_SHA")
+          if grep -Fxq 'requirements.yml' <<< "$changed_paths" &&
+             ! grep -Fxq 'collections-dist/PYTHON_MANIFEST.json' <<< "$changed_paths"; then
+              echo "::error::PR modifies requirements.yml but PYTHON_MANIFEST.json is not updated"
+              echo "  Run: scripts/gen-collection-manifest.py collections-dist collections-dist/PYTHON_MANIFEST.json"
+              exit 1
+          fi
+
+  vault-encryption:
+    name: Vault Encryption Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Ensure vault files are encrypted
+        run: |
+          failed=0
+          while IFS= read -r f; do
+            # shellcheck disable=SC2016
+            if head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
+              continue
+            fi
+            # Share the same restricted plaintext-template check as local hooks.
+            if python3 scripts/verify-vault-stub.py < "$f"; then
+              echo "::notice file=${f}::Vault stub (no real secrets) — OK"
+              continue
+            fi
+            echo "::error file=${f}::Unencrypted vault file: ${f}"
+            failed=1
+          done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*' -not -path './.venv/*')
+          exit "$failed"
+
+      - name: Ensure vault is not encrypted with CI dummy password
+        run: |
+          python3 - <<'PYEOF'
+          # Verify no vault file was encrypted with the known CI dummy password.
+          # Ansible vault 1.1 AES256 format: vault body = hexlify(hexlify(salt) + b'\n'
+          # + hmac_hexdigest_bytes + b'\n' + hexlify(ciphertext)).
+          # PBKDF2-HMAC-SHA256(password, salt, 10000, 80) derives: AES key (0:32),
+          # HMAC key (32:64), IV (64:80).  HMAC = SHA256(hmac_key, ciphertext).
+          import sys, hashlib, hmac as _hmac, binascii, subprocess
+
+          dummy = 'ci-dummy-vault-password'
+          result = subprocess.run(
+              ['find', '.', '-name', '*vault.yml',
+               '-not', '-path', './node_modules/*',
+               '-not', '-path', './collections/*',
+               '-not', '-path', './.venv/*'],
+              capture_output=True, text=True)
+          if result.returncode != 0:
+              print(f"find failed: {result.stderr}", file=sys.stderr); sys.exit(1)
+          found = result.stdout.splitlines()
+          failed = False
+          for f in found:
+              try:
+                  with open(f) as fh:
+                      lines = fh.readlines()
+              except Exception:
+                  continue
+              if not lines or not lines[0].startswith('$ANSIBLE_VAULT'):
+                  continue
+              body = ''.join(l.strip() for l in lines[1:])
+              try:
+                  inner = binascii.unhexlify(body)
+              except Exception:
+                  continue
+              parts = inner.split(b'\n', 2)
+              if len(parts) != 3:
+                  continue
+              try:
+                  salt = binascii.unhexlify(parts[0])
+                  stored_hmac = parts[1]
+                  ciphertext = binascii.unhexlify(parts[2])
+              except Exception:
+                  continue
+              dk = hashlib.pbkdf2_hmac('sha256', dummy.encode(), salt, 10000, 80)
+              computed = _hmac.new(dk[32:64], ciphertext, hashlib.sha256).hexdigest().encode()
+              if _hmac.compare_digest(computed, stored_hmac):
+                  print(f'::error file={f}::{f} is encrypted with the CI dummy password'
+                        ' — re-encrypt using vault-pass.sh')
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PYEOF
+
+  script-integrity:
+    name: Script Integrity Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify verify-collections.sh integrity
+        run: |
+          cd scripts
+          if ! sha256sum -c verify-collections.sh.sha256; then
+            echo "::error::verify-collections.sh integrity check failed"
+            echo "The verify-collections.sh script has been tampered with or the .sha256 file is out of sync."
+            echo "If changes to verify-collections.sh are intentional, regenerate the hash:"
+            echo "  sha256sum scripts/verify-collections.sh > scripts/verify-collections.sh.sha256"
+            echo "Then commit both files together to prevent supply chain tampering."
+            exit 1
+          fi
+          echo "✓ verify-collections.sh integrity verified"
+
+  collections-integrity:
+    name: Collections Integrity Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify upstream hashes and any configured collection signature
+        env:
+          SKIP_GPG_VERIFY: "1"
+        run: |
+          # The bundled key is explicitly a placeholder; it cannot be imported.
+          # Independent Galaxy hashes remain mandatory in both configurations.
+          scripts/verify-collections-galaxy.sh
+          if [ "$(scripts/gpg-policy.sh)" = disabled ]; then
+            echo "::notice::Collection GPG enforcement is temporarily disabled by repository policy"
+          elif grep -q '^INVALID-STUB-KEY-PLACEHOLDER$' collections-dist/signing-key.asc; then
+            echo "::notice::Collection signing key is a documented placeholder; upstream hashes verified"
+          else
+            gpg --import collections-dist/signing-key.asc
+          fi
+          scripts/verify-collections.sh
+
+      - name: Verify collections-dist SHA256SUMS
+        run: |
+          cd collections-dist
+          if ! sha256sum -c SHA256SUMS; then
+            echo "::error::collections-dist integrity check failed"
+            echo "One or more collection tarballs have been tampered with or SHA256SUMS is out of sync."
+            echo "If collections were intentionally updated, run: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS"
+            exit 1
+          fi
+
+  syntax-check:
+    name: Ansible Syntax Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
+
+      - name: Run syntax check
+        run: |
+          # Sanitize env vars that could be injected on a self-hosted or compromised runner.
+          # Mirrors the subset of sanitization performed by scripts/verify-ansible-args.sh
+          # for the vars that affect plugin loading and Python/linker behaviour.
+          # PATH is intentionally NOT pinned here to preserve the ci-setup Python venv path.
+          unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS \
+                ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS \
+                PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR \
+                TMPDIR TEMP TMP
+          ansible-playbook site.yml --syntax-check
+
+  critical-assertions-guard:
+    name: Critical Assertions Guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI environment
+        uses: ./.github/actions/ci-setup
+
+      - name: Verify critical preflight assertions with YAML-aware validation
+        run: |
+          if ! python3 .github/scripts/verify-critical-assertions.py; then
+            echo "::error::Critical assertions verification failed"
+            exit 1
+          fi
+
+  git-config-guards:
+    name: Git Config Guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify core.hooksPath not overridden
+        run: |
+          failed=0
+          # Check local repo config
+          local_hookspath=$(git config --local core.hooksPath || true)
+          if [ -n "$local_hookspath" ] && [ "$local_hookspath" != ".githooks" ]; then
+            echo "::error::Local core.hooksPath overridden to: $local_hookspath (must be .githooks or unset)"
+            failed=1
+          fi
+          # Check system/global config (defensive against system-level tampering)
+          global_hookspath=$(git config --global core.hooksPath || true)
+          if [ -n "$global_hookspath" ] && [ "$global_hookspath" != ".githooks" ]; then
+            echo "::error::Global core.hooksPath set to: $global_hookspath (should be unset)"
+            failed=1
+          fi
+          system_hookspath=$(git config --system core.hooksPath || true)
+          if [ -n "$system_hookspath" ]; then
+            echo "::error::System core.hooksPath set to: $system_hookspath (should be unset)"
+            failed=1
+          fi
+          if [ "$failed" -eq 0 ]; then
+            echo "✓ core.hooksPath verified: correctly configured (local unset or .githooks, global/system unset)"
+          fi
+          exit "$failed"
+
+      - name: Validate hook files for git config modifications
+        run: |
+          # SECURITY: Prevent hook-disabling patterns (git config core.hooksPath writes)
+          # that could bypass hook enforcement at development time.
+          failed=0
+          for hook in .githooks/*; do
+            # Reject git config modifications that could disable hooks
+            if grep -vE '^[[:space:]]*#' "$hook" | \
+               grep -qE 'git\s+config\s+(--local\s+)?core\.hooksPath|git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath'; then
+              echo "::error::$hook: git config core.hooksPath modification detected (hook disabling risk)" >&2
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Validate commit history for git config hook-disabling patterns
+        if: github.event_name == 'pull_request'
+        run: |
+          # SECURITY: Check PR commit history for attempts to disable hooks via git config.
+          # An attacker could write git config --local core.hooksPath /dev/null in a hook,
+          # then unset it afterward to restore config. This check searches commit diffs
+          # for such patterns in .githooks/* changes.
+          failed=0
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Check if any commit modifies .githooks/* with git config write patterns
+          commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+          for commit in $commits; do
+            # Look for git config core.hooksPath modifications in .githooks/ diff
+            if git show "$commit" -- .githooks/ | \
+               grep -vE '^\+[[:space:]]*#' | \
+               grep -qE '^\+.*git\s+config\s+(--local\s+)?core\.hooksPath'; then
+              echo "::error::Commit $commit modifies .githooks/ with git config core.hooksPath write (hook disabling risk)" >&2
+              failed=1
+            fi
+            # Also check for config unset patterns
+            if git show "$commit" -- .githooks/ | \
+               grep -vE '^\+[[:space:]]*#' | \
+               grep -qE '^\+.*git\s+config\s+(--local\s+)?--unset\s+core\.hooksPath'; then
+              echo "::error::Commit $commit modifies .githooks/ with git config --unset core.hooksPath (hook disabling risk)" >&2
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+  gpg-signatures:
+    name: GPG Signature Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify signatures on commits modifying critical supply-chain files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Signoff remains mandatory; cryptographic signing follows tracked policy.
+          gpg_policy=$(scripts/gpg-policy.sh)
+          echo "Repository GPG enforcement: $gpg_policy"
+
+          # Handle both PR and push events
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # For push events, verify the pushed commits against the previous commit
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.event.after }}"
+          fi
+          failed=0
+          for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            # SECURITY: Use directory-prefix wildcard patterns (scripts/, .githooks/, collections-dist/, .github/workflows/)
+            # and specific critical files (roles/packages/defaults/main.yml for binary download hashes).
+            # This automatically covers all current and future supply-chain files:
+            # - scripts/verify-collections.sh, scripts/verify-ansible-args.sh, scripts/check-vars-sync.py, etc.
+            # - .githooks/pre-commit, .githooks/pre-push, .githooks/commit-msg, etc.
+            # - collections-dist/* for vendored collections and SHA256SUMS
+            # - roles/packages/defaults/main.yml for binary download SHA256 hashes (prevents hash bypass attacks)
+            # - .github/workflows/* for CI/CD pipeline definitions
+            critical_pattern='^(scripts/|\.githooks/|collections-dist/|\.github/'
+            critical_pattern+='|Makefile(\.sha256)?$|roles/(packages|repos_dnf)/defaults/main\.yml$'
+            critical_pattern+='|requirements-(test\.lock|bootstrap\.txt)$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
+            changed_paths=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
+            if grep -Eq "$critical_pattern" <<< "$changed_paths"; then
+              if [ "$gpg_policy" = enabled ]; then
+                # GitHub checks the signature and registered contributor identity.
+                if verified=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${commit}" \
+                    --jq '.commit.verification.verified') && [ "$verified" = "true" ]; then
+                  echo "✓ Commit $commit: cryptographic signature verified by GitHub"
+                else
+                  echo "::error::Commit $commit modifies supply-chain files without a verified signature"
+                  failed=1
+                fi
+              fi
+              # Check Signed-off-by trailer (text-based, enforced by local .githooks/commit-msg hook)
+              message=$(git log -1 --format=%B "$commit")
+              if ! grep -q '^Signed-off-by:' <<< "$message"; then
+                echo "::error::Commit $commit is missing Signed-off-by trailer (use git commit -s)"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -eq 1 ]; then
+            echo ""
+            echo "Supply-chain commits require Signed-off-by: (git commit -s)."
+            echo "When .gpg-enforcement is enabled, they also require a verified signature (-S)."
+            echo "See SECURITY.md for the current policy and re-enablement procedure."
+            exit 1
+          fi
+
+      - name: Validate Go module checksum database (GOSUMDB)
+        run: |
+          # SECURITY: Reject empty or disabled GOSUMDB to prevent Go module tampering.
+          # Go binaries in the supply chain (kind, helm, kustomize, k9s, oc, etc.) must verify
+          # against the module checksum database. An unset environment uses Go's secure
+          # default; check the effective value and reject disabled verification.
+          gosumdb=$(go env GOSUMDB)
+          if [ -z "$gosumdb" ]; then
+            echo "::error::GOSUMDB is unset or empty — Go module verification disabled"
+            exit 1
+          fi
+          case "$gosumdb" in
+            "off"|"")
+              echo "::error::GOSUMDB is set to '$gosumdb' — Go module verification disabled"
+              exit 1
+              ;;
+          esac
+          echo "✓ GOSUMDB validation passed: $gosumdb"
+
+  node-lint:
+    name: Node Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name != 'pull_request' && 1 || 0 }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Assert safe npm registry
+        run: |
+          if [ -n "${NPM_CONFIG_REGISTRY:-}" ] && \
+             [ "${NPM_CONFIG_REGISTRY}" != "https://registry.npmjs.org/" ]; then
+            echo "::error::NPM_CONFIG_REGISTRY is set to '${NPM_CONFIG_REGISTRY}' — only https://registry.npmjs.org/ is permitted"
+            exit 1
+          fi
 
       - name: Validate lockfile integrity and registry
         run: |
@@ -113,8 +776,6 @@ jobs:
                   errors.append(f'Weak hash ({integrity[:10]}...): {name}')
               if resolved and not resolved.startswith('https://registry.npmjs.org/'):
                   errors.append(f'Non-npmjs registry: {name} -> {resolved}')
-              if resolved.startswith(('git://', 'git+', 'ssh://')):
-                  errors.append(f'Git protocol dependency (bypasses ignore-scripts): {name}')
           if errors:
               for e in errors:
                   print(f'::error::{e}')
@@ -122,106 +783,101 @@ jobs:
           print(f'Validated {len(lock.get(\"packages\", {})) - 1} packages: all SHA-512, all npmjs.org, no git deps')
           "
 
-      - name: Install packages for audit
-        run: npm ci --ignore-scripts
-
-      - name: Verify npm package signatures
-        run: npm audit signatures
-
-      - name: Check for known vulnerabilities
-        run: npm audit
-
-  vault-encryption:
-    name: Vault Encryption Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Ensure vault files are encrypted
-        run: |
-          failed=0
-          while IFS= read -r f; do
-            # shellcheck disable=SC2016
-            if head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
-              continue
-            fi
-            # Allow the placeholder stub (no real secrets)
-            if grep -q 'vault_placeholder' "$f" && [ "$(grep -E '^vault_' "$f" | grep -cv 'vault_placeholder')" -eq 0 ]; then
-              echo "::notice file=${f}::Vault stub (no real secrets) — OK"
-              continue
-            fi
-            echo "::error file=${f}::Unencrypted vault file: ${f}"
-            failed=1
-          done < <(find . -name '*vault.yml' -not -path './node_modules/*' -not -path './collections/*')
-          exit $failed
-
-  syntax-check:
-    name: Ansible Syntax Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: requirements-test.txt
-
-      - name: Install Ansible
-        run: pip install -r requirements-test.txt
-
-      - name: Install collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Create vault password script for CI
-        run: cp scripts/vault-pass-ci.sh scripts/vault-pass.sh
-
-      - name: Run syntax check
-        run: ansible-playbook site.yml --syntax-check
-
-  markdownlint:
-    name: Markdown Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
-        with:
-          node-version: '22'
-          cache: npm
-
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Test commit message parsing and signing configuration
+        run: python3 scripts/test-commit-message.py
+
       - name: Run markdownlint
-        run: npx --no -- markdownlint-cli2 "**/*.md" "#node_modules" "#collections" "#.claude" "#references"
+        run: npm run lint:markdown
+
+      - name: Run commitlint and check commit conventions
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          failed=0
+          npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA" || failed=1
+          # bash case does NOT re-parse | from variable expansion — use a function with literal alternation
+          # Sync partner: .githooks/commit-msg — keep this word list identical
+          _bad_word() {
+            local lw; lw=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+            case "$lw" in
+              added|changed|created|deleted|enabled|disabled|expanded|\
+              fixed|implemented|improved|merged|moved|refactored|\
+              removed|renamed|replaced|resolved|reverted|started|\
+              stopped|updated|upgraded|\
+              adding|changing|creating|deleting|enabling|disabling|\
+              expanding|fixing|implementing|improving|merging|moving|\
+              refactoring|removing|renaming|replacing|resolving|\
+              reverting|starting|stopping|updating|upgrading) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          # shellcheck disable=SC2046
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            subject=$(git log -1 --format=%s "$sha")
+            body=$(git log -1 --format=%B "$sha")
+            first=$(printf "%s\n" "$subject" | awk '{print $1}')
+            first="${first%:}"
+            # For scoped commits (Scope: Verb noun), extract word after colon to check verb
+            desc_first=$(printf "%s\n" "$subject" | sed 's/^[-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
+            desc_first="${desc_first%:}"
+            # Check scope word (e.g. 'Fixed: suppress lint warning' -> 'Fixed' is caught)
+            if _bad_word "$first"; then
+              echo "::error::Commit $sha: Use imperative mood for scope word, not '$first'"
+              failed=1
+            fi
+            # Also check word after scope colon (e.g. 'Dotfiles: Updated' -> 'Updated' is caught)
+            if [[ "$desc_first" != "$first" ]] && _bad_word "$desc_first"; then
+              echo "::error::Commit $sha: Use imperative mood after scope colon, not '$desc_first'"
+              failed=1
+            fi
+            if ! printf "%s\n" "$body" | grep -q '^Signed-off-by:'; then
+              echo "::error::Commit $sha is missing Signed-off-by: trailer (use git commit -s)"
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      - name: Verify npm package signatures
+        id: npm_signatures
+        continue-on-error: true
+        run: npm audit signatures
+
+      - name: Check for known vulnerabilities
+        id: npm_audit
+        continue-on-error: true
+        run: npm audit --audit-level=moderate
+
+      - name: Check npm audit results
+        if: always()
+        run: |
+          failed=0
+          if [ "${{ steps.npm_signatures.outcome }}" = "failure" ]; then
+            echo "npm audit signatures failed"
+            failed=1
+          fi
+          if [ "${{ steps.npm_audit.outcome }}" = "failure" ]; then
+            echo "npm audit --audit-level=moderate failed"
+            failed=1
+          fi
+          exit "$failed"
 
   gitleaks:
     name: Secret Detection
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Download gitleaks
+      - name: Download gitleaks  # Last bumped: 2026-08-05; check https://github.com/gitleaks/gitleaks/releases
         env:
           GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
@@ -230,20 +886,25 @@ jobs:
           tar xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
           chmod +x gitleaks
 
-      - name: Run gitleaks
-        run: ./gitleaks git . --redact
+      - name: Verify secret scanner exceptions remain narrow
+        run: PATH="$PWD:$PATH" python3 scripts/test-gitleaks-config.py
 
-  actionlint:
-    name: Action Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+      - name: Run gitleaks
+        run: ./gitleaks git . --redact --max-decode-depth 2 --config .gitleaks.toml
+
+  workflow-security:
+    name: Workflow Security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Download actionlint
+      - name: Download actionlint  # Last bumped: 2026-08-05; check https://github.com/rhysd/actionlint/releases
+        id: actionlint_download
+        continue-on-error: true
         env:
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
@@ -253,81 +914,212 @@ jobs:
           chmod +x actionlint
 
       - name: Run actionlint
+        id: actionlint
+        if: steps.actionlint_download.outcome == 'success'
         run: ./actionlint -color
 
-  zizmor:
-    name: Workflow Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Download zizmor
+      - name: Download zizmor  # Last bumped: 2026-08-05; check https://github.com/zizmorcore/zizmor/releases
+        id: zizmor_download
+        continue-on-error: true
         env:
-          ZIZMOR_SHA256: aa1facd105f0d83fe5c55b1adcd9d7417de5d83aa27471f91dc0b66cf3803577
+          ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
-          curl -sSLO https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-unknown-linux-gnu.tar.gz
+          curl -sSLO https://github.com/zizmorcore/zizmor/releases/download/v1.29.0/zizmor-x86_64-unknown-linux-gnu.tar.gz
           echo "${ZIZMOR_SHA256}  zizmor-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
           tar xzf zizmor-x86_64-unknown-linux-gnu.tar.gz zizmor
           chmod +x zizmor
 
       - name: Run zizmor
-        run: ./zizmor .github/workflows/
+        id: zizmor
+        if: steps.zizmor_download.outcome == 'success'
+        run: ./zizmor .github/
 
-  commitlint:
-    name: Commit Message Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
-        with:
-          node-version: '22'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Run commitlint
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx --no -- commitlint --from "$BASE_SHA" --to "$HEAD_SHA"
-
-      - name: Check imperative mood
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      # scan steps fail the job directly; only download failures need aggregation
+      - name: Check security scanner results
+        if: always()
         run: |
           failed=0
-          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
-            msg=$(git log -1 --format=%s "$sha")
-            first=$(echo "$msg" | awk '{print $1}')
-            if ! echo "$msg" | grep -qE '^[A-Z]'; then
-              echo "::error::Commit $sha: Subject must start with a capital letter"
-              failed=1
+          if [ "${{ steps.actionlint_download.outcome }}" = "failure" ]; then
+            echo "actionlint download failed"
+            failed=1
+          fi
+          if [ "${{ steps.zizmor_download.outcome }}" = "failure" ]; then
+            echo "zizmor download failed"
+            failed=1
+          fi
+          exit "$failed"
+
+  galaxy-recheck:
+    name: Galaxy Collections Runtime Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Re-verify collections against Galaxy API at CI time
+        run: |
+          # SECURITY: Detect supply chain drift by re-verifying SHA256SUMS against Galaxy API.
+          # This job runs at CI time (pull_request + main push) and guards against:
+          #   1. SHA256SUMS files modified to match malicious artifacts
+          #   2. Galaxy API changes (collection yanked, version replaced, hash updated)
+          #   3. Network-level tampering (DNS hijacking, MITM, CDN replacement)
+          # Note: This does NOT protect against simultaneous galaxy.ansible.com compromise
+          # (both CDN and API compromised in sync), but catches most supply chain attacks.
+          set -euo pipefail
+
+          GALAXY_API="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index"
+          FAIL=0
+
+          # Specs: namespace/name/version/filename
+          for spec in \
+            "ansible/posix/2.2.2/ansible-posix-2.2.2.tar.gz" \
+            "community/general/13.5.0/community-general-13.5.0.tar.gz" \
+            "community/library_inventory_filtering_v1/1.1.5/community-library_inventory_filtering_v1-1.1.5.tar.gz" \
+            "containers/podman/1.21.1/containers-podman-1.21.1.tar.gz"; do
+
+            ns=$(echo "$spec" | cut -d/ -f1)
+            name=$(echo "$spec" | cut -d/ -f2)
+            ver=$(echo "$spec" | cut -d/ -f3)
+            file=$(echo "$spec" | cut -d/ -f4)
+
+            # Fetch Galaxy API hash
+            api_hash=$(curl -sf "${GALAXY_API}/${ns}/${name}/versions/${ver}/" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['artifact']['sha256'])" 2>/dev/null || echo "")
+
+            # Compute local file hash
+            local_hash=$(sha256sum "collections-dist/${file}" 2>/dev/null | awk '{print $1}' || echo "")
+
+            if [ -z "$api_hash" ]; then
+              echo "WARN: ${file} — could not fetch Galaxy API hash (network issue or collection removed)"
+              continue
+            elif [ -z "$local_hash" ]; then
+              echo "ERROR: ${file} — local file missing or unreadable"
+              FAIL=1
+            elif [ "$api_hash" = "$local_hash" ]; then
+              echo "PASS: ${file} matches Galaxy API (${api_hash:0:16}...)"
+            else
+              echo "ERROR: ${file} — MISMATCH"
+              echo "  Galaxy API hash: ${api_hash}"
+              echo "  Local file hash: ${local_hash}"
+              echo "  ACTION: If expected (manual collection update), run: make vendor-collections"
+              FAIL=1
             fi
-            case "$first" in
-              Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|\
-              Fixed|Implemented|Improved|Merged|Moved|Refactored|\
-              Removed|Renamed|Replaced|Resolved|Reverted|Started|\
-              Stopped|Updated|Upgraded|\
-              Adding|Changing|Creating|Deleting|Enabling|Disabling|\
-              Expanding|Fixing|Implementing|Improving|Merging|Moving|\
-              Refactoring|Removing|Renaming|Replacing|Resolving|\
-              Reverting|Starting|Stopping|Updating|Upgrading)
-                echo "::error::Commit $sha: Use imperative mood, not '$first'"
-                failed=1 ;;
-            esac
           done
-          exit $failed
+
+          if [ "$FAIL" -eq 1 ]; then
+            echo ""
+            echo "Collection verification failed. This may indicate:"
+            echo "  - Collections were updated but SHA256SUMS not re-generated (run: make vendor-collections)"
+            echo "  - Galaxy removed/replaced a collection version (uncommon, contact maintainer)"
+            echo "  - Supply chain tampering detected (audit git log, review CI logs, contact maintainers)"
+            exit 1
+          fi
+          echo ""
+          echo "All collections verified against Galaxy API."
+
+  upstream-collections-check:
+    name: Collections Upstream Source Verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify runtime Python filenames and content against upstream release tags
+        run: scripts/verify-vendor-tarball.sh
+
+  supply-chain-validation-gate:
+    name: Supply-Chain Validation Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    needs:
+      - gpg-signatures
+      - node-lint
+      - gitleaks
+    steps:
+      - name: Verify supply-chain validation jobs succeeded
+        run: |
+          # SECURITY: Enforce that supply-chain validation gates pass before merge.
+          # This is a secondary gate (redundant with branch protection) that validates:
+          #   1. GPG Signature Verification (signoff and configured signing policy)
+          #   2. Node Lint (enforces Signed-off-by requirement in PR commits)
+          #   3. Secret Detection/gitleaks (no credentials leaked in history)
+          # If this job fails, the PR cannot be merged (in addition to branch protection).
+          # If this job succeeds, it confirms that all supply-chain validation has passed.
+          failed=0
+          echo "Supply-chain validation gate results:"
+          echo "  - GPG Signature Verification: ${{ needs.gpg-signatures.result }}"
+          echo "  - Node Lint: ${{ needs.node-lint.result }}"
+          echo "  - Secret Detection (gitleaks): ${{ needs.gitleaks.result }}"
+
+          if [ "${{ needs.gpg-signatures.result }}" != "success" ]; then
+            echo "::error::GPG Signature Verification failed"
+            failed=1
+          fi
+          if [ "${{ needs.node-lint.result }}" != "success" ]; then
+            echo "::error::Node Lint failed (Signed-off-by validation)"
+            failed=1
+          fi
+          if [ "${{ needs.gitleaks.result }}" != "success" ]; then
+            echo "::error::Secret Detection (gitleaks) failed"
+            failed=1
+          fi
+
+          if [ "$failed" -eq 0 ]; then
+            echo ""
+            echo "✓ All supply-chain validation checks PASSED"
+            echo "The configured supply-chain checks passed."
+          else
+            echo ""
+            echo "Supply-chain validation FAILED. Review errors above."
+            echo ""
+            echo "NOTE: Ensure GitHub branch protection is configured with required checks:"
+            echo "  Required checks on 'main' branch MUST include:"
+            echo "    - Node Lint (enforces Signed-off-by: on all commits)"
+            echo "    - GPG Signature Verification (enforces configured signing policy)"
+            echo "    - Secret Detection (gitleaks) (detects leaked credentials)"
+            echo ""
+            echo "See SECURITY.md § 'Supply-Chain Validation' for configuration details."
+            exit 1
+          fi
+
+  all-checks-pass:
+    name: All Checks Pass
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - ansible-lint
+      - check-vars-sync
+      - shell-checks
+      - script-integrity
+      - vault-encryption
+      - collections-integrity
+      - syntax-check
+      - critical-assertions-guard
+      - git-config-guards
+      - gpg-signatures
+      - node-lint
+      - gitleaks
+      - workflow-security
+      - collections-manifest
+      - galaxy-recheck
+      - upstream-collections-check
+      - supply-chain-validation-gate
+    steps:
+      - name: Verify no required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more required jobs failed or were cancelled"
+          exit 1

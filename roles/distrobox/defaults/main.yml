@@ -1,11 +1,24 @@
 ---
-distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
-distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:43') }}"
-distrobox_container_replace: "{{ container_replace | default(false) }}"
+packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+fapolicyd_enforcing: false  # fallback; authoritative value in group_vars/all/vars.yml
+csb_detected: false  # fallback; authoritative in group_vars/all/vars.yml
+csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+distrobox_enabled: true  # set false in config.yml to skip Play 3; site.yml role when-guard
+distrobox_use_host_network: false  # set true only for OVN-K/bpfman; enables --network=host + CAP_NET_ADMIN
 
-distrobox_ini_path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+distrobox_fedora_release: '44'
+distrobox_container_digest: "sha256:27dc67339a01d10400322b1a008387cc24a85d1b092e6f56867732a0cd96da00"  # yamllint disable-line rule:line-length
+distrobox_container_name: "{{ container_name | default('fedora-dev') }}"
+distrobox_container_image: "{{ container_image | default('registry.fedoraproject.org/fedora-toolbox:' ~ distrobox_container_release ~ '@' ~ distrobox_container_digest) }}"  # yamllint disable-line rule:line-length
+distrobox_container_replace: "{{ container_replace | default(false) }}"
+distrobox_container_release: "{{ container_release | default(distrobox_fedora_release) }}"
+
+distrobox_ini_path: "{{ ansible_facts['user_dir'] }}/.config/distrobox/distrobox.ini"
 
 distrobox_packages:
+  # --- General shell tools ---
   - git
   - vim
   - tmux
@@ -17,58 +30,103 @@ distrobox_packages:
   - wget
   - tar
   - unzip
-  - gcc
-  - gcc-c++
-  - clang
-  - make
-  - cmake
-  - autoconf
-  - automake
-  - libtool
-  - golang
-  - python3
-  - python3-pip
-  - python3-devel
-  - nodejs
-  - npm
-  - openssl-devel
-  - libffi-devel
-  - zlib-devel
-  - ShellCheck
-  - yamllint
-  - ripgrep
-  - fd-find
-  - buildah
-  - skopeo
   - zoxide
-  - shfmt
   - procps-ng
   - findutils
   - which
   - hostname
   - bash-completion
+
+  # --- C / build toolchain ---
+  - gcc
+  - gcc-c++
+  - clang
+  - llvm  # complements clang for eBPF bytecode compilation
+  - make
+  - cmake
+  - autoconf
+  - automake
+  - libtool
+  - protobuf-compiler  # protoc — hard bpfman build requirement (tonic/prost gRPC code generation)
+  - pkgconf-pkg-config  # pkg-config — Rust build scripts for libbpf and openssl use it
+  - openssl-devel
+  - libffi-devel
+  - zlib-devel
+  - libbpf-devel  # eBPF development headers
+
+  # --- Language runtimes ---
+  - golang
+  - rust    # bpfman MSRV 1.85.0; Fedora 44 ships 1.97.1 (stable, no nightly features needed)
+  - cargo   # Rust package manager (companion to rust package)
+  - clippy  # Rust linter — separate dnf package on Fedora; needed for 'cargo clippy'
+  - rustfmt  # Rust formatter — separate dnf package; needed for 'cargo fmt --check'
+  - rust-src  # Rust stdlib source — rust-analyzer indexes this for go-to-definition into std and hover docs
+  - rust-analyzer  # Rust LSP — indexes rust-src for go-to-definition into std and hover docs
+  - python3
+  - python3-pip
+  - python3-devel
+  - nodejs
+  - npm
+
+  # --- Linting / code quality ---
+  - ShellCheck
+  - yamllint
+  - shfmt
+
+  # --- Search / navigation ---
+  - ripgrep
+  - fd-find
+
+  # --- Container tools ---
+  - buildah
+  - skopeo
+
+  # --- Networking / diagnostics ---
   - tcpdump
+  - wireshark-cli  # tshark — scripting-safe CLI capture for OVN-K/bpfman traffic analysis
   - iproute
+  - iproute-tc  # tc split from iproute on Fedora 38+; required for OVS/eBPF traffic control
   - nmap-ncat
   - bind-utils
   - traceroute
+  - mtr
+  - nftables
+  - ethtool
+  - conntrack-tools
+  - socat
+  - iperf3
+
+  # --- eBPF / debugging ---
+  - strace
+  - bpftool  # eBPF program/map introspection (essential for bpfman development)
+  - bpftrace  # eBPF dynamic tracing (container-side; shares host kernel with distrobox)
+  - perf      # kernel performance profiling; CAP_PERFMON granted by distrobox additional_flags
+  - gdb       # C/eBPF program debugger; required by rust-gdb; Go debugging fallback
+  - rust-gdb  # Rust GDB pretty-printers (separate Fedora package from rust)
+  - delve     # Go-native debugger (dlv) — goroutine-aware; GDB insufficient for OVN-K/bpfman Go runtime inspection
+
+  # --- VCS / security ---
+  - gh
+  - gitleaks
+
+  # --- OVN / networking stack ---
   - ovn
   - openvswitch
 
+# SECURITY: container shares $HOME (same UID); install untrusted packages with that in mind — see SECURITY.md § "$HOME trust model".
 distrobox_host_exec_commands:
   - podman
-  - docker
   - flatpak
-
-distrobox_exports:
-  - /usr/bin/jq
-  - /usr/bin/vim
-  - /usr/local/bin/oc
-  - /usr/local/bin/kubectl
+  - kind
+  # docker: excluded by default (install_docker: false); add back if Docker CE is installed
 
 # Binary versions for container provisioning (Play 3)
-distrobox_oc_version: "stable"
-
-# kind host prerequisites
-distrobox_kind_log_driver: "k8s-file"
-distrobox_kind_pids_limit: 65536
+# Reference packages_oc_version so host and container stay in sync. Update default below when bumping packages_oc_version.
+distrobox_oc_version: "{{ packages_oc_version | default('4.22.8') }}"
+distrobox_oc_mirror_url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
+distrobox_golangci_lint_version: "v{{ packages_golangci_lint_version | default('2.12.2') }}"
+distrobox_subctl_version: "v{{ packages_subctl_version | default('0.24.0') }}"  # synced with packages_subctl_version
+distrobox_create_timeout: 600
+distrobox_oc_fetch_timeout: 30
+distrobox_oc_fetch_retries: 3
+distrobox_oc_fetch_delay: 10

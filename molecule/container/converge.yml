@@ -1,0 +1,37 @@
+---
+# Converge: exercise roles/distrobox/tasks/container-provision.yml.
+# Running inside the geerlingguy Fedora 44 container (no real distrobox):
+#   - distrobox-host-exec stub present (from prepare) → symlink path executes
+#     (not flatpak-spawn); flatpak-spawn path is covered by the
+#     container-offline scenario.
+#   - oc stub present (from prepare) → download block skipped.
+#   - golangci-lint/subctl stubs echo pinned versions → version-string guard skips go install.
+#   - distrobox-export stub present (from prepare) → export task succeeds and
+#     ~/.local/bin/oc is asserted by roles/distrobox/tasks/container-provision.yml.
+- name: Converge (container provisioning)
+  hosts: all
+  become: false
+  gather_facts: false
+
+  pre_tasks:
+    - name: Gather minimal facts
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/gather-minimal-facts.yml"
+
+  vars:
+    # Empty — dnf installs with become:true trigger daemon-reload inside the
+    # privileged systemd container, crashing PID 1 before the symlink task runs.
+    # Package installation is tested by the fedora/rocky/debian molecule scenarios.
+    distrobox_packages: []
+    # Explicit test context; production container provisioning still writes system paths.
+    system_is_container: true
+    # Single command to exercise the flatpak-spawn wrapper creation path.
+    distrobox_host_exec_commands:
+      - podman
+    distrobox_oc_version: "4.22.8"  # keep in sync with packages_oc_version in roles/packages/defaults/main.yml
+    distrobox_golangci_lint_version: "v2.12.2"
+    distrobox_subctl_version: "v0.24.0"
+
+  tasks:
+    - name: Run container provisioning tasks
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/distrobox/tasks/container-provision.yml"

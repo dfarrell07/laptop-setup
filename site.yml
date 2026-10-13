@@ -1,46 +1,122 @@
 ---
+# Static import orders pre-flight validation before provisioning.
+# Use the verified wrapper: it rejects flags that could skip these checks.
+- name: Import pre-flight validation
+  ansible.builtin.import_playbook: pre-flight.yml
+
+# ============================================================================
+# PLAY ARCHITECTURE & CONTRIBUTOR GUIDE
+# ============================================================================
+# Play 0 (pre-flight.yml, import_playbook): Pre-flight checks
+#   • CSB detection, fapolicyd state, vault encryption validation
+#   • Runs before provisioning; the wrapper rejects --start-at-task
+#
+# Play 1 (System setup, become: true): Root-level infrastructure
+#   • repos_dnf: Configure package repos (Fedora/RHEL only)
+#   • system: Hardening, SELinux, firewall, kernel params, services
+#   • Play-level become: true simplifies privilege escalation for these roles
+#   • Post-task: Validates DNS resolution after NetworkManager restart
+#     (Play 2 depends on DNS for git/binary downloads; see line 35)
+#
+# Play 2 (User setup, become: false): User-level provisioning
+#   • Pre-tasks: CSB re-validation, pre-flight re-check (defense against
+#     --start-at-task bypass), vault healthcheck, identity var assertions
+#   • Roles: packages, ssh, dotfiles, git_repos, notes, redhat, containers,
+#     desktop, distrobox, claude
+#   • Individual tasks use become: true + tags: [become] when needed
+#   • See CLAUDE.md § "Key Patterns" for become convention details
+#   • NEW ROLES: Add here with appropriate tags and conditional become: true
+#
+# Play 3 (Container provisioning): Podman-based dev container
+#   • Only runs if distrobox role registered a container with add_host
+#   • Uses containers.podman.podman connection plugin
+#   • Bootstraps Python inside container, gathers facts, runs container tasks
+#
+# SECURITY NOTE: The verified wrapper rejects --start-at-task and skipping always
+# tags. Direct Ansible invocation can skip checks; use the Make targets or wrapper.
+# ============================================================================
+
 # Play 1 — Host system (become: true)
 # Runs repos_dnf and system roles that need play-level privilege escalation.
 - name: System setup (requires sudo)
   hosts: localhost
   become: true
-  gather_facts: true
+  gather_facts: false
   tags: [become]
 
   pre_tasks:
-    - name: Capture real user identity
-      ansible.builtin.set_fact:
-        real_user_home: "{{ lookup('env', 'HOME') }}"
-        real_user_id: "{{ lookup('env', 'USER') }}"
+    # become:false so --check mode works without requiring sudo
+    - name: Gather facts
+      ansible.builtin.gather_facts:
       become: false
       tags: [always]
 
-    - name: Set project root for include paths
-      ansible.builtin.set_fact:
-        common_project_root: >-
-          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
-             | default(playbook_dir, true) }}
-      tags: [always]
-
-    - name: Load configuration
-      ansible.builtin.include_vars: default.config.yml
-      tags: [always]
-
-    - name: Load user overrides
-      ansible.builtin.include_vars: config.yml
-      failed_when: false
+    # SECURITY: Close pre-hardening cron window.
+    # cronie is installed by default on Fedora and may already be running when provisioning
+    # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
+    # into provisioning), leaving a window in which pre-placed /var/spool/cron/<user>
+    # jobs fire freely. Writing cron.allow=root here — the earliest privileged step —
+    # eliminates that window before any role executes. Skip on any CSB machine (IT managed
+    # cron jobs would be blocked) and containers (no crond).
+    - name: "SECURITY: Write cron.allow and at.allow before roles (close pre-hardening cron window)"
+      ansible.builtin.copy:
+        content: "root\n"
+        dest: "{{ item }}"
+        mode: "0600"
+      loop:
+        - /etc/cron.allow
+        - /etc/at.allow
+      when:
+        - not system_is_container
+        - not csb_detected
       tags: [always]
 
   roles:
     - role: repos_dnf
       tags: [repos_dnf]
-      when: ansible_pkg_mgr in ['dnf', 'dnf5']
+      when: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
 
     - role: system
       tags: [system]
-      when: ansible_system == 'Linux'
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
 
-# Play 2 — Host user (no play-level become)
+  post_tasks:
+    - name: Flush handlers before DNS wait (ensure NetworkManager and systemd-resolved have restarted)
+      ansible.builtin.meta: flush_handlers
+      tags: [system]
+
+    # NetworkManager restart and systemd-resolved restart handlers have executed above.
+    # Wait for DNS connectivity before Play 2 begins — Play 2 needs DNS for git clones,
+    # binary downloads, and SSH host key fetches.
+    - name: Wait for DNS resolution after NetworkManager and systemd-resolved restart
+      ansible.builtin.command:
+        cmd: getent hosts github.com
+      become: false
+      changed_when: false
+      failed_when: false
+      retries: 6
+      delay: 5
+      register: system_dns_liveness
+      until: system_dns_liveness.rc == 0
+      when:
+        - ansible_facts['system'] | default('Linux') == 'Linux'
+        - ansible_facts['virtualization_type'] | default('') not in ['container', 'docker', 'podman']
+      tags: [system]
+
+    - name: Warn if DNS is not resolving after NetworkManager restart
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: DNS resolution for github.com failed after NetworkManager/systemd-resolved
+          restart. Play 2 (git clones, binary downloads) may fail. Check NM and resolved status:
+          systemctl status NetworkManager systemd-resolved; resolvectl status
+      become: false
+      when:
+        - ansible_facts['system'] | default('Linux') == 'Linux'
+        - system_dns_liveness is defined
+        - system_dns_liveness.rc | default(1) != 0
+      tags: [system]
+
+# Play 2 — User-level provisioning (no play-level become)
 # Individual tasks escalate with become: true + tags: [become] as needed.
 - name: User setup
   hosts: localhost
@@ -48,21 +124,90 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Load configuration
-      ansible.builtin.include_vars: default.config.yml
+    - name: Set project root for include paths
+      ansible.builtin.set_fact:
+        common_project_root: >-
+          {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
+             | default(playbook_dir, true) }}
       tags: [always]
 
-    - name: Load user overrides
-      ansible.builtin.include_vars: config.yml
-      failed_when: false
+    - name: Set OS family facts (is_macos, is_linux)
+      ansible.builtin.set_fact:
+        is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+        is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+      tags: [always]
+
+    - name: Re-run CSB detection to refresh fapolicyd_enforcing and dependent facts
+      become: false
+      when: ansible_facts['system'] | default('Linux') == 'Linux'
+      tags: [always]
+      block:
+        - name: Include CSB detection
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb_detect.yml"
+
+    - name: SECURITY CRITICAL — Re-validate supply chain and config integrity (defense-in-depth)
+      # Refresh validation before user provisioning. Static imports and always tags
+      # do not prevent direct CLI flags from skipping tasks; the wrapper enforces
+      # that argument policy before Ansible starts.
+      become: false
+      tags: [always]
+      block:
+        - name: Re-run pre-flight checks before user provisioning
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+
+    - name: Vault healthcheck — assert required SSH key variables are defined (allows empty on first provision)
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_auth_key is defined
+          - vault_ssh_auth_key_pub is defined
+          - vault_ssh_signing_key is defined
+          - vault_ssh_signing_key_pub is defined
+        fail_msg: >-
+          vault.yml missing SSH key vars. Expected:
+          vault_ssh_auth_key, vault_ssh_auth_key_pub, vault_ssh_signing_key, vault_ssh_signing_key_pub.
+          Run: make vault-view | grep vault_ssh
+      when: not _pf_is_molecule
+      tags: [always]
+
+    # NOTE: vault SSH key population check for distrobox is enforced inside
+    # roles/distrobox/tasks/main.yml (lines 63-74) as defense-in-depth against
+    # --start-at-task bypasses. Keeping the check there (not here) limits the
+    # blast radius to the distrobox role on first provision with an empty vault,
+    # allowing dotfiles, ssh, git_repos, notes, and claude roles to succeed.
+
+    # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
+    # hardening before Play 2, so users who skip 'make preflight' get no other
+    # warning. preflight.sh alone is not sufficient. This block is protected
+    # from automated modification in the audit workflow script (GITIGNORED).
+    - name: Assert identity vars are not CHANGE_ME placeholder values
+      ansible.builtin.assert:
+        that:
+          - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_user_name | default('') | length > 0)
+          - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME') and (dotfiles_github_user | default('') | length > 0)
+          - >-
+            (dotfiles_user_email_personal | default('CHANGE_ME') != 'CHANGE_ME') and
+            (dotfiles_user_email_personal | default('') | length > 0)
+        fail_msg: >-
+          Set dotfiles_user_name, dotfiles_github_user, dotfiles_user_email_personal in config.yml.
+          These are CHANGE_ME placeholders; git commits will be misattributed.
+      when: not _pf_is_molecule
+      tags: [always]
+
+    - name: Assert work email var is not CHANGE_ME placeholder value (work profile)
+      ansible.builtin.assert:
+        that:
+          - dotfiles_user_email_work | default('CHANGE_ME') != 'CHANGE_ME'
+        fail_msg: >-
+          Set dotfiles_user_email_work in config.yml (required for profile=work).
+      when: not _pf_is_molecule and profile == 'work'
       tags: [always]
 
   roles:
     - role: common
-      tags: [always]
-
-    - role: dotfiles
-      tags: [dotfiles]
+      # always tag is intentional: common creates prerequisite dirs; '--skip-tags common'
+      # is insufficient to suppress it — the always tag wins. Use '--skip-tags always'
+      # to suppress (also affects all other always-tagged pre_tasks in this play).
+      tags: [common, always]
 
     - role: packages
       tags: [packages]
@@ -70,15 +215,18 @@
     - role: ssh
       tags: [ssh]
 
+    - role: dotfiles
+      tags: [dotfiles]
+
     - role: git_repos
-      tags: [repos]
+      tags: [repos, git_repos]
 
     - role: notes
       tags: [notes]
 
     - role: redhat
       tags: [redhat]
-      when: profile == 'work'
+      when: profile == 'work' and (is_rhel or csb_detected)
 
     - role: containers
       tags: [containers]
@@ -86,20 +234,27 @@
     - role: desktop
       tags: [desktop]
 
-    - role: distrobox
-      tags: [distrobox]
-      when: ansible_system == 'Linux'
-
     - role: claude
       tags: [claude]
 
+    - role: distrobox
+      tags: [distrobox]
+      when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool
+
   post_tasks:
-    - name: Generate CSB compatibility report
-      ansible.builtin.include_tasks: common/tasks/csb-report.yml
+    - name: Remove stale CSB report
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/csb-report.md"
+        state: absent
       tags: [always]
 
-# Play 3 — Container provisioning (podman connection)
-# Only runs when the distrobox role registered a container via add_host.
+    - name: Generate CSB compatibility report
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-report.yml"
+      tags: [always]
+      when: csb_detected
+
+# Play 3 — Dev container provisioning (podman connection)
+# Runs only if distrobox role registered a container with add_host.
 - name: Provision dev container
   hosts: containers
   connection: containers.podman.podman
@@ -112,12 +267,45 @@
         common_project_root: >-
           {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
              | default(playbook_dir, true) }}
+      tags: [always]
+
+    - name: SECURITY CRITICAL — Validate config integrity before container provisioning
+      # DEFENSE: Play 3 can be targeted directly with --limit containers, bypassing
+      # Play 0 and Play 2 validations. Re-run SSTI guard, vault health, and identity
+      # checks with tags: [always] to ensure they execute regardless of --limit.
+      delegate_to: localhost
+      become: false
+      tags: [always]
+      block:
+        - name: Re-run pre-flight checks (ensures --limit cannot bypass)
+          ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/pre_flight_checks.yml"
+
+    - name: Vault healthcheck — assert required SSH key variables are defined
+      ansible.builtin.assert:
+        that:
+          - vault_ssh_auth_key is defined and vault_ssh_auth_key | length > 0
+          - vault_ssh_auth_key_pub is defined and vault_ssh_auth_key_pub | length > 0
+        fail_msg: vault.yml missing or empty SSH key vars (required for container provisioning)
+      delegate_to: localhost
+      when: not _pf_is_molecule
+      tags: [always]
+
+    - name: Assert identity vars are not CHANGE_ME placeholders
+      ansible.builtin.assert:
+        that:
+          - (dotfiles_user_name | default('CHANGE_ME') != 'CHANGE_ME')
+          - (dotfiles_github_user | default('CHANGE_ME') != 'CHANGE_ME')
+        fail_msg: Set identity vars in config.yml before container provisioning
+      delegate_to: localhost
+      when: not _pf_is_molecule
+      tags: [always]
 
     - name: Bootstrap Python inside container
       ansible.builtin.raw: |
-        dnf install -y python3 python3-libdnf5 2>/dev/null || \
-        dnf install -y python3 python3-dnf 2>/dev/null || true
+        sudo dnf install -y python3 python3-libdnf5 2>/dev/null || \
+        sudo dnf install -y python3 python3-dnf 2>/dev/null || true
       changed_when: false
+      tags: [always]
 
     - name: Gather minimal facts
       ansible.builtin.setup:
@@ -126,8 +314,9 @@
           - "!min"
           - distribution
           - env
+      tags: [always]
 
   tasks:
     - name: Provision dev container
       ansible.builtin.include_tasks:
-        file: "{{ common_project_root }}/common/tasks/container-provision-tasks.yml"
+        file: "{{ common_project_root }}/roles/distrobox/tasks/container-provision.yml"

@@ -1,0 +1,117 @@
+---
+# roles/system/tasks/logrotate_sudo.yml
+# --- Logrotate for sudo.log (created by sudoers Defaults logfile) ---
+- name: Install and configure logrotate for sudo.log
+  when:
+    # CSB: IT manages sudoers on all CSB tiers; 99-hardening (Defaults logfile=) is skipped on csb_detected — no sudo.log will ever be
+    # written
+    - not csb_detected
+    - not system_is_container
+  block:
+    - name: Install logrotate
+      ansible.builtin.package:
+        name: logrotate
+        state: present
+
+    - name: Deploy logrotate config for sudo.log
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          /var/log/sudo.log {
+              weekly
+              rotate 26
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0600 root root
+          }
+        dest: /etc/logrotate.d/sudo
+        mode: "0644"
+
+    - name: Find /etc/logrotate.d files not owned by any RPM (pre-plant audit)
+      # postrotate blocks execute as root via logrotate.timer; a planted file gives persistent
+      # root code execution. RPM-owned files are automatically permitted; only non-RPM files
+      # must be listed in system_logrotated_whitelist. Pattern mirrors dbus-1/system.d check.
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          find /etc/logrotate.d -maxdepth 1 -type f \
+            | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+        executable: /bin/bash
+      register: _logrotated_unowned
+      changed_when: false
+      failed_when: false
+      when: is_dnf
+
+    - name: Inspect the playbook-managed Claude poller logrotate file
+      ansible.builtin.stat:
+        path: /etc/logrotate.d/claude-queue-poller
+        follow: false
+        get_checksum: false
+      register: _system_claude_logrotate_stat
+
+    - name: Read the root-owned Claude logrotate configuration
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/claude-queue-poller
+      register: _system_claude_logrotate_content
+      no_log: true
+      when:
+        - _system_claude_logrotate_stat.stat.isreg | default(false)
+        - _system_claude_logrotate_stat.stat.uid | default(-1) == 0
+        - _system_claude_logrotate_stat.stat.mode | default('') is match('^[0-7]*[0145][0145]$')
+
+    - name: Resolve the real user's group for managed logrotate validation
+      ansible.builtin.command:
+        argv: [id, -gn, "{{ ansible_facts['user_id'] }}"]
+      register: _system_claude_logrotate_group
+      changed_when: false
+      check_mode: false
+      when: not _system_claude_logrotate_content.skipped | default(false)
+
+    - name: Recognize the exact managed Claude logrotate stanza
+      vars:
+        _system_claude_existing_dir: >-
+          {{ (_system_claude_logrotate_content.content | default('') | b64decode
+              | regex_findall('(?m)^([a-zA-Z0-9/._~-]+)/poller\.log \{$') | first) | default('') }}
+        # A previous safe log directory remains valid when config.yml changes.
+        # The exact stanza uses the real user's su identity and contains no hooks.
+        _system_claude_logrotate_vars:
+          claude_log_dir: "{{ _system_claude_existing_dir }}"
+          _primary_group_name: "{{ _system_claude_logrotate_group | default({'stdout': ''}) }}"
+      ansible.builtin.set_fact:
+        _system_verified_claude_logrotate: >-
+          {{ (ansible_facts.user_uid | default(0) | int) > 0
+             and (_system_claude_logrotate_stat.stat.isreg | default(false))
+             and (_system_claude_logrotate_stat.stat.uid | default(-1)) == 0
+             and (_system_claude_logrotate_stat.stat.mode | default('')) is match('^[0-7]*[0145][0145]$')
+             and _system_claude_existing_dir | length > 0
+             and (_system_claude_logrotate_content.content | default('') | b64decode | trim) ==
+             (lookup('template', role_path ~ '/../claude/templates/claude-queue-poller-logrotate.j2',
+                     template_vars=_system_claude_logrotate_vars) | trim) }}
+      no_log: true
+
+    - name: Fail if unexpected files exist in /etc/logrotate.d
+      vars:
+        _unexpected: >-
+          {{ _logrotated_unowned.stdout_lines | default([]) | map('basename') | list
+             | difference(system_logrotated_whitelist
+               + (['claude-queue-poller'] if _system_verified_claude_logrotate else [])) }}
+      ansible.builtin.fail:
+        msg: >-
+          Unexpected unpackaged files in /etc/logrotate.d: {{ _unexpected }}.
+          Each postrotate block runs as root via logrotate.timer — a planted file
+          gives persistent root code execution. Remove the unexpected file(s) or
+          add them to system_logrotated_whitelist in config.yml if they are
+          legitimate non-RPM configs.
+      when:
+        - is_dnf
+        - _unexpected | length > 0
+
+- name: Remove logrotate config for sudo.log on CSB (all tiers)
+  ansible.builtin.file:
+    path: /etc/logrotate.d/sudo
+    state: absent
+  when:
+    - csb_detected
+    - not system_is_container

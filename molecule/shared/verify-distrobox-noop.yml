@@ -1,0 +1,18 @@
+---
+# molecule/shared/verify-distrobox-noop.yml
+# Assertions for the distrobox role no-op path (packages_containers emptied in converge).
+# Included by rocky/verify.yml and fedora/verify.yml.
+#
+# Asserts distrobox.ini is not created by the distrobox role when the binary is absent
+# (packages_containers=[] in CI suppresses binary install). CI gap: the stale-ini removal
+# path (binary removed after being installed) is not exercised here — make test-vm only.
+
+- name: Stat distrobox.ini (must be absent on no-op path)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+  register: verify_distrobox_ini
+
+- name: Assert distrobox.ini is absent when no tool is installed
+  ansible.builtin.assert:
+    that: not verify_distrobox_ini.stat.exists
+    fail_msg: "distrobox.ini deployed despite /usr/bin/distrobox being absent — distrobox role guard (distrobox_tool detection) regressed"

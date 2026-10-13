@@ -1,0 +1,279 @@
+---
+# Restrict system-connections directory so unprivileged users cannot enumerate
+# VPN endpoints, SSIDs, or corporate network topology via directory listing.
+# Enforce before any NM restart handler fires.
+- name: Restrict /etc/NetworkManager/system-connections permissions
+  ansible.builtin.file:
+    path: /etc/NetworkManager/system-connections
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  when: not system_is_container
+
+# --- NetworkManager dispatcher.d audit ---
+# Scripts in dispatcher.d execute as root on every NM restart. Enumerate the
+# directory before any task that notifies 'Restart NetworkManager' so unexpected
+# entries are caught before they run again.
+- name: Enumerate NetworkManager dispatcher scripts
+  ansible.builtin.find:
+    paths: /etc/NetworkManager/dispatcher.d
+    file_type: any
+    recurse: true
+  register: _nm_dispatcher_audit
+  when: not system_is_container
+
+- name: Check owner of Fedora's console-login dispatcher script
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - -qf
+      - --queryformat
+      - "%{NAME}"
+      - /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if
+  register: _nm_vendor_owner
+  changed_when: false
+  failed_when: false
+  when:
+    - not system_is_container
+    - is_dnf
+    - >-
+      '/etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if'
+      in (_nm_dispatcher_audit.files | default([]) | map(attribute='path') | list)
+
+- name: Verify the Fedora console-login helper package
+  ansible.builtin.command:
+    argv: [rpm, --verify, console-login-helper-messages-issuegen]
+  register: _nm_vendor_integrity
+  changed_when: false
+  failed_when: false
+  when:
+    - _nm_vendor_owner is not skipped
+    - _nm_vendor_owner.rc == 0
+    - _nm_vendor_owner.stdout == 'console-login-helper-messages-issuegen'
+
+- name: Record verified vendor NetworkManager dispatcher scripts
+  ansible.builtin.set_fact:
+    _nm_verified_vendor_scripts: >-
+      {{ ['/etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if']
+         if (_nm_vendor_owner.rc | default(1) == 0
+             and _nm_vendor_owner.stdout | default('') == 'console-login-helper-messages-issuegen'
+             and _nm_vendor_integrity.rc | default(1) == 0
+             and _nm_vendor_integrity.stdout | default('') | length == 0)
+         else [] }}
+
+- name: Fail on unexpected NetworkManager dispatcher scripts
+  vars:
+    _configured: "{{ (['csb-fedora-logo'] if csb_detected else []) + (system_nm_dispatcher_allowlist | default([])) }}"
+    _expected: "{{ _configured + (_nm_verified_vendor_scripts | map('basename') | list) }}"
+    _found: "{{ _nm_dispatcher_audit.files | default([]) | rejectattr('isdir') | map(attribute='path') | list }}"
+    _unexpected: "{{ _found | difference(_nm_verified_vendor_scripts) | map('basename') | difference(_configured) }}"
+  ansible.builtin.fail:
+    msg: |
+      Unexpected scripts in /etc/NetworkManager/dispatcher.d run as root on NM restart.
+      Unexpected: {{ _unexpected | join(', ') }}
+      Allowed:    {{ _expected | join(', ') if _expected else '(none — non-CSB host)' }}
+      Remove the files or add them to system_nm_dispatcher_allowlist in config.yml.
+  when:
+    - not system_is_container
+    - _unexpected | length > 0
+
+# --- NetworkManager Tailscale unmanaged ---
+# On CSB, IT may use MAC-based NAC that requires the hardware MAC for 802.1X RADIUS
+# authentication. stable-ssid presents a SSID-hashed pseudo-random MAC which could
+# break corporate WiFi auth. On CSB, deploy preserve to override the NM 1.45+ package
+# default (22-wifi-mac-addr.conf sets stable-ssid), which would otherwise present a
+# SSID-hashed MAC and break 802.1X RADIUS auth.
+# Note: NM 1.45+ ships this as a package default via /usr/lib/NetworkManager/conf.d/22-wifi-mac-addr.conf;
+# the non-CSB (stable-ssid) path of this task is redundant on NM 1.45+; the CSB path (preserve) actively overrides the system default.
+- name: Set WiFi MAC address policy (stable-ssid on standard Fedora, preserve on CSB)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection.wifi-mac-rand]
+      match-device=type:wifi
+      wifi.cloned-mac-address={{ 'stable-ssid' if (system_wifi_mac_rand | bool and not csb_detected) else 'preserve' }}
+    dest: /etc/NetworkManager/conf.d/99-wifi-mac-rand.conf
+    mode: "0644"
+  when: not system_is_container  # NM conf.d write triggers NM reload via inotify, can crash container
+  notify: Restart NetworkManager
+
+- name: Warn that system_wifi_mac_rand is ignored on CSB-detected machines
+  ansible.builtin.debug:
+    msg: >-
+      system_wifi_mac_rand=true is set in config.yml, but CSB-detected machines enforce
+      preserve (hardware MAC) for 802.1X RADIUS NAC compatibility regardless of this variable.
+      stable-ssid MAC randomization is NOT active. Remove system_wifi_mac_rand from config.yml
+      or accept that the hardware MAC is used on all WiFi associations.
+  when:
+    - system_wifi_mac_rand | bool
+    - csb_detected
+    - not system_is_container
+
+- name: NM Tailscale-unmanaged and systemd-resolved DNS deployed (non-CSB)
+  when:
+    - not csb_rhel  # IT may use wg* for managed WireGuard VPN; do not mark unmanaged on RHEL CSB
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+  block:
+    - name: Configure NetworkManager to ignore Tailscale and kind interfaces
+      ansible.builtin.copy:
+        content: >-
+          {{ '# ' ~ ansible_managed ~ '\n[keyfile]\n' ~ _nm_unmanaged_devices ~ '\n' }}
+
+        dest: /etc/NetworkManager/conf.d/tailscale.conf
+        mode: "0644"
+      vars:
+        _nm_unmanaged_devices: "unmanaged-devices+=interface-name:tailscale*,interface-name:kind*,interface-name:podman*\
+          ,interface-name:br-*,interface-name:virbr*,interface-name:ovs-system,interface-name:br-int\
+          ,interface-name:br-ex,interface-name:br-local,interface-name:genev_sys_*{{ '\
+          ,interface-name:wg*' if not csb_detected else '' }},interface-name:wt*,interface-name:ovn-k8s-mp0"
+      notify: Restart NetworkManager
+
+    - name: Deploy NM systemd-resolved DNS config (Tailscale MagicDNS)
+      ansible.builtin.copy:
+        content: |
+          # {{ ansible_managed }}
+          [main]
+          dns=systemd-resolved
+        dest: /etc/NetworkManager/conf.d/99-dns.conf
+        mode: "0644"
+      notify: Restart NetworkManager
+
+- name: Remove NM dns=systemd-resolved config on CSB RHEL
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dns.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+# On CSB-RHEL, IT manages NM power policy; skip to avoid conflicts with corporate config.
+- name: Disable WiFi power saving (prevents latency spikes and drops on ThinkPad)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      match-device=type:wifi
+      wifi.powersave=2
+    dest: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    mode: "0644"
+  when:
+    - not csb_rhel  # IT manages NM power policy on CSB-RHEL; guard holds even when var overridden
+    - system_wifi_powersave_disabled | bool
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+- name: Remove WiFi power saving config
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-wifi-powersave.conf
+    state: absent
+  when:
+    - csb_rhel or not (system_wifi_powersave_disabled | bool)
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+- name: Remove stale 99-dhcp-no-hostname.conf (renamed to 99-dhcp-privacy.conf)
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dhcp-no-hostname.conf
+    state: absent
+  when: not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+- name: Suppress DHCP hostname advertisement (privacy — prevents hostname leakage to DHCP servers)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      [connection]
+      ipv4.dhcp-send-hostname=false
+      ipv6.dhcp-send-hostname=false
+    dest: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+    mode: "0644"
+  when:
+    - not csb_rhel
+    - not system_is_container  # NM conf.d write triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+- name: Remove DHCP hostname suppression config on CSB RHEL
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d/99-dhcp-privacy.conf
+    state: absent
+  when:
+    - csb_rhel
+    - not system_is_container  # NM conf.d delete triggers NM inotify reload, can crash container
+  notify: Restart NetworkManager
+
+# tailscale0 is intentionally not CSB-guarded: Tailscale is a user-managed VPN
+# interface, not controlled by IT's firewalld policy. Trusted zone is required for
+# Tailscale exit-node and peer-to-peer routing to work. Side effect: all Tailscale
+# peers can reach any listening port on this machine (passim, etc. are masked separately).
+- name: Warn when tailscale0 zone assignment will be skipped
+  ansible.builtin.debug:
+    msg: "system_firewalld_running=false — tailscale0 zone assignment skipped; run without --tags to configure firewall"
+  when:
+    - not system_is_container
+    - not system_firewalld_running | bool
+
+- name: Assign tailscale0 to firewall trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: tailscale0
+    permanent: true
+    immediate: true
+    state: enabled
+  when:
+    - not system_is_container  # firewalld module crashes privileged Podman containers
+    - system_firewalld_running | bool
+  # iifname-based nftables rule succeeds immediately even when tailscale0 does not
+  # exist yet — firewalld uses iifname (name-match) not iif (index-match), so the
+  # rule activates the moment tailscaled creates the interface. No failed_when needed.
+  notify:
+    - Apply firewall rules
+    - Restart tailscaled
+
+# wt0 is the NetBird WireGuard interface. Like tailscale0, it is a user-managed
+# VPN interface that must be in the trusted zone so decrypted peer traffic
+# (arriving on wt0) is not dropped by the drop zone default. The firewall.yml
+# exclusion regex (w[gt].*) prevents wt0 from being moved to drop, but does
+# not assign a zone — firewalld applies the default (drop) to unzoned interfaces.
+# iifname-based nftables rule: succeeds immediately even when wt0 does not exist;
+# the rule activates the moment NetBird creates the interface. No failed_when needed.
+# Note: no 'Restart netbird' handler — NetBird manages its own nftables rules
+# natively; restarting it on zone change would drop active peer connections.
+# Side effect: all NetBird peers can reach any listening port on this machine.
+# Services are masked separately (see service_masking.yml). Dev servers bound to
+# 0.0.0.0 are reachable from NetBird peers — bind to 127.0.0.1 or use
+# firewall-cmd --zone=trusted --add-rich-rule for port-specific restrictions if needed.
+- name: Warn when wt0 zone assignment will be skipped
+  ansible.builtin.debug:
+    msg: "system_firewalld_running=false — wt0 zone assignment skipped; run without --tags to configure firewall"
+  when:
+    - not system_is_container
+    - not system_firewalld_running | bool
+
+- name: Assign wt0 (NetBird) to firewall trusted zone
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: wt0
+    permanent: true
+    immediate: true
+    state: enabled
+  when:
+    - not system_is_container  # firewalld module crashes privileged Podman containers
+    - system_firewalld_running | bool
+  notify:
+    - Apply firewall rules
+
+# On CSB where the Tailscale repo is blocked, tailscaled may not be installed.
+# Ignore only "Could not find the requested service" (unit absent); propagate
+# all other errors (D-Bus failures, permission denials, etc.).
+- name: Enable and start tailscaled
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+  register: _tailscaled_enable_result
+  failed_when:
+    - _tailscaled_enable_result.failed | default(false)
+    - "'Could not find the requested service' not in (_tailscaled_enable_result.msg | default(''))"
+  when: not system_is_container

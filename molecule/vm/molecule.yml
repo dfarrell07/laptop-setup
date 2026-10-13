@@ -1,4 +1,6 @@
 ---
+# Prerequisite: run `make bootstrap-test` (vagrant box add fedora/44-cloud --provider libvirt).
+# The box is large (~835 MB); ensure adequate disk space before running.
 driver:
   name: vagrant
   provider:
@@ -6,19 +8,34 @@ driver:
 
 platforms:
   - name: fedora-test
-    box: fedora/43-cloud-base
+    box: fedora/44-cloud
+    # Official Fedora release checksum verified with the Fedora 44 release key.
+    box_url: https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Vagrant-libvirt-44-1.7.x86_64.vagrant.libvirt.box  # yamllint disable-line rule:line-length
+    box_download_checksum: 4695d5ef2bfcc882649b98de0c545d04671d2064f6609e7e68e606718c8333dc
+    box_download_checksum_type: sha256
     memory: 4096
     cpus: 2
+    provider_raw_config_args:
+      - machine_virtual_size = 40  # package and dev-container coverage exceeds the cloud box disk
 
 provisioner:
   name: ansible
+  playbooks:
+    create: create.yml
+    prepare: prepare.yml
+    side_effect: side_effect.yml
+    destroy: destroy.yml
   env:
+    ANSIBLE_DISPLAY_OK_HOSTS: "true"  # expose boot-state diagnostics in this disposable scenario
     ANSIBLE_VAULT_PASSWORD_FILE: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
     ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
   config_options:
     defaults:
       vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      pipelining: true
+      gathering: smart
     privilege_escalation:
       become: true
 
@@ -29,7 +46,9 @@ scenario:
   test_sequence:
     - dependency
     - create
+    - prepare
     - converge
     - idempotence
+    - side_effect
     - verify
     - destroy

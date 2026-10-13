@@ -1,9 +1,10 @@
 ---
+packages_bpfman_enabled: false  # shared opt-in flag; also used before the packages role
 # Indirection layer between vault secrets and role variables.
 # Roles reference these; vault_ prefixed variables come from vault.yml.
 
-# Static string for {{ ansible_managed }} in templates (no timestamps)
-ansible_managed: "Ansible managed — do not edit"
+# Replaces DEFAULT_MANAGED_STR (removed in ansible-core 2.23); all templates use {{ ansible_managed }}
+ansible_managed: 'Ansible managed — do not edit'
 
 # SSH keys (deployed by ssh role when vault is populated)
 ssh_auth_key: "{{ vault_ssh_auth_key | default('') }}"
@@ -12,14 +13,148 @@ ssh_signing_key: "{{ vault_ssh_signing_key | default('') }}"
 ssh_signing_key_pub: "{{ vault_ssh_signing_key_pub | default('') }}"
 
 # Git signing
-ssh_git_signing_email: "{{ dotfiles_user_email_work }}"
+# Separate from ssh_signing_key_pub to allow config.yml override during vault bootstrap;
+# same vault source after vault is populated (see default.config.yml).
 ssh_git_signing_pubkey: "{{ vault_ssh_signing_key_pub | default('') }}"
 
 # Red Hat internal git key
 rh_git_key: "{{ vault_rh_git_key | default('') }}"
 
-# Internal hostnames (override in config.yml per-environment)
-dotfiles_internal_git_host: "internal-git.example.com"
-
 # Notes repo transcrypt password
 notes_transcrypt_password: "{{ vault_notes_transcrypt_password | default('') }}"
+
+# GRUB bootloader password hash
+system_grub_password_hash: "{{ vault_grub_password_hash | default('') }}"
+
+registry_tokens: "{{ vault_registry_tokens | default([]) }}"
+
+# CSB / OS detection baselines — csb_detect.yml overrides on Linux via set_fact at runtime;
+# macOS values depend on a separate fact-computation step in site.yml
+# (see molecule/macos/converge.yml for the pattern).
+# Defining here removes the need for | default(X) guards in conditionals.
+csb_detected: false
+csb_restricted: false
+is_rhel: false
+is_fedora: false
+is_macos: false
+is_linux: false
+is_dnf: false
+is_dnf5: false
+is_apt: false
+fapolicyd_enforcing: false
+fapolicyd_installed: false
+internal_ca_present: false
+csb_ca_cert_paths:
+  - /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+  - /etc/pki/ca-trust/source/anchors/Eng-CA.crt
+  - /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem
+needs_container_tier: "host-only"  # runtime set_fact by csb_detect.yml (p19>include_vars p18); override via -e needs_container_tier=<tier>
+network_proxied: false  # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY/HTTP_PROXY env vars
+proxy_url: ''           # runtime set_fact in csb_detect.yml; config.yml cannot override — set HTTPS_PROXY env var
+
+# Cross-role variable baselines — allow standalone invocation of roles that consume
+# variables defined in other roles' defaults or default.config.yml (which only loads
+# during full playbook runs via pre_flight_checks.yml include_vars).
+packages_install_binaries: true  # fallback copies in packages/claude/distrobox defaults; add a fallback when adding a new consuming role
+profile: work  # fallback copies in dotfiles/packages/repos_dnf/system/git_repos/claude/ssh defaults; add a fallback for new consuming roles
+
+# Feature toggle baselines (single source of truth) — eliminates | default(X) in role tasks.
+# Users override these in config.yml (higher precedence via include_vars).
+repo_gh_cli: true
+repo_google_chrome: false
+repo_google_cloud_sdk: false
+repo_mullvad: true
+repo_docker_ce: false
+repo_redhat: true
+repo_rpmfusion_free: true
+repo_rpmfusion_nonfree: false
+repo_tailscale: true
+install_docker: false
+install_vpn: true
+install_virtualization: true
+
+# Security hardening parameter baselines. Authoritative values defined here (group_vars, precedence 5);
+# mirrored verbatim in roles/system/defaults/main.yml for standalone molecule invocability.
+# check-vars-sync.py enforces the two files stay in sync.
+system_tmout: 0                    # session inactivity timeout in seconds; 0 = disabled; 1–900 valid (CIS 5.5.5 max 900)
+system_faillock_deny: 5            # PAM lockout: failed attempts before account lock
+system_faillock_unlock_time: 900   # seconds before auto-unlock after failed attempts
+system_pwquality_minlen: 14        # minimum password length (CIS 5.3.2)
+system_pwquality_difok: 4          # characters that must differ from previous password
+system_pwquality_ucredit: -1       # require at least 1 uppercase character (CIS 5.3.3)
+system_pwquality_lcredit: -1       # require at least 1 lowercase character (CIS 5.3.3)
+system_pwquality_ocredit: -1       # require at least 1 special character (CIS 5.3.3)
+system_pwquality_dcredit: -1       # require at least 1 digit (CIS 5.3.3)
+system_pwquality_maxrepeat: 3      # maximum consecutive repeated characters
+system_pwquality_maxsequence: 3    # maximum consecutive characters in a monotonic sequence
+system_pwhistory_remember: 24      # number of previous passwords to remember (CIS 5.3.5)
+system_inactive_days: 30           # days inactive before account lock (CIS 5.5.1.5)
+system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
+system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
+system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)
+system_auditd_max_log_file: 8      # MB per audit log file (auditd.conf max_log_file)
+system_auditd_num_logs: 5          # rotated files to keep (auditd.conf num_logs)
+system_umask: "027"                # default umask for login shells (login.defs UMASK)
+# With these values, a kernel panic does not reboot and a kernel oops does not halt — the system
+# continues running in an undefined state. Set panic=10 and panic_on_oops=1 in config.yml for
+# unattended or production hosts.
+system_kernel_panic: 0             # dev workstation: preserve panic state for kdump/KASAN/UBSAN; CIS default is 10 (auto-reboot)
+# NOTE: kernel default=0; toggle mechanism writes this unconditionally to 90-hardening.conf; no-op at this value
+system_kernel_panic_on_oops: 0     # dev workstation: log-and-continue on OOPS (CIS 1.5.3 default is 1 = halt)
+# NOTE: kernel default=0; toggle mechanism writes this unconditionally to 90-hardening.conf; no-op at this value
+system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl); CIS defense-in-depth;
+                                   # set 1 (CIS) to block legacy kexec_load() even when lockdown is disabled
+                                   # NOTE: system_kernel_lockdown: integrity (default) already blocks kexec_load() at
+                                   # kernel level; this sysctl is the sole pre-reboot guard when lockdown is disabled
+system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev workstations needing unrestricted ptrace
+system_sysrq: 0                    # disable SysRq; set 176 in config.yml for OVN-K kernel debugging
+system_bpf_jit_harden: 1          # harden BPF JIT (net.core.bpf_jit_harden)
+system_unprivileged_bpf_disabled: 2  # write-once on Fedora 44 (BPF_UNPRIV_DEFAULT_OFF); value 1 requires custom kernel
+system_perf_event_paranoid: 2      # restrict perf_event_open to CAP_PERFMON+ (CIS); set 1 for normal users, -1 to disable
+system_io_uring_disabled: 1        # restrict io_uring to CAP_SYS_ADMIN; set 2 to fully disable
+system_enable_ip_forward: true     # net.ipv4.ip_forward + net.ipv6.conf.all.forwarding; false on terminal-only hosts
+system_disable_avahi: true        # mask avahi-daemon (mDNS/DNS-SD); set false for .local resolution
+system_mask_nfs_server: true      # mask nfs-server; most workstations don't export NFS
+system_mask_iscsi: true           # mask iSCSI initiator units (CIS 2.3.x); set false on iSCSI storage machines
+system_init_on_free: true         # zero freed memory pages on kernel free (init_on_free=1)
+system_faillock_even_deny_root: false  # set true on shared/multi-user machines; false reduces lockout risk (PermitRootLogin no blocks root)
+system_disable_sctp: false  # OVN-K kind/Submariner use SCTP; set true for strict CIS 3.4.1
+system_disable_usb_storage: false
+system_disable_udf: true
+system_install_usbguard: true
+system_tmp_noexec: false
+system_bluetooth_privacy: device
+system_journald_compress: "yes"
+# install/start bolt; false on VMs and containers
+system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
+system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
+ssh_port: 722  # mirrors in roles/system/defaults/main.yml and roles/dotfiles/defaults/main.yml; override in config.yml
+ssh_signing_key_basename: "id_ed25519_sk_signing"  # shared between dotfiles and ssh roles; must match
+dotfiles_ssh_hardware_key_basename: "id_ed25519_sk"  # shared between dotfiles and ssh roles; must match
+dotfiles_ssh_redhat_key_basename: "id_rsa_redhat"  # shared between dotfiles and ssh roles; must match
+dotfiles_homebrew_prefix: "{{ '/usr/local' if ansible_facts['architecture'] == 'x86_64' else '/opt/homebrew' }}"
+# SSH crypto vars below: mirrored in roles/system/defaults/main.yml; check-vars-sync.py enforces sync
+# cert variants allow cert-authority entries in authorized_keys; TrustedUserCAKeys must be configured
+# separately for CA-based cert auth; distinct from host certs (HostKeyAlgorithms)
+ssh_pubkey_accepted_algorithms:
+  - ssh-ed25519
+  - ssh-ed25519-cert-v01@openssh.com
+  - sk-ssh-ed25519@openssh.com
+  - sk-ssh-ed25519-cert-v01@openssh.com
+ssh_ciphers: 'chacha20-poly1305@openssh.com,aes256-gcm@openssh.com'
+ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
+ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
+  ecdh-sha2-nistp521,ecdh-sha2-nistp384"
+# sshd only — ssh client uses capability-detected list in ssh_config.j2 (dotfiles_ssh_kex_pq_enabled)
+ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; RSA/ECDSA excluded intentionally — on disk but unused
+# Baseline false — csb_detect.yml overrides at runtime via set_fact
+# (csb_detected and is_rhel). True on RHEL CSB where IT manages security
+# baselines; false on hybrid Fedora CSB where the user manages their own system.
+# Used in rescue blocks to route IT ticket vs. generic warning.
+csb_rhel: false
+
+# WARNING: overriding containers_registries in config.yml REPLACES the full list,
+# dropping quay.io and (for work profile) registry.redhat.io. To append without
+# clobbering, use containers_registries_extra (roles/containers/defaults) instead.
+containers_registries: >-
+  {{ ['quay.io'] + (['registry.redhat.io'] if profile == 'work' else []) }}

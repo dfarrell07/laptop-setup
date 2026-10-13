@@ -1,35 +1,95 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 # ~/.zshrc — managed by Ansible (roles/dotfiles)
 
-export ZSH="$HOME/.oh-my-zsh"
+export ZSH="$HOME/.local/share/oh-my-zsh"
 ZSH_THEME="{{ dotfiles_oh_my_zsh_theme }}"
 
 zstyle ':omz:update' mode disabled
 
-plugins=({{ dotfiles_oh_my_zsh_plugins | join(' ') }})
+plugins=({{ dotfiles_oh_my_zsh_plugins | map('regex_replace', '[^a-zA-Z0-9_-]', '') | join(' ') }})
 
-source "$ZSH/oh-my-zsh.sh"
+[[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"
 
 # --- Environment ---
 export EDITOR=vim
+export VISUAL=vim
 {% if profile == 'work' %}
-export AWS_PROFILE="{{ dotfiles_aws_profile }}"
+{% if dotfiles_aws_profile %}
+export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
 {% endif %}
-export PATH="$PATH:$HOME/.local/bin:$HOME/bin:$HOME/go/bin"
-{% if ansible_system | default('Linux') == 'Darwin' %}
-export SSH_AUTH_SOCK="$HOME/.ssh/ssh-agent.socket"
+{% if dotfiles_gonosumdb %}
+export GONOSUMDB='{{ dotfiles_gonosumdb | replace("'", "'\''" ) }}'
 {% endif %}
-export TMUX_TMPDIR="$HOME/.local/run/tmux"
+{% if dotfiles_goprivate %}
+export GOPRIVATE='{{ dotfiles_goprivate | replace("'", "'\''" ) }}'
+{% endif %}
+{% endif %}
+export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
+export GOPATH="$HOME/go"
+export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
+export GOTOOLCHAIN='{{ packages_gotoolchain }}'  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
+export KUBECONFIG="$HOME/.kube/config"
+HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
+HISTSIZE=50000
+SAVEHIST=50000
+unsetopt SHARE_HISTORY  # oh-my-zsh sets this; unset so APPEND_HISTORY controls write behavior
+setopt APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
+{% if _system == 'Darwin' %}
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"  # preserve existing socket if set
+{% endif %}
 export REGISTRY_AUTH_FILE="$HOME/.config/containers/auth.json"
+export DIRENV_LOG_FORMAT=""  # suppress verbose 'direnv: loading .envrc' output on every cd
+export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
+command -v rg &>/dev/null && export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
+export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
+{% if _system == 'Linux' %}
+export TMUX_TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tmux"
+# SSH_AUTH_SOCK fallback for shells that bypass systemd user session (sudo -s, su -)
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket}"
+[[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock" ]] && export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+export KIND_EXPERIMENTAL_PROVIDER=podman  # use rootless Podman provider (not docker-provider-via-socket)
+# Wayland-native rendering for Qt and Electron when running under Sway
+[[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export QT_QPA_PLATFORM=wayland
+[[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export ELECTRON_OZONE_PLATFORM_HINT=wayland
+[[ "${XDG_CURRENT_DESKTOP}" == "sway" ]] && export _JAVA_AWT_WM_NONREPARENTING=1
+# XDG_SESSION_TYPE: set by DM on graphical login; ensure it's set for TTY-launched Sway
+[[ "${XDG_CURRENT_DESKTOP}" == "sway" && -z "${XDG_SESSION_TYPE}" ]] && export XDG_SESSION_TYPE=wayland
+{% endif %}
 
 # --- Tool hooks (silently skip if not installed) ---
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+{% if _system == 'Linux' %}
+command -v fzf &>/dev/null && [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+# Fedora rpm ships completion via /usr/share/zsh/site-functions/_fzf (picked up by compinit);
+# completion.zsh does not exist in the Fedora package. No explicit source needed for rpm installs.
+{% elif _system == 'Darwin' %}
+command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/key-bindings.zsh"
+command -v fzf &>/dev/null && [[ -f "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/opt/fzf/shell/completion.zsh"
+{% endif %}
+{% if _system == 'Linux' %}
+command -v vimx &>/dev/null && alias vim=vimx  # vimx (+clipboard) from vim-X11 package
+command -v bat &>/dev/null && export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # syntax-highlighted man pages
+{% endif %}
 
-# --- Claude Code API endpoint guard ---
+# --- zsh quality-of-life plugins ---
+{% if _system == 'Linux' %}
+[[ -f /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+[[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+{% elif _system == 'Darwin' %}
+[[ -f "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+[[ -f "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && source "{{ dotfiles_homebrew_prefix | trim }}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+{% endif %}
+
+# --- Claude Code ---
 _claude_check_base_url() {
   if [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
-    local host="${ANTHROPIC_BASE_URL#https://}"; host="${host#http://}"; host="${host#*@}"; host="${host%%[:/]*}"
+    if [[ "${ANTHROPIC_BASE_URL}" != https://* ]]; then
+      echo "BLOCKED: ANTHROPIC_BASE_URL must use https:// (got: ${ANTHROPIC_BASE_URL})" >&2
+      return 1
+    fi
+    local host="${ANTHROPIC_BASE_URL#https://}"; host="${host#*@}"; host="${host%%[:/]*}"
     if [[ "$host" != "api.anthropic.com" && "$host" != *-aiplatform.googleapis.com ]]; then
       echo "BLOCKED: ANTHROPIC_BASE_URL=$host (untrusted)" >&2
       return 1
@@ -37,7 +97,7 @@ _claude_check_base_url() {
   fi
 }
 
-# --- Claude Code instance guard ---
+# Instance guard + tmux launchers:
 claude() {
   if [[ -z "${CLAUDE_CONFIG_DIR:-}" ]]; then
     echo "ERROR: CLAUDE_CONFIG_DIR not set. Use 'cw' (work) or 'ccp' (personal)." >&2
@@ -47,11 +107,11 @@ claude() {
   command claude "$@"
 }
 
-# --- Claude Code in tmux (sessions survive disconnects) ---
 {% if profile == 'work' %}
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   _claude_check_base_url || return 1
+  [[ -f ~/.config/claude/work-env ]] || { echo "ERROR: ~/.config/claude/work-env missing — run: make claude" >&2; return 1; }
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
   tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"
@@ -61,19 +121,32 @@ cw() {
 ccp() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   local phys="$(pwd -P)"
-  if [[ "$phys" == */src/submariner-io/* || "$phys" == */src/stolostron/* || "$phys" == */src/ovnk/* || "$phys" == */src/konflux/* || "$phys" == */src/bpfman/* || "$phys" == */src/ds/* || "$phys" == */src/cncf/* ]]; then
-    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1
-  fi
+{% if dotfiles_work_src_dirs %}
+  case "$phys" in
+{% for d in dotfiles_work_src_dirs %}
+  */src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}|*/src/{{ d | regex_replace('[^a-zA-Z0-9_-]', '') }}/*)
+    echo "ERROR: Work directory detected. Use 'cw' for work repos." >&2; return 1;;
+{% endfor %}
+  esac
+{% endif %}
   _claude_check_base_url || return 1
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="personal-${dir}"
-  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; CLAUDE_CONFIG_DIR=~/.claude-personal claude; zsh"
+  tmux new-session -As "$s" "unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT; export CLAUDE_CONFIG_DIR={{ claude_personal_config_dir }}; claude; zsh"
 }
 
 cls() { tmux list-sessions 2>/dev/null | grep -E "work-|personal-"; }
-ca() { local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
+ca() { command -v fzf &>/dev/null || { echo "ca: fzf not installed" >&2; return 1; }; local s; s=$(tmux list-sessions -F '#{session_name}' | grep -E 'work-|personal-' | fzf --height=40% --prompt="Attach: ") && [[ -n "$s" ]] && tmux attach -t "$s"; }
 {% if profile == 'work' %}
-cwt() { local n="${1:?Usage: cwt <worktree-name>}"; _claude_check_base_url || return 1; tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree $n; zsh"; }
+cwt() {
+  local n="${1:?Usage: cwt <worktree-name>}"
+  if [[ "$n" =~ [^a-zA-Z0-9_-] ]]; then
+    echo "ERROR: worktree name must use only alphanumeric, dash, underscore (got: $n)" >&2
+    return 1
+  fi
+  _claude_check_base_url || return 1
+  tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree $n; zsh"
+}
 {% endif %}
 cstatus() {
   for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E 'work-|personal-'); do
@@ -82,36 +155,178 @@ cstatus() {
 }
 
 # --- Device access (Tailscale + mosh) ---
-alias laptop='mosh laptop.tail'
-alias mac='mosh mac-desktop.tail'
-laptop-claude() { mosh laptop.tail -- tmux new-session -A -s "${1:-work}"; }
-mac-claude() { mosh mac-desktop.tail -- tmux new-session -A -s "${1:-personal}"; }
+{% if dotfiles_laptop_tailscale_host %}
+alias laptop='mosh "{{ dotfiles_laptop_tailscale_host }}"'
+laptop-claude() { mosh "{{ dotfiles_laptop_tailscale_host }}" -- tmux new-session -A -s "${1:-work}"; }
+{% endif %}
+{% if dotfiles_mac_tailscale_host %}
+alias mac='mosh "{{ dotfiles_mac_tailscale_host }}"'
+mac-claude() { mosh "{{ dotfiles_mac_tailscale_host }}" -- tmux new-session -A -s "${1:-personal}"; }
+{% endif %}
 alias rc='claude --remote-control'
 
 # --- Quick nav ---
 alias src='cd ~/src'
+{% if profile == 'work' %}
 alias subm='cd ~/src/submariner-io'
 alias ovnk='cd ~/src/ovnk'
-alias notes='cd ~/src/{{ dotfiles_github_user }}/notes-ai'
+{% endif %}
+alias notes="cd {{ notes_repo_path }}"
 
 # --- Task queue ---
-cq() { gh issue create --repo {{ dotfiles_github_user }}/claude-tasks --title "$1" --body "$2"; }
+cq() {
+  [[ "{{ dotfiles_claude_queue_repo }}" == CHANGE_ME/* ]] && { echo "cq: set dotfiles_github_user in config.yml first" >&2; return 1; }
+  [[ -z "${1:-}" ]] && { echo "Usage: cq <title> [body]" >&2; return 1; }
+  gh issue create --repo "{{ dotfiles_claude_queue_repo | replace('"', '') | replace(';', '') | replace('`', '') }}" --title "$1" --body "${2:-}"
+}
+
+# --- Kubernetes ---
+# Ensure compinit is available (oh-my-zsh initializes it, but guard for when it's absent)
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit }
+# kubectl completion is provided by the oh-my-zsh kubectl plugin (no duplicate load needed)
+# Cache completions for tools not covered by oh-my-zsh plugins; regenerate when binary changes.
+_zsh_cached_completion() {
+  local cmd="$1"; shift
+  command -v "$cmd" &>/dev/null || return 0
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions"
+  local cache_file="$cache_dir/${cmd}.zsh"
+  local binary
+  binary=$(command -v "$cmd")
+  if [[ ! -f "$cache_file" || "$binary" -nt "$cache_file" ]]; then
+    mkdir -p "$cache_dir"
+    "$cmd" "$@" > "$cache_file" 2>/dev/null
+  fi
+  [[ -s "$cache_file" ]] && source "$cache_file"
+}
+_zsh_cached_completion oc completion zsh
+_zsh_cached_completion helm completion zsh
+_zsh_cached_completion kind completion zsh
+_zsh_cached_completion kustomize completion zsh
+{% if profile == 'work' %}
+_zsh_cached_completion golangci-lint completion zsh
+_zsh_cached_completion tkn completion zsh
+if command -v bpfman &>/dev/null; then
+  _bpf_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions/bpfman.zsh"
+  _bpf_bin=$(command -v bpfman)
+  if [[ ! -f "$_bpf_cache" || "$_bpf_bin" -nt "$_bpf_cache" ]]; then
+    mkdir -p "${_bpf_cache:h}"
+    _bpf_tmp=$(mktemp -d)
+    bpfman completions "$_bpf_tmp" --shell zsh 2>/dev/null
+    [[ -f "$_bpf_tmp/_bpfman" ]] && mv -f "$_bpf_tmp/_bpfman" "$_bpf_cache"
+    rm -rf "$_bpf_tmp"
+  fi
+  [[ -s "$_bpf_cache" ]] && source "$_bpf_cache"
+fi
+_zsh_cached_completion stern completion zsh
+{% endif %}
+
+# --- Dev shortcuts ---
+alias mj='make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)'  # parallel make (OVN-K/bpfman builds)
+alias psa='podman ps -a'             # list all containers (rootless podman default)
+alias kcc='kind create cluster --config'  # OVN-K kind cluster creation
+alias kdc='kind delete cluster'      # tear down kind cluster
+{% if profile == 'work' %}
+# bpfman daily ops (bpfman completion is sourced above for tab completion)
+command -v bpfman &>/dev/null && alias bpl='bpfman list'
+command -v bpfman &>/dev/null && alias bpg='bpfman get'
+command -v bpfman &>/dev/null && alias bpld='bpfman load'
+{% endif %}
+
+# helpers:
+# kfiles: fzf kubeconfig FILE picker — exports selected file as KUBECONFIG
+# (for context switching within a kubeconfig, use: kubectl ctx / kubectl krew install ctx)
+kfiles() {
+  command -v fzf &>/dev/null || { echo "kfiles: fzf required" >&2; return 1; }
+  local f
+  f=$(find "$HOME/.kube" -maxdepth 1 \( -name '*.yaml' -o -name '*.yml' -o -name 'config*' \) 2>/dev/null \
+      | fzf --prompt="kubeconfig file: " --height=40%) || return
+  export KUBECONFIG="$f"
+}
+# klogs: fzf pod picker then kubectl logs -f (pass extra args e.g. --container, --previous)
+klogs() {
+  command -v fzf &>/dev/null || { echo "klogs: fzf required" >&2; return 1; }
+  local sel ns pod
+  sel=$(kubectl get pods -A 2>/dev/null | fzf --header-lines=1 --prompt="pod: " --height=50%) || return
+  ns=$(awk '{print $1}' <<<"$sel"); pod=$(awk '{print $2}' <<<"$sel")
+  kubectl logs -f -n "$ns" "$pod" "$@"
+}
+# kenv: seed a per-repo .envrc with KUBECONFIG for direnv auto-switching
+kenv() {
+  local cfg="${1:-$KUBECONFIG}"
+  [[ -z "$cfg" ]] && { echo "kenv: no KUBECONFIG set or given" >&2; return 1; }
+  local envrc="${PWD}/.envrc"
+  # Replace existing KUBECONFIG line or append — prevents duplicate entries on repeated calls
+  if grep -q "^export KUBECONFIG=" "$envrc" 2>/dev/null; then
+    sed -i.bak "s|^export KUBECONFIG=.*|export KUBECONFIG=$cfg|" "$envrc" && rm -f "${envrc}.bak"
+  else
+    echo "export KUBECONFIG=$cfg" >> "$envrc"
+  fi
+  direnv allow .
+}
+# sp: tmux project sessionizer — jump to ~/src project with fzf, create session if needed
+sp() {
+  command -v fzf &>/dev/null || { echo "sp: fzf required" >&2; return 1; }
+  local dir
+  dir=$(find "$HOME/src" -mindepth 1 -maxdepth 3 -type d 2>/dev/null | fzf --prompt="project: " --height=50%) || return
+  local name
+  name=$(basename "$dir" | tr '.' '_')
+  tmux new-session -As "$name" -c "$dir"
+}
+
+{% if profile == 'work' %}
+# --- OVN-K/bpfman workflow ---
+# Namespace-pinned kubectl: typing -n ovn-kubernetes on every command is the #1 daily friction.
+alias kovnk='kubectl -n ovn-kubernetes'
+alias kbpf='kubectl -n bpfman'
+
+# Watch pod state transitions in real time (spot CrashLoopBackOff, Pending→Running, etc.)
+alias kwatch='kubectl get pods -A -w'
+alias kovnkwatch='kubectl get pods -n ovn-kubernetes -w'
+
+# stern: concurrent log streaming across all matching pods — the right way to watch OVN-K logs.
+# '.' matches every pod in the namespace; narrower patterns isolate a single component.
+# stern is installed via packages_go_install_work (github.com/stern/stern) — work profile only.
+command -v stern &>/dev/null && {
+  alias skovnk='stern -n ovn-kubernetes .'          # all OVN-K pods at once, color-coded by pod
+  alias sknode='stern -n ovn-kubernetes ovnkube-node'
+  alias skctrl='stern -n ovn-kubernetes ovnkube-controller'
+  alias skbpf='stern -n bpfman .'
+}
+
+# kind-load: push a locally-built image into the kind cluster without a registry round-trip.
+# Needed after every 'make build' cycle when testing OVN-K or bpfman images in kind.
+# Usage: kind-load <image:tag> [cluster-name]
+kind-load() {
+  local img="${1:?Usage: kind-load <image:tag> [cluster-name]}"
+  local cluster="${2:-${KIND_CLUSTER_NAME:-kind}}"
+  kind load docker-image "$img" --name "$cluster"
+}
+{% endif %}
 
 # --- Status ---
 alias yk='ykman info'
-{% if ansible_system | default('Linux') == 'Darwin' %}
+{% if _system == 'Darwin' %}
 alias vpn='netstat -rn | grep -E "utun|wg"'
 {% else %}
 alias vpn='ip route | grep -E "tun|wg"'
 {% endif %}
+{% if repo_tailscale | default(true) %}
 alias ts='tailscale status'
+{% endif %}
 
 # --- General aliases ---
-alias gv="gvim -vp"
-alias gi="grep -rniI --color=always --exclude-dir=vendor"
+command -v gvim &>/dev/null && alias gv="gvim -vp"
+alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
+{% if _system == 'Linux' %}
 alias ping="ping -i .2"
+{% endif %}
 alias pingg="ping www.google.com"
 alias ping8="ping 8.8.8.8"
 
 # --- umask ---
 umask 077
+{% if profile == 'work' %}
+
+# --- Claude Code Vertex backend (env.sh holds ANTHROPIC_VERTEX_PROJECT_ID — not in repo) ---
+[[ -f "${HOME}/.config/claude-code-vertex/env.sh" ]] && source "${HOME}/.config/claude-code-vertex/env.sh"
+{% endif %}

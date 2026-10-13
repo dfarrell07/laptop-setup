@@ -1,0 +1,50 @@
+---
+# roles/system/tasks/journald.yml
+# --- Journald persistent logging and retention ---
+# Skipped entirely in containers: inotify on /etc/systemd/journald.conf.d and creating
+# /var/log/journal both trigger journald restart, which crashes privileged Podman containers.
+# Rationale for /var/log/journal: Storage=auto is the compiled-in default; creating
+# /var/log/journal triggers persistent behavior; the explicit Storage=persistent drop-in
+# makes intent unambiguous and independent of directory state.
+# NOTE: 99-hardening.conf sorts last; if IT deploys a journald drop-in on hybrid Fedora
+# with a lower-numbered name, this config wins. If IT tuning
+# must take precedence on hybrid CSB, add a csb_detected guard or rename the drop-in
+# to a lower sort-order name. If they use an older systemd with Storage=auto, persistent logging is a security
+# benefit (logs survive reboots).
+# journald persistence does NOT interfere with SIEM forwarding — CSB's SIEM pipeline uses
+# audisp-remote (auditd), a completely separate subsystem.
+# The opinionated config (rate limits, disk quota) is also CSB-guarded because those specific
+# numbers may conflict with IT's journald tuning or centralized log management.
+- name: Configure journald (skip in containers)
+  when: not system_is_container
+  block:
+    - name: Ensure journald drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    # NOTE: With Storage=auto (compiled-in default), creating /var/log/journal triggers persistent storage —
+    # this remains true on CSB after drop-in removal; see block-level comment above.
+    - name: Ensure /var/log/journal exists for persistent storage
+      ansible.builtin.file:
+        path: /var/log/journal
+        state: directory
+        owner: root
+        group: systemd-journal
+        mode: "2755"
+
+    - name: Remove journald hardening config on CSB
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d/99-hardening.conf
+        state: absent
+      when: csb_detected
+      notify: Restart systemd-journald
+
+    - name: Deploy journald hardening config
+      ansible.builtin.template:
+        src: journald-99-hardening.conf.j2
+        dest: /etc/systemd/journald.conf.d/99-hardening.conf
+        mode: "0644"
+      when: not csb_detected
+      notify: Restart systemd-journald

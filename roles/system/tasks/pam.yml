@@ -1,0 +1,664 @@
+---
+# --- PAM hardening (faillock, pwhistory, pwquality) ---
+# CSB: faillock/pwhistory/pwquality govern local-account PAM policy. On RHEL CSB hybrid,
+# IT's security baseline sets lockout thresholds (NIST SP 800-53 AC-7); overwriting them
+# silently violates corporate policy. Fedora hybrid is owner-managed — apply hardening there.
+#
+# DESIGN CONSTRAINT — PAM session continuity:
+# pam_handle_t is allocated in each PAM consumer (sshd child, login, su) at pam_start() and
+# held for the entire lifetime of that session. PAM file changes written below do NOT affect
+# any session whose pam_start() was called before this provisioning run began. A terminal
+# opened via SSH before `make all` retains the pre-hardening PAM stack — including any
+# disabled faillock, permissive pwquality, and the prior authselect profile — until that
+# session exits. No playbook task can close the gap; it is a kernel-level PAM design constraint.
+#
+# Procedural mitigation (see CLAUDE.md "Quick Reference"):
+#   - Provision from the local console or inside tmux, not over a pre-existing SSH session.
+#   - After provisioning, run `make smoke-test`; it warns if active non-console (pts) sessions
+#     are detected so the operator knows to close them and log in fresh under the new PAM stack.
+
+# --- PAM faillock (account lockout after failed attempts) ---
+- name: Configure pam_faillock value settings
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    no_extra_spaces: true
+    mode: "0644"
+  loop:
+    - key: deny
+      value: "{{ system_faillock_deny }}"
+    - key: unlock_time
+      value: "{{ system_faillock_unlock_time }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - not csb_rhel
+    - not system_is_container  # /etc/security/ writes trigger PAM re-evaluation; crashes Debian 13 container PID 1
+
+- name: Enable pam_faillock audit flag (when system_faillock_audit is true)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: audit
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - system_faillock_audit | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Remove pam_faillock audit flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: audit
+    state: absent
+    mode: "0644"
+  when:
+    - not (system_faillock_audit | bool)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Enable pam_faillock local_users_only flag (when system_faillock_local_users_only is true)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: local_users_only  # prevent double-lockout with SSSD/IPA domain users
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - system_faillock_local_users_only | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Remove pam_faillock local_users_only flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: local_users_only
+    state: absent
+    mode: "0644"
+  when:
+    - not (system_faillock_local_users_only | bool)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Enable pam_faillock even_deny_root flag (when system_faillock_even_deny_root is true)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: even_deny_root
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - system_faillock_even_deny_root | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Remove pam_faillock even_deny_root flag (when disabled)
+  community.general.ini_file:
+    path: /etc/security/faillock.conf
+    section: null
+    option: even_deny_root
+    state: absent
+    mode: "0644"
+  when:
+    - not (system_faillock_even_deny_root | bool)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Check if authselect with-faillock feature is already enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-faillock
+  register: system_authselect_faillock_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Configure PAM faillock with atomic backup/restore
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Backup /etc/pam.d/system-auth before authselect modification
+      ansible.builtin.copy:
+        src: /etc/pam.d/system-auth
+        dest: /etc/pam.d/system-auth.ansible-backup
+        remote_src: true
+        mode: preserve
+      changed_when: false
+
+    - name: Enable authselect with-faillock feature
+      ansible.builtin.command:
+        cmd: authselect enable-feature with-faillock
+      register: system_authselect_faillock_enable
+      when: system_authselect_faillock_check.rc | default(0) != 0
+      changed_when: system_authselect_faillock_enable.rc | default(1) == 0
+      failed_when: false
+
+    - name: Fail if authselect enable-feature with-faillock did not activate
+      ansible.builtin.fail:
+        msg: >-
+          authselect enable-feature with-faillock exited
+          {{ system_authselect_faillock_enable.rc | default('unknown') }} — faillock PAM feature is not active.
+          Silent half-hardened state is worse than a failed run; fix authselect profile and re-run.
+      when:
+        - system_authselect_faillock_enable.rc | default(0) != 0
+        - system_authselect_faillock_enable is not skipped
+
+    - name: Verify pam_faillock.so authfail appears after pam_unix.so in system-auth (authselect)
+      ansible.builtin.shell:
+        cmd: >-
+          awk '/pam_faillock\.so preauth/{pre=NR} /^auth.*pam_unix\.so/ && !unix {unix=NR} /pam_faillock\.so authfail/{fail=NR}
+               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/system-auth
+      changed_when: false
+      register: system_pam_faillock_authselect_order_check
+      failed_when: false
+
+    - name: Fail if pam_faillock.so is not correctly ordered in system-auth (authselect)
+      ansible.builtin.fail:
+        msg: >-
+          pam_faillock.so is not in the correct position in /etc/pam.d/system-auth.
+          Required order: preauth < pam_unix.so < authfail. authselect enable-feature
+          with-faillock returned rc=0 but the PAM stack lacks the expected stanzas
+          (corrupted feature template or authselect version-specific silent-success bug?).
+          Inspect /etc/pam.d/system-auth and /usr/share/authselect/default/sssd/ then re-run.
+      when:
+        - system_pam_faillock_authselect_order_check.rc | default(1) != 0
+        - system_pam_faillock_authselect_order_check is not skipped
+
+    - name: Assert exactly one pam_faillock.so preauth line in system-auth (authselect)
+      ansible.builtin.command:
+        cmd: grep -c 'pam_faillock\.so.*preauth' /etc/pam.d/system-auth
+      register: _pam_authselect_preauth_count
+      changed_when: false
+      check_mode: false
+      failed_when: _pam_authselect_preauth_count.stdout | int != 1
+
+    - name: Verify pam_faillock.so control flags in system-auth (functional guard)
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          set -e
+          # Verify preauth has 'required' control flag (not 'optional' which would disable lockout)
+          grep -E '^auth[[:space:]]+required[[:space:]]+pam_faillock\.so[[:space:]]+preauth' /etc/pam.d/system-auth >/dev/null
+          # Verify authfail exists with a control flag that causes failure propagation
+          # (either 'required' or '[default=die]' — both enforce the lockout)
+          grep -E '^auth[[:space:]]+(required|\[default=die\])[[:space:]]+pam_faillock\.so[[:space:]]+authfail' \
+            /etc/pam.d/system-auth >/dev/null
+        executable: /bin/bash
+      changed_when: false
+      check_mode: false
+      register: _pam_faillock_control_flags_check
+      failed_when: false
+
+    - name: Fail if pam_faillock.so control flags are incorrect (functional guard)
+      ansible.builtin.fail:
+        msg: >-
+          pam_faillock.so control flags are incorrect in /etc/pam.d/system-auth.
+          Preauth MUST use 'required' (not 'optional' which would disable lockout).
+          Authfail MUST use 'required' or '[default=die]' to enforce account lockout.
+          The awk order check passed (modules are present and ordered correctly) but
+          control flags are wrong — faillock is syntactically present but functionally
+          inactive. Review /etc/pam.d/system-auth and authselect template, then re-run.
+      when:
+        - _pam_faillock_control_flags_check.rc | default(0) != 0
+        - _pam_faillock_control_flags_check is not skipped
+
+  rescue:
+    - name: Restore /etc/pam.d/system-auth backup after validation failure
+      ansible.builtin.copy:
+        src: /etc/pam.d/system-auth.ansible-backup
+        dest: /etc/pam.d/system-auth
+        remote_src: true
+        mode: preserve
+      when: not (ansible_check_mode | bool)
+
+    - name: Fail with clear rollback message
+      ansible.builtin.fail:
+        msg: >-
+          authselect enable-feature with-faillock validation FAILED.
+          PAM stack was corrupted (authselect bug or template issue).
+          /etc/pam.d/system-auth has been RESTORED from backup.
+          Review authselect profile and upstream bug reports, then re-run.
+
+  always:
+    - name: Remove temporary PAM backup
+      ansible.builtin.file:
+        path: /etc/pam.d/system-auth.ansible-backup
+        state: absent
+      changed_when: false
+
+# --- Debian PAM faillock (no authselect; direct PAM stack insertion) ---
+# On Debian, authselect is absent; pam_faillock.so must be added directly to
+# /etc/pam.d/common-auth and /etc/pam.d/common-account. faillock.conf (deployed
+# above) provides deny/unlock_time values — without pam_faillock.so in the stack
+# those settings have NO effect. Two lines are required:
+#   preauth  — before pam_unix.so, checks if account is already locked
+#   authfail — after pam_unix.so, records failed attempts
+# Both are written atomically via a single shell task (awk rewrite + mv rename) to
+# eliminate the inter-task inconsistency window that existed when two sequential
+# lineinfile tasks were used (brute-force attempts landing between the two writes
+# were not counted toward the lockout threshold).
+- name: Debian PAM faillock and pwhistory direct stack insertion
+  when:
+    - is_apt
+    # Shell writes to /etc/pam.d/ are plain file writes — no PAM re-evaluation trigger,
+    # no daemon-reload side-effect; safe inside containers. The not-system_is_container guard
+    # that blocks /etc/security/ ini_file writes above does NOT apply here.
+  block:
+    - name: Ensure pam_faillock.so preauth and authfail lines in common-auth (Debian, atomic)
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          path=/etc/pam.d/common-auth
+          preauth='auth    required                        pam_faillock.so preauth'
+          authfail='auth    [default=die]                  pam_faillock.so authfail'
+          # Idempotency: skip when both lines are already present in correct order
+          if awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
+                   END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$path"; then
+            exit 0
+          fi
+          # Atomic rewrite: remove any stale faillock lines, re-insert both in one pass,
+          # write to a temp file in the same directory, validate, then rename (atomic on Linux).
+          tmp=$(mktemp "${path}.XXXXXX")
+          chmod 0644 "$tmp"
+          trap 'rm -f "$tmp"' EXIT
+          awk -v preauth="$preauth" -v authfail="$authfail" '
+            /pam_faillock\.so preauth/ || /pam_faillock\.so authfail/ { next }
+            /^auth/ && !pre { print preauth; pre=1 }
+            { print }
+            /^auth.*pam_unix\.so/ { print authfail }
+          ' "$path" > "$tmp"
+          # Validate temp file BEFORE committing
+          if ! awk '/pam_faillock\.so preauth/{p=NR} /^auth.*pam_unix\.so/ && !u {u=NR} /pam_faillock\.so authfail/{f=NR} \
+                     END{exit !(p>0 && u>0 && f>0 && p<u && u<f)}' "$tmp"; then
+            rm -f "$tmp"
+            echo "ERROR: Generated PAM config missing required faillock lines or incorrect ordering" >&2
+            exit 1
+          fi
+          trap - EXIT
+          mv -f "$tmp" "$path"
+          echo changed
+      register: _pam_common_auth_atomic
+      changed_when: "'changed' in _pam_common_auth_atomic.stdout"
+
+    - name: Record common-auth checksum immediately after atomic write (TOCTOU guard)
+      ansible.builtin.stat:
+        path: /etc/pam.d/common-auth
+        checksum_algorithm: sha256
+      register: _pam_common_auth_post_write
+      changed_when: false
+      check_mode: false  # read-only probe
+      when: is_apt
+
+    - name: Verify pam_faillock.so authfail appears after pam_unix.so in common-auth (Debian)
+      ansible.builtin.shell:
+        cmd: >-
+          awk '/pam_faillock\.so preauth/{pre=NR} /^auth.*pam_unix\.so/ && !unix {unix=NR} /pam_faillock\.so authfail/{fail=NR}
+               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
+      changed_when: false
+      register: system_pam_faillock_order_check
+      failed_when: false
+
+    - name: Fail if pam_faillock.so authfail is not ordered after pam_unix.so in common-auth (Debian)
+      ansible.builtin.fail:
+        msg: >-
+          pam_faillock.so authfail is not in the correct position in /etc/pam.d/common-auth.
+          Required order: preauth < pam_unix.so < authfail. The insertafter pattern
+          '^auth.*pam_unix\.so' found no matching line (distro PAM refactor?).
+          Out-of-order placement breaks faillock semantics. Inspect common-auth
+          and re-run after correcting the PAM stack.
+      when: system_pam_faillock_order_check.rc | default(1) != 0
+
+    - name: Ensure pam_faillock.so account line is in common-account (Debian)
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-account
+        regexp: '^account\s+required\s+pam_faillock\.so$'
+        line: 'account required                        pam_faillock.so'
+        insertbefore: '^account\s'
+        mode: "0644"
+
+    # Debian: pam_pwhistory.so must be inserted directly (no authselect).
+    # authselect enable-feature with-pwhistory (below) is RHEL/Fedora only.
+    # This mirrors the pam_faillock Debian block above.
+    - name: Ensure pam_pwhistory.so line is in common-password (Debian)
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-password
+        regexp: '^password\s+required\s+pam_pwhistory\.so'
+        # yamllint disable-line rule:line-length
+        line: 'password required                   pam_pwhistory.so use_authtok remember={{ system_pwhistory_remember | int }}
+        enforce_for_root'
+        insertbefore: '^password.*pam_unix\.so'
+        mode: "0644"
+
+# --- TOCTOU guard: re-verify common-auth integrity before assertions ---
+- name: Re-stat common-auth before assertions (TOCTOU guard)
+  ansible.builtin.stat:
+    path: /etc/pam.d/common-auth
+    checksum_algorithm: sha256
+  register: _pam_common_auth_pre_assertions
+  changed_when: false
+  check_mode: false  # read-only probe
+  when:
+    - is_apt
+    - _pam_common_auth_post_write is defined
+    - _pam_common_auth_post_write.stat is defined
+
+- name: Abort if common-auth changed after atomic write (TOCTOU guard)
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: /etc/pam.d/common-auth changed after atomic write validation —
+      possible TOCTOU file substitution. Aborting before assertions to prevent
+      validating a tampered PAM config. Re-run make system to recover.
+      Expected: {{ _pam_common_auth_post_write.stat.checksum }}
+      Found:    {{ _pam_common_auth_pre_assertions.stat.checksum | default('missing') }}
+  when:
+    - is_apt
+    - _pam_common_auth_post_write is defined
+    - _pam_common_auth_post_write.stat is defined
+    - (_pam_common_auth_pre_assertions.stat.checksum | default('')) !=
+      _pam_common_auth_post_write.stat.checksum
+
+# Assert exactly one preauth/authfail entry after lineinfile — detects duplicates
+# from libpam-runtime reconfiguration or repeated runs with whitespace drift.
+- name: Assert exactly one pam_faillock.so preauth line in common-auth (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so.*preauth' /etc/pam.d/common-auth
+  register: _pam_preauth_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_preauth_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Assert exactly one pam_faillock.so authfail line in common-auth (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so.*authfail' /etc/pam.d/common-auth
+  register: _pam_authfail_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_authfail_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Assert exactly one pam_faillock.so line in common-account (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_faillock\.so' /etc/pam.d/common-account
+  register: _pam_account_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_account_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Assert exactly one pam_pwhistory.so line in common-password (Debian)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_pwhistory\.so' /etc/pam.d/common-password
+  register: _pam_pwhistory_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_pwhistory_count.stdout | int != 1
+  when:
+    - is_apt
+    - not system_is_container
+
+# --- Debian PAM pwquality (password complexity) ---
+# On Debian, pam_pwquality.so is active in common-password by default (via
+# libpam-pwquality) and reads /etc/security/pwquality.conf. Configure the
+# same complexity requirements applied on Fedora/RHEL.
+- name: Configure password quality requirements (Debian)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    no_extra_spaces: true
+    mode: "0644"
+  loop:
+    - key: minlen
+      value: "{{ system_pwquality_minlen }}"
+    - key: dcredit
+      value: "{{ system_pwquality_dcredit }}"
+    - key: ucredit
+      value: "{{ system_pwquality_ucredit }}"
+    - key: lcredit
+      value: "{{ system_pwquality_lcredit }}"
+    - key: ocredit
+      value: "{{ system_pwquality_ocredit }}"
+    - key: difok
+      value: "{{ system_pwquality_difok }}"
+    - key: maxrepeat
+      value: "{{ system_pwquality_maxrepeat }}"
+    - key: maxsequence
+      value: "{{ system_pwquality_maxsequence }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - is_apt
+    - not system_is_container
+
+- name: Enforce pwquality for root (Debian, CIS 5.3.4)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - is_apt
+    - not system_is_container
+
+# --- PAM pwhistory (password reuse prevention, CIS 5.3.5) ---
+- name: Check if authselect with-pwhistory feature is already enabled
+  ansible.builtin.command:
+    cmd: authselect is-feature-enabled with-pwhistory
+  register: system_authselect_pwhistory_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Enable authselect with-pwhistory feature
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-pwhistory
+  register: system_authselect_pwhistory_enable
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container  # authselect enable-feature triggers PAM reload → inotify → daemon-reload → crashes container
+    - system_authselect_pwhistory_check.rc | default(0) != 0
+  changed_when: system_authselect_pwhistory_enable.rc | default(1) == 0
+  failed_when: false
+
+- name: Fail if authselect enable-feature with-pwhistory did not activate
+  ansible.builtin.fail:
+    msg: >-
+      authselect enable-feature with-pwhistory exited
+      {{ system_authselect_pwhistory_enable.rc | default('unknown') }} — pwhistory PAM feature is not active.
+      Silent half-hardened state is worse than a failed run; fix authselect profile and re-run.
+  when:
+    - system_authselect_pwhistory_enable.rc | default(0) != 0
+    - system_authselect_pwhistory_enable is not skipped
+    - not csb_rhel
+    - not system_is_container
+
+- name: Verify pam_pwhistory.so appears before pam_unix.so in system-auth (authselect)
+  ansible.builtin.shell:
+    cmd: >-
+      awk '/^password.*pam_pwhistory\.so/{hist=NR} /^password.*pam_unix\.so/ && !unix {unix=NR}
+           END{exit !(hist>0 && unix>0 && hist<unix)}' /etc/pam.d/system-auth
+  changed_when: false
+  register: system_pam_pwhistory_authselect_order_check
+  failed_when: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if pam_pwhistory.so is not correctly ordered in system-auth (authselect)
+  ansible.builtin.fail:
+    msg: >-
+      pam_pwhistory.so is not in the correct position in /etc/pam.d/system-auth.
+      Required order: pam_pwhistory.so < pam_unix.so in password section.
+      authselect enable-feature with-pwhistory returned rc=0 but the PAM stack
+      lacks the expected stanza (corrupted feature template or authselect bug?).
+      Inspect /etc/pam.d/system-auth and /usr/share/authselect/default/sssd/ then re-run.
+  when:
+    - system_pam_pwhistory_authselect_order_check.rc | default(1) != 0
+    - system_pam_pwhistory_authselect_order_check is not skipped
+
+- name: Assert exactly one pam_pwhistory.so line in system-auth (authselect)
+  ansible.builtin.command:
+    cmd: grep -c 'pam_pwhistory\.so' /etc/pam.d/system-auth
+  register: _pam_authselect_pwhistory_count
+  changed_when: false
+  check_mode: false
+  failed_when: _pam_authselect_pwhistory_count.stdout | int != 1
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Verify pam_pwhistory.so control flag in system-auth (functional guard)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      # Verify pwhistory has 'requisite' control flag (not 'optional' which would disable enforcement)
+      grep -E '^password[[:space:]]+requisite[[:space:]]+pam_pwhistory\.so' /etc/pam.d/system-auth >/dev/null
+  changed_when: false
+  check_mode: false
+  register: _pam_pwhistory_control_flag_check
+  failed_when: false
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if pam_pwhistory.so control flag is incorrect (functional guard)
+  ansible.builtin.fail:
+    msg: >-
+      pam_pwhistory.so control flag is incorrect in /etc/pam.d/system-auth.
+      MUST use 'requisite' (not 'optional' which would disable password reuse prevention).
+      The order check passed (module is present and ordered correctly) but the control
+      flag is wrong — pwhistory is syntactically present but functionally inactive.
+      Review /etc/pam.d/system-auth and authselect template, then re-run.
+  when:
+    - _pam_pwhistory_control_flag_check.rc | default(0) != 0
+    - _pam_pwhistory_control_flag_check is not skipped
+
+- name: Configure pam_pwhistory remember count (CIS 5.3.5)
+  community.general.ini_file:
+    path: /etc/security/pwhistory.conf
+    section: null
+    option: remember
+    value: "{{ system_pwhistory_remember | int }}"
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+    - not is_apt
+
+- name: Enforce pam_pwhistory for root (CIS 5.3.5)
+  community.general.ini_file:
+    path: /etc/security/pwhistory.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - (system_authselect_bin.stat | default({})).exists | default(false)
+    - not csb_rhel
+    - not system_is_container
+    - not is_apt
+
+# --- PAM pwquality (password complexity) ---
+- name: Configure password quality requirements
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    no_extra_spaces: true
+    mode: "0644"
+  loop:
+    - key: minlen
+      value: "{{ system_pwquality_minlen }}"
+    - key: dcredit
+      value: "{{ system_pwquality_dcredit }}"
+    - key: ucredit
+      value: "{{ system_pwquality_ucredit }}"
+    - key: lcredit
+      value: "{{ system_pwquality_lcredit }}"
+    - key: ocredit
+      value: "{{ system_pwquality_ocredit }}"
+    - key: difok
+      value: "{{ system_pwquality_difok }}"
+    - key: maxrepeat
+      value: "{{ system_pwquality_maxrepeat }}"
+    - key: maxsequence
+      value: "{{ system_pwquality_maxsequence }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - not is_apt
+
+- name: Enforce pwquality for root (CIS 5.3.4)
+  community.general.ini_file:
+    path: /etc/security/pwquality.conf
+    section: null
+    option: enforce_for_root
+    allow_no_value: true
+    no_extra_spaces: true
+    mode: "0644"
+  when:
+    - not csb_rhel
+    - not system_is_container
+    - not is_apt
+
+# --- Restrict su to wheel group ---
+- name: Enable pam_wheel.so for su
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
+    line: 'auth		required	pam_wheel.so use_uid'
+    insertafter: '^auth\s+sufficient\s+pam_rootok\.so'
+  when:
+    - is_dnf  # pam_wheel.so / wheel group restriction is RHEL/Fedora-only; Debian uses 'sudo' group, macOS has different PAM stack
+    - not csb_rhel
+    - not system_is_container  # /etc/pam.d/su absent in minimal containers
+    - system_pam_wheel_su | bool
+
+- name: Remove pam_wheel.so from su (wheel restriction disabled)
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
+    state: absent
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - not (system_pam_wheel_su | bool)

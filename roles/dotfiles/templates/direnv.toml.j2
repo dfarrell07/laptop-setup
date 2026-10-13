@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# strict_env enables set -euo pipefail during .envrc evaluation:
+# unset variables become errors and pipeline failures propagate.
+# The outer shell environment (PATH, GOPATH, KUBECONFIG, etc.) is still inherited.
+# Example minimal .envrc: PATH_add bin
+[global]
+strict_env = {{ "true" if dotfiles_direnv_strict_env | bool else "false" }}
+disable_stdin = {{ "true" if dotfiles_direnv_disable_stdin | bool else "false" }}
+warn_timeout = "{{ dotfiles_direnv_warn_timeout | regex_replace('[^0-9smh]', '') }}"

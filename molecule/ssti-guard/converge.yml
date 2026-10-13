@@ -1,0 +1,83 @@
+---
+- name: Verify production config template-injection guard
+  hosts: all
+  gather_facts: false
+  vars:
+    _ssti_cases:
+      - name: string
+        reject: true
+        content: !unsafe |
+          dotfiles_user_name: "{{ lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') }}"
+      - name: list
+        reject: true
+        content: !unsafe |
+          paths: ['/etc/ssh', "{{ lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') }}"]
+      - name: nested mapping
+        reject: true
+        content: !unsafe |
+          nested:
+            payload: "{{ lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') }}"
+      - name: statement
+        reject: true
+        content: !unsafe |
+          value: '{% if true %}template statement{% endif %}'
+      - name: unsafe tagged template
+        reject: true
+        content: !unsafe |
+          value: !unsafe "{{ lookup('pipe', 'touch /tmp/ssti-guard-payload-executed') }}"
+      - name: missing config after rejected payload
+        reject: false
+      - name: malformed YAML
+        reject: true
+        failure_task: Parse raw config YAML without evaluating template expressions
+        content: 'value: ['
+      - name: non-mapping YAML
+        reject: true
+        failure_task: Parse raw config YAML without evaluating template expressions
+        content: '[one, two]'
+      - name: safe values
+        reject: false
+        content: |
+          dotfiles_user_name: Valid User
+          paths: ['/etc/ssh']
+      - name: unsafe tagged safe value
+        reject: false
+        content: |
+          dotfiles_goprivate: !unsafe 'gitlab.internal.com,pkgs.devel.redhat.com'
+
+  pre_tasks:
+    - name: Create isolated config directory inside the test container
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Remove any marker from a previous failed test
+      ansible.builtin.file:
+        path: /tmp/ssti-guard-payload-executed
+        state: absent
+
+    - name: Remove any payload marker on the controller
+      ansible.builtin.file:
+        path: /tmp/ssti-guard-payload-executed
+        state: absent
+      delegate_to: localhost
+      become: false
+
+    - name: Reset verified test cases
+      ansible.builtin.set_fact:
+        _ssti_verified: []
+
+  tasks:
+    - name: Exercise the production guard against each fixture
+      ansible.builtin.include_tasks: tasks/test_case.yml
+      loop: "{{ _ssti_cases }}"
+      loop_control:
+        loop_var: _ssti_case
+        label: "{{ _ssti_case.name }}"
+
+    - name: Record successfully verified cases
+      ansible.builtin.copy:
+        dest: /tmp/ssti-guard-results.json
+        content: "{{ _ssti_verified | to_json }}"
+        mode: "0644"

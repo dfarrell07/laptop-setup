@@ -1,5 +1,19 @@
 ---
-notes_repo_path: "{{ ansible_user_dir }}/notes"
-notes_remote_url: "git@github.com:{{ dotfiles_github_user }}/notes.git"
-notes_remote_url_https: "https://github.com/{{ dotfiles_github_user }}/notes.git"
+notes_enabled: false  # opt-in: set true in config.yml; requires a GitHub repo named "notes" under dotfiles_github_user
+notes_repo_name: notes
+notes_repo_path: "{{ ansible_facts['user_dir'] }}/{{ notes_repo_name }}"
+notes_remote_url: "git@github.com:{{ dotfiles_github_user }}/{{ notes_repo_name }}.git"
+notes_remote_url_https: "https://github.com/{{ dotfiles_github_user }}/{{ notes_repo_name }}.git"
 notes_transcrypt_cipher: aes-256-cbc
+notes_transcrypt_password: ''  # sentinel fallback; group_vars/all/vars.yml sets this via vault_notes_transcrypt_password
+notes_transcrypt_linux_bin_path: /usr/local/bin/transcrypt
+notes_transcrypt_bin_path: >-
+  {{ (dotfiles_homebrew_prefix + '/bin/transcrypt') if ansible_facts['os_family'] == 'Darwin'
+  else notes_transcrypt_linux_bin_path }}
+notes_transcrypt_available: false  # set via set_fact in tasks/main.yml when transcrypt is found
+# Sentinel fallback; overwritten by set_fact in tasks/main.yml when notes_repo_available is true;
+# value here is only the initial sentinel to prevent UndefinedError before set_fact runs
+notes_transcrypt_inited: false      # set via set_fact in tasks/main.yml when transcrypt --display succeeds
+# Sentinel fallback; overwritten by set_fact in tasks/main.yml after clone attempt;
+# prevents UndefinedError when the block is interrupted before set_fact runs
+notes_repo_available: false

@@ -1,0 +1,107 @@
+---
+# roles/system/tasks/firmware.yml
+# --- Firmware updates (LVFS/fwupd) ---
+- name: Install fwupd
+  ansible.builtin.dnf:
+    name: fwupd
+    state: present
+  register: system_fwupd_install_result
+  when:
+    - is_dnf
+    - not csb_rhel  # CSB: IT manages firmware via Satellite/RHSM, not LVFS
+    - not system_is_container  # RPM post-install calls systemctl preset + daemon-reload, crashes Podman container systemd
+  # No failed_when: false — fwupd install failure means no firmware updates; surface as hard error.
+
+- name: Pin LVFS MetadataURI and FirmwareBaseURI to known-good CDN values
+  community.general.ini_file:
+    path: /etc/fwupd/remotes.d/lvfs.conf
+    section: fwupd Remote
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - {key: MetadataURI, value: "https://cdn.fwupd.org/downloads/firmware.xml.zst"}
+    - {key: FirmwareBaseURI, value: "https://fwupd.org/downloads"}
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+  # Prevents 'fwupdmgr modify-remote lvfs MetadataURI https://evil.com/...' from persisting
+  # across provisioning runs. Any out-of-band URL modification is reset on every 'make all'.
+
+- name: Enable and refresh firmware metadata
+  block:
+    - name: Enable fwupd-refresh.timer for automatic LVFS metadata updates
+      ansible.builtin.systemd:
+        name: fwupd-refresh.timer
+        state: started
+        enabled: true
+      when:
+        - not csb_rhel  # CSB: IT manages firmware; LVFS timer not needed
+        - not system_is_container
+
+    - name: Refresh LVFS firmware metadata  # noqa: no-handler — one-shot refresh after install; handler would defer to play end
+      ansible.builtin.command:
+        cmd: fwupdmgr refresh
+      when: system_fwupd_install_result is changed
+      changed_when: false
+  rescue:
+    - name: Warn on fwupd timer/metadata failure
+      ansible.builtin.debug:
+        msg: >-
+          fwupd-refresh.timer enable or LVFS metadata refresh failed — automatic firmware
+          update checks may be inactive. Error: {{ ansible_failed_result.msg | default('unknown') }}.
+          Run 'sudo fwupdmgr refresh' manually or re-run provisioning to retry.
+
+    - name: Re-raise fwupd timer/metadata failure
+      ansible.builtin.fail:
+        msg: "fwupd-refresh.timer enable or LVFS metadata refresh failed — see warning above"
+
+- name: Mask passim (fwupd P2P caching dependency — unauthenticated HTTP on 0.0.0.0:27500)
+  ansible.builtin.systemd:
+    name: passim
+    masked: true
+    state: stopped
+    daemon_reload: true
+  when: not csb_rhel and not system_is_container  # daemon_reload crashes container systemd; passim only installed alongside fwupd
+  # No failed_when: false — passim masking failure leaves an unauthenticated HTTP service (port 27500)
+  # reachable by any Tailscale peer (tailscale0 is in the 'trusted' firewall zone); surface as hard error.
+  # passim is an implicit fwupd dependency that opens port 27500 on all interfaces.
+  # Masking does not affect fwupd firmware update functionality.
+
+- name: Harden fwupd configuration (OnlyTrusted, UriSchemes)
+  community.general.ini_file:
+    path: /etc/fwupd/fwupd.conf
+    section: fwupd
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - {option: OnlyTrusted, value: "true"}
+    - {option: UriSchemes, value: "https"}
+  when:
+    - not csb_rhel
+    - not system_is_container
+  failed_when: false
+
+- name: Check for firmware updates
+  ansible.builtin.command:
+    cmd: fwupdmgr get-updates --no-device-prompt
+  register: system_fwupd_check_result
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — runs even in check mode
+  when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
+    - not system_is_container  # fwupdmgr activates fwupd D-Bus service, crashing privileged Podman container systemd
+
+- name: Report available firmware updates
+  ansible.builtin.debug:
+    msg: "Firmware updates available: {{ system_fwupd_check_result.stdout | default('') | trim }}\nRun: sudo fwupdmgr update"
+  when:
+    - not csb_rhel  # CSB: IT manages firmware; LVFS probe not needed
+    - not system_is_container
+    - system_fwupd_check_result.rc == 0
+    - "'no available firmware updates' not in (system_fwupd_check_result.stdout | default('') | lower)"

@@ -1,0 +1,28 @@
+---
+- name: Converge — packages role with binaries enabled
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
+
+    - name: Override for binary download testing
+      ansible.builtin.set_fact:
+        packages_install_binaries: true           # the critical toggle under test
+        profile: work
+        is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+        is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+        # Exercise the current subctl build without compiling unrelated work-profile Go tools.
+        packages_go_install:
+          - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
+        packages_go_install_work: []              # clear work-profile go tools
+        packages_security_yubikey: []             # skip YubiKey packages in CI
+        packages_networking: []                   # avoid dnf repo dependencies
+        packages_networking_work: []              # avoid dnf repo dependencies
+        packages_support_work: []                 # avoid dnf repo dependencies
+        packages_containers: []                   # avoid dnf repo dependencies
+        install_virtualization: false             # libvirt not needed in CI container
+
+  roles:
+    - role: packages

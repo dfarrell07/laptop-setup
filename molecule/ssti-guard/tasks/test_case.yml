@@ -1,0 +1,71 @@
+---
+- name: Exercise one config fixture
+  block:
+    - name: Write literal fixture without evaluating its template expressions
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/config.yml"
+        content: "{{ _ssti_case.content }}"
+        mode: "0644"
+      when: _ssti_case.content is defined
+
+    - name: Reset rejection state for this fixture
+      ansible.builtin.set_fact:
+        _ssti_rejected: false
+
+    - name: Capture only the expected template-injection assertion failure
+      block:
+        - name: Run the shared production guard
+          ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/config_ssti_guard.yml"
+      rescue:
+        - name: Confirm the guard rejected the fixture for the expected reason
+          ansible.builtin.assert:
+            that:
+              - _ssti_case.reject | bool
+              - >-
+                ansible_failed_task.name == (_ssti_case.failure_task | default(
+                'Comprehensively scan all config.yml values for Jinja2 template expressions (SSTI guard)'))
+              - >-
+                _ssti_case.failure_task is defined or
+                'SECURITY: config.yml contains' in ansible_failed_result.msg
+
+        - name: Record expected rejection
+          ansible.builtin.set_fact:
+            _ssti_rejected: true
+
+    - name: Check actual result matches the fixture expectation
+      ansible.builtin.assert:
+        that:
+          - _ssti_rejected == _ssti_case.reject
+        fail_msg: "Unexpected guard result for {{ _ssti_case.name }}"
+
+    - name: Check whether any fixture payload executed
+      ansible.builtin.stat:
+        path: /tmp/ssti-guard-payload-executed
+      register: _ssti_payload_marker
+
+    - name: Check whether any lookup payload executed on the controller
+      ansible.builtin.stat:
+        path: /tmp/ssti-guard-payload-executed
+      delegate_to: localhost
+      become: false
+      register: _ssti_controller_marker
+
+    - name: Assert missing config clears previously cached raw values
+      ansible.builtin.assert:
+        that: _config_raw == {}
+      when: _ssti_case.content is not defined
+
+    - name: Assert payloads never execute before rejection
+      ansible.builtin.assert:
+        that:
+          - not _ssti_payload_marker.stat.exists
+          - not _ssti_controller_marker.stat.exists
+
+    - name: Record verified fixture
+      ansible.builtin.set_fact:
+        _ssti_verified: "{{ _ssti_verified + [_ssti_case.name] }}"
+  always:
+    - name: Remove fixture config inside the test container
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/config.yml"
+        state: absent

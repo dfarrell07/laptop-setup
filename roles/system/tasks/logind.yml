@@ -1,0 +1,46 @@
+---
+# --- Logind session policy ---
+# Write to a drop-in so package upgrades can't clobber the settings.
+# inotify on /etc/systemd/logind.conf.d triggers logind reload, destabilizes containers
+- name: Configure logind session policy
+  # csb_rhel guard: IT manages session policy via Satellite/SCAP on RHEL CSB; the 99-prefix
+  # would win lexicographically over IT-deployed drop-ins. Fedora hybrid (csb_rhel=false) runs.
+  when:
+    - not system_is_container
+    - not csb_rhel
+  block:
+    - name: Ensure logind drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/logind.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Write logind session policy (lid switch, power key, idle timeout, process kill)
+      community.general.ini_file:
+        path: /etc/systemd/logind.conf.d/99-hardening.conf
+        section: Login
+        option: "{{ item.key }}"
+        value: "{{ item.value }}"
+        no_extra_spaces: true
+        mode: "0644"
+        create: true
+      loop:
+        - key: HandleLidSwitch
+          value: "{{ system_lid_switch }}"
+        - key: HandleLidSwitchExternalPower
+          value: "{{ system_lid_switch_external }}"
+        - key: HandleLidSwitchDocked
+          value: "{{ system_lid_switch_docked }}"
+        - key: HandleHibernateKey
+          value: ignore
+        - key: HandlePowerKey
+          value: "{{ system_power_key }}"
+        - key: IdleAction
+          value: lock
+        - key: IdleActionSec
+          value: "{{ system_logind_idle_sec }}"
+        - key: KillUserProcesses
+          value: "no"
+      loop_control:
+        label: "{{ item.key }}"
+      notify: Reload logind

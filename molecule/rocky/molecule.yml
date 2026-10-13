@@ -1,0 +1,43 @@
+---
+driver:
+  name: podman
+
+platforms:
+  - name: rocky-test
+    # To update digest: podman pull docker.io/geerlingguy/docker-rockylinux10-ansible:latest
+    # then: podman inspect --format='{{.Digest}}' docker.io/geerlingguy/docker-rockylinux10-ansible:latest
+    image: docker.io/geerlingguy/docker-rockylinux10-ansible@sha256:776b46ac22b0c351319b3c58ea48cb21e53b6912d125c7ff6823d6b5f246ff53
+    pre_build_image: true
+    privileged: true
+    extra_opts: ["--cgroupns=host"]
+    command: /usr/sbin/init
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+provisioner:
+  name: ansible
+  env:
+    ANSIBLE_VAULT_PASSWORD_FILE: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+    ANSIBLE_LIBRARY: ''
+  config_options:
+    defaults:
+      vault_password_file: ${MOLECULE_PROJECT_DIRECTORY}/scripts/vault-pass-ci.sh
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections:/usr/share/ansible/collections
+      gathering: smart
+      remote_tmp: /tmp
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - create
+    - prepare
+    - converge
+    # idempotence excluded: bolt D-Bus activation and systemd unit state differ
+    # between first and second run in privileged Podman containers
+    - verify
+    - destroy

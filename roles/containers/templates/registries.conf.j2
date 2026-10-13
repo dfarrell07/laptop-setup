@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# Enforce fully-qualified image references.
+# docker.io is removed from unqualified-search-registries to prevent namespace-squatting
+# attacks: `podman pull nginx` (short name) would otherwise silently resolve to docker.io/library/nginx
+# and could pull a malicious squatted image. Use fully-qualified names instead:
+#   docker.io/library/nginx, quay.io/org/image, registry.access.redhat.com/ubi9/ubi
+#
+# To opt out (allow short names again), set containers_enforce_fqin: false in config.yml.
+unqualified-search-registries = []

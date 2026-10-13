@@ -1,0 +1,68 @@
+---
+- name: Converge pass 1 — distrobox_container_replace=true (--replace branch)
+  hosts: all
+  gather_facts: true
+
+  vars:
+    fapolicyd_enforcing: false
+    distrobox_oc_version: "4.22.8"
+    distrobox_container_replace: true
+    common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+  pre_tasks:
+    - name: Mark trusted Molecule test context
+      ansible.builtin.set_fact:
+        _pf_is_molecule: true
+
+    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+      # Molecule generates its own inventory in a temp dir; the project's group_vars/all/
+      # are not auto-loaded. Load vars.yml explicitly so csb_rhel is defined in rescue blocks.
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+  roles:
+    - role: distrobox
+
+- name: Save pass-1 log and reset for pass 2
+  hosts: distrobox-role-test
+  gather_facts: false
+
+  tasks:
+    - name: Save pass-1 distrobox call log
+      ansible.builtin.copy:
+        src: /tmp/distrobox-calls.log
+        dest: /tmp/distrobox-calls-pass1.log
+        remote_src: true
+        mode: "0644"
+
+    - name: Clear distrobox call log for pass 2
+      ansible.builtin.copy:
+        dest: /tmp/distrobox-calls.log
+        content: ""
+        mode: "0644"
+
+    - name: Update podman stub — container now present (rc=0)
+      ansible.builtin.copy:
+        dest: /tmp/podman-container-exists-rc
+        content: "0"
+        mode: "0644"
+
+- name: Converge pass 2 — distrobox_container_replace=false (skip-create path)
+  hosts: distrobox-role-test
+  gather_facts: true
+
+  vars:
+    fapolicyd_enforcing: false
+    distrobox_oc_version: "4.22.8"
+    distrobox_container_replace: false
+    common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+
+  pre_tasks:
+    - name: Mark trusted Molecule test context
+      ansible.builtin.set_fact:
+        _pf_is_molecule: true
+
+    - name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+  roles:
+    - role: distrobox

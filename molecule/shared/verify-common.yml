@@ -3,10 +3,6 @@
 # Universal assertions that should pass on every platform.
 # Include from each scenario's verify.yml via include_tasks.
 
-- name: Check git is installed
-  ansible.builtin.command: git --version
-  changed_when: false
-
 # --- Dotfiles ---
 - name: Verify .zshrc exists
   ansible.builtin.stat:
@@ -16,27 +12,37 @@
 - name: Assert .zshrc exists
   ansible.builtin.assert:
     that: verify_zshrc.stat.exists
-    fail_msg: ".zshrc was not deployed"
+    fail_msg: ".zshrc was not deployed (exists={{ verify_zshrc.stat.exists | default(false) }})"
 
-- name: Verify .gitconfig exists
+- name: Verify git/config exists (XDG path)
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.gitconfig"
+    path: "{{ ansible_user_dir }}/.config/git/config"
   register: verify_gitconfig
 
-- name: Assert .gitconfig exists
+- name: Assert git/config exists (XDG path)
   ansible.builtin.assert:
     that: verify_gitconfig.stat.exists
-    fail_msg: ".gitconfig was not deployed"
+    fail_msg: ".config/git/config was not deployed (exists={{ verify_gitconfig.stat.exists | default(false) }})"
 
-- name: Verify .tmux.conf exists
+- name: Stat legacy ~/.gitconfig (should be absent after XDG migration)
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.tmux.conf"
+    path: "{{ ansible_user_dir }}/.gitconfig"
+  register: verify_legacy_gitconfig
+
+- name: Assert legacy ~/.gitconfig is absent (XDG migration complete)
+  ansible.builtin.assert:
+    that: not verify_legacy_gitconfig.stat.exists
+    fail_msg: "~/.gitconfig exists alongside ~/.config/git/config — XDG migration incomplete"
+
+- name: Verify .config/tmux/tmux.conf exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/tmux/tmux.conf"
   register: verify_tmux
 
-- name: Assert .tmux.conf exists
+- name: Assert .config/tmux/tmux.conf exists
   ansible.builtin.assert:
     that: verify_tmux.stat.exists
-    fail_msg: ".tmux.conf was not deployed"
+    fail_msg: ".config/tmux/tmux.conf was not deployed (exists={{ verify_tmux.stat.exists | default(false) }})"
 
 - name: Verify .vimrc exists
   ansible.builtin.stat:
@@ -46,7 +52,7 @@
 - name: Assert .vimrc exists
   ansible.builtin.assert:
     that: verify_vimrc.stat.exists
-    fail_msg: ".vimrc was not deployed"
+    fail_msg: ".vimrc was not deployed (exists={{ verify_vimrc.stat.exists | default(false) }})"
 
 - name: Verify bashrc deployed
   ansible.builtin.stat:
@@ -56,19 +62,33 @@
 - name: Assert bashrc exists
   ansible.builtin.assert:
     that: verify_bashrc.stat.exists
-    fail_msg: ".bashrc was not deployed"
+    fail_msg: ".bashrc was not deployed (exists={{ verify_bashrc.stat.exists | default(false) }})"
 
-- name: Verify oh-my-zsh is installed
+- name: Check bashrc has Ansible managed marker
+  ansible.builtin.command:
+    cmd: grep -q 'Ansible managed' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
+- name: Check bashrc has FZF_DEFAULT_OPTS
+  ansible.builtin.command:
+    cmd: grep -q 'FZF_DEFAULT_OPTS' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
+- name: Check bashrc has DIRENV_LOG_FORMAT
+  ansible.builtin.command:
+    cmd: grep -q 'DIRENV_LOG_FORMAT' "{{ ansible_user_dir }}/.bashrc"
+  changed_when: false
+
+- name: Verify oh-my-zsh sentinel file exists
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.oh-my-zsh"
+    path: "{{ ansible_user_dir }}/.local/share/oh-my-zsh/oh-my-zsh.sh"
   register: verify_omz
 
-- name: Assert oh-my-zsh exists
+- name: Assert oh-my-zsh clone is complete
   ansible.builtin.assert:
     that:
       - verify_omz.stat.exists
-      - verify_omz.stat.isdir
-    fail_msg: "oh-my-zsh was not cloned"
+    fail_msg: "oh-my-zsh was not cloned — oh-my-zsh.sh sentinel missing (exists={{ verify_omz.stat.exists | default(false) }})"
 
 - name: Verify git config-personal exists
   ansible.builtin.stat:
@@ -78,7 +98,7 @@
 - name: Assert git config-personal deployed
   ansible.builtin.assert:
     that: verify_git_personal.stat.exists
-    fail_msg: "git config-personal not deployed"
+    fail_msg: "git config-personal not deployed (exists={{ verify_git_personal.stat.exists | default(false) }})"
 
 # --- SSH ---
 - name: Verify SSH config exists with correct permissions
@@ -91,7 +111,11 @@
     that:
       - verify_ssh_config.stat.exists
       - verify_ssh_config.stat.mode == '0600'
-    fail_msg: "SSH config missing or wrong permissions"
+    fail_msg: >-
+      SSH config missing or wrong permissions
+      (exists={{ verify_ssh_config.stat.exists }},
+      mode={{ verify_ssh_config.stat.mode | default('absent') }},
+      expected 0600)
 
 - name: Verify SSH directory permissions
   ansible.builtin.stat:
@@ -100,59 +124,84 @@
 
 - name: Assert SSH directory is 0700
   ansible.builtin.assert:
-    that: verify_ssh_dir.stat.mode == '0700'
-    fail_msg: "SSH directory has wrong permissions"
+    that:
+      - verify_ssh_dir.stat.exists
+      - verify_ssh_dir.stat.mode == '0700'
+    fail_msg: "SSH directory has wrong permissions (mode={{ verify_ssh_dir.stat.mode | default('absent') }}, expected 0700)"
+
+- name: Check SSH config has KexAlgorithms directive
+  ansible.builtin.command:
+    cmd: grep -q 'KexAlgorithms' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  failed_when: false
+  register: verify_ssh_kex
+
+- name: Assert SSH config has KexAlgorithms with curve25519 baseline
+  ansible.builtin.assert:
+    that: verify_ssh_kex.rc == 0
+    fail_msg: "SSH config missing KexAlgorithms directive — template regression? (rc={{ verify_ssh_kex.rc }})"
+
+- name: Check SSH config has Ciphers directive
+  ansible.builtin.command:
+    cmd: grep -q 'Ciphers' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  failed_when: false
+  register: verify_ssh_ciphers
+
+- name: Assert SSH config has Ciphers directive
+  ansible.builtin.assert:
+    that: verify_ssh_ciphers.rc == 0
+    fail_msg: "SSH config missing Ciphers directive — template regression? (rc={{ verify_ssh_ciphers.rc }})"
+
+- name: Check SSH config has MACs directive
+  ansible.builtin.command:
+    cmd: grep -q '^ *MACs' "{{ ansible_user_dir }}/.ssh/config"
+  changed_when: false
+  failed_when: false
+  register: verify_ssh_macs
+
+- name: Assert SSH config has MACs directive
+  ansible.builtin.assert:
+    that: verify_ssh_macs.rc == 0
+    fail_msg: "SSH config missing MACs directive — template regression? (rc={{ verify_ssh_macs.rc }})"
+
+# --- SSH known_hosts ---
+- name: Verify ~/.ssh/known_hosts exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.ssh/known_hosts"
+  register: verify_known_hosts
+
+- name: Assert known_hosts exists
+  ansible.builtin.assert:
+    that:
+      - verify_known_hosts.stat.exists
+      - verify_known_hosts.stat.mode == '0600'
+    fail_msg: >-
+      ~/.ssh/known_hosts missing or wrong permissions
+      (exists={{ verify_known_hosts.stat.exists | default(false) }},
+      mode={{ verify_known_hosts.stat.mode | default('absent') }},
+      expected 0600) — known_hosts seeding regression
+
+- name: Check known_hosts contains github.com entry
+  ansible.builtin.command:
+    cmd: ssh-keygen -F github.com -f "{{ ansible_user_dir }}/.ssh/known_hosts"
+  register: verify_known_hosts_github
+  changed_when: false
+  failed_when: false
+
+- name: Assert github.com is in known_hosts
+  ansible.builtin.assert:
+    that: verify_known_hosts_github.rc == 0
+    fail_msg: "github.com is not present in ~/.ssh/known_hosts — known_hosts seeding regression?"
+
+# CI gap: ssh_work_keyscan_hosts is empty in all molecule scenarios — keyscan_host.yml
+# (including fingerprint verification added in roles/ssh/tasks/keyscan_host.yml) is not
+# exercised in container CI; fingerprint pinning is only verified during real provisioning
+# when ssh_work_keyscan_hosts entries include a fingerprint field.
 
 # --- Git security ---
-- name: Check git core.fsmonitor
-  ansible.builtin.command: git config --global core.fsmonitor
-  register: verify_fsmonitor
-  changed_when: false
-
-- name: Assert git core.fsmonitor is false
-  ansible.builtin.assert:
-    that: verify_fsmonitor.stdout == 'false'
-    fail_msg: "git core.fsmonitor is not set to false"
-
-- name: Check git core.hooksPath
-  ansible.builtin.command: git config --global core.hooksPath
-  register: verify_hooks_path
-  changed_when: false
-
-- name: Assert core.hooksPath is set
-  ansible.builtin.assert:
-    that: "'hooks' in verify_hooks_path.stdout"
-    fail_msg: "git core.hooksPath not configured"
-
-- name: Check git push.autoSetupRemote
-  ansible.builtin.command: git config --global push.autoSetupRemote
-  register: verify_auto_remote
-  changed_when: false
-
-- name: Assert push.autoSetupRemote is true
-  ansible.builtin.assert:
-    that: verify_auto_remote.stdout == 'true'
-    fail_msg: "git push.autoSetupRemote not set"
-
-- name: Check git commit.gpgsign
-  ansible.builtin.command: git config --global commit.gpgsign
-  register: verify_gpgsign
-  changed_when: false
-
-- name: Assert commit.gpgsign is true
-  ansible.builtin.assert:
-    that: verify_gpgsign.stdout == 'true'
-    fail_msg: "git commit.gpgsign not enabled"
-
-- name: Check git safe.bareRepository setting
-  ansible.builtin.command: git config --global safe.bareRepository
-  register: verify_bare_repo
-  changed_when: false
-
-- name: Assert git safe.bareRepository is explicit
-  ansible.builtin.assert:
-    that: verify_bare_repo.stdout == 'explicit'
-    fail_msg: "git safe.bareRepository is not set to explicit"
+- name: Git security checks
+  ansible.builtin.include_tasks: verify-git-security.yml
 
 # --- Directories ---
 - name: Verify ~/bin directory exists
@@ -165,7 +214,8 @@
     that:
       - verify_bin_dir.stat.exists
       - verify_bin_dir.stat.isdir
-    fail_msg: "~/bin directory was not created"
+    fail_msg: "~/bin not created (exists={{ verify_bin_dir.stat.exists | default(false) }}, isdir={{ verify_bin_dir.stat.isdir |
+    default(false) }})"
 
 - name: Verify ~/.local/bin directory exists
   ansible.builtin.stat:
@@ -177,7 +227,9 @@
     that:
       - verify_local_bin.stat.exists
       - verify_local_bin.stat.isdir
-    fail_msg: "~/.local/bin directory was not created"
+    fail_msg: >-
+      ~/.local/bin not created (exists={{ verify_local_bin.stat.exists | default(false) }}, isdir={{ verify_local_bin.stat.isdir |
+      default(false) }})
 
 - name: Verify git repos base directory exists
   ansible.builtin.stat:
@@ -189,7 +241,26 @@
     that:
       - verify_repos_dir.stat.exists
       - verify_repos_dir.stat.isdir
-    fail_msg: "Git repos base directory ~/src was not created"
+    fail_msg: >-
+      Git repos base directory ~/src was not created (exists={{ verify_repos_dir.stat.exists | default(false) }}, isdir={{
+      verify_repos_dir.stat.isdir | default(false) }})
+
+# --- git_repos role: verify a public HTTPS repo was actually cloned ---
+- name: Verify public HTTPS repo was cloned to ~/src/ by git_repos role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/src/ci-test/laptop-setup/.git"
+  register: verify_git_repos_clone
+
+- name: Assert git_repos clone ran successfully
+  ansible.builtin.assert:
+    that:
+      - verify_git_repos_clone.stat.exists
+      - verify_git_repos_clone.stat.isdir
+    fail_msg: >-
+      git_repos clone task did not create ~/src/ci-test/laptop-setup/.git —
+      clone task logic regression or git_repos_list filtering broken
+      (exists={{ verify_git_repos_clone.stat.exists | default(false) }},
+      isdir={{ verify_git_repos_clone.stat.isdir | default(false) }})
 
 # --- Claude ---
 - name: Verify Claude personal config directory
@@ -203,19 +274,87 @@
       - verify_claude_dir.stat.exists
       - verify_claude_dir.stat.isdir
       - verify_claude_dir.stat.mode == '0700'
-    fail_msg: "Claude personal config dir missing or wrong permissions"
+    fail_msg: >-
+      Claude personal config dir missing or wrong permissions
+      (exists={{ verify_claude_dir.stat.exists | default(false) }},
+      mode={{ verify_claude_dir.stat.mode | default('absent') }},
+      expected 0700)
 
-- name: Verify Claude settings.json exists
+- name: Verify Claude default settings.local.json exists (~/.claude)
   ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.claude-personal/settings.json"
+    path: "{{ ansible_user_dir }}/.claude/settings.local.json"
+  register: verify_claude_default_settings
+
+- name: Assert Claude default settings.local.json deployed (0600)
+  ansible.builtin.assert:
+    that:
+      - verify_claude_default_settings.stat.exists
+      - verify_claude_default_settings.stat.mode == '0600'
+    fail_msg: >-
+      ~/.claude/settings.local.json missing or wrong permissions
+      (exists={{ verify_claude_default_settings.stat.exists | default(false) }},
+      mode={{ verify_claude_default_settings.stat.mode | default('absent') }},
+      expected 0600)
+
+- name: Verify Claude personal settings.local.json exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
   register: verify_claude_settings
 
-- name: Assert Claude settings.json exists with 0600
+- name: Assert Claude personal settings.local.json has mode 0600
   ansible.builtin.assert:
     that:
       - verify_claude_settings.stat.exists
       - verify_claude_settings.stat.mode == '0600'
-    fail_msg: "Claude settings.json not deployed or wrong permissions (expected 0600)"
+    fail_msg: >-
+      Claude settings.local.json wrong permissions
+      (exists={{ verify_claude_settings.stat.exists | default(false) }},
+      mode={{ verify_claude_settings.stat.mode | default('absent') }},
+      expected 0600)
+
+- name: Validate Claude settings.local.json sandbox and deny config
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "import json, sys;
+      d = json.load(open('{{ item }}'));
+      assert d.get('sandbox', {}).get('enabled'), 'sandbox.enabled is not true';
+      assert d.get('sandbox', {}).get('failIfUnavailable'), 'sandbox.failIfUnavailable is not true (allows sandbox bypass)';
+      assert not d.get('sandbox', {}).get('allowUnsandboxedCommands'), 'sandbox.allowUnsandboxedCommands is not false';
+      assert d.get('enableAllProjectMcpServers', True) == False, 'enableAllProjectMcpServers is missing or not false';
+      assert len(d.get('permissions', {}).get('deny', [])) > 0, 'deny list is empty'"
+  changed_when: false
+  loop:
+    - "{{ ansible_user_dir }}/.claude/settings.local.json"
+    - "{{ ansible_user_dir }}/.claude-personal/settings.local.json"
+
+- name: Verify claude-privacy tmpfiles config deployed (Linux)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+  register: verify_claude_tmpfiles
+  when: ansible_system == 'Linux'
+
+- name: Assert claude-privacy tmpfiles config deployed (Linux)
+  ansible.builtin.assert:
+    that:
+      - verify_claude_tmpfiles.stat.exists
+      - verify_claude_tmpfiles.stat.mode == '0644'
+    fail_msg: >-
+      claude-privacy.conf tmpfiles config not deployed (exists={{ verify_claude_tmpfiles.stat.exists | default(false) }}, mode={{
+      verify_claude_tmpfiles.stat.mode | default('absent') }}, expected 0644) — ~/.claude permissions won't be enforced at boot
+  when: ansible_system == 'Linux'
+
+- name: Slurp claude-privacy.conf content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+  register: verify_claude_tmpfiles_content
+  when: ansible_system == 'Linux'
+
+- name: Assert claude-privacy.conf deploys 0700 tmpfiles rule
+  ansible.builtin.assert:
+    that: (verify_claude_tmpfiles_content.content | b64decode) is search('^d %h/\.claude 0700', multiline=True)
+    fail_msg: "claude-privacy.conf missing 'd %h/.claude 0700' line (actual={{ (verify_claude_tmpfiles_content.content | b64decode)[:120]
+    }})"
+  when: ansible_system == 'Linux'
 
 - name: Verify Claude CLAUDE.md deployed
   ansible.builtin.stat:
@@ -225,7 +364,19 @@
 - name: Assert Claude CLAUDE.md exists
   ansible.builtin.assert:
     that: verify_claude_md.stat.exists
-    fail_msg: "Claude CLAUDE.md not deployed"
+    fail_msg: "Claude CLAUDE.md not deployed at {{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+
+- name: Slurp Claude CLAUDE.md content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.claude-personal/CLAUDE.md"
+  register: verify_claude_md_content
+  when: verify_claude_md.stat.exists
+
+- name: Assert Claude CLAUDE.md contains signoff instruction
+  ansible.builtin.assert:
+    that: "'--signoff' in (verify_claude_md_content.content | b64decode)"
+    fail_msg: "Claude CLAUDE.md missing '--signoff' instruction (actual={{ (verify_claude_md_content.content | b64decode)[:120] }})"
+  when: verify_claude_md.stat.exists
 
 # --- Git hooks ---
 - name: Verify gitleaks pre-commit hook
@@ -238,7 +389,10 @@
     that:
       - verify_precommit.stat.exists
       - verify_precommit.stat.executable
-    fail_msg: "Gitleaks pre-commit hook missing or not executable"
+    fail_msg: >-
+      Gitleaks pre-commit hook missing or not executable
+      (exists={{ verify_precommit.stat.exists | default(false) }},
+      executable={{ verify_precommit.stat.executable | default(false) }})
 
 - name: Verify gh CLI config directory
   ansible.builtin.stat:
@@ -251,7 +405,11 @@
       - verify_gh_dir.stat.exists
       - verify_gh_dir.stat.isdir
       - verify_gh_dir.stat.mode == '0700'
-    fail_msg: "gh config directory missing or wrong permissions"
+    fail_msg: >-
+      gh config directory missing or wrong permissions
+      (exists={{ verify_gh_dir.stat.exists | default(false) }},
+      mode={{ verify_gh_dir.stat.mode | default('absent') }},
+      expected 0700)
 
 # --- Dotfiles: direnv ---
 - name: Verify direnv config exists
@@ -262,17 +420,1672 @@
 - name: Assert direnv config deployed
   ansible.builtin.assert:
     that: verify_direnv.stat.exists
-    fail_msg: "direnv config not deployed"
+    fail_msg: "direnv config not deployed (exists={{ verify_direnv.stat.exists | default(false) }})"
+
+- name: Read direnv.toml content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/direnv/direnv.toml"
+  register: verify_direnv_toml
+
+- name: Assert direnv.toml contains expected settings
+  ansible.builtin.assert:
+    that:
+      - "'strict_env = true' in (verify_direnv_toml.content | b64decode)"
+      - "'disable_stdin = true' in (verify_direnv_toml.content | b64decode)"
+    fail_msg: "direnv.toml missing expected settings (actual={{ (verify_direnv_toml.content | b64decode)[:200] }})"
 
 # --- Dotfiles: SSH agent (Linux only) ---
+# Host user-service files are omitted in containers to avoid systemd reload crashes.
+# Verify their presence on full hosts and their absence in the container scenarios.
 - name: Verify SSH agent systemd service deployed
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
   register: verify_ssh_agent
   when: ansible_system == 'Linux'
 
-- name: Assert SSH agent service deployed
+- name: Assert SSH agent service file present (full hosts)
   ansible.builtin.assert:
-    that: verify_ssh_agent.stat.exists
-    fail_msg: "SSH agent systemd user service not deployed"
+    that:
+      - verify_ssh_agent.stat.exists
+      - verify_ssh_agent.stat.mode == '0644'
+    fail_msg: >-
+      SSH agent service file missing or wrong mode (exists={{ verify_ssh_agent.stat.exists | default(false) }}, mode={{
+      verify_ssh_agent.stat.mode | default('absent') }})
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert headless containers omit SSH agent user-service files
+  ansible.builtin.assert:
+    that: not verify_ssh_agent.stat.exists
+    fail_msg: "Container provisioning must not write SSH agent user-service units."
+  when: ansible_system == 'Linux' and (system_is_container | default(false))
+
+- name: Verify ripgrep config deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/ripgrep/config"
+  register: verify_ripgreprc
+
+- name: Assert ripgrep config deployed
+  ansible.builtin.assert:
+    that: verify_ripgreprc.stat.exists
+    fail_msg: "~/.config/ripgrep/config not deployed (exists={{ verify_ripgreprc.stat.exists | default(false) }})"
+
+- name: Read ripgrep config content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/ripgrep/config"
+  register: verify_ripgreprc_content
+
+- name: Assert ripgrep config contains expected options
+  ansible.builtin.assert:
+    that:
+      - "'--smart-case' in (verify_ripgreprc_content.content | b64decode)"
+    fail_msg: "~/.config/ripgrep/config exists but missing --smart-case; got: {{ (verify_ripgreprc_content.content | b64decode)[:200] }}"
+
+- name: Verify git config-work exists (always deployed)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/git/config-work"
+  register: verify_git_config_work
+
+- name: Assert git config-work deployed (always deployed)
+  ansible.builtin.assert:
+    that: verify_git_config_work.stat.exists
+    fail_msg: "git config-work not deployed — work gitconfig includes missing (exists={{ verify_git_config_work.stat.exists |
+    default(false) }})"
+
+- name: Slurp git config-work content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/git/config-work"
+  register: verify_git_config_work_content
+  when: verify_git_config_work.stat.exists
+
+- name: Assert git config-work contains user identity
+  ansible.builtin.assert:
+    that: >-
+      '[user]' in (verify_git_config_work_content.content | b64decode) and
+      'email =' in (verify_git_config_work_content.content | b64decode)
+    fail_msg: >-
+      git config-work exists but contains no [user] section or email — work identity unset; got: {{
+      (verify_git_config_work_content.content | b64decode)[:200] }}
+  when: verify_git_config_work.stat.exists
+
+- name: Verify ssh-agent environment.d config deployed (Linux)
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
+  register: verify_ssh_agent_envd
   when: ansible_system == 'Linux'
+
+- name: Assert ssh-agent environment.d config deployed (Linux)
+  ansible.builtin.assert:
+    that: verify_ssh_agent_envd.stat.exists
+    fail_msg: >-
+      ssh-agent.conf not deployed — SSH_AUTH_SOCK will be missing in GUI processes (exists={{ verify_ssh_agent_envd.stat.exists |
+      default(false) }})
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert headless containers omit SSH agent environment config
+  ansible.builtin.assert:
+    that: not verify_ssh_agent_envd.stat.exists
+    fail_msg: "Container provisioning must not configure a host SSH agent socket."
+  when: ansible_system == 'Linux' and (system_is_container | default(false))
+
+- name: Read ssh-agent.conf content
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
+  register: verify_ssh_agent_envd_content
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Assert ssh-agent.conf contains SSH_AUTH_SOCK assignment
+  ansible.builtin.assert:
+    that:
+      - "'SSH_AUTH_SOCK=' in (verify_ssh_agent_envd_content.content | b64decode)"
+    fail_msg: "ssh-agent.conf missing SSH_AUTH_SOCK= — systemd user session will not export SSH_AUTH_SOCK"
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+# --- CSB detection: verify non-CSB test environments are correctly classified ---
+# Re-run CSB detection in verify phase (set_fact from converge doesn't persist to separate
+# verify playbook invocation). All csb_detect.yml tasks use failed_when: false and are idempotent.
+- name: Re-run CSB detection for verify-phase assertions
+  ansible.builtin.include_tasks:
+    file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb_detect.yml"
+  when: ansible_system == 'Linux'
+
+# These assertions catch regressions in csb_detect.yml that would silently misclassify
+# all Fedora/Debian/Rocky molecule runs as CSB, suppressing repo tasks and container-tier logic.
+# Guard-logic regression tests only — they catch future false-positive bugs in csb_detect.yml, not gaps in coverage today.
+- name: Assert csb_detected is false on non-CSB test host
+  ansible.builtin.assert:
+    that: not (csb_detected | default(false))
+    fail_msg: "csb_detected is true on non-CSB molecule host — csb_detect.yml regression"
+  when:
+    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_system == 'Linux'
+
+- name: Assert needs_container_tier is host-only on non-CSB Fedora/Debian
+  ansible.builtin.assert:
+    that: needs_container_tier == 'host-only'
+    fail_msg: "needs_container_tier is '{{ needs_container_tier }}', expected 'host-only' on non-CSB host — CSB detection regression"
+  when:
+    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_system == 'Linux'
+
+- name: Assert fapolicyd is not running on non-CSB molecule host
+  ansible.builtin.assert:
+    that: not (fapolicyd_installed | default(false))
+    fail_msg: "fapolicyd_installed is true on non-CSB molecule host — CSB detection false positive"
+  when:
+    - ansible_distribution in ['Fedora', 'Debian']
+    - ansible_system == 'Linux'
+
+# /dev/shm fstab checks — container CI gap; only fires in make test-vm (VM scenario)
+- name: Check /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nosuid' /etc/fstab
+  register: verify_fstab_shm_nosuid
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /dev/shm fstab entry has nosuid (CIS 1.1.7.1)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_nosuid.rc == 0
+    fail_msg: >-
+      fstab entry for /dev/shm absent or missing nosuid (CIS 1.1.7.1) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_nosuid.rc | default('skipped') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check /dev/shm fstab entry has nodev (CIS 1.1.7.2)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*nodev' /etc/fstab
+  register: verify_fstab_shm_nodev
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /dev/shm fstab entry has nodev (CIS 1.1.7.2)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_nodev.rc == 0
+    fail_msg: >-
+      fstab entry for /dev/shm absent or missing nodev (CIS 1.1.7.2) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_nodev.rc | default('skipped') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check /dev/shm fstab entry has noexec (CIS 1.1.7.3)
+  ansible.builtin.command:
+    cmd: grep -qE '^tmpfs\s+/dev/shm\s+tmpfs\s+[^ ]*noexec' /etc/fstab
+  register: verify_fstab_shm_noexec
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /dev/shm fstab entry has noexec (CIS 1.1.7.3)
+  ansible.builtin.assert:
+    that: verify_fstab_shm_noexec.rc == 0
+    fail_msg: >-
+      fstab entry for /dev/shm absent or missing noexec (CIS 1.1.7.3) —
+      expected: tmpfs /dev/shm tmpfs defaults,nosuid,nodev,noexec
+      (rc={{ verify_fstab_shm_noexec.rc | default('skipped') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+# --- Sysctl hardening: file-content assertions (system role, Linux only) ---
+# File-content assertions (safer than sysctl -n live kernel reads on VMs);
+# skipped in container CI since sysctl.yml does not apply settings in containers.
+# No become: true needed because /etc/sysctl.d/90-hardening.conf is deployed mode 0644.
+- name: Stat sysctl hardening config (asserts system role ran)
+  ansible.builtin.stat:
+    path: /etc/sysctl.d/90-hardening.conf
+  register: verify_sysctl_file
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert sysctl hardening config deployed
+  ansible.builtin.assert:
+    that: verify_sysctl_file.stat.exists
+    fail_msg: >-
+      /etc/sysctl.d/90-hardening.conf not deployed — system role did not run (exists={{ verify_sysctl_file.stat.exists | default(false)
+      }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert sysctl 90-hardening.conf contains expected security keys
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  loop:
+    - kernel.yama.ptrace_scope = {{ system_ptrace_scope | default(1) }}
+    - kernel.dmesg_restrict = 1  # hardcoded: no system_dmesg_restrict var; see system_sysctl_hardening in defaults/main.yml
+    - kernel.kptr_restrict = 2  # hardcoded: no system_kptr_restrict var; see system_sysctl_hardening in defaults/main.yml
+    - kernel.unprivileged_bpf_disabled = {{ system_unprivileged_bpf_disabled | default(2) }}
+    - kernel.io_uring_disabled = {{ system_io_uring_disabled | default(1) }}
+    - kernel.kexec_load_disabled = {{ system_kexec_load_disabled | default(1) }}
+    - net.core.bpf_jit_harden = {{ system_bpf_jit_harden | default(1) }}
+    - net.bridge.bridge-nf-call-iptables = 1  # work-profile policy in _system_sysctl_work_defaults
+    - net.ipv6.conf.all.use_tempaddr = 2  # hardcoded: no system_ipv6_use_tempaddr var; matches _system_sysctl_hardening_defaults dict
+    - net.ipv4.conf.all.rp_filter = 2  # hardcoded: no system_rp_filter var; matches _system_sysctl_hardening_defaults dict
+    - net.ipv4.conf.default.rp_filter = 2  # hardcoded: no system_rp_filter_default var; matches _system_sysctl_hardening_defaults dict
+    - vm.max_map_count = 1048576  # hardcoded: no system_max_map_count var; matches _system_sysctl_hardening_defaults dict
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  changed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_sysctl_file is not skipped
+    - verify_sysctl_file.stat.exists
+    - item != 'net.bridge.bridge-nf-call-iptables = 1' or profile | default('personal') == 'work'
+
+- name: Check sysctl ip_forward keys equal system_enable_ip_forward value
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/sysctl.d/90-hardening.conf
+  loop:
+    - 'net.ipv4.ip_forward = {{ system_enable_ip_forward | bool | int }}'
+    - 'net.ipv6.conf.all.forwarding = {{ system_enable_ip_forward | bool | int }}'
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  changed_when: false
+  failed_when: false
+  register: verify_ip_forward_keys
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_sysctl_file is not skipped
+    - verify_sysctl_file.stat.exists
+    - system_enable_ip_forward | default(true) | bool
+
+- name: Assert sysctl 90-hardening.conf ip_forward keys match expected value
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "90-hardening.conf missing '{{ item.item }}' — sysctl.yml ip_forward regression (rc={{ item.rc | default('?') }})"
+  loop: "{{ verify_ip_forward_keys.results }}"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_sysctl_file is not skipped
+    - verify_sysctl_file.stat.exists
+    - system_enable_ip_forward | default(true) | bool
+
+- name: Stat /etc/systemd/system/tmp.mount.d/hardening.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/system/tmp.mount.d/hardening.conf
+  register: verify_tmp_hardening
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert tmp.mount.d/hardening.conf deployed
+  ansible.builtin.assert:
+    that: verify_tmp_hardening.stat.exists
+    fail_msg: >-
+      /etc/systemd/system/tmp.mount.d/hardening.conf not deployed — system role did not run or template broken (exists={{
+      verify_tmp_hardening.stat.exists | default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Check tmp.mount.d/hardening.conf Options= line has nosuid,nodev,noexec
+  ansible.builtin.command: grep -qE '^Options=.*{{ item }}' /etc/systemd/system/tmp.mount.d/hardening.conf
+  loop:
+    - nosuid
+    - nodev
+    - noexec
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  changed_when: false
+  failed_when: false
+  register: verify_tmp_options
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_tmp_hardening.stat.exists
+    - item != 'noexec' or system_tmp_noexec | default(false) | bool
+
+- name: Assert tmp.mount hardening.conf Options= contains all required flags
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "tmp.mount hardening.conf missing Options={{ item.item }} — mounts.yml template regression (rc={{ item.rc | default('?') }})"
+  loop: "{{ verify_tmp_options.results | rejectattr('skipped', 'defined') | list }}"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_tmp_hardening.stat.exists
+
+# --- modprobe hardening: file-content assertions (system role, Linux only) ---
+- name: Stat /etc/modprobe.d/hardening.conf (asserts system role deployed it)
+  ansible.builtin.stat:
+    path: /etc/modprobe.d/hardening.conf
+  register: verify_modprobe_hardening
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert /etc/modprobe.d/hardening.conf deployed
+  ansible.builtin.assert:
+    that: verify_modprobe_hardening.stat.exists
+    fail_msg: >-
+      /etc/modprobe.d/hardening.conf not deployed — system role did not run or template broken (exists={{
+      verify_modprobe_hardening.stat.exists | default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Check modprobe hardening contains unconditional blacklist entries
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/modprobe.d/hardening.conf
+  loop:
+    - "blacklist jffs2"
+    - "install jffs2 /bin/false"
+    - "install cramfs /bin/false"
+    - "install freevxfs /bin/false"
+    - "blacklist hfs"
+    - "install hfs /bin/false"
+    - "blacklist hfsplus"
+    - "install hfsplus /bin/false"
+    - "install dccp /bin/false"
+    - "blacklist rds"
+    - "install rds /bin/false"
+    - "blacklist tipc"
+    - "install tipc /bin/false"
+    - "install firewire-core /bin/false"
+    - "blacklist nosy"
+    - "install nosy /bin/false"
+    - "install vivid /bin/false"
+    - "install n_hdlc /bin/false"
+  changed_when: false
+  failed_when: false
+  register: verify_modprobe_entries
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+
+- name: Assert modprobe hardening unconditional blacklist entries
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: >-
+      modprobe hardening missing entry '{{ item.item }}' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template
+      regression (rc={{ item.rc | default('?') }})
+  loop: "{{ verify_modprobe_entries.results }}"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+
+- name: Check modprobe hardening contains usb_storage blacklist entry
+  ansible.builtin.command: grep -qF 'install usb_storage /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  failed_when: false
+  register: verify_modprobe_usb_storage
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_usb_storage | default(false) | bool
+
+- name: Assert modprobe hardening usb_storage blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_usb_storage.rc == 0
+    fail_msg: >-
+      modprobe hardening missing 'install usb_storage /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml
+      template regression (rc={{ verify_modprobe_usb_storage.rc | default('?') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_usb_storage | default(false) | bool
+
+- name: Check modprobe hardening contains udf blacklist entry
+  ansible.builtin.command: grep -qF 'install udf /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  failed_when: false
+  register: verify_modprobe_udf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_udf | default(true) | bool
+
+- name: Assert modprobe hardening udf blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_udf.rc == 0
+    fail_msg: >-
+      modprobe hardening missing 'install udf /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template
+      regression (rc={{ verify_modprobe_udf.rc | default('?') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_udf | default(true) | bool
+
+- name: Check modprobe hardening contains sctp blacklist entry
+  ansible.builtin.command: grep -qF 'install sctp /bin/false' /etc/modprobe.d/hardening.conf
+  changed_when: false
+  failed_when: false
+  register: verify_modprobe_sctp
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_sctp | default(false) | bool
+
+- name: Assert modprobe hardening sctp blacklist entry
+  ansible.builtin.assert:
+    that: verify_modprobe_sctp.rc == 0
+    fail_msg: >-
+      modprobe hardening missing 'install sctp /bin/false' in /etc/modprobe.d/hardening.conf — kernel_modules_blacklist.yml template
+      regression (rc={{ verify_modprobe_sctp.rc | default('?') }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_modprobe_hardening.stat.exists
+    - system_disable_sctp | default(false) | bool
+
+# --- system role drop-in file assertions (sshd, resolved, DNS-over-TLS, coredump, logind, sudoers, journald, auditd rules; Linux only) ---
+# sshd drop-in is mode 0600 root:root — become: true required for stat and grep.
+# Catches directive-value regressions that pass sshd -t syntax validation.
+- name: Stat sshd hardening drop-in (asserts system role deployed it)
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/00-hardening.conf
+  register: verify_sshd_dropin
+  become: true
+  when: ansible_system == 'Linux'
+# Rocky scenario (csb_rhel=true) runs this stat but skips both asserts below via not csb_rhel
+
+- name: Assert sshd hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_sshd_dropin.stat.exists
+    fail_msg: >-
+      /etc/ssh/sshd_config.d/00-hardening.conf not deployed —
+      sshd task regression or openssh-server not installed
+      (deployment block gated on sshd.service being defined)
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'  # openssh-server not installed in Debian Podman CI (daemon-reload crash risk)
+    - not csb_rhel
+
+- name: Assert sshd hardening drop-in has mode 0600
+  ansible.builtin.assert:
+    that: (verify_sshd_dropin.stat.mode | default('')) == '0600'
+    fail_msg: >-
+      /etc/ssh/sshd_config.d/00-hardening.conf missing or has wrong permissions
+      (exists={{ verify_sshd_dropin.stat.exists | default(false) }}, expected mode 0600,
+      got {{ verify_sshd_dropin.stat.mode | default('absent') }})
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'  # openssh-server not installed in Debian Podman CI (daemon-reload crash risk)
+    - not csb_rhel
+
+- name: Check sshd hardening drop-in for required directives
+  ansible.builtin.command: grep -E '{{ item }}' /etc/ssh/sshd_config.d/00-hardening.conf
+  loop:
+    - "^PasswordAuthentication no"
+    - "^PermitRootLogin no"
+    - "^KbdInteractiveAuthentication no"
+    - "^PermitEmptyPasswords no"
+    - "^X11Forwarding no"
+    - "^HostKeyAlgorithms {{ ssh_host_key_algorithms }}"
+    - "^ClientAliveInterval {{ system_ssh_client_alive_interval | default(300) }}"
+    - "^ClientAliveCountMax {{ system_ssh_client_alive_count_max | default(2) }}"
+    - "^Port {{ ssh_port }}$"
+    - "^AllowUsers "
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  failed_when: false
+  register: verify_sshd_directives
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - not csb_rhel
+    - verify_sshd_dropin.stat.exists
+
+- name: Verify sshd directives found in drop-in
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: >-
+      sshd drop-in missing directive {{ item.item }} (rc={{ item.rc | default('?') }}, expected in
+      /etc/ssh/sshd_config.d/00-hardening.conf, got: {{ item.stdout | default('(no match)') }})
+  loop: "{{ verify_sshd_directives.results }}"
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - not csb_rhel
+    - verify_sshd_dropin.stat.exists
+
+- name: Stat /etc/systemd/resolved.conf.d/98-llmnr.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/resolved.conf.d/98-llmnr.conf
+  register: verify_llmnr_conf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert 98-llmnr.conf deployed
+  ansible.builtin.assert:
+    that:
+      - verify_llmnr_conf.stat.exists
+      - verify_llmnr_conf.stat.isreg
+      - verify_llmnr_conf.stat.uid == 0
+      - verify_llmnr_conf.stat.mode == '0644'
+    fail_msg: >-
+      98-llmnr.conf must be a root-owned regular file with mode 0644
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Check 98-llmnr.conf for LLMNR setting
+  ansible.builtin.command: grep 'LLMNR={{ system_resolved_llmnr | default("no") }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  changed_when: false
+  failed_when: false
+  register: verify_llmnr_setting
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_llmnr_conf.stat.exists
+
+- name: Assert 98-llmnr.conf LLMNR value matches expected
+  ansible.builtin.assert:
+    that: verify_llmnr_setting.rc == 0
+    fail_msg: >-
+      98-llmnr.conf missing LLMNR={{ system_resolved_llmnr | default("no") }} — dns_over_tls.yml LLMNR regression — found: {{
+      verify_llmnr_setting.stdout | default("(empty)") }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_llmnr_conf.stat.exists
+
+- name: Check 98-llmnr.conf MulticastDNS setting
+  ansible.builtin.command: grep -qF '{{ item }}' /etc/systemd/resolved.conf.d/98-llmnr.conf
+  loop:
+    - "MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
+  changed_when: false
+  failed_when: false
+  register: verify_mdns_setting
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_llmnr_conf.stat.exists
+
+- name: Assert 98-llmnr.conf MulticastDNS value matches expected
+  ansible.builtin.assert:
+    that: verify_mdns_setting.results | selectattr('rc', 'ne', 0) | list | length == 0
+    fail_msg: "98-llmnr.conf missing MulticastDNS={{ system_resolved_multicast_dns | default('no') }}"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_llmnr_conf.stat.exists
+
+- name: Stat /etc/systemd/resolved.conf.d/99-dot.conf
+  ansible.builtin.stat:
+    path: /etc/systemd/resolved.conf.d/99-dot.conf
+  register: verify_dot_conf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert DNS-over-TLS config deployed
+  ansible.builtin.assert:
+    that:
+      - verify_dot_conf.stat.exists
+      - verify_dot_conf.stat.isreg
+      - verify_dot_conf.stat.uid == 0
+      - verify_dot_conf.stat.mode == '0644'
+    fail_msg: >-
+      99-dot.conf must be a root-owned regular file with mode 0644
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Slurp DNS-over-TLS drop-in content
+  ansible.builtin.slurp:
+    src: /etc/systemd/resolved.conf.d/99-dot.conf
+  register: verify_dot_conf_content
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_dot_conf.stat.exists
+
+- name: Assert DNSOverTLS= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic')))
+      in (verify_dot_conf_content.content | b64decode)
+    fail_msg: >-
+      99-dot.conf missing expected DNSOverTLS={{ system_dot_mode | default('opportunistic') }}, got: {{ verify_dot_conf_content.content |
+      b64decode | regex_search('DNSOverTLS=\S*') | default('(no DNSOverTLS= line)') }} — template regression?
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_dot_conf.stat.exists
+
+- name: Stat /etc/resolv.conf (symlink check)
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    follow: false
+  register: verify_resolv_conf
+  when:
+    - not (system_is_container | default(false))  # dns_over_tls.yml also skips in containers
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /etc/resolv.conf is symlink to stub-resolv.conf
+  ansible.builtin.assert:
+    that:
+      - verify_resolv_conf.stat.islnk
+      - verify_resolv_conf.stat.lnk_target == '/run/systemd/resolve/stub-resolv.conf'
+    fail_msg: >-
+      /etc/resolv.conf is not a symlink to /run/systemd/resolve/stub-resolv.conf
+      (islnk={{ verify_resolv_conf.stat.islnk | default(false) }},
+      target={{ verify_resolv_conf.stat.lnk_target | default('(not a symlink)') }}) —
+      split DNS / Tailscale MagicDNS will not work; dns_over_tls.yml creates this symlink
+  when:
+    - not (system_is_container | default(false))  # dns_over_tls.yml also skips in containers
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Stat coredump drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/systemd/coredump.conf.d/coredump.conf
+  register: verify_coredump_conf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert coredump drop-in deployed
+  ansible.builtin.assert:
+    that:
+      - verify_coredump_conf.stat.exists
+      - verify_coredump_conf.stat.isreg
+      - verify_coredump_conf.stat.uid == 0
+      - verify_coredump_conf.stat.mode == '0644'
+    fail_msg: "coredump.conf must be a root-owned regular file with mode 0644"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Slurp coredump drop-in content
+  ansible.builtin.slurp:
+    src: /etc/systemd/coredump.conf.d/coredump.conf
+  register: verify_coredump_content
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
+- name: Assert coredump Storage= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('Storage=' ~ (system_coredump_storage | default('external')))
+      in (verify_coredump_content.content | b64decode)
+    fail_msg: >-
+      coredump drop-in missing expected Storage={{ system_coredump_storage | default('external') }},
+      got: {{ verify_coredump_content.content | b64decode | regex_search('Storage=\S*') | default('(no Storage= line)') }}
+      — template regression?
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
+- name: Assert coredump ProcessSizeMax= value matches deployed variable
+  ansible.builtin.assert:
+    that: >-
+      ('ProcessSizeMax=' ~ (system_coredump_process_size_max | default('2G')))
+      in (verify_coredump_content.content | b64decode)
+    fail_msg: >-
+      coredump drop-in missing expected ProcessSizeMax={{ system_coredump_process_size_max | default('2G') }},
+      got: {{ verify_coredump_content.content | b64decode | regex_search('ProcessSizeMax=\S*') | default('(no ProcessSizeMax= line)') }}
+      — template regression?
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_coredump_conf.stat.exists
+
+
+- name: Stat logind hardening drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_conf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert logind hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_logind_conf.stat.exists
+    fail_msg: >-
+      /etc/systemd/logind.conf.d/99-hardening.conf not deployed — system role logind task regression (exists={{
+      verify_logind_conf.stat.exists | default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Stat sudoers hardening drop-in (system role must deploy it)
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/99-hardening
+  register: verify_sudoers_conf
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert sudoers hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_sudoers_conf.stat.exists
+    fail_msg: >-
+      /etc/sudoers.d/99-hardening not deployed — system role sudoers task regression (exists={{ verify_sudoers_conf.stat.exists |
+      default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert sudoers drop-in is mode 0440
+  ansible.builtin.assert:
+    that: verify_sudoers_conf.stat.mode == '0440'
+    fail_msg: "/etc/sudoers.d/99-hardening has wrong mode {{ verify_sudoers_conf.stat.mode }} — expected 0440"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
+    - verify_sudoers_conf.stat.exists
+
+- name: Assert logind drop-in has IdleAction=lock
+  ansible.builtin.command: grep '^IdleAction=lock' /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_idle_action
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Assert IdleAction=lock present in logind drop-in
+  ansible.builtin.assert:
+    that: verify_logind_idle_action.rc == 0
+    fail_msg: >-
+      logind 99-hardening.conf missing 'IdleAction=lock' — CIS session locking regression — found: {{ verify_logind_idle_action.stdout |
+      default('(not found)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Assert logind drop-in has HandlePowerKey={{ system_power_key | default("lock") }}
+  ansible.builtin.command: >-
+    grep '^HandlePowerKey={{ system_power_key | default("lock") }}'
+    /etc/systemd/logind.conf.d/99-hardening.conf
+  register: verify_logind_power_key
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Assert HandlePowerKey={{ system_power_key | default("lock") }} present in logind drop-in
+  ansible.builtin.assert:
+    that: verify_logind_power_key.rc == 0
+    fail_msg: >-
+      logind 99-hardening.conf missing 'HandlePowerKey={{ system_power_key | default("lock") }}'
+      — found: {{ verify_logind_power_key.stdout | default('(not found)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_logind_conf is not skipped
+    - verify_logind_conf.stat.exists
+
+- name: Stat sudoers go-env drop-in (system role must deploy it on non-CSB)
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/go-env
+  register: verify_sudoers_go_env
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check sudoers go-env contains Defaults env_keep
+  ansible.builtin.command: grep 'Defaults env_keep' /etc/sudoers.d/go-env
+  register: verify_sudoers_go_env_content
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - verify_sudoers_go_env.stat.exists | default(false)
+
+- name: Assert sudoers go-env drop-in deployed
+  ansible.builtin.assert:
+    that:
+      - verify_sudoers_go_env.stat.exists
+      - verify_sudoers_go_env_content.rc == 0
+    fail_msg: >-
+      /etc/sudoers.d/go-env not deployed — system role sudoers go-env task regression (exists={{ verify_sudoers_go_env.stat.exists |
+      default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert sudoers go-env drop-in is mode 0440
+  ansible.builtin.assert:
+    that: verify_sudoers_go_env.stat.mode == '0440'
+    fail_msg: >-
+      /etc/sudoers.d/go-env has wrong mode {{ verify_sudoers_go_env.stat.mode }} — expected 0440 (sudo silently rejects non-0440 sudoers
+      files)
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_sudoers_go_env is not skipped
+    - verify_sudoers_go_env.stat.exists
+
+- name: Stat logrotate sudo config (/var/log/sudo.log rotation)
+  ansible.builtin.stat:
+    path: /etc/logrotate.d/sudo
+  register: verify_logrotate_sudo
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check logrotate sudo config references sudo.log
+  ansible.builtin.command: grep '/var/log/sudo.log' /etc/logrotate.d/sudo
+  register: verify_logrotate_sudo_content
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - verify_logrotate_sudo.stat.exists | default(false)
+
+- name: Assert logrotate sudo config deployed
+  ansible.builtin.assert:
+    that:
+      - verify_logrotate_sudo.stat.exists
+      - verify_logrotate_sudo.stat.mode == '0644'
+      - verify_logrotate_sudo_content.rc == 0
+    fail_msg: >-
+      /etc/logrotate.d/sudo not deployed or wrong mode (expected 0644, got {{ verify_logrotate_sudo.stat.mode | default('absent') }}) —
+      system role logrotate task regression
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Stat journald hardening drop-in (system role deploys it on non-CSB Linux)
+  ansible.builtin.stat:
+    path: /etc/systemd/journald.conf.d/99-hardening.conf
+  register: verify_journald_conf
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+
+- name: Assert journald hardening drop-in deployed
+  ansible.builtin.assert:
+    that: verify_journald_conf.stat.exists
+    fail_msg: >-
+      /etc/systemd/journald.conf.d/99-hardening.conf not deployed — system role journald task regression (exists={{
+      verify_journald_conf.stat.exists | default(false) }})
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+
+- name: Slurp journald hardening drop-in for directive checks
+  ansible.builtin.slurp:
+    src: /etc/systemd/journald.conf.d/99-hardening.conf
+  register: journald_conf_content
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_journald_conf.stat.exists
+
+- name: Assert journald drop-in contains required directives
+  ansible.builtin.assert:
+    that: >-
+      (journald_conf_content.content | b64decode).splitlines()
+      | select('match', item) | list | length > 0
+    fail_msg: >-
+      Missing journald directive: {{ item }} — file has:
+      {{ (journald_conf_content.content | b64decode).splitlines()
+         | select('match', item | split('=') | first ~ '=') | list | join(', ') | default('(none)') }}
+  loop:
+    - Storage=persistent
+    - "SystemMaxUse={{ system_journald_max_use | default('4G') }}"
+    - "MaxRetentionSec={{ system_journald_max_retention | default('6month') }}"
+    - "SystemKeepFree={{ system_journald_keep_free | default('1G') }}"
+    - "RateLimitIntervalSec={{ system_journald_rate_interval | default('30s') }}"
+    - "RateLimitBurst={{ system_journald_rate_burst | default(10000) }}"
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_journald_conf.stat.exists
+
+- name: Check sudoers drop-in has logfile=/var/log/sudo.log directive
+  ansible.builtin.command: grep 'logfile=/var/log/sudo.log' /etc/sudoers.d/99-hardening
+  register: verify_sudoers_logfile
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
+    - verify_sudoers_conf.stat.exists
+
+- name: Assert sudoers drop-in contains logfile=/var/log/sudo.log directive
+  ansible.builtin.assert:
+    that: verify_sudoers_logfile.rc == 0
+    fail_msg: >-
+      /etc/sudoers.d/99-hardening missing 'logfile=/var/log/sudo.log' — file content: {{ verify_sudoers_logfile.stdout_lines | default([])
+      | join(' | ') | default('(empty or absent)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_sudoers_conf is not skipped
+    - verify_sudoers_conf.stat.exists
+    - verify_sudoers_logfile is not skipped
+
+- name: Stat auditd rules file (system role deploys it on non-RHEL-CSB Linux, including Fedora hybrid CSB)
+  ansible.builtin.stat:
+    path: /etc/audit/rules.d/claude-code.rules
+  register: verify_auditd_rules
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert auditd rules file deployed with mode 0640
+  ansible.builtin.assert:
+    that:
+      - verify_auditd_rules.stat.exists
+      - verify_auditd_rules.stat.mode == '0640'
+    fail_msg: >-
+      /etc/audit/rules.d/claude-code.rules not deployed or wrong mode
+      (expected 0640, got {{ verify_auditd_rules.stat.mode | default('missing') }})
+      — system role auditd task regression
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check auditd rules contain immutability flag -e 2 (non-CSB hosts)
+  ansible.builtin.command: grep -q '^-e 2$' /etc/audit/rules.d/claude-code.rules
+  register: verify_auditd_e2
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected  # Fedora hybrid CSB (csb_detected=true) deploys -e 1 (mutable); RHEL CSB skips rules entirely
+    - verify_auditd_rules.stat.exists
+
+- name: Assert auditd rules contain immutability flag -e 2
+  ansible.builtin.assert:
+    that: verify_auditd_e2.rc == 0
+    fail_msg: "claude-code.rules missing '-e 2' — audit immutability regression (rc={{ verify_auditd_e2.rc | default('?') }})"
+  when:
+    - verify_auditd_e2 is not skipped
+
+- name: Check auditd rules contain mutable flag -e 1 (Fedora hybrid CSB)
+  ansible.builtin.command: grep -q '^-e 1$' /etc/audit/rules.d/claude-code.rules
+  changed_when: false
+  failed_when: false
+  register: verify_auditd_e1
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - csb_detected | default(false)
+    - not csb_rhel  # RHEL CSB skips rules entirely; only Fedora hybrid CSB gets -e 1
+    - verify_auditd_rules.stat.exists
+
+- name: Assert auditd rules contain mutable flag -e 1
+  ansible.builtin.assert:
+    that: verify_auditd_e1.rc == 0
+    fail_msg: "claude-code.rules missing '-e 1' — hybrid CSB audit flag regression (rc={{ verify_auditd_e1.rc | default('?') }})"
+  when:
+    - verify_auditd_e1 is not skipped
+
+- name: Check auditd rules contain required watch keys
+  ansible.builtin.command: >-
+    grep -q ' -k {{ item }}$' /etc/audit/rules.d/claude-code.rules
+  loop:
+    - privilege-escalation
+    - privileged-exec
+    - user-mgmt
+    - identity-change
+    - kernel-module-load
+    - time-change
+    - perm_mod
+    - logins
+    - session
+    - system-locale
+    - mac-policy
+    - persistence
+    - actions
+    - audit-config
+    - claude-sensitive-write
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  changed_when: false
+  failed_when: false
+  register: verify_auditd_watch_keys
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_auditd_rules.stat.exists
+
+- name: Assert auditd rules contain all required watch keys
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "claude-code.rules missing '-k {{ item.item }}' — audit watch key regression (rc={{ item.rc | default('?') }})"
+  loop: "{{ verify_auditd_watch_keys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item is not skipped
+
+- name: Read immutable audit policy receipt
+  ansible.builtin.slurp:
+    src: /etc/audit/claude-code-policy.json
+  register: verify_audit_policy_receipt
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_auditd_rules.stat.exists
+
+- name: Check auditd rules contain renameat2 exclusions for tools present at compilation
+  ansible.builtin.command: >-
+    grep -qE '{{ item }}' /etc/audit/rules.d/claude-code.rules
+  loop:
+    - 'arch=b64.*renameat2.*exe=/usr/bin/cargo'
+    - 'arch=b32.*renameat2.*exe=/usr/bin/cargo'
+    - 'arch=b64.*renameat2.*exe=/usr/bin/git'
+    - 'arch=b32.*renameat2.*exe=/usr/bin/git'
+    - 'arch=b64.*renameat2.*exe=/usr/bin/npm'
+    - 'arch=b32.*renameat2.*exe=/usr/bin/npm'
+  loop_control:
+    label: "{{ item | split(' ') | first }}"
+  changed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - verify_auditd_rules.stat.exists
+    - item.split('exe=')[-1] not in ((verify_audit_policy_receipt.content | b64decode | from_json).omitted_executables)
+
+# --- auditd.conf coverage (deployed by system role on non-RHEL-CSB Linux) ---
+# auditd.conf is deployed on Fedora hybrid CSB (csb_detected=true, csb_rhel=false) but NOT
+# on RHEL CSB (csb_rhel=true) where IT manages auditd.conf via SCAP policies.
+# Guard is 'not csb_rhel' (matches auditd.yml when: not csb_rhel).
+- name: Stat /etc/audit/auditd.conf
+  ansible.builtin.stat:
+    path: /etc/audit/auditd.conf
+  register: verify_auditd_conf
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel  # RHEL CSB IT manages auditd.conf; Fedora hybrid is user-managed
+
+- name: Assert auditd.conf deployed with mode 0640
+  ansible.builtin.assert:
+    that:
+      - verify_auditd_conf.stat.exists
+      - verify_auditd_conf.stat.mode == '0640'
+    fail_msg: >-
+      /etc/audit/auditd.conf missing or wrong mode
+      (expected 0640, got {{ verify_auditd_conf.stat.mode | default('missing') }})
+      — system role auditd deploy regression
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+
+- name: Check auditd.conf max_log_file={{ system_auditd_max_log_file }}
+  ansible.builtin.command: grep -E '^max_log_file = {{ system_auditd_max_log_file | default(8) }}' /etc/audit/auditd.conf
+  changed_when: false
+  failed_when: false
+  register: _auditd_max_log_file_check
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+
+- name: Assert auditd.conf max_log_file value
+  ansible.builtin.assert:
+    that: _auditd_max_log_file_check.rc == 0
+    fail_msg: >-
+      auditd.conf max_log_file mismatch — expected '{{ system_auditd_max_log_file | default(8) }}';
+      found: {{ _auditd_max_log_file_check.stdout | default('(no match)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+
+- name: Check auditd.conf log_format=ENRICHED (CIS 4.1.2.1)
+  ansible.builtin.command: grep -E '^log_format = ENRICHED' /etc/audit/auditd.conf
+  changed_when: false
+  failed_when: false
+  register: _auditd_log_format_check
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+
+- name: Assert auditd.conf log_format value
+  ansible.builtin.assert:
+    that: _auditd_log_format_check.rc == 0
+    fail_msg: >-
+      auditd.conf log_format mismatch — expected 'ENRICHED';
+      found: {{ _auditd_log_format_check.stdout | default('(no match)') }}
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_detected
+    - verify_auditd_conf.stat.exists
+
+# --- dconf hardening (CIS 1.8.x — GNOME/GDM only, stat-gated) ---
+# Only fires when the system role's dconf.yml ran (gdm.service present on target).
+# Skips cleanly on Sway/i3 and all Podman container CI scenarios where GDM is absent.
+- name: Stat /usr/sbin/gdm (GDM display manager binary)
+  ansible.builtin.stat:
+    path: /usr/sbin/gdm
+  register: verify_gdm
+  when: ansible_system == 'Linux'
+
+- name: Stat /etc/dconf/db/local.d/50-hardening (dconf media-handling CIS 1.8.6-1.8.8)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local.d/50-hardening
+  register: verify_dconf_50_hardening
+  when: ansible_system == 'Linux'
+
+- name: Assert 50-hardening present on GDM host
+  ansible.builtin.assert:
+    that: verify_dconf_50_hardening.stat.exists
+    fail_msg: "/etc/dconf/db/local.d/50-hardening missing on GDM host"
+  when:
+    - ansible_system == 'Linux'
+    - verify_gdm.stat.exists | default(false)
+
+- name: Stat /etc/dconf/db/local (compiled dconf database)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local
+  register: verify_dconf_db_local
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Assert /etc/dconf/db/local compiled database exists
+  ansible.builtin.assert:
+    that: verify_dconf_db_local.stat.exists
+    fail_msg: >-
+      /etc/dconf/db/local compiled database missing — 'Apply dconf schema database'
+      handler did not run dconf update after deploying /etc/dconf/db/local.d/50-hardening
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Check dconf 50-hardening has automount=false (CIS 1.8.6)
+  ansible.builtin.command: grep -q '^automount=false' /etc/dconf/db/local.d/50-hardening
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Check dconf 50-hardening has autorun-never=true (CIS 1.8.8)
+  ansible.builtin.command: grep -q '^autorun-never=true' /etc/dconf/db/local.d/50-hardening
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_50_hardening.stat.exists
+
+- name: Stat /etc/dconf/db/local.d/51-screensaver (dconf screensaver CIS 1.8.4/1.8.5)
+  ansible.builtin.stat:
+    path: /etc/dconf/db/local.d/51-screensaver
+  register: verify_dconf_51_screensaver
+  when: ansible_system == 'Linux'
+
+- name: Assert 51-screensaver present on GDM host
+  ansible.builtin.assert:
+    that: verify_dconf_51_screensaver.stat.exists
+    fail_msg: "/etc/dconf/db/local.d/51-screensaver missing on GDM host"
+  when:
+    - ansible_system == 'Linux'
+    - verify_gdm.stat.exists | default(false)
+
+- name: Check dconf 51-screensaver has lock-enabled=true (CIS 1.8.5)
+  ansible.builtin.command: grep -q '^lock-enabled=true' /etc/dconf/db/local.d/51-screensaver
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - verify_dconf_51_screensaver.stat.exists
+
+- name: Check chrony/chronyd service is enabled (NTP hardening)
+  ansible.builtin.systemd:
+    name: "{{ 'chrony' if ansible_pkg_mgr == 'apt' else 'chronyd' }}"
+  register: verify_chronyd
+  become: true
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
+
+# CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
+# make test-vm exercises full chrony service-enablement and NTS coverage.
+- name: Assert chrony/chronyd is enabled and active
+  ansible.builtin.assert:
+    that:
+      - verify_chronyd.status.UnitFileState | default('') == 'enabled'
+      - verify_chronyd.status.ActiveState | default('') == 'active'
+    fail_msg: >-
+      chrony/chronyd state regression: UnitFileState='{{ verify_chronyd.status.UnitFileState | default('') }}'
+      ActiveState='{{ verify_chronyd.status.ActiveState | default('') }}'; expected enabled+active.
+      A service can be enabled (will start on boot) but not currently running — both must be true.
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - system_chrony_service_enabled | default(true) | bool
+    - verify_chronyd is not skipped
+
+- name: Check /etc/chrony.conf has NTS-enabled server directive (^server.*nts)
+  ansible.builtin.command: grep -qE '^server.*[[:space:]]nts' /etc/chrony.conf
+  changed_when: false
+  failed_when: false
+  register: verify_chrony_nts
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
+
+# CI gap: system_is_container=true in all container scenario verify pre_tasks — chrony skipped via not system_is_container;
+# make test-vm exercises full chrony service-enablement and NTS coverage.
+- name: Assert chrony NTS config is present
+  ansible.builtin.assert:
+    that: verify_chrony_nts.rc == 0
+    fail_msg: "NTS not configured in /etc/chrony.conf — NTS deployment regression (rc={{ verify_chrony_nts.rc }})"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - system_chrony_service_enabled | default(not (system_is_container | default(false))) | bool
+
+# --- Chrony NTS template render guard (container-safe) ---
+# Renders chrony-nts.conf.j2 to a temp path so Jinja2 errors surface in container CI
+# even when system_chrony_service_enabled=false prevents chronyd install/config.
+# Load defaults into a namespace; self-referential task vars recurse on Ansible 2.21.
+- name: Load chrony render defaults without overriding verify configuration
+  ansible.builtin.include_vars:
+    file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/system/defaults/main.yml"
+    name: _chrony_render_defaults
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Render chrony NTS template to temp path (template error guard)
+  ansible.builtin.template:
+    src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/system/templates/chrony-nts.conf.j2"
+    dest: /tmp/molecule-chrony-nts-render-check.conf
+    mode: "0644"
+  vars:
+    system_chrony_nts_servers: >-
+      {{ hostvars[inventory_hostname].system_chrony_nts_servers | default(_chrony_render_defaults.system_chrony_nts_servers) }}
+    system_chrony_fallback_pool: >-
+      {{ hostvars[inventory_hostname].system_chrony_fallback_pool | default(_chrony_render_defaults.system_chrony_fallback_pool) }}
+    system_chrony_minsources: >-
+      {{ hostvars[inventory_hostname].system_chrony_minsources | default(_chrony_render_defaults.system_chrony_minsources) }}
+    system_chrony_authselectmode: >-
+      {{ hostvars[inventory_hostname].system_chrony_authselectmode | default(_chrony_render_defaults.system_chrony_authselectmode) }}
+    system_chrony_dhcp_sourcedir: >-
+      {{ hostvars[inventory_hostname].system_chrony_dhcp_sourcedir | default(_chrony_render_defaults.system_chrony_dhcp_sourcedir) }}
+    system_chrony_ntsdumpdir: >-
+      {{ hostvars[inventory_hostname].system_chrony_ntsdumpdir | default(_chrony_render_defaults.system_chrony_ntsdumpdir) }}
+    system_chrony_driftfile: >-
+      {{ hostvars[inventory_hostname].system_chrony_driftfile | default(_chrony_render_defaults.system_chrony_driftfile) }}
+    system_chrony_makestep: >-
+      {{ hostvars[inventory_hostname].system_chrony_makestep | default(_chrony_render_defaults.system_chrony_makestep) }}
+    system_chrony_leapseclist: >-
+      {{ hostvars[inventory_hostname].system_chrony_leapseclist | default(_chrony_render_defaults.system_chrony_leapseclist) }}
+    system_chrony_leapsecmode: >-
+      {{ hostvars[inventory_hostname].system_chrony_leapsecmode | default(_chrony_render_defaults.system_chrony_leapsecmode) }}
+    system_chrony_logdir: >-
+      {{ hostvars[inventory_hostname].system_chrony_logdir | default(_chrony_render_defaults.system_chrony_logdir) }}
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Verify chrony NTS template contains at least one NTS server line
+  ansible.builtin.command: grep -qE '^server.*nts' /tmp/molecule-chrony-nts-render-check.conf
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Check TMOUT readonly in profile.d (CIS 5.5.5 — bash)
+  ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/profile.d/tmout.sh
+  changed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - system_tmout | int > 0
+
+# No system_is_container guard: session_timeout.yml writes /etc/zshrc in containers (unlike profile.d which crashes PID 1)
+- name: Check TMOUT typeset -xr in /etc/zshrc (CIS 5.5.5 — zsh, Fedora/RHEL)
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zshrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family != 'Debian'
+    - system_tmout | int > 0
+
+- name: Check TMOUT typeset -xr in /etc/zsh/zshrc (CIS 5.5.5 — zsh, Debian GLOBAL_ZSHRC)
+  ansible.builtin.command: grep -qE '^typeset -xr TMOUT={{ system_tmout }}' /etc/zsh/zshrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
+    - system_tmout | int > 0
+
+- name: Check TMOUT readonly in /etc/bash.bashrc (CIS 5.5.5 — bash, Debian)
+  ansible.builtin.command: grep -qE '^readonly TMOUT={{ system_tmout }}' /etc/bash.bashrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
+    - system_tmout | int > 0
+
+- name: Check TMOUT export in /etc/bash.bashrc (CIS 5.5.5 — bash, Debian)
+  ansible.builtin.command: grep -qE '^export TMOUT' /etc/bash.bashrc
+  changed_when: false
+  when:
+    - ansible_system == 'Linux'
+    - ansible_os_family == 'Debian'
+    - system_tmout | int > 0
+
+# --- System role: service masking (Linux container CI) ---
+# Uses systemctl show to query UnitFileState — same pattern as smoke-test.sh lines 526-530.
+# failed_when: false + item.rc/stdout guards skip cleanly when a unit is absent from a
+# minimal image (e.g. cups-browsed not installed on debian slim).
+- name: Check UnitFileState for sshd.socket (must be masked — socket activation bypasses port 722)
+  ansible.builtin.command: systemctl show -p UnitFileState --value sshd.socket
+  register: masked_sshd_socket_state
+  changed_when: false
+  failed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert sshd.socket is masked
+  ansible.builtin.assert:
+    that: masked_sshd_socket_state.stdout == 'masked'
+    fail_msg: >-
+      sshd.socket UnitFileState is '{{ masked_sshd_socket_state.stdout }}', expected 'masked'
+      — socket activation would reopen port 22 bypassing the port-722 hardening
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+    - masked_sshd_socket_state.rc == 0
+    - masked_sshd_socket_state.stdout | length > 0
+
+# --- USBGuard config content verification (system role, DNF Linux, system_install_usbguard only) ---
+# Gated on system_install_usbguard — verification skips on hosts where USBGuard is not installed.
+# rules.conf is deployed mode 0600 — become: true required to read.
+# usbguard-daemon.conf checks verify ImplicitPolicyTarget=block (prevents silent policy downgrade)
+# and AuditBackend=LinuxAudit (ensures USB events flow through the audit subsystem).
+- name: Stat /etc/usbguard/rules.conf
+  ansible.builtin.stat:
+    path: /etc/usbguard/rules.conf
+  register: verify_usbguard_rules
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - usbguard_expected | default(false)
+    - ansible_os_family != 'Debian'
+
+- name: Assert USBGuard rules.conf deployed (mode 0600, non-empty)
+  ansible.builtin.assert:
+    that:
+      - verify_usbguard_rules.stat.exists
+      - verify_usbguard_rules.stat.mode == '0600'
+      - verify_usbguard_rules.stat.size | default(0) > 0
+    fail_msg: >-
+      /etc/usbguard/rules.conf regression —
+      mode={{ verify_usbguard_rules.stat.mode | default('missing') }},
+      size={{ verify_usbguard_rules.stat.size | default('missing') }}
+      — system role USBGuard template regression
+  when:
+    - ansible_system == 'Linux'
+    - usbguard_expected | default(false)
+    - ansible_os_family != 'Debian'
+
+- name: Check USBGuard rules.conf contains hardwired-device allow rule
+  ansible.builtin.command: grep -q 'with-connect-type "hardwired"' /etc/usbguard/rules.conf
+  changed_when: false
+  become: true
+  when:
+    - ansible_system == 'Linux'
+    - usbguard_expected | default(false)
+    - ansible_os_family != 'Debian'
+    - verify_usbguard_rules.stat.exists
+
+- name: Check git is installed
+  ansible.builtin.command: git --version  # noqa: command-instead-of-module
+  register: verify_git
+  changed_when: false
+  failed_when: false
+
+- name: Assert git is installed
+  ansible.builtin.assert:
+    that: verify_git.rc == 0
+    fail_msg: "git not installed (rc={{ verify_git.rc }})"
+
+- name: Check git-lfs is installed (packages role)
+  ansible.builtin.command:
+    cmd: git lfs version
+  register: verify_git_lfs
+  changed_when: false
+  failed_when: false
+
+- name: Assert git-lfs installed
+  ansible.builtin.assert:
+    that: verify_git_lfs.rc == 0
+    fail_msg: "git-lfs not installed (rc={{ verify_git_lfs.rc }}) — packages_cli regression (needed for repos with LFS-tracked files)"
+
+- name: Check git-lfs filter registered globally
+  ansible.builtin.command:
+    cmd: git config --global filter.lfs.smudge
+  register: verify_git_lfs_filter
+  changed_when: false
+  failed_when: false
+
+- name: Assert git-lfs filter registered (git lfs install was run)
+  ansible.builtin.assert:
+    that: verify_git_lfs_filter.rc == 0
+    fail_msg: >
+      git lfs install has not been run — global LFS filter drivers not registered;
+      run: git lfs install --skip-repo
+
+- name: Check zshrc has GONOSUMDB (profile=work)
+  ansible.builtin.command:
+    cmd: grep -q 'GONOSUMDB' "{{ ansible_user_dir }}/.zshrc"
+  changed_when: false
+  failed_when: false
+  register: verify_gonosumdb
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
+
+- name: Assert GONOSUMDB in zshrc (work profile, Linux)
+  ansible.builtin.assert:
+    that: verify_gonosumdb.rc == 0
+    fail_msg: "GONOSUMDB missing from ~/.zshrc — dotfiles_gonosumdb variable not rendered"
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
+
+- name: Check zshrc has GOPRIVATE on separate line (profile=work, trim_blocks regression guard)
+  ansible.builtin.command:
+    cmd: grep -q '^export GOPRIVATE=' "{{ ansible_user_dir }}/.zshrc"
+  changed_when: false
+  failed_when: false
+  register: verify_goprivate
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
+
+- name: Assert GOPRIVATE in zshrc on its own line
+  ansible.builtin.assert:
+    that: verify_goprivate.rc == 0
+    fail_msg: >-
+      export GOPRIVATE= not found as a standalone line in ~/.zshrc — possible
+      Jinja2 trim_blocks regression (GOPRIVATE concatenated with export PATH on one line)
+  when:
+    - ansible_system == 'Linux'
+    - profile | default('personal') == 'work'
+
+# --- subuid/subgid (rootless Podman) ---
+# Use real_user_id (the provisioned user) rather than ansible_user_id (connection user).
+# In container CI, ansible_user_id=root but subuid is provisioned for real_user_id=molecule.
+- name: Check /etc/subuid has entry for real_user_id
+  ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subuid"
+  changed_when: false
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+- name: Check /etc/subgid has entry for real_user_id
+  ansible.builtin.command: "grep -q '^{{ real_user_id | default(ansible_user_id) }}:' /etc/subgid"
+  changed_when: false
+  when: ansible_system == 'Linux' and not (system_is_container | default(false))
+
+# --- Login banner (system role, non-CSB Linux only) ---
+- name: Slurp /etc/issue content
+  ansible.builtin.slurp:
+    src: /etc/issue
+  register: verify_issue_content
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+- name: Assert /etc/issue contains authorized-users-only notice
+  ansible.builtin.assert:
+    that: "'authorized users only' in (verify_issue_content.content | b64decode)"
+    fail_msg: "/etc/issue does not contain expected 'authorized users only' text — banner template regression"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - not csb_rhel
+
+# --- Locale and console keymap (system role, Linux only) ---
+- name: Stat /etc/locale.conf (system role deploys it)
+  ansible.builtin.stat:
+    path: /etc/locale.conf
+  register: verify_locale_conf
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert /etc/locale.conf exists
+  ansible.builtin.assert:
+    that: verify_locale_conf.stat.exists
+    fail_msg: "/etc/locale.conf not deployed — system role timezone_locale.yml regression"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Check /etc/locale.conf contains LANG=en_US.UTF-8
+  ansible.builtin.command: grep -q 'LANG={{ system_locale | default("en_US.UTF-8") }}' /etc/locale.conf
+  changed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_locale_conf is not skipped
+    - verify_locale_conf.stat.exists
+
+- name: Stat /etc/vconsole.conf (system role deploys it)
+  ansible.builtin.stat:
+    path: /etc/vconsole.conf
+  register: verify_vconsole_conf
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Assert /etc/vconsole.conf exists
+  ansible.builtin.assert:
+    that: verify_vconsole_conf.stat.exists
+    fail_msg: "/etc/vconsole.conf not deployed — system role timezone_locale.yml regression"
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+
+- name: Check /etc/vconsole.conf contains KEYMAP=us
+  ansible.builtin.command: grep -q 'KEYMAP={{ system_keymap | default("us") }}' /etc/vconsole.conf
+  changed_when: false
+  become: true
+  when:
+    - not (system_is_container | default(false))
+    - ansible_system == 'Linux'
+    - verify_vconsole_conf is not skipped
+    - verify_vconsole_conf.stat.exists

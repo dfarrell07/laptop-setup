@@ -1,0 +1,375 @@
+---
+# --- Firewall (drop zone) ---
+- name: Install firewalld before applying firewall hardening
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+  when: not system_is_container and is_dnf
+
+- name: Ensure firewalld is started and enabled
+  ansible.builtin.systemd:
+    name: firewalld
+    state: started
+    enabled: true
+  register: _firewalld_start_result
+  failed_when: >-
+    _firewalld_start_result.failed and
+    'Unit firewalld.service not found' not in (_firewalld_start_result.msg | default(''))
+  when: not system_is_container and is_dnf  # enabling+starting firewalld triggers daemon-reload, crashes privileged Podman containers
+
+- name: Re-gather service facts after firewalld start
+  ansible.builtin.service_facts:
+  when: not system_is_container  # systemctl list-units --all crashes PID 1 in Debian 13 privileged Podman containers
+
+- name: Set firewalld running fact
+  ansible.builtin.set_fact:
+    system_firewalld_running: >-
+      {{ ansible_facts.services['firewalld.service'] is defined and
+         ansible_facts.services['firewalld.service'].state == 'running' }}
+
+- name: 'Warn: firewalld not running — hardening tasks skipped'
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: firewalld is not running. Firewall hardening tasks in this file
+      (drop zone, port 722, ICMP rules) will be skipped. Related tasks in
+      other files — nm.yml (tailscale0 trusted zone) and firewall.yml (libvirt
+      zone ssh removal) — also guard on this fact and will likewise be skipped.
+      Install and start firewalld before re-running if firewall management is
+      required.
+  when:
+    - not (system_firewalld_running | bool)
+    - is_dnf
+
+- name: Check current default firewall zone
+  ansible.posix.firewalld_info:
+  register: system_firewall_info
+  failed_when: false
+  when: system_firewalld_running | bool
+
+- name: Set default firewall zone to drop
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: firewall-cmd --set-default-zone=drop
+  register: _zone_result
+  changed_when: ansible_check_mode or ('success' in (_zone_result.stdout | default('')))
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_info.firewalld_info.default_zone is defined
+    - system_firewall_info.firewalld_info.default_zone != 'drop'
+    - system_firewall_manage_zone | bool  # CSB IT manages zone policy; drop zone breaks VPN/management
+  notify:
+    - Apply firewall rules
+
+- name: Move all physical network interfaces to drop zone
+  ansible.posix.firewalld:
+    zone: drop
+    interface: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  vars:
+    # wg=WireGuard; wt=NetBird (wt0) and wg-quick wt0 alias (Mullvad/custom WireGuard profiles)
+    _excl_re: "^(lo|tailscale\\d*|tun.*|w[gt].*|virbr.*|podman.*|cni.*\
+      |br-.*|veth.*|docker.*|kind.*|ovn-k8s.*|genev.*|breth.*|ovs-system\
+      |vxlan.*|cali.*|lxc.*|cilium.*|flannel.*|vnet.*|macvtap.*|tap.*|ppp.*)$"
+  loop: "{{ ansible_facts['interfaces'] | default([]) | reject('match', _excl_re) | list }}"
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool  # paired with zone guard above
+
+# Defense-in-depth: NM may assign new connections to FedoraWorkstation zone by default;
+# strip its open services/ports even though physical ifaces are already in drop zone.
+- name: Remove default services from FedoraWorkstation zone
+  ansible.posix.firewalld:
+    zone: FedoraWorkstation
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - ssh
+    - dhcpv6-client
+    - samba-client
+  # ssh, dhcpv6-client, samba-client: all confirmed present in firewalld 2.4.x / Fedora 44 FedoraWorkstation.xml
+  # mdns is NOT in the Fedora 44 FedoraWorkstation zone (removed by Red Hat); no removal needed.
+  # cockpit is NOT in FedoraWorkstation.xml; its port (9090/tcp) is managed separately via the drop zone task above.
+  register: _system_fw_zone_svc_remove
+  notify: Apply firewall rules
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - is_fedora
+
+- name: Remove broad port rules from FedoraWorkstation zone
+  ansible.posix.firewalld:
+    zone: FedoraWorkstation
+    port: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop:
+    - 1025-65535/tcp
+    - 1025-65535/udp
+  # Both ranges confirmed present in firewalld 2.4.4 / Fedora 44 FedoraWorkstation.xml
+  register: _system_fw_zone_port_remove
+  notify: Apply firewall rules
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - is_fedora
+
+- name: Configure allowed traffic in drop zone
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+
+# Fallback for RHEL CSB machines where IT manages firewall zone policy
+# (system_firewall_manage_zone=false) and the primary interface stays in whatever
+# the default zone is. On Fedora hybrid, system_firewall_manage_zone=true so the
+# drop zone tasks already handle port 722 and this task is skipped. The guard on
+# not(system_firewall_manage_zone) is the primary discriminator; the default-zone
+# guard prevents a redundant rule if the default zone is already drop.
+  block:
+    - name: Enable ICMP block inversion on drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block_inversion: true
+        permanent: true
+        immediate: true
+        state: enabled
+      notify: Apply firewall rules
+
+    # NOTE: With icmp-block-inversion enabled, adding icmp-block ALLOWS these types
+    # (semantics are inverted). Without inversion, this command would block them.
+    - name: Allow essential ICMP types through drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ (system_firewall_icmp_types + system_firewall_icmp_extra_types) | unique }}"
+      notify: Apply firewall rules
+
+    - name: ICMPv6 router-advertisement in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        icmp_block: router-advertisement
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
+      notify: Apply firewall rules
+
+    - name: Allow DHCPv6-client in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        service: dhcpv6-client
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
+      notify: Apply firewall rules
+
+    # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
+    # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
+    # Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
+    # via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
+    - name: Open SSH port in firewall
+      ansible.posix.firewalld:
+        port: "{{ ssh_port }}/tcp"
+        zone: drop
+        permanent: true
+        immediate: true
+        state: enabled
+      notify: Apply firewall rules
+
+    # On fresh provisioning with system_enable_cockpit=false (the default), this task is a
+    # no-op: state=disabled against a non-existent rule on the drop zone is always ok.
+    # The task only has an effect when transitioning from system_enable_cockpit: true → false
+    # (closing a previously opened port) or true → true (opening/ensuring the port is open).
+    - name: Toggle Cockpit port 9090/tcp in drop zone
+      ansible.posix.firewalld:
+        zone: drop
+        port: "9090/tcp"
+        permanent: true
+        immediate: true
+        state: "{{ 'enabled' if system_enable_cockpit else 'disabled' }}"
+      notify: Apply firewall rules
+- name: Open SSH port in default zone (CSB fallback)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  register: _result
+  when:
+    - system_firewalld_running | bool
+    - csb_detected
+    - not (system_firewall_manage_zone | bool)
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
+  failed_when: >-
+    (_result.failed | default(false)) and
+    'INVALID_ZONE' not in (_result.msg | default(''))
+  notify: Apply firewall rules
+
+- name: Assert trusted zone incompatible with CSB hardening
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY FAILURE: firewalld default zone is 'trusted' (accept-all) and
+      csb_detected=true with system_firewall_manage_zone=false. The accept-all
+      zone is incompatible with CSB hardening — all traffic is permitted without
+      restriction. Either set system_firewall_manage_zone: true to let the
+      playbook switch the default zone to 'drop', or reconfigure firewalld to
+      use a non-accept-all default zone (public/FedoraWorkstation) before
+      re-running provisioning.
+  when:
+    - system_firewalld_running | bool
+    - csb_detected
+    - not (system_firewall_manage_zone | bool)
+    - (system_firewall_info.firewalld_info.default_zone | default('')) == 'trusted'
+
+# Non-CSB safety net: on plain Fedora with zone management explicitly disabled via
+# system_firewall_manage_zone: false, the drop-zone SSH task (line ~176) is skipped and
+# the CSB fallback above requires csb_detected=true — leaving port {{ ssh_port }} in no zone.
+# After sshd.yml reconfigures sshd to port {{ ssh_port }}, SSH becomes unreachable externally.
+# This task is a safety net; the recommended setting is to leave system_firewall_manage_zone
+# at its default (not csb_rhel, which is true on plain Fedora).
+- name: Open SSH port in default zone (non-CSB safety net)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    zone: "{{ system_firewall_info.firewalld_info.default_zone }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  register: _result_non_csb_ssh
+  when:
+    - system_firewalld_running | bool
+    - not csb_detected
+    - not (system_firewall_manage_zone | bool)
+    - system_firewall_info.firewalld_info.default_zone | default('') not in ['drop', 'trusted', '']
+  failed_when: >-
+    (_result_non_csb_ssh.failed | default(false)) and
+    'INVALID_ZONE' not in (_result_non_csb_ssh.msg | default(''))
+  notify: Apply firewall rules
+
+- name: 'Warn: SSH port not opened — RHEL CSB drop zone'
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: csb_rhel=true and the default firewall zone is 'drop'.
+      The fallback SSH task was skipped (drop zone excluded) and the
+      redhat-zone task only runs on Fedora. Port {{ ssh_port }}/tcp is
+      not opened by this playbook on this host — IT's zone policy must
+      include port {{ ssh_port }}/tcp for SSH to be reachable.
+  when:
+    - system_firewalld_running | bool
+    - csb_rhel | bool
+    - not (system_firewall_manage_zone | bool)
+    - (system_firewall_info.firewalld_info.default_zone | default('')) == 'drop'
+
+- name: Open SSH port in redhat zone (CSB Fedora VPN)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    zone: "redhat"
+    permanent: true
+    immediate: true
+    state: enabled
+  register: _system_redhat_ssh_open
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - csb_detected
+    - is_fedora
+  failed_when: >-
+    (_system_redhat_ssh_open.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_redhat_ssh_open.msg | default(''))
+  notify: Apply firewall rules
+
+- name: 'Warn: SSH port not opened in redhat zone (zone absent)'
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: csb_detected=true, is_fedora=true and the 'redhat' firewall zone
+      does not exist on this host. Port {{ ssh_port }}/tcp was not opened in the
+      redhat zone — VPN tun0 interface traffic may not reach sshd.
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - csb_detected
+    - is_fedora
+    - not csb_rhel | bool
+    - _system_redhat_ssh_open is defined
+    - "'INVALID_ZONE' in (_system_redhat_ssh_open.msg | default(''))"
+
+- name: Remove legacy ssh service from redhat zone
+  ansible.posix.firewalld:
+    zone: "redhat"
+    service: ssh
+    permanent: true
+    immediate: true
+    state: disabled
+  register: _system_redhat_ssh_remove
+  when:
+    - system_firewalld_running | bool
+    - system_firewall_manage_zone | bool
+    - csb_detected
+    - is_fedora
+    - ssh_port | int != 22
+  failed_when: >-
+    (_system_redhat_ssh_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_redhat_ssh_remove.msg | default(''))
+  notify: Apply firewall rules
+
+- name: Remove ssh service from libvirt zone
+  ansible.posix.firewalld:
+    zone: libvirt
+    service: ssh
+    permanent: true
+    immediate: true
+    state: disabled
+  register: _system_libvirt_ssh_remove
+  when:
+    - system_firewalld_running | bool
+    - install_virtualization | bool
+    - system_firewall_manage_zone | bool
+    - ssh_port | int != 22
+  failed_when: >-
+    (_system_libvirt_ssh_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_libvirt_ssh_remove.msg | default(''))
+  # INVALID_ZONE (rc=112) is tolerated: the libvirt firewall zone is shipped by
+  # libvirt-daemon-driver-network, which is installed in Play 2 by the packages role;
+  # on first provision (before packages run) the zone file is absent. All other failures surface.
+  # Note: libvirt zone target=ACCEPT applies to forwarded (VM-to-external) traffic; a priority=32767
+  # reject rule blocks all host-bound traffic except explicitly listed services, so removing ssh here
+  # does prevent VMs from reaching sshd on port 22.
+  notify: Apply firewall rules
+
+- name: Remove tftp service from libvirt zone
+  ansible.posix.firewalld:
+    zone: libvirt
+    service: tftp
+    permanent: true
+    immediate: true
+    state: disabled
+  register: _system_libvirt_tftp_remove
+  when:
+    - system_firewalld_running | bool
+    - install_virtualization | bool
+    - system_firewall_manage_zone | bool
+    - system_libvirt_remove_tftp | bool  # set false in config.yml to keep tftp for PXE/network-boot VMs
+  failed_when: >-
+    (_system_libvirt_tftp_remove.failed | default(false)) and
+    'INVALID_ZONE' not in (_system_libvirt_tftp_remove.msg | default(''))
+  notify: Apply firewall rules
+
+- name: Toggle SSH port in libvirt zone
+  ansible.posix.firewalld:
+    zone: libvirt
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: "{{ 'enabled' if system_libvirt_open_ssh | bool else 'disabled' }}"
+  register: _result_lv_ssh
+  when:
+    - system_firewalld_running | bool
+    - install_virtualization | bool
+    - system_firewall_manage_zone | bool
+  failed_when: (_result_lv_ssh.failed | default(false)) and 'INVALID_ZONE' not in (_result_lv_ssh.msg | default(''))
+  notify: Apply firewall rules

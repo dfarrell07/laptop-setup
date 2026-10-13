@@ -1,0 +1,368 @@
+---
+# roles/distrobox/tasks/container-provision.yml
+# Runs inside the dev container via Play 3 (containers.podman.podman connection).
+# Distrobox role (Play 2) creates and registers the container via add_host.
+
+# --- Ensure dev packages ---
+- name: Ensure development packages installed
+  ansible.builtin.dnf:
+    name: "{{ distrobox_packages }}"
+    state: present
+  become: "{{ ansible_facts['user_id'] != 'root' }}"  # distrobox has passwordless sudo for its regular user
+  # intentional: dnf5 may fail first-run (D-Bus unavailable); provisioning summary surfaces rc
+  failed_when: false
+  when: distrobox_packages | length > 0
+  register: container_dnf_result
+
+# --- Binary downloads ---
+- name: Create /usr/local/bin if absent
+  ansible.builtin.file:
+    path: /usr/local/bin
+    state: directory
+    mode: "0755"
+  become: "{{ ansible_facts['user_id'] != 'root' }}"
+
+- name: Check if oc is installed
+  ansible.builtin.command:
+    cmd: /usr/local/bin/oc version --client
+  register: container_oc_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+
+- name: Download and install oc + kubectl
+  when: >-
+    container_oc_check.rc != 0 or
+    (container_oc_check.stdout | regex_findall('Client Version: (\S+)') | first | default('')) != distrobox_oc_version
+  become: "{{ ansible_facts['user_id'] != 'root' }}"
+  block:
+    - name: Fetch OpenShift client SHA256 checksums
+      ansible.builtin.uri:
+        url: "{{ distrobox_oc_mirror_url }}/{{ distrobox_oc_version }}/sha256sum.txt"
+        return_content: true
+        timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
+      register: container_oc_checksums
+      retries: "{{ distrobox_oc_fetch_retries | default(3) }}"
+      delay: "{{ distrobox_oc_fetch_delay | default(10) }}"
+      until: container_oc_checksums.status == 200
+
+    - name: Extract oc tarball checksum
+      ansible.builtin.set_fact:
+        container_oc_sha256: >-
+          {{ container_oc_checksums.content |
+             regex_findall('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
+             multiline=True) | first | default('') }}
+
+    - name: Assert oc SHA256 was found
+      ansible.builtin.assert:
+        that: container_oc_sha256 | length == 64
+        fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ distrobox_oc_version }})"
+
+    - name: Create temporary directory for oc download
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: oc_
+      register: container_oc_tempdir
+
+    - name: Download OpenShift client tarball (SHA256-verified, randomized tempdir)
+      ansible.builtin.get_url:
+        url: "{{ distrobox_oc_mirror_url }}/{{ distrobox_oc_version }}/openshift-client-linux.tar.gz"
+        dest: "{{ container_oc_tempdir.path }}/openshift-client-linux.tar.gz"
+        checksum: "sha256:{{ container_oc_sha256 }}"
+        mode: "0644"
+        timeout: "{{ distrobox_oc_fetch_timeout | default(30) }}"
+      register: container_oc_download
+      retries: "{{ distrobox_oc_fetch_retries | default(3) }}"
+      delay: "{{ distrobox_oc_fetch_delay | default(10) }}"
+      until: container_oc_download is succeeded
+
+    - name: Verify oc tarball is not a symlink
+      ansible.builtin.stat:
+        path: "{{ container_oc_download.dest }}"
+        follow: false
+      register: container_oc_tarball_stat
+
+    - name: Fail if oc tarball is a symlink (TOCTOU attack detected)
+      ansible.builtin.fail:
+        msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+      when: container_oc_tarball_stat.stat.islnk
+
+    - name: Extract oc and kubectl
+      ansible.builtin.unarchive:
+        src: "{{ container_oc_download.dest }}"
+        dest: /usr/local/bin
+        remote_src: true
+        extra_opts:
+          - --no-same-owner
+          - oc
+          - kubectl
+
+    - name: Set permissions on oc and kubectl
+      ansible.builtin.file:
+        path: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [oc, kubectl]
+
+  rescue:
+    - name: Handle oc download failure
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: oc/kubectl download encountered an error.
+          Error: {{ ansible_failed_result.msg | default('unknown error') | truncate(200) }}.
+          Play 3 continues — oc will not be available until the next provision run.
+
+    - name: Record that oc was not installed
+      ansible.builtin.set_fact:
+        container_oc_installed: false
+
+    - name: Write rescue sentinel for offline verify
+      ansible.builtin.copy:
+        dest: /tmp/oc_rescue_fired
+        content: "1"
+        mode: "0644"
+
+# --- Go tools (not in Fedora repos) ---
+  always:
+    - name: Clean up oc temporary directory
+      ansible.builtin.file:
+        path: "{{ container_oc_tempdir.path }}"
+        state: absent
+      when: container_oc_tempdir is defined
+      failed_when: false
+
+- name: Check golangci-lint version
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/go/bin/golangci-lint version --format short"
+  register: container_golangci_lint_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install golangci-lint via go install
+  ansible.builtin.command:
+    cmd: >-
+      go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{ distrobox_golangci_lint_version }}
+  environment:
+    GOPATH: "{{ ansible_env.HOME }}/go"
+    GOBIN: "{{ ansible_env.HOME }}/go/bin"
+    GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
+    HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+    GOSUMDB: "sum.golang.org"
+    GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
+    GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+    CC: /usr/bin/gcc
+    CGO_ENABLED: '1'
+    CGO_CFLAGS: ''
+    CGO_CXXFLAGS: ''
+    CGO_LDFLAGS: ''
+  register: container_golangci_lint_result
+  changed_when: container_golangci_lint_result.rc == 0
+  timeout: 300
+  failed_when: false
+  when: >-
+    container_golangci_lint_check.rc != 0 or
+    distrobox_golangci_lint_version not in container_golangci_lint_check.stdout
+
+- name: Check subctl version
+  ansible.builtin.command:
+    cmd: "{{ ansible_env.HOME }}/go/bin/subctl version"
+  register: container_subctl_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Ensure container Go bin directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/go/bin"
+    state: directory
+    mode: "0755"
+
+- name: Validate pinned container subctl version before linker flag interpolation
+  vars:
+    _container_subctl_pin_re: '^v[0-9]+([.][0-9]+)*(-[a-zA-Z0-9]+)?\Z'
+  ansible.builtin.assert:
+    that:
+      - distrobox_subctl_version is string
+      - distrobox_subctl_version is match(_container_subctl_pin_re)
+    fail_msg: "Container subctl must use a pinned semantic version."
+
+- name: Build and install the subctl CLI with its pinned version
+  vars:
+    _container_subctl_version_re: 'subctl version: v?(\S+)'
+    _container_subctl_installed: >-
+      {{ container_subctl_check.stdout | regex_findall(_container_subctl_version_re) | first | default('') }}
+  when: >-
+    container_subctl_check.rc != 0 or
+    _container_subctl_installed != (distrobox_subctl_version | regex_replace('^v', ''))
+  block:
+    - name: Create private subctl build directory in the container
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_subctl_
+      register: _container_subctl_tmpdir
+
+    - name: Compile subctl main package with release version metadata
+      ansible.builtin.command:
+        argv:
+          - go
+          - install
+          - -ldflags
+          - "-X github.com/submariner-io/subctl/pkg/version.Version={{ distrobox_subctl_version | regex_replace('^v', '') }}"
+          - "github.com/submariner-io/subctl/cmd@{{ distrobox_subctl_version }}"
+      environment:
+        GOPATH: "{{ ansible_env.HOME }}/go"
+        GOBIN: "{{ _container_subctl_tmpdir.path }}"
+        GOTOOLCHAIN: auto  # packages_gotoolchain is a packages-role-only default; distrobox role uses auto directly
+        HTTPS_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+        HTTP_PROXY: "{{ proxy_url if (network_proxied | bool) else omit }}"
+        GOSUMDB: "sum.golang.org"
+        GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"
+        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+        CC: /usr/bin/gcc
+        CGO_ENABLED: '1'
+        CGO_CFLAGS: ''
+        CGO_CXXFLAGS: ''
+        CGO_LDFLAGS: ''
+      register: container_subctl_result
+      changed_when: true
+      timeout: 600
+
+    - name: Install compiled container subctl executable
+      ansible.builtin.copy:
+        src: "{{ _container_subctl_tmpdir.path }}/cmd"
+        dest: "{{ ansible_env.HOME }}/go/bin/subctl"
+        remote_src: true
+        mode: "0755"
+  rescue:
+    - name: Report subctl build failure without installing an incomplete executable
+      ansible.builtin.debug:
+        msg: >-
+          Optional container subctl installation failed (rc={{ container_subctl_result.rc | default('unknown') }}):
+          {{ ansible_failed_result.msg | default('unknown error') }}.
+          Existing subctl is preserved; install it after Go and network access are available.
+      # A checksum mismatch indicates possible tampering and must stop provisioning.
+      when: "'checksum mismatch' not in (container_subctl_result.stderr | default(''))"
+
+    - name: Fail if Go detected a subctl module checksum mismatch
+      ansible.builtin.fail:
+        msg: "subctl module checksum verification failed; provisioning stopped."
+      when: "'checksum mismatch' in (container_subctl_result.stderr | default(''))"
+  always:
+    - name: Remove private container subctl build directory
+      ansible.builtin.file:
+        path: "{{ _container_subctl_tmpdir.path }}"
+        state: absent
+      when: _container_subctl_tmpdir.path is defined
+
+- name: Report go install failures
+  ansible.builtin.debug:
+    msg: |
+      go install FAILED (rc={{ item.rc }}): {{ item.stderr | default('no stderr') }}
+      On CSB networks: configure GOPROXY, GONOSUMDB, and GOPRIVATE in config.yml
+      See default.config.yml for dotfiles_gonosumdb and dotfiles_goprivate options.
+  loop:
+    - "{{ container_golangci_lint_result }}"
+    - "{{ container_subctl_result }}"
+  when: item.rc | default(0) != 0
+
+# --- Host-command delegation ---
+- name: Check for distrobox-host-exec
+  ansible.builtin.stat:
+    path: /usr/bin/distrobox-host-exec
+  register: container_host_exec
+
+- name: Create distrobox-host-exec symlinks
+  ansible.builtin.file:
+    src: /usr/bin/distrobox-host-exec
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop: "{{ distrobox_host_exec_commands }}"
+  when:
+    - container_host_exec.stat.exists
+  become: "{{ ansible_facts['user_id'] != 'root' }}"
+
+- name: Deploy flatpak-spawn wrapper scripts (Toolbx fallback)
+  ansible.builtin.copy:
+    dest: "/usr/local/bin/{{ item }}"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      exec flatpak-spawn --host {{ item | quote }} "$@"
+  loop: "{{ distrobox_host_exec_commands }}"
+  when: not container_host_exec.stat.exists
+  become: "{{ ansible_facts['user_id'] != 'root' }}"
+
+# Export oc and kubectl to the host after they are installed (must happen
+# after install, not at init time which runs before Play 3).
+# No `creates:` guard: always overwrite so the wrapper points to the current
+# container. A stale wrapper from a renamed/old container would otherwise
+# silently persist. distrobox-export is idempotent when the container matches.
+# distrobox-export is only available inside distrobox containers (not toolbox).
+# container_host_exec.stat.exists is true for distrobox (distrobox-host-exec present),
+# false for toolbox. Without the guard, this hard-fails Play 3 for toolbox users.
+- name: Export oc and kubectl to host
+  ansible.builtin.command:
+    cmd: "distrobox-export --bin /usr/local/bin/{{ item }} --export-path {{ ansible_env.HOME }}/.local/bin"
+  loop: [oc, kubectl]
+  changed_when: false
+  failed_when: false
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
+
+- name: Export golangci-lint to host (pinned version from container, not dnf)
+  ansible.builtin.command:
+    cmd: "distrobox-export --bin {{ ansible_env.HOME }}/go/bin/golangci-lint --export-path {{ ansible_env.HOME }}/.local/bin"
+  changed_when: false
+  failed_when: false
+  when: container_host_exec.stat.exists
+
+# --- Verify ---
+- name: Confirm Python works
+  ansible.builtin.command:
+    cmd: python3 --version
+  changed_when: false
+
+- name: Confirm oc exported to host shell
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.local/bin/oc"
+  register: container_oc_export_stat
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
+
+- name: Assert oc host wrapper exists
+  ansible.builtin.assert:
+    that: container_oc_export_stat.stat.exists
+    fail_msg: >-
+      oc was not exported to {{ ansible_env.HOME }}/.local/bin —
+      distrobox-export may have failed or the path is not writable.
+  when: container_host_exec.stat.exists and container_oc_installed | default(true)
+
+- name: Confirm oc is available (container side)
+  ansible.builtin.command:
+    cmd: /usr/local/bin/oc version --client
+  register: container_oc_version
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+
+- name: Confirm host delegation works
+  ansible.builtin.command:
+    cmd: /usr/local/bin/podman --version
+  register: container_host_podman
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+
+# yamllint disable rule:line-length
+- name: Provisioning summary
+  ansible.builtin.debug:
+    msg: |
+      === Container Provisioning Summary ===
+      packages     : {{ 'skipped (no packages)' if container_dnf_result.skipped | default(false) else ('OK' if container_dnf_result.rc | default(-1) == 0 else 'FAILED (rc=' + (container_dnf_result.rc | default(-1) | string) + ')') }}
+      oc client    : {{ container_oc_version.stdout | default('not installed') | trim }}
+      oc host wrap : {{ '~/.local/bin/oc present' if container_oc_export_stat.stat.exists | default(false) else ('N/A (oc download failed)' if not (container_oc_installed | default(true)) else ('N/A (Toolbx)' if not container_host_exec.stat.exists else 'MISSING')) }}
+      golangci-lint: {{ 'OK' if container_golangci_lint_result.rc | default(-1) == 0 else ('already installed' if container_golangci_lint_result.skipped | default(false) else 'FAILED (rc=' + (container_golangci_lint_result.rc | default(-1) | string) + ')') }}
+      subctl       : {{ 'OK' if container_subctl_result.rc | default(-1) == 0 else ('already installed' if container_subctl_result.skipped | default(false) else 'FAILED (rc=' + (container_subctl_result.rc | default(-1) | string) + ')') }}
+      Host podman  : {{ container_host_podman.stdout | default('not available') | trim }}
+      ======================================
+# yamllint enable rule:line-length

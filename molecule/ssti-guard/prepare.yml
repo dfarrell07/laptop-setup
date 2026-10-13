@@ -1,0 +1,8 @@
+---
+- name: Prepare config guard test container
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait until the test container accepts commands
+      ansible.builtin.wait_for_connection:
+        timeout: 60

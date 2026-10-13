@@ -1,24 +1,32 @@
 # {{ ansible_managed }}
 # NTS-authenticated time sources
-server time.cloudflare.com iburst nts
-server nts.netnod.se iburst nts
-server ptbtime1.ptb.de iburst nts
-server ntppool1.time.nl iburst nts
+{% for server in system_chrony_nts_servers %}
+server {{ server | regex_replace("[\n\r].*","") }} iburst nts
+{% endfor %}
 
-# Unauthenticated fallback (only used if ALL NTS sources fail)
-pool 2.fedora.pool.ntp.org iburst
+# Unauthenticated fallback — used by authselectmode prefer when NTS sources are unreachable (port 4460 blocked, NTS-KE fails). minsources={{ system_chrony_minsources | regex_replace("[\n\r].*","") }} is the minimum sources before clock adjustment, a separate concern.
+{% if system_chrony_authselectmode != 'require' %}
+pool {{ system_chrony_fallback_pool | regex_replace('[\\n\\r].*','') }} iburst
+{% endif %}
 
-# Prefer NTS; fall back to pool only when NTS unavailable
-authselectmode prefer
+# prefer: use NTS when available; accept unauthenticated pool and DHCP-sourced NTP as supplements when NTS is unreachable
+# require: reject all unauthenticated sources; time sync fails if NTS-KE (TCP 4460) is blocked (no fallback)
+authselectmode {{ system_chrony_authselectmode | regex_replace("[\n\r].*","") }}
 
+{% if system_chrony_dhcp_sourcedir and system_chrony_authselectmode != 'require' %}
 # Use NTP servers from DHCP
-sourcedir /run/chrony-dhcp
+sourcedir {{ system_chrony_dhcp_sourcedir | regex_replace("[\n\r].*","") }}
+{% endif %}
 
 # Persist NTS cookies across restarts
-ntsdumpdir /var/lib/chrony
+ntsdumpdir {{ system_chrony_ntsdumpdir | regex_replace("[\n\r].*","") }}
 
-driftfile /var/lib/chrony/drift
-makestep 1.0 3
+driftfile {{ system_chrony_driftfile | regex_replace("[\n\r].*","") }}
+makestep {{ system_chrony_makestep | regex_replace("[\n\r].*","") }}
 rtcsync
-leapseclist /usr/share/zoneinfo/leap-seconds.list
-logdir /var/log/chrony
+{% if system_chrony_leapseclist and (_chrony_leapseclist_probe.rc | default(1)) == 0 %}
+leapseclist {{ system_chrony_leapseclist | regex_replace("[\n\r].*","") }}
+{% endif %}
+leapsecmode {{ system_chrony_leapsecmode | regex_replace("[\n\r].*","") }}
+minsources {{ system_chrony_minsources | regex_replace("[\n\r].*","") }}
+logdir {{ system_chrony_logdir | regex_replace("[\n\r].*","") }}

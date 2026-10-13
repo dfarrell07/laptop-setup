@@ -1,30 +1,101 @@
-#!/bin/sh
-# Enforce imperative mood commit messages (Tim Pope style)
+#!/bin/bash
+# Reject past-tense/gerund first words in commit description (allows noun-phrase subjects per repo convention)
 msg=$(head -1 "$1")
-first=$(echo "$msg" | awk '{print $1}')
 
-# Check capitalized
-if ! echo "$msg" | grep -qE '^[A-Z]'; then
-  echo "ERROR: Capitalize the subject line" >&2
+# SECURITY: Require Signed-off-by trailer (text in commit message via 'git commit -s')
+# IMPORTANT: This is the TEXT check only. See note below about GPG signature (-S).
+# Checked before any early-exit so reverts are also covered
+if ! grep -q '^Signed-off-by:' "$1"; then
+  echo "ERROR: Missing Signed-off-by trailer — use --signoff / -s with your git command" >&2
+  echo "" >&2
+  echo "NOTE: -s adds text only (not cryptographic). When .gpg-enforcement is enabled, supply-chain files also need -S:" >&2
+  echo "  git commit -s -S" >&2
+  echo "" >&2
+  echo "See SECURITY.md § 'Supply-Chain Commits: -s vs -S' for the distinction." >&2
   exit 1
 fi
 
-# Reject common past tense and gerund first words
-case "$first" in
-  Added|Changed|Created|Deleted|Enabled|Disabled|Expanded|Fixed|\
-  Implemented|Improved|Merged|Moved|Refactored|Removed|Renamed|\
-  Replaced|Resolved|Reverted|Started|Stopped|Updated|Upgraded|\
-  Adding|Changing|Creating|Deleting|Enabling|Disabling|Expanding|\
-  Fixing|Implementing|Improving|Merging|Moving|Refactoring|Removing|\
-  Renaming|Replacing|Resolving|Reverting|Starting|Stopping|Updating|\
-  Upgrading)
-    echo "ERROR: Use imperative mood ('$first' is not imperative)" >&2
-    echo "  Write 'Add ...' not 'Added/Adding ...'" >&2
-    exit 1 ;;
-esac
+# Enforce signing only when the staged repository policy enables it.
+_repo_root=$(git rev-parse --show-toplevel) || exit 1
+_gpg_policy=$("$_repo_root/scripts/gpg-policy.sh" --staged) || exit 1
 
-# Check length
-len=${#msg}
+# SECURITY: If critical supply-chain files are staged, require GPG signing configuration
+# Prevents unsigned commits that modify scripts + hashes in the same commit.
+# NOTE: This enforces 'git commit -S' (cryptographic GPG signature), complementary to -s above
+_sc_files_modified=0
+if git diff --cached --quiet --diff-filter=ACMR -- '.gpg-enforcement' 'scripts/gpg-policy.sh' 'scripts/verify-collections.sh' 'scripts/verify-collections.sh.sha256' 'scripts/verify-ansible-args.sh' 'scripts/verify-ansible-args.sh.sha256' 'collections-dist/SHA256SUMS' 'collections-dist/*.tar.gz' 2>/dev/null; then
+  : # No changes to critical files
+else
+  _sc_files_modified=1
+fi
+
+# SECURITY: Enforce GPG signing (cryptographic signature via -S) for critical supply-chain files
+# NOTE: This is the CRYPTOGRAPHIC signature check (complement to -s Signed-off-by text check above)
+# Prevents unsigned commits that modify scripts + hashes in the same commit
+if [ "$_sc_files_modified" -eq 1 ] && [ "$_gpg_policy" = enabled ]; then
+  if ! git config --bool commit.gpgsign 2>/dev/null | grep -q '^true$'; then
+    echo "ERROR: Critical supply-chain files modified but GPG signing not configured" >&2
+    echo "       Enable signing for this commit and use both signoff and signature:" >&2
+    echo "       git -c commit.gpgsign=true commit -s -S" >&2
+    echo "       Setup: see SECURITY.md for GPG key import and registration." >&2
+    exit 1
+  fi
+fi
+
+# Signed-off-by still required above; these prefixes skip scope/tense/length checks only
+case "$msg" in
+  squash!*|fixup!*|amend!*) exit 0 ;;
+  Merge\ branch*|Merge\ pull*|Merge\ remote*|'Merge tag'*) exit 0 ;;
+  Revert\ *) exit 0 ;;
+esac
+if ! echo "$msg" | grep -qE '^[A-Z][-A-Za-z0-9/]*:[[:space:]]'; then
+  echo "ERROR: Missing or uncapitalized scope — format must be 'Scope: description' (space after colon required)" >&2
+  exit 1
+fi
+# Extract scope portion for scope-parts bad-word check below
+first=$(echo "$msg" | sed 's/^\([A-Z][-A-Za-z0-9/]*\):.*/\1/')
+# Extract the description word — the first word after "Scope: "
+# This is what should be imperative mood.
+desc_first=$(echo "$msg" | sed 's/^[A-Z][-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
+desc_first="${desc_first%:}"  # strip trailing colon: 'Added:' would not match 'added' in case without this
+if [ -z "$desc_first" ]; then
+  echo "ERROR: Subject has no description after scope colon" >&2
+  exit 1
+fi
+
+# Reject common past tense and gerund first words in the description (after scope colon)
+_bad_word() {
+  local _w
+  _w=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+  case "$_w" in
+    added|changed|created|deleted|enabled|disabled|expanded|fixed|\
+    implemented|improved|merged|moved|refactored|removed|renamed|\
+    replaced|resolved|reverted|started|stopped|updated|upgraded|\
+    adding|changing|creating|deleting|enabling|disabling|expanding|\
+    fixing|implementing|improving|merging|moving|refactoring|removing|\
+    renaming|replacing|resolving|reverting|starting|stopping|updating|\
+    upgrading) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+# Check description word (word after "Scope: ") — this is the critical tense check
+if _bad_word "$desc_first"; then
+  echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
+  exit 1
+fi
+# Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')
+# Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
+IFS='/' read -ra _scope_parts <<< "$first"
+for _part in "${_scope_parts[@]}"; do
+  if _bad_word "$_part"; then
+    echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
+    exit 1
+  fi
+done
+
+# Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
+# This value must match header-max-length in commitlint.config.js
+len=$(printf '%s' "$msg" | LC_ALL=en_US.UTF-8 wc -m)
 if [ "$len" -gt 72 ]; then
   echo "ERROR: Subject too long ($len > 72 chars)" >&2
   exit 1
@@ -32,11 +103,21 @@ fi
 
 # No trailing period
 if echo "$msg" | grep -qE '\.$'; then
-  echo "ERROR: No trailing period on subject line" >&2
+  echo "ERROR: Remove trailing period from subject line" >&2
   exit 1
 fi
 
-# Run commitlint for remaining rules (body blank line, etc.)
+# Sync message-format rules with roles/dotfiles/files/git-template-commit-msg.
+# The supply-chain signing configuration check above is repository-specific.
 if command -v npx >/dev/null 2>&1; then
-  npx --no -- commitlint --edit "$1"
+  if [ -x "./node_modules/.bin/commitlint" ]; then
+    npx --no -- commitlint --edit "$1"
+    exit $?
+  else
+    echo "WARNING: commitlint not found in ./node_modules — run: npm install --ignore-scripts (or: make bootstrap)" >&2
+    exit 0
+  fi
+else
+  echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
+  exit 0
 fi

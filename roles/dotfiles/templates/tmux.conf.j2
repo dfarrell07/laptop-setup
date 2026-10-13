@@ -1,18 +1,36 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 
 # Prefix
 unbind C-b
-set -g prefix {{ dotfiles_tmux_prefix }}
-bind {{ dotfiles_tmux_prefix }} send-prefix
+set -g prefix {{ dotfiles_tmux_prefix | regex_replace('[^A-Za-z0-9-]', '') }}
+bind {{ dotfiles_tmux_prefix | regex_replace('[^A-Za-z0-9-]', '') }} send-prefix
+
+# Terminal — 256-color + true-color passthrough
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-256color:Tc"
+
+# Refresh SSH_AUTH_SOCK on tmux attach so reattached sessions use the
+# current agent socket, not the one inherited at session creation time.
+# SSH_AUTH_SOCK is already in tmux's built-in default update-environment list.
+{% if _system == 'Linux' %}
+set -ga update-environment "WAYLAND_DISPLAY"
+set -ga update-environment "XDG_RUNTIME_DIR"
+{% endif %}
 
 # Reduce escape sequence ambiguity (default 500ms is too slow)
-set -sg escape-time 10
+set -s escape-time 10
 
 # Vi mode
 setw -g mode-keys vi
 
 # History
-set -g history-limit {{ dotfiles_tmux_history_limit }}
+set -g history-limit {{ dotfiles_tmux_history_limit | int }}
+set -g renumber-windows on       # close middle window → no gaps in numbering
+set -g focus-events on           # allows vim/neovim autoread and focus autocommands inside tmux
+setw -g monitor-activity on     # flag panes with output while you're elsewhere
+set -g visual-activity on       # show activity indicator in status bar
+set -g word-separators " /@\"<>()[]{}|;"  # double-click selects path components, not whole paths
 
 # Mouse
 set -g mouse on
@@ -22,18 +40,30 @@ set -g base-index 1
 setw -g pane-base-index 1
 
 # Quick reload
-bind r source-file ~/.tmux.conf \; display "Config reloaded"
+bind r source-file ~/.config/tmux/tmux.conf \; display "Config reloaded"
+
+# Status bar — session name left, time right, active window highlighted
+set -g status-interval 5
+set -g status-left-length 40
+set -g status-left "[#S] "
+set -g status-right "#{?pane_synchronized,#[fg=colour226 bold]SYNC#[fg=default nobold] ,}%H:%M %d-%b"
+set -g status-style "fg=colour250,bg=colour235"
+set -g window-status-current-style "fg=colour255,bg=colour33,bold"
+set -g window-status-activity-style "fg=colour226,bg=colour235"
 
 # Split panes
 bind | split-window -h -c "#{pane_current_path}"
 bind - split-window -v -c "#{pane_current_path}"
 
+# Synchronized panes — send same keystrokes to all panes (multi-node kind/OVN-K)
+bind S setw synchronize-panes \; display "Sync: #{?pane_synchronized,ON,OFF}"
+
 # Vi copy mode
 bind -T copy-mode-vi v send-keys -X begin-selection
-{% if ansible_system | default('Linux') == 'Darwin' %}
+{% if _system == 'Darwin' %}
 bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
-{% elif (ansible_env.XDG_SESSION_TYPE | default('')) == 'wayland' %}
-bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy"
+bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
 {% else %}
-bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "xclip -selection clipboard"
+bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "wl-copy 2>/dev/null || xsel --clipboard --input 2>/dev/null || xclip -selection clipboard 2>/dev/null"
+bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "wl-copy 2>/dev/null || xsel --clipboard --input 2>/dev/null || xclip -selection clipboard 2>/dev/null"
 {% endif %}

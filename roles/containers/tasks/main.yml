@@ -2,38 +2,192 @@
 # roles/containers/tasks/main.yml
 # Podman/Docker config, registry auth.
 
+# Flush handlers so update-ca-trust runs before registry auth checks.
+# The redhat role notifies Update CA trust; without flushing here it
+# would fire at the end of the play — after container registry operations.
+- name: Flush handlers before container registry auth
+  ansible.builtin.meta: flush_handlers
+
 - name: Ensure containers config directory
   ansible.builtin.file:
     path: "{{ containers_config_dir }}"
     state: directory
     mode: "0700"
+  when: is_linux
+
+# Deploy /etc/containers/policy.json equivalent at user scope.
+# Default rejects all registries not explicitly listed, preventing accidental pulls
+# from unknown or compromised registries. GPG signature enforcement is added for
+# registry.redhat.io and registry.access.redhat.com on DNF-based hosts (Fedora/RHEL),
+# where Red Hat's GPG key ships at {{ containers_policy_rh_gpg_key }}.
+# quay.io is allowed without signature enforcement (most images there are unsigned;
+# per-repo cosign verification is out of scope for a workstation policy).
+- name: Stat user-level policy.json (preserve existing user policies)
+  ansible.builtin.stat:
+    path: "{{ containers_config_dir }}/policy.json"
+  register: containers_policy_user_stat
+  when: is_linux
+
+- name: Stat system-level policy.json (preserve existing IT-managed policies)
+  ansible.builtin.stat:
+    path: /etc/containers/policy.json
+  register: containers_policy_system_stat
+  when: is_linux
+
+- name: Deploy container image pull policy (reject-unknown; GPG-verify on DNF)
+  ansible.builtin.template:
+    src: policy.json.j2
+    dest: "{{ containers_config_dir }}/policy.json"
+    mode: "0600"
+  when:
+    - is_linux
+    - containers_policy_enabled | bool
+    - not (containers_policy_user_stat.stat.exists | default(false))
+    # Note: system-level /etc/containers/policy.json is NOT checked here — user-level
+    # ~/.config/containers/policy.json takes precedence over the system file in Podman's
+    # containers/image library. Deploy the user-level policy regardless of system file
+    # presence so GPG verification is enforced.
+
+- name: Note system-level policy.json present (user-level policy overrides it)
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: System-level /etc/containers/policy.json exists; deploying user-level policy to
+      {{ containers_config_dir }}/policy.json which takes precedence. GPG signature
+      verification for registry.redhat.io and registry.access.redhat.com will be enforced
+      at user scope. (System file owner: rpm -qf /etc/containers/policy.json)
+  when:
+    - is_linux
+    - containers_policy_enabled | bool
+    - not (containers_policy_user_stat.stat.exists | default(false))
+    - containers_policy_system_stat.stat.exists | default(false)
+
+- name: Remove policy.json (container image pull policy disabled)
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/policy.json"
+    state: absent
+  when:
+    - is_linux
+    - not (containers_policy_enabled | bool)
+
+- name: Stat auth.json
+  ansible.builtin.stat:
+    path: "{{ containers_auth_file }}"
+  register: containers_auth_stat
+  when: is_linux
 
 - name: Set auth.json permissions if exists
   ansible.builtin.file:
     path: "{{ containers_auth_file }}"
     mode: "0600"
+  when:
+    - is_linux
+    - containers_auth_stat.stat.exists | default(false)
+
+- name: Check vault registry pre-auth status
+  ansible.builtin.command:
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
+  loop: "{{ registry_tokens }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  register: containers_vault_pre_auth
+  changed_when: false
+  failed_when: false  # intentional: rc!=0 = not yet logged in (expected on unauthenticated host); auth task + Warn verify success
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+
+- name: Authenticate to container registries from vault
+  ansible.builtin.command:
+    cmd: "podman login --authfile {{ containers_auth_file }} --username {{ item.item.username }} --password-stdin {{ item.item.registry }}"
+    stdin: "{{ item.item.token }}"
+  timeout: 60
+  register: _vault_login_result
+  loop: "{{ containers_vault_pre_auth.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.registry }}"
+  no_log: true
+  changed_when: _vault_login_result.rc == 0
+  # intentional: Check/Warn tasks verify success; do NOT use ignore_errors: true
+  # (sets .failed=True; no downstream task needs _vault_login_result.failed —
+  # failure is surfaced via the post-auth check task below)
   failed_when: false
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+    # re-login if: not currently authenticated (rc!=0) or logged in as wrong user (stdout != username)
+    - item.rc != 0 or (item.stdout | trim) != item.item.username
+
+- name: Check registry auth status after vault login
+  ansible.builtin.command:
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item.registry }}"
+  loop: "{{ registry_tokens }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  register: containers_vault_auth_status
+  changed_when: false
+  failed_when: false  # intentional: rc!=0 = registry not authenticated; Warn task verifies and surfaces
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+
+- name: Warn if vault registry login did not persist credentials
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: vault registry auth for {{ item.item.registry }} is not active
+      (podman login --get-login returned rc={{ item.rc }}).
+      If login was attempted, credentials may not have persisted; check
+      vault_registry_tokens username/token and registry reachability.
+  loop: "{{ containers_vault_auth_status.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.registry | default('unknown') }}"
+  no_log: true
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+    - not ansible_check_mode
+    - item.rc != 0 or (item.stdout | trim) != item.item.username
+
+- name: Set auth.json permissions after vault auth
+  ansible.builtin.file:
+    path: "{{ containers_auth_file }}"
+    mode: "0600"
+  when:
+    - is_linux
+    - registry_tokens | length > 0
+    - >-
+      (containers_vault_auth_status.results | default([]) |
+      selectattr('rc', 'equalto', 0) | list | length > 0)
 
 - name: Check registry auth status
   ansible.builtin.command:
-    cmd: "podman login --get-login {{ item }}"
-  loop: "{{ containers_registries }}"
+    cmd: "podman login --authfile {{ containers_auth_file }} --get-login {{ item }}"
+  vars:
+    _vault_registries: "{{ registry_tokens | map(attribute='registry') | list }}"
+    _check_registries: "{{ (containers_registries + containers_registries_extra) | unique | reject('in', _vault_registries) | list }}"
+  loop: "{{ _check_registries }}"
+  loop_control:
+    label: "{{ item }}"
   register: containers_auth_status
   changed_when: false
-  failed_when: false
-  when: ansible_system == 'Linux'
+  failed_when: false  # intentional: rc!=0 = not yet authenticated; Report task surfaces unauthenticated registries
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
 
 - name: Report unauthenticated registries
   ansible.builtin.debug:
     msg: >-
       Registry {{ item.item }} not authenticated.
       Run: podman login --authfile {{ containers_auth_file }} {{ item.item }}
-      Then: chmod 0600 {{ containers_auth_file }}
   loop: "{{ containers_auth_status.results | default([]) }}"
   loop_control:
     label: "{{ item.item | default('unknown') }}"
   when:
-    - item.rc is defined
+    - is_linux
+    - not ansible_check_mode
     - item.rc != 0
 
 - name: Check user group membership
@@ -41,22 +195,406 @@
     cmd: id -nG
   register: containers_user_groups
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
 
 - name: Warn if user is in Docker group
   ansible.builtin.debug:
     msg: >-
       Docker group membership = passwordless root. Never join.
       Use rootless Podman or rootless Docker instead.
-  when: "'docker' in containers_user_groups.stdout.split()"
+  when:
+    - is_linux
+    - "'docker' in containers_user_groups.stdout.split()"
+
+# SECURITY NOTE — podman.socket lateral-movement path inside distrobox:
+# Distrobox unconditionally bind-mounts $XDG_RUNTIME_DIR (e.g. /run/user/<uid>) into the
+# container. The podman.socket lives at $XDG_RUNTIME_DIR/podman/podman.sock, so it is
+# reachable from any process inside a distrobox container regardless of whether that process
+# goes through the distrobox-host-exec symlink. A container process can call the host Podman
+# REST API directly (e.g. curl --unix-socket /run/user/<uid>/podman/podman.sock) and create
+# privileged containers with / bind-mounted, achieving host root access without distrobox-host-exec.
+# This is a known lateral path — it is NOT independently safe to assume distrobox-host-exec is
+# the only host-escape vector when podman.socket is active.
+# Mitigations considered: moving the socket outside XDG_RUNTIME_DIR breaks kind/devcontainers;
+# distrobox does not natively support per-path volume exclusions. Accepted residual risk on
+# developer workstations where the container user == the host user (no privilege boundary).
+# Do not use this profile on multi-tenant or shared hosts.
+- name: Enable podman user socket (kind, docker-compat CLIs, devcontainers)
+  ansible.builtin.systemd:
+    name: podman.socket
+    state: started
+    enabled: true
+    scope: user
+  register: containers_podman_socket
+  when:
+    - is_linux
+    - not (system_is_container)  # scope:user systemd crashes Podman container PID 1
+  failed_when: false  # intentional: Warn checks ActiveState, not .failed — do NOT replace with ignore_errors: true
+
+- name: Warn if podman user socket failed to start
+  vars:
+    _socket_state: "{{ (containers_podman_socket.status | default({})).ActiveState | default('') }}"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: podman.socket failed to start ({{ _socket_state |
+      default(containers_podman_socket.msg | default('unknown')) }}).
+      kind and docker-compatible CLIs will not work. Fix: systemctl --user enable --now podman.socket.
+      If that fails: systemctl --user status podman.socket; journalctl --user -u podman.socket
+      On a fresh provision without an active user session, this is expected — the socket will enable at first login.
+  when:
+    - is_linux
+    - not (system_is_container)  # scope:user systemd crashes Podman container PID 1
+    - _socket_state not in ['active', 'activating']
+
+- name: Check if docker.socket unit file exists  # noqa: command-instead-of-module
+  ansible.builtin.command: systemctl cat docker.socket
+  register: _docker_socket_exists
+  changed_when: false
+  failed_when: false  # intentional: rc!=0 = unit file absent (Docker not installed); downstream tasks guard on rc==0
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_linux
+    - not (system_is_container)
+
+- name: Unmask Docker socket when Docker is enabled
+  ansible.builtin.systemd:
+    name: docker.socket
+    masked: false
+    state: started
+    enabled: true
+  become: true
+  tags: [become]
+  register: containers_docker_unmask
+  when:
+    - is_linux
+    - install_docker
+    - not (system_is_container)
+    - _docker_socket_exists.rc | default(1) == 0
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+
+- name: Warn if Docker socket enable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: docker.socket failed to start (unmask/enable failed).
+      Docker CLI will not work correctly.
+      Fix: systemctl unmask docker.socket; systemctl enable --now docker.socket.
+      Check: systemctl status docker.socket; journalctl -u docker.socket
+  when:
+    - is_linux
+    - install_docker
+    - not (system_is_container)
+    - containers_docker_unmask.failed | default(false)
 
 - name: Disable Docker socket by default
   ansible.builtin.systemd:
     name: docker.socket
     state: stopped
     enabled: false
+    masked: true
   become: true
   tags: [become]
+  register: containers_docker_mask
   when:
-    - ansible_system == 'Linux'
-    - not (install_docker | default(false))
+    - is_linux
+    - not install_docker
+    - not (system_is_container)  # masked: true → inotify → daemon-reload → container crash
+    - _docker_socket_exists.rc | default(1) == 0
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+
+- name: Warn if Docker socket disable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: docker.socket masking failed. The socket may be left in an unexpected state.
+      Fix: systemctl mask docker.socket; systemctl stop docker.socket.
+      Check: systemctl status docker.socket; journalctl -u docker.socket
+  when:
+    - is_linux
+    - not install_docker
+    - not (system_is_container)
+    - containers_docker_mask.failed | default(false)
+
+# --- workstation-wide rootless Podman settings (also required for kind nodes) ---
+- name: Assert containers_pids_limit is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - containers_pids_limit | string | regex_search('^[0-9]+$') is not none
+    fail_msg: >
+      containers_pids_limit must be a non-negative integer, got: {{ containers_pids_limit }}
+  when: is_linux
+
+- name: Assert containers_nofile_limit is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - containers_nofile_limit | string | regex_search('^[0-9]+$') is not none
+    fail_msg: >
+      containers_nofile_limit must be a non-negative integer, got: {{ containers_nofile_limit }}
+  when: is_linux
+
+# The default (8x the soft limit) always satisfies this; only fails when
+# config.yml overrides containers_nofile_hard_limit below containers_nofile_limit.
+- name: Assert overridden nofile hard limit is not below soft limit
+  ansible.builtin.assert:
+    that:
+      - containers_nofile_hard_limit | int >= containers_nofile_limit | int
+    fail_msg: >
+      containers_nofile_hard_limit ({{ containers_nofile_hard_limit }}) must be >=
+      containers_nofile_limit ({{ containers_nofile_limit }}) or Podman will reject the config.
+      Note: the default containers_nofile_hard_limit is auto-scaled to 8x the soft limit.
+  when: is_linux
+
+- name: Assert containers_log_driver is a known safe value
+  ansible.builtin.assert:
+    that:
+      - containers_log_driver in ['k8s-file', 'journald', 'none', 'passthrough']
+    fail_msg: >
+      containers_log_driver must be one of: k8s-file, journald, none, passthrough.
+      Got: {{ containers_log_driver }}
+  when: is_linux
+
+- name: Set containers.conf user-scope options (logging, kind compatibility)
+  ansible.builtin.template:
+    src: containers.conf.j2
+    dest: "{{ containers_config_dir }}/containers.conf"
+    mode: "0644"
+  when: is_linux
+
+# SECURITY: Deploy registries.conf to enforce fully-qualified image references.
+# Clears unqualified-search-registries so `podman pull nginx` (short/unqualified name)
+# fails rather than silently querying docker.io where namespace squatting can deliver
+# a malicious image. Users must use full names (e.g. docker.io/library/nginx).
+- name: Stat system-level registries.conf (preserve existing IT-managed policies)
+  ansible.builtin.stat:
+    path: /etc/containers/registries.conf
+  register: containers_registries_system_stat
+  when: is_linux
+
+- name: Read system registries.conf unqualified-search-registries (FQIN audit)
+  ansible.builtin.command:
+    cmd: grep -E '^\s*unqualified-search-registries\s*=' /etc/containers/registries.conf
+  register: containers_fqin_it_uqsr
+  changed_when: false
   failed_when: false
+  when:
+    - is_linux
+    - containers_registries_system_stat.stat.exists | default(false)
+
+- name: Deploy registries.conf to enforce fully-qualified image references
+  ansible.builtin.template:
+    src: registries.conf.j2
+    dest: "{{ containers_config_dir }}/registries.conf"
+    mode: "0644"
+  when:
+    - is_linux
+    - containers_enforce_fqin | bool
+    - not (containers_registries_system_stat.stat.exists | default(false))
+      or (containers_enforce_fqin_override | bool)
+
+- name: Warn when system-level registries.conf skips FQIN enforcement
+  ansible.builtin.debug:
+    # NOTE: user-level registries.conf TAKES PRECEDENCE over the system-level file
+    # (Podman uses ~/.config/containers/registries.conf if it exists, otherwise falls
+    # back to /etc/containers/registries.conf — they are mutually exclusive, not merged).
+    # We intentionally do NOT deploy user-level FQIN enforcement here because overriding
+    # IT's unqualified-search-registries would break short-name pulls from corporate
+    # registries. If IT's system file does not define unqualified-search-registries,
+    # FQIN enforcement can safely be deployed — set containers_enforce_fqin_override: true
+    # in config.yml to force user-level deployment even when the system file exists.
+    # Verify IT's file: grep unqualified-search-registries /etc/containers/registries.conf
+    msg: >-
+      WARN: System-level /etc/containers/registries.conf exists; user-level FQIN enforcement
+      not deployed to avoid overriding IT-managed unqualified-search-registries policy.
+      IT unqualified-search-registries: {{ containers_fqin_it_uqsr.stdout | default('(not set — FQIN enforced by IT)') }}.
+      If IT allows short-name pulls (docker.io listed above), namespace-squatting attacks are possible.
+      Set containers_enforce_fqin_override: true in config.yml to force user-level enforcement.
+    verbosity: 0
+  when:
+    - is_linux
+    - containers_enforce_fqin | bool
+    - containers_registries_system_stat.stat.exists | default(false)
+    - not (containers_enforce_fqin_override | bool)
+
+- name: Remove registries.conf (fully-qualified image enforcement disabled)
+  ansible.builtin.file:
+    path: "{{ containers_config_dir }}/registries.conf"
+    state: absent
+  when:
+    - is_linux
+    - not (containers_enforce_fqin | bool)
+
+# --- periodic container storage cleanup ---
+- name: Assert containers_prune_schedule contains only valid OnCalendar characters
+  ansible.builtin.assert:
+    that:
+      - containers_prune_schedule | string | regex_search('^[a-zA-Z0-9:*/, .-]+$') is not none
+    fail_msg: "containers_prune_schedule '{{ containers_prune_schedule }}' contains invalid characters for a systemd OnCalendar value"
+  when: containers_prune_enabled | bool
+
+- name: Set systemd user unit directory fact
+  ansible.builtin.set_fact:
+    _containers_systemd_user_dir: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+
+- name: Deploy podman-prune.service
+  ansible.builtin.copy:
+    src: podman-prune.service
+    dest: "{{ _containers_systemd_user_dir }}/podman-prune.service"
+    mode: "0644"
+  when:
+    - is_linux
+    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+    - containers_prune_enabled | bool
+  register: containers_prune_service
+
+- name: Deploy podman-prune.timer
+  ansible.builtin.template:
+    src: podman-prune.timer.j2
+    dest: "{{ _containers_systemd_user_dir }}/podman-prune.timer"
+    mode: "0644"
+  when:
+    - is_linux
+    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+    - containers_prune_enabled | bool
+  register: containers_prune_timer
+
+- name: Reload systemd user daemon after deploying prune units  # noqa: no-handler
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  when:
+    - is_linux
+    - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
+    - containers_prune_enabled | bool
+    - containers_prune_service.changed or containers_prune_timer.changed
+  # intentional: daemon-reload may fail on fresh provision with no active user session;
+  # warn task below surfaces the failure to the operator
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+  register: _prune_daemon_reload
+
+- name: Warn if systemd user daemon-reload failed after deploying prune units
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: systemd --user daemon-reload failed after deploying prune units.
+      The podman-prune timer/service may not be recognized by systemd.
+      Fix: systemctl --user daemon-reload.
+      Check: systemctl --user status podman-prune.timer; journalctl --user -xe
+      On a fresh provision without an active user session, this is expected — run daemon-reload at first login.
+  when:
+    - is_linux
+    - not (system_is_container)
+    - containers_prune_enabled | bool
+    - containers_prune_service.changed or containers_prune_timer.changed
+    - _prune_daemon_reload.failed | default(false)
+
+- name: Enable and start podman-prune.timer
+  ansible.builtin.systemd:
+    name: podman-prune.timer
+    state: started
+    enabled: true
+    scope: user
+  register: _prune_timer_enable
+  when:
+    - is_linux
+    - not (system_is_container)  # scope:user systemd start crashes Podman container PID 1
+    - containers_prune_enabled | bool
+    - not (_prune_daemon_reload.failed | default(false))
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+
+- name: Warn if podman-prune.timer failed to enable
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: podman-prune.timer failed to enable/start.
+      Periodic container storage cleanup will not run automatically.
+      Fix: systemctl --user daemon-reload && systemctl --user enable --now podman-prune.timer.
+      Check: systemctl --user status podman-prune.timer; journalctl --user -u podman-prune.timer
+      On a fresh provision without an active user session, this is expected — the timer will enable at first login.
+  when:
+    - is_linux
+    - not (system_is_container)
+    - containers_prune_enabled | bool
+    - _prune_timer_enable.failed | default(false)
+
+# --- Disable podman-prune when not enabled (cleanup if previously enabled) ---
+- name: Stop and disable podman-prune.timer (when disabled)
+  ansible.builtin.systemd:
+    name: podman-prune.timer
+    scope: user
+    state: stopped
+    enabled: false
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user systemd stop crashes Podman container PID 1
+  failed_when: false  # intentional: unit may not exist on first run (prune was never enabled)
+
+- name: Remove podman-prune systemd unit files (when disabled)
+  ansible.builtin.file:
+    path: "{{ _containers_systemd_user_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - podman-prune.service
+    - podman-prune.timer
+  register: _prune_unit_removal
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # files do not exist in containers (deploy was skipped)
+
+- name: Reload systemd user daemon after removing podman-prune unit files  # noqa: no-handler
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
+    - _prune_unit_removal.changed
+  # intentional: daemon-reload may fail on fresh provision with no active user session;
+  # unit files are already gone — stale systemd state resolves at next login
+  ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+  register: _prune_remove_daemon_reload
+
+- name: Warn if systemd user daemon-reload failed after removing podman-prune unit files
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: systemd --user daemon-reload failed after removing prune unit files.
+      Unit files are already gone — stale systemd state resolves at next login.
+      Fix: systemctl --user daemon-reload.
+      Check: journalctl --user -xe
+  when:
+    - not (containers_prune_enabled | bool)
+    - is_linux
+    - not (system_is_container)
+    - _prune_unit_removal.changed
+    - _prune_remove_daemon_reload.failed | default(false)
+
+# --- environment.d: DOCKER_HOST and KIND_EXPERIMENTAL_PROVIDER for make-spawned sh ---
+# SECURITY WARNING: environment.d exports DOCKER_HOST system-wide via
+# systemd-environment-d-generator. Every process in the graphical session — VS Code
+# extensions, language servers, browser-spawned helpers — inherits DOCKER_HOST and can
+# reach the Podman socket without any explicit configuration. A malicious extension or
+# plugin can use the Docker/Podman API against the host daemon.
+# This is opt-in (containers_environment_d_enabled: false by default). Enable in config.yml
+# when 'make kind' (OVN-K/Submariner) is required: DOCKER_HOST must be set for sh-spawned
+# Make sub-processes (sh does not source .zshrc/.bashrc). Only enable on hosts where all
+# graphical session processes are trusted. KIND_EXPERIMENTAL_PROVIDER is low-risk
+# (a provider hint only), but is scoped alongside DOCKER_HOST as they are used together.
+- name: Deploy containers environment.d config (KIND and Podman socket)
+  ansible.builtin.copy:
+    content: |
+      DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/podman/podman.sock
+      KIND_EXPERIMENTAL_PROVIDER=podman
+    # No :-fallback needed: XDG_RUNTIME_DIR is always set by systemd in user sessions.
+    # environment.d does not support $() command substitution, so the $(id -u) fallback
+    # used in zshrc.j2 cannot be used here. The two forms are intentionally different.
+    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/containers.conf"
+    mode: "0644"
+  when:
+    - is_linux
+    # ~/.config/environment.d not created in containers (common task guards it);
+    # systemd-environment-d-generator not active inside containers
+    - not (system_is_container)
+    - containers_environment_d_enabled | bool
+  # environment.d is processed by systemd-environment-d-generator at user session start,
+  # processes in the graphical session including Make — unlike .zshrc which is
+  # skipped by 'sh' (spawned by make). Without this, 'make kind' in OVN-K or
+  # Submariner finds no Docker socket and fails even though Podman is available.

@@ -1,0 +1,657 @@
+---
+- name: Verify — packages binary installs
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load packages role defaults for version pin assertions
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/packages/defaults/main.yml"
+
+    - name: Match the Go tool scope used by converge
+      ansible.builtin.set_fact:
+        packages_go_install:
+          - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
+        packages_go_install_work: []
+
+  tasks:
+    # --- /usr/local/bin binaries ---
+
+    - name: Stat /usr/local/bin/kind
+      ansible.builtin.stat:
+        path: /usr/local/bin/kind
+      register: verify_kind
+
+    - name: Assert kind exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kind.stat.exists
+          - verify_kind.stat.executable
+        fail_msg: "/usr/local/bin/kind missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/helm
+      ansible.builtin.stat:
+        path: /usr/local/bin/helm
+      register: verify_helm
+
+    - name: Assert helm exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_helm.stat.exists
+          - verify_helm.stat.executable
+        fail_msg: "/usr/local/bin/helm missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/kustomize
+      ansible.builtin.stat:
+        path: /usr/local/bin/kustomize
+      register: verify_kustomize
+
+    - name: Assert kustomize exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kustomize.stat.exists
+          - verify_kustomize.stat.executable
+        fail_msg: "/usr/local/bin/kustomize missing or not executable — packages_install_binaries=true regression"
+
+    - name: Stat /usr/local/bin/transcrypt
+      ansible.builtin.stat:
+        path: /usr/local/bin/transcrypt
+      register: verify_transcrypt
+
+    - name: Assert transcrypt exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_transcrypt.stat.exists
+          - verify_transcrypt.stat.executable
+        fail_msg: "/usr/local/bin/transcrypt missing or not executable — packages_install_binaries=true regression"
+
+    - name: Check transcrypt version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/transcrypt --version
+      register: verify_transcrypt_ver
+      changed_when: false
+
+    - name: Assert transcrypt version matches packages_transcrypt_version
+      ansible.builtin.assert:
+        that: packages_transcrypt_version in (verify_transcrypt_ver.stdout + verify_transcrypt_ver.stderr)
+        fail_msg: >-
+          transcrypt version mismatch — expected {{ packages_transcrypt_version }},
+          got: {{ verify_transcrypt_ver.stdout + verify_transcrypt_ver.stderr }}
+
+    - name: Stat /usr/local/bin/k9s
+      ansible.builtin.stat:
+        path: /usr/local/bin/k9s
+      register: verify_k9s
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert k9s exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_k9s.stat.exists
+          - verify_k9s.stat.executable
+        fail_msg: "/usr/local/bin/k9s missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Stat /usr/local/bin/sops
+      ansible.builtin.stat:
+        path: /usr/local/bin/sops
+      register: verify_sops
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert sops exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_sops.stat.exists
+          - verify_sops.stat.executable
+        fail_msg: "/usr/local/bin/sops missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat /usr/local/bin/gitleaks
+      ansible.builtin.stat:
+        path: /usr/local/bin/gitleaks
+      register: verify_gitleaks
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert gitleaks exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gitleaks.stat.exists
+          - verify_gitleaks.stat.executable
+        fail_msg: "/usr/local/bin/gitleaks missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat /usr/local/bin/actionlint
+      ansible.builtin.stat:
+        path: /usr/local/bin/actionlint
+      register: verify_actionlint
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert actionlint exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_actionlint.stat.exists
+          - verify_actionlint.stat.executable
+        fail_msg: "/usr/local/bin/actionlint missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Stat /usr/local/bin/zizmor
+      ansible.builtin.stat:
+        path: /usr/local/bin/zizmor
+      register: verify_zizmor
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert zizmor exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_zizmor.stat.exists
+          - verify_zizmor.stat.executable
+        fail_msg: "/usr/local/bin/zizmor missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    # --- work-profile OCP + toolchain binaries ---
+
+    - name: Stat /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert oc exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_oc.stat.exists
+          - verify_oc.stat.executable
+        fail_msg: "/usr/local/bin/oc missing or not executable — work-profile OCP tarball regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Stat /usr/local/bin/kubectl
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: verify_kubectl
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert kubectl exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_kubectl.stat.exists
+          - verify_kubectl.stat.executable
+        fail_msg: "/usr/local/bin/kubectl missing or not executable — OCP tarball extraction regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Stat /usr/local/bin/opm
+      ansible.builtin.stat:
+        path: /usr/local/bin/opm
+      register: verify_opm
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert opm exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_opm.stat.exists
+          - verify_opm.stat.executable
+        fail_msg: "/usr/local/bin/opm missing or not executable — work-profile OCP tarball regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Stat /usr/local/bin/operator-sdk
+      ansible.builtin.stat:
+        path: /usr/local/bin/operator-sdk
+      register: verify_operator_sdk
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert operator-sdk exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_operator_sdk.stat.exists
+          - verify_operator_sdk.stat.executable
+        fail_msg: "/usr/local/bin/operator-sdk missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat /usr/local/bin/cosign
+      ansible.builtin.stat:
+        path: /usr/local/bin/cosign
+      register: verify_cosign
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert cosign exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_cosign.stat.exists
+          - verify_cosign.stat.executable
+        fail_msg: "/usr/local/bin/cosign missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat /usr/local/bin/tkn
+      ansible.builtin.stat:
+        path: /usr/local/bin/tkn
+      register: verify_tkn
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert tkn exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_tkn.stat.exists
+          - verify_tkn.stat.executable
+        fail_msg: "/usr/local/bin/tkn missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat /usr/local/bin/ec
+      ansible.builtin.stat:
+        path: /usr/local/bin/ec
+      register: verify_ec
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert ec exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_ec.stat.exists
+          - verify_ec.stat.executable
+        fail_msg: "/usr/local/bin/ec missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Stat krew binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew"
+        follow: true
+        checksum_algorithm: sha256
+      register: verify_krew
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert krew exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_krew.stat.exists
+          - verify_krew.stat.executable
+          - verify_krew.stat.checksum == packages_krew_binary_sha256
+        fail_msg: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew missing or not executable — packages_install_binaries=true regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    # --- pipx-installed tools ---
+
+    - name: Check yamllint version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.local/bin/yamllint --version"
+      register: verify_yamllint_ver
+      changed_when: false
+
+    - name: Assert yamllint is installed and runnable
+      ansible.builtin.assert:
+        that: verify_yamllint_ver.rc == 0
+        fail_msg: "yamllint --version failed (rc={{ verify_yamllint_ver.rc }}) — pipx install regression"
+
+    - name: Check ansible-lint version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.local/bin/ansible-lint --version"
+      register: verify_ansible_lint_ver
+      changed_when: false
+
+    - name: Assert ansible-lint is installed and runnable
+      ansible.builtin.assert:
+        that: verify_ansible_lint_ver.rc == 0
+        fail_msg: "ansible-lint --version failed (rc={{ verify_ansible_lint_ver.rc }}) — pipx install regression"
+
+    # --- go install binaries ---
+
+    - name: Stat gofumpt binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/gofumpt"
+      register: verify_gofumpt
+
+    - name: Assert gofumpt exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gofumpt.stat.exists
+          - verify_gofumpt.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gofumpt missing or not executable — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Stat golangci-lint binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/golangci-lint"
+      register: verify_golangci_lint
+
+    - name: Assert golangci-lint exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_golangci_lint.stat.exists
+          - verify_golangci_lint.stat.executable
+        fail_msg: >-
+          golangci-lint missing at ~/go/bin/golangci-lint —
+          packages_go_install_work empty or go install failed
+          (check install_go_tools.yml loop)
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Stat govulncheck binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/govulncheck"
+      register: verify_govulncheck
+
+    - name: Assert govulncheck exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_govulncheck.stat.exists
+          - verify_govulncheck.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/govulncheck missing — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Stat gci binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/gci"
+      register: verify_gci
+
+    - name: Assert gci exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gci.stat.exists
+          - verify_gci.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gci missing — packages_go_install_work regression"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Stat gopls binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/go/bin/gopls"
+      register: verify_gopls
+
+    - name: Assert gopls exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_gopls.stat.exists
+          - verify_gopls.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/go/bin/gopls missing — packages_go_install_work regression (needs GOTOOLCHAIN=auto for Go 1.26+)"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Stat subctl18 binary
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.local/bin/subctl18"
+      register: verify_subctl18
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert subctl18 exists and is executable
+      ansible.builtin.assert:
+        that:
+          - verify_subctl18.stat.exists
+          - verify_subctl18.stat.executable
+        fail_msg: "{{ ansible_user_dir }}/.local/bin/subctl18 missing or not executable — packages_subctl_versioned regression"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    # --- Version-pin assertions: each binary must report the pinned version ---
+
+    - name: Check kind version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kind version
+      register: verify_kind_ver
+      changed_when: false
+
+    - name: Assert kind version matches packages_kind_version
+      ansible.builtin.assert:
+        that: packages_kind_version in verify_kind_ver.stdout
+        fail_msg: "kind version mismatch — expected {{ packages_kind_version }}, got: {{ verify_kind_ver.stdout }}"
+
+    - name: Check helm version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/helm version
+      register: verify_helm_ver
+      changed_when: false
+
+    - name: Assert helm version matches packages_helm_version
+      ansible.builtin.assert:
+        that: packages_helm_version in verify_helm_ver.stdout
+        fail_msg: "helm version mismatch — expected {{ packages_helm_version }}, got: {{ verify_helm_ver.stdout }}"
+
+    - name: Check kustomize version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kustomize version
+      register: verify_kustomize_ver
+      changed_when: false
+
+    - name: Assert kustomize version matches packages_kustomize_version
+      ansible.builtin.assert:
+        that: packages_kustomize_version in verify_kustomize_ver.stdout
+        fail_msg: "kustomize version mismatch — expected {{ packages_kustomize_version }}, got: {{ verify_kustomize_ver.stdout }}"
+
+    - name: Check k9s version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k9s version
+      register: verify_k9s_ver
+      changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert k9s version matches packages_k9s_version
+      ansible.builtin.assert:
+        that: packages_k9s_version in (verify_k9s_ver.stdout + verify_k9s_ver.stderr)
+        fail_msg: "k9s version mismatch — expected {{ packages_k9s_version }}, got: {{ verify_k9s_ver.stdout + verify_k9s_ver.stderr }}"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Check sops version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/sops --version
+      register: verify_sops_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert sops version matches packages_sops_version
+      ansible.builtin.assert:
+        that: packages_sops_version in (verify_sops_ver.stdout + verify_sops_ver.stderr)
+        fail_msg: "sops version mismatch — expected {{ packages_sops_version }}, got: {{ verify_sops_ver.stdout + verify_sops_ver.stderr }}"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check cosign version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/cosign version
+      register: verify_cosign_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert cosign version matches packages_cosign_version
+      ansible.builtin.assert:
+        that: packages_cosign_version in (verify_cosign_ver.stdout + verify_cosign_ver.stderr)
+        fail_msg: >-
+          cosign version mismatch — expected {{ packages_cosign_version }},
+          got: {{ verify_cosign_ver.stdout + verify_cosign_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check gitleaks version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/gitleaks version
+      register: verify_gitleaks_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert gitleaks version matches packages_gitleaks_version
+      ansible.builtin.assert:
+        that: packages_gitleaks_version in (verify_gitleaks_ver.stdout + verify_gitleaks_ver.stderr)
+        fail_msg: >-
+          gitleaks version mismatch — expected {{ packages_gitleaks_version }},
+          got: {{ verify_gitleaks_ver.stdout + verify_gitleaks_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check actionlint version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/actionlint --version
+      register: verify_actionlint_ver
+      changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert actionlint version matches packages_actionlint_version
+      ansible.builtin.assert:
+        that: packages_actionlint_version in (verify_actionlint_ver.stdout + verify_actionlint_ver.stderr)
+        fail_msg: >-
+          actionlint version mismatch — expected {{ packages_actionlint_version }},
+          got: {{ verify_actionlint_ver.stdout + verify_actionlint_ver.stderr }}
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Check zizmor version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/zizmor --version
+      register: verify_zizmor_ver
+      changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert zizmor version matches packages_zizmor_version
+      ansible.builtin.assert:
+        that: packages_zizmor_version in (verify_zizmor_ver.stdout + verify_zizmor_ver.stderr)
+        fail_msg: >-
+          zizmor version mismatch — expected {{ packages_zizmor_version }},
+          got: {{ verify_zizmor_ver.stdout + verify_zizmor_ver.stderr }}
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Check tkn version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/tkn version --component=client
+      register: verify_tkn_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert tkn version matches packages_tkn_version
+      ansible.builtin.assert:
+        that: packages_tkn_version in (verify_tkn_ver.stdout + verify_tkn_ver.stderr)
+        fail_msg: >-
+          tkn version mismatch — expected {{ packages_tkn_version }},
+          got: {{ verify_tkn_ver.stdout + verify_tkn_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check ec version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/ec version
+      register: verify_ec_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert ec version matches packages_ec_version
+      ansible.builtin.assert:
+        that: packages_ec_version in (verify_ec_ver.stdout + verify_ec_ver.stderr)
+        fail_msg: "ec version mismatch — expected {{ packages_ec_version }}, got: {{ verify_ec_ver.stdout + verify_ec_ver.stderr }}"
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check operator-sdk version output
+      ansible.builtin.command:
+        cmd: /usr/local/bin/operator-sdk version
+      register: verify_operator_sdk_ver
+      changed_when: false
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Assert operator-sdk version matches packages_operator_sdk_version
+      ansible.builtin.assert:
+        that: packages_operator_sdk_version in (verify_operator_sdk_ver.stdout + verify_operator_sdk_ver.stderr)
+        fail_msg: >-
+          operator-sdk version mismatch — expected {{ packages_operator_sdk_version }},
+          got: {{ verify_operator_sdk_ver.stdout + verify_operator_sdk_ver.stderr }}
+      when: ansible_facts['architecture'] in ['x86_64', 'aarch64']
+
+    - name: Check krew version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.krew/bin/kubectl-krew version"
+      register: verify_krew_ver
+      changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert krew version matches packages_krew_bootstrap_version
+      ansible.builtin.assert:
+        that: packages_krew_bootstrap_version in verify_krew_ver.stdout
+        fail_msg: "krew version mismatch — expected {{ packages_krew_bootstrap_version }}, got: {{ verify_krew_ver.stdout }}"
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Check golangci-lint version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/golangci-lint --version"
+      register: verify_golangci_lint_ver
+      changed_when: false
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Assert golangci-lint version matches packages_golangci_lint_version
+      ansible.builtin.assert:
+        that: packages_golangci_lint_version in verify_golangci_lint_ver.stdout
+        fail_msg: >-
+          golangci-lint version mismatch — expected {{ packages_golangci_lint_version }},
+          got: {{ verify_golangci_lint_ver.stdout }}
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Check gofumpt version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gofumpt --version"
+      register: verify_gofumpt_ver
+      changed_when: false
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Assert gofumpt version matches packages_gofumpt_version
+      ansible.builtin.assert:
+        that: packages_gofumpt_version in verify_gofumpt_ver.stdout
+        fail_msg: "gofumpt version mismatch — expected {{ packages_gofumpt_version }}, got: {{ verify_gofumpt_ver.stdout }}"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Check govulncheck version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/govulncheck -version"
+      register: verify_govulncheck_ver
+      changed_when: false
+      failed_when: false
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Assert govulncheck version matches packages_govulncheck_version
+      ansible.builtin.assert:
+        that: packages_govulncheck_version in (verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr)
+        fail_msg: >-
+          govulncheck version mismatch — expected {{ packages_govulncheck_version }},
+          got: {{ verify_govulncheck_ver.stdout + verify_govulncheck_ver.stderr }}
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Check gci version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gci --version"
+      register: verify_gci_ver
+      changed_when: false
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Assert gci version matches packages_gci_version
+      ansible.builtin.assert:
+        that: packages_gci_version in verify_gci_ver.stdout
+        fail_msg: "gci version mismatch — expected {{ packages_gci_version }}, got: {{ verify_gci_ver.stdout }}"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Check gopls version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/gopls version"
+      register: verify_gopls_ver
+      changed_when: false
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Assert gopls version matches packages_gopls_version
+      ansible.builtin.assert:
+        that: packages_gopls_version in verify_gopls_ver.stdout
+        fail_msg: "gopls version mismatch — expected {{ packages_gopls_version }}, got: {{ verify_gopls_ver.stdout }}"
+      when: packages_go_install_work | default([]) | length > 0
+
+    - name: Check current subctl release metadata
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/go/bin/subctl version"
+      register: verify_subctl_current_ver
+      changed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert current subctl has its pinned release version
+      ansible.builtin.assert:
+        that: >-
+          (verify_subctl_current_ver.stdout | trim) == 'subctl version: ' ~ packages_subctl_version
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Check subctl18 version output
+      ansible.builtin.command:
+        cmd: "{{ ansible_user_dir }}/.local/bin/subctl18 version"
+      register: verify_subctl18_ver
+      changed_when: false
+      failed_when: false
+      when: ansible_facts['architecture'] == 'x86_64'
+
+    - name: Assert subctl18 version matches packages_subctl_versioned entry
+      ansible.builtin.assert:
+        that:
+          - verify_subctl18_ver.rc == 0
+          - >-
+            (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | list | length > 0) and
+            (verify_subctl18_ver.stdout | trim) == 'subctl version: ' ~
+            (packages_subctl_versioned | selectattr('suffix', 'equalto', '18') | first).version
+        fail_msg: >-
+          subctl18 entry missing from packages_subctl_versioned or version mismatch —
+          expected suffix='18' entry with version in subctl18 output,
+          got: {{ verify_subctl18_ver.stdout }},
+          available: {{ packages_subctl_versioned | to_json }}
+      when: ansible_facts['architecture'] == 'x86_64'

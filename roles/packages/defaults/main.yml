@@ -1,73 +1,140 @@
 ---
+profile: work  # fallback for standalone invocation
+
 # Package lists by category. Override in config.yml or group_vars.
+# Base lists (packages_cli, packages_languages, packages_security, packages_containers)
+# install on all profiles. Lists with a _work suffix are work-profile-only.
 
 packages_cli:
-  - git
   - make
-  - curl
-  - tree
   - htop
   - tmux
   - mosh
   - jq
   - yq
-  - procps-ng
-  - nmap
-  - meld
   - direnv
-  - vim
-  - zsh
+  - vim-enhanced  # provides /usr/bin/vim binary; neovim does not symlink vim on Fedora (smoke-test checks command -v vim)
+  - neovim
+  - zsh  # login shell (set by desktop role); explicit to prevent autoremovable-orphan if plugins drop
+  - zsh-autosuggestions  # depends on zsh (pulled in automatically)
+  - zsh-syntax-highlighting
   - fzf
-  - socat
   - pipx
   - zoxide
   - ShellCheck
   - shfmt
   - gh
-  - golangci-lint
-  - tailscale
-  - toolbox
+  - ripgrep
+  - fd-find
+  - bat
+  - tree  # directory listing utility; not a Fedora comps default; needed on Fedora and RHEL/Rocky alike
+  - git-lfs            # large file support — git_repos and notes roles register lfs filters; both profiles need this
+  - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
+  - npm                # package manager for commitlint/markdownlint node_modules
 
 packages_languages:
+  - python3-pip  # pipx runtime dep; Fedora pipx RPM omits python3-pip as RPM dep
+
+# Work-profile-only language tools (CGO builds — OVN-K, Submariner; not needed for pure-Go personal builds)
+packages_languages_work:
   - golang
-  - python3
-  - python3-pip
-  - gcc
-  - gcc-c++
-  - clang
+  - gcc           # needed for Go CGO builds
 
 packages_security:
+  - openssl  # openssl-libs is a system dep; openssl CLI is not a Fedora 44 / RHEL default — needed for s_client, genrsa, and vault scripts
+
+# YubiKey packages — installed only when packages_yubikey_enabled: true (default).
+# Set packages_yubikey_enabled: false in config.yml on machines without a YubiKey.
+packages_yubikey_enabled: true
+
+# LuLu application firewall cask — opt in by setting packages_brew_cask_lulu_enabled: true in config.yml.
+# Disabled by default: every major macOS upgrade requires interactive system extension approval in System Settings.
+packages_brew_cask_lulu_enabled: false
+
+# bpfman eBPF program manager daemon — opt in by setting packages_bpfman_enabled: true in config.yml.
+# SECURITY WARNING: bpfman requires CAP_SYS_ADMIN to manage eBPF programs. Fedora 44 ships no
+# SELinux policy for bpfman, so the daemon runs unconfined despite SELinux Enforcing mode.
+# Without MAC, a compromised bpfman can load arbitrary kernel eBPF programs. Only enable on
+# machines where eBPF development requires the daemon; prefer manual bpftool for one-off tasks.
+packages_bpfman_enabled: false
+
+packages_security_yubikey:
   - yubikey-manager
-  - bubblewrap
-  - policycoreutils-python-utils
-  - age
+
+packages_apt_yubikey:
+  - yubikey-manager
+  - yubikey-personalization  # legacy: provides ykpersonalize (EOL Feb 2026);
+                              # setup-yubikeys.sh uses yubikey-manager only
+
+# macOS: ykpers/ykpersonalize not available on Homebrew (EOL Feb 2026);
+# setup-yubikeys.sh uses ykman for all operations
+packages_brew_yubikey:
+  - ykman
+
+# RHEL/Rocky-only security packages: Fedora's libssh pulls in libfido2.so.1 as a
+# capability dep; on RHEL/Rocky, libssh lacks FIDO2 so an explicit install is needed.
+# Merged into _packages_dnf_all only when ansible_distribution != 'Fedora'.
+packages_security_rhel:
+  - libfido2
 
 packages_containers:
-  - podman
+  - podman  # Fedora Workstation default since F33; explicit for RHEL/Rocky and non-Workstation targets
+  - distrobox
+
+# Work-profile-only container tools (OCI image builder — not needed for personal distrobox/podman-run usage)
+packages_containers_work:
   - buildah
   - skopeo
 
+# kubectl via dnf only when the OCP tarball download is skipped (personal profile,
+# non-x86_64, or packages_install_binaries=false). On work+x86_64 with
+# packages_install_binaries=true, the OCP tarball provides /usr/local/bin/kubectl,
+# which shadows /usr/bin/kubectl in PATH; the dnf install is unused and wastes disk.
+# tasks/main.yml merges this list conditionally. Override to [] to suppress.
+packages_containers_kubectl:
+  - kubectl
+
 packages_virtualization:
   - libvirt
-  - qemu-kvm
+  - qemu-kvm  # not pulled in by libvirt on Fedora 44 (libvirt-daemon-driver-qemu requires qemu-img, not qemu-kvm)
   - virt-install
-  - virt-viewer
 
 # Desktop packages managed by the desktop role, not here.
 
 packages_networking:
-  - tcpdump
-  - bridge-utils
-  - conntrack-tools
-  - ethtool
-  - iperf3
-  - traceroute
-  - iproute
-  - ovn
-  - openvswitch
+  # tcpdump, traceroute, mtr, ethtool, bind-utils, nftables are Fedora Workstation defaults
+  # (always installed on Fedora; on RHEL/Rocky absent from host, in distrobox instead)
+  # nftables: firewalld pulls it in as a dependency; no task calls nft directly
+  # VPN
+  - tailscale       # WireGuard mesh VPN (moved from packages_cli — it's a networking daemon)
+
+# Work-profile-only networking tools (OVN-K development at Red Hat)
+packages_networking_work:
+  - ovn            # Open Virtual Network control plane (OVN-K dep; pulls in openvswitch automatically)
+  - iproute-tc     # tc split from iproute on Fedora 38+; required for OVS/eBPF TC programs (OVN-K, bpfman)
+  - wireshark-cli  # tshark — scripting-safe CLI capture; GUI wireshark intentionally omitted; work profile only
+  - conntrack-tools  # netfilter connection tracking debugger; work profile only (OVN-K/Kubernetes)
+  - iperf3         # network bandwidth measurement; work profile only
+  - socat          # socket relay utility; work profile only
+  # network scanner; work profile only (OVN-K/Kubernetes debugging); WARNING: local/test networks only — scanning RH infra triggers
+  # IDS/IPS
+  - nmap
+
+# Work-profile-only support tools (Red Hat diagnostic utilities + debug/profiling tools)
+packages_support_work:
+  - sos      # general RH support diagnostic bundle tool (sosreport); work profile only
+             # (no RH support contract on personal)
+  - strace   # system call tracer; general debugging and system tracing
+  - gdb      # GNU debugger; general debugging (attach to processes, coredumps)
+  - perf     # kernel performance profiling
+  - bpftrace # eBPF dynamic tracing; requires CAP_SYS_ADMIN for kernel tracing
+             # NOTE: kernel lockdown=integrity (active by default) blocks kprobe/kretprobe programs
+             # (BPF_PROG_TYPE_KPROBE) with EPERM; use tracepoints (tracepoint:...) or uprobes instead,
+             # or set system_kernel_lockdown: '' in config.yml + re-run make system for a debug session
+  - bpftool  # eBPF program/map introspection
 
 packages_apt:
-  - git
+  - git-lfs  # depends on git (pulled in automatically)
   - make
   - curl
   - tree
@@ -75,78 +142,267 @@ packages_apt:
   - tmux
   - mosh
   - jq
-  - nmap
-  - meld
   - direnv
-  - vim
-  - zsh
+  - vim-nox  # full-featured vim with +clipboard; 'vim' pkg on Debian lacks clipboard support
+  - neovim
+  - zsh-autosuggestions  # depends on zsh (pulled in automatically)
+  - zsh-syntax-highlighting
+  - zsh  # login shell; explicit to prevent autoremovable-orphan if plugins drop (mirrors packages_cli)
   - fzf
-  - socat
+  - zoxide
+  - gnupg          # Debian does not auto-install gnupg; needed for SSH role and git commit signing
+  - openssh-client  # not a Debian 13 desktop default in minimal/container images;
+                    # needed by ansible.builtin.known_hosts hash_host:true in ssh role
+  # Networking tools (not Debian defaults):
+  - dnsutils       # dig/nslookup/host; Fedora ships bind-utils as a Workstation default, Debian does not
+  - python3-pip    # Fedora installs via packages_languages; Debian requires explicit install
   - pipx
   - shellcheck
-  - gh
+  - ripgrep
+  - fd-find
+  - bat
+  - shfmt
+  - nodejs             # runtime for commitlint and markdownlint (make ci/lint)
+  - npm                # package manager for commitlint/markdownlint node_modules
+  # wl-clipboard moved to desktop_apt_packages (Wayland-only; belongs with desktop packages)
+  # gh (GitHub CLI) is not in Debian standard repos; requires cli.github.com/packages apt source
+  # yq: Debian 13 ships a Python-based yq (jq wrapper) incompatible with the Go-based yq here
+
+# Work-profile-only apt packages (Debian/Ubuntu).
+# Kubernetes CLIs (kubectl/kind/helm/kustomize) come from binary downloads, not apt.
+packages_apt_work:
+  # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
+  # GOTOOLCHAIN=auto (default in packages_gotoolchain) downloads the toolchain on demand.
+  - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
+  - gcc     # CGO builds — mirrors packages_languages_work on Fedora
+  - nmap    # network scanner; work-only (mirrors packages_networking_work on Fedora)
+  - socat   # socket relay; work-only (mirrors packages_networking_work on Fedora)
+  - iperf3  # network bandwidth measurement — mirrors packages_networking_work on Fedora
+  - tshark  # scripting-safe CLI capture; mirrors packages_networking_work wireshark-cli on Fedora
+  - conntrack-tools  # netfilter connection tracking — mirrors packages_networking_work on Fedora
+  - buildah  # OCI image builder; mirrors packages_containers_work on Fedora
+  - skopeo  # container image inspection/copy; mirrors packages_containers_work on Fedora
 
 # Binary downloads — pinned versions with SHA256 verification.
 # Override versions in config.yml when upgrading.
 packages_kind_version: "0.32.0"
 packages_kind_sha256: "50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa9463721b0f54"
+packages_kind_sha256_arm64: "b92cd615e97585de8ddade28ed5cd7feb4248d717c233eea5b03c37298900f5d"
 
-packages_helm_version: "4.2.0"
-packages_helm_sha256: "97dbeb971be4ac4b27e3839976d9564c0fb35c6f3b1da89dd1e292d236af4096"
+packages_helm_version: "4.2.3"
+packages_helm_sha256: "e9b88b4ee95b18c706839c28d3a0220e5bc470e9cd9262410c90793c45ff8b7c"
+packages_helm_sha256_arm64: "21abd9354d39b2cd79a8d76be6912cd137a983cbf997193503fb8a6a6e2f2785"
 
 packages_kustomize_version: "5.8.1"
 packages_kustomize_sha256: "029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d"
-packages_kustomize_url_base: "https://github.com/kubernetes-sigs/kustomize/releases/download"
+packages_kustomize_sha256_arm64: "0953ea3e476f66d6ddfcd911d750f5167b9365aa9491b2326398e289fef2c142"
 
 packages_transcrypt_version: "2.3.2"
 packages_transcrypt_sha256: "d4723d29cee8781de6fa83e5ad2817ad81241674fb4159db6452c1ce9d4b0253"
 
-packages_sops_version: "3.13.1"
-packages_sops_sha256: "620a9d7e3352ababeca6908cea24a6e8b14ce89a448ddbd3f94f1ef3398f470a"
+packages_sops_version: "3.13.3"
+packages_sops_sha256: "e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
+packages_sops_sha256_arm64: "53b0abacd38ef1b12a66d6c100956691b9cefce018d91f81e73ddf7438b94d77"
+# SHA256 of the release-level checksums.txt and its Sigstore bundle — pinned so get_url
+# hard-fails on a tampered proxy response before cosign verify-blob runs.
+packages_sops_checksums_txt_sha256: "91710ede6a3218e5b62286412543768a92d0c3449434951bd148d21043aad538"
+packages_sops_bundle_sha256: "b140370c339c465dff725b879e0caad3e7ff441fdbbef51179924f9c4b45082f"
+
+# gitleaks version pinned to match CI (linting.yml); SHA256 of linux_x64 tarball
+packages_gitleaks_version: "8.30.1"
+packages_gitleaks_sha256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+packages_gitleaks_sha256_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+
+# actionlint version pinned to match CI (linting.yml); SHA256 of linux_amd64 tarball; x86_64 only (no arm64 CI pin)
+packages_actionlint_version: "1.7.12"
+packages_actionlint_sha256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+
+# zizmor version pinned to match CI (linting.yml); SHA256 of x86_64-unknown-linux-gnu tarball; x86_64 only (no arm64 CI pin)
+packages_zizmor_version: "1.29.0"
+packages_zizmor_sha256: "dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839"
+
+packages_operator_sdk_version: "1.42.3"
+packages_operator_sdk_sha256: "887a3bb0d63ccc4ca47a522d0c8ffac56d9d5246f6a2bd886b4ed23eb2e2672f"
+packages_operator_sdk_sha256_arm64: "6db93cd821b429f0bb514cea4bbb5553827d273fc8aa211f13e14798599d31cd"
+# operator-sdk GPG signing key (operator-framework release team)
+# Key ID: 052996E2A20B5C7E (short form); update when upstream rotates signing key
+packages_operator_sdk_gpg_key_id: "052996E2A20B5C7E"
+
+packages_cosign_install_enabled: true  # set false to skip; requires manual installation with alternative verification
+packages_cosign_version: "3.1.2"
+packages_cosign_sha256: "f7622ed3cf22e55e1ae6377c080979ff77a22da9981c11df222a2e444991e7cf"
+packages_cosign_sha256_arm64: "90e7ae0b5dfd60f20816b52c012addf7fc055ebcc7bea4ce81c428ca8518c302"
+
+packages_tkn_version: "0.46.0"
+packages_tkn_sha256: "4a69c3884b40a370bf6faff620ee719adb3a4b4c1820c2edba93520e54268419"
+packages_tkn_sha256_arm64: "1aecaf783da733feccaab84240581529a62f91df11596ab536717d92a0a9c8a2"
+
+# enterprise-contract/ec-cli moved to github.com/conforma/cli (permanent redirect)
+# conforma = Red Hat Konflux team's upstream org.  Releases ship only plain .sha256 files —
+# no Sigstore-signed attestations yet; cosign verify-blob cannot be added until .bundle/.sig
+# assets appear in releases.  SHA256 below is the primary integrity control.
+packages_ec_version: "0.9.96"
+packages_ec_sha256: "4c1b3d66afedafe1e5aefc2f77226f853a87795840192dd208e7592fbce9ce01"
+packages_ec_sha256_arm64: "3b828381befb917db1a626f449cc6464b94371b765ea0f650f52170178b57e5b"
 
 packages_yamllint_version: "1.38.0"
-packages_ansible_lint_version: "26.4.0"
+packages_ansible_lint_version: "26.6.0"
 
-packages_oc_version: "stable"
+# Also governs opm download — opm co-releases with oc on mirror.openshift.com.
+# kubectl is extracted from the same OCP tarball (openshift-client-linux.tar.gz)
+# and therefore tracks the OCP release cadence, not upstream Kubernetes.  OCP 4.22
+# ships Kubernetes 1.35 (OCP 4.x → k8s 1.(x+13); update this line when
+# packages_oc_version changes).  If you need a newer kubectl for upstream clusters, replace
+# the Extract task in tasks/main.yml with a standalone dl.k8s.io download and pin
+# packages_kubectl_version independently.
+packages_oc_version: "4.22.8"
+# packages_oc_sha256 and packages_opm_sha256 must be updated together whenever packages_oc_version is bumped.
+packages_oc_sha256: "22cb5df5206569ca2c8ca3b56f55f5af9dbd68fc35ea237a4069e06ffd6e9218"
+packages_opm_sha256: "22a0f705e6c319e3f8360a18a077f1e96f80c500169fd9d2a19121d09ca36e2a"
+packages_opm_binary_name: "opm-rhel8"  # binary name inside opm-linux.tar.gz; verify when bumping packages_oc_version
 
-packages_go_install:
-  - sigs.k8s.io/controller-tools/cmd/controller-gen@latest
-  - k8s.io/code-generator/cmd/client-gen@latest
-  - k8s.io/code-generator/cmd/informer-gen@latest
-  - k8s.io/code-generator/cmd/lister-gen@latest
-  - k8s.io/code-generator/cmd/deepcopy-gen@latest
-  - k8s.io/code-generator/cmd/applyconfiguration-gen@latest
-  - k8s.io/code-generator/cmd/defaulter-gen@latest
-  - github.com/submariner-io/subctl@latest
-  - mvdan.cc/gofumpt@latest
-  - golang.org/x/vuln/cmd/govulncheck@latest
-  - github.com/daixiang0/gci@latest
+# kubectl source: 'ocp' (extracted from OCP tarball, tracks OCP release cadence) or
+# 'upstream' (downloaded from dl.k8s.io, tracks upstream Kubernetes stable releases).
+# OCP 4.22 ships kubectl 1.35; upstream is currently 1.36.
+packages_kubectl_source: ocp
+# Used only when packages_kubectl_source: upstream; ignored when source is 'ocp'.
+# Fetch latest: curl -L -s https://dl.k8s.io/release/stable.txt
+packages_kubectl_version: "1.36.3"
+packages_kubectl_sha256: "096dd0c0c6e169f8476d9cfb1eb5c5ac23a929fa5f84a22ccd00231c0b82f6a2"  # x86_64 Linux
+packages_kubectl_sha256_arm64: "5fe5855e815d13e8e4c76e4c0a71cffc23befa21a47e81c5ad25a9975fb77c66"  # arm64 Linux
 
-packages_install_binaries: true
+packages_go_install: []  # no universal Go tools; all dev tools are profile-scoped below
+# GOTOOLCHAIN env for go install; 'local' prevents runtime toolchain downloads (aligns with SHA256-pinned pattern).
+packages_gotoolchain: local
+  # Set 'auto' in config.yml only when intentionally allowing toolchain self-replacement (Fedora 44 Go 1.24 < gofumpt/gopls needs).
 
-packages_brew_taps:
-  - nikitabobko/tap
-  - theseal/ssh-askpass
-  - domt4/autoupdate
+# Work-profile-only Go tools (OVN-K codegen + Submariner + Kubernetes + Go IDE/CI toolchain)
+# Integrity via GOSUMDB (sum.golang.org) — not post-compilation SHA256. Go binary SHA256 is
+# non-deterministic (toolchain version, build flags, arch all vary); GOSUMDB is verified in
+# install_go_tools.yml before go install runs. See install_go_tools.yml for supply chain model.
+packages_golangci_lint_version: "2.12.2"
+packages_gofumpt_version: "0.11.0"
+packages_govulncheck_version: "1.6.0"
+packages_gci_version: "0.14.0"
+packages_gopls_version: "0.23.0"
+packages_controller_gen_version: "0.19.0"
+packages_stern_version: "1.34.0"
 
-packages_brew_cask:
-  - alacritty
+packages_go_install_work:
+  # Go IDE / CI tools — work profile only (not needed on personal workstations)
+  - "mvdan.cc/gofumpt@v{{ packages_gofumpt_version }}"
+  - "golang.org/x/vuln/cmd/govulncheck@v{{ packages_govulncheck_version }}"
+  - "github.com/daixiang0/gci@v{{ packages_gci_version }}"
+  - "golang.org/x/tools/gopls@v{{ packages_gopls_version }}"
+  - "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v{{ packages_golangci_lint_version }}"
+  # Pin controller-gen to match OVN-K's update-codegen.sh (not go.mod — controller-tools is not a go.mod dep).
+  # Bump packages_code_generator_version together when OVN-K upgrades k8s (tracks upstream OVN-K; openshift fork lags).
+  - "sigs.k8s.io/controller-tools/cmd/controller-gen@v{{ packages_controller_gen_version }}"
+  - "k8s.io/code-generator/cmd/client-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/informer-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/lister-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/deepcopy-gen@v{{ packages_code_generator_version }}"
+  - "k8s.io/code-generator/cmd/applyconfiguration-gen@v{{ packages_code_generator_version }}"
+  # subctl: latest version installed as 'subctl'; packages_subctl_version governs the pin.
+  # See packages_subctl_versioned below for older-version multi-install.
+  - "github.com/submariner-io/subctl/cmd@v{{ packages_subctl_version }}"
+  # Kubernetes log viewer — multi-pod log tail for OVN-K/Konflux debugging
+  - "github.com/stern/stern@v{{ packages_stern_version }}"
+
+# Versioned subctl installs: each entry becomes subctl<major><minor> in ~/.local/bin.
+# Example: {version: "0.18.0", suffix: "18"} → installs /usr/local/bin → ~/.local/bin/subctl18
+# Useful when managing Submariner clusters at different broker API versions.
+# The latest version should also be in packages_go_install_work (as plain 'subctl').
+packages_code_generator_version: "0.36.2"  # governs all k8s.io/code-generator/* tools; bump with OVN-K k8s upgrade
+packages_subctl_version: "0.24.0"  # governs go install and distrobox_subctl_version; bump together
+
+packages_subctl_versioned:
+  - version: "0.18.0"
+    suffix: "18"
+
+# Downstream RH subctl (registry.redhat.io/rhacm2/subctl-rhel{8,9}) — RHACM-bundled builds.
+# Extracted via 'oc image extract'; each entry installed as subctlRH<suffix> in ~/.local/bin.
+# Requires: oc installed (from OCP tarball) + podman login registry.redhat.io.
+# Image name: subctl-rhel8 for RHACM <=2.8 (Submariner <=0.15); subctl-rhel9 for RHACM 2.9+
+# Binary inside image: /dist/subctl-v<tag>*-linux-amd64.tar.xz
+packages_subctl_rh_versions: []
+# Example to enable:
+# packages_subctl_rh_versions:
+#   - tag: "v0.18"            # image tag (e.g. v0.18 for Submariner 0.18.x / RHACM 2.11)
+#     image: "subctl-rhel8"   # image name: subctl-rhel8 (<=RHACM 2.8) or subctl-rhel9 (2.9+)
+#     suffix: "RH18"          # binary name: ~/.local/bin/subctlRH18
+#   - tag: "v0.22"
+#     image: "subctl-rhel9"
+#     suffix: "RH22"
+
+packages_k9s_version: "0.51.0"
+packages_k9s_sha256: "c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"  # x86_64 only (no arm64 CI pin)
+
+packages_aerospace_version: "0.21.3-Beta"
+packages_aerospace_sha256: "bdbd3fedb3a41bdd3987d241dd5cc1d8b74a56fdbc0d76a98e6925c5cfef4ce4"  # macOS universal zip; bump with version
+
+packages_krew_bootstrap_version: "0.5.0"  # Single version pin; SHA256-verified at install and upgrade
+packages_krew_sha256: "5d5a221fffdf331d1c5c68d9917530ecd102e0def5b5a6d62eeed1c404efb28a"
+# Executable digest extracted from the verified archive; update all three Krew pins together.
+packages_krew_binary_sha256: "7e3170836d1ab3b339dc79ceb06a2a978923375cc2bdc64734081571b3e402be"
+packages_krew_plugin_ctx_version: "v0.11.0"  # kubectx krew plugin pinned version; bump deliberately
+packages_krew_plugin_ns_version: "v0.11.0"   # kubens krew plugin pinned version; bump deliberately
+# Post-install checksums for krew plugins (compensating control: krew index has no cryptographic
+# signing; these pin the known-good script SHA256 independent of the live index).
+# SHA256 of kubectx/kubens scripts at packages_krew_plugin_ctx/ns_version, extracted from the
+# kubectx tarball (sha256: 1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907).
+# Update both version and sha256 vars together when bumping plugin versions.
+# Archive checksums pin the manifests used for explicit plugin installs (Krew has no name@version syntax).
+packages_krew_ctx_archive_sha256: "1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907"
+packages_krew_ns_archive_sha256: "1c8eb6b30c0067f89e5b2f9480865b0e3229a221fadddb644ce192d663c63907"
+packages_krew_plugin_ctx_sha256: "1905c04422efe305d5b27f7526c3573a8c00b9e291e825dba6dd8a5350d59037"
+packages_krew_plugin_ns_sha256: "bf81b4a515e96bfb1878e3b85950bd5742d96a5d6b398e737495ab1b3972ef70"
+
+packages_gosumdb: 'sum.golang.org'  # GOSUMDB server; override with corporate proxy (e.g. sum.myproxy.com)
+# GOSUMDB-specific proxy (optional; independent of network_proxied); if set, overrides network_proxied proxy detection
+packages_gosumdb_proxy: ''
+# GOPROXY value for go install; override with corporate mirror (e.g. 'https://goproxy.corp.com,direct')
+packages_goproxy: 'https://proxy.golang.org,direct'
+
+packages_install_binaries: true  # fallback; authoritative definition in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+install_virtualization: true  # fallback; authoritative value in group_vars/all/vars.yml
+network_proxied: false  # fallback; authoritative value in group_vars/all/vars.yml
+proxy_url: ''  # fallback; authoritative value in group_vars/all/vars.yml
+repo_tailscale: true  # fallback; authoritative value in group_vars/all/vars.yml
+repo_gh_cli: true  # fallback; authoritative value in group_vars/all/vars.yml
+needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml
+csb_rhel: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+
+packages_brew_taps: []
+
+packages_brew_taps_yubikey: []
+
+packages_brew_taps_work: []  # AeroSpace removed from tap; installed via direct SHA256-verified download (see install_brew.yml)
+
+packages_brew_update: false  # launchd refreshes metadata; updating on every provision is slow
+packages_brew_autoupdate_interval: 86400  # seconds per metadata refresh; 0 disables the background job
+
+# Alacritty's cask is disabled by Homebrew Gatekeeper policy; do not bypass it.
+packages_brew_cask: "{{ ['ghostty'] if desktop_terminal | default('ghostty') == 'ghostty' else [] }}"
+
+packages_brew_cask_work:
   - google-chrome
-  - bitwarden
-  - keepassxc
   - slack
-  - lulu
-  - nikitabobko/tap/aerospace
+  - keepassxc
+
+packages_brew_cask_personal:
+  - bitwarden
 
 packages_brew:
-  - ansible
-  - git
-  - openssh
-  - libfido2
-  - ykman
-  - ykpers
+  - git  # Xcode CLT git is stale; brew git tracks upstream releases
+  - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
+  - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
   - tmux
-  - mosh
   - jq
   - yq
   - direnv
@@ -154,11 +410,41 @@ packages_brew:
   - zoxide
   - shellcheck
   - shfmt
-  - yamllint
-  - ansible-lint
-  - golangci-lint
-  - golang
-  - python3
+  - pipx  # yamllint + ansible-lint pinned installs (all profiles; no profile guard in install_pipx.yml); pulls python3 transitively
   - gh
-  - tailscale
+  - tailscale  # formula provides CLI + tailscaled daemon; menubar app requires the cask — consistent with Linux daemon treatment
+  - gitleaks  # no work guard — useful for personal repos; actionlint/zizmor are GHA-specific (work-only)
+  - gnupg
+  # keg-only; provides upstream OpenSSL CLI for s_client/genrsa/vault scripts
+  # (macOS ships LibreSSL which has API/behavior differences from upstream OpenSSL)
+  - openssl
+  - ripgrep
+  - fd  # fd-find on Linux; Homebrew package is 'fd'
+  - bat
+  - tree
+  - htop
+  - neovim
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
+
+packages_brew_personal: []
+
+packages_brew_work:
+  - ansible  # bootstrap installs for first run; kept here for idempotent reprovisioning — work-profile Macs only
+  - golang
+  - kubectl    # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - kind       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - helm       # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - kustomize  # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
   - socat
+  - nmap
+  - mosh
+  - transcrypt  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_transcrypt_version pin
+  - sops  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_sops_version pin
+  - iperf3
+  - tshark  # CLI-only formula; mirrors packages_networking_work wireshark-cli (no Qt GUI libs)
+  - k9s   # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
+  - krew  # NOTE: unversioned on macOS (brew tracks latest); Linux pins bootstrap via packages_krew_bootstrap_version; self-manages updates
+  - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
+  - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
+  - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin

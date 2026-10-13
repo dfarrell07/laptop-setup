@@ -1,29 +1,60 @@
 ---
-claude_install_method: native  # native (recommended) or npm (deprecated)
-claude_install_url: "https://claude.ai/install.sh"
+profile: work  # fallback for standalone invocation (--tags claude)
+# Fallback; authoritative in group_vars/all/vars.yml; consumed by packages, claude, distrobox
+packages_install_binaries: true
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml
+csb_rhel: false  # fallback; authoritative in group_vars/all/vars.yml
+dotfiles_github_user: "CHANGE_ME"  # shared cross-role variable, intentionally unprefixed
+claude_install_method: native  # native (recommended) or skip (CI/testing — bypasses install)
+claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
+# SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
+claude_install_sha256: ""
+claude_pinned_version: ""  # pin in config.yml (e.g. "1.0.3"); empty = installs latest (role debug advisory only — no smoke-test WARN)
+claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
+claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
 
-claude_work_config_dir: "{{ ansible_user_dir }}/.claude-work"
-claude_personal_config_dir: "{{ ansible_user_dir }}/.claude-personal"
+claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
+claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
+claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
+claude_personal_instance_enabled: true  # set false in config.yml for work-only machines
 
 claude_telemetry_env:
   DISABLE_ERROR_REPORTING: "1"
   DISABLE_FEEDBACK_COMMAND: "1"
-  # Do NOT set DISABLE_TELEMETRY — breaks feature flags (Opus 1M context)
+  # Do NOT set DISABLE_TELEMETRY — breaks feature flags (extended context window models)
   # Do NOT set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC — same + disables updater
 
+# Keys must match Claude settings.json camelCase format — do NOT convert to snake_case
 claude_sandbox_config:
   enabled: true
   allowUnsandboxedCommands: false
   failIfUnavailable: true
+  # use weaker nested sandbox when Claude runs inside a sandboxed context (devcontainer, CSB restricted shell)
   enableWeakerNestedSandbox: true
 
 claude_cleanup_period_days: 7
+claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
 
 claude_queue_enabled: false
+claude_queue_allowed_authors: []  # GitHub logins allowed to trigger queue; MUST set when enabled — empty = auth disabled
+claude_log_dir: "{{ ansible_facts['user_dir'] }}/.local/state/claude/logs"
+claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
 claude_queue_repo: ""
-claude_remote_control_enabled: false
+claude_queue_poll_interval_sec: 120
+claude_queue_boot_delay_sec: 60
+claude_queue_memory_max: '4G'
+claude_queue_cpu_quota: '80%'
+claude_queue_max_turns: 50    # --max-turns passed to claude; limits runaway sessions
+claude_queue_timeout: 1800    # seconds before SIGTERM is sent to claude process
+claude_queue_max_issues_per_run: 5    # max issues processed per poller invocation; caps lock hold time
+claude_queue_host_label: ""   # optional human-readable label posted in issue comments; leave empty to omit host identity
+claude_queue_config_dir: "{{ claude_work_config_dir if profile == 'work' else claude_default_config_dir }}"  # config dir for queue daemon
+claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warning only, no unit; run claude --remote-control manually
+claude_remote_control_config_dir: "{{ claude_personal_config_dir }}"  # config dir for remote-control; override to use a different instance
 
-claude_deny_read:
+claude_deny_sensitive:
   - "~/.ssh/**"
   - "~/.aws/**"
   - "~/.gnupg/**"
@@ -31,12 +62,16 @@ claude_deny_read:
   - "~/.config/gh/**"
   - "~/.config/gcloud/**"
   - "~/.config/acli/**"
+  - "~/.config/sops/age/**"
   - "~/.config/containers/auth.json"
   - "~/.docker/config.json"
   - "~/.local/share/keyrings/**"
-  - "~/.claude-work/**"
-  - "~/.claude-personal/**"
-  - "~/.claude/.credentials.json"
+  - "~/.config/helm/**"
+  - "~/.config/claude/**"  # queue-repos.conf and work-env — read denied (defense-in-depth; write also blocked via claude_deny_write_only)
+  - "~/.azure/**"
+  - "~/.config/rclone/**"
+  - "~/.gitconfig"
+  - "~/.config/git/config"
   - "~/.vault_pass*"
   - "~/.netrc"
   - "~/.npmrc"
@@ -44,6 +79,10 @@ claude_deny_read:
   - "**/.git/config"
   - "/proc/*/environ"
   - "/proc/*/cmdline"
+  - "/proc/*/mem"
+  - "/proc/*/maps"
+  - "/proc/*/smaps"
+  - "/proc/*/fd/**"
   - "~/.password-store/**"
   - "~/.mozilla/**"
   - "~/.config/google-chrome/**"
@@ -51,38 +90,24 @@ claude_deny_read:
   - "~/.pki/**"
   - "~/.local/share/gnome-keyring/**"
   - "~/.Xauthority"
-  - "~/.zsh_history"
+  - "~/.local/state/zsh/history"
   - "~/.bash_history"
-  - "//run/host/**"
+  - "/run/host/**"
+  - "/etc/shadow"
+  - "/etc/sudoers"
+  - "/etc/sudoers.d/**"
 
-claude_deny_write:
-  - "~/.ssh/**"
-  - "~/.aws/**"
-  - "~/.gnupg/**"
-  - "~/.kube/**"
-  - "~/.config/gh/**"
-  - "~/.config/gcloud/**"
-  - "~/.config/acli/**"
-  - "~/.config/containers/auth.json"
-  - "~/.docker/config.json"
-  - "~/.local/share/keyrings/**"
-  - "~/.claude-work/**"
-  - "~/.claude-personal/**"
-  - "~/.claude/.credentials.json"
-  - "~/.claude/settings.json"
-  - "~/.claude/settings.local.json"
-  - "~/.vault_pass*"
-  - "~/.netrc"
-  - "~/.npmrc"
-  - "**/.env"
-  - "**/.git/config"
-  - "~/.password-store/**"
-  - "~/.mozilla/**"
-  - "~/.config/google-chrome/**"
-  - "~/.config/chromium/**"
-  - "~/.pki/**"
-  - "~/.local/share/gnome-keyring/**"
-  - "~/.Xauthority"
-  - "~/.zsh_history"
-  - "~/.bash_history"
-  - "//run/host/**"
+claude_deny_write_only:
+  - "~/.config/claude/**"  # Write/Edit denied; Read also denied via claude_deny_sensitive entry below — defense-in-depth
+  - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
+  - "~/.bashrc"
+  - "~/.zshrc"
+  - "~/.profile"
+  - "~/.bash_profile"
+  - "~/.zshenv"
+  - "~/.local/bin/**"  # Claude-the-agent only; Ansible deploys claude-queue-poller.sh here
+  - "~/.config/autostart/**"
+  - "~/Library/LaunchAgents/**"
+  - "~/.config/git/template/hooks/**"  # Git hooks deployed by dotfiles; must not be overwritten by Claude
+  - "**/.git/hooks/**"  # Per-repo hook files; Write + git config --local core.hooksPath enables hook injection
+  - "~/.config/environment.d/**"  # DOCKER_HOST + KIND_EXPERIMENTAL_PROVIDER; overwrite breaks Makefile-based kind/Podman workflows

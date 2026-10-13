@@ -4,80 +4,140 @@
   gather_facts: true
   become: false
 
+  pre_tasks:
+    - name: Load configuration defaults
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars for verify assertions
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../group_vars/all/vars.yml"
+
+    - name: Detect guest OS and managed-host restrictions
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/common/tasks/csb_detect.yml"
+
+    # Load variable overrides matching vm/converge.yml so shared verify checks
+    # evaluate against the correct deployed values (not role/config defaults).
+    - name: Apply VM-specific variable overrides for verify
+      ansible.builtin.set_fact:
+        system_faillock_even_deny_root: true
+        system_coredump_storage: none        # converge.yml overrides to none for hardened CI
+        system_coredump_process_size_max: 0  # converge.yml overrides to 0 for hardened CI
+        usbguard_expected: true              # converge.yml sets this; enables USBGuard assertions in verify-smoke.yml
+        system_tlp_enabled: true             # converge.yml sets this; needed for TLP verify assertions
+        system_aide_enabled: true            # converge.yml sets this; needed for AIDE assertions
+        system_disable_bluetooth: true        # converge.yml sets this; enables BT masking + blacklist assertions
+        system_disable_printing: true        # converge.yml sets this; enables cups masking assertions
+        system_disable_usb_storage: true     # converge.yml sets this; enables usb_storage blacklist assertions
+        system_disable_fingerprint: true     # converge.yml sets this (role default=true); verify asserts fprintd masked
+        system_tmout: 600                    # converge.yml sets this; enables session timeout assertions
+        profile: personal                    # converge.yml sets personal profile; sos (work-only) must be guarded
+        ssh_port: 722                        # matches default; parameterizes sshd port assertions
+        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
+        system_dot_mode: opportunistic       # matches role default; parameterizes DNSOverTLS assertions
+
   tasks:
+    - name: Require the installed Tailscale daemon to survive the first reboot
+      ansible.builtin.command:
+        argv: [systemctl, "{{ item.action }}", tailscaled.service]
+      loop:
+        - {action: is-active, expected: active}
+        - {action: is-enabled, expected: enabled}
+      register: verify_tailscaled_state
+      changed_when: false
+      failed_when: verify_tailscaled_state.rc != 0 or verify_tailscaled_state.stdout != item.expected
+
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
+
+    # NOTE: verify-smoke.yml hardcodes --user-only. A second play below (become: true)
+    # runs smoke-test.sh without --user-only as root to cover system-level checks
+    # (auditd watch keys, pwquality details, chrony NTS cookies, pwhistory, yescrypt,
+    # TMOUT bounds, /var/tmp bind-mount) that the user-only run cannot reach.
+    - name: Include smoke-test verification
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
     # --- repos_dnf checks ---
-    - name: Verify gh-cli repo configured
-      ansible.builtin.stat:
-        path: /etc/yum.repos.d/gh-cli.repo
-      register: verify_gh_repo
-      become: true
-
-    - name: Assert gh-cli repo exists
-      ansible.builtin.assert:
-        that: verify_gh_repo.stat.exists
-        fail_msg: "gh-cli repo not configured"
+    # gh-cli repo assertion removed: gh ships in standard Fedora repos (F43+),
+    # so the third-party repo is no longer added on Fedora.
 
     - name: Verify google-chrome repo configured
       ansible.builtin.stat:
         path: /etc/yum.repos.d/google-chrome.repo
       register: verify_chrome_repo
       become: true
+      when: repo_google_chrome
 
     - name: Assert google-chrome repo exists
       ansible.builtin.assert:
         that: verify_chrome_repo.stat.exists
         fail_msg: "google-chrome repo not configured"
+      when: repo_google_chrome
 
-    - name: Verify mullvad repo configured
+    - name: Include desktop common assertions (Alacritty + Chrome policy)
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
+
+    - name: Verify google-cloud-cli repo configured
       ansible.builtin.stat:
-        path: /etc/yum.repos.d/mullvad.repo
-      register: verify_mullvad_repo
+        path: /etc/yum.repos.d/google-cloud-cli.repo
+      register: verify_gcloud_repo
       become: true
+      when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
 
-    - name: Assert mullvad repo exists
+    - name: Assert google-cloud-cli repo exists
       ansible.builtin.assert:
-        that: verify_mullvad_repo.stat.exists
-        fail_msg: "mullvad repo not configured"
+        that: verify_gcloud_repo.stat.exists
+        fail_msg: "google-cloud-cli repo not configured"
+      when: (repo_google_cloud_sdk) and ansible_architecture == 'x86_64'
 
-    - name: Verify sysctl hardening config deployed
-      ansible.builtin.stat:
-        path: /etc/sysctl.d/90-hardening.conf
-      register: verify_sysctl
+    - name: Check sysctl config contains kernel.panic = 0 (workstation default; group_vars default is 0; CIS target is 10)
+      ansible.builtin.command: grep -q 'kernel.panic = {{ system_kernel_panic | default(0) }}' /etc/sysctl.d/90-hardening.conf
+      changed_when: false
       become: true
+      when:
+        - verify_sysctl_file is not skipped
+        - verify_sysctl_file.stat.exists
 
-    - name: Assert sysctl hardening deployed
-      ansible.builtin.assert:
-        that: verify_sysctl.stat.exists
-        fail_msg: "Sysctl hardening config not deployed"
+    - name: Check sysctl config contains kernel.panic_on_oops = 0 (workstation default; group_vars default is 0; CIS target is 1)
+      ansible.builtin.command:
+        cmd: >-
+          grep -q 'kernel.panic_on_oops = {{ system_kernel_panic_on_oops | default(0) }}'
+          /etc/sysctl.d/90-hardening.conf
+      changed_when: false
+      become: true
+      when:
+        - verify_sysctl_file is not skipped
+        - verify_sysctl_file.stat.exists
 
-    - name: Check sysctl config contains ptrace restriction
-      ansible.builtin.command: grep -q 'kernel.yama.ptrace_scope = 1' /etc/sysctl.d/90-hardening.conf
+    - name: Check fs.inotify.max_user_watches (system role)
+      ansible.builtin.command: sysctl -n fs.inotify.max_user_watches
+      register: verify_inotify_watches
       changed_when: false
       become: true
 
-    - name: Check sysctl config contains dmesg restriction
-      ansible.builtin.command: grep -q 'kernel.dmesg_restrict = 1' /etc/sysctl.d/90-hardening.conf
+    - name: Assert fs.inotify.max_user_watches >= 1048576
+      ansible.builtin.assert:
+        that: verify_inotify_watches.stdout | int >= 1048576
+        fail_msg: >-
+          fs.inotify.max_user_watches={{ verify_inotify_watches.stdout }},
+          expected >=1048576 (role default: _system_sysctl_performance_defaults)
+
+    - name: Check fs.inotify.max_user_instances (system role)
+      ansible.builtin.command: sysctl -n fs.inotify.max_user_instances
+      register: verify_inotify_instances
       changed_when: false
       become: true
 
-    - name: Verify modprobe hardening config deployed
-      ansible.builtin.stat:
-        path: /etc/modprobe.d/hardening.conf
-      register: verify_modprobe
-      become: true
-
-    - name: Assert modprobe hardening deployed
+    - name: Assert fs.inotify.max_user_instances >= 8192
       ansible.builtin.assert:
-        that: verify_modprobe.stat.exists
-        fail_msg: "Modprobe hardening config not deployed"
+        that: verify_inotify_instances.stdout | int >= 8192
+        fail_msg: >-
+          fs.inotify.max_user_instances={{ verify_inotify_instances.stdout }},
+          expected >=8192 (role default: _system_sysctl_performance_defaults)
 
     # --- System hardening checks (VM only) ---
     - name: Gather service facts for conditional checks
@@ -95,6 +155,39 @@
         that: verify_fw_zone.stdout == 'drop'
         fail_msg: "Firewall default zone is '{{ verify_fw_zone.stdout }}', expected 'drop'"
 
+    - name: Check ICMP block inversion enabled in drop zone
+      ansible.builtin.command: firewall-cmd --zone=drop --query-icmp-block-inversion
+      register: verify_fw_icmp_inversion
+      changed_when: false
+      become: true
+
+    - name: Assert ICMP block inversion is enabled in drop zone
+      ansible.builtin.assert:
+        that: verify_fw_icmp_inversion.rc == 0
+        fail_msg: "icmp-block-inversion not enabled in drop zone — NDP/PMTU ICMP cannot be selectively allowed"
+
+    - name: Check drop zone interface list excludes tun* interfaces
+      ansible.builtin.command: firewall-cmd --zone=drop --list-interfaces
+      register: verify_fw_drop_ifaces
+      changed_when: false
+      become: true
+
+    - name: Assert no tun* interfaces in drop zone (VPN exclusion from reject filter)
+      ansible.builtin.assert:
+        that: not (verify_fw_drop_ifaces.stdout | regex_search('tun[0-9]+'))
+        fail_msg: "tun* interface found in drop zone — VPN tunnel traffic will be silently dropped"
+
+    - name: Check port 722/tcp is open in drop zone
+      ansible.builtin.command: firewall-cmd --zone=drop --query-port={{ ssh_port }}/tcp
+      register: verify_fw_port
+      changed_when: false
+      become: true
+
+    - name: Assert port 722/tcp is open in drop zone
+      ansible.builtin.assert:
+        that: verify_fw_port.rc == 0
+        fail_msg: "Port {{ ssh_port }}/tcp not open in drop zone"
+
     - name: Check sysctl net.core.bpf_jit_harden
       ansible.builtin.command: sysctl -n net.core.bpf_jit_harden
       register: verify_bpf
@@ -103,8 +196,43 @@
 
     - name: Assert BPF JIT hardening
       ansible.builtin.assert:
-        that: verify_bpf.stdout == '2'
-        fail_msg: "BPF JIT hardening not set to 2"
+        that: verify_bpf.stdout == (system_bpf_jit_harden | default(1) | string)
+        fail_msg: >-
+          BPF JIT hardening is '{{ verify_bpf.stdout }}',
+          expected '{{ system_bpf_jit_harden | default(1) }}' (system_bpf_jit_harden)
+
+    - name: Check sysctl kernel.unprivileged_bpf_disabled
+      ansible.builtin.command: sysctl -n kernel.unprivileged_bpf_disabled
+      register: verify_bpf_unpriv
+      changed_when: false
+      become: true
+
+    - name: Assert unprivileged BPF is disabled but root-re-enable-able
+      ansible.builtin.assert:
+        that: verify_bpf_unpriv.stdout | int in [1, 2]
+        fail_msg: >-
+          kernel.unprivileged_bpf_disabled={{ verify_bpf_unpriv.stdout }} (expected 1 or 2).
+          Value 0 allows unprivileged BPF loading — security regression.
+
+    - name: Check bpfman binary is present
+      ansible.builtin.command: which bpfman
+      register: verify_bpfman_bin
+      changed_when: false
+      failed_when: false
+
+    - name: Check bpfman.socket is enabled
+      ansible.builtin.command: systemctl is-enabled bpfman.socket  # noqa: command-instead-of-module
+      register: verify_bpfman_socket
+      changed_when: false
+      become: true
+      failed_when: false
+      when: verify_bpfman_bin.rc == 0
+
+    - name: Assert bpfman.socket is enabled
+      ansible.builtin.assert:
+        that: verify_bpfman_socket.rc == 0
+        fail_msg: "bpfman.socket is not enabled — bpfman load/list will fail at runtime"
+      when: verify_bpfman_bin.rc == 0
 
     - name: Check sysctl net.ipv4.conf.all.rp_filter
       ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
@@ -114,34 +242,77 @@
 
     - name: Assert reverse path filtering
       ansible.builtin.assert:
-        that: verify_rp_filter.stdout == '1'
-        fail_msg: "Reverse path filtering not set to strict mode"
+        # hardcoded: no system_rp_filter var exists;
+        # must match _system_sysctl_hardening_defaults net.ipv4.conf.all.rp_filter = 2
+        that: verify_rp_filter.stdout | int == 2
+        fail_msg: "Reverse path filtering is '{{ verify_rp_filter.stdout }}', expected '2' (loose mode required for Tailscale)"
 
-    - name: Verify auditd rules file exists
-      ansible.builtin.stat:
-        path: /etc/audit/rules.d/claude-code.rules
-      register: verify_auditd
+    - name: Check sysctl net.ipv4.ip_forward
+      ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+      register: verify_ip_forward
+      changed_when: false
       become: true
 
-    - name: Assert auditd rules deployed with correct mode
+    - name: Assert ip_forward is 1 (required for Kubernetes/OVN-K/kind)
+      ansible.builtin.assert:
+        that: verify_ip_forward.stdout == '1'
+        fail_msg: "net.ipv4.ip_forward is not 1 — pod routing and Tailscale subnet routing will fail"
+      when: hostvars[inventory_hostname].system_enable_ip_forward | default(true) | bool
+
+    - name: Check sysctl net.bridge.bridge-nf-call-iptables
+      ansible.builtin.command: sysctl -n net.bridge.bridge-nf-call-iptables
+      register: verify_bridge_nf
+      changed_when: false
+      become: true
+
+    - name: Assert bridge-nf-call-iptables is 1 (required for OVN-K NetworkPolicy)
+      ansible.builtin.assert:
+        that: verify_bridge_nf.stdout | int == 1
+        fail_msg: >-
+          net.bridge.bridge-nf-call-iptables is '{{ verify_bridge_nf.stdout }}',
+          expected '1' (required for Kubernetes NetworkPolicy)
+
+    - name: Verify ip_tables, br_netfilter, overlay modules loaded at runtime
+      ansible.builtin.command: sh -c "lsmod | grep -qE 'ip_tables|br_netfilter|overlay'"
+      changed_when: false
+      become: true
+
+    - name: Verify all 7 kind kernel modules are marked persistent in /etc/modules-load.d
+      ansible.builtin.command: grep -rqE '^{{ item }}$' /etc/modules-load.d/
+      loop:
+        - ip6_tables
+        - ip6table_nat
+        - ip_tables
+        - iptable_nat
+        - br_netfilter
+        - nf_conntrack
+        - overlay
+      changed_when: false
+      become: true
+
+    # auditd: stat + mode 0640 + -e 2 immutability covered by verify-common.yml (not csb_detected)
+
+    - name: Slurp DNS-over-TLS config for content check
+      ansible.builtin.slurp:
+        src: /etc/systemd/resolved.conf.d/99-dot.conf
+      register: verify_dot_content
+      become: true
+      when:
+        - verify_dot_conf is not skipped
+        - verify_dot_conf.stat.exists
+
+    - name: Assert DNS-over-TLS config contains required settings
       ansible.builtin.assert:
         that:
-          - verify_auditd.stat.exists
-          - verify_auditd.stat.mode == '0640'
-        fail_msg: "Auditd rules not deployed or wrong permissions (expected 0640)"
-      when: ansible_facts.services['auditd.service'] is defined
-
-    - name: Verify DNS-over-TLS config exists
-      ansible.builtin.stat:
-        path: /etc/systemd/resolved.conf.d/99-dot.conf
-      register: verify_dot
-      become: true
-
-    - name: Assert DNS-over-TLS config deployed
-      ansible.builtin.assert:
-        that: verify_dot.stat.exists
-        fail_msg: "DNS-over-TLS config not deployed"
-      when: ansible_facts.services['systemd-resolved.service'] is defined
+          - (verify_dot_content.content | b64decode) is search('Domains=~\.')
+          - (verify_dot_content.content | b64decode) is search('DNSOverTLS=' ~ (system_dot_mode | default('opportunistic')))
+          - (verify_dot_content.content | b64decode) is search('1\.1\.1\.1')
+        fail_msg: >-
+          99-dot.conf exists but is missing required settings
+          (Domains=~., DNSOverTLS={{ system_dot_mode | default('opportunistic') }}, 1.1.1.1)
+      when:
+        - verify_dot_conf is not skipped
+        - verify_dot_conf.stat.exists
 
     - name: Verify kernel lockdown in grubby
       ansible.builtin.command: grubby --info=DEFAULT
@@ -152,56 +323,43 @@
 
     - name: Assert kernel lockdown integrity
       ansible.builtin.assert:
-        that: "'lockdown=integrity' in verify_lockdown.stdout"
-        fail_msg: "Kernel lockdown=integrity not found in boot args"
-      when: verify_lockdown.rc == 0
+        that: "'lockdown=' ~ (system_kernel_lockdown | default('integrity')) in verify_lockdown.stdout"
+        fail_msg: "Kernel lockdown={{ system_kernel_lockdown | default('integrity') }} not found in boot args"
+      when:
+        - verify_lockdown.rc == 0
+        - system_kernel_lockdown | default('integrity') | length > 0
 
-    - name: Verify sshd hardening config
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config.d/00-hardening.conf
-      register: verify_sshd
+    - name: Verify port 722 is labeled ssh_port_t
+      ansible.builtin.command:
+        cmd: semanage port -l
+      register: verify_semanage
+      changed_when: false
+      failed_when: false
       become: true
 
-    - name: Assert sshd hardening deployed with correct mode
+    - name: Assert SSH port is labeled ssh_port_t
       ansible.builtin.assert:
         that:
-          - verify_sshd.stat.exists
-          - verify_sshd.stat.mode == '0600'
-        fail_msg: "SSHD hardening config not deployed or wrong permissions (expected 0600)"
+          - >-
+            verify_semanage.rc == 0 and
+            verify_semanage.stdout | regex_search('ssh_port_t.*' ~ ssh_port ~ '|' ~ ssh_port ~ '.*ssh_port_t') is not none
+        fail_msg: "Port {{ ssh_port }} not labeled ssh_port_t — sshd will fail to bind"
 
-    - name: Check sshd config disables password auth
-      ansible.builtin.command: grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config.d/00-hardening.conf
+    - name: Extract AllowUsers value from sshd config
+      ansible.builtin.command: grep -oP '(?<=AllowUsers )\S+' /etc/ssh/sshd_config.d/00-hardening.conf
+      register: verify_sshd_allowusers
       changed_when: false
       become: true
 
-    - name: Check sshd config disables root login
-      ansible.builtin.command: grep -q 'PermitRootLogin no' /etc/ssh/sshd_config.d/00-hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Verify crypto-policy
-      ansible.builtin.command: update-crypto-policies --show
-      register: verify_crypto
-      changed_when: false
-      become: true
-      failed_when: false
-
-    - name: Assert crypto-policy is DEFAULT:NO-SHA1
+    - name: Assert AllowUsers is set to the real user (not empty, not root)
       ansible.builtin.assert:
-        that: verify_crypto.stdout == 'DEFAULT:NO-SHA1'
-        fail_msg: "Crypto policy is '{{ verify_crypto.stdout }}', expected DEFAULT:NO-SHA1"
-      when: verify_crypto.rc == 0
-
-    - name: Verify NetworkManager Tailscale config
-      ansible.builtin.stat:
-        path: /etc/NetworkManager/conf.d/tailscale.conf
-      register: verify_nm_ts
-      become: true
-
-    - name: Assert Tailscale NM unmanaged config deployed
-      ansible.builtin.assert:
-        that: verify_nm_ts.stat.exists
-        fail_msg: "NetworkManager Tailscale config not deployed"
+        that:
+          - verify_sshd_allowusers.stdout | length > 0
+          - verify_sshd_allowusers.stdout != 'root'
+          - verify_sshd_allowusers.stdout == ansible_user_id
+        fail_msg: >-
+          AllowUsers is '{{ verify_sshd_allowusers.stdout }}',
+          expected '{{ ansible_user_id }}' (non-empty, non-root)
 
     # --- New system hardening checks ---
     - name: Check /dev/shm mount options
@@ -218,50 +376,128 @@
           - "'nodev' in verify_shm.stdout"
         fail_msg: "/dev/shm missing required mount options (noexec,nosuid,nodev)"
 
-    - name: Verify modprobe blacklists usb_storage
-      ansible.builtin.command: grep -q usb_storage /etc/modprobe.d/hardening.conf
+    - name: Check /tmp mount options (CIS 1.1.2.x)
+      ansible.builtin.command: findmnt -n -o OPTIONS /tmp
+      register: verify_tmp
       changed_when: false
-      failed_when: false
-      register: verify_usb_storage
       become: true
 
-    - name: Assert usb_storage is blacklisted
+    - name: Assert /tmp has noexec (CIS 1.1.2.x)
       ansible.builtin.assert:
-        that: verify_usb_storage.rc == 0
-        fail_msg: "usb_storage not blacklisted"
+        that:
+          - "not (system_tmp_noexec | default(false) | bool) or 'noexec' in verify_tmp.stdout"
+          - "'nosuid' in verify_tmp.stdout"
+          - "'nodev' in verify_tmp.stdout"
+        fail_msg: "/tmp missing required mount options (noexec,nosuid,nodev) — CIS 1.1.2.x"
 
-    - name: Check modprobe blacklists cramfs
-      ansible.builtin.command: grep -q cramfs /etc/modprobe.d/hardening.conf
+    - name: Check /home mount options (CIS 1.1.9)
+      ansible.builtin.command: findmnt -n -o OPTIONS /home
+      register: verify_home
       changed_when: false
       become: true
-
-    - name: Check modprobe blacklists firewire-core
-      ansible.builtin.command: grep -q firewire-core /etc/modprobe.d/hardening.conf
-      changed_when: false
-      become: true
-
-    - name: Verify chrony NTS config
-      ansible.builtin.command: grep -q nts /etc/chrony.conf
-      changed_when: false
       failed_when: false
-      register: verify_chrony_nts
-      become: true
 
-    - name: Assert chrony has NTS config
+    - name: Assert /home has nosuid (CIS 1.1.9)
       ansible.builtin.assert:
-        that: verify_chrony_nts.rc == 0
-        fail_msg: "NTS not configured in chrony.conf"
+        that: "'nosuid' in verify_home.stdout"
+        fail_msg: "/home missing nosuid mount option (CIS 1.1.9)"
+      when: verify_home.rc | default(1) == 0  # skip if /home is not a separate mountpoint
 
-    - name: Verify chronyd is enabled
+    - name: Check /home fstab entry contains nosuid (system role fstab hardening)
+      # The Fedora installer writes a /home entry in /etc/fstab even when /home is on
+      # the root partition (subvol= btrfs). The system role adds nosuid to that line.
+      ansible.builtin.command: findmnt -n -o OPTIONS --fstab /home
+      changed_when: false
+      become: true
+      failed_when: false
+      register: verify_home_fstab_nosuid
+
+    - name: Assert /home fstab entry has nosuid
+      ansible.builtin.assert:
+        that:
+          - verify_home_fstab_nosuid.rc == 0
+          - "'nosuid' in verify_home_fstab_nosuid.stdout.split(',')"
+        fail_msg: "/home fstab entry missing nosuid — system role fstab lineinfile task may have failed"
+
+    - name: Check /boot mount options
+      ansible.builtin.command: findmnt -n -o OPTIONS /boot
+      register: verify_boot
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert /boot has nosuid, nodev, noexec
+      ansible.builtin.assert:
+        that:
+          - "'nosuid' in verify_boot.stdout"
+          - "'nodev' in verify_boot.stdout"
+          - "'noexec' in verify_boot.stdout"
+        fail_msg: "/boot missing required mount options (nosuid,nodev,noexec)"
+      when: verify_boot.rc | default(1) == 0  # skip if /boot is not a separate mountpoint
+
+    - name: Check /boot/efi mount options
+      ansible.builtin.command: findmnt -n -o OPTIONS /boot/efi
+      register: verify_boot_efi
+      changed_when: false
+      become: true
+      failed_when: false
+
+    - name: Assert /boot/efi has nosuid, noexec
+      ansible.builtin.assert:
+        that:
+          - "'nosuid' in verify_boot_efi.stdout"
+          - "'noexec' in verify_boot_efi.stdout"
+        fail_msg: "/boot/efi missing required mount options (nosuid,noexec)"
+      when: verify_boot_efi.rc | default(1) == 0  # skip if /boot/efi is not a separate mountpoint
+
+    # --- Bluetooth disable path (system_disable_bluetooth: true) ---
+    - name: Query bluetooth.service UnitFileState
       ansible.builtin.systemd:
-        name: chronyd
-      register: verify_chronyd
+        name: bluetooth.service
+      register: verify_bluetooth_service
       become: true
+      failed_when: false
+      when: system_disable_bluetooth | bool
 
-    - name: Assert chronyd is enabled
+    - name: Assert bluetooth.service is masked
       ansible.builtin.assert:
-        that: verify_chronyd.status.UnitFileState == 'enabled'
-        fail_msg: "chronyd not enabled"
+        that: verify_bluetooth_service.status.UnitFileState == 'masked'
+        fail_msg: "bluetooth.service is not masked — system_disable_bluetooth: true did not take effect"
+      when:
+        - system_disable_bluetooth | bool
+        - verify_bluetooth_service.status.UnitFileState | default('') != ''
+
+    - name: Check modprobe blacklists bluetooth
+      ansible.builtin.command: grep -q 'blacklist bluetooth' /etc/modprobe.d/hardening.conf
+      changed_when: false
+      become: true
+      when: system_disable_bluetooth | bool
+
+    - name: Check SELinux enforcing mode
+      ansible.builtin.command: getenforce
+      register: verify_selinux
+      changed_when: false
+      become: true
+      when: system_selinux_enforcing_required | default(true) | bool
+
+    - name: Assert SELinux is enforcing
+      ansible.builtin.assert:
+        that: verify_selinux.stdout == 'Enforcing'
+        fail_msg: "SELinux is '{{ verify_selinux.stdout }}', expected 'Enforcing'"
+      when: system_selinux_enforcing_required | default(true) | bool
+
+    - name: Verify var-tmp.mount is enabled
+      ansible.builtin.systemd:
+        name: var-tmp.mount
+      register: verify_var_tmp_mount
+      become: true
+      when: system_var_tmp_noexec | default(false)
+
+    - name: Assert var-tmp.mount is enabled
+      ansible.builtin.assert:
+        that: verify_var_tmp_mount.status.UnitFileState == 'enabled'
+        fail_msg: "var-tmp.mount not enabled — system_var_tmp_noexec: true did not take effect"
+      when: system_var_tmp_noexec | default(false)
 
     - name: Check pam_wheel.so in /etc/pam.d/su
       ansible.builtin.command: grep -qE '^auth.*required.*pam_wheel.so' /etc/pam.d/su
@@ -277,68 +513,391 @@
     - name: Assert root account is locked
       ansible.builtin.assert:
         that: "'LK' in verify_root_lock.stdout or 'L ' in verify_root_lock.stdout"
-        fail_msg: "Root account is not locked"
+        fail_msg: "Root account is not locked (passwd -S: '{{ verify_root_lock.stdout }}')"
 
     - name: Verify AIDE timer enabled
       ansible.builtin.systemd:
         name: aide-check.timer
       register: verify_aide_timer
       become: true
+      when: system_aide_enabled | default(false)
 
     - name: Assert AIDE timer is enabled
       ansible.builtin.assert:
         that: verify_aide_timer.status.UnitFileState == 'enabled'
         fail_msg: "AIDE check timer not enabled"
+      when: system_aide_enabled | default(false)
+
+    - name: Stat AIDE database
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: verify_aide_db
+      become: true
+      when: system_aide_enabled | default(false)
+
+    - name: Assert AIDE database is initialized
+      ansible.builtin.assert:
+        that: verify_aide_db.stat.exists
+        fail_msg: "AIDE database /var/lib/aide/aide.db.gz not initialized"
+      when: system_aide_enabled | default(false)
+
+    - name: Check AIDE service RestrictAddressFamilies sandbox setting
+      ansible.builtin.command: grep -q 'RestrictAddressFamilies=none' /etc/systemd/system/aide-check.service
+      changed_when: false
+      become: true
+      when: system_aide_enabled | default(false)
+
+    - name: Check AIDE conf includes security-critical paths
+      ansible.builtin.command: grep -q '{{ item.path }}' /etc/aide.conf
+      loop:
+        - path: /etc/audit
+        - path: /etc/bpfman
+        - path: /etc/crypto-policies
+        - path: /etc/selinux
+        - path: /etc/usbguard
+      loop_control:
+        label: "{{ item.path }}"
+      when:
+        - system_aide_enabled | default(false)
+        - item.path != '/etc/usbguard' or usbguard_expected | default(false)
+        - item.path != '/etc/bpfman' or profile | default('personal') == 'work'
+      changed_when: false
+      become: true
+
+    # --- PAM faillock unique VM check (others covered by verify-dnf.yml) ---
+    - name: Check faillock even_deny_root present (VM converge sets system_faillock_even_deny_root true)
+      ansible.builtin.command: grep -q '^even_deny_root' /etc/security/faillock.conf
+      changed_when: false
+      become: true
+
+    # pwquality minlen=14 covered by verify-dnf.yml (included at line 35)
+
+    # --- Journald persistence ---
+    - name: Verify /var/log/journal exists for persistent logging
+      ansible.builtin.stat:
+        path: /var/log/journal
+      register: verify_journal_dir
+      become: true
+
+    - name: Assert journal directory exists with correct mode
+      ansible.builtin.assert:
+        that:
+          - verify_journal_dir.stat.exists
+          - verify_journal_dir.stat.isdir
+          - verify_journal_dir.stat.mode == '2755'
+        fail_msg: "/var/log/journal missing or wrong mode (expected 2755)"
 
     # --- Service masking ---
-    - name: Check cups-browsed service state
+    - name: Check cups.socket state
       ansible.builtin.systemd:
-        name: cups-browsed
-      register: verify_cups
+        name: cups.socket
+      register: verify_cups_socket
       become: true
       failed_when: false
 
-    - name: Assert cups-browsed is masked
+    - name: Assert cups.socket is masked (prevent socket activation of CUPS)
       ansible.builtin.assert:
-        that: verify_cups.status.UnitFileState == 'masked'
-        fail_msg: "cups-browsed is not masked"
-      when: verify_cups.status.UnitFileState | default('') != ''
+        that: verify_cups_socket.status.UnitFileState == 'masked'
+        fail_msg: "cups.socket is not masked — Flatpak print dialogs can trigger socket activation to restart CUPS"
+      when:
+        - verify_cups_socket.status.UnitFileState | default('') != ''
+        - system_disable_printing | default(false) | bool
 
-    - name: Check ctrl-alt-del.target state
+    - name: Check cups.path state
       ansible.builtin.systemd:
-        name: ctrl-alt-del.target
-      register: verify_cad
+        name: cups.path
+      register: verify_cups_path
       become: true
       failed_when: false
 
-    - name: Assert ctrl-alt-del is masked
+    - name: Assert cups.path is masked (prevent path activation of CUPS)
       ansible.builtin.assert:
-        that: verify_cad.status.UnitFileState == 'masked'
-        fail_msg: "ctrl-alt-del.target is not masked"
-      when: verify_cad.status.UnitFileState | default('') != ''
+        that: verify_cups_path.status.UnitFileState == 'masked'
+        fail_msg: "cups.path is not masked — path activation can restart CUPS daemon"
+      when:
+        - verify_cups_path.status.UnitFileState | default('') != ''
+        - system_disable_printing | default(false) | bool
 
-    # --- Core dump disable ---
-    - name: Verify core dump disable config
+    - name: Check cups.service state
+      ansible.builtin.systemd:
+        name: cups.service
+      register: verify_cups_service
+      become: true
+      failed_when: false
+      when: system_disable_printing | default(false) | bool
+
+    - name: Assert cups.service is disabled when printing disabled
+      ansible.builtin.assert:
+        that: verify_cups_service.status.UnitFileState == 'disabled'
+        fail_msg: "cups.service UnitFileState is '{{ verify_cups_service.status.UnitFileState }}', expected 'disabled'"
+      when:
+        - system_disable_printing | default(false) | bool
+        - verify_cups_service.status.UnitFileState | default('') != ''
+
+    - name: Check fprintd service state
+      ansible.builtin.systemd:
+        name: fprintd.service
+      register: verify_fprintd
+      become: true
+      failed_when: false
+
+    - name: Assert fprintd.service is masked (prevents fingerprint from bypassing pam_faillock)
+      ansible.builtin.assert:
+        that: verify_fprintd.status.UnitFileState == 'masked'
+        fail_msg: "fprintd.service is not masked — fingerprint auth can bypass pam_faillock"
+      when: verify_fprintd.status.UnitFileState | default('') != ''
+
+    - name: Check power-profiles-daemon state
+      ansible.builtin.systemd:
+        name: power-profiles-daemon
+      register: verify_ppd
+      become: true
+      failed_when: false
+
+    - name: Assert power-profiles-daemon is masked (TLP conflict prevention)
+      ansible.builtin.assert:
+        that: verify_ppd.status.UnitFileState == 'masked'
+        fail_msg: "power-profiles-daemon is not masked — TLP and power-profiles-daemon will conflict"
+      when: system_tlp_enabled | bool and verify_ppd.status.UnitFileState | default('') != ''
+
+    - name: Check tuned-ppd state
+      ansible.builtin.systemd:
+        name: tuned-ppd
+      register: verify_tuned_ppd
+      become: true
+      failed_when: false
+
+    - name: Assert tuned-ppd is masked (TLP conflict prevention)
+      ansible.builtin.assert:
+        that: verify_tuned_ppd.status.UnitFileState == 'masked'
+        fail_msg: "tuned-ppd is not masked — TLP and tuned-ppd will conflict"
+      when: system_tlp_enabled | bool and verify_tuned_ppd.status.UnitFileState | default('') != ''
+
+    - name: Check tlp.service is enabled (system_tlp_enabled path)
+      ansible.builtin.systemd:
+        name: tlp.service
+      register: verify_tlp_service
+      become: true
+      failed_when: false
+      when: system_tlp_enabled | default(false)
+
+    - name: Assert tlp.service is enabled
+      ansible.builtin.assert:
+        that: verify_tlp_service.status.UnitFileState == 'enabled'
+        fail_msg: "tlp.service is not enabled — system_tlp_enabled: true did not take effect"
+      when:
+        - system_tlp_enabled | default(false)
+        - verify_tlp_service.status is defined
+
+    - name: Stat TLP ThinkPad config file
       ansible.builtin.stat:
-        path: /etc/systemd/coredump.conf.d/disable.conf
-      register: verify_coredump
-      become: true
+        path: /etc/tlp.d/50-thinkpad.conf
+      register: verify_tlp_config
+      when: system_tlp_enabled | default(false)
 
-    - name: Assert core dump disable config deployed
+    - name: Assert TLP ThinkPad config deployed
       ansible.builtin.assert:
-        that: verify_coredump.stat.exists
-        fail_msg: "Core dump disable config not deployed"
+        that: verify_tlp_config.stat.exists
+        fail_msg: "/etc/tlp.d/50-thinkpad.conf not deployed — Deploy TLP ThinkPad charge threshold config task failed"
+      when: system_tlp_enabled | default(false)
 
-    # --- dnf-automatic ---
-    - name: Verify dnf-automatic timer enabled
-      ansible.builtin.systemd:
-        name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
-      register: verify_dnf_auto
-      become: true
-      failed_when: false
+    - name: Stat /usr/local/bin/gitleaks
+      ansible.builtin.stat:
+        path: /usr/local/bin/gitleaks
+      register: verify_vm_gitleaks
 
-    - name: Assert dnf-automatic timer is enabled
+    - name: Assert gitleaks binary exists and is executable
       ansible.builtin.assert:
-        that: verify_dnf_auto.status.UnitFileState == 'enabled'
-        fail_msg: "dnf-automatic timer not enabled"
-      when: verify_dnf_auto.status.UnitFileState | default('') != ''
+        that:
+          - verify_vm_gitleaks.stat.exists
+          - verify_vm_gitleaks.stat.executable
+        fail_msg: "/usr/local/bin/gitleaks missing — gitleaks binary download regression (packages role)"
+
+    # --- logind unique VM check: IdleActionSec (others covered by verify-common.yml) ---
+    - name: Check logind config contains IdleActionSec
+      ansible.builtin.command: grep -q '^IdleActionSec=' /etc/systemd/logind.conf.d/99-hardening.conf
+      changed_when: false
+      become: true
+      when:
+        - verify_logind_conf is not skipped
+        - verify_logind_conf.stat.exists
+
+    # setup-yubikeys.sh uses the supported YubiKey Manager CLI.
+    - name: Check YubiKey Manager is installed
+      ansible.builtin.command: ykman --version
+      changed_when: false
+
+    - name: Check sos is installed (sosreport diagnostic bundle tool)
+      ansible.builtin.command: rpm -q sos  # noqa: command-instead-of-module
+      changed_when: false
+      when: profile | default('personal') == 'work'  # sos is in packages_support_work (work-profile only)
+
+    # --- distrobox role ---
+    - name: Check for distrobox binary
+      ansible.builtin.stat:
+        path: /usr/bin/distrobox
+      register: verify_distrobox_bin
+
+    - name: Check for toolbox binary
+      ansible.builtin.stat:
+        path: /usr/bin/toolbox
+      register: verify_toolbox_bin
+
+    - name: Assert distrobox binary is present (installed by packages role)
+      ansible.builtin.assert:
+        that: verify_distrobox_bin.stat.exists
+        fail_msg: "distrobox binary not found in /usr/bin — packages role should install it"
+
+    - name: Stat distrobox.ini deployed by template
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/distrobox/distrobox.ini"
+      register: verify_distrobox_ini
+      when: verify_distrobox_bin.stat.exists
+
+    - name: Assert distrobox.ini exists (template was rendered and deployed)
+      ansible.builtin.assert:
+        that: verify_distrobox_ini.stat.exists
+        fail_msg: >-
+          distrobox.ini missing at {{ ansible_user_dir }}/.config/distrobox/distrobox.ini —
+          distrobox role template was not deployed
+      when: verify_distrobox_bin.stat.exists
+
+    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
+    - name: Verify notes role
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
+
+- name: Verify (VM) — root smoke-test
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Read the active kernel audit status
+      ansible.builtin.command:
+        argv: [auditctl, -s]
+      register: verify_active_audit_status
+      changed_when: false
+
+    - name: Require immutable kernel audit enforcement after reboot
+      ansible.builtin.assert:
+        that: verify_active_audit_status.stdout is search('(?m)^enabled 2$')
+
+    - name: Read the loaded kernel audit rules for the disposable guest
+      ansible.builtin.command:
+        argv: [auditctl, -l]
+      register: verify_active_audit_rules
+      changed_when: false
+
+    - name: Show the loaded audit status and rules
+      ansible.builtin.debug:
+        msg: "{{ verify_active_audit_status.stdout }} {{ verify_active_audit_rules.stdout }}"
+
+    - name: Require the audit probe path to match the loaded credential watch
+      ansible.builtin.assert:
+        that: >-
+          verify_active_audit_rules.stdout is
+          search('(?m)^-w ' ~ ((ansible_user_dir ~ '/.vault_pass') | regex_escape) ~ ' -p r -k claude-sensitive-read$')
+
+    - name: Check the audit probe path is unused
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.vault_pass"
+      register: verify_audit_probe_path
+
+    - name: Require an unused credential-watch path for the VM audit probe
+      ansible.builtin.assert:
+        that: not verify_audit_probe_path.stat.exists
+
+    - name: Verify a credential file created after policy loading is audited
+      block:
+        - name: Create the disposable audit read fixture
+          ansible.builtin.copy:
+            content: "audit-probe-only\n"
+            dest: "{{ ansible_user_dir }}/.vault_pass"
+            mode: '0600'
+
+        - name: Read the watched fixture
+          ansible.builtin.command:
+            argv: [cat, "{{ ansible_user_dir }}/.vault_pass"]
+          changed_when: false
+          no_log: true
+
+        - name: Find the kernel audit event for the new file
+          ansible.builtin.command:
+            argv: [ausearch, --input-logs, -k, claude-sensitive-read, -f, "{{ ansible_user_dir }}/.vault_pass", -c, cat]
+          register: verify_audit_probe_event
+          changed_when: false
+          until: verify_audit_probe_event.rc == 0
+          retries: 10
+          delay: 2
+      always:
+        - name: Remove the disposable audit fixture
+          ansible.builtin.file:
+            path: "{{ ansible_user_dir }}/.vault_pass"
+            state: absent
+
+    # User checks run above as the real account; root verifies only the system.
+    - name: Allocate a private system smoke-test script
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .smoke-test.sh
+      register: verify_system_smoke_file
+
+    - name: Verify system smoke checks with separate stdout and stderr
+      block:
+        - name: Copy the candidate smoke-test script
+          ansible.builtin.copy:
+            src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/scripts/smoke-test.sh"
+            dest: "{{ verify_system_smoke_file.path }}"
+            mode: '0700'
+
+        - name: Run the system-only smoke-test as root
+          ansible.builtin.command:
+            argv:
+              - /bin/bash
+              - "{{ verify_system_smoke_file.path }}"
+              - --json
+              - --system-only
+              - --profile
+              - "{{ profile }}"
+          environment:
+            HOME: "{{ ansible_user_dir }}"
+          register: smoke_root
+          changed_when: false
+          failed_when: false
+
+        - name: Report system smoke results
+          ansible.builtin.debug:
+            msg: "{{ smoke_root.stdout }} {{ smoke_root.stderr }}"
+
+        - name: Inspect firmware availability in the disposable guest
+          ansible.builtin.stat:
+            path: /sys/firmware/efi
+          register: verify_vm_efi
+
+        - name: Identify the running virtual machine with the native detector
+          ansible.builtin.command:
+            argv: [systemd-detect-virt, --vm]
+          register: verify_vm_type
+          changed_when: false
+
+        - name: Identify firmware checks unavailable in the disposable VM
+          ansible.builtin.set_fact:
+            verify_vm_firmware_exclusions: >-
+              {{ ['secure-boot'] if verify_vm_type.stdout in ['kvm', 'qemu']
+                 and not verify_vm_efi.stat.exists else [] }}
+
+        - name: Assert all supported system smoke checks passed
+          ansible.builtin.assert:
+            that:
+              - smoke_root.rc in [0, 1]
+              - >-
+                (smoke_root.stdout | from_json).results
+                | selectattr('status', 'equalto', 'FAIL')
+                | rejectattr('name', 'in', verify_vm_firmware_exclusions)
+                | list | length == 0
+            fail_msg: "System smoke checks failed: {{ smoke_root.stdout }} {{ smoke_root.stderr }}"
+      always:
+        - name: Remove the private system smoke-test script
+          ansible.builtin.file:
+            path: "{{ verify_system_smoke_file.path }}"
+            state: absent

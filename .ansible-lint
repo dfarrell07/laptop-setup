@@ -3,11 +3,10 @@ profile: production
 
 exclude_paths:
   - collections/
+  - tmp/  # Molecule runtime files under ANSIBLE_HOME
   - .github/
-  - molecule/
-  - "*.md"
-  - common/tasks/csb_detect.yml
-  - common/tasks/csb-failure-handler.yml
+  - molecule/shared/  # task-include files; not standalone playbooks — linted via scenario verify.yml inclusion
 
 skip_list:
-  - yaml[line-length]  # yamllint handles this with 140 char limit
+  - yaml[line-length]  # yamllint --strict enforces line length
+  - var-naming[no-role-prefix]  # cross-role shared vars and underscore-prefixed register vars

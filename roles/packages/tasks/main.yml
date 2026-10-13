@@ -2,367 +2,592 @@
 # roles/packages/tasks/main.yml
 # Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
-- name: Install dnf packages
-  ansible.builtin.dnf:
-    name: >-
-      {{ packages_cli
-         + packages_languages
-         + packages_security
-         + packages_containers
-         + packages_networking }}
-    state: present
-  become: true
-  tags: [become]
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
+  vars:
+    _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
+    # Critical version variables used in download URLs for kind, helm, kustomize, k9s, etc.
+    _version_vars:
+      - packages_kind_version
+      - packages_helm_version
+      - packages_kustomize_version
+      - packages_k9s_version
+      - packages_transcrypt_version
+      - packages_sops_version
+      - packages_gitleaks_version
+      - packages_actionlint_version
+      - packages_zizmor_version
+      - packages_operator_sdk_version
+      - packages_cosign_version
+      - packages_tkn_version
+      - packages_ec_version
+      - packages_oc_version
+      - packages_yamllint_version
+      - packages_ansible_lint_version
+      - packages_golangci_lint_version
+      - packages_gofumpt_version
+      - packages_govulncheck_version
+      - packages_gci_version
+      - packages_gopls_version
+      - packages_controller_gen_version
+      - packages_stern_version
+      - packages_code_generator_version
+      - packages_subctl_version
+      - packages_aerospace_version
+      - packages_krew_bootstrap_version
+      - packages_krew_plugin_ctx_version
+      - packages_krew_plugin_ns_version
+      - packages_kubectl_version
+  ansible.builtin.assert:
+    that:
+      # Each version variable must match semantic versioning pattern or be empty
+      - query('ansible.builtin.vars', *_version_vars, default='') |
+        map('string') | select() | list |
+        reject('match', _semver_pattern) | list | length == 0
+    fail_msg: >-
+      SECURITY: One or more binary version variables contain path traversal characters
+      (slashes, double-dots, etc.) or non-semantic-version format. Version variables
+      are directly interpolated into download URLs without additional validation.
+      An attacker-controlled version string like "0.32.0/../../evil" could perform URL
+      path traversal. This check is duplicated in pre_flight_checks.yml; it runs again
+      here to protect against --start-at-task flag bypassing play-level pre_tasks.
+      Allowed pattern: ^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$
+      (e.g. "0.32.0", "v0.11.0", "1.0.0-beta", "v2.3.4-rc1")
+  # NOTE: no tags — see roles/claude/tasks/main.yml for explanation of why tags: [always]
+  # is deliberately omitted here (to survive --skip-tags always bypass attempts).
 
-- name: Install virtualization packages
-  ansible.builtin.dnf:
-    name: "{{ packages_virtualization }}"
-    state: present
-  become: true
-  tags: [become]
+- name: SECURITY assert packages_kubectl_source is valid enum value
+  ansible.builtin.assert:
+    that:
+      - packages_kubectl_source in ['ocp', 'upstream']
+    fail_msg: >-
+      SECURITY: packages_kubectl_source must be either 'ocp' or 'upstream'.
+      Got: {{ packages_kubectl_source | default('UNDEFINED') }}.
+      'ocp' extracts kubectl from OCP tarball (tracks OCP release cadence).
+      'upstream' downloads kubectl from dl.k8s.io (tracks upstream Kubernetes).
+      An invalid value causes kubectl installation to be silently skipped.
+      Fix: Set packages_kubectl_source to 'ocp' or 'upstream' in config.yml.
+
+# On CSB container tier (fapolicyd enforcing), binaries installed to /usr/local/bin
+# outside dnf won't be in fapolicyd's trust database and will be blocked at runtime.
+# Downloads would succeed but every invocation would fail with EPERM.
+- name: Disable binary downloads on fapolicyd-enforcing CSB container tier
+  ansible.builtin.set_fact:
+    packages_install_binaries: false
+  when: needs_container_tier == 'container'
+
+- name: Warn about future fapolicyd risk on hybrid CSB tier
+  ansible.builtin.debug:
+    msg: |
+      WARNING: csb_detected=true but fapolicyd not enforcing (hybrid tier).
+      Binary downloads to /usr/local/bin will fail if IT enables fapolicyd enforcement.
+      Persistent warning written to: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
+      If binaries fail with EPERM, run: make container && distrobox enter {{ container_name }}
   when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
-    - install_virtualization | default(true) | bool
+    - needs_container_tier == 'hybrid'
+    - packages_install_binaries | bool
 
-- name: Install apt packages (Debian/Ubuntu)
-  ansible.builtin.apt:
-    name: "{{ packages_apt }}"
-    state: present
-    update_cache: true
-  become: true
-  tags: [become]
-  when: ansible_pkg_mgr == 'apt'
-
-- name: Install Homebrew packages (macOS)
-  community.general.homebrew:
-    name: "{{ packages_brew }}"
-    state: present
-  when: ansible_os_family == 'Darwin'
-
-- name: Add Homebrew taps (macOS)
-  community.general.homebrew_tap:
-    name: "{{ item }}"
-    state: present
-  loop: "{{ packages_brew_taps }}"
-  when: ansible_os_family == 'Darwin'
-
-- name: Install Homebrew cask packages (macOS)
-  community.general.homebrew_cask:
-    name: "{{ packages_brew_cask }}"
-    state: present
-  when: ansible_os_family == 'Darwin'
-
-- name: Install ssh-askpass (macOS)
-  community.general.homebrew:
-    name: theseal/ssh-askpass/ssh-askpass
-    state: present
-  when: ansible_os_family == 'Darwin'
-
-# --- Binary downloads (SHA256-verified, pinned versions) ---
-
-- name: Install oc and kubectl
-  when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Check if oc is installed
-      ansible.builtin.command:
-        cmd: /usr/local/bin/oc version --client
-      register: packages_oc_check
-      changed_when: false
-      failed_when: false
-
-    - name: Download and install oc + kubectl
-      when: >-
-        packages_oc_check.rc != 0 or
-        packages_oc_version == 'stable' or
-        packages_oc_version not in (packages_oc_check.stdout | default(''))
-      block:
-        - name: Fetch OpenShift client sha256sum.txt
-          ansible.builtin.uri:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
-            return_content: true
-          register: packages_oc_sha256sums
-
-        - name: Extract SHA256 for openshift-client-linux.tar.gz
-          ansible.builtin.set_fact:
-            packages_oc_sha256: >-
-              {{ packages_oc_sha256sums.content
-                 | regex_search('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
-                                '\1', multiline=True)
-                 | first }}
-
-        - name: Download OpenShift client tarball (SHA256-verified)
-          ansible.builtin.get_url:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
-            dest: /tmp/openshift-client-linux.tar.gz
-            checksum: "sha256:{{ packages_oc_sha256 }}"
-            mode: "0644"
-
-        - name: Extract oc and kubectl
-          ansible.builtin.unarchive:
-            src: /tmp/openshift-client-linux.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --no-same-owner
-          become: true
-          tags: [become]
-
-        - name: Set permissions on oc and kubectl
-          ansible.builtin.file:
-            path: "/usr/local/bin/{{ item }}"
-            mode: "0755"
-          loop: [oc, kubectl]
-          become: true
-          tags: [become]
-
-        - name: Clean up oc tarball
-          ansible.builtin.file:
-            path: /tmp/openshift-client-linux.tar.gz
-            state: absent
-
-- name: Install opm (Operator Package Manager)
-  when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-    - profile == 'work'
-  block:
-    - name: Check if opm is installed
-      ansible.builtin.command:
-        cmd: /usr/local/bin/opm version
-      register: packages_opm_check
-      changed_when: false
-      failed_when: false
-
-    - name: Download and install opm
-      when: packages_opm_check.rc != 0
-      block:
-        - name: Fetch OPM sha256sum.txt
-          ansible.builtin.uri:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
-            return_content: true
-          register: packages_opm_sha256sums
-
-        - name: Extract SHA256 for opm-linux.tar.gz
-          ansible.builtin.set_fact:
-            packages_opm_sha256: >-
-              {{ packages_opm_sha256sums.content
-                 | regex_search('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
-                                '\1', multiline=True)
-                 | first }}
-
-        - name: Download opm tarball (SHA256-verified)
-          ansible.builtin.get_url:
-            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"
-            dest: /tmp/opm-linux.tar.gz
-            checksum: "sha256:{{ packages_opm_sha256 }}"
-            mode: "0644"
-
-        - name: Extract opm binary
-          ansible.builtin.unarchive:
-            src: /tmp/opm-linux.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --no-same-owner
-          become: true
-          tags: [become]
-
-        - name: Set permissions on opm
-          ansible.builtin.file:
-            path: /usr/local/bin/opm
-            mode: "0755"
-          become: true
-          tags: [become]
-
-        - name: Clean up opm tarball
-          ansible.builtin.file:
-            path: /tmp/opm-linux.tar.gz
-            state: absent
-
-- name: Install kind
-  when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Download kind binary
-      ansible.builtin.get_url:
-        url: "https://kind.sigs.k8s.io/dl/v{{ packages_kind_version }}/kind-linux-amd64"
-        dest: /usr/local/bin/kind
-        checksum: "sha256:{{ packages_kind_sha256 }}"
-        mode: "0755"
-      become: true
-      tags: [become]
-
-- name: Install helm
-  when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Check if helm is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/helm version --short
-      register: packages_helm_check
-      changed_when: false
-      failed_when: false
-
-    - name: Download and extract helm
-      when: "packages_helm_version not in (packages_helm_check.stdout | default(''))"
-      block:
-        - name: Download helm tarball
-          ansible.builtin.get_url:
-            url: "https://get.helm.sh/helm-v{{ packages_helm_version }}-linux-amd64.tar.gz"
-            dest: /tmp/helm.tar.gz
-            checksum: "sha256:{{ packages_helm_sha256 }}"
-            mode: "0644"
-
-        - name: Extract helm binary
-          ansible.builtin.unarchive:
-            src: /tmp/helm.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-            extra_opts:
-              - --strip-components=1
-              - linux-amd64/helm
-          become: true
-          tags: [become]
-
-        - name: Set permissions on helm
-          ansible.builtin.file:
-            path: /usr/local/bin/helm
-            mode: "0755"
-          become: true
-          tags: [become]
-
-        - name: Clean up helm tarball
-          ansible.builtin.file:
-            path: /tmp/helm.tar.gz
-            state: absent
-
-- name: Install kustomize
-  when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Check if kustomize is installed at target version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/kustomize version
-      register: packages_kustomize_check
-      changed_when: false
-      failed_when: false
-
-    - name: Download and extract kustomize
-      when: "packages_kustomize_version not in (packages_kustomize_check.stdout | default(''))"
-      block:
-        - name: Download kustomize tarball
-          vars:
-            _ver: "{{ packages_kustomize_version }}"
-          ansible.builtin.get_url:
-            url: "{{ packages_kustomize_url_base }}/kustomize%2Fv{{ _ver }}/kustomize_v{{ _ver }}_linux_amd64.tar.gz"
-            dest: /tmp/kustomize.tar.gz
-            checksum: "sha256:{{ packages_kustomize_sha256 }}"
-            mode: "0644"
-
-        - name: Extract kustomize binary
-          ansible.builtin.unarchive:
-            src: /tmp/kustomize.tar.gz
-            dest: /usr/local/bin
-            remote_src: true
-          become: true
-          tags: [become]
-
-        - name: Set permissions on kustomize
-          ansible.builtin.file:
-            path: /usr/local/bin/kustomize
-            mode: "0755"
-          become: true
-          tags: [become]
-
-        - name: Clean up kustomize tarball
-          ansible.builtin.file:
-            path: /tmp/kustomize.tar.gz
-            state: absent
-
-# --- Standalone script/binary downloads ---
-
-- name: Install transcrypt
-  ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/elasticdog/transcrypt/v{{ packages_transcrypt_version }}/transcrypt"
-    dest: /usr/local/bin/transcrypt
-    checksum: "sha256:{{ packages_transcrypt_sha256 }}"
+- name: Create ansible-packages state directory for persistent warnings
+  ansible.builtin.file:
+    path: /var/lib/ansible-packages
+    state: directory
     mode: "0755"
   become: true
   tags: [become]
   when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
+    - needs_container_tier == 'hybrid'
+    - packages_install_binaries | bool
 
-- name: Install SOPS
+- name: Write persistent fapolicyd risk warning for hybrid CSB tier
+  ansible.builtin.copy:
+    content: |
+      WARNING: Binary downloads in /usr/local/bin may fail if IT enables fapolicyd enforcement.
+
+      Current state: csb_detected=true, needs_container_tier='hybrid', fapolicyd not enforcing
+      Risk: If Red Hat IT enables fapolicyd enforcement, all binaries in /usr/local/bin will be
+      blocked at runtime with EPERM because they are not in fapolicyd's trust database.
+
+      Binaries affected (work profile): kind, helm, kustomize, k9s, oc, kubectl, opm, transcrypt,
+      sops, gitleaks, actionlint, zizmor, operator-sdk, cosign, tkn, ec, gofumpt, golangci-lint,
+      govulncheck, gci, gopls, controller-gen, stern
+
+      Migration path if binaries fail with EPERM:
+      1. Run: make container
+      2. Enter container: distrobox enter {{ container_name }}
+      3. All dev tools will be available inside the container
+
+      This file persists across reboots. Remove it manually if fapolicyd is disabled.
+    dest: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
+    mode: "0644"
+  become: true
+  tags: [become]
   when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
-    - ansible_architecture == 'x86_64'
-  block:
-    - name: Download SOPS binary
-      ansible.builtin.get_url:
-        url: "https://github.com/getsops/sops/releases/download/v{{ packages_sops_version }}/sops-v{{ packages_sops_version }}.linux.amd64"
-        dest: /usr/local/bin/sops
-        checksum: "sha256:{{ packages_sops_sha256 }}"
-        mode: "0755"
-      become: true
-      tags: [become]
+    - needs_container_tier == 'hybrid'
+    - packages_install_binaries | bool
 
-# --- Go install tools ---
+- name: Install dnf packages
+  ansible.builtin.include_tasks: install_dnf_packages.yml
 
-- name: Install Go tools
+- name: Check kernel lockdown state for bpftrace advisory
   ansible.builtin.command:
-    cmd: "go install {{ item }}"
-    creates: >-
-      {{ ansible_user_dir }}/go/bin/{{
-        item | regex_replace('.*/([^@]+)@.*', '\1')
-      }}
-  environment:
-    GOPATH: "{{ ansible_user_dir }}/go"
-    GOBIN: "{{ ansible_user_dir }}/go/bin"
-    GONOSUMCHECK: ""
-    GONOSUMDB: ""
-  loop: "{{ packages_go_install }}"
-  register: packages_go_results
+    cmd: cat /sys/kernel/security/lockdown
+  register: _packages_lockdown_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - is_dnf
+    - profile == 'work'
+    - not system_is_container
+
+- name: Advisory — bpftrace kprobe programs blocked under kernel lockdown=integrity
+  ansible.builtin.debug:
+    msg: |
+      NOTE: bpftrace installed, but kernel lockdown=integrity is active.
+      kprobe/kretprobe programs (BPF_PROG_TYPE_KPROBE) return EPERM under lockdown=integrity.
+      Use tracepoints (tracepoint:...) or uprobes instead for kernel-level tracing.
+      To enable kprobes for a debug session: set system_kernel_lockdown: '' in config.yml
+      then re-run: make system
+  when:
+    - is_dnf
+    - profile == 'work'
+    - not system_is_container
+    - _packages_lockdown_state.rc is defined
+    - _packages_lockdown_state.rc == 0
+    - "'[integrity]' in _packages_lockdown_state.stdout"
+
+# Re-check GitHub CLI availability POST-install to overwrite pre-flight false value.
+# Pre-flight checks run BEFORE packages role installs gh via DNF; the idempotency
+# guard prevents re-checking. Attestation verification tasks (actionlint, zizmor)
+# gate on packages_gh_available; without this post-install check they skip on first
+# provision even after gh is successfully installed.
+- name: Check GitHub CLI availability post-install (attestation verification prerequisite)
+  when:
+    - is_dnf
+    - profile == 'work'
+  block:
+    - name: Check GitHub CLI in PATH after package installation
+      ansible.builtin.command: which gh
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      register: _packages_gh_postinstall_check
+
+    - name: Set packages_gh_available fact (overwrite pre-flight value)
+      ansible.builtin.set_fact:
+        packages_gh_available: "{{ _packages_gh_postinstall_check.rc == 0 }}"
+
+# Enable bpfman.socket here (Play 2 packages role) to catch the case where bpfman
+# was just installed in this play. The system role (Play 1) also attempts this, but
+# on first provision bpfman is not yet installed when Play 1 runs, so that attempt
+# is a no-op.
+# noqa: command-instead-of-module — probe optional unit without starting it
+- name: Detect bpfman.socket for packages role enable attempt (may not be installed)
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: systemctl cat bpfman.socket
+  register: _packages_bpfman_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when:
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+
+- name: Enable bpfman.socket after package install (required for bpfman load/list to work)
+  ansible.builtin.systemd:
+    name: bpfman.socket
+    state: started
+    enabled: true
+  become: true
+  tags: [become]
+  when:
+    - packages_bpfman_enabled | bool
+    - is_dnf
+    - not system_is_container  # bpfman.socket enable crashes container PID 1
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
+
+- name: Check bpfman SELinux context for unconfined warning
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      pid=$(systemctl show -p MainPID bpfman.socket 2>/dev/null | awk -F= '{print $2}')
+      if [[ -n "$pid" && "$pid" != "0" && -r "/proc/$pid/attr/current" ]]; then
+        cat "/proc/$pid/attr/current"
+      else
+        echo "no-pid"
+      fi
+    executable: /bin/bash
+  register: _bpfman_selinux_context
+  changed_when: false
   failed_when: false
   when:
-    - packages_install_binaries | default(true) | bool
-    - ansible_system == 'Linux'
+    - packages_bpfman_enabled | bool
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
 
-- name: Report failed Go tool installs
+- name: Warn if bpfman is running unconfined (no SELinux policy)
   ansible.builtin.debug:
-    msg: "Failed to install {{ item.item }}: {{ item.stderr | default('unknown error') | trim }}"
-  loop: "{{ packages_go_results.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item | default('unknown') }}"
+    msg: |
+      WARNING: bpfman.socket enabled but running unconfined (no SELinux policy).
+      A compromised bpfman has CAP_SYS_ADMIN and can load arbitrary kernel eBPF programs.
+      Consider manual bpftool for one-off tasks instead of persistent bpfman daemon.
+      Persistent warning written to: {{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt
   when:
-    - packages_go_results is defined
-    - item.rc | default(0) != 0
-    - item.skipped is not defined or not item.skipped
+    - packages_bpfman_enabled | bool
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
+    - _bpfman_selinux_context.stdout is defined
+    - "'unconfined_t' in _bpfman_selinux_context.stdout"
 
-# --- pip/pipx installs ---
+- name: Create ansible-packages doc directory for bpfman SELinux warning
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages"
+    state: directory
+    mode: "0755"
+  when:
+    - packages_bpfman_enabled | bool
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
+    - _bpfman_selinux_context.stdout is defined
+    - "'unconfined_t' in _bpfman_selinux_context.stdout"
 
-- name: Install yamllint (pipx, version-pinned)
-  community.general.pipx:
-    name: yamllint
-    source: "yamllint=={{ packages_yamllint_version }}"
-    state: install
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+- name: Write persistent bpfman SELinux warning
+  ansible.builtin.copy:
+    content: |
+      WARNING: bpfman.socket enabled but running unconfined (no SELinux policy).
 
-- name: Install ansible-lint (pipx, version-pinned)
-  community.general.pipx:
-    name: ansible-lint
-    source: "ansible-lint=={{ packages_ansible_lint_version }}"
-    state: install
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
+      SELinux context: {{ _bpfman_selinux_context.stdout }}
+      Expected: bpfman_t (confined policy — not available in Fedora 44)
+      Actual: unconfined_t
+
+      Security impact:
+      - bpfman requires CAP_SYS_ADMIN to manage eBPF programs
+      - Without SELinux confinement, a compromised bpfman can load arbitrary kernel eBPF programs
+      - This creates a privilege escalation vector
+
+      Recommendation:
+      - For one-off eBPF tasks, use bpftool directly instead of persistent bpfman daemon
+      - Monitor for Fedora selinux-policy-targeted updates that add bpfman_t policy
+      - Check: semodule -l | grep bpfman
+
+      This file persists across reboots. Remove it manually if SELinux policy is deployed.
+      Last checked: {{ ansible_date_time.iso8601 }}
+    dest: "{{ ansible_facts['user_dir'] }}/.local/share/ansible-packages/bpfman-selinux-WARNING.txt"
+    mode: "0644"
+  when:
+    - packages_bpfman_enabled | bool
+    - is_dnf
+    - not system_is_container
+    - profile == 'work'
+    - (_packages_bpfman_check.rc | default(-1)) == 0
+    - _bpfman_selinux_context.stdout is defined
+    - "'unconfined_t' in _bpfman_selinux_context.stdout"
+
+- name: Install virtualization packages and post-install setup
+  ansible.builtin.include_tasks: install_virtualization.yml
+  when:
+    - is_dnf
+    - install_virtualization | bool
+    - profile == 'work'
+
+- name: Install apt packages (Debian/Ubuntu)
+  when:
+    - is_apt
+  block:
+    - name: Install apt packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        policy_rc_d: "{{ 101 if system_is_container else omit }}"
+        name: "{{ packages_apt }}"
+        state: present
+        update_cache: true
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install apt packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+
+- name: Install apt work-profile packages (Debian/Ubuntu)
+  when:
+    - is_apt
+    - profile == 'work'
+  block:
+    - name: Install apt work-profile packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        policy_rc_d: "{{ 101 if system_is_container else omit }}"
+        name: "{{ packages_apt_work }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt work-profile package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install apt work-profile packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+
+- name: Install apt YubiKey packages (Debian/Ubuntu)
+  when:
+    - is_apt
+    - packages_yubikey_enabled | bool
+  block:
+    - name: Install apt YubiKey packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        policy_rc_d: "{{ 101 if system_is_container else omit }}"
+        name: "{{ packages_apt_yubikey }}"
+        state: present
+      become: true
+      tags: [become]
+  rescue:
+    - name: Warn apt YubiKey package install failed
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install apt YubiKey packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or missing repo access.
+          Continuing playbook execution.
+
+- name: Install Homebrew packages and configure autoupdate (macOS)
+  ansible.builtin.include_tasks: install_brew.yml
+
+# The system role runs before packages: a newly installed daemon must become
+# ready in this same provision, rather than waiting for a second make all.
+- name: Enable installed Tailscale after package installation
+  when:
+    - is_linux
+    - not system_is_container
+  block:
+    - name: Inspect the Tailscale unit after package installation
+      ansible.builtin.command:
+        argv: [systemctl, show, tailscaled.service, --property=LoadState, --value]
+      register: _packages_tailscaled_unit
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        _packages_tailscaled_unit.rc != 0 or
+        _packages_tailscaled_unit.stdout not in ['loaded', 'not-found', 'masked']
+
+    - name: Enable and start the installed Tailscale daemon
+      ansible.builtin.systemd_service:
+        name: tailscaled.service
+        enabled: true
+        state: started
+      become: true
+      tags: [become]
+      when: _packages_tailscaled_unit.stdout != 'not-found'
+
+- name: Set Linux x86 work binary install fact
+  ansible.builtin.set_fact:
+    _packages_linux_x86_work: "{{ packages_install_binaries | bool
+      and is_linux
+      and ansible_facts['architecture'] == 'x86_64'
+      and profile == 'work' }}"
+
+- name: Install binary downloads
+  ansible.builtin.import_tasks: install_binary_downloads.yml
+
+- name: Install standalone binaries
+  ansible.builtin.include_tasks: install_standalone_binaries.yml
+  when: packages_install_binaries | bool
+
+# --- golang verification (defense-in-depth before GOTOOLCHAIN=local) ---
+
+- name: Verify golang binary after installation
+  ansible.builtin.include_tasks: verify_golang.yml
+  when:
+    - profile == 'work'
+    - (is_dnf or is_apt or is_macos)
+    - packages_install_binaries | bool
+
+- name: Install Go tools
+  ansible.builtin.include_tasks: install_go_tools.yml
+  when:
+    - packages_install_binaries | bool
+    - is_linux or is_macos
+
+- name: Install pipx packages (yamllint, ansible-lint)
+  ansible.builtin.include_tasks: install_pipx.yml
+  when:
+    - is_dnf or is_apt or is_macos
+    - packages_install_binaries | bool
+
+- name: Install krew
+  ansible.builtin.include_tasks: install_krew.yml
+  when: _packages_linux_x86_work
+
+- name: Assert krew binary exists after installation
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
+  register: _krew_binary_stat
+  when: _packages_linux_x86_work
+
+- name: Fail if krew binary is missing
+  ansible.builtin.fail:
+    msg: >-
+      krew installation completed but binary is missing at
+      {{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew.
+      Installation may have failed silently. Verify network connectivity and
+      re-run provisioning, or install manually from
+      https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+  when:
+    - _packages_linux_x86_work
+    - not _krew_binary_stat.stat.exists
+    - not csb_detected
+
+- name: Install subctl multi-version binaries
+  ansible.builtin.include_tasks: install_subctl_versions.yml
+
+- name: Krew post-install — plugin index update and SHA256-pinned plugin installation
+  # Guard: skip entirely if krew binary is absent (e.g., CSB install failed silently above).
+  # Without this guard, `krew update` hard-fails the play when the binary is missing, with no
+  # CSB rescue handler to record the failure and continue provisioning.
+  when:
+    - _packages_linux_x86_work
+    - _krew_binary_stat.stat.exists | default(false)
+  block:
+    - name: Update krew plugin index
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew update"
+      timeout: 60
+      changed_when: false
+      register: _krew_index_update
+
+      environment:
+        KREW_ROOT: "{{ ansible_facts['user_dir'] }}/.krew"
+
+    - name: Fail if krew plugin index update failed
+      ansible.builtin.fail:
+        msg: >-
+          Failed to update krew plugin index.
+          Error: {{ _krew_index_update.stderr | default('unknown error') }}.
+          This may indicate a transient network error or a corrupted krew installation.
+      when: _krew_index_update.rc | default(0) != 0
+
+    - name: Create private directory for pinned krew plugin manifests and archives
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_krew_plugins_
+        path: "{{ ansible_facts['user_dir'] }}/.cache"
+      register: _krew_plugin_tmpdir
+
+    - name: Install essential krew plugins from pinned manifests
+      ansible.builtin.include_tasks: install_krew_plugin.yml
+      vars:
+        _krew_plugin: "{{ item }}"
+      loop:
+        - name: ctx
+          binary: kubectx
+          version: "{{ packages_krew_plugin_ctx_version }}"
+          archive_sha256: "{{ packages_krew_ctx_archive_sha256 }}"
+          binary_sha256: "{{ packages_krew_plugin_ctx_sha256 }}"
+        - name: ns
+          binary: kubens
+          version: "{{ packages_krew_plugin_ns_version }}"
+          archive_sha256: "{{ packages_krew_ns_archive_sha256 }}"
+          binary_sha256: "{{ packages_krew_plugin_ns_sha256 }}"
+      loop_control:
+        label: "{{ item.name }}@{{ item.version }}"
+
+    # Post-install checksum verification: krew index has no cryptographic signing (no Sigstore/GPG),
+    # so we pin known-good SHA256 values and assert the installed scripts match.
+    # Missing plugins must fail loudly to detect network errors or incomplete installations.
+    - name: Stat ctx krew plugin binary for checksum verification
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: _krew_ctx_stat
+
+    - name: Fail if ctx krew plugin is missing
+      ansible.builtin.fail:
+        msg: >-
+          ctx plugin installation failed — file missing at
+          {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx.
+          This may indicate a network error during plugin download.
+          Re-run provisioning or install manually.
+      when: not _krew_ctx_stat.stat.exists
+
+    - name: Assert ctx krew plugin binary checksum
+      ansible.builtin.assert:
+        that:
+          - _krew_ctx_stat.stat.exists | bool
+          - _krew_ctx_stat.stat.checksum == packages_krew_plugin_ctx_sha256
+        fail_msg: >-
+          ctx plugin verification failed at
+          {{ ansible_facts['user_dir'] }}/.krew/store/ctx/{{ packages_krew_plugin_ctx_version }}/kubectx:
+          file exists={{ _krew_ctx_stat.stat.exists | default(false) }},
+          expected checksum {{ packages_krew_plugin_ctx_sha256 }},
+          got {{ _krew_ctx_stat.stat.checksum | default('MISSING') }}
+
+    - name: Stat ns krew plugin binary for checksum verification
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens"
+        get_checksum: true
+        checksum_algorithm: sha256
+      register: _krew_ns_stat
+
+    - name: Fail if ns krew plugin is missing
+      ansible.builtin.fail:
+        msg: >-
+          ns plugin installation failed — file missing at
+          {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens.
+          This may indicate a network error during plugin download.
+          Re-run provisioning or install manually.
+      when: not _krew_ns_stat.stat.exists
+
+    - name: Assert ns krew plugin binary checksum
+      ansible.builtin.assert:
+        that:
+          - _krew_ns_stat.stat.exists | bool
+          - _krew_ns_stat.stat.checksum == packages_krew_plugin_ns_sha256
+        fail_msg: >-
+          ns plugin verification failed at
+          {{ ansible_facts['user_dir'] }}/.krew/store/ns/{{ packages_krew_plugin_ns_version }}/kubens:
+          file exists={{ _krew_ns_stat.stat.exists | default(false) }},
+          expected checksum {{ packages_krew_plugin_ns_sha256 }},
+          got {{ _krew_ns_stat.stat.checksum | default('MISSING') }}
+
+  rescue:
+    - name: Record krew post-install failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "krew-plugins"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install kubectx and kubens manually via krew after network access is available:
+          kubectl krew update && kubectl krew install ctx ns
+        _csb_ticket_summary: "Cannot update krew index or install ctx/ns plugins on CSB"
+        _csb_ticket_body: >-
+          krew plugin index update or ctx/ns plugin installation failed, likely due to
+          github.com CDN access being filtered by corporate network policy.
+          Install manually: kubectl krew update && kubectl krew install ctx ns
+      when: csb_detected
+    - name: Fail the play after non-CSB krew post-install failure
+      ansible.builtin.fail:
+        msg: >-
+          krew plugin installation failed and is required for this provisioning profile.
+          Error: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually: kubectl krew update && kubectl krew install ctx ns
+      when: not csb_detected
+
+  always:
+    - name: Remove private krew plugin manifests and archives
+      ansible.builtin.file:
+        path: "{{ _krew_plugin_tmpdir.path }}"
+        state: absent
+      when: _krew_plugin_tmpdir.path is defined

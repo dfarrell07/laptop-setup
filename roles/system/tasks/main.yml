@@ -3,500 +3,423 @@
 # System hardening: firewall, sysctl, kernel lockdown, auditd, services.
 # All tasks require become (Play 1 has become: true at play level).
 
+# --- SECURITY: Input validation for sysctl key and value format ---
+# Prevents injection attacks via newlines, shell metacharacters in sysctl keys and values.
+# This assertion runs before any hardening tasks to catch malformed input early.
+- name: "SECURITY: Validate sysctl key and value format in all extra dicts"
+  ansible.builtin.assert:
+    that:
+      - "_sysctl_keys | reject('match', _sysctl_key_re) | list | length == 0"
+      - "(_sysctl_values_invalid | length == 0)"
+    fail_msg: >-
+      Invalid sysctl key or value format.
+      Sysctl keys must match [a-zA-Z0-9._-]+ only.
+      Sysctl values must be alphanumeric, dots, slashes, hyphens, underscores, pipes only (no other shell metacharacters).
+      Found invalid keys: {{ _sysctl_keys | reject('match', _sysctl_key_re) | list }}
+      Found invalid values: {{ _sysctl_values_invalid }}
+  vars:
+    _sysctl_key_re: '^[a-zA-Z0-9._-]+\Z'
+    _sysctl_value_re: '^[a-zA-Z0-9._/|-]+\Z'
+    _sysctl_keys: "{{ (system_sysctl_extra.keys() | list) + (system_sysctl_extra_additional.keys() | list) }}"
+    _sysctl_all_dicts: "{{ [system_sysctl_extra | default({}), system_sysctl_extra_additional | default({})] }}"
+    # yamllint disable-line rule:line-length
+    _sysctl_values_invalid: >-
+      {{ _sysctl_all_dicts | map('dict2items') | flatten | map(attribute='value') | map('string')
+      | reject('match', _sysctl_value_re) | list }}
+  when: not (system_is_container or csb_rhel)
+  tags: [always]
+
+# --- SECURITY: Enforce collections-dist integrity against supply chain tampering ---
+# Detects commits created with `git commit --no-verify` that bypass pre-commit SHA256SUMS
+# check. Paired with CI collections-integrity job for defense-in-depth protection.
+- name: "SECURITY: Verify collections-dist SHA256SUMS before provisioning"
+  ansible.builtin.assert:
+    that:
+      - lookup('file', (common_project_root | default(playbook_dir)) ~ '/collections-dist/SHA256SUMS') is defined
+      - "'ansible-posix-2.2.2.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~ '/collections-dist/SHA256SUMS')"
+      - >-
+        'community-general-13.5.0.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
+        '/collections-dist/SHA256SUMS')
+      - >-
+        'community-library_inventory_filtering_v1-1.1.5.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
+        '/collections-dist/SHA256SUMS')
+      - >-
+        'containers-podman-1.21.1.tar.gz' in lookup('file', (common_project_root | default(playbook_dir)) ~
+        '/collections-dist/SHA256SUMS')
+    fail_msg: |
+      SECURITY FAILURE: collections-dist/SHA256SUMS missing or incomplete.
+      This indicates collections-dist/*.tar.gz may have been modified without updating
+      SHA256SUMS. Common cause: `git commit --no-verify` bypassed the pre-commit guard.
+
+      To fix: cd collections-dist && sha256sum *.tar.gz > SHA256SUMS
+      Then commit normally: git add SHA256SUMS && git commit (no --no-verify)
+  tags: [always]
+
+- name: "SECURITY: Enumerate files in /etc/udev/rules.d/ (pre-plant audit)"
+  ansible.builtin.find:
+    paths: /etc/udev/rules.d/
+    file_type: file
+  register: _udev_rules_found
+  when: not system_is_container
+  tags: [always]
+
+- name: "SECURITY: Warn on unexpected files in /etc/udev/rules.d/ (CSB — IT may deploy rules)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected file(s) in /etc/udev/rules.d/.
+      On CSB machines IT may deploy udev rules — verify these are IT-managed.
+      Unexpected: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list }}
+      To suppress: add basename(s) to system_udev_rules_d_allowlist in config.yml.
+  when:
+    - csb_detected
+    - not system_is_container
+    - _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list | length > 0
+  tags: [always]
+
+- name: "SECURITY: Assert no unauthorized files in /etc/udev/rules.d/ (pre-plant attack)"
+  ansible.builtin.assert:
+    that:
+      - >-
+        _udev_rules_found.files | map(attribute='path') | map('basename')
+        | difference(system_udev_rules_d_allowlist) | list | length == 0
+    fail_msg: >-
+      SECURITY: Unauthorized file(s) in /etc/udev/rules.d/.
+      Attack: a pre-planted udev rule executes as root on every matching device event.
+      Unauthorized: {{ _udev_rules_found.files | map(attribute='path') | map('basename')
+      | difference(system_udev_rules_d_allowlist) | list }}
+      Fix: add the basename(s) to system_udev_rules_d_allowlist in config.yml, then re-run.
+  when:
+    - not csb_detected
+    - not system_is_container
+  tags: [always]
+
 # --- Gather service facts (needed for firewalld/auditd/resolved conditionals) ---
 - name: Gather service facts
   ansible.builtin.service_facts:
+  when: not system_is_container  # systemctl list-units --all crashes PID 1 in Debian 13 privileged Podman containers
 
-# --- SELinux enforcement check ---
-- name: Verify SELinux is enforcing
+- name: Seed empty service facts for container environments
+  # Ensures ansible_facts.services is defined so downstream 'is defined' guards
+  # (firewall.yml, sshd.yml, main.yml gdm check) evaluate safely to False.
+  ansible.builtin.set_fact:
+    ansible_facts: "{{ ansible_facts | combine({'services': {}}) }}"
+  when: system_is_container
+
+# --- Prerequisites (needed by seport and other system tasks) ---
+- name: Ensure policycoreutils-python-utils is installed
+  ansible.builtin.dnf:
+    name: policycoreutils-python-utils
+    state: present
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container  # RPM post-install calls daemon-reload, crashes Podman container systemd; installed in prepare instead
+
+- name: "SECURITY: Reject system_selinux_enforcing_required: false on managed dnf hosts"
   ansible.builtin.assert:
     that:
-      - ansible_selinux.status == 'enabled'
-      - ansible_selinux.mode == 'enforcing'
-      - ansible_selinux.type == 'targeted'
+      - system_selinux_enforcing_required | bool
     fail_msg: >-
-      SELinux is {{ ansible_selinux.mode | default('disabled') }}
-      (type: {{ ansible_selinux.type | default('unknown') }}).
-      Fix: sudo setenforce 1 && sudo sed -i
-      's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-  when: ansible_selinux is defined
+      SECURITY: system_selinux_enforcing_required is false — all SELinux enforcement tasks are skipped.
+      Threat: config.yml sets system_selinux_enforcing_required: false to silently bypass MAC enforcement.
+      Input: system_selinux_enforcing_required={{ system_selinux_enforcing_required }}.
+      Mechanism: hardening_core.yml outer block when-condition evaluates false — setenforce, fact refresh,
+      and enforce assert are all skipped; provisioning completes with SELinux in permissive or disabled state.
+      Impact: SELinux MAC bypass — all DAC-equivalent attacks succeed without audit log entries.
+      Fix: remove system_selinux_enforcing_required from config.yml or set it to true.
+  when: is_dnf and not csb_rhel and not system_is_container
+  tags: [always]
 
-# --- Harden /dev/shm mount options ---
-- name: Harden /dev/shm with noexec
-  ansible.posix.mount:
-    path: /dev/shm
-    src: tmpfs
-    fstype: tmpfs
-    opts: defaults,nosuid,nodev,noexec
-    state: mounted
+- name: "SECURITY: Validate system_kernel_lockdown value (injection guard)"
+  ansible.builtin.assert:
+    that:
+      - system_kernel_lockdown | string is match('^(integrity|confidentiality|none|)$')
+    fail_msg: >-
+      SECURITY: system_kernel_lockdown has an invalid value: '{{ system_kernel_lockdown }}'.
+      Threat: a crafted -e override like "none' --update-kernel=ALL --args='" passes shlex
+      through the old cmd: string form and disables lockdown on all kernels after reboot.
+      Allowed values: integrity, confidentiality, none, or empty string (disabled).
+      Input: system_kernel_lockdown={{ system_kernel_lockdown }}.
+      Fix: remove the override or set system_kernel_lockdown to a permitted value in config.yml.
+  when: not (system_is_container or csb_rhel)
+  tags: [always]
 
-# --- Kernel module blacklist ---
-- name: Deploy kernel module blacklist
-  ansible.builtin.template:
-    src: modprobe-hardening.conf.j2
-    dest: /etc/modprobe.d/hardening.conf
-    mode: "0644"
+- name: "SECURITY: Find systemd drop-in directories under /etc/systemd/system"
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    file_type: any
+    patterns: "*.d"
+  register: _systemd_dropin_find
+  when: not system_is_container
+  tags: [always]
 
-# --- Sysctl hardening ---
-- name: Deploy sysctl hardening config
-  ansible.builtin.template:
-    src: sysctl-hardening.conf.j2
-    dest: /etc/sysctl.d/90-hardening.conf
-    mode: "0644"
-  notify: Reload sysctl
-
-# --- Firewall (drop zone) ---
-- name: Set firewalld running fact
-  ansible.builtin.set_fact:
-    system_firewalld_running: >-
-      {{ ansible_facts.services['firewalld.service'] is defined and
-         ansible_facts.services['firewalld.service'].state == 'running' }}
-
-- name: Check current default firewall zone
-  ansible.builtin.command:
-    cmd: firewall-cmd --get-default-zone
-  register: system_fw_default_zone
-  changed_when: false
-  failed_when: false
-  when: system_firewalld_running | bool
-
-- name: Set default firewall zone to drop
-  ansible.builtin.command:
-    cmd: firewall-cmd --set-default-zone=drop
-  changed_when: true
-  when:
-    - system_firewalld_running | bool
-    - system_fw_default_zone.stdout | default('') != 'drop'
-  notify:
-    - Reload firewalld
-    - Reload NetworkManager
-    - Restart tailscaled
-
-- name: Enable ICMP block inversion on drop zone
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: firewall-cmd --permanent --zone=drop --add-icmp-block-inversion
-  register: system_icmp_inversion
-  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
-  failed_when:
-    - system_icmp_inversion.rc != 0
-    - "'ALREADY_ENABLED' not in ((system_icmp_inversion.stderr | default('')) + (system_icmp_inversion.stdout | default('')))"
-  when: system_firewalld_running | bool
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
-
-# NOTE: With icmp-block-inversion enabled, --add-icmp-block ALLOWS these types
-# (semantics are inverted). Without inversion, this command would block them.
-- name: Allow essential ICMP types through drop zone
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: "firewall-cmd --permanent --zone=drop --add-icmp-block={{ item }}"
-  loop: "{{ system_firewall_icmp_types }}"
-  register: system_icmp_types
-  changed_when: "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
-  failed_when:
-    - system_icmp_types.rc != 0
-    - "'ALREADY_ENABLED' not in ((system_icmp_types.stderr | default('')) + (system_icmp_types.stdout | default('')))"
-  when: system_firewalld_running | bool
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
-
-- name: Open SSH port in firewall
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    zone: drop
-    permanent: true
-    immediate: true
-    state: enabled
-  when: system_firewalld_running | bool
-  notify:
-    - Reload firewalld
-    - Restart tailscaled
-
-# --- Kernel lockdown ---
-- name: Check current kernel cmdline
-  ansible.builtin.command:
-    cmd: grubby --info=DEFAULT
-  register: system_grubby_info
-  changed_when: false
-  failed_when: false
-
-- name: Enable kernel lockdown (integrity mode)
-  ansible.builtin.command:
-    cmd: grubby --args="lockdown=integrity" --update-kernel=ALL
-  when: "'lockdown=integrity' not in (system_grubby_info.stdout | default(''))"
-  changed_when: true
-  failed_when: false
-
-# --- Core dumps ---
-- name: Ensure coredump config directory
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d
-    state: directory
-    mode: "0755"
-
-- name: Disable core dumps
-  ansible.builtin.template:
-    src: coredump-disable.conf.j2
-    dest: /etc/systemd/coredump.conf.d/disable.conf
-    mode: "0644"
-
-# --- Auditd ---
-- name: Deploy auditd rules
-  ansible.builtin.template:
-    src: auditd-claude.rules.j2
-    dest: /etc/audit/rules.d/claude-code.rules
-    mode: "0640"
-  notify: Restart auditd
-  when: ansible_facts.services['auditd.service'] is defined
-
-# --- Mask cups-browsed (RCE entry point) ---
-- name: Mask cups-browsed service
-  ansible.builtin.systemd:
-    name: cups-browsed
-    masked: true
-    state: stopped
-  failed_when: false
-
-# --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
-- name: Mask avahi-daemon service
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: true
-    state: stopped
-  loop:
-    - avahi-daemon.service
-    - avahi-daemon.socket
-  failed_when: false
-
-# --- Logind lid close ---
-- name: Configure lid close behavior
-  community.general.ini_file:
-    path: /etc/systemd/logind.conf
-    section: Login
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    mode: "0644"
-  loop:
-    - key: HandleLidSwitch
-      value: "{{ system_lid_switch }}"
-    - key: HandleLidSwitchExternalPower
-      value: "{{ system_lid_switch_external }}"
-    - key: HandleLidSwitchDocked
-      value: "{{ system_lid_switch_docked }}"
-    - key: HandlePowerKey
-      value: lock
-    - key: IdleAction
-      value: lock
-    - key: IdleActionSec
-      value: "300"
-  notify: Restart logind
-
-# --- Disable Ctrl+Alt+Delete reboot ---
-- name: Mask Ctrl+Alt+Delete reboot target
-  ansible.builtin.systemd:
-    name: ctrl-alt-del.target
-    masked: true
-  failed_when: false
-
-# --- Services ---
-- name: Enable libvirtd
-  ansible.builtin.systemd:
-    name: libvirtd
-    state: started
-    enabled: true
-  when: system_enable_libvirtd | bool
-  failed_when: false
-
-- name: Enable Mullvad VPN service
-  ansible.builtin.systemd:
-    name: mullvad-daemon
-    state: started
-    enabled: true
-  when: system_enable_mullvad | bool
-  failed_when: false
-
-# --- USBGuard ---
-- name: Install USBGuard
-  ansible.builtin.dnf:
-    name:
-      - usbguard
-      - usbguard-selinux
-    state: present
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-
-- name: Deploy USBGuard whitelist rules
-  ansible.builtin.template:
-    src: usbguard-rules.conf.j2
-    dest: /etc/usbguard/rules.conf
-    mode: "0600"
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-  notify: Restart usbguard
-
-- name: Enable USBGuard service
-  ansible.builtin.systemd:
-    name: usbguard
-    state: started
-    enabled: true
-  when: system_install_usbguard | default(true) | bool
-  failed_when: false
-
-# --- Firmware updates ---
-- name: Check for firmware updates
-  ansible.builtin.command:
-    cmd: fwupdmgr get-updates --no-unreported-check
-  register: system_fwupd
-  changed_when: false
-  failed_when: false
-
-- name: Report available firmware updates
-  ansible.builtin.debug:
-    msg: "Firmware updates available. Run: sudo fwupdmgr update"
-  when:
-    - system_fwupd.rc == 0
-    - "'No updates available' not in (system_fwupd.stdout | default(''))"
-
-# --- sshd hardening ---
-- name: Ensure sshd config drop-in directory
-  ansible.builtin.file:
-    path: /etc/ssh/sshd_config.d
-    state: directory
-    mode: "0755"
-
-- name: Deploy sshd hardening config
-  ansible.builtin.template:
-    src: sshd-hardening.conf.j2
-    dest: /etc/ssh/sshd_config.d/00-hardening.conf
-    mode: "0600"
-  notify: Restart sshd
-  when: ansible_facts.services['sshd.service'] is defined
-
-# --- SELinux SSH port label ---
-- name: Label non-default SSH port for SELinux
-  community.general.seport:
-    ports: "{{ ssh_port }}"
-    proto: tcp
-    setype: ssh_port_t
-    state: present
-  when: ssh_port | int != 22
-  failed_when: false
-
-# --- Crypto policy ---
-- name: Check current crypto policy
-  ansible.builtin.command:
-    cmd: update-crypto-policies --show
-  register: system_crypto_policy
-  changed_when: false
-  failed_when: false
-
-- name: Set crypto policy to DEFAULT:NO-SHA1
-  ansible.builtin.command:
-    cmd: update-crypto-policies --set DEFAULT:NO-SHA1
-  when:
-    - system_crypto_policy.rc == 0
-    - system_crypto_policy.stdout | default('') != 'DEFAULT:NO-SHA1'
-  changed_when: true
-  notify: Restart sshd
-
-# --- Kernel modules for kind ---
-- name: Load iptables kernel modules for kind
-  community.general.modprobe:
-    name: "{{ item }}"
-    state: present
-    persistent: present
-  loop:
-    - ip6_tables
-    - ip6table_nat
-    - ip_tables
-    - iptable_nat
-  failed_when: false
-
-# --- NetworkManager Tailscale unmanaged ---
-- name: Ensure NetworkManager conf.d exists
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d
-    state: directory
-    mode: "0755"
-  failed_when: false
-
-- name: Configure NetworkManager to ignore Tailscale interfaces
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      [keyfile]
-      unmanaged-devices=interface-name:tailscale*
-    dest: /etc/NetworkManager/conf.d/tailscale.conf
-    mode: "0644"
-  failed_when: false
-  notify: Reload NetworkManager
-
-# --- GNOME gcr-ssh-agent mask ---
-- name: Mask gcr-ssh-agent socket
-  ansible.builtin.systemd:
-    name: gcr-ssh-agent.socket
-    masked: true
-    scope: user
-  become: false
-  failed_when: false
-
-# --- dnf-automatic ---
-- name: Install dnf-automatic
-  ansible.builtin.dnf:
-    name: "{{ 'dnf5-plugin-automatic' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic' }}"
-    state: present
-  failed_when: false
-
-- name: Deploy dnf-automatic config
-  ansible.builtin.template:
-    src: dnf-automatic.conf.j2
-    dest: "{{ '/etc/dnf/dnf5-plugins/automatic.conf' if ansible_pkg_mgr == 'dnf5' else '/etc/dnf/automatic.conf' }}"
-    mode: "0644"
-  notify: Restart dnf-automatic timer
-
-- name: Enable dnf-automatic timer
-  ansible.builtin.systemd:
-    name: "{{ 'dnf5-automatic.timer' if ansible_pkg_mgr == 'dnf5' else 'dnf-automatic.timer' }}"
-    state: started
-    enabled: true
-  failed_when: false
-
-# --- DNS-over-TLS ---
-- name: Ensure resolved drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
-  when: ansible_facts.services['systemd-resolved.service'] is defined
-
-- name: Deploy DNS-over-TLS resolved config
-  ansible.builtin.copy:
-    content: |
-      # {{ ansible_managed }}
-      [Resolve]
-      DNS=1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
-      Domains=~.
-      DNSOverTLS=yes
-      DNSSEC=allow-downgrade
-      FallbackDNS=
-      LLMNR=no
-      MulticastDNS=no
-    dest: /etc/systemd/resolved.conf.d/99-dot.conf
-    mode: "0644"
-  when: ansible_facts.services['systemd-resolved.service'] is defined
-  notify: Restart systemd-resolved
-
-# --- Verify resolv.conf symlink for split DNS ---
-- name: Check resolv.conf symlink target
+# Audit watches require this directory, although the SSH role owns no unit drop-ins.
+# Accept only the empty, root-owned non-writable directory created for that watch.
+- name: Inspect the audit watch directory for SSH service overrides
   ansible.builtin.stat:
-    path: /etc/resolv.conf
-  register: system_resolv_conf
+    path: /etc/systemd/system/sshd.service.d
+    follow: false
+    get_checksum: false
+  register: _system_ssh_dropin_stat
+  when: not system_is_container
+  tags: [always]
 
-- name: Warn if resolv.conf is not stub-resolv
+- name: Inspect all entries in the SSH service override directory
+  ansible.builtin.find:
+    paths: /etc/systemd/system/sshd.service.d
+    file_type: any
+    recurse: true
+    hidden: true
+  register: _system_ssh_dropin_entries
+  when:
+    - not system_is_container
+    - _system_ssh_dropin_stat.stat.isdir | default(false)
+    - not _system_ssh_dropin_stat.stat.islnk | default(false)
+  tags: [always]
+
+- name: Recognize the safe empty SSH audit watch directory
+  ansible.builtin.set_fact:
+    _system_empty_ssh_dropin: >-
+      {{ (_system_ssh_dropin_stat.stat.isdir | default(false))
+         and not (_system_ssh_dropin_stat.stat.islnk | default(false))
+         and (_system_ssh_dropin_stat.stat.uid | default(-1)) == 0
+         and (_system_ssh_dropin_stat.stat.mode | default('')) is match('^[0-7]*[0145][0145]$')
+         and (_system_ssh_dropin_entries.matched | default(-1)) == 0 }}
+  when: not system_is_container
+  tags: [always]
+
+- name: "SECURITY: Warn on unexpected systemd drop-in directories (CSB — IT may deploy drop-ins)"
   ansible.builtin.debug:
     msg: >-
-      /etc/resolv.conf {{ 'points to ' + (system_resolv_conf.stat.lnk_source | default('unknown'))
-      if (system_resolv_conf.stat.islnk | default(false)) else 'is a regular file (not a symlink)' }}.
-      For proper split DNS, it should symlink to /run/systemd/resolve/stub-resolv.conf.
-      Fix: ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-  when: >-
-    not (system_resolv_conf.stat.islnk | default(false)) or
-    'stub-resolv' not in (system_resolv_conf.stat.lnk_source | default(''))
+      WARNING: Unexpected systemd drop-in dir(s) under /etc/systemd/system/.
+      On CSB machines IT may deploy service drop-ins — verify these are IT-managed.
+      Unexpected: {{ _unexpected_dropin_dirs | join(', ') }}
+      Whitelist: {{ system_systemd_dropin_whitelist | join(', ') }}
+      To suppress: add dir name(s) to system_systemd_dropin_whitelist in config.yml.
+  vars:
+    _found_dropin_dirs: >-
+      {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
+    _unexpected_dropin_dirs: >-
+      {{ _found_dropin_dirs
+         | reject('in', system_systemd_dropin_whitelist + (['sshd.service.d'] if _system_empty_ssh_dropin else [])) | list }}
+  when:
+    - csb_detected
+    - not system_is_container
+    - _unexpected_dropin_dirs | length > 0
+  tags: [always]
 
-# --- Chrony NTS (authenticated time sync) ---
-- name: Deploy NTS-authenticated chrony config
-  ansible.builtin.template:
-    src: chrony-nts.conf.j2
-    dest: /etc/chrony.conf
-    mode: "0644"
-    backup: true
-  notify: Restart chronyd
+- name: "SECURITY: Fail on unexpected systemd drop-in directories (pre-plant backdoor guard)"
+  ansible.builtin.assert:
+    that:
+      - _unexpected_dropin_dirs | length == 0
+    fail_msg: |
+      SECURITY: Unexpected systemd drop-in dir(s) under /etc/systemd/system/.
+      Threat: a pre-planted override.conf with ExecStartPre= executes as root
+      when a handler restarts the service (sshd, NetworkManager, polkit, dbus).
+      Unexpected: {{ _unexpected_dropin_dirs | join(', ') }}
+      Whitelist: {{ system_systemd_dropin_whitelist | join(', ') }}
+      Fix: remove the unexpected director(ies), or add them to
+      system_systemd_dropin_whitelist in config.yml if they are legitimate.
+  vars:
+    _found_dropin_dirs: >-
+      {{ _systemd_dropin_find.files | default([]) | map(attribute='path') | map('basename') | list }}
+    _unexpected_dropin_dirs: >-
+      {{ _found_dropin_dirs
+         | reject('in', system_systemd_dropin_whitelist + (['sshd.service.d'] if _system_empty_ssh_dropin else [])) | list }}
+  when:
+    - not csb_detected
+    - not system_is_container
+  tags: [always]
 
-- name: Ensure chronyd is enabled
-  ansible.builtin.systemd:
-    name: chronyd
-    state: started
-    enabled: true
-
-# --- Restrict su to wheel group ---
-- name: Enable pam_wheel.so for su
-  ansible.builtin.lineinfile:
-    path: /etc/pam.d/su
-    regexp: '^#?\s*auth\s+required\s+pam_wheel\.so\s+use_uid'
-    line: 'auth		required	pam_wheel.so use_uid'
-    insertafter: '^#.*pam_wheel.so'
-
-# --- Lock root account ---
-- name: Check root account status
-  ansible.builtin.command:
-    cmd: passwd -S root
-  register: system_root_status
+- name: "SECURITY: Find /etc/dbus-1/system.d files not owned by any RPM (pre-plant audit)"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      find /etc/dbus-1/system.d -maxdepth 1 -type f \
+        | while IFS= read -r f; do rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"; done
+    executable: /bin/bash
+  register: _dbus_unowned
   changed_when: false
-
-- name: Lock root account
-  ansible.builtin.command:
-    cmd: passwd -l root
-  when: "'LK' not in system_root_status.stdout and 'L ' not in system_root_status.stdout"
-  changed_when: true
-
-# --- AIDE file integrity monitoring ---
-- name: Install AIDE
-  ansible.builtin.dnf:
-    name: aide
-    state: present
-  when: system_aide_enabled | bool
-
-- name: Ensure AIDE monitors /usr/local/bin
-  ansible.builtin.lineinfile:
-    path: /etc/aide.conf
-    regexp: '^/usr/local/bin'
-    line: '/usr/local/bin CONTENT_EX'
-    state: present
-  when: system_aide_enabled | bool
-
-- name: Check if AIDE database exists
-  ansible.builtin.stat:
-    path: /var/lib/aide/aide.db.gz
-  register: system_aide_db
-  when: system_aide_enabled | bool
-
-- name: Initialize AIDE database (first run only)
-  ansible.builtin.command:
-    cmd: aide --init
+  failed_when: false
   when:
-    - system_aide_enabled | bool
-    - not (system_aide_db.stat.exists | default(false))
-  changed_when: true
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  tags: [always]
 
-- name: Promote initial AIDE database
+- name: "SECURITY: Warn on /etc/dbus-1/system.d files not owned by any RPM (CSB — IT may deploy policies)"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unpackaged file(s) in /etc/dbus-1/system.d/.
+      On CSB machines IT may deploy non-RPM D-Bus policy files — verify these are IT-managed.
+      Unpackaged: {{ _dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list }}
+      To suppress: add full path(s) to system_dbus_system_d_allowlist in config.yml.
+  when:
+    - csb_detected
+    - not system_is_container
+    - is_dnf
+    - (_dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list) | length > 0
+  tags: [always]
+
+- name: "SECURITY: Fail on /etc/dbus-1/system.d files not owned by any RPM (pre-plant attack)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unpackaged file(s) in /etc/dbus-1/system.d/.
+      Attack: a pre-planted D-Bus policy grants an unprivileged process ownership of a
+      privileged bus name (e.g., org.freedesktop.PolicyKit1), enabling polkit impersonation
+      and privileged D-Bus message injection.
+      Unpackaged: {{ _dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list }}
+      Fix: remove the file(s) or add full path(s) to system_dbus_system_d_allowlist in config.yml.
+  when:
+    - not csb_detected
+    - not system_is_container
+    - is_dnf
+    - (_dbus_unowned.stdout_lines | default([]) | difference(system_dbus_system_d_allowlist) | list) | length > 0
+  tags: [always]
+
+- name: "Hardening core (mounts, firewall, kernel, sysctl, coredumps, modules blacklist, kernel lockdown)"
+  ansible.builtin.import_tasks: hardening_core.yml
+
+# --- Load kernel modules for kind AFTER sysctl.yml deploys 90-hardening.conf ---
+# WARNING: system_modules_disabled defaults to 1 (ratchet ENABLED). After provisioning
+# completes and kernel-modules-lockdown.service starts, ALL kernel module loading
+# is blocked until reboot. For dev machines that load modules at runtime (VirtualBox
+# vboxdrv, kvm, custom DKMS drivers, hot-plug devices), set system_modules_disabled: 0
+# in config.yml BEFORE first provision. See roles/system/defaults/main.yml:626 for
+# security rationale (closes pre-reboot init_module() attack window).
+#
+# kernel.modules_disabled=1 is a one-way ratchet (cannot be disabled until reboot).
+# Task order satisfies two constraints:
+# 1. kernel_modules_kind.yml runs AFTER sysctl.yml deploys 90-hardening.conf
+#    (fixes bridge-nf-call-iptables assertion failure on first provision)
+# 2. modprobe runs BEFORE the final module lockdown service activates the ratchet
+#    (boot activation is also ordered after networking and firewalld)
+- name: Kernel modules for kind
+  ansible.builtin.include_tasks: kernel_modules_kind.yml
+  when: not system_is_container and not csb_rhel
+  # Always load on non-container hosts — unused modules are harmless; NOT loading them
+  # when needed is catastrophic with modules_disabled=1. The include file already uses
+  # failed_when:false to tolerate Intel/AMD mismatch.
+
+- name: "GRUB bootloader password (CIS 1.4.2)"
+  ansible.builtin.import_tasks: grub_password.yml
+
+# --- Auditd ---
+- name: Auditd tasks
+  ansible.builtin.import_tasks: auditd.yml
+
+- name: "Bolt hardening"
+  ansible.builtin.import_tasks: bolt.yml
+
+- name: Authselect and fingerprint auth
+  ansible.builtin.import_tasks: authselect_fingerprint.yml
+
+- name: "Service masking"
+  ansible.builtin.import_tasks: service_masking.yml
+
+- name: "Logind configuration"
+  ansible.builtin.import_tasks: logind.yml
+
+- name: "Service enable/disable"
+  ansible.builtin.import_tasks: services.yml
+
+- name: Firmware updates
+  ansible.builtin.import_tasks: firmware.yml
+
+- name: "SECURITY: Validate system_ssh_extra_allow_users entries (sshd AllowUsers injection guard)"
+  ansible.builtin.assert:
+    that:
+      - >-
+        system_ssh_extra_allow_users | default([])
+        | map('string') | select()
+        | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list | length == 0
+    fail_msg: >-
+      SECURITY: system_ssh_extra_allow_users contains an invalid entry.
+      Threat: a newline-embedded entry like "validuser\nPermitRootLogin yes" passes sshd -t
+      and loads a malicious directive overriding PermitRootLogin no.
+      Input: system_ssh_extra_allow_users={{ system_ssh_extra_allow_users | default([]) | to_json }}.
+      Mechanism: entries are joined verbatim into AllowUsers in sshd_config.d/00-hardening.conf;
+      a newline splits the directive and the next token is parsed as a top-level sshd directive.
+      Impact: PermitRootLogin or other hardened directives silently overridden; root SSH enabled.
+      Fix: each entry must match ^[a-z_][a-z0-9_.@-]{0,31}$ (valid Linux username, 32 chars max).
+      Offending entries: {{ system_ssh_extra_allow_users | default([]) | reject('match', '^[a-z_][a-z0-9_.@-]{0,31}$') | list }}.
+  when:
+    - not csb_rhel
+    - system_ssh_extra_allow_users | default([]) | length > 0
+  tags: [always]
+
+- name: SSHD hardening, SELinux port label, and crypto policy
+  ansible.builtin.import_tasks: sshd.yml
+
+- name: NetworkManager configuration
+  ansible.builtin.import_tasks: nm.yml
+
+- name: Dnf-automatic
+  ansible.builtin.import_tasks: dnf_automatic.yml
+
+- name: DNS-over-TLS
+  ansible.builtin.import_tasks: dns_over_tls.yml
+  when: not system_is_container
+
+# --- Session timeout (CIS 5.5.5: TMOUT <= 900s) ---
+- name: "Session timeout"
+  ansible.builtin.import_tasks: session_timeout.yml
+
+- name: Timezone and locale
+  ansible.builtin.import_tasks: timezone_locale.yml
+
+- name: Chrony NTS
+  ansible.builtin.import_tasks: chrony.yml
+  when: not system_is_container  # chrony apt install + systemd start hang in Debian 13 privileged Podman containers
+
+- name: PAM hardening (faillock, pwhistory, pwquality, pam_wheel)
+  ansible.builtin.import_tasks: pam.yml
+
+- name: Journald persistent logging
+  ansible.builtin.import_tasks: journald.yml
+
+- name: Logrotate for sudo.log
+  ansible.builtin.import_tasks: logrotate_sudo.yml
+
+- name: "Cron access restriction"
+  ansible.builtin.import_tasks: cron.yml
+
+- name: Deploy login banners (/etc/issue and /etc/issue.net)
   ansible.builtin.copy:
-    src: /var/lib/aide/aide.db.new.gz
-    dest: /var/lib/aide/aide.db.gz
-    remote_src: true
-    mode: "0600"
+    content: |
+      NOTICE: This system is for authorized users only. Unauthorized access
+      or use is strictly prohibited and may result in disciplinary action
+      and/or criminal prosecution. All activities on this system may be
+      monitored, recorded, and audited. By accessing this system, you
+      consent to such monitoring and recording.
+    dest: "{{ item }}"
+    mode: "0644"
+  loop: [/etc/issue, /etc/issue.net]
   when:
-    - system_aide_enabled | bool
-    - not (system_aide_db.stat.exists | default(false))
+    - not csb_detected  # CSB: IT maintains compliant login banner on all CSB tiers
+    - not system_is_container  # /etc/issue writes trigger getty inotify; crashes privileged Podman container PID 1
+  failed_when: false
 
-- name: Deploy AIDE check service
-  ansible.builtin.template:
-    src: aide-check.service.j2
-    dest: /etc/systemd/system/aide-check.service
-    mode: "0644"
-  when: system_aide_enabled | bool
+- name: Account hardening
+  ansible.builtin.import_tasks: account_hardening.yml
+  tags: [account, become]
 
-- name: Deploy AIDE check timer
-  ansible.builtin.template:
-    src: aide-check.timer.j2
-    dest: /etc/systemd/system/aide-check.timer
-    mode: "0644"
-  when: system_aide_enabled | bool
+- name: System-level dconf hardening
+  ansible.builtin.include_tasks: dconf.yml
+  when:
+    - '"gdm.service" in ansible_facts.services'
+    - not csb_rhel
 
-- name: Enable AIDE check timer
-  ansible.builtin.systemd:
-    name: aide-check.timer
-    state: started
-    enabled: true
-    daemon_reload: true
-  when: system_aide_enabled | bool
+- name: "AIDE cleanup"
+  ansible.builtin.import_tasks: aide_cleanup.yml
+
+- name: AIDE configuration
+  ansible.builtin.import_tasks: aide.yml
+
+- name: Apply the module loading lock after system provisioning and handlers
+  ansible.builtin.include_tasks: kernel_modules_lockdown.yml
+  when:
+    - not system_is_container
+    - not csb_rhel

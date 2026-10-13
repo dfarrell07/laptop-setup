@@ -1,0 +1,63 @@
+---
+# SSTI guard: read config.yml as raw bytes (bypasses include_vars trusted_as_template tagging)
+# and reject Jinja2 expressions before loading any user overrides into the play.
+# Missing config is allowed; unreadable or invalid config fails closed.
+- name: Stat config.yml for parse-failure detection
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/config.yml"
+  register: _config_yml_stat
+  tags: [always]
+
+- name: Slurp config.yml for SSTI guard (raw bytes, bypasses include_vars trusted_as_template)
+  ansible.builtin.slurp:
+    src: "{{ playbook_dir }}/config.yml"
+  register: _config_yml_raw
+  when: _config_yml_stat.stat.exists
+  no_log: true
+  tags: [always]
+
+- name: Parse raw config YAML without evaluating template expressions
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | default(playbook_dir, true) }}/scripts/parse-config.py"
+    stdin: "{{ _config_yml_raw.content | b64decode }}"
+    stdin_add_newline: false
+  delegate_to: localhost
+  become: false
+  when: _config_yml_stat.stat.exists
+  register: _config_parsed
+  changed_when: false
+  check_mode: false
+  no_log: true
+  tags: [always]
+
+- name: Cache parsed config.yml dict for SSTI guard assertions
+  ansible.builtin.set_fact:
+    _config_raw: "{{ (_config_parsed.stdout | from_json) if _config_yml_stat.stat.exists else {} }}"
+  no_log: true
+  tags: [always]
+
+- name: Comprehensively scan all config.yml values for Jinja2 template expressions (SSTI guard)
+  when: _config_raw is defined
+  vars:
+    # Serialize entire config dict to JSON for unified template marker scanning
+    # This detects {{ or {% in ANY value (string, list element, dict value)
+    _config_json: "{{ _config_raw | to_nice_json }}"
+  ansible.builtin.assert:
+    that:
+      # Reject {{ and {% in the entire serialized config
+      # The combination of both checks prevents SSTI in all config variables
+      - ('{' ~ '{') not in _config_json
+      - ('{' ~ '%') not in _config_json
+    fail_msg: >-
+      {% raw -%}
+      SECURITY: config.yml contains {{ or {% — Ansible evaluates these as live Jinja2
+      templates (trusted_as_template=True), allowing arbitrary code execution as the
+      provisioning user (become: true in Play 1).
+      Input: the entire config.yml including all strings, list elements, dict values.
+      Mechanism: include_vars with trusted_as_template evaluates any {{ }} or {% %} block.
+      Example: dotfiles_goprivate="{{lookup('pipe','id')}}" runs id() at provision time.
+      Impact: SSTI — arbitrary Ansible code execution with become: true.
+      Fix: remove template markers from configuration values. !unsafe tags are supported,
+      but do not exempt values from this scan. Literal values without template markers are safe.{%- endraw %}

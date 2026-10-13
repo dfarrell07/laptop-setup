@@ -1,0 +1,133 @@
+---
+# --- Cron access restriction (defense-in-depth if cronie is ever installed) ---
+# Any CSB machine: Satellite katello-agent, Insights client, IT monitoring agents, and other
+# IT-provisioned tools may run cron jobs under dedicated non-root system users. Creating
+# cron.allow with only 'root' would silently block those IT management jobs. Skip on all
+# CSB machines (both RHEL CSB and hybrid Fedora CSB) to avoid conflicting with IT cron policy.
+- name: Cron access restriction (skip on CSB and containers)
+  when:
+    - not system_is_container
+    - not csb_detected
+  block:
+    - name: Find non-root crontabs in /var/spool/cron
+      ansible.builtin.find:
+        paths: /var/spool/cron
+        excludes: root
+        file_type: file
+      register: system_existing_crontabs
+      failed_when: false
+
+    - name: Alert operator about user crontabs that will be silently blocked
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Non-root crontabs found and will be silently blocked by cron.allow=root:
+          {{ system_existing_crontabs.files | map(attribute='path') | list }}.
+          Review these jobs before proceeding.
+      when:
+        - (system_existing_crontabs.files | default([])) | length > 0
+
+    - name: Check if root crontab exists
+      ansible.builtin.stat:
+        path: /var/spool/cron/root
+      register: system_root_crontab_stat
+      failed_when: false
+
+    - name: Read root crontab if it exists
+      ansible.builtin.slurp:
+        src: /var/spool/cron/root
+      register: system_root_crontab_content
+      when: system_root_crontab_stat.stat.exists | default(false)
+
+    - name: Warn if root crontab contains pre-existing jobs
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: /var/spool/cron/root exists with content — pre-existing root cron
+          jobs may persist outside Ansible management:
+          {{ system_root_crontab_content.content | b64decode | trim }}
+      when:
+        - system_root_crontab_stat.stat.exists | default(false)
+        - system_root_crontab_content.content is defined
+        - (system_root_crontab_content.content | b64decode | trim) | length > 0
+
+    - name: Restrict cron and at access to root only (CIS 5.1.8/5.1.9)
+      ansible.builtin.copy:
+        content: "root\n"
+        dest: "{{ item }}"
+        mode: "0600"
+      loop:
+        - /etc/cron.allow
+        - /etc/at.allow
+
+    - name: Remove cron.deny and at.deny (CIS 5.1.8-5.1.9 — allow files are authoritative)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cron.deny
+        - /etc/at.deny
+
+    - name: Harden cron directory permissions (CIS 5.1.2-5.1.7)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - path: /etc/crontab
+          mode: "0600"
+        - path: /etc/cron.hourly
+          mode: "0700"
+        - path: /etc/cron.daily
+          mode: "0700"
+        - path: /etc/cron.weekly
+          mode: "0700"
+        - path: /etc/cron.monthly
+          mode: "0700"
+        - path: /etc/cron.d
+          mode: "0700"
+      loop_control:
+        label: "{{ item.path }}"
+      failed_when: false
+
+    - name: Find unmanaged files in /etc/cron.d
+      ansible.builtin.find:
+        paths: /etc/cron.d
+        file_type: file
+        excludes: "{{ system_crond_whitelist }}"
+      register: system_crond_files
+      failed_when: false
+
+    - name: Abort on unexpected /etc/cron.d files not in system_crond_whitelist
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY: Unexpected files in /etc/cron.d not in system_crond_whitelist:
+          {{ system_crond_files.files | map(attribute='path') | list }}.
+          These files execute as cron system jobs (cron.allow does not restrict /etc/cron.d).
+          Remove attacker-placed files or add legitimate package files to system_crond_whitelist
+          in config.yml before re-running provisioning.
+      when:
+        - (system_crond_files.files | default([])) | length > 0
+
+# CSB machines skip the block above (IT manages cron policy) but still need visibility into
+# unexpected /etc/cron.d files that IT may have dropped. This block runs only on CSB machines.
+- name: Check /etc/cron.d for unexpected files on CSB machines (warn-only)
+  when:
+    - csb_detected
+    - not system_is_container
+  block:
+    - name: Find unmanaged files in /etc/cron.d (CSB)
+      ansible.builtin.find:
+        paths: /etc/cron.d
+        file_type: file
+        excludes: "{{ system_crond_whitelist }}"
+      register: system_crond_files_csb
+      failed_when: false
+
+    - name: Warn on unexpected /etc/cron.d files not in system_crond_whitelist (CSB — IT may drop files)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Unexpected files in /etc/cron.d not in system_crond_whitelist:
+          {{ system_crond_files_csb.files | map(attribute='path') | list }}.
+          These files execute as cron system jobs (cron.allow does not restrict /etc/cron.d).
+          Add IT-managed basenames to system_crond_whitelist in config.yml to suppress this warning.
+      when: (system_crond_files_csb.files | default([])) | length > 0

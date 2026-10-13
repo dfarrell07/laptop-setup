@@ -1,0 +1,269 @@
+---
+# roles/system/tasks/sysctl.yml
+# --- Sysctl hardening ---
+# Merge system_sysrq into the dict so config.yml can override without replacing
+# the entire system_sysctl_hardening dict. Default is 0 (CIS); set 176 in
+# config.yml for sync(16)+remount-ro(32)+reboot(128) on a kernel dev workstation.
+- name: Assert accept_ra=1 is not used with ip_forward=1
+  when: not system_is_container
+  ansible.builtin.assert:
+    that: system_ipv6_accept_ra | int != 1 or not (system_enable_ip_forward | bool)
+    fail_msg: >-
+      system_ipv6_accept_ra: 1 is silently suppressed by the kernel when ip_forward=1.
+      Use system_ipv6_accept_ra: 2 to enable SLAAC.
+
+# net.ipv4.tcp_timestamps is left at the kernel default (1) globally. CIS 3.3.9
+# recommends 0, but disabling timestamps harms RTTM/PAWS on high-BDP links
+# (OVN-K, Submariner). No conditional override is applied.
+- name: Apply sysctl hardening (non-container, non-CSB-RHEL)
+  when:
+    - not system_is_container
+    - not csb_rhel  # CSB: IT manages sysctl via SCAP; 90-hardening.conf would conflict
+  block:
+    - name: Parse system_sysctl_extra if passed as JSON string
+      ansible.builtin.set_fact:
+        system_sysctl_extra: >-
+          {{ system_sysctl_extra | from_json
+             if system_sysctl_extra is string
+             else system_sysctl_extra }}
+      when: system_sysctl_extra | default({}) | length > 0
+
+    - name: Parse system_sysctl_extra_additional if passed as JSON string
+      ansible.builtin.set_fact:
+        system_sysctl_extra_additional: >-
+          {{ system_sysctl_extra_additional | from_json
+             if system_sysctl_extra_additional is string
+             else system_sysctl_extra_additional }}
+      when: system_sysctl_extra_additional | default({}) | length > 0
+
+    - name: Validate system_sysctl_extra is a dict
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_extra is mapping
+        fail_msg: "system_sysctl_extra must be a dict, not {{ system_sysctl_extra | type_debug }}"
+      when: system_sysctl_extra is defined
+
+    - name: Validate system_sysctl_extra_additional is a dict
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_extra_additional is mapping
+        fail_msg: "system_sysctl_extra_additional must be a dict, not {{ system_sysctl_extra_additional | type_debug }}"
+      when: system_sysctl_extra_additional is defined
+
+    - name: Validate system_core_pattern is a safe file path (no pipe)
+      # Bare | enables kernel pipe mode (RCE risk); |/path also rejected — playbook default uses
+      # role-level default (systemd-coredump); config.yml overrides must use safe file paths only.
+      ansible.builtin.assert:
+        that:
+          - system_core_pattern is string
+          - system_core_pattern | regex_search('^[a-zA-Z0-9._/%\- ]+$') is not none
+        fail_msg: >-
+          SECURITY: system_core_pattern must be a plain file path — no pipe (|) allowed.
+          A | prefix in kernel.core_pattern enables pipe mode, executing a program for every
+          crash; an attacker-set value like '|/bin/sh' achieves root code execution on coredump.
+          Even a bare | (no handler) enables pipe mode. Use a file path (e.g. /var/crash/core.%e.%p).
+          Set system_core_pattern in config.yml or leave unset to use the playbook default.
+      when:
+        - system_core_pattern is defined
+        - system_core_pattern | length > 0
+        # Skip when value equals the role-default systemd-coredump pipe path — that value is
+        # intentional and safe. Only validate user overrides from config.yml.
+        - system_core_pattern != '|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F'
+
+    - name: Ensure /etc/sysctl.d exists
+      ansible.builtin.file:
+        path: /etc/sysctl.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Assert no toggle-managed sysctl keys in extra dicts
+      ansible.builtin.assert:
+        that:
+          - "(_item.dict.keys() | intersect(_toggle_keys)) | length == 0"
+        fail_msg: >-
+          Toggle-managed keys
+          {{ _item.dict.keys() | intersect(_toggle_keys) | join(', ') }}
+          found in {{ _item.name }}. Use the corresponding toggle variables
+          instead: system_enable_ip_forward
+          (net.ipv4.ip_forward, net.ipv6.conf.all.forwarding),
+          system_ptrace_scope (kernel.yama.ptrace_scope),
+          system_kexec_load_disabled (kernel.kexec_load_disabled),
+          system_modules_disabled (kernel.modules_disabled),
+          system_io_uring_disabled (kernel.io_uring_disabled),
+          system_sysrq (kernel.sysrq),
+          system_core_pattern (kernel.core_pattern),
+          system_kernel_panic (kernel.panic),
+          system_kernel_panic_on_oops (kernel.panic_on_oops),
+          system_unprivileged_bpf_disabled (kernel.unprivileged_bpf_disabled),
+          system_bpf_jit_harden (net.core.bpf_jit_harden),
+          system_ipv6_accept_ra (net.ipv6.conf.all.accept_ra,
+          net.ipv6.conf.default.accept_ra),
+          system_perf_event_paranoid (kernel.perf_event_paranoid).
+      vars:
+        _toggle_keys:
+          - net.ipv4.ip_forward
+          - net.ipv6.conf.all.forwarding
+          - kernel.yama.ptrace_scope
+          - kernel.kexec_load_disabled
+          - kernel.modules_disabled
+          - kernel.io_uring_disabled
+          - kernel.sysrq
+          - kernel.core_pattern
+          - kernel.panic
+          - kernel.panic_on_oops
+          - kernel.unprivileged_bpf_disabled
+          - net.core.bpf_jit_harden
+          - net.ipv6.conf.all.accept_ra
+          - net.ipv6.conf.default.accept_ra
+          - kernel.perf_event_paranoid
+      loop:
+        - name: system_sysctl_extra
+          dict: "{{ system_sysctl_extra }}"
+        - name: system_sysctl_extra_additional
+          dict: "{{ system_sysctl_extra_additional }}"
+      loop_control:
+        loop_var: _item
+        label: "{{ _item.name }}"
+
+    - name: Assert no hardening-critical keys in extra dicts
+      ansible.builtin.assert:
+        that:
+          - "(_item.dict.keys() | intersect(_hardening_critical_keys)) | length == 0"
+        fail_msg: >-
+          Hardening-critical keys
+          {{ _item.dict.keys() | intersect(_hardening_critical_keys) | join(', ') }}
+          found in {{ _item.name }}. These keys enforce
+          CIS/STIG security requirements and cannot be overridden via
+          system_sysctl_extra or system_sysctl_extra_additional. Document security exception with
+          your security team before attempting to modify these keys.
+      vars:
+        _hardening_critical_keys:
+          - kernel.core_pattern
+          - kernel.kptr_restrict
+          - kernel.dmesg_restrict
+          - fs.suid_dumpable
+          - kernel.randomize_va_space
+          - net.ipv4.conf.all.send_redirects
+          - net.ipv4.conf.default.send_redirects
+          - net.ipv4.conf.all.accept_redirects
+          - net.ipv4.conf.default.accept_redirects
+          - net.ipv6.conf.all.accept_redirects
+          - net.ipv6.conf.default.accept_redirects
+          - net.ipv4.conf.all.accept_source_route
+          - net.ipv4.conf.default.accept_source_route
+          - net.ipv6.conf.all.accept_source_route
+          - net.ipv6.conf.default.accept_source_route
+          - net.ipv4.conf.all.rp_filter
+          - net.ipv4.conf.default.rp_filter
+          - net.ipv4.conf.all.log_martians
+          - net.ipv4.conf.default.log_martians
+          - net.ipv4.conf.all.secure_redirects
+          - net.ipv4.conf.default.secure_redirects
+          - net.ipv4.icmp_echo_ignore_broadcasts
+          - net.ipv4.icmp_ignore_bogus_error_responses
+          - fs.protected_regular
+          - fs.protected_hardlinks
+          - fs.protected_symlinks
+          - fs.protected_fifos
+          - net.ipv4.tcp_syncookies
+          - net.ipv4.tcp_rfc1337
+          - net.ipv6.conf.all.use_tempaddr
+          - net.ipv6.conf.default.use_tempaddr
+          - kernel.yama.ptrace_scope
+      loop:
+        - name: system_sysctl_extra
+          dict: "{{ system_sysctl_extra }}"
+        - name: system_sysctl_extra_additional
+          dict: "{{ system_sysctl_extra_additional }}"
+      loop_control:
+        loop_var: _item
+        label: "{{ _item.name }}"
+
+    - name: Warn when ptrace scope is disabled (system_ptrace_scope = 0)
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY WARNING: system_ptrace_scope is 0 — YAMA ptrace restrictions are
+          disabled system-wide for this session. Any same-UID process (including shell
+          subprocesses spawned during provisioning) can call ptrace(PTRACE_ATTACH) or
+          open /proc/<pid>/mem against ansible-playbook and extract the in-memory vault
+          password. Do not run 'make all' with an encrypted vault while
+          system_ptrace_scope: 0 is set. Restore to 1 (CIS default) after dev work.
+      when: system_ptrace_scope | int == 0
+
+    - name: Warn when io_uring is restricted (system_io_uring_disabled >= 1)
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: system_io_uring_disabled is {{ system_io_uring_disabled }} — io_uring is
+          restricted to CAP_SYS_ADMIN (value 1) or fully disabled (value 2). Non-root applications
+          using io_uring directly (tokio-uring, not standard tokio which uses epoll via mio; Node.js libuv, PostgreSQL 14+, some Go apps)
+          will
+          receive EPERM on io_uring_setup(). tokio-uring has no epoll fallback and will fail outright;
+          libuv and PostgreSQL fall back to epoll (performance degradation). Test all critical workloads after provisioning.
+          If breakage occurs: set system_io_uring_disabled: 0 in config.yml and re-provision.
+      when: system_io_uring_disabled | int >= 1
+
+    - name: Validate system_sysctl_hardening is a non-empty dict (defense-in-depth)
+      # extra-vars (precedence 22) beats set_fact (18); -esystem_sysctl_hardening={}
+      # replaces the role-default dict before this task runs.  A mapping check alone
+      # does not catch the empty-dict attack, so also enforce a minimum key count
+      # matching the static baseline (30 keys as of last audit).  Using >= 25 as the
+      # floor gives headroom for minor refactors while still blocking {}.
+      ansible.builtin.assert:
+        that:
+          - system_sysctl_hardening is mapping
+          - system_sysctl_hardening | length >= 25
+        fail_msg: >-
+          SECURITY: system_sysctl_hardening must be a dict with at least 25 keys
+          (current: {{ system_sysctl_hardening | type_debug }},
+          length={{ system_sysctl_hardening | length }}).
+          Passing an empty or minimal dict via -e/--extra-vars silently drops
+          kptr_restrict, dmesg_restrict, ASLR, tcp_syncookies, and all other
+          static CIS/STIG hardening entries from /etc/sysctl.d/90-hardening.conf.
+          Do not override system_sysctl_hardening on the command line.
+
+    - name: Merge configurable sysctl values into hardening dict
+      ansible.builtin.set_fact:
+        system_sysctl_hardening: "{{ system_sysctl_hardening | combine({
+            'kernel.sysrq': system_sysrq | int,
+            'net.ipv6.conf.all.accept_ra': system_ipv6_accept_ra | int,
+            'net.ipv6.conf.default.accept_ra': system_ipv6_accept_ra | int,
+            'net.core.bpf_jit_harden': system_bpf_jit_harden | int,
+            'kernel.unprivileged_bpf_disabled': system_unprivileged_bpf_disabled | int,
+            'kernel.panic': system_kernel_panic | int,
+            'kernel.panic_on_oops': system_kernel_panic_on_oops | int,
+            'kernel.core_pattern': system_core_pattern,
+            'kernel.yama.ptrace_scope': system_ptrace_scope | int,
+            'kernel.perf_event_paranoid': system_perf_event_paranoid | int,
+            'kernel.kexec_load_disabled': system_kexec_load_disabled | int,
+            'kernel.modules_disabled': system_modules_disabled | int,
+            'kernel.io_uring_disabled': system_io_uring_disabled | int,
+            'net.ipv4.ip_forward': system_enable_ip_forward | bool | int,
+            'net.ipv6.conf.all.forwarding': system_enable_ip_forward | bool | int
+          }) | combine(system_sysctl_extra) | combine(system_sysctl_extra_additional) }}" # noqa: jinja[spacing]
+
+    - name: Deploy sysctl hardening config
+      ansible.builtin.template:
+        src: sysctl-hardening.conf.j2
+        dest: /etc/sysctl.d/90-hardening.conf
+        mode: "0644"
+      notify: Sysctl config changed
+      # EPERM for kernel.unprivileged_bpf_disabled (write-locked on Fedora 44) is
+      # tolerated in the handler's failed_when (handlers/main.yml).
+
+- name: Set ip_forward on RHEL CSB (Tailscale/kind; SCAP skip)
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value | string }}"
+    state: present
+    sysctl_set: true
+    reload: true
+    sysctl_file: /etc/sysctl.d/91-ansible-ipforward.conf
+  loop:
+    - {key: net.ipv4.ip_forward, value: "{{ system_enable_ip_forward | bool | int }}"}
+    - {key: net.ipv6.conf.all.forwarding, value: "{{ system_enable_ip_forward | bool | int }}"}
+  when:
+    - csb_rhel
+    - system_enable_ip_forward | bool
+    - not system_is_container
