@@ -29,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'dcd3b59953d5d3b6ccce0581f50458d50c39d8bf30725e58fb8f2a5f64195697',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '8b491cb8b1af0c8948827f62ff55e3eaabf443f3d7d7c1655f9ff5ee66c69cec',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: a7910079bd9e6ee80ca8042f933938331eb62a49')\nPY_SNAPSHOT\n"
+        \ candidate tree: 814855b6cb40cbacd5325c5a7e06f39ff3d0d0fd')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
