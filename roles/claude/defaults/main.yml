@@ -18,6 +18,8 @@ claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-que
 claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
 claude_work_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-work"
 claude_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-personal"
+claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
+claude_personal2_instance_enabled: true
 claude_personal_instance_enabled: true  # set false in config.yml for work-only machines
 
 claude_telemetry_env:
@@ -33,6 +35,34 @@ claude_sandbox_config:
   failIfUnavailable: true
   # use weaker nested sandbox when Claude runs inside a sandboxed context (devcontainer, CSB restricted shell)
   enableWeakerNestedSandbox: true
+
+# Seed-only user preferences; CLI edits remain user-owned.
+claude_user_preferences:
+  model: opus
+  effortLevel: medium
+  alwaysThinkingEnabled: false
+  includeCoAuthoredBy: false
+  tui: fullscreen
+
+# Seed declarations from repositories, not cached marketplace paths or installed state.
+# Existing settings.json remains user-owned; work plugins stay in the isolated work home.
+claude_personal_plugin_settings:
+  extraKnownMarketplaces:
+    claude-skills:
+      source: {source: github, repo: "{{ dotfiles_github_user }}/claude-skills"}
+  enabledPlugins:
+    claude-skills@claude-skills: true
+claude_work_plugin_settings:
+  extraKnownMarketplaces:
+    ai-helpers:
+      source: {source: github, repo: openshift-eng/ai-helpers}
+    submariner:
+      source: {source: github, repo: submariner-io/shipyard}
+    submariner-release:
+      source: {source: github, repo: stolostron/submariner-release-management}
+  enabledPlugins:
+    shipyard@submariner: true
+    release-management@submariner-release: true
 
 claude_cleanup_period_days: 7
 claude_enable_all_project_mcp_servers: false  # true = auto-trust all project-local MCP servers; false = prompt (more secure)
@@ -55,6 +85,11 @@ claude_remote_control_enabled: false  # macOS-only (launchd); Linux emits warnin
 claude_remote_control_config_dir: "{{ claude_personal_config_dir }}"  # config dir for remote-control; override to use a different instance
 
 claude_deny_sensitive:
+  - "~/.codex/**"
+  - "~/.codex-personal/**"
+  - "~/.gemini/**"
+  - "~/.config/claude-code-vertex/**"
+  - "~/.config/submariner-release-management/**"
   - "~/.ssh/**"
   - "~/.aws/**"
   - "~/.gnupg/**"

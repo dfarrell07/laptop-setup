@@ -74,14 +74,6 @@
     - system_unprivileged_bpf_disabled is defined
   changed_when: false
 
-- name: Restart tlp
-  ansible.builtin.systemd:
-    name: tlp
-    state: restarted
-  become: true
-  when: not system_is_container  # TLP not applicable in containers
-  ignore_errors: true  # noqa: ignore-errors
-
 - name: Restart NetworkManager
   ansible.builtin.systemd:
     name: NetworkManager

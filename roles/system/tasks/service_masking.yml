@@ -45,6 +45,7 @@
     - csb_detected | bool
     - not system_is_container
     - not csb_rhel
+    - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
   failed_when: false
 
 - name: Warn on non-empty drop-in dirs before removal (possible IT-placed config on csb_detected)
@@ -101,6 +102,8 @@
     - not system_is_container
     - not csb_rhel
     - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; probe+warn above handles that path
+    # Preserve native overrides across switches and failed-transition recovery.
+    - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
 
 # --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
 - name: Mask bluetooth service
@@ -216,117 +219,13 @@
     - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
   failed_when: false
 
-# --- TLP battery charge management (ThinkPad) ---
-- name: Install TLP for ThinkPad battery charge thresholds
-  ansible.builtin.dnf:
-    name:
-      - tlp
-      - tlp-rdw
-    state: present
+# --- Power management: exactly one TLP/native stack ---
+- name: Configure laptop power management
+  ansible.builtin.import_tasks: power_management.yml
   when:
-    - system_tlp_enabled | bool
-    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not override
     - is_dnf
-  failed_when: false
-  register: _system_tlp_install
-
-- name: Warn if TLP install failed
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: TLP install failed (rc={{ _system_tlp_install.rc | default('n/a') }});
-      power management daemon masking, config deploy, and service enable will be skipped
-  when:
-    - _system_tlp_install.rc | default(0) != 0
-
-- name: Detect TLP (may not be installed)  # noqa: command-instead-of-module — probe optional unit without starting it
-  ansible.builtin.command:
-    cmd: systemctl cat tlp
-  register: _system_tlp_disable_check
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  when:
-    - not (system_tlp_enabled | bool)
-    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
-    - not system_is_container
-    - is_dnf
-
-- name: Stop and disable TLP when TLP disabled
-  ansible.builtin.systemd:
-    name: tlp
-    state: stopped
-    enabled: false
-  when:
-    - not (system_tlp_enabled | bool)
-    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
-    - not system_is_container
-    - is_dnf
-    - (_system_tlp_disable_check.rc | default(-1)) == 0
-
-- name: Unmask power management daemons when TLP disabled
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    masked: false
-    enabled: true
-    state: started
-  loop:
-    - tuned-ppd
-    - power-profiles-daemon
-  when:
-    - not (system_tlp_enabled | bool)
     - not csb_rhel
     - not system_is_container
-    - is_dnf
-  failed_when: false
-
-- name: Unmask tuned.service when TLP disabled
-  ansible.builtin.systemd:
-    name: tuned.service
-    masked: false
-    # intentionally not started: let tuned remain stopped on resume; systemd starts it on next boot
-  when:
-    - not (system_tlp_enabled | bool)
-    - not csb_rhel
-    - not system_is_container
-    - is_dnf
-  failed_when: false
-
-- name: TLP power management (enabled, install succeeded, not RHEL CSB)
-  when:
-    - system_tlp_enabled | bool
-    - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
-    - _system_tlp_install.rc | default(0) == 0
-  block:
-    - name: Mask power management daemons that conflict with TLP
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        masked: true
-        state: stopped
-      loop:
-        - tuned-ppd
-        - tuned
-        - power-profiles-daemon
-      when:
-        - is_dnf
-        - not system_is_container
-      failed_when: false
-
-    - name: Deploy TLP ThinkPad charge threshold config
-      ansible.builtin.template:
-        src: tlp-thinkpad.conf.j2
-        dest: /etc/tlp.d/50-thinkpad.conf
-        mode: "0644"
-      failed_when: false
-      notify: Restart tlp
-
-    - name: Enable and start TLP service
-      ansible.builtin.systemd:
-        name: tlp
-        state: started
-        enabled: true
-      when:
-        - not system_is_container
-      failed_when: false
 
 # --- cups-browsed (CVE-2024-47176) and cups service/socket/path ---
 # system_disable_printing: true  → cups-browsed masked+stopped; cups.service disabled;

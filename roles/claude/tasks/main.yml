@@ -34,6 +34,24 @@
       This check duplicates pre_flight_checks.yml to protect against
       --start-at-task bypass. Use only simple directory paths in claude_log_dir.
 
+- name: Set active Claude instance directories
+  ansible.builtin.set_fact:
+    _claude_instances: >-
+      {{ ([claude_default_config_dir]
+          + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
+          + ([claude_personal2_config_dir] if (claude_personal2_instance_enabled | bool) else [])
+          + ([claude_work_config_dir] if (profile == 'work') else [])
+          + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
+         | unique }}
+
+- name: SECURITY assert active Claude instance paths cannot inject tmpfiles directives
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | string is match('^[a-zA-Z0-9/._~-]+\Z')
+    fail_msg: Claude instance paths must contain only simple filesystem path characters.
+  loop: "{{ _claude_instances }}"
+
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed
   ansible.builtin.command:
@@ -71,8 +89,8 @@
       binary version that script installs — install.sh may download "latest" internally, so
       different binary versions are installed across provisioning runs even when sha256 passes.
       Set claude_pinned_version (e.g. "1.0.3") alongside claude_install_sha256 to pin both the
-      installer content and the installed binary version. The CLAUDE_VERSION environment variable
-      is forwarded to the installer when claude_pinned_version is set (main.yml line 143).
+      installer content and the installed binary version. The version is passed as the
+      installer's positional target argument and verified after installation.
   when:
     - claude_install_method == 'native'
     - packages_install_binaries | bool
@@ -159,10 +177,21 @@
 
     - name: Run Claude Code install script
       ansible.builtin.command:  # noqa: no-changed-when
-        cmd: bash "{{ _claude_temp_file.path }}"
+        argv: "{{ ['bash', _claude_temp_file.path] + ([claude_pinned_version] if claude_pinned_version else []) }}"
         chdir: /tmp
-      environment: "{{ {'CLAUDE_VERSION': claude_pinned_version} if claude_pinned_version else {} }}"
       timeout: 150
+
+    - name: Verify pinned Claude Code version after native installation
+      ansible.builtin.command:
+        argv: ["{{ claude_bin_path }}", --version]
+      register: _claude_installed_version
+      changed_when: false
+      failed_when: >-
+        _claude_installed_version.rc != 0 or
+        claude_pinned_version not in (_claude_installed_version.stdout | default('') | trim).split()
+      when:
+        - claude_pinned_version | length > 0
+        - not ansible_check_mode
 
   rescue:
     - name: Clean up Claude Code install script on failure
@@ -194,11 +223,6 @@
           Install manually: curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
       when: not csb_rhel
 
-# --- Instance isolation directories and settings ---
-# Build the active instance list. Three cases:
-#   default only:    default always present; personal when claude_personal_instance_enabled
-#   +work:           profile=work adds claude_work_config_dir
-#   +remote-control: is_macos + claude_remote_control_enabled adds claude_remote_control_config_dir
   always:
     - name: Remove Claude Code install script
       ansible.builtin.file:
@@ -206,15 +230,7 @@
         state: absent
       failed_when: false
       when: _claude_temp_file is defined
-- name: Set active Claude instance directories
-  ansible.builtin.set_fact:
-    _claude_instances: >-
-      {{ ([claude_default_config_dir]
-          + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
-          + ([claude_work_config_dir] if (profile == 'work') else [])
-          + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
-         | unique }}
-
+# --- Instance isolation directories and settings ---
 - name: Create Claude instance config directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -234,9 +250,14 @@
 - name: Deploy Claude work-env file
   ansible.builtin.copy:
     content: |
-      export CLAUDE_CONFIG_DIR={{ claude_work_config_dir }}
       # Source Vertex backend env (ANTHROPIC_VERTEX_PROJECT_ID lives outside repo in claude-code-vertex/env.sh)
-      [ -f "${HOME}/.config/claude-code-vertex/env.sh" ] && . "${HOME}/.config/claude-code-vertex/env.sh"
+      unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN
+      if [ -f "${HOME}/.config/claude-code-vertex/env.sh" ]; then
+        . "${HOME}/.config/claude-code-vertex/env.sh" || return 1
+      fi
+      unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_FOUNDRY
+      export CLAUDE_CONFIG_DIR={{ claude_work_config_dir | quote }}
+      export CLAUDE_CODE_USE_VERTEX=1
     dest: "{{ claude_queue_runtime_config_dir }}/work-env"
     mode: "0600"
     force: true
@@ -253,6 +274,18 @@
 # overwrites settings.json (theme, model, etc.) but does NOT touch
 # settings.local.json, so security policy survives user preference changes.
 # Claude Code merges both files; settings.local.json takes precedence.
+- name: Seed Claude user preferences without replacing CLI edits
+  ansible.builtin.copy:
+    content: |
+      {{ claude_personal_plugin_settings
+         | combine(claude_work_plugin_settings if item == claude_work_config_dir else {}, recursive=true)
+         | combine(claude_user_preferences, recursive=true)
+         | to_nice_json }}
+    dest: "{{ item }}/settings.json"
+    mode: "0600"
+    force: false
+  loop: "{{ _claude_instances }}"
+
 - name: Deploy instance settings.local.json
   ansible.builtin.template:
     src: settings.local.json.j2

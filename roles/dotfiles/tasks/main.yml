@@ -566,3 +566,18 @@
     mode: "0644"
     # seed-only — user edits not overwritten
     force: false
+
+- name: Create user-owned local zsh configuration directory
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/zsh"
+    state: directory
+    mode: "0700"
+
+- name: Seed local zsh extension without replacing user edits
+  ansible.builtin.copy:
+    content: |
+      # Local aliases and machine-specific settings. Sourced after managed zshrc.
+      # This file is yours; provisioning preserves it and make backup includes it.
+    dest: "{{ ansible_facts['user_dir'] }}/.config/zsh/local.zsh"
+    mode: "0600"
+    force: false

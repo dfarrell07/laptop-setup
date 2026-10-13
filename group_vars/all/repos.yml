@@ -2,8 +2,8 @@
 # Git repositories to clone under ~/src/ (or git_repos_base_dir).
 # Filter with: -e repo_category=ovnk
 #
-# Categories: personal, downstream, bpfman, ovnk, konflux
-# Work profile: all categories. Personal profile: personal + ovnk.
+# Categories: personal, downstream, bpfman, ovnk, konflux, evpn, rh-context
+# Work defaults: all categories. Personal defaults: personal + ovnk; explicit category filters override the profile.
 # Repos without an enabled field are included by default (enabled is opt-in only for overrides).
 
 git_repos_list:
@@ -40,8 +40,10 @@ git_repos_list:
 
   - url: https://github.com/submariner-io/admiral
     dest: submariner-io/admiral
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_ad"
+        url: "git@github.com:{{ dotfiles_github_user }}/admiral.git"
 
   - url: https://github.com/submariner-io/lighthouse
     dest: submariner-io/lighthouse
@@ -52,13 +54,17 @@ git_repos_list:
 
   - url: https://github.com/submariner-io/shipyard
     dest: submariner-io/shipyard
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_sy"
+        url: "git@github.com:{{ dotfiles_github_user }}/shipyard.git"
 
   - url: https://github.com/submariner-io/cloud-prepare
     dest: submariner-io/cloud-prepare
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_cp"
+        url: "git@github.com:{{ dotfiles_github_user }}/cloud-prepare.git"
 
   - url: https://github.com/submariner-io/subctl
     dest: submariner-io/subctl
@@ -69,28 +75,38 @@ git_repos_list:
 
   - url: https://github.com/submariner-io/enhancements
     dest: submariner-io/enhancements
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_enh"
+        url: "git@github.com:{{ dotfiles_github_user }}/enhancements.git"
 
   - url: https://github.com/submariner-io/submariner-website
     dest: submariner-io/submariner-website
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_web"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-website.git"
 
   - url: https://github.com/submariner-io/submariner-charts
     dest: submariner-io/submariner-charts
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_helm"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-charts.git"
 
   - url: https://github.com/submariner-io/releases
     dest: submariner-io/releases
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_rel"
+        url: "git@github.com:{{ dotfiles_github_user }}/releases.git"
 
   - url: https://github.com/submariner-io/get.submariner.io
     dest: submariner-io/get.submariner.io
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_get"
+        url: "git@github.com:{{ dotfiles_github_user }}/get.submariner.io.git"
 
   # --- stolostron / ACM (category: downstream) ---
   - url: https://github.com/stolostron/submariner-addon
@@ -102,13 +118,17 @@ git_repos_list:
 
   - url: https://github.com/stolostron/submariner-release-management
     dest: stolostron/submariner-release-management
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_relmang"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-release-management.git"
 
   - url: https://github.com/stolostron/submariner-operator-fbc
     dest: stolostron/submariner-operator-fbc
-    depth: 1
     category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_fbc"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-operator-fbc.git"
 
   - url: https://github.com/stolostron/rhacm-docs
     dest: stolostron/rhacm-docs
@@ -419,3 +439,356 @@ git_repos_list:
     dest: konflux/docs/users
     depth: 1
     category: konflux
+
+  # --- evpn (old laptop inventory) ---
+  - url: "git@gitlab.cee.redhat.com:datucker/evpn-on-cloud.git"
+    dest: "evpn/datucker/evpn-on-cloud"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/osbuild/bootc-image-builder.git"
+    dest: "evpn/osbuild/bootc-image-builder"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/containers/bootc.git"
+    dest: "evpn/containers/bootc"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/ansible-automation-platform/aap-konflux-pipelines.git"
+    dest: "evpn/ansible-automation-platform/aap-konflux-pipelines"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/osbuild/bootc-foundry.git"
+    dest: "evpn/osbuild/bootc-foundry"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/redhat-developer/mapt.git"
+    dest: "evpn/redhat-developer/mapt"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/ansible/ansible-content-actions"
+    dest: "evpn/ansible/ansible-content-actions"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/openshift/bgp-cloud-connector"
+    dest: "evpn/openshift/bgp-cloud-connector"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/build-service"
+    dest: "evpn/konflux-ci/build-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/container-build-catalog"
+    dest: "evpn/konflux-ci/container-build-catalog"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/integration-service"
+    dest: "evpn/konflux-ci/integration-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/openshift/network.offline_migration_sdn_to_ovnk"
+    dest: "evpn/openshift/network.offline_migration_sdn_to_ovnk"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/release-service"
+    dest: "evpn/konflux-ci/release-service"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/tekton-integration-catalog"
+    dest: "evpn/konflux-ci/tekton-integration-catalog"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/release-service-utils"
+    dest: "evpn/konflux-ci/release-service-utils"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/mintmaker-presets"
+    dest: "evpn/konflux-ci/mintmaker-presets"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/multi-platform-controller"
+    dest: "evpn/konflux-ci/multi-platform-controller"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/openperouter/openperouter"
+    dest: "evpn/openperouter/openperouter"
+    category: evpn
+
+  - url: "https://github.com/openshift-kni/openperouter"
+    dest: "evpn/openshift-kni/openperouter"
+    category: evpn
+
+  - url: "https://github.com/red-hat-data-services/aipcc-konflux-data"
+    dest: "evpn/red-hat-data-services/aipcc-konflux-data"
+    category: evpn
+    depth: 1
+
+  - url: "https://gitlab.com/redhat/centos-stream/containers/bootc.git"
+    dest: "evpn/redhat/centos-stream/containers/bootc"
+    category: evpn
+    depth: 1
+
+  - url: "https://github.com/kubernetes-sigs/prow"
+    dest: "evpn/kubernetes-sigs/prow"
+    category: evpn
+    depth: 1
+
+
+  # --- rh-context (old laptop inventory) ---
+  - url: "git@gitlab.cee.redhat.com:service/app-interface.git"
+    dest: "rh-context/service/app-interface"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:global-engineering/wg-agentic-sdlc.git"
+    dest: "rh-context/global-engineering/wg-agentic-sdlc"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:bugzilla-data/components.git"
+    dest: "rh-context/bugzilla-data/components"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:developer-guide/developer-guide.git"
+    dest: "rh-context/developer-guide/developer-guide"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:catalog/catalog.git"
+    dest: "rh-context/catalog/catalog"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:tools.gss.redhat.com/support-scripts.git"
+    dest: "rh-context/tools.gss.redhat.com/support-scripts"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ccit/jenkins-csb.git"
+    dest: "rh-context/ccit/jenkins-csb"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:models-corp/user-documentation.git"
+    dest: "rh-context/models-corp/user-documentation"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:cpaas-products/product-configs.git"
+    dest: "rh-context/cpaas-products/product-configs"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:dataverse/agentic-engineering/skills-hub.git"
+    dest: "rh-context/dataverse/agentic-engineering/skills-hub"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ncredi/managerkit.git"
+    dest: "rh-context/ncredi/managerkit"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:tme/gobot-mpp/gobot-slack.git"
+    dest: "rh-context/tme/gobot-mpp/gobot-slack"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:kernel-qe/kernel.git"
+    dest: "rh-context/kernel-qe/kernel"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ccx/ccx-rules-ocp.git"
+    dest: "rh-context/ccx/ccx-rules-ocp"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:tailwind/tailwind.git"
+    dest: "rh-context/tailwind/tailwind"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:mmcgrath/sdlc-starter.git"
+    dest: "rh-context/mmcgrath/sdlc-starter"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:bragaitools/bragai.git"
+    dest: "rh-context/bragaitools/bragai"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:service/ocm-resources.git"
+    dest: "rh-context/service/ocm-resources"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:dataverse/dataverse-config/dataproduct-config.git"
+    dest: "rh-context/dataverse/dataverse-config/dataproduct-config"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:redhat-ai-analysis/ai-skills-workshop.git"
+    dest: "rh-context/redhat-ai-analysis/ai-skills-workshop"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ansible/aap-containerized-installer.git"
+    dest: "rh-context/ansible/aap-containerized-installer"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:support-insights/gss-rules.git"
+    dest: "rh-context/support-insights/gss-rules"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:cee-data-engineering/sushe-agent-tools.git"
+    dest: "rh-context/cee-data-engineering/sushe-agent-tools"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:konflux/docs/sop.git"
+    dest: "rh-context/konflux/docs/sop"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:service/uhc-clusters-service.git"
+    dest: "rh-context/service/uhc-clusters-service"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:prodsec/product-definitions.git"
+    dest: "rh-context/prodsec/product-definitions"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ocp-edge-qe/ocp-edge.git"
+    dest: "rh-context/ocp-edge-qe/ocp-edge"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:hybrid-platforms/org.git"
+    dest: "rh-context/hybrid-platforms/org"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:pmyers/scripts.git"
+    dest: "rh-context/pmyers/scripts"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:cpaas/service.git"
+    dest: "rh-context/cpaas/service"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:jscarbor/fedora-config.git"
+    dest: "rh-context/jscarbor/fedora-config"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:vrutkovs/matrix.osci.redhat.com.git"
+    dest: "rh-context/vrutkovs/matrix.osci.redhat.com"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:cpaas/documentation.git"
+    dest: "rh-context/cpaas/documentation"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:kab/kab.git"
+    dest: "rh-context/kab/kab"
+    category: rh-context
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:ccs-ai/ccs-ai-agentic-workflow.git"
+    dest: "rh-context/ccs-ai/ccs-ai-agentic-workflow"
+    category: rh-context
+    depth: 1
+
+  - url: "https://github.com/{{ dotfiles_github_user }}/evpn-gateway-appliance-context.git"
+    dest: "evpn/{{ dotfiles_github_user }}/evpn-gateway-appliance-context"
+    category: evpn
+
+  - url: "https://github.com/openshift/evpn-gateway-appliance.git"
+    dest: "evpn/openshift/evpn-gateway-appliance"
+    category: evpn
+    extra_remotes:
+      - name: fork
+        url: "git@github.com:{{ dotfiles_github_user }}/evpn-gateway-appliance.git"
+
+
+  # --- konflux (old laptop inventory) ---
+  - url: "https://github.com/enterprise-contract/ec-policies.git"
+    dest: "konflux/enterprise-contract/ec-policies"
+    category: konflux
+    depth: 1
+
+  - url: "git@gitlab.cee.redhat.com:documentation-red-hat-openshift-data-science-documentation/rhel-ai.git"
+    dest: "konflux/documentation-red-hat-openshift-data-science-documentation/rhel-ai"
+    category: konflux
+    depth: 1
+
+  - url: "https://gitlab.com/testing-farm/integrations-konflux.git"
+    dest: "konflux/testing-farm/integrations-konflux"
+    category: konflux
+    depth: 1
+
+  - url: "https://github.com/konflux-ci/konflux-qe-definitions.git"
+    dest: "konflux/konflux-ci/konflux-qe-definitions"
+    category: konflux
+    depth: 1
+
+  - url: "https://github.com/redhat-appstudio/release-service-catalog.git"
+    dest: "konflux/redhat-appstudio/release-service-catalog"
+    category: konflux
+    depth: 1
+
+
+  # --- additional durable personal workspaces ---
+  - url: "git@github.com:{{ dotfiles_github_user }}/patents.git"
+    dest: "{{ dotfiles_github_user }}/patents"
+    category: personal
+
+  - url: "git@github.com:{{ dotfiles_github_user }}/startups.git"
+    dest: "{{ dotfiles_github_user }}/startups"
+    category: personal
+
+  - url: "git@github.com:{{ dotfiles_github_user }}/dotfiles.git"
+    dest: "{{ dotfiles_github_user }}/dotfiles"
+    category: personal
+
+  # --- additional Submariner development sources ---
+  - url: https://github.com/submariner-io/coastguard.git
+    dest: submariner-io/coastguard
+    category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_cg"
+        url: "git@github.com:{{ dotfiles_github_user }}/coastguard.git"
+
+  - url: https://github.com/submariner-io/submariner-diagnostics.git
+    dest: submariner-io/submariner-diagnostics
+    category: downstream
+    extra_remotes:
+      - name: "{{ dotfiles_github_user }}_diag"
+        url: "git@github.com:{{ dotfiles_github_user }}/submariner-diagnostics.git"

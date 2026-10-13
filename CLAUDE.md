@@ -125,7 +125,7 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
 1. `make bootstrap` — installs Ansible collections, git hooks, creates vault-pass.sh stub
    (fresh Fedora/RHEL: `sudo dnf install -y make` first; macOS: `xcode-select --install` + Homebrew from <https://brew.sh> first)
 2. Copy `default.config.yml` to `config.yml` (`cp default.config.yml config.yml`) and replace
-   each `CHANGE_ME` sentinel — at minimum `desktop_environment` (sway/i3/gnome), the four
+   each `CHANGE_ME` sentinel — at minimum `desktop_environment` (Linux: sway/i3/gnome; macOS: aerospace), the four
    identity vars (`dotfiles_github_user`, `dotfiles_user_name`, `dotfiles_user_email_work`,
    `dotfiles_user_email_personal`), and `system_timezone`. Copying preserves the full
    optional-toggle comment block for reference.
@@ -227,6 +227,9 @@ make repos_dnf        # repos_dnf role only (sudo)
 make redhat           # redhat role only (sudo)
 make containers       # containers role only (sudo)
 make claude           # claude role only (sudo)
+make codex            # pinned user-space Codex CLI + seed account settings (no sudo)
+make migration-inventory # private local Git metadata report for a laptop move
+make workstation-audit # private package/tool/desktop/service drift report
 make distrobox        # alias for make container (backwards compatibility)
 # Per repo-group subsets of `make repos` — pattern rule: make repos-<group>
 # runs git_repos role with repo_category=<group>; any category name is valid
@@ -235,12 +238,14 @@ make repos-konflux    # Konflux repos only
 make repos-personal   # personal repos only (SSH-only; requires ssh-add before running)
 make repos-bpfman     # bpfman repos only
 make repos-downstream # downstream repos only
+make repos-evpn       # EVPN project and context (work profile category)
+make repos-rh-context # internal RH context repos (VPN + SSH credentials)
 ```
 
 ## Project Structure
 
 - **site.yml** — 3 plays: system (become), user (no become), container (podman connection)
-- **13 roles**: common, repos_dnf, system, packages, dotfiles, ssh, git_repos, notes, redhat, containers, desktop, distrobox, claude
+- **14 roles**: common, repos_dnf, system, packages, dotfiles, ssh, git_repos, notes, redhat, containers, desktop, distrobox, claude, codex
 - **common/** — Shared task files (CSB detection, failure handler, CSB report, container provisioning)
 - **scripts/** — preflight.sh (`--profile work|personal`), smoke-test.sh (`--user-only` skips root checks),
   backup.sh, vault-pass.sh, vault-pass-ci.sh, test-queue-poller.sh
@@ -270,7 +275,7 @@ make repos-downstream # downstream repos only
   `install_standalone_binaries.yml` (standalone tool downloads: transcrypt, sops, gitleaks, actionlint, zizmor, operator-sdk, cosign, tkn,
   ec), `install_brew.yml` (Homebrew packages and autoupdate, macOS), `install_krew.yml` (kubectl krew plugin manager), `install_pipx.yml`
   (yamllint/ansible-lint via pipx), `install_virtualization.yml` (virtualization packages and post-install setup), and `verify_golang.yml`
-  (Go toolchain version assertion) (plus main.yml = 14 task files total); add new binaries in the appropriate extractor file
+  (Go toolchain version assertion) (plus main.yml = 17 task files total); add new binaries in the appropriate extractor file
 
 ## Key Patterns
 
@@ -371,6 +376,8 @@ make repos-downstream # downstream repos only
 - `make test-scripts` — Bash syntax-check of 8 scripts/ files (preflight.sh, smoke-test.sh, backup.sh, vault-pass-ci.sh,
   test-queue-poller.sh, verify-collections.sh, verify-ansible-args.sh, test-hooks-security.sh) + executes test-hooks-security.sh
 - `make test-poller` — Unit tests for roles/claude/files/claude-queue-poller.sh internal helpers
+- `LAPTOP_SETUP_TEST_TIMEOUT=180 make test-scripts` — Raise isolated workstation/input-guard
+  Ansible test deadlines on a busy host; assertions and normal CI deadlines remain unchanged
 - `make test` — shellcheck + test-scripts + test-poller + molecule
   (Fedora/Rocky/Debian/container/container-offline/container-offline-distrobox/distrobox-role/packages-binaries/ssti-guard);
   Podman only, no libvirt required. CI molecule coverage minus macOS (omits lint/syntax-check from full ci)
@@ -404,3 +411,29 @@ make repos-downstream # downstream repos only
   SHA256 verification, Python manifest comparison (`PYTHON_MANIFEST.json` TOCTOU checks), and
   mandatory code review gates. See `SECURITY.md` § "Ansible Collections Supply Chain" for
   vulnerability analysis, attack scenarios, and step-by-step code review procedure.
+
+## Moving from the old laptop
+
+See [the migration plan](docs/old-laptop-migration-plan.md),
+[discovery inventory](docs/old-laptop-inventory.md), and
+[transfer checklist](docs/migration-checklist.md). Familiar direct launchers are
+`cwork`, `cper`, `cper2`, `owork`, `oper`, and `gper`; configurable argument lists
+preserve the source laptop's workflow. `gper` requires the separate Antigravity
+vendor CLI. `~/.config/zsh/local.zsh` is preserved for personal additions.
+
+Codex uses a committed npm integrity lock and installs into user space with
+lifecycle scripts disabled. `packages_install_binaries: false` skips its download;
+`codex_enabled: false` skips the role. Config files are seed-only. To update the
+pin, edit `roles/codex/files/package.json`, regenerate its lock with
+`npm install --package-lock-only --ignore-scripts --prefix roles/codex/files`,
+review all archive URLs/integrity values, and run the migration regression tests.
+The optional download test is
+`CODEX_INSTALL_TEST=1 .venv/bin/python3 scripts/test-laptop-migration.py`.
+
+The [wider audit](docs/old-laptop-second-pass.md) adds native package extension
+lists, work AWS CLI tooling, typed GNOME preferences and guarded power-stack
+transitions. Native package/service behavior still requires destination validation.
+`make workstation-audit` records package provenance, PATH shadows,
+pipx health and desktop/service metadata without exporting credentials. TLP
+package and native-stack restoration logic lives in
+`roles/system/tasks/power_management.yml`, imported with DNF/CSB/container guards.

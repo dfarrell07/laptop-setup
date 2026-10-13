@@ -1,13 +1,13 @@
 .PHONY: bootstrap-hooks help all minimal offline backup backup-dry-run bootstrap bootstrap-test lint check diff test smoke-test \
        dotfiles packages repos notes \
-       ssh desktop system repos_dnf redhat containers claude distrobox container \
+       ssh desktop system repos_dnf redhat containers claude codex distrobox container \
        container-rebuild csb-audit vault-edit vault-view vault-diff update hooks \
        smoke-test-container smoke-test-user \
        ci syntax-check shellcheck markdownlint commitlint check-vars-sync \
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections
+       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
 # The make -x check MUST precede 'override MAKEFLAGS :=' because:
@@ -37,6 +37,11 @@ override MAKEFLAGS :=
 # preflight checks, and the SSTI guard with become:true (root) execution. The 'override' directive
 # defeats command-line variable assignments, the same mechanism used to lock MAKEFLAGS above.
 override SHELL := /bin/bash
+
+# Bootstrap installs the Homebrew runtime and checksum tools used below.
+ifeq ($(shell uname -s),Darwin)
+export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
+endif
 
 # Guard against BASH_ENV/ENV/ZDOTDIR shell-init injection (CWE-454/CWE-426).
 # BASH_ENV=/tmp/evil.sh make all causes the Makefile recipe to spawn a bash process
@@ -80,12 +85,12 @@ export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
 help:
 	@echo "Primary:    all minimal offline container container-rebuild update  (distrobox=alias for container)"
 	@echo "Roles:      dotfiles packages repos notes ssh desktop system repos_dnf"
-	@echo "            redhat containers claude"
-	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream"
+	@echo "            redhat containers claude codex"
+	@echo "Repos:      repos-ovnk repos-konflux repos-personal repos-bpfman repos-downstream repos-evpn repos-rh-context"
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
-	@echo "Other:      backup backup-dry-run csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
+	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
 # Safety guard: user-space role targets must not run as root (dotfiles would install to /root/)
@@ -127,7 +132,7 @@ bootstrap-hooks: guard-not-root
 bootstrap: guard-not-root bootstrap-hooks
 	@# macOS: brew openssh links libfido2; system ssh (LibreSSL) lacks sk-ssh-ed25519/FIDO2 support
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
-		brew install ansible git openssh libfido2 ykman make shellcheck; \
+		brew install ansible git openssh libfido2 ykman make shellcheck coreutils node bash python3; \
 	elif command -v apt-get >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y ansible git yubikey-personalization make shellcheck python3-venv python3-pip; \
 	else \
@@ -319,9 +324,19 @@ containers: guard-not-root
 claude: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
+codex: guard-not-root
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex
+
 distrobox: container  # alias for backwards compatibility
 
 # --- Audit and testing ---
+
+workstation-audit: guard-not-root
+	python3 scripts/workstation-audit.py --output "$(HOME)/workstation-audit-$$(date +%Y%m%d-%H%M%S).json"
+
+migration-inventory: guard-not-root
+	python3 scripts/migration-inventory.py --output "$(HOME)/migration-inventory-$$(date +%Y%m%d-%H%M%S).json"
+
 
 preflight:
 	scripts/preflight.sh
@@ -412,6 +427,9 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-sshd-template.py
 	.venv/bin/python3 scripts/test-sysctl-template.py
 	.venv/bin/python3 scripts/test-smoke-test.py
+	.venv/bin/python3 scripts/test-workstation-audit.py
+	.venv/bin/python3 scripts/test-go-checksum.py
+	.venv/bin/python3 scripts/test-laptop-migration.py
 	.venv/bin/python3 scripts/test-claude-privacy.py
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py

@@ -263,6 +263,9 @@
       isdir={{ verify_git_repos_clone.stat.isdir | default(false) }})
 
 # --- Claude ---
+- name: Verify Codex account baseline
+  ansible.builtin.import_tasks: verify-codex.yml
+
 - name: Verify Claude personal config directory
   ansible.builtin.stat:
     path: "{{ ansible_user_dir }}/.claude-personal"

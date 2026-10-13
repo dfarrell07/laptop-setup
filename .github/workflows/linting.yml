@@ -280,6 +280,11 @@ jobs:
       - name: Test raw config parsing and unsafe-tag handling
         uses: ./.github/actions/ci-setup
 
+      - name: Install zsh for migration launcher regression tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes zsh dconf-cli dbus-x11 python3-gi python3-psutil
+
       - name: Run config parser and SSH host-key regression tests
         run: |
           python3 scripts/test-config-parser.py
@@ -287,6 +292,9 @@ jobs:
           python3 scripts/test-sshd-template.py
           python3 scripts/test-smoke-test.py
           python3 scripts/test-claude-privacy.py
+          python3 scripts/test-laptop-migration.py
+          python3 scripts/test-workstation-audit.py
+          python3 scripts/test-go-checksum.py
 
       - name: Run pre-push enforcement regression tests
         run: |

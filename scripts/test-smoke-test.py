@@ -13,6 +13,24 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class SmokeTests(unittest.TestCase):
+    def test_native_power_baseline_does_not_require_tlp(self):
+        source = (ROOT / 'scripts/smoke-test.sh').read_text()
+        start = source.index('  # TLP is an explicit opt-in;')
+        end = source.index('\n  # Chrome policies', start)
+        with tempfile.TemporaryDirectory() as directory:
+            # A native stack is active and TLP is absent. No hardware/service probes
+            # should run at all when the managed TLP choice is disabled.
+            executable = Path(directory) / 'systemctl'
+            executable.write_text('#!/bin/sh\necho unexpected-power-probe >&2\nexit 1\n')
+            executable.chmod(0o755)
+            result = subprocess.run(['bash', '-eu', '-o', 'pipefail', '-c',
+                'record() { printf "%s %s\\n" "$1" "$2"; }; _tlp_enabled=false;\n' + source[start:end]],
+                env=dict(os.environ, PATH=directory + ':' + os.environ['PATH']),
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), 'tlp-service SKIP')
+            self.assertEqual(result.stderr, '')
+
     def test_home_tmp_probe_uses_a_binary_available_on_macos_and_linux(self):
         source = (ROOT / 'scripts/smoke-test.sh').read_text()
         start = source.index('if [[ ! -d "$HOME/tmp" ]]')

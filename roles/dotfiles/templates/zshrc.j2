@@ -18,14 +18,14 @@ export VISUAL=vim
 {% if dotfiles_aws_profile %}
 export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
 {% endif %}
-{% if dotfiles_gonosumdb %}
-export GONOSUMDB='{{ dotfiles_gonosumdb | replace("'", "'\''" ) }}'
+# Go ignores empty environment values; explicit patterns override stale GoENV entries.
+export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
+export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
 {% endif %}
-{% if dotfiles_goprivate %}
-export GOPRIVATE='{{ dotfiles_goprivate | replace("'", "'\''" ) }}'
+{% if _system == 'Darwin' %}
+export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
 {% endif %}
-{% endif %}
-export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/go/bin:$HOME/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
 export GOTOOLCHAIN='{{ packages_gotoolchain }}'  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
@@ -111,10 +111,11 @@ claude() {
 cw() {
   command -v tmux &>/dev/null || { echo "ERROR: tmux not found"; return 1; }
   _claude_check_base_url || return 1
-  [[ -f ~/.config/claude/work-env ]] || { echo "ERROR: ~/.config/claude/work-env missing — run: make claude" >&2; return 1; }
+  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
   local dir="${PWD##*/}"; dir="${dir//[^a-zA-Z0-9_-]/_}"; [[ -z "$dir" ]] && dir="root"
   local s="work-${dir}"
-  tmux new-session -As "$s" "source ~/.config/claude/work-env && claude; zsh"
+  tmux new-session -As "$s" "source ${(q)work_env} && claude; zsh"
 }
 {% endif %}
 
@@ -145,7 +146,9 @@ cwt() {
     return 1
   fi
   _claude_check_base_url || return 1
-  tmux new-session -As "work-$n" "source ~/.config/claude/work-env && claude --worktree $n; zsh"
+  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  [[ -f "$work_env" ]] || { echo "ERROR: $work_env missing — run: make claude" >&2; return 1; }
+  tmux new-session -As "work-$n" "source ${(q)work_env} && claude --worktree $n; zsh"
 }
 {% endif %}
 cstatus() {
@@ -153,6 +156,48 @@ cstatus() {
     echo "=== $s ==="; tmux capture-pane -t "$s" -p | tail -3; echo
   done
 }
+
+# Familiar direct launchers. Subshells keep account/backend changes local.
+_claude_personal() (
+  local config_dir="$1"; shift
+  unset CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION
+  unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_CLOUD_PROJECT ANTHROPIC_BASE_URL
+  unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN
+  unset CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_FOUNDRY
+  export CLAUDE_CONFIG_DIR="$config_dir" CLAUDE_CODE_USE_VERTEX=0
+  export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
+  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "$@"
+)
+cper() { _claude_personal {{ claude_default_config_dir | quote }} "$@"; }
+{% if claude_personal2_instance_enabled | bool %}
+cper2() { _claude_personal {{ claude_personal2_config_dir | quote }} "$@"; }
+{% endif %}
+{% if profile == 'work' %}
+cwork() (
+  local work_env={{ (claude_queue_runtime_config_dir ~ '/work-env') | quote }}
+  [[ -f "$work_env" ]] || { echo "cwork: run make claude first" >&2; return 1; }
+  source "$work_env" || return 1
+  export CLAUDE_CODE_USE_VERTEX=1
+  export CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION={{ dotfiles_claude_max_subagents | int }}
+  claude {{ dotfiles_claude_launcher_args | map('quote') | join(' ') }} "$@"
+)
+{% endif %}
+
+# --- Codex ---
+{% if profile == 'work' %}
+owork() (
+  export CODEX_HOME={{ codex_work_config_dir | quote }}
+  command codex {{ dotfiles_codex_launcher_args | map('quote') | join(' ') }} "$@"
+)
+{% endif %}
+oper() (
+  unset OPENAI_API_KEY CODEX_API_KEY OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_PROJECT_ID
+  export CODEX_HOME={{ codex_personal_config_dir | quote }}
+  mkdir -p "$CODEX_HOME" && chmod 700 "$CODEX_HOME" || return 1
+  command codex {{ dotfiles_codex_launcher_args | map('quote') | join(' ') }} "$@"
+)
+# Antigravity CLI is a separate vendor tool from npm's Gemini CLI.
+gper() { command agy {{ dotfiles_gemini_launcher_args | map('quote') | join(' ') }} "$@"; }
 
 # --- Device access (Tailscale + mosh) ---
 {% if dotfiles_laptop_tailscale_host %}
@@ -170,6 +215,8 @@ alias src='cd ~/src'
 {% if profile == 'work' %}
 alias subm='cd ~/src/submariner-io'
 alias ovnk='cd ~/src/ovnk'
+alias evpn='cd ~/src/evpn'
+alias rhrepos='cd ~/src/rh-context'
 {% endif %}
 alias notes="cd {{ notes_repo_path }}"
 
@@ -316,17 +363,26 @@ alias ts='tailscale status'
 
 # --- General aliases ---
 command -v gvim &>/dev/null && alias gv="gvim -vp"
+{% if dotfiles_legacy_grep_alias_enabled | bool %}
+alias gi="grep -rniI --color=always --exclude-dir=vendor"
+{% endif %}
 alias gri="grep -rniI --color=always --exclude-dir=vendor"  # gi is reserved for forgit::ignore
 {% if _system == 'Linux' %}
 alias ping="ping -i .2"
 {% endif %}
 alias pingg="ping www.google.com"
 alias ping8="ping 8.8.8.8"
+alias mtrg="mtr google.com"
+hash -d dl="$HOME/Downloads"
+alias -g ...='../..'
+alias -g ....='../../..'
+alias -g .....='../../../..'
+alias -g ......='../../../../..'
+alias -g .......='../../../../../..'
+unset GREP_OPTIONS
 
 # --- umask ---
 umask 077
-{% if profile == 'work' %}
 
-# --- Claude Code Vertex backend (env.sh holds ANTHROPIC_VERTEX_PROJECT_ID — not in repo) ---
-[[ -f "${HOME}/.config/claude-code-vertex/env.sh" ]] && source "${HOME}/.config/claude-code-vertex/env.sh"
-{% endif %}
+# User-owned additions (hardware aliases, local tool paths, etc.).
+[[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/local.zsh" ]] && source "${XDG_CONFIG_HOME:-$HOME/.config}/zsh/local.zsh"

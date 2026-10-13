@@ -15,7 +15,7 @@ dotfiles_gh_editor: vim  # seed-only gh editor (force: false); to change: gh con
 dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g. "aws-acm-subm"
 
 # Red Hat-specific defaults; override in config.yml with your organization's internal Go module domains.
-# Empty strings omit the export entirely (profile: work users without internal modules do not need these).
+# Empty config uses explicit no-match patterns; Go ignores empty exports and otherwise falls back to stale GoENV values.
 dotfiles_gonosumdb: ""  # set in config.yml for private Go module domains; e.g. "*.redhat.com,*.engineering.redhat.com"
 dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com"
 dotfiles_internal_git_host: ""  # internal HTTPS git hostname; when set, adds http sslCAInfo + SSH Host stanza
@@ -71,3 +71,19 @@ notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/
 dotfiles_user_name: 'CHANGE_ME'  # override in config.yml
 dotfiles_user_email_work: 'CHANGE_ME@work.invalid'  # override in config.yml
 dotfiles_user_email_personal: 'CHANGE_ME@personal.invalid'  # override in config.yml
+
+# Familiar direct launchers from the old laptop; lists are shell-quoted per argument.
+dotfiles_claude_launcher_args: [--dangerously-skip-permissions, --plugin-dir, .]
+dotfiles_codex_launcher_args: [--ask-for-approval=never, --sandbox=danger-full-access]
+dotfiles_gemini_launcher_args: [--mode=accept-edits, --dangerously-skip-permissions]
+dotfiles_claude_max_subagents: 2000
+# Cross-role fallbacks for standalone dotfiles provisioning.
+claude_default_config_dir: "{{ ansible_facts['user_dir'] }}/.claude"
+claude_queue_runtime_config_dir: "{{ ansible_facts['user_dir'] }}/.config/claude"
+claude_personal2_config_dir: "{{ ansible_facts['user_dir'] }}/.claude-per2"
+claude_personal2_instance_enabled: true
+codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"
+codex_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.codex-personal"
+
+# The old laptop uses gi for grep; default gri preserves forgit's gi alias.
+dotfiles_legacy_grep_alias_enabled: false

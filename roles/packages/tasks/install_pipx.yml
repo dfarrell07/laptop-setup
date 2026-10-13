@@ -43,3 +43,15 @@
           Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
           This may be a transient network error or missing pipx/pip access.
       when: not csb_rhel
+
+- name: Validate optional pipx package pins
+  ansible.builtin.assert:
+    that:
+      - item is match('^[a-zA-Z0-9_.-]+==[0-9]+\.[0-9]+(\.[0-9]+)?$')
+  loop: "{{ packages_extra_pipx }}"
+
+- name: Install optional pinned pipx tools
+  community.general.pipx:
+    name: "{{ item }}"
+    state: install
+  loop: "{{ packages_extra_pipx }}"

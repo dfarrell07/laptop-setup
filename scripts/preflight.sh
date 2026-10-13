@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # preflight.sh — Pre-flight checks for workstation Ansible playbook.
 # Exit 0 if ready, 1 if failures. Usage: preflight.sh [--json] [--profile work|personal]
 set -euo pipefail

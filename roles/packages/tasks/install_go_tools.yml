@@ -22,14 +22,16 @@
   become: false
 
 - name: "Validate GONOSUMDB/GOSUMDB: (1/3) no public module domains in GONOSUMDB"
-  vars:
-    _pub_mod_re: '(^|,)(\*|github\.com|golang\.org|mvdan\.cc|sigs\.k8s\.io|k8s\.io|gopkg\.in)(,|$)'
   ansible.builtin.assert:
     that:
-      - dotfiles_gonosumdb | default('') | regex_search(_pub_mod_re) is none
+      - >-
+        ((dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')))
+        | go_checksum_exceptions_safe((packages_go_install | default([])) + (packages_go_install_work | default([]))
+                                     + ['github.com/submariner-io/subctl/cmd'])
     fail_msg: >-
-      dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
-      verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
+      The effective checksum exception (GONOSUMDB or its GOPRIVATE fallback) contains a public pattern that bypasses Go checksum-database
+      verification, or uses unsupported pattern syntax. Use private domain prefixes
+      (e.g. '*.redhat.com') or literal private owners; only literals and '*' globs are supported.
 
 - name: "Validate GONOSUMDB/GOSUMDB: (2/3) GOSUMDB not disabled and valid hostname"
   # Accepts: FQDN (e.g. sum.golang.org) and FQDN:port (e.g. sum.corp.com:443)
@@ -209,8 +211,8 @@
         HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
         # security-critical: pin proxy, prevent GOPROXY env injection; override packages_goproxy in config.yml for corporate mirrors
         GOPROXY: "{{ packages_goproxy }}"
-        GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
-        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+        GONOSUMDB: "{{ (dotfiles_gonosumdb | default('')) or (dotfiles_goprivate | default('')) or 'none' }}"
+        GOPRIVATE: "{{ (dotfiles_goprivate | default('')) or 'none' }}"
         GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical
         CC: /usr/bin/gcc  # pin compiler identity; prevent caller CC injection into CGO builds
         CGO_CFLAGS: ''  # clear inherited flags; prevent CGO_CFLAGS injection

@@ -1,0 +1,46 @@
+---
+# Host-role scenarios deploy both account homes even when binary downloads are skipped.
+- name: Verify Codex account files and permissions
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/{{ item }}"
+  loop:
+    - .codex/config.toml
+    - .codex/AGENTS.md
+    - .codex-personal/config.toml
+    - .codex-personal/AGENTS.md
+  register: verify_codex_files
+
+- name: Assert private Codex account files exist
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.mode == '0600'
+  loop: "{{ verify_codex_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Read Codex working agreements
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.codex-personal/AGENTS.md"
+  register: verify_codex_agreements
+
+- name: Assert Codex receives the signed-off commit convention
+  ansible.builtin.assert:
+    that: "'--signoff' in (verify_codex_agreements.content | b64decode)"
+
+# VM/macOS scenarios enable real binary installs; Podman scenarios verify config-only provisioning.
+- name: Verify the locked Codex binary on native hosts
+  when: not (system_is_container | default(false))
+  block:
+    - name: Read installed Codex version
+      ansible.builtin.command:
+        argv: ["{{ ansible_user_dir }}/.local/bin/codex", --version]
+      register: verify_codex_version
+      changed_when: false
+
+    - name: Assert installed Codex matches the committed pin
+      ansible.builtin.assert:
+        that: >-
+          verify_codex_version.stdout | trim == 'codex-cli ' ~
+          (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~
+           '/roles/codex/files/package.json') | from_json).dependencies['@openai/codex']
