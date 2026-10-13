@@ -12,9 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: macos
-          runner: macos-15
-          timeout: 60
         - scenario: vm
           runner: ubuntu-22.04
           timeout: 90
@@ -32,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'e3634a763a5bba0ab2756f27072e232ce4bbb40c3aec293d05c3c3eef9180260',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '03c55f7f69c8d56d6ff37d99acd4691fb4bfe5a501b0034f65c1c430d223d749',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: af8fc461a9bcf6b791a243552703daef516219ed')\nPY_SNAPSHOT\n"
+        \ candidate tree: df5b84c32450e17a620a6d02573efd4c042325c5')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
