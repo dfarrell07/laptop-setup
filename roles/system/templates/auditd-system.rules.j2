@@ -1,0 +1,267 @@
+# {{ ansible_managed }}
+# Audit rules for sensitive file access monitoring
+
+# Exclusion rules (MUST come before -a always,exit syscall rules — first-match wins).
+# These suppress noise from well-known agents when syscall rules are added.
+# They have NO effect on the -w watch rules below: -w rules use audit_inode_hash
+# (a separate kernel data structure from AUDIT_FILTER_EXIT). At syscall exit,
+# audit_filter_inodes() runs after audit_filter_syscall() and overrides the
+# DISABLED state when a watched inode is accessed. Result: getpid/mmap noise
+# from ssh-agent is suppressed, but writes to ~/.ssh/ are still audited.
+# NOTE: this guarantee does NOT hold for -a always,exit -F dir=... rules —
+# those live in AUDIT_FILTER_EXIT and WOULD be suppressed by these exclusions.
+-a never,exit -F exe=/usr/bin/ssh-agent -k exclude-ssh-agent
+-a never,exit -F exe=/usr/bin/gpg-agent -k exclude-gpg-agent
+-a never,exit -F exe=/usr/bin/bpfman -k exclude-bpfman
+# Fedora packages Go at /usr/lib/golang (golang-bin RPM), not /usr/local/go (go.dev tarball convention).
+# GOTOOLCHAIN=auto downloads land at ~/go/pkg/mod/golang.org/toolchain@vX.Y.Z/ — version slug changes,
+# so those paths cannot be excluded by exe= without per-toolchain entries.
+-a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/compile -k exclude-go-build
+-a never,exit -F exe=/usr/lib/golang/pkg/tool/linux_amd64/link -k exclude-go-build
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/lib/golang/bin/go -k exclude-go-build
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/lib/golang/bin/go -k exclude-go-build
+# Build tools generate thousands of delete/rename events during normal operation
+# (cargo clean, npm install, git checkout). Exclude only those specific syscalls;
+# -w watch rules use the inode-hash path and are unaffected by these exclusions,
+# and other syscall rules (privilege-escalation, bpf, perm_mod) remain active.
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/cargo -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/git -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -S fchmod -S fchmodat -F exe=/usr/bin/git -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/npm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/npm -k exclude-build-deletes
+-a never,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/npm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/npm -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/dnf5 -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F exe=/usr/bin/rpm -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/podman -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/podman -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/buildah -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/buildah -k exclude-build-deletes
+-a never,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/crun -k exclude-build-deletes
+-a never,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F exe=/usr/bin/crun -k exclude-build-deletes
+
+# Write/attribute changes on frequently-accessed sensitive paths
+-w {{ real_user_home }}/.ssh/ -p wa -k claude-sensitive-write
+-w {{ real_user_home }}/.gnupg/ -p wa -k claude-sensitive-write
+-w {{ real_user_home }}/.kube/config -p wa -k claude-sensitive-write
+
+# Read access on rarely-accessed high-value files
+-w {{ real_user_home }}/.aws/ -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.vault_pass -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.claude/.credentials.json -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.config/containers/auth.json -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.config/gcloud/ -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.config/gh/ -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.config/acli/ -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.docker/config.json -p r -k claude-sensitive-read
+-w {{ real_user_home }}/.netrc -p r -k claude-sensitive-read
+# Claude Code settings — write-watch detects sandbox policy tampering, malicious MCP server injection,
+# or tool permission escalation via settings.json/settings.local.json/CLAUDE.md
+-w {{ real_user_home }}/.claude/settings.json -p wa -k claude-settings
+-w {{ real_user_home }}/.claude/settings.local.json -p wa -k claude-settings
+-w {{ real_user_home }}/.claude/CLAUDE.md -p wa -k claude-settings
+# Vertex auth env (ANTHROPIC_VERTEX_PROJECT_ID) — sourced by claude role for all instances
+-w {{ real_user_home }}/.config/claude-code-vertex/ -p r -k claude-sensitive-read
+-w /etc/sudoers -p wa -k privilege-escalation
+-w /etc/sudoers.d/ -p wa -k privilege-escalation
+-w /etc/ssh/sshd_config -p wa -k privilege-escalation
+-w /etc/ssh/sshd_config.d/ -p wa -k privilege-escalation
+-w /etc/ssh/ssh_config -p wa -k network-config
+-w /etc/ssh/ssh_config.d/ -p wa -k network-config
+
+# System identity and authentication files
+-w /etc/passwd -p wa -k identity-change
+-w /etc/shadow -p wa -k identity-change
+-w /etc/group -p wa -k identity-change
+-w /etc/gshadow -p wa -k identity-change
+-w /etc/security/opasswd -p wa -k identity-change
+-w /etc/pam.d/ -p wa -k auth-config
+-w /etc/selinux/ -p wa -k mac-policy
+# watch for unauthorized policy downgrade (e.g. re-enabling SHA1)
+-w /etc/crypto-policies/ -p wa -k crypto-policy
+-w /etc/NetworkManager/conf.d/ -p wa -k network-config
+-w /etc/firewalld/ -p wa -k network-config
+
+# Polkit rules (privilege escalation backdoor vector)
+-w /etc/polkit-1/rules.d/ -p wa -k polkit-rules
+
+# Persistence mechanisms (system)
+-w /etc/cron.d/ -p wa -k persistence
+-w /etc/cron.daily/ -p wa -k persistence
+-w /etc/cron.hourly/ -p wa -k persistence
+-w /etc/cron.weekly/ -p wa -k persistence
+-w /etc/cron.monthly/ -p wa -k persistence
+-w /etc/crontab -p wa -k persistence
+-w /etc/systemd/system/ -p wa -k persistence
+-w /etc/systemd/system/sshd.service.d/ -p wa -k persistence
+-w /etc/systemd/system/dnf-automatic.service.d/ -p wa -k persistence
+-w /etc/systemd/system/dnf5-automatic.service.d/ -p wa -k persistence
+-w /etc/systemd/system/tmp.mount.d/ -p wa -k persistence
+-w /etc/profile.d/ -p wa -k persistence
+-w /etc/ld.so.conf.d/ -p wa -k persistence
+-w /etc/udev/rules.d/ -p wa -k udev-rules
+-w /var/spool/cron/ -p wa -k persistence
+
+# User-level persistence
+-w {{ real_user_home }}/.config/systemd/user/ -p wa -k user-persistence
+-w {{ real_user_home }}/.config/autostart/ -p wa -k user-persistence
+-w {{ real_user_home }}/.config/environment.d/ -p wa -k user-persistence
+-w {{ real_user_home }}/.zshrc -p wa -k shell-persistence
+-w {{ real_user_home }}/.zshenv -p wa -k shell-persistence
+-w {{ real_user_home }}/.bashrc -p wa -k shell-persistence
+-w {{ real_user_home }}/.local/bin/ -p wa -k user-persistence
+
+# Audit infrastructure protection
+-w /etc/audit/ -p wa -k audit-config
+-w /etc/systemd/journald.conf.d/ -p wa -k audit-config
+-w /usr/bin/auditd -p x -k audit-tools
+-w /usr/bin/auditctl -p x -k audit-tools
+-w /usr/bin/augenrules -p x -k audit-tools
+
+{% if system_aide_enabled %}
+# AIDE integrity monitoring protection (prevent covert tampering of AIDE baseline)
+-w /var/lib/aide/ -p wa -k aide-integrity
+-w /etc/aide.conf -p wa -k aide-integrity
+{% endif %}
+
+{% if system_tlp_enabled %}
+# TLP battery/power configuration changes
+-w /etc/tlp.d/ -p wa -k power-config
+-w /etc/tlp.conf -p wa -k power-config
+{% endif %}
+
+{% if system_install_usbguard %}
+# USBGuard device whitelist (allow new devices to avoid silent privilege escalation)
+-w /etc/usbguard/ -p wa -k device-policy
+{% endif %}
+
+{% if profile == 'work' %}
+# bpfman eBPF program manager configuration (trusted daemon with kernel-level access)
+-w /etc/bpfman/ -p wa -k bpfman-config
+{% endif %}
+
+# Kernel parameter and module configuration
+-w /etc/sysctl.conf -p wa -k kernel-params
+-w /etc/sysctl.d/ -p wa -k kernel-params
+-w /etc/modprobe.d/ -p wa -k kernel-modules
+# /boot: grubby silently modifies BLS entries without touching /etc — these watches
+# catch kernel cmdline stripping (lockdown=integrity, vsyscall=none, etc.)
+-w /boot/loader/entries/ -p a -k kernel-params
+-w /boot/grub2/grub.cfg -p a -k kernel-params
+
+# Privilege escalation syscalls (CIS benchmark)
+-a always,exit -F arch=b64 -S setuid -S setreuid -S setresuid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b32 -S setuid -S setreuid -S setresuid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b64 -S setgid -S setregid -S setresgid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+-a always,exit -F arch=b32 -S setgid -S setregid -S setresgid -F auid>=1000 -F auid!=-1 -k privilege-escalation
+
+# Kernel module loading (sign of rootkit installation or unauthorized driver)
+-a always,exit -F arch=b64 -S init_module -S finit_module -k kernel-module-load
+-a always,exit -F arch=b32 -S init_module -S finit_module -k kernel-module-load
+-a always,exit -F arch=b64 -S delete_module -k kernel-module-unload
+-a always,exit -F arch=b32 -S delete_module -k kernel-module-unload
+# CIS 4.1.3.11 — kernel module tool binary execution watches
+-w /sbin/insmod -p x -k kernel-module-load
+-w /sbin/rmmod -p x -k kernel-module-unload
+-w /sbin/modprobe -p x -k kernel-module-load
+
+# eBPF program load/map/attach via bpf() syscall (syscall 321 on x86_64, 357 on x86)
+# bpfman itself is excluded above; these catch direct bpf() calls that bypass bpfman.
+-a always,exit -F arch=b64 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
+-a always,exit -F arch=b32 -S bpf -F auid>=1000 -F auid!=-1 -k bpf-syscall
+# Also audit root-initiated bpf() (auid=-1 covers daemon/service context)
+-a always,exit -F arch=b64 -S bpf -F uid=0 -F auid=-1 -k bpf-syscall
+-a always,exit -F arch=b32 -S bpf -F uid=0 -F auid=-1 -k bpf-syscall
+
+# User account management tool execution (CIS 4.1.3.8)
+-w /usr/bin/useradd -p x -k user-mgmt
+-w /usr/bin/usermod -p x -k user-mgmt
+-w /usr/bin/userdel -p x -k user-mgmt
+-w /usr/bin/groupadd -p x -k user-mgmt
+-w /usr/bin/groupmod -p x -k user-mgmt
+-w /usr/bin/groupdel -p x -k user-mgmt
+-w /usr/bin/gpasswd -p x -k user-mgmt
+-w /usr/bin/passwd -p x -k user-mgmt
+-w /usr/bin/chsh -p x -k user-mgmt
+-w /usr/bin/chfn -p x -k user-mgmt
+-w /usr/bin/newgrp -p x -k user-mgmt
+-w /usr/bin/su -p x -k user-mgmt
+
+# Process execution with setuid/setgid (privileged command audit)
+-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
+-a always,exit -F arch=b32 -S execve -F euid=0 -F auid>=1000 -F auid!=-1 -k privileged-exec
+
+# Date/time modification (CIS 4.1.x)
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -S clock_adjtime -F auid>=1000 -F auid!=-1 -k time-change
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -S clock_adjtime -F auid>=1000 -F auid!=-1 -k time-change
+-a always,exit -F arch=b64 -S clock_settime -F auid>=1000 -F auid!=-1 -k time-change
+-a always,exit -F arch=b32 -S clock_settime -F auid>=1000 -F auid!=-1 -k time-change
+-w /etc/localtime -p wa -k time-change
+
+# Unauthorized file access attempts (EACCES/EPERM) — CIS 4.1.x
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EACCES -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b64 -S creat -S open -S openat -S openat2 -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
+-a always,exit -F arch=b32 -S creat -S open -S openat -S truncate -S ftruncate -F exit=-EPERM -F auid>=1000 -F auid!=-1 -k access
+
+# File deletion by users (CIS 4.1.x)
+-a always,exit -F arch=b64 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F auid>=1000 -F auid!=-1 -k delete
+-a always,exit -F arch=b32 -S unlink -S unlinkat -S rename -S renameat -S renameat2 -F auid>=1000 -F auid!=-1 -k delete
+
+# Filesystem mounts (CIS 4.1.x)
+-a always,exit -F arch=b64 -S mount -S umount2 -F auid>=1000 -F auid!=-1 -k mounts
+-a always,exit -F arch=b32 -S mount -S umount2 -F auid>=1000 -F auid!=-1 -k mounts
+
+# Login/logout events (CIS 4.1.3.6)
+# Tamper-detection watches (separate from automatic AUDIT_LOGIN records generated by pam_loginuid.so).
+# Use key logins-tamper to distinguish from automatic login events in SIEM queries.
+-w /var/log/lastlog -p wa -k logins-tamper
+-w /var/log/wtmp -p wa -k logins-tamper
+-w /var/log/btmp -p wa -k logins
+
+# Session open/close events — pam_session audit trail (CIS 4.1.3.6)
+-w /var/run/utmp -p wa -k session
+
+
+# Network environment changes (CIS 4.1.3.5 / 4.1.3.12)
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k system-locale
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale
+-w /etc/hosts -p wa -k system-locale
+-w /etc/hostname -p wa -k system-locale
+-w /etc/issue -p wa -k login-banner
+-w /etc/issue.net -p wa -k login-banner
+-w /etc/locale.conf -p wa -k system-locale
+
+# DAC permission modification (CIS 4.1.3.9)
+-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=-1 -k perm_mod
+-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -F auid>=1000 -F auid!=-1 -k perm_mod
+-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=-1 -k perm_mod
+-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -F auid>=1000 -F auid!=-1 -k perm_mod
+-a always,exit -F arch=b64 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=1000 -F auid!=-1 -k perm_mod
+-a always,exit -F arch=b32 -S setxattr -S lsetxattr -S fsetxattr -S removexattr -S lremovexattr -S fremovexattr -F auid>=1000 -F auid!=-1 -k perm_mod
+# CIS 4.1.3.17 — setfacl binary watch (ACL modification)
+-w /usr/bin/setfacl -p x -k perm_mod
+
+# MAC (SELinux) policy changes (CIS 4.1.3.4)
+-a always,exit -F path=/usr/sbin/semanage -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/sbin/setsebool -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/bin/chcon -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+-a always,exit -F path=/usr/sbin/setfiles -F perm=x -F auid>=1000 -F auid!=-1 -k mac-policy
+
+# sudo log watch (CIS 4.1.3.3)
+-w /var/log/sudo.log -p wa -k actions
+
+# Set audit enforcement mode.
+# Non-CSB: -e 2 (immutable) — rules locked until reboot; augenrules --load
+#   and auditctl -R return EPERM. Policy changes require a reboot to reload.
+# Fedora hybrid CSB (csb_detected=true, csb_rhel=false): -e 1 (enabled, mutable)
+#   so CSB Ansible can call augenrules --load without EPERM. Immutable mode on a
+#   CSB-managed machine silently blocks IT audit policy updates until reboot.
+-e {{ csb_detected | ternary('1', '2') }}

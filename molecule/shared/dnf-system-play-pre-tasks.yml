@@ -1,0 +1,14 @@
+---
+# molecule/shared/dnf-system-play-pre-tasks.yml
+# Common Play 1 pre_tasks for DNF-based system role converge plays.
+# Included by fedora/converge.yml and rocky/converge.yml Play 1 pre_tasks.
+- name: Load common system play pre-tasks
+  ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/common-system-play-pre-tasks.yml"
+
+- name: Refresh DNF cache so system role sees current mirror metadata
+  ansible.builtin.dnf:
+    update_cache: true
+  register: _dnf_cache_refresh
+  retries: 3
+  delay: 5
+  until: _dnf_cache_refresh is succeeded

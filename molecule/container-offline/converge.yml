@@ -1,0 +1,34 @@
+---
+# Converge: exercise the rescue/degradation path in roles/distrobox/tasks/container-provision.yml.
+# No stubs are placed (prepare.yml only gathers facts to let systemd settle), so
+# the oc download block executes for real.
+# distrobox_oc_version is set to an invalid value that produces a 404 on
+# mirror.openshift.com, triggering the rescue block.  distrobox_oc_fetch_retries: 1
+# and distrobox_oc_fetch_timeout: 5 make the failure fast (two attempts, 5 s cap each).
+# The golangci-lint go install also runs (creates: guard not satisfied) and fails
+# gracefully via failed_when: false — failure mode is go binary absent (command not
+# found), not network unavailability.
+# The optional subctl build also reports failure without copying an incomplete executable.
+# This scenario confirms that tool availability failures degrade gracefully and that
+# the surrounding task logic (flatpak-spawn wrapper creation) is unaffected.
+- name: Converge (container provisioning — offline rescue path)
+  hosts: all
+  become: false
+  gather_facts: false
+
+  pre_tasks:
+    - name: Gather minimal facts
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/gather-minimal-facts.yml"
+
+    - name: Load shared feature and proxy baselines
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+    - name: Load shared offline scenario vars
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/offline-vars.yml"
+
+  tasks:
+    - name: Run container provisioning tasks (rescue path)
+      ansible.builtin.include_tasks:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/distrobox/tasks/container-provision.yml"

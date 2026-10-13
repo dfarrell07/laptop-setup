@@ -3,54 +3,190 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Load configuration
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+    - name: Override profile and identity vars to match converge
+      ansible.builtin.set_fact:
+        system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
+        system_ssh_unused_connection_timeout: 600  # role default; absent here silences verify trim_blocks guard
+        profile: personal
+        dotfiles_user_email_personal: "molecule-test@ci.invalid"  # matches ci-default-vars.yml value; not re-loaded in verify phase
+        real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # converge sets this; re-state so verify-claude-queue.yml assertions execute
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
+
+    - name: Include smoke-test verification
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Packages (apt) ---
-    - name: Check vim is installed
-      ansible.builtin.command: vim --version
-      changed_when: false
+    - name: Include apt package assertions
+      ansible.builtin.import_tasks: ../shared/verify-apt.yml
 
-    - name: Check curl is installed
-      ansible.builtin.command: which curl
-      changed_when: false
+    # wl-clipboard moved to desktop_apt_packages (Wayland-only; not installed in headless CI)
 
-    - name: Check tmux is installed
-      ansible.builtin.command: tmux -V
-      changed_when: false
-
-    - name: Check zsh is installed
-      ansible.builtin.command: zsh --version
-      changed_when: false
-
-    - name: Check jq is installed
-      ansible.builtin.command: jq --version
-      changed_when: false
-
-    - name: Check fzf is installed
-      ansible.builtin.command: fzf --version
-      changed_when: false
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: Verify Chrome policy deployed
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/security.json
-      register: verify_chrome
-
-    - name: Assert Chrome policy exists
-      ansible.builtin.assert:
-        that: verify_chrome.stat.exists
-        fail_msg: "Chrome security policy not deployed"
+    - name: Include Alacritty and Chrome policy assertions
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
     # --- Containers ---
-    - name: Verify containers config directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/containers"
-      register: verify_containers_dir
+    - name: Include containers.conf assertions
+      ansible.builtin.import_tasks: ../shared/verify-containers.yml
 
-    - name: Assert containers config directory exists
+    # --- Claude task queue (converge sets claude_queue_enabled: true) ---
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
+
+    # --- PAM file content checks via slurp (unconditional; no system_is_container gate) ---
+    # These run in Podman CI (system_is_container=true) by reading file bytes directly;
+    # no live PAM stack required.
+    - name: Slurp /etc/pam.d/common-auth for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-auth
+      register: verify_pam_common_auth
+      become: true
+
+    - name: Set _pam_auth_content fact (Debian)
+      ansible.builtin.set_fact:
+        _pam_auth_content: "{{ verify_pam_common_auth['content'] | b64decode }}"
+
+    - name: Assert pam_faillock.so preauth present in common-auth (Debian)
       ansible.builtin.assert:
-        that: verify_containers_dir.stat.isdir
-        fail_msg: "Containers config directory was not created"
+        that: _pam_auth_content is search('(?m)^auth\s+required\s+pam_faillock\.so\s+preauth')
+        fail_msg: "pam_faillock.so preauth line missing in /etc/pam.d/common-auth"
+
+    - name: Assert pam_faillock.so authfail present in common-auth (Debian)
+      ansible.builtin.assert:
+        that: _pam_auth_content is search('(?m)^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail')
+        fail_msg: "pam_faillock.so authfail line missing in /etc/pam.d/common-auth"
+
+    - name: Assert pam_faillock preauth->pam_unix->authfail ordering in common-auth (Debian)
+      vars:
+        _pam_preauth_re: '^auth[ \t]+required[ \t]+pam_faillock[.]so[ \t]+preauth'
+        _pam_unix_re: '^auth[ \t]+(?:\[[^\]\r\n]+\]|[^\s\[\]]+)[ \t]+pam_unix[.]so'
+        _pam_authfail_re: '^auth[ \t]+\[default=die\][ \t]+pam_faillock[.]so[ \t]+authfail'
+      ansible.builtin.assert:
+        that:
+          - _pam_auth_content | regex_findall('(?m)' ~ _pam_preauth_re) | length == 1
+          - _pam_auth_content | regex_findall('(?m)' ~ _pam_unix_re) | length == 1
+          - _pam_auth_content | regex_findall('(?m)' ~ _pam_authfail_re) | length == 1
+          - >-
+            _pam_auth_content is search('(?ms)' ~ _pam_preauth_re ~ '[^\n]*\n.*?' ~
+            _pam_unix_re ~ '[^\n]*\n.*?' ~ _pam_authfail_re)
+        fail_msg: "pam_faillock.so ordering wrong in /etc/pam.d/common-auth (expected preauth < pam_unix.so < authfail)"
+
+    - name: Slurp /etc/pam.d/common-account for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-account
+      register: verify_pam_common_account
+      become: true
+
+    - name: Assert pam_faillock.so account line present in common-account (Debian)
+      ansible.builtin.assert:
+        that: verify_pam_common_account['content'] | b64decode is search('(?m)^account\s+required\s+pam_faillock\.so$')
+        fail_msg: "pam_faillock.so account line missing in /etc/pam.d/common-account"
+
+    # faillock.conf (deny=N) and pwquality.conf are written by ini_file tasks guarded by
+    # not system_is_container — those writes are unsafe in Podman CI (crash risk documented in
+    # pam.yml). The /etc/pam.d/ assertions above cover the critical stack-ordering checks.
+    # faillock.conf and pwquality.conf value assertions remain in the VM-gated block below.
+
+    - name: Slurp /etc/pam.d/common-password for content assertions (Debian)
+      ansible.builtin.slurp:
+        src: /etc/pam.d/common-password
+      register: verify_pam_common_password
+      become: true
+
+    - name: Assert pam_pwhistory.so present in common-password (Debian)
+      ansible.builtin.assert:
+        that: verify_pam_common_password['content'] | b64decode is search('(?m)^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+')
+        fail_msg: "pam_pwhistory.so line missing in /etc/pam.d/common-password"
+
+    # --- PAM faillock (Debian, live-stack checks; skipped in Podman CI where system_is_container=true) ---
+    - name: Check pam_faillock.so preauth line in common-auth (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^auth\s+required\s+pam_faillock\.so\s+preauth' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pam_faillock.so authfail line in common-auth (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pam_faillock.so ordering in common-auth (Debian)
+      ansible.builtin.shell:
+        cmd: >-
+          awk '/pam_faillock\.so preauth/{pre=NR} /pam_unix\.so/{unix=NR} /pam_faillock\.so authfail/{fail=NR}
+               END{exit !(pre>0 && unix>0 && fail>0 && pre<unix && unix<fail)}' /etc/pam.d/common-auth
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pam_faillock.so account line in common-account (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^account\s+required\s+pam_faillock\.so$' /etc/pam.d/common-account
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check faillock.conf deny setting (Debian) = {{ system_faillock_deny }}
+      ansible.builtin.command:
+        cmd: grep -q '^deny = {{ system_faillock_deny }}' /etc/security/faillock.conf
+      changed_when: false
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pam_pwhistory.so line in common-password (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^password\s+required\s+pam_pwhistory\.so.*remember=[0-9]+' /etc/pam.d/common-password
+      changed_when: false
+      become: true
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pwquality.conf minlen (Debian)
+      ansible.builtin.command:
+        cmd: grep -q '^minlen = {{ system_pwquality_minlen }}' /etc/security/pwquality.conf
+      changed_when: false
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check pwquality.conf enforce_for_root (Debian)
+      ansible.builtin.command:
+        cmd: grep -qE '^enforce_for_root' /etc/security/pwquality.conf
+      changed_when: false
+      when:
+        - not (system_is_container | default(false))
+
+    - name: Check git user.email is personal email
+      ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
+      register: verify_git_email_personal
+      changed_when: false
+
+    - name: Assert git email is personal profile
+      ansible.builtin.assert:
+        that: "dotfiles_user_email_personal in verify_git_email_personal.stdout"
+        fail_msg: >-
+          git user.email ('{{ verify_git_email_personal.stdout }}') does not contain
+          expected personal address '{{ dotfiles_user_email_personal }}' —
+          gitconfig.j2 profile conditional regression?

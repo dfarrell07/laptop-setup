@@ -1,34 +1,61 @@
 ---
+- name: Converge — System role (Debian)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load common system play pre-tasks
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/common-system-play-pre-tasks.yml"
+
+    # openssh-server install intentionally skipped in Debian Podman CI: apt triggers daemon-reload
+    # on /etc/systemd/** writes, crashing the privileged container. The sshd hardening block is
+    # therefore also skipped for Debian Podman CI; make test-vm exercises full sshd hardening.
+
+  roles:
+    - role: system
+
 - name: Converge (Debian/ChromeOS Crostini)
   hosts: all
   gather_facts: true
 
   pre_tasks:
-    - name: Load configuration
-      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+    - name: Load CI pre-tasks (config, group_vars, project root)
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-pre-tasks.yml"
 
     - name: Override profile
       ansible.builtin.set_fact:
         profile: personal
+        # packages_install_binaries and ssh_signing_key_pub are in molecule/shared/system-container-overrides.yml
+
+    - name: Create mock notes repo structure for CI
+      ansible.builtin.include_tasks: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-mock-notes.yml"
 
   roles:
     - role: common
     - role: packages
-      vars:
-        packages_install_binaries: false
     - role: dotfiles
     - role: ssh
     - role: git_repos
     - role: notes
-      vars:
-        notes_transcrypt_password: ""
     - role: containers
-    - role: desktop
-      vars:
-        desktop_environment: 'unknown'
-        desktop_common_packages: []
-        desktop_sway_packages: []
-        desktop_i3_packages: []
     - role: claude
+
+  post_tasks:
+    # Desktop role called via include_role so vars: are at role-params precedence (p20),
+    # overriding desktop role default (desktop_environment: auto from roles/desktop/defaults/main.yml).
+    # Calling with roles: vars: would set vars at play-vars precedence (p12), losing to p18.
+    # Package lists are suppressed via the shared include (set_fact p19 overrides defaults p2).
+    - name: Set desktop package list overrides to empty (CI)
+      ansible.builtin.include_tasks: ../shared/converge-desktop-no-packages.yml
+
+    - name: Converge desktop role (unknown — sway not installed on Debian CI)
+      ansible.builtin.include_role:
+        name: desktop
       vars:
-        claude_install_method: skip
+        desktop_environment: unknown
+        # Chrome policy not deployed in container CI (system_is_container=true blocks it); VM scenario only
+
+    - name: Run shared converge post-tasks
+      ansible.builtin.include_tasks: ../shared/converge-post-common.yml
+      tags: [always]

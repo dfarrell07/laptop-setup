@@ -1,20 +1,30 @@
 # {{ ansible_managed }}
+{% set _system = ansible_facts['system'] | default('Linux') %}
 [user]
-	name = {{ dotfiles_user_name }}
-	email = {{ dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal }}
-	signingkey = ~/.ssh/id_ed25519_sk_signing.pub
+	name = {{ dotfiles_user_name | trim | regex_replace('[\r\n].*', '') }}
+	email = {{ (dotfiles_user_email_work if profile == 'work' else dotfiles_user_email_personal) | regex_replace('[\r\n].*', '') }}
+{% if ssh_git_signing_pubkey | trim | length > 0 %}
+	signingkey = ~/.ssh/{{ ssh_signing_key_basename }}.pub
 
 [commit]
 	gpgsign = true
-
-[tag]
-	gpgsign = true
+	signoff = true
 
 [gpg]
 	format = ssh
 
 [gpg "ssh"]
 	allowedSignersFile = ~/.config/git/allowed_signers
+{% endif %}
+
+[branch]
+	sort = -committerdate
+
+[tag]
+{% if ssh_git_signing_pubkey | trim | length > 0 %}
+	gpgsign = true
+{% endif %}
+	sort = -version:refname
 
 [push]
 	default = current
@@ -23,14 +33,41 @@
 [pull]
 	rebase = true
 
+[rebase]
+	autosquash = true
+	autostash = true
+
+[merge]
+	conflictStyle = zdiff3
+{% if _system == 'Linux' %}
+	tool = meld
+{% endif %}
+
+[mergetool]
+	prompt = false
+
+[rerere]
+	enabled = true
+
 [url "ssh://git@github.com/"]
 	pushInsteadOf = https://github.com/
 
 [alias]
 	logg = log --oneline --graph --decorate --all
+	uncommit = reset HEAD~1
+	unstage = restore --staged
+	pushf = push --force-with-lease
+	fixup = commit --fixup
+	wip = commit -s -m WIP
+	revert-s = revert -s
+	stash-all = stash --include-untracked
+	# 'recent' alias removed — [branch] sort = -committerdate makes plain 'git branch' sort by recency
 
 [diff]
+{% if _system == 'Linux' %}
 	tool = meld
+{% endif %}
+	algorithm = histogram
 
 [difftool]
 	prompt = false
@@ -40,8 +77,8 @@
 
 [core]
 	hooksPath = ~/.config/git/template/hooks
+	excludesfile = ~/.config/git/ignore
 	fsmonitor = false
-	symlinks = false
 
 [safe]
 	bareRepository = explicit
@@ -50,40 +87,44 @@
 	fsckObjects = true
 [fetch]
 	fsckObjects = true
+	prune = true
 [receive]
 	fsckObjects = true
 
+[init]
+	defaultBranch = main
+
+[protocol]
+	allow = never
+[protocol "https"]
+	allow = always
+[protocol "ssh"]
+	allow = always
 [protocol "file"]
 	allow = user
 
 [credential "https://github.com"]
 	helper = !gh auth git-credential
+{% if profile == 'work' and _system == 'Linux' and dotfiles_internal_git_host != '' %}
 
-{% if profile == 'work' and ansible_system | default('Linux') == 'Linux' and dotfiles_internal_git_host | default('') not in ['', 'internal-git.example.com'] %}
-[http "https://{{ dotfiles_internal_git_host }}"]
-	sslCAInfo = /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+[http "https://{{ dotfiles_internal_git_host | trim | regex_replace('[^a-zA-Z0-9._-]', '') }}"]
+	sslCAInfo = {{ dotfiles_internal_ca_path | regex_replace('\n', '') | trim }}
 {% endif %}
 
-[includeIf "gitdir:~/src/submariner-io/"]
+{% if profile == 'work' %}{% for org in dotfiles_work_src_dirs %}
+[includeIf "gitdir:~/src/{{ org | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-work
 
-[includeIf "gitdir:~/src/stolostron/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/ovnk/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/konflux/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/bpfman/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/ds/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/cncf/"]
-	path = ~/.config/git/config-work
-
-[includeIf "gitdir:~/src/{{ dotfiles_github_user }}/"]
+{% endfor %}{% endif %}
+{% if dotfiles_github_user != 'CHANGE_ME' %}
+# Personal email override — only active for repos under ~/src/{{ dotfiles_github_user }}/
+# Repos cloned elsewhere (~/personal/, ~/tmp/, etc.) use the work email above.
+[includeIf "gitdir:~/src/{{ dotfiles_github_user | regex_replace('[^a-zA-Z0-9_-]', '') }}/"]
 	path = ~/.config/git/config-personal
+{% endif %}
+
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true

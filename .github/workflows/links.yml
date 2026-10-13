@@ -3,74 +3,72 @@ name: Link Check
 
 on:
   schedule:
-    - cron: '23 4 * * 0'
+    - cron: '41 4 * * 3'
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 concurrency:
-  group: links
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   links:
     name: Check Markdown Links
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out the repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Check links
-        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411  # v2.8.0
-        with:
-          args: >-
-            --no-progress
-            --exclude-path node_modules
-            --exclude-path collections
-            --exclude-path .claude
-            --exclude 'registry\.redhat\.io'
-            --exclude 'code\.engineering\.redhat\.com'
-            --exclude 'gitlab\.cee\.redhat\.com'
-            --exclude 'internal-git\.example\.com'
-            --exclude 'github\.com/dfarrell07/laptop-setup/security'
-            '**/*.md'
-          fail: true
+      - name: Download lychee  # Last bumped: 2026-08-05; check https://github.com/lycheeverse/lychee/releases
+        env:
+          LYCHEE_SHA256: 0d48569e2dc11c1917fa98321dfd7aa675fba03b79f41e8e74afa3223e30d379
+        run: |
+          curl -sSLO https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.1/lychee-x86_64-unknown-linux-gnu.tar.gz
+          echo "${LYCHEE_SHA256}  lychee-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
+          tar xzf lychee-x86_64-unknown-linux-gnu.tar.gz lychee
+          chmod +x lychee
 
+      - name: Check links
+        run: |
+          ./lychee \
+            --no-progress \
+            --exclude-path node_modules \
+            --exclude-path collections \
+            --exclude-path .claude \
+            --exclude 'registry\.redhat\.io' \
+            --exclude 'code\.engineering\.redhat\.com' \
+            --exclude 'gitlab\.cee\.redhat\.com' \
+            --exclude 'github\.com/dfarrell07/laptop-setup/security' \
+            '**/*.md'
+
+  report:
+    name: Create Issue on Failure
+    needs: links
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
       - name: Create issue on failure
-        if: failure()
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
-        with:
-          script: |
-            const fs = require('fs');
-            const body = fs.existsSync('./lychee/out.md')
-              ? fs.readFileSync('./lychee/out.md', 'utf8')
-              : 'Link check failed. See workflow run for details.';
-            const {data: issues} = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: 'documentation',
-              state: 'open',
-              creator: 'github-actions[bot]'
-            });
-            const existing = issues.find(i => i.title === 'Broken links detected');
-            if (existing) {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing.number,
-                body: body
-              });
-            } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: 'Broken links detected',
-                body: body,
-                labels: ['documentation']
-              });
-            }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Broken links detected"
+          BODY="Link check failed. See run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          EXISTING=$(gh issue list --label documentation --state open \
+            --search "$TITLE in:title" --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "documentation" || \
+              echo '::warning::gh issue create failed — check token permissions and label existence'
+          fi

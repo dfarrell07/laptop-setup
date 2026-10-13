@@ -3,10 +3,37 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Load configuration defaults
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+    - name: Load desktop defaults used by the macOS role
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/desktop/defaults/main.yml"
+
+    - name: Load pinned development tool versions
+      ansible.builtin.include_vars:
+        file: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/roles/packages/defaults/main.yml"
+        name: verify_package_defaults
+
+    # set_fact from converge does not persist to a separate verify invocation.
+    # macOS converge sets dotfiles_github_user: dfarrell07; re-apply here so
+    # the SSH agent launchd plist path resolves correctly.
+    - name: Set dotfiles_github_user for verify context
+      ansible.builtin.set_fact:
+        dotfiles_github_user: 'dfarrell07'
+        is_macos: true
+        profile: personal
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
+
+    - name: Include smoke-test verification
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- macOS-specific ---
     - name: Check tmux is installed
@@ -36,9 +63,43 @@
     - name: Check go is installed
       ansible.builtin.command: go version
       changed_when: false
+      when: profile == 'work'
 
     - name: Check shellcheck is installed
       ansible.builtin.command: shellcheck --version
+      changed_when: false
+
+    - name: Check shfmt is installed
+      ansible.builtin.command: shfmt --version
+      changed_when: false
+
+    - name: Check ripgrep is installed
+      ansible.builtin.command: rg --version
+      changed_when: false
+
+    - name: Check fd is installed
+      ansible.builtin.command: fd --version
+      changed_when: false
+
+    - name: Check nmap is installed
+      ansible.builtin.command: nmap --version
+      changed_when: false
+      when: profile == 'work'
+
+    - name: Check bat is installed (packages_brew)
+      ansible.builtin.command: bat --version
+      changed_when: false
+
+    - name: Check yq is installed (packages_brew)
+      ansible.builtin.command: yq --version
+      changed_when: false
+
+    - name: Check neovim is installed (packages_brew)
+      ansible.builtin.command: nvim --version
+      changed_when: false
+
+    - name: Check gitleaks is installed (packages_brew)
+      ansible.builtin.command: gitleaks version
       changed_when: false
 
     - name: Verify SSH sockets directory exists (macOS ControlPath)
@@ -48,8 +109,14 @@
 
     - name: Assert SSH sockets directory exists
       ansible.builtin.assert:
-        that: verify_ssh_sockets.stat.isdir
+        that:
+          - verify_ssh_sockets.stat.exists
+          - verify_ssh_sockets.stat.isdir
         fail_msg: "SSH sockets directory missing for macOS ControlPath"
+
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role (macOS) ---
     - name: Verify AeroSpace config deployed
@@ -62,13 +129,145 @@
         that: verify_aerospace.stat.exists
         fail_msg: "AeroSpace config not deployed"
 
+    - name: Verify Alacritty config deployed
+      ansible.builtin.stat:
+        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
+      register: verify_alacritty_macos
+      when: desktop_terminal == 'alacritty'
+
+    - name: Assert Alacritty config exists
+      ansible.builtin.assert:
+        that: verify_alacritty_macos.stat.exists
+        fail_msg: "Alacritty config not deployed on macOS"
+      when: desktop_terminal == 'alacritty'
+
+    - name: Verify selected macOS terminal application is installed
+      ansible.builtin.stat:
+        path: "{{ desktop_macos_terminal_path }}"
+      register: verify_macos_terminal
+
+    - name: Assert selected macOS terminal application exists
+      ansible.builtin.assert:
+        that: verify_macos_terminal.stat.isdir | default(false)
+
+    - name: Verify selected macOS terminal application code signature
+      ansible.builtin.command:
+        argv: [codesign, --verify, --deep, --strict, "{{ desktop_macos_terminal_path }}"]
+      changed_when: false
+
+    - name: Verify AeroSpace launches the selected terminal application
+      ansible.builtin.command:
+        argv:
+          - grep
+          - -F
+          - "alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'"
+          - "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
+      changed_when: false
+
     # --- launchd services (macOS) ---
     - name: Verify SSH agent launchd plist deployed
       ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.ssh-agent.plist"
+        path: "{{ ansible_user_dir }}/Library/LaunchAgents/com.{{ dotfiles_github_user }}.ssh-agent.plist"
       register: verify_ssh_plist
 
     - name: Assert SSH agent plist exists
       ansible.builtin.assert:
         that: verify_ssh_plist.stat.exists
         fail_msg: "SSH agent launchd plist not deployed"
+
+    # --- Native Homebrew metadata refresh ---
+    - name: Read the installed metadata update launch agent
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - "import json,plistlib,sys; print(json.dumps(plistlib.load(open(sys.argv[1], 'rb'))))"
+          - "{{ ansible_user_dir }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
+      register: verify_brew_update_plist
+      changed_when: false
+
+    - name: Read the installed Homebrew prefix
+      ansible.builtin.command:
+        argv: [brew, --prefix]
+      register: verify_brew_prefix
+      changed_when: false
+
+    - name: Assert metadata update arguments and schedule match configuration
+      ansible.builtin.assert:
+        that:
+          - (verify_brew_update_plist.stdout | from_json).Label == 'com.laptop-setup.homebrew-update'
+          - (verify_brew_update_plist.stdout | from_json).ProgramArguments == [verify_brew_prefix.stdout + '/bin/brew', 'update']
+          - (verify_brew_update_plist.stdout | from_json).StartInterval == verify_package_defaults.packages_brew_autoupdate_interval
+
+    - name: Check native update job registration
+      ansible.builtin.command:
+        argv: [launchctl, print, "{{ item }}/com.laptop-setup.homebrew-update"]
+      loop: ["gui/{{ ansible_facts['user_uid'] }}", "user/{{ ansible_facts['user_uid'] }}"]
+      register: verify_brew_update_jobs
+      changed_when: false
+      failed_when: false
+
+    - name: Assert the update job is registered in one user domain
+      ansible.builtin.assert:
+        that: verify_brew_update_jobs.results | selectattr('rc', 'equalto', 0) | list | length == 1
+
+    - name: Test the scheduled metadata refresh
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - kickstart
+          - "{{ (verify_brew_update_jobs.results | selectattr('rc', 'equalto', 0) | first).item }}/com.laptop-setup.homebrew-update"
+      changed_when: true
+
+    - name: Verify the metadata refresh completes successfully
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - print
+          - "{{ (verify_brew_update_jobs.results | selectattr('rc', 'equalto', 0) | first).item }}/com.laptop-setup.homebrew-update"
+      register: verify_brew_update_execution
+      changed_when: false
+      until:
+        - verify_brew_update_execution.stdout is search('last exit code = 0')
+        - verify_brew_update_execution.stdout is not search('state = running')
+      retries: 60
+      delay: 2
+
+    # --- pipx tools: yamllint and ansible-lint (cycle-41b: moved from brew to pipx on macOS) ---
+    - name: Check yamllint installed via pipx
+      ansible.builtin.command:
+        argv: ["{{ ansible_user_dir }}/.local/bin/yamllint", --version]
+      register: verify_pipx_yamllint
+      changed_when: false
+      failed_when: verify_pipx_yamllint.stdout.split() != ['yamllint', verify_package_defaults.packages_yamllint_version]
+
+    - name: Check ansible-lint installed via pipx
+      ansible.builtin.command:
+        argv: ["{{ ansible_user_dir }}/.local/bin/ansible-lint", --version]
+      register: verify_pipx_ansible_lint
+      changed_when: false
+      failed_when: verify_pipx_ansible_lint.stdout.split()[:2] != ['ansible-lint', verify_package_defaults.packages_ansible_lint_version]
+
+    # --- macOS application firewall ---
+    - name: Check macOS application firewall is enabled
+      ansible.builtin.command:
+        cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+      register: verify_fw
+      changed_when: false
+      failed_when: false
+
+    - name: Assert macOS firewall is enabled (State = 1)
+      ansible.builtin.assert:
+        that: "'State = 1' in verify_fw.stdout"
+        fail_msg: "macOS application firewall not enabled — desktop role firewall task regression"
+      when: verify_fw.rc == 0
+
+    - name: Verify macOS firewall stealth mode is enabled
+      ansible.builtin.command:
+        cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
+      register: verify_fw_stealth
+      changed_when: false
+      become: true
+      failed_when: >-
+        verify_fw_stealth.stdout | regex_search(
+          (desktop_macos_firewall_settings | selectattr('name', 'equalto', 'stealth') | first).match_re) is none

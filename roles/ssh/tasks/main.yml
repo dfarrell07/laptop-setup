@@ -2,74 +2,327 @@
 # roles/ssh/tasks/main.yml
 # Deploy SSH keys from vault + pre-seed known_hosts.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+# FAIL_MSG TEMPLATE (six elements for defense-in-depth assertions):
+# (1) SECURITY + threat, (2) input source, (3) injection mechanism, (4) attack example,
+# (5) impact, (6) allowed pattern. Guides rootcause diagnosis in remote/batch provisioning.
+
+- name: SECURITY assert ssh_work_keyscan_hosts entries are safe hostnames (SSH role guard)
+  # Deliberately NO tags — only way to survive --skip-tags always.
+  vars:
+    _keyscan_hosts: "{{ ssh_work_keyscan_hosts | default([]) }}"
+    _hostnames: >-
+      {{ _keyscan_hosts | map(attribute='host', default='') | map('string') | select() | list +
+         (_keyscan_hosts | selectattr('host', 'undefined') | map('string') | select() | list) }}
+  ansible.builtin.assert:
+    that:
+      - _hostnames | select('search', '[^a-zA-Z0-9._-]') | list | length == 0
+    fail_msg: >-
+      SECURITY: Command Injection via Unvalidated SSH Hostname.
+      Input: ssh_work_keyscan_hosts contains hostname outside [a-zA-Z0-9._-].
+      Mechanism: Unsafe hostnames in ProxyCommand or -R port forwarding expand via shell.
+      Example: "ProxyCommand ssh gateway -W localhost;rm%20-rf%20/:22" executes shell commands.
+      Impact: SSH session hijacking, key compromise, arbitrary code execution.
+      Fix: Hostnames must strictly match ^[a-zA-Z0-9._-]+$.
+  when: ssh_work_keyscan_hosts | default([]) | length > 0
+
 - name: Ensure SSH directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.ssh"
+    path: "{{ ansible_facts['user_dir'] }}/.ssh"
     state: directory
     mode: "0700"
+
+- name: Ensure known_hosts has private permissions before seeding
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+    state: touch
+    mode: "0600"
+    access_time: preserve
+    modification_time: preserve
 
 - name: Fetch GitHub SSH host keys from API
   ansible.builtin.uri:
     url: "{{ ssh_github_known_hosts_url }}"
     return_content: true
+    timeout: 10
   register: ssh_github_meta
   changed_when: false
-  failed_when: false
+  check_mode: false
+  failed_when: >
+    ssh_github_meta.status is not defined and
+    ssh_github_meta.msg is defined
+  retries: 2
+  delay: 3
+  until: ssh_github_meta.status | default(0) == 200
+
+- name: Set GitHub ed25519 keys fact
+  ansible.builtin.set_fact:
+    ssh_github_ed25519_keys: "{{ ssh_github_meta.json.ssh_keys | default([]) | select('match', 'ssh-ed25519 ') | list }}"
+
+- name: Set GitHub API fetch success fact
+  ansible.builtin.set_fact:
+    ssh_github_ok: "{{ ssh_github_meta.status | default(0) == 200 and ssh_github_ed25519_keys | length > 0 }}"
+
+- name: Set MITM guard flag when API ed25519 keys share no key with pinned fallback
+  ansible.builtin.set_fact:
+    _ssh_github_mitm_guard: "{{ ssh_github_ok and (ssh_github_ed25519_keys | intersect(ssh_github_known_hosts_fallback) | length == 0) }}"
+
+- name: Override ssh_github_ok when MITM guard triggered (reject untrusted API keys)
+  ansible.builtin.set_fact:
+    ssh_github_ok: false
+  when: _ssh_github_mitm_guard
+
+- name: Check known_hosts exists before the read-only probe (including check mode)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+  register: _ssh_known_hosts_before_read
+
+- name: Read current GitHub known_hosts entries
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -F
+      - github.com
+      - -f
+      - "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+  register: _ssh_github_existing
+  when: _ssh_known_hosts_before_read.stat.exists
+  changed_when: false
+  failed_when: _ssh_github_existing.rc not in [0, 1]
+  check_mode: false
+
+- name: Remove stale github.com known_hosts entries before re-seeding
+  vars:
+    _ssh_host_field_re: '^[^ \t]+[ \t]+'
+    _ssh_existing_github_keys: >-
+      {{ _ssh_github_existing.stdout_lines | default([]) | reject('match', '^#')
+         | map('regex_replace', _ssh_host_field_re, '') | list }}
+    _ssh_desired_github_keys: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
+  ansible.builtin.known_hosts:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+    name: github.com
+    state: absent
+  when: (_ssh_existing_github_keys | sort) != (_ssh_desired_github_keys | sort)
 
 - name: Pre-seed GitHub known_hosts
   ansible.builtin.known_hosts:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
     name: github.com
     key: "github.com {{ item }}"
     state: present
     hash_host: true
-  loop: "{{ (ssh_github_meta.json.ssh_keys | default([])) }}"
-  when: ssh_github_meta.status | default(0) == 200
+  loop: "{{ ssh_github_ed25519_keys if ssh_github_ok else ssh_github_known_hosts_fallback }}"
+  loop_control:
+    label: "{{ item.split()[0] }}"
+
+- name: Warn if GitHub SSH key fetch failed (used pinned fallback)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Could not fetch GitHub SSH host keys from api.github.com
+      (status: {{ ssh_github_meta.status | default('no response') }}).
+      Seeded github.com known_hosts from pinned fallback keys instead.
+  when: not ssh_github_ok and not _ssh_github_mitm_guard | default(false)
+
+- name: Warn when MITM guard triggered for GitHub SSH API keys
+  ansible.builtin.debug:
+    msg: >-
+      SECURITY WARNING: GitHub API ed25519 keys share no key with pinned fallback (ssh_github_known_hosts_fallback).
+      A rogue CA or TLS MITM may have injected attacker-controlled SSH host keys via api.github.com.
+      Seeding github.com known_hosts from pinned fallback instead; API keys rejected.
+      If GitHub legitimately rotated keys, update ssh_github_known_hosts_fallback and re-provision.
+  when: _ssh_github_mitm_guard | default(false)
+
+- name: Pre-seed work git host known_hosts
+  ansible.builtin.include_tasks: keyscan_host.yml
+  loop: "{{ ssh_work_keyscan_hosts }}"
+  loop_control:
+    loop_var: _keyscan_host
+  when: profile == 'work'
+
+- name: Assert SSH auth public key type is accepted by sshd hardening
+  ansible.builtin.assert:
+    that:
+      - ssh_auth_key_pub.split()[0] in ssh_pubkey_accepted_algorithms
+    fail_msg: >-
+      SECURITY: SSH Authentication Lockout via Incompatible Key Algorithm.
+      Input: ssh_auth_key_pub (vault) has key type '{{ ssh_auth_key_pub.split()[0] }}'.
+      Mechanism: sshd-hardening.conf.j2 PubkeyAcceptedAlgorithms restricts accepted types;
+      non-matching types silently rejected at auth time with no fallback.
+      Example: RSA key deployed when only ed25519/ecdsa accepted causes permanent lockout.
+      Impact: SSH login failure, potential lockout from provisioned machine.
+      Fix: Use only {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
+  when:
+    - ansible_facts['system'] == 'Linux'  # the system role hardens sshd only on Linux
+    - ssh_auth_key_pub | trim | length > 0
+  tags: [always]
 
 - name: Deploy SSH auth key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_hardware_key_basename }}"
     mode: "0600"
   no_log: true
-  when: ssh_auth_key | default('') | length > 0
+  when: ssh_auth_key | trim | length > 0
 
 - name: Deploy SSH auth public key
   ansible.builtin.copy:
     content: "{{ ssh_auth_key_pub }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk.pub"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_hardware_key_basename }}.pub"
     mode: "0644"
+  when: ssh_auth_key_pub | trim | length > 0
+
+- name: Stat authorized_keys before writing (symlink-to-device guard)
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+  register: _ssh_authkeys_stat
+  tags: [always]
+
+- name: Assert authorized_keys is not a symlink
+  ansible.builtin.assert:
+    that:
+      - not _ssh_authkeys_stat.stat.exists or _ssh_authkeys_stat.stat.isreg
+    fail_msg: >-
+      SECURITY: ~/.ssh/authorized_keys is a symlink (target:
+      {{ _ssh_authkeys_stat.stat.lnk_target | default('unknown') }}).
+      A symlink-to-device attack would silently discard written keys.
+      Remove the symlink and re-run provisioning.
+  tags: [always]
+
+- name: Assert — vault empty and no authorized_keys present (SSH lockout risk after reboot)
+  ansible.builtin.assert:
+    that:
+      - ssh_allow_empty_authorized_keys | default(false)
+    fail_msg: >-
+      CRITICAL: SSH Lockout Risk — Vault Empty + No authorized_keys.
+      vault_ssh_auth_key_pub is not populated AND ~/.ssh/authorized_keys does not exist.
+      After reboot, sshd will be on port 722 with PubkeyAcceptedAlgorithms restricted to
+      ed25519/FIDO2 and PasswordAuthentication disabled. You will have NO SSH access.
+      REQUIRED ACTIONS BEFORE RUNNING 'make all':
+      (1) Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local
+      (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_local.pub >> ~/.ssh/authorized_keys
+      OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
+      To acknowledge this risk and continue without a key (first provision without vault keys),
+      set ssh_allow_empty_authorized_keys: true in config.yml.
+  when:
+    - ansible_facts['system'] == 'Linux'  # macOS setup configures an SSH client, not sshd
+    - ssh_auth_key_pub | trim | length == 0
+    - not _ssh_authkeys_stat.stat.exists
+  tags: [always]
+
+- name: Validate existing authorized_keys key types when vault is empty
+  when:
+    - ansible_facts['system'] == 'Linux'  # macOS setup configures an SSH client, not sshd
+    - ssh_auth_key_pub | trim | length == 0  # vault empty
+    - _ssh_authkeys_stat.stat.exists
+  block:
+    - name: Read existing authorized_keys
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+      register: _existing_authkeys
+
+    - name: Select active authorized_keys entries
+      ansible.builtin.set_fact:
+        _existing_key_lines: >-
+          {{ (_existing_authkeys.content | b64decode).splitlines()
+             | map('trim') | reject('equalto', '') | reject('match', '^#') | list }}
+        # OpenSSH options occupy one token, but quoted option values may contain spaces.
+        _ssh_authorized_key_pattern: >-
+          ^(?:(?:[^\s"]+|"(?:[^"\\]|\\.)*")+\s+)?((?:ssh|ecdsa|sk-ssh|sk-ecdsa)-\S+)\s+\S+(?:\s+.*)?$
+
+    - name: Assert existing authorized_keys entries have recognizable key types
+      ansible.builtin.assert:
+        that:
+          - _existing_key_lines | reject('match', _ssh_authorized_key_pattern) | list | length == 0
+          - _existing_key_lines | length > 0 or ssh_allow_empty_authorized_keys | default(false)
+        fail_msg: >-
+          SECURITY: authorized_keys is empty or contains an unrecognized entry.
+          Supply a compatible Ed25519/FIDO2 key before enabling SSH hardening.
+
+    - name: Parse key types from authorized_keys
+      ansible.builtin.set_fact:
+        _existing_key_types: >-
+          {{ _existing_key_lines | map('regex_findall', _ssh_authorized_key_pattern)
+             | flatten | list }}
+
+    - name: Assert all existing authorized_keys are compatible with sshd hardening
+      ansible.builtin.assert:
+        that:
+          - _existing_key_types | difference(ssh_pubkey_accepted_algorithms) | length == 0
+        fail_msg: >-
+          CRITICAL: SSH Lockout Risk — Vault Empty + Incompatible authorized_keys.
+          Your vault is empty (vault_ssh_auth_key_pub not populated), so no ed25519 key
+          will be deployed. However, ~/.ssh/authorized_keys contains key types that will
+          be REJECTED by sshd hardening: {{ _existing_key_types | difference(ssh_pubkey_accepted_algorithms) | join(', ') }}.
+          After provisioning, sshd will restrict PubkeyAcceptedAlgorithms to {{ ssh_pubkey_accepted_algorithms | join(', ') }}.
+          On reboot, sshd moves to port 722 with hardening that rejects RSA/incompatible keys.
+          You will be LOCKED OUT. REQUIRED ACTIONS BEFORE RUNNING 'make all':
+          (1) Generate ed25519 key: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_bootstrap
+          (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_bootstrap.pub >> ~/.ssh/authorized_keys
+          (3) Test login with ed25519 key before rebooting
+          OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
+      when: _existing_key_types | length > 0
+
+- name: Slurp authorized_keys to detect backup keys that exclusive write will remove
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['user_dir'] }}/.ssh/authorized_keys"
+  register: _pre_excl_authkeys_slurp
   no_log: true
-  when: ssh_auth_key_pub | default('') | length > 0
+  when:
+    - ssh_auth_key_pub | trim | length > 0
+    - _ssh_authkeys_stat.stat.exists
+
+- name: Warn when exclusive authorized_keys write will remove existing backup keys
+  ansible.builtin.debug:
+    msg: >-
+      NOTE: authorized_keys contains keys beyond the vault key that exclusive: true will remove.
+      After this run, authorized_keys will contain ONLY the vault key.
+      If the YubiKey is temporarily unavailable (firmware update, re-programming),
+      SSH login requires physical console access — no backup key will remain.
+  when:
+    - ssh_auth_key_pub | trim | length > 0
+    - _ssh_authkeys_stat.stat.exists
+    - >-
+      (_pre_excl_authkeys_slurp.content | b64decode).split('\n')
+      | map('trim') | reject('eq', '') | reject('match', '^#')
+      | reject('eq', ssh_auth_key_pub | trim)
+      | list | length > 0
+
+- name: Add SSH auth public key to authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ ansible_facts['user_id'] }}"
+    key: "{{ ssh_auth_key_pub }}"
+    state: present
+    exclusive: true
+  no_log: true
+  when: ssh_auth_key_pub | trim | length > 0
 
 - name: Deploy SSH signing key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}"
     mode: "0600"
   no_log: true
-  when: ssh_signing_key | default('') | length > 0
+  when: ssh_signing_key | trim | length > 0
 
 - name: Deploy SSH signing public key
   ansible.builtin.copy:
     content: "{{ ssh_signing_key_pub }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_ed25519_sk_signing.pub"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ ssh_signing_key_basename }}.pub"
     mode: "0644"
-  no_log: true
-  when: ssh_signing_key_pub | default('') | length > 0
+  when: ssh_signing_key_pub | trim | length > 0
 
 - name: Deploy Red Hat internal git key
   ansible.builtin.copy:
     content: "{{ rh_git_key }}"
-    dest: "{{ ansible_user_dir }}/.ssh/id_rsa_redhat"
+    dest: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
     mode: "0600"
   no_log: true
   when:
-    - rh_git_key | default('') | length > 0
+    - rh_git_key | trim | length > 0
     - profile == 'work'
 
-- name: Deploy allowed signers file
-  ansible.builtin.template:
-    src: allowed_signers.j2
-    dest: "{{ ansible_user_dir }}/.config/git/allowed_signers"
-    mode: "0644"
-  when: ssh_git_signing_pubkey | default('') | length > 0
+- name: Remove Red Hat internal git key when not work profile
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.ssh/{{ dotfiles_ssh_redhat_key_basename }}"
+    state: absent
+  when: profile != 'work'

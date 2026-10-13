@@ -3,90 +3,70 @@
   hosts: all
   gather_facts: true
 
+  pre_tasks:
+    - name: Load configuration defaults
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+    # set_fact from converge does not persist to a separate verify invocation.
+    # Fedora converge sets profile: work; re-apply here so verify-common.yml
+    # GONOSUMDB/GOPRIVATE checks evaluate in the correct profile context.
+    - name: Set work profile for verify context
+      ansible.builtin.set_fact:
+        profile: work
+        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches converge set_fact; undefined otherwise
+        system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
+        system_ssh_unused_connection_timeout: >-
+          {{ (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~ '/roles/system/defaults/main.yml')
+              | from_yaml).system_ssh_unused_connection_timeout }}
+        real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # re-state so verify-claude-queue.yml assertions execute (service/timer skipped — test-vm only)
+
   tasks:
     # --- Shared assertions (all platforms) ---
     - name: Include common verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-common.yml
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
+
+    - name: Include smoke-test verification
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
 
     # --- Shared assertions (dnf platforms) ---
     - name: Include dnf verify assertions
-      ansible.builtin.include_tasks: ../shared/verify-dnf.yml
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
 
-    # --- Fedora-specific: package checks ---
-    - name: Check vim is installed
-      ansible.builtin.command: vim --version
-      changed_when: false
+    # --- redhat role: not exercised on Fedora (when: is_rhel or csb_detected — both false in CI) ---
 
-    - name: Check curl is installed
-      ansible.builtin.command: which curl
-      changed_when: false
-
-    # --- Notes role (private repo, clone expected to fail gracefully in CI) ---
-    - name: Check notes repo directory
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git"
-      register: verify_notes
-
-    - name: Assert notes .git/config has 0600 when repo exists
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/notes/.git/config"
-      register: verify_notes_config
-      when: verify_notes.stat.exists
-
-    - name: Verify notes .git/config permissions
-      ansible.builtin.assert:
-        that: verify_notes_config.stat.mode == '0600'
-        fail_msg: "notes .git/config should be 0600"
-      when: verify_notes.stat.exists and verify_notes_config.stat.exists
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
 
     # --- Desktop role ---
-    - name: Verify Alacritty config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
-      register: verify_alacritty
+    - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
 
-    - name: Assert Alacritty config exists
-      ansible.builtin.assert:
-        that: verify_alacritty.stat.exists
-        fail_msg: "Alacritty config not deployed"
+    # --- Desktop WM configs (converge sets desktop_environment: sway) ---
+    - name: Include sway config assertions
+      ansible.builtin.import_tasks: ../shared/verify-sway.yml
 
-    - name: Verify Chrome policy deployed
-      ansible.builtin.stat:
-        path: /etc/opt/chrome/policies/managed/security.json
-      register: verify_chrome
+    # --- Desktop WM configs (second converge run sets desktop_environment: i3) ---
+    - name: Include i3 config assertions
+      ansible.builtin.import_tasks: ../shared/verify-i3.yml
 
-    - name: Assert Chrome policy exists
-      ansible.builtin.assert:
-        that: verify_chrome.stat.exists
-        fail_msg: "Chrome security policy not deployed"
+    # --- System role: usbguard ---
+    # usbguard assertions are handled by molecule/shared/verify-smoke.yml.
 
-    - name: Validate Chrome policy JSON
-      ansible.builtin.command:
-        cmd: "python3 -c \"import json; json.load(open('/etc/opt/chrome/policies/managed/security.json'))\""
-      changed_when: false
+    # --- Work profile: Claude work instance directory ---
+    - name: Include Claude work instance directory and settings assertions
+      ansible.builtin.import_tasks: ../shared/verify-claude-work.yml
 
-    # --- Desktop WM configs (converge sets desktop_environment: i3) ---
-    - name: Verify i3 config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/i3/config"
-      register: verify_i3
+    # --- Claude task queue (converge sets claude_queue_enabled: true) ---
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
 
-    - name: Assert i3 config exists
-      ansible.builtin.assert:
-        that: verify_i3.stat.exists
-        fail_msg: "i3 config not deployed"
+    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
 
-    - name: Verify i3status-rust config deployed
-      ansible.builtin.stat:
-        path: "{{ ansible_user_dir }}/.config/i3status-rust/config.toml"
-      register: verify_i3status
-
-    - name: Assert i3status-rust config exists
-      ansible.builtin.assert:
-        that: verify_i3status.stat.exists
-        fail_msg: "i3status-rust config not deployed"
-
-    - name: Validate i3status-rust TOML syntax
-      ansible.builtin.command:
-        cmd: "python3 -c \"import tomllib; tomllib.load(open('{{ ansible_user_dir }}/.config/i3status-rust/config.toml', 'rb'))\""
-      changed_when: false
+    # --- distrobox role: no-op path (packages_containers emptied in converge) ---
+    - name: Import distrobox no-op path assertions
+      ansible.builtin.import_tasks: ../shared/verify-distrobox-noop.yml

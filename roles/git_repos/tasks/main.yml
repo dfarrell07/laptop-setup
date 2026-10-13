@@ -1,6 +1,23 @@
 ---
 # roles/git_repos/tasks/main.yml
-# Clone repos via HTTPS, add fork remotes. Filter by category.
+# Clone repos (HTTPS or SSH), add fork remotes. Filter by category.
+
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: Assert git_repos_base_dir is within user home directory (path traversal guard)
+  ansible.builtin.assert:
+    that:
+      - git_repos_base_dir | string is match(ansible_facts['user_dir'] | regex_escape ~ '(/.*)?$')
+      - git_repos_base_dir | string is not search('\.\.|\./')
+    fail_msg: >-
+      SECURITY: git_repos_base_dir must be within the user home directory.
+      Input: git_repos_base_dir='{{ git_repos_base_dir }}' (from config.yml or -e flag).
+      Mechanism: git_repos_base_dir is mkdir'd and used as clone destination without path
+      validation; a value outside home dir writes repos to attacker-chosen locations.
+      Example: make repos -e git_repos_base_dir=/etc/cron.d clones repo files as
+      root-owned cron entries executed system-wide.
+      Impact: arbitrary file write outside ~/src — LPE or persistent code execution.
+      Fix: omit git_repos_base_dir or set it under {{ ansible_facts['user_dir'] }} (e.g. ~/src).
+  tags: [always]
 
 - name: Check gh auth status
   ansible.builtin.command:
@@ -8,13 +25,21 @@
   register: git_repos_gh_auth
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run even in --check mode
+
+- name: Warn if gh not installed
+  ansible.builtin.debug:
+    msg: >-
+      gh not found in PATH — run 'make packages' first.
+      Cloning will fail for private repos.
+  when: git_repos_gh_auth.rc == 127
 
 - name: Warn if gh not authenticated
   ansible.builtin.debug:
     msg: >-
       GitHub CLI not authenticated. Run 'gh auth login' before
       'make repos'. Cloning will fail for private repos.
-  when: git_repos_gh_auth.rc != 0
+  when: git_repos_gh_auth.rc not in [0, 127]
 
 - name: Determine active categories for profile
   ansible.builtin.set_fact:
@@ -29,51 +54,223 @@
   ansible.builtin.set_fact:
     git_repos_filtered: >-
       {{
-        git_repos_list | default([])
-        | selectattr('enabled', 'equalto', true)
-        | selectattr('category', 'in', git_repos_active_categories)
-        | list
+        (git_repos_list | selectattr('category', 'in', git_repos_active_categories)
+        | rejectattr('enabled', 'defined') | list)
+        + (git_repos_list | selectattr('category', 'in', git_repos_active_categories)
+        | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list)
       }}
+
+- name: Fail when explicit category filter matches no enabled repos
+  ansible.builtin.fail:
+    msg: >-
+      Category '{{ git_repos_category_filter }}' matched no enabled repos.
+      Valid categories: {{ (git_repos_work_categories + git_repos_personal_categories) | unique | sort | join(', ') }}.
+  when:
+    - git_repos_category_filter | length > 0
+    - git_repos_filtered | length == 0
 
 - name: Display repos to clone
   ansible.builtin.debug:
+    verbosity: 1
     msg: "Will clone {{ git_repos_filtered | length }} repos (categories: {{ git_repos_active_categories | join(', ') }})"
+
+- name: Check SSH agent has loaded identities
+  ansible.builtin.command:
+    cmd: ssh-add -l
+  register: git_repos_ssh_agent
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run even in --check mode
+
+- name: Warn if SSH agent has no identities loaded
+  ansible.builtin.debug:
+    msg: >-
+      SSH agent not ready (rc={{ git_repos_ssh_agent.rc }} —
+      {{ 'no identities loaded' if git_repos_ssh_agent.rc == 1 else 'cannot connect to agent' }}).
+      Run 'ssh-add' before 'make repos'. The following filtered repos use SSH and will likely fail:
+      {{ git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | map(attribute='dest') | list | join(', ') }}
+  when:
+    - git_repos_ssh_agent.rc in [1, 2]
+    - git_repos_filtered | selectattr('url', 'search', 'ssh://|git@') | list | length > 0
+
+# Coverage gap: the wait_for task is never invoked in any molecule scenario.
+# Molecule overrides git_repos_list to a single CI test repo (HTTPS GitHub URL).
+# git_repos_vpn_check_host defaults to '' so the length guard short-circuits and
+# wait_for is skipped. A functional end-to-end test would require VPN access
+# unavailable in CI.
+- name: Check connectivity to VPN-gated repo hosts
+  ansible.builtin.wait_for:
+    host: "{{ git_repos_vpn_check_host }}"
+    port: "{{ git_repos_vpn_check_port }}"
+    timeout: 3
+  when:
+    - git_repos_vpn_check_host | length > 0
+    - >-
+      git_repos_filtered | map(attribute='url') |
+      select('search', git_repos_vpn_check_host | regex_escape) |
+      list | length > 0
+  register: git_repos_vpn_check
+  ignore_errors: true
+
+- name: Warn if VPN-gated repo hosts are unreachable
+  ansible.builtin.debug:
+    msg: >-
+      VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
+      Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
+  when: git_repos_vpn_check.failed | default(false)
+
+- name: Stat base directory without following symlinks
+  ansible.builtin.stat:
+    path: "{{ git_repos_base_dir }}"
+    follow: false
+  register: _git_repos_base_dir_stat
+  when: git_repos_filtered | length > 0
+
+- name: Assert base directory is not a symlink
+  ansible.builtin.assert:
+    that: not _git_repos_base_dir_stat.stat.exists or not _git_repos_base_dir_stat.stat.islnk
+    fail_msg: >-
+      SECURITY: git_repos_base_dir ({{ git_repos_base_dir }}) is a symlink. A malicious
+      package could pre-create ~/src as a symlink to a privileged path (e.g. /etc/cron.d),
+      causing clone tasks to write attacker-controlled content there. Remove the symlink and
+      re-run, or set git_repos_base_dir to a non-symlinked path.
+  when: git_repos_filtered | length > 0
+
+- name: Assert git_repos_base_dir is within user home directory
+  ansible.builtin.assert:
+    that:
+      - git_repos_base_dir | string is match('^' ~ ansible_facts['user_dir'] ~ '(/|$)')
+    fail_msg: >-
+      SECURITY: git_repos_base_dir='{{ git_repos_base_dir }}' is not inside {{ ansible_facts['user_dir'] }}.
+      Input: git_repos_base_dir set to an absolute path outside the user home dir (e.g., '/' or '/etc').
+      Mechanism: ansible.builtin.file with state=directory chmods the target path to mode 0755.
+      Example: git_repos_base_dir: / chmods the root filesystem; git_repos_base_dir: /home chmods /home world-readable.
+      Impact: privilege escalation via filesystem permission widening on sensitive system directories.
+      Fix: set git_repos_base_dir to a path inside your home directory, e.g. ~/src (default).
+  tags: [always]
+  when: git_repos_filtered | length > 0
 
 - name: Ensure base directory exists
   ansible.builtin.file:
     path: "{{ git_repos_base_dir }}"
     state: directory
     mode: "0755"
+  when: git_repos_filtered | length > 0
 
-- name: Clone repositories  # noqa: latest[git]
+- name: Set up git-lfs smudge/clean filter drivers
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
+  when: git_repos_filtered | length > 0
+
+- name: Assert SSH git repo hosts are in known_hosts (--start-at-task guard)
+  ansible.builtin.command:
+    cmd: >-
+      ssh-keygen -F "{{ item }}" -f "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
+  loop: >-
+    {{ git_repos_filtered | default([]) | map(attribute='url')
+       | select('match', '^git@') | map('regex_replace', '^git@([^:]+):.*', '\1')
+       | unique | list }}
+  changed_when: false
+  tags: [always]
+
+- name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:
     repo: "{{ item.url }}"
     dest: "{{ git_repos_base_dir }}/{{ item.dest }}"
     update: false
-    version: HEAD
+    # SECURITY: submodule URLs not validated by pre-flight TOFU guard; disable to prevent attacker-controlled .gitmodules redirect
+    recursive: false
+    depth: "{{ item.depth | default(omit) }}"
+    # SECURITY: TOFU mitigated by pre-flight check (pre_flight_checks.yml) asserting every SSH git hostname is pre-seeded in
+    # ssh_work_keyscan_hosts (github.com exempt — always seeded via API); new hosts must be added to ssh_work_keyscan_hosts in config.yml
+    accept_newhostkey: true
+  environment:
+    GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging make repos
+    GIT_CONFIG_NOSYSTEM: "1"  # prevent /etc/gitconfig injection (core.fsmonitor RCE, url.insteadOf redirect)
   loop: "{{ git_repos_filtered }}"
   loop_control:
     label: "{{ item.dest }}"
   register: git_repos_clone_results
-  ignore_errors: true
+  ignore_errors: true  # noqa: ignore-errors — per-item failure must be captured in .results for the Report task below
+  timeout: 300
+
+- name: Set available repo destinations fact
+  ansible.builtin.set_fact:
+    git_repos_available_dests: >-
+      {{ git_repos_clone_results.results | default([])
+         | rejectattr('failed', 'equalto', true)
+         | map(attribute='item.dest') | list }}
+
+- name: Fail when all clones failed
+  ansible.builtin.fail:
+    msg: "All {{ git_repos_filtered | length }} clone(s) failed — check clone errors above"
+  when:
+    - git_repos_filtered | length > 0
+    - git_repos_available_dests | length == 0
 
 - name: Report failed clones
   ansible.builtin.debug:
-    msg: "FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}: {{ item.msg | default('unknown error') }}"
-  loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+    msg: >-
+      FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}:
+      {{ item.stderr | default('', true) or item.msg | default('unknown error') }}
+  loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
 
-- name: Configure fork remotes  # noqa: command-instead-of-module no-changed-when
+- name: Pull upstream changes (ff-only)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: git pull --ff-only -c core.hooksPath=/dev/null
+    chdir: "{{ git_repos_base_dir }}/{{ item.dest }}"
+  environment:
+    LC_ALL: C  # ensure 'Already up to date' string is stable regardless of system locale
+    GIT_TERMINAL_PROMPT: "0"  # prevent interactive credential prompt from hanging on expired HTTPS auth
+    GIT_CONFIG_NOSYSTEM: "1"  # prevent /etc/gitconfig injection (core.fsmonitor RCE, url.insteadOf redirect)
+  loop: "{{ git_repos_filtered }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  when:
+    - git_repos_pull | bool
+    - item.dest in git_repos_available_dests
+  register: git_repos_pull_results
+  # during per-iteration eval, git_repos_pull_results is the current item result (not the accumulated .results list)
+  changed_when: >-
+    git_repos_pull_results.rc == 0 and
+    'Already up to date' not in git_repos_pull_results.stdout
+  # NOTE: ignore_errors: true sets failed=true on non-zero rc in .results, making rc and failed attribute filters reliable
+  ignore_errors: true  # retries omitted: ignore_errors still records failed=true per item, so retries would never trigger
+  timeout: 120
+
+- name: Report failed pulls
+  ansible.builtin.debug:
+    msg: "FAILED to pull {{ item.item.dest }}: {{ item.stderr | default('', true) or item.msg | default('unknown error') }}"
+  loop: "{{ (git_repos_pull_results.results | default([])) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+
+- name: Fail if any pulls failed
+  ansible.builtin.fail:
+    msg: >-
+      git pull failed for: {{ (git_repos_pull_results.results | default([]))
+        | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
+        | map(attribute='item.dest') | list | join(', ') }}
+  when:
+    - git_repos_pull | bool
+    - >-
+      (git_repos_pull_results.results | default([])
+      | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
+      | list | length) > 0
+
+- name: Configure fork remotes  # noqa: command-instead-of-module
   ansible.builtin.shell:
     cmd: >-
-      git remote set-url "{{ item.1.name }}" "{{ item.1.url }}" 2>/dev/null ||
-      git remote add "{{ item.1.name }}" "{{ item.1.url }}"
+      set -euo pipefail;
+      old=$(git remote get-url {{ item.1.name | quote }} 2>/dev/null) || old="";
+      if [ "$old" = {{ item.1.url | quote }} ]; then true;
+      elif [ -n "$old" ]; then git remote set-url {{ item.1.name | quote }} {{ item.1.url | quote }} && echo updated;
+      else git remote add {{ item.1.name | quote }} {{ item.1.url | quote }} && echo added; fi
     chdir: "{{ git_repos_base_dir }}/{{ item.0.dest }}"
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
+  when: item.0.dest in git_repos_available_dests
   register: git_repos_remote_result
-  failed_when:
-    - git_repos_remote_result.rc != 0
-    - "'No such file' not in (git_repos_remote_result.stderr | default(''))"
+  changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']

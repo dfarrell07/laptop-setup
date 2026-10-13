@@ -1,0 +1,82 @@
+---
+- name: Verify (container-offline-distrobox — distrobox path with rescue)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Stat oc at /usr/local/bin/oc
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: verify_oc_absent
+
+    - name: Assert oc absent — rescue block ran and play continued gracefully
+      ansible.builtin.assert:
+        that: not verify_oc_absent.stat.exists
+        fail_msg: >-
+          /usr/local/bin/oc exists after an intentional download failure.
+          Either the rescue block did not execute, a pre-existing oc binary is present
+          in the image, or the invalid version accidentally resolved to a real release.
+
+    - name: Stat subctl after the optional Go build failure
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/subctl"
+      register: verify_subctl_absent
+
+    - name: Assert failed Go build leaves no incomplete subctl executable
+      ansible.builtin.assert:
+        that: not verify_subctl_absent.stat.exists
+
+    - name: Stat golangci-lint at ~/go/bin/golangci-lint
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/go/bin/golangci-lint"
+      register: verify_golangci_absent
+
+    - name: Assert golangci-lint absent — go install failed and failed_when swallowed it
+      ansible.builtin.assert:
+        that: not verify_golangci_absent.stat.exists
+        fail_msg: >-
+          golangci-lint exists after an intentional offline run.
+          Either go is installed and the network was reachable, or the distrobox-export
+          stub unexpectedly caused an install side-effect.
+
+    - name: Stat /usr/local/bin/podman
+      ansible.builtin.stat:
+        path: /usr/local/bin/podman
+        follow: false
+      register: verify_podman_symlink
+
+    - name: Assert podman is a symlink to distrobox-host-exec (not flatpak-spawn wrapper)
+      ansible.builtin.assert:
+        that:
+          - verify_podman_symlink.stat.exists
+          - verify_podman_symlink.stat.islnk
+          - verify_podman_symlink.stat.lnk_target == '/usr/bin/distrobox-host-exec'
+        fail_msg: >-
+          /usr/local/bin/podman is not a symlink to /usr/bin/distrobox-host-exec.
+          The distrobox branch (symlink) must be active, not the flatpak-spawn wrapper path.
+
+    - name: Stat rescue sentinel /tmp/oc_rescue_fired
+      ansible.builtin.stat:
+        path: /tmp/oc_rescue_fired
+      register: verify_rescue_sentinel
+
+    - name: Assert rescue sentinel exists — rescue block executed
+      ansible.builtin.assert:
+        that: verify_rescue_sentinel.stat.exists
+        fail_msg: >-
+          /tmp/oc_rescue_fired is absent. The rescue block did not execute — either the
+          download block was silently skipped (when: condition false) or the rescue path
+          was bypassed. The offline scenario must trigger the rescue block.
+
+    - name: Stat oc host wrapper at ~/.local/bin/oc
+      ansible.builtin.stat:
+        path: "{{ ansible_env.HOME }}/.local/bin/oc"
+      register: verify_oc_export_absent
+
+    - name: Assert oc export absent — container_oc_installed=false skipped the export task
+      ansible.builtin.assert:
+        that: not verify_oc_export_absent.stat.exists
+        fail_msg: >-
+          ~/.local/bin/oc exists despite oc download failure.
+          The export task guard (container_oc_installed | default(true)) must have
+          allowed the export to run — container_oc_installed=false was not set by rescue.

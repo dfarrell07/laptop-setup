@@ -1,0 +1,109 @@
+---
+# Krew accepts local manifests, not plugin@version install or upgrade arguments.
+- name: Read installed krew plugin receipt metadata
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.krew/receipts/{{ _krew_plugin.name }}.yaml"
+  register: _krew_receipt_stat
+
+- name: Load existing krew plugin receipt
+  ansible.builtin.slurp:
+    src: "{{ _krew_receipt_stat.stat.path }}"
+  register: _krew_receipt
+  when: _krew_receipt_stat.stat.exists
+
+- name: Record installed krew plugin version
+  ansible.builtin.set_fact:
+    _krew_installed_version: >-
+      {{ ((_krew_receipt.content | b64decode | from_yaml).spec.version | default(''))
+         if _krew_receipt_stat.stat.exists else '' }}
+
+- name: Check pinned krew plugin executable before deciding whether to reinstall
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.krew/store/{{ _krew_plugin.name }}/{{ _krew_plugin.version }}/{{ _krew_plugin.binary }}"
+    checksum_algorithm: sha256
+  register: _krew_existing_binary
+
+- name: Install or repair pinned krew plugin
+  when: >-
+    _krew_installed_version != _krew_plugin.version or
+    (_krew_existing_binary.stat.checksum | default('')) != _krew_plugin.binary_sha256 or
+    (_krew_existing_binary.stat.mode | default('')) != '0755'
+  block:
+    - name: Verify the pinned krew plugin archive checksum is well formed
+      ansible.builtin.assert:
+        that: _krew_plugin.archive_sha256 is match('^[0-9a-f]{64}$')
+
+    - name: Download and verify plugin archive before replacing an installed plugin
+      ansible.builtin.get_url:
+        url: "https://github.com/ahmetb/kubectx/archive/{{ _krew_plugin.version }}.tar.gz"
+        dest: "{{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.tar.gz"
+        checksum: "sha256:{{ _krew_plugin.archive_sha256 }}"
+        mode: "0644"
+        timeout: 120
+
+    - name: Write pinned local krew plugin manifest
+      vars:
+        _krew_manifest:
+          apiVersion: krew.googlecontainertools.github.com/v1alpha2
+          kind: Plugin
+          metadata:
+            name: "{{ _krew_plugin.name }}"
+          spec:
+            version: "{{ _krew_plugin.version }}"
+            shortDescription: "Pinned {{ _krew_plugin.binary }}"
+            homepage: https://github.com/ahmetb/kubectx
+            platforms:
+              - selector:
+                  matchLabels:
+                    os: linux
+                uri: "https://github.com/ahmetb/kubectx/archive/{{ _krew_plugin.version }}.tar.gz"
+                sha256: "{{ _krew_plugin.archive_sha256 }}"
+                bin: "{{ _krew_plugin.binary }}"
+                files:
+                  - from: "kubectx-*/{{ _krew_plugin.binary }}"
+                    to: .
+                  - from: kubectx-*/LICENSE
+                    to: .
+      ansible.builtin.copy:
+        content: "{{ _krew_manifest | to_nice_yaml }}"
+        dest: "{{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.yaml"
+        mode: "0600"
+
+    - name: Remove an outdated or damaged krew plugin after the archive is verified
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
+          - uninstall
+          - "{{ _krew_plugin.name }}"
+      environment:
+        KREW_ROOT: "{{ ansible_facts['user_dir'] }}/.krew"
+      changed_when: true
+      when: _krew_receipt_stat.stat.exists
+
+    - name: Install krew plugin from its verified archive and pinned manifest
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-krew"
+          - install
+          - "--manifest={{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.yaml"
+          - "--archive={{ _krew_plugin_tmpdir.path }}/{{ _krew_plugin.name }}.tar.gz"
+      environment:
+        KREW_ROOT: "{{ ansible_facts['user_dir'] }}/.krew"
+      changed_when: true
+      timeout: 120
+
+- name: Verify pinned plugin executable before exposing its launcher
+  ansible.builtin.stat:
+    path: "{{ ansible_facts['user_dir'] }}/.krew/store/{{ _krew_plugin.name }}/{{ _krew_plugin.version }}/{{ _krew_plugin.binary }}"
+    checksum_algorithm: sha256
+  register: _krew_verified_plugin
+  failed_when: >-
+    (_krew_verified_plugin.stat.checksum | default('')) != _krew_plugin.binary_sha256 or
+    (_krew_verified_plugin.stat.mode | default('')) != '0755'
+
+- name: Ensure krew plugin launcher points to the verified pinned executable
+  ansible.builtin.file:
+    src: "{{ ansible_facts['user_dir'] }}/.krew/store/{{ _krew_plugin.name }}/{{ _krew_plugin.version }}/{{ _krew_plugin.binary }}"
+    dest: "{{ ansible_facts['user_dir'] }}/.krew/bin/kubectl-{{ _krew_plugin.name }}"
+    state: link
+    force: true

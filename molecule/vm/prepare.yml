@@ -1,0 +1,120 @@
+---
+# Older distro Vagrant generates RSA transport keys. Install an ephemeral Ed25519
+# test key before the production sshd policy rejects RSA; retain the full policy.
+- name: Prepare VM transport key
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Generate an ephemeral Ed25519 VM transport key
+      ansible.builtin.command:
+        argv:
+          - ssh-keygen
+          - -t
+          - ed25519
+          - -N
+          - ''
+          - -f
+          - "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/transport-key"
+        creates: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/transport-key"
+      no_log: true
+
+- name: Prepare hardened SSH authentication
+  hosts: all
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Install the cloud partition growth utility
+      ansible.builtin.dnf:
+        name: cloud-utils-growpart
+        state: present
+      become: true
+
+    - name: Identify the guest root partition
+      ansible.builtin.command:
+        argv: [findmnt, -n, -o, SOURCE, /]
+      register: vm_root_device
+      changed_when: false
+
+    - name: Require the expected virtual root partition
+      ansible.builtin.assert:
+        that:
+          - vm_root_device.stdout.split('[')[0] is match('^/dev/[vs]d[a-z][0-9]+$')
+
+    - name: Expand the virtual root partition to the test disk size
+      ansible.builtin.command:
+        argv:
+          - growpart
+          - "{{ vm_root_device.stdout.split('[')[0] | regex_replace('[0-9]+$', '') }}"
+          - "{{ vm_root_device.stdout.split('[')[0] | regex_search('[0-9]+$') }}"
+      register: vm_root_growpart
+      changed_when: "'CHANGED:' in vm_root_growpart.stdout"
+      failed_when: vm_root_growpart.rc != 0 and 'NOCHANGE:' not in vm_root_growpart.stdout
+      become: true
+
+    - name: Identify the guest root filesystem type
+      ansible.builtin.command:
+        argv: [findmnt, -n, -o, FSTYPE, /]
+      register: vm_root_fstype
+      changed_when: false
+
+    - name: Require a supported cloud root filesystem
+      ansible.builtin.assert:
+        that: vm_root_fstype.stdout in ['btrfs', 'xfs', 'ext4']
+
+    - name: Expand the guest root filesystem
+      ansible.builtin.command:
+        argv: >-
+          {{ ['btrfs', 'filesystem', 'resize', 'max', '/'] if vm_root_fstype.stdout == 'btrfs'
+             else ['xfs_growfs', '/'] if vm_root_fstype.stdout == 'xfs'
+             else ['resize2fs', vm_root_device.stdout.split('[')[0]] }}
+      changed_when: vm_root_growpart.changed
+      become: true
+
+    - name: Verify the expanded guest disk capacity
+      ansible.builtin.command:
+        argv: [df, -B1, '--output=size', /]
+      register: vm_root_capacity
+      changed_when: false
+
+    - name: Require adequate disk space for full toolchain and container testing
+      ansible.builtin.assert:
+        that: vm_root_capacity.stdout_lines[-1] | trim | int > 30000000000
+
+    - name: Install the explicit VM privilege-escalation fixture
+      ansible.builtin.copy:
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        dest: /etc/sudoers.d/vagrant
+        owner: root
+        group: root
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+      become: true
+
+    - name: Authorize only the ephemeral Ed25519 transport key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') + '/transport-key.pub') }}"
+        exclusive: true
+
+    - name: Select the hardened transport key
+      ansible.builtin.set_fact:
+        ansible_ssh_private_key_file: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/transport-key"
+
+    - name: Reset the SSH connection to verify the new key
+      ansible.builtin.meta: reset_connection
+
+    - name: Verify the new SSH authentication works
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+
+    - name: Save hardened authentication for converge and verify
+      ansible.builtin.copy:
+        dest: "{{ molecule_instance_config }}"
+        content: >-
+          {{ lookup('file', molecule_instance_config) | from_yaml
+             | map('combine', {'identity_file': ansible_ssh_private_key_file}) | list | to_yaml }}
+        mode: '0600'
+      delegate_to: localhost
+      run_once: true

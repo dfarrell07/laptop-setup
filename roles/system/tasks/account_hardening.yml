@@ -1,0 +1,520 @@
+---
+# --- Sudoers.d directory audit ---
+- name: Find unmanaged files in /etc/sudoers.d
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    file_type: file
+    excludes: "{{ system_sudoersd_whitelist }}"
+  register: system_sudoersd_files
+  failed_when: false
+  when:
+    - not csb_detected
+    - not system_is_container
+
+- name: Warn on unexpected /etc/sudoers.d files not in system_sudoersd_whitelist (CSB — IT may drop files)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected files in /etc/sudoers.d not in system_sudoersd_whitelist:
+      {{ system_sudoersd_files.files | map(attribute='path') | list }}.
+      These files grant sudo access and are read by sudo (lexicographic order).
+      Add IT-managed basenames to system_sudoersd_whitelist in config.yml to suppress this warning.
+  when:
+    - csb_detected
+    - not system_is_container
+    - (system_sudoersd_files.files | default([])) | length > 0
+
+- name: Abort on unexpected /etc/sudoers.d files not in system_sudoersd_whitelist
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unexpected files in /etc/sudoers.d not in system_sudoersd_whitelist:
+      {{ system_sudoersd_files.files | map(attribute='path') | list }}.
+      These files grant sudo access and are read by sudo (lexicographic order).
+      Remove attacker-placed files or add legitimate package files to
+      system_sudoersd_whitelist in config.yml before re-running provisioning.
+  when:
+    - not csb_detected
+    - not system_is_container
+    - (system_sudoersd_files.files | default([])) | length > 0
+
+# --- Sudoers hardening ---
+- name: Write /etc/sudoers.d/99-hardening (Defaults hardening)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      Defaults logfile=/var/log/sudo.log
+      Defaults log_input,log_output
+      Defaults timestamp_timeout={{ system_sudo_timestamp_timeout }}
+      Defaults passwd_timeout=5
+      Defaults passwd_tries=3
+      Defaults umask=0027
+      Defaults use_pty
+    dest: /etc/sudoers.d/99-hardening
+    mode: "0440"
+    validate: visudo -cf %s
+  when:
+    # CSB: IT manages sudoers via Satellite/SCAP; log_input/log_output conflict with IT monitoring (all CSB tiers, not just csb_rhel)
+    - not csb_detected
+    - not system_is_container
+
+- name: Propagate GOTMPDIR through sudo (go test under sudo)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      Defaults env_keep += GOTMPDIR
+    dest: /etc/sudoers.d/go-env
+    mode: "0440"
+    validate: visudo -cf %s
+  when:
+    - system_go_env_sudoers | default(true)
+    - not csb_detected  # CSB: IT manages all sudoers.d; unmanaged drop-ins may be removed by compliance (all CSB tiers, not just csb_rhel)
+    - not system_is_container  # /etc/sudoers.d is not meaningful inside a container
+  # TRUST BOUNDARY: env_keep re-propagates the caller's GOTMPDIR into every subsequent sudo
+  # invocation on this host. verify-ansible-args.sh unsets GOTMPDIR before provisioning to
+  # prevent an attacker-set value from being baked in here, but after provisioning any local
+  # user can set GOTMPDIR and have it survive privilege escalation via this entry. Only retain
+  # if go test/build under sudo is an active workflow on this machine; set
+  # system_go_env_sudoers: false in config.yml to remove.
+
+- name: Remove /etc/sudoers.d/go-env (system_go_env_sudoers disabled)
+  ansible.builtin.file:
+    path: /etc/sudoers.d/go-env
+    state: absent
+  when:
+    - not (system_go_env_sudoers | default(true))
+    - not system_is_container
+
+# --- Password aging ---
+# CSB: login.defs governs local account policy. INACTIVE=30 could lock IT-managed local
+# service accounts that don't rotate passwords. YESCRYPT is the RHEL 9 default already.
+# Skip on CSB and rely on IPA/SSSD + IT group policy for account management.
+- name: Set login.defs password aging and home mode fields
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^{{ item.name }}\\s+"
+    line: "{{ item.name }}\t{{ item.value }}"
+    insertafter: EOF
+    create: false
+    mode: "0644"
+  loop:
+    - name: PASS_MAX_DAYS
+      value: "{{ system_pass_max_days }}"
+    - name: PASS_MIN_DAYS
+      value: "{{ system_pass_min_days }}"
+    # PASS_WARN_AGE: Fedora 44 default is 7 (matches system_pass_warn_age default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
+    - name: PASS_WARN_AGE
+      value: "{{ system_pass_warn_age }}"
+    # HOME_MODE: Fedora 44 default is 0700 (matches system_home_mode default); no-op on Fedora 44 but enforces on RHEL/Rocky/Debian
+    - name: HOME_MODE
+      value: "{{ system_home_mode }}"  # CIS: explicit home dir permissions (Fedora 38+ shadow-utils)
+    # login.defs INACTIVE: read by newusers(8) for batch account creation on RHEL/Rocky;
+    # on all shadow-utils platforms, useradd reads INACTIVE from /etc/default/useradd (set below via useradd -D -f) not from login.defs;
+    # login.defs INACTIVE is only the operative setting for newusers(8) and as a pre-provisioning safety net before useradd -D -f executes
+    - name: INACTIVE
+      value: "{{ system_inactive_days }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    # CSB: intent is "Skip on CSB" (see comment above block); not csb_rhel was too narrow — hybrid Fedora CSB also uses IPA/SSSD
+    - not csb_detected
+    - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
+
+# UMASK 027: applies to PAM sessions that do not source rc files (cron, systemd user services).
+# Overridden by dotfiles for interactive shells (umask 077 in ~/.bashrc and ~/.zshrc).
+- name: Set default login umask in login.defs (CIS)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^UMASK\\s+"
+    line: "UMASK\t{{ system_umask }}"
+    insertafter: EOF
+    create: false
+    mode: "0644"
+  when:
+    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not system_is_container  # logind inotify on login.defs crashes PID 1 in privileged Podman containers (Debian 13 and Rocky 10)
+
+# NOTE: ENCRYPT_METHOD is a true no-op on Fedora 44 (already uncommented as YESCRYPT);
+# enforces on RHEL/Rocky; skipped on Debian (SHA512 default preserved)
+- name: Enforce yescrypt password hashing in login.defs (CIS 5.3.6)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^#?ENCRYPT_METHOD'
+    line: 'ENCRYPT_METHOD YESCRYPT'
+  when:
+    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - not is_apt  # Debian 13 defaults to SHA512; YESCRYPT_COST_FACTOR is not in Debian's login.defs template
+
+# NOTE: Fedora 44 ships '#YESCRYPT_COST_FACTOR 5' commented; first run uncomments it.
+# regexp matches both commented and uncommented forms for true idempotency — narrow
+# '^#YESCRYPT_COST_FACTOR' would fail to match the already-uncommented line on re-runs
+# and lineinfile would append a duplicate rather than no-op.
+# YESCRYPT_COST_FACTOR is a Fedora/RHEL shadow-utils extension; Debian's login.defs does not
+# include this key — shadow-utils ignores it but lineinfile would append a stray line.
+- name: Enforce yescrypt cost factor in login.defs (CIS 5.4.1)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^#?YESCRYPT_COST_FACTOR'
+    line: 'YESCRYPT_COST_FACTOR 5'
+  when:
+    - not csb_detected  # CSB: IT manages local account policy via IPA/SSSD on all CSB tiers
+    - not system_is_container  # same inotify/logind crash guard as Configure password aging task above
+    - not is_apt  # YESCRYPT_COST_FACTOR not in Debian's login.defs; would append an unrecognized stray key
+
+- name: Restrict existing user home directory permissions to system_home_mode (CIS 6.2.x)
+  when:
+    - real_user_home | length > 0
+    - real_user_home != '/'
+    - real_user_home is regex('^(/home/[a-zA-Z0-9_.-]+|/root|/Users/[a-zA-Z0-9_.-]+)(/[a-zA-Z0-9_. -]+)*$')
+    # CSB: IPA/SSSD manages home directory permissions via oddjob-mkhomedir (hybrid Fedora CSB also uses IPA/SSSD — not csb_rhel was too
+    # narrow)
+    - not csb_detected
+    - not system_is_container  # home dir chmod triggers security framework events that crash Debian 13 container PID 1
+
+# --- Inactive account lockout (CIS 5.5.1.5: lock accounts inactive >30 days) ---
+  block:
+    - name: Set home directory mode
+      ansible.builtin.file:
+        path: "{{ real_user_home }}"
+        mode: "{{ system_home_mode }}"
+        state: directory
+      register: _home_mode_result
+
+  rescue:
+    - name: Check current home directory permissions
+      ansible.builtin.stat:
+        path: "{{ real_user_home }}"
+      register: _home_stat
+
+    - name: Abort if home directory is more permissive than allowed
+      vars:
+        # Permission modes are bit sets; numeric ordering misses e.g. 0670 vs 0700.
+        _home_allowed_bits:
+          '0': '0'
+          '1': '01'
+          '2': '02'
+          '3': '0123'
+          '4': '04'
+          '5': '0145'
+          '6': '0246'
+          '7': '01234567'
+      ansible.builtin.assert:
+        that:
+          - _home_stat.stat.mode is match('^0[0-7]{3}$')
+          - system_home_mode is match('^0[0-7]{3}$')
+          - _home_stat.stat.mode[-3] in _home_allowed_bits[system_home_mode[-3]]
+          - _home_stat.stat.mode[-2] in _home_allowed_bits[system_home_mode[-2]]
+          - _home_stat.stat.mode[-1] in _home_allowed_bits[system_home_mode[-1]]
+        fail_msg: >-
+          SECURITY: Home directory {{ real_user_home }} permissions are {{ _home_stat.stat.mode }}
+          (expected {{ system_home_mode }} or less permissive). chmod failed with error:
+          {{ _home_mode_result.msg | default('unknown error') }}.
+          Possible causes: NFS with root_squash (disable or use nfsvers=4.2 with idmap),
+          ACLs preventing chmod (check getfacl/setfacl), SELinux denial (check audit.log).
+          Manual fix required before provisioning can continue.
+
+- name: Configure inactive account lockout
+  when:
+    # CSB: IT-managed local service accounts may not rotate passwords; useradd -D -f 30 would lock them after 30 inactive days
+    - not csb_detected
+    - not system_is_container  # useradd/chage shadow ops trigger PAM events that crash Debian 13 container PID 1
+  block:
+    - name: Check useradd default INACTIVE setting
+      ansible.builtin.command:
+        cmd: useradd -D
+      register: system_useradd_defaults
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode
+
+    - name: Set default inactive days for new accounts to 30
+      ansible.builtin.command:
+        argv: [useradd, -D, -f, "{{ system_inactive_days }}"]
+      register: _useradd_inactive_result
+      when:
+        - >-
+          system_useradd_defaults.stdout_lines | default([]) | select('match', '^INACTIVE=' ~ system_inactive_days ~ '$') | list | length
+          == 0
+      changed_when: _useradd_inactive_result.rc == 0
+      failed_when: false
+
+    - name: Warn if Set default inactive days failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: useradd -D -f {{ system_inactive_days }} exited
+          {{ _useradd_inactive_result.rc | default('skipped') }} —
+          CIS 5.5.1.5 default inactive days for new accounts may not be enforced
+      when:
+        - _useradd_inactive_result.rc | default(0) != 0
+
+# useradd -D -f 30 only governs future accounts. Apply the same 30-day
+# inactive lockout to the pre-existing real user account (CIS 5.5.1.5).
+- name: Check current inactive lockout setting for existing user account
+  ansible.builtin.getent:
+    database: shadow
+    key: "{{ real_user_id }}"
+    fail_key: false
+  register: system_chage_inactive_days
+  check_mode: false
+  when:
+    - not csb_detected  # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails on all CSB tiers
+    - not system_is_container
+    - real_user_id | length > 0
+
+- name: Set inactive lock for existing user account (CIS 5.5.1.5)
+  ansible.builtin.command:
+    argv: [chage, -I, "{{ system_inactive_days }}", "{{ real_user_id }}"]
+  register: _chage_inactive_result
+  when:
+    # CSB: IPA/SSSD domain users have no /etc/shadow entry; chage silently fails.
+    # IPA manages inactive lockout via krbPwdPolicy, not shadow aging.
+    - not csb_detected  # CSB: applies on all CSB tiers (hybrid Fedora CSB also uses IPA/SSSD)
+    - not system_is_container
+    - (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id] is not none
+    - >-
+      (system_chage_inactive_days.ansible_facts.getent_shadow | default({}))[real_user_id][5] | default('') | string !=
+      system_inactive_days | string
+  changed_when: _chage_inactive_result.rc == 0
+  failed_when: false
+
+- name: Warn if Set inactive lock for existing user account failed
+  ansible.builtin.debug:
+    msg: >
+      WARNING: chage -I {{ system_inactive_days }} {{ real_user_id }} exited
+      {{ _chage_inactive_result.rc | default('skipped') }} —
+      CIS 5.5.1.5 inactive lockout may not be set on the existing account
+  when:
+    - _chage_inactive_result.rc | default(0) != 0
+    - not csb_detected
+    - not system_is_container
+
+- name: Check current password aging fields for existing user account
+  ansible.builtin.command:
+    argv: [awk, "-F:", "-v", "u={{ real_user_id }}", "$1==u{found=1; print ${{ item.field }}} END{if (!found) exit 1}", /etc/shadow]
+  register: system_chage_fields
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - not csb_detected  # CSB: IPA/SSSD manages password aging via krbPwdPolicy on all CSB tiers
+    - not system_is_container
+    - real_user_id | length > 0
+  loop:
+    - {field: 4, flag: '-m', var: 'system_pass_min_days', cis: 'CIS 5.5.1.2'}
+    - {field: 5, flag: '-M', var: 'system_pass_max_days', cis: 'CIS 5.5.1.1'}
+    - {field: 6, flag: '-W', var: 'system_pass_warn_age', cis: 'CIS 5.5.1.3'}
+  loop_control:
+    label: "{{ item.cis }}"
+
+- name: Set password aging fields for existing user account
+  ansible.builtin.command:
+    argv: [chage, '{{ item.item.flag }}', '{{ vars[item.item.var] }}', '{{ real_user_id }}']
+  register: _chage_set_result
+  when:
+    - not csb_detected  # CSB: IPA/SSSD manages password aging via krbPwdPolicy on all CSB tiers
+    - not system_is_container
+    - real_user_id | length > 0
+    - item.rc | default(1) == 0
+    - item.stdout | default('') | trim != vars[item.item.var] | string
+  changed_when: _chage_set_result.rc == 0
+  failed_when: false
+  loop: "{{ system_chage_fields.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.cis }}"
+
+- name: Warn if any password aging chage command failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: chage {{ item.item.item.flag }} {{ vars[item.item.item.var] }} {{ real_user_id }} exited {{ item.rc }}
+      — {{ item.item.item.cis }} password aging may not be enforced
+  loop: "{{ _chage_set_result.results | default([]) }}"
+  when:
+    - item.rc | default(0) != 0
+    - not (item.skipped | default(false))
+    - not csb_detected
+    - not system_is_container
+
+- name: Check if real user account exists in system passwd database
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ real_user_id }}"
+    fail_key: false
+  register: system_real_user_exists
+  check_mode: false
+  when:
+    - real_user_id | length > 0
+    - not system_is_container  # getent uses NSS/systemd-userdb D-Bus; crashes Debian 13 container PID 1
+
+# --- Rootless container prerequisites (subuid/subgid for podman) ---
+- name: Ensure rootless podman prerequisites for user
+  when:
+    - real_user_id | length > 0
+    - not csb_rhel  # CSB: intentionally NOT not csb_detected — hybrid Fedora CSB dev machines need rootless
+      # Podman (kind/OVN-K/DOCKER_HOST in dotfiles); only RHEL CSB (csb_rhel=true) has Satellite/SCAP
+      # managing subuid/subgid ranges where overwriting would create an IT drift loop
+    - not system_is_container  # subuid/subgid writes + loginctl enable-linger crash Debian 13 container PID 1
+  block:
+    - name: Ensure subuid entry exists for user
+      ansible.builtin.lineinfile:
+        path: /etc/subuid
+        regexp: "^{{ real_user_id }}:"
+        line: "{{ real_user_id }}:165536:165536"
+        create: true
+        mode: "0644"
+
+    - name: Ensure subgid entry exists for user
+      ansible.builtin.lineinfile:
+        path: /etc/subgid
+        regexp: "^{{ real_user_id }}:"
+        line: "{{ real_user_id }}:165536:165536"
+        create: true
+        mode: "0644"
+
+    - name: Enable session lingering for rootless podman socket persistence
+      ansible.builtin.command:
+        argv: [loginctl, enable-linger, "{{ real_user_id }}"]
+        creates: /var/lib/systemd/linger/{{ real_user_id }}
+      register: _linger_result
+      failed_when: false
+      when:
+        - (system_real_user_exists.ansible_facts.getent_passwd | default({}))[real_user_id] is not none
+      # Without linger, systemd kills the user session (and podman.socket) when the
+      # provisioning SSH session ends. DOCKER_HOST in dotfiles points to the socket.
+
+- name: Warn if Enable session lingering failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: loginctl enable-linger {{ real_user_id }} exited
+      {{ _linger_result.rc | default('skipped') }} —
+      rootless podman socket may not persist after session end; DOCKER_HOST will stop working
+  when: (_linger_result is defined) and (_linger_result.rc | default(0) != 0)
+
+# --- Lock root account ---
+- name: Lock root account
+  ansible.builtin.user:
+    name: root
+    password_lock: true
+  register: _lock_root_result
+  ignore_errors: true
+  # CSB: IT owns break-glass root access on all CSB tiers; hybrid Fedora CSB uses IPA/SSSD — not csb_rhel was too narrow
+  when: not csb_detected and not system_is_container
+
+- name: Abort if Lock root account failed
+  ansible.builtin.fail:
+    msg: >-
+      CRITICAL: Failed to lock root account ({{ _lock_root_result.msg | default('unknown error') }}).
+      Root account must be locked per CIS benchmark. Check /etc/shadow permissions,
+      PAM configuration, and NSS. Do not continue provisioning until this is resolved.
+  when:
+    - not csb_detected  # CSB: all CSB tiers (both RHEL and hybrid Fedora CSB); consistent with other account-hardening guards in this file
+    - not system_is_container
+    - _lock_root_result.failed | default(false)
+
+# --- User account integrity (CIS 6.2.1/6.2.2/6.2.9) ---
+- name: Find non-root UID 0 accounts (CIS 6.2.9)
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($3==0 && $1!=\"root\"){print $1}"
+      - /etc/passwd
+  register: system_uid0_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # /etc/passwd access triggers NSS/systemd-userdb; crashes Debian 13 container PID 1
+
+- name: Assert no non-root UID 0 accounts (CIS 6.2.9)
+  ansible.builtin.assert:
+    that: system_uid0_accounts.stdout | length == 0
+    fail_msg: "Non-root UID 0 accounts found: {{ system_uid0_accounts.stdout }} -- Fix: sudo usermod -u <new_uid> <account>"
+    success_msg: "CIS 6.2.9: no non-root UID 0 accounts"
+  # CSB: IT-provisioned service accounts may have unusual UID/GID — assert would abort play
+  when: not csb_detected and not system_is_container
+
+- name: Find accounts with GID 0 (root group) as primary group (CIS 6.2.x)
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($4==0 && $1!~/^({{ system_gid0_allowed_accounts | join('|') }})$/){print $1}"
+      - /etc/passwd
+  register: system_gid0_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # same NSS/D-Bus crash risk as uid0 probe above
+
+- name: Assert no non-root GID 0 primary group accounts (CIS 6.2.x)
+  ansible.builtin.assert:
+    that: system_gid0_accounts.stdout | length == 0
+    fail_msg: "Non-root accounts with root primary GID: {{ system_gid0_accounts.stdout }} -- Fix: sudo usermod -g <new_gid> <account>"
+    success_msg: "CIS 6.2.x: no non-root GID 0 primary group accounts"
+  when: not csb_detected and not system_is_container  # CSB: IT-provisioned service accounts may have GID 0
+
+- name: Find accounts with empty passwords in shadow (CIS 6.2.2)
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($2==\"\"){print $1}"
+      - /etc/shadow
+  register: system_empty_pw_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # /etc/shadow access crashes Debian 13 container PID 1
+
+- name: Assert no empty password accounts (CIS 6.2.2)
+  ansible.builtin.assert:
+    that: system_empty_pw_accounts.stdout | length == 0
+    fail_msg: >-
+      Accounts with empty passwords: {{ system_empty_pw_accounts.stdout }}
+      -- Fix: sudo passwd -l <account> (lock) or sudo passwd <account> (set password)
+    success_msg: "CIS 6.2.2: no empty passwords"
+  when: not csb_detected and not system_is_container  # CSB: IPA-managed accounts may appear empty in local shadow
+
+- name: Find accounts with unmasked passwords in passwd (CIS 6.2.1)
+  ansible.builtin.command:
+    argv:
+      - awk
+      - "-F:"
+      - "($2!=\"x\" && $2!=\"*\" && $2!=\"!\"){print $1}"
+      - /etc/passwd
+  register: system_unshadowed_accounts
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: not system_is_container  # same NSS/D-Bus crash risk as uid0 probe above
+
+- name: Assert all passwd entries use shadowed passwords (CIS 6.2.1)
+  ansible.builtin.assert:
+    that: system_unshadowed_accounts.stdout | length == 0
+    fail_msg: "Unshadowed passwd entries: {{ system_unshadowed_accounts.stdout }} -- Fix: sudo pwconv"
+    success_msg: "CIS 6.2.1: all passwd entries shadowed"
+  when: not csb_detected and not system_is_container  # CSB: IPA manages passwords; some entries may appear unshadowed
+
+# --- Critical file permissions (CIS 6.1.2/6.1.4/6.1.6/6.1.8) ---
+- name: Enforce permissions on critical auth files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/passwd
+      group: root
+      mode: "0644"
+    - path: /etc/shadow
+      group: "{{ 'shadow' if is_apt else 'root' }}"
+      mode: "{{ '0640' if is_apt else '0000' }}"
+    - path: /etc/group
+      group: root
+      mode: "0644"
+    - path: /etc/gshadow
+      group: "{{ 'shadow' if is_apt else 'root' }}"
+      mode: "{{ '0640' if is_apt else '0000' }}"
+  loop_control:
+    label: "{{ item.path }}"
+  # CSB: Satellite/SCAP owns these permissions; shadow group ownership may differ on RHEL CSB; Kolide/SCAP manages these on hybrid Fedora
+  # CSB too
+  when: not csb_detected and not system_is_container

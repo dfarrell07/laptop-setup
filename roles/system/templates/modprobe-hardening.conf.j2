@@ -1,27 +1,62 @@
 # {{ ansible_managed }}
 # Blacklist unused filesystem and DMA modules (CIS/STIG)
+#
+# DESIGN NOTE — unconditional vs. conditional entries:
+# The following modules are ALWAYS blacklisted, regardless of config.yml settings,
+# and cannot be suppressed by any variable: jffs2, cramfs, freevxfs, hfs, hfsplus,
+# dccp, rds, tipc, firewire-core, firewire-ohci, firewire-net, firewire-sbp2, nosy,
+# vivid, n_hdlc. These are considered universally safe to blacklist on workstations
+# (no legitimate use case, confirmed CVE history, or CIS/STIG mandate). This is an
+# intentional one-way ratchet — if a specific unconditional entry must be re-enabled
+# (e.g., rds for cluster testing), BOTH steps are required:
+# 1. Drop a file under /etc/modprobe.d/ that overrides the install directive with the real path
+#    (e.g., install rds /sbin/modprobe --ignore-install rds).
+# 2. Add the basename of that file to system_modprobed_whitelist in config.yml.
+# Without step 2, 'make system' aborts with 'Unexpected file(s) in /etc/modprobe.d'.
+# Conditional entries (udf, sctp, thunderbolt,
+# usb_storage, bluetooth) retain their config.yml toggles for legitimate use cases.
 
 # Unused filesystems — attack surface via crafted images
-blacklist cramfs
-install cramfs /bin/false
-blacklist freevxfs
-install freevxfs /bin/false
+# squashfs is NOT blacklisted — Flatpak runtime images require it. Without it
+# all Flatpak app launches fail. CIS 1.1.1.6 calls for squashfs; this is the
+# intentional exception matching the SCTP pattern in the network section below.
+# jffs2: present in Fedora 44 (jffs2.ko.xz, alias fs-jffs2); blacklisted as unused attack surface.
 blacklist jffs2
 install jffs2 /bin/false
+# cramfs: CONFIG_CRAMFS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist cramfs' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist cramfs
+install cramfs /bin/false
+# freevxfs: CONFIG_VXFS_FS not set in Fedora 44 — no .ko to blacklist; install directive guards against future reintroduction.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist freevxfs' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist freevxfs
+install freevxfs /bin/false
 blacklist hfs
 install hfs /bin/false
 blacklist hfsplus
 install hfsplus /bin/false
+{% if system_disable_udf | bool %}
+# UDF filesystem disabled — system_disable_udf=true in config.yml.
+# UDF (Universal Disk Format) is used on USB drives, DVDs, and Blu-rays; pairs with
+# system_disable_usb_storage to block both the transport layer and the filesystem layer.
+# Default is true (disabled) — set false in config.yml if UDF media is required.
 blacklist udf
 install udf /bin/false
-blacklist squashfs
-install squashfs /bin/false
+{% endif %}
 
 # Unused network protocols — CVE-validated attack surface
-blacklist dccp
-install dccp /bin/false
+# Note: sctp is NOT blacklisted — OVN-Kubernetes kind cluster tests and
+# Submariner use SCTP; 'install sctp /bin/false' would silently break them.
+{% if system_disable_sctp | bool %}
 blacklist sctp
 install sctp /bin/false
+{% endif %}
+# dccp: removed from Fedora kernels at Fedora 40 (CONFIG_IP_DCCP not set in Fedora 44).
+# 'install dccp /bin/false' is the effective guard: modprobe checks the install directive
+# before looking up module files, blocking any future re-introduction without code change.
+# CIS audit tools (OpenSCAP, lynis) check for 'blacklist dccp' literally; blacklist on a missing .ko is silently ignored by the kernel but satisfies pattern-matching.
+blacklist dccp
+install dccp /bin/false
 blacklist rds
 install rds /bin/false
 blacklist tipc
@@ -32,11 +67,58 @@ blacklist firewire-core
 install firewire-core /bin/false
 blacklist firewire-ohci
 install firewire-ohci /bin/false
+blacklist firewire-net
+install firewire-net /bin/false
 blacklist firewire-sbp2
 install firewire-sbp2 /bin/false
+# nosy: FireWire sniffer — CVE history; no workstation use. Still ships in Fedora 44 as nosy.ko.xz.
+blacklist nosy
+install nosy /bin/false
 
-# USB mass storage — close boot-time window before USBGuard
+{% if system_disable_thunderbolt | bool %}
+# Thunderbolt disabled — system_disable_thunderbolt=true in config.yml.
+# Mitigates Thunderspy-class DMA attacks; only set on machines with no Thunderbolt peripherals.
+# Default is false (enabled) — required for Thunderbolt docks, displays, and peripherals.
+blacklist thunderbolt
+install thunderbolt /bin/false
+blacklist thunderbolt_net
+install thunderbolt_net /bin/false
+{% endif %}
+
+{% if system_disable_usb_storage | bool %}
+# USB mass storage: kernel-blocked (system_disable_usb_storage=true in config.yml).
+# USBGuard cannot override kernel-level blocking — USB drives will not mount even with USBGuard rules.
+# Set system_disable_usb_storage: false in config.yml to allow USB storage.
+# Recovery without re-provisioning: sudo modprobe --ignore-install usb_storage && sudo modprobe --ignore-install uas
+# (plain modprobe usb_storage runs /bin/false due to install directive — --ignore-install bypasses it)
 blacklist usb_storage
 install usb_storage /bin/false
 blacklist uas
 install uas /bin/false
+{% endif %}
+
+# vivid: virtual video test driver — CVE history (OOB write, privilege escalation),
+# ships in every Fedora kernel, no legitimate use on workstations.
+blacklist vivid
+install vivid /bin/false
+
+# n_hdlc: TTY HDLC line discipline — CVE history (privilege escalation),
+# CIS RHEL 9 Level 2 recommended blacklist, no legitimate workstation use.
+blacklist n_hdlc
+install n_hdlc /bin/false
+
+{% if system_disable_bluetooth | bool %}
+# Bluetooth stack disabled — system_disable_bluetooth=true in config.yml.
+# CIS RHEL 9 2.1.5: blacklist BT modules on machines with no BT peripherals.
+# Default is true (disabled) — set false in config.yml to enable Bluetooth peripherals.
+# rfcomm/bnep are upper-layer BT protocols that remain loaded after bluetooth.service stops;
+# blacklisted here alongside btusb/bluetooth to ensure no BT module survives post-reboot.
+blacklist rfcomm
+install rfcomm /bin/false
+blacklist bnep
+install bnep /bin/false
+blacklist btusb
+install btusb /bin/false
+blacklist bluetooth
+install bluetooth /bin/false
+{% endif %}

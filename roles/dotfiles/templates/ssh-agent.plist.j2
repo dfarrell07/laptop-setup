@@ -4,23 +4,23 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.dfarrell07.ssh-agent</string>
+  <string>{{ dotfiles_ssh_agent_label | e }}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/ssh-agent</string>
+    <string>{{ dotfiles_homebrew_prefix | e }}/bin/ssh-agent</string>
     <string>-D</string>
     <string>-a</string>
-    <string>{{ ansible_user_dir }}/.ssh/ssh-agent.socket</string>
+    <string>{{ ansible_facts['user_dir'] }}/.ssh/ssh-agent.socket</string>
     <string>-t</string>
-    <string>{{ dotfiles_ssh_agent_timeout }}</string>
+    <string>{{ dotfiles_ssh_agent_timeout | int }}</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>{{ ansible_user_dir }}/.local/share/log/ssh-agent.log</string>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/ssh-agent.log</string>
   <key>StandardErrorPath</key>
-  <string>{{ ansible_user_dir }}/.local/share/log/ssh-agent.log</string>
+  <string>{{ ansible_facts['user_dir'] }}/.local/state/log/ssh-agent.log</string>
 </dict>
 </plist>

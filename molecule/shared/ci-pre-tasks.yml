@@ -1,0 +1,22 @@
+---
+# molecule/shared/ci-pre-tasks.yml
+# Loads default.config.yml + group_vars/all/vars.yml and sets common_project_root.
+# Molecule does not auto-load group_vars, so this is required in converge.yml for full-role scenarios
+# (fedora, rocky, debian, macos, vm, packages-binaries). Container-provisioning and
+# distrobox-role scenarios load vars directly or are self-contained — see those converge files.
+- name: Load default.config.yml
+  ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+- name: Load group_vars baselines (feature toggles, csb_rhel, needs_container_tier)
+  # Molecule generates its own inventory in a temp dir; the project's group_vars/all/
+  # are not auto-loaded. Load vars.yml explicitly so roles that reference repo_*,
+  # csb_rhel, needs_container_tier, etc. don't fail with 'variable is undefined'.
+  ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+- name: Set project root for include paths
+  ansible.builtin.set_fact:
+    common_project_root: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+    _pf_is_molecule: true  # this include belongs exclusively to trusted test playbooks
+
+- name: Load shared CI default vars (git_repos_list, dotfiles identity, and other shared defaults)
+  ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/molecule/shared/ci-default-vars.yml"

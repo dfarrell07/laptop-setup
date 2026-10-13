@@ -1,0 +1,8 @@
+---
+# roles/claude/handlers/main.yml
+
+- name: Apply claude-privacy tmpfiles
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --user --create
+  changed_when: false
+  when: is_linux

@@ -1,28 +1,73 @@
 # {{ ansible_managed }}
 # Drop-in hardening for sshd — deployed to /etc/ssh/sshd_config.d/
 
-Port {{ ssh_port }}
+Port {{ ssh_port | regex_replace('[\r\n].*', '') | int }}
+Banner /etc/issue.net
+# WARNING: password auth is disabled. Before running make all, ensure
+# ~/.ssh/authorized_keys holds at least one ssh-ed25519 or
+# sk-ssh-ed25519@openssh.com key — RSA/ECDSA are silently rejected by
+# PubkeyAcceptedAlgorithms below. A missing or wrong-type key causes a
+# complete SSH lockout once sshd restarts. If no hardware key is available:
+#   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_local -C "local-bootstrap"
+#   cat ~/.ssh/id_ed25519_local.pub > ~/.ssh/authorized_keys
+# Alternatively, populate vault.yml with vault_ssh_auth_key_pub (ed25519).
 PasswordAuthentication no
-KbdInteractiveAuthentication no
-PermitRootLogin no
-PermitEmptyPasswords no
+PubkeyAuthentication yes
 HostbasedAuthentication no
+IgnoreRhosts yes
 PermitUserEnvironment no
+KbdInteractiveAuthentication no  # compiled default yes; 00-hardening.conf wins via first-occurrence; 50-redhat.conf also sets no but would lose on reorder
+PermitRootLogin no
+PermitEmptyPasswords no  # OpenSSH compiled default; unreachable because both PasswordAuthentication no (line 14) and KbdInteractiveAuthentication no (line 15) close all password-equivalent auth paths (UsePAM yes makes both relevant)
+HostKeyAlgorithms {{ ssh_host_key_algorithms | regex_replace('[\r\n].*', '') }}  # cert variant excluded intentionally (no host CA); add ssh-ed25519-cert-v01@openssh.com here and configure TrustedUserCAKeys if deploying host certs
+PubkeyAcceptedAlgorithms {{ ssh_pubkey_accepted_algorithms | map('regex_replace', '[\r\n].*', '') | join(',') }}  # ed25519 and FIDO2, plain and cert variants; cert auth requires cert-authority in authorized_keys or TrustedUserCAKeys; RSA/ECDSA rejected
+AuthorizedKeysFile .ssh/authorized_keys  # Fedora's sshd_config already restricts this; explicit here for auditability and resilience against base-config reset
 
-AllowUsers {{ real_user_id }}
+AllowUsers {{ ([real_user_id] + (system_ssh_extra_allow_users | default([]) | map('regex_replace', '[\r\n].*', '') | list)) | join(' ') }}
 MaxAuthTries 3
-MaxSessions 2
+MaxSessions {{ system_ssh_max_sessions | int }}  # OpenSSH default is 10; explicit so value is auditable and config.yml overrides are visible in the drop-in
 LoginGraceTime 30
 
-X11Forwarding no
-AllowAgentForwarding no
-AllowTcpForwarding no
+X11Forwarding no  # compiled default no; overrides 50-redhat.conf which sets yes on Fedora/RHEL
+AllowAgentForwarding {{ system_ssh_allow_agent_forwarding | regex_replace('[\r\n].*', '') }}
+AllowTcpForwarding {{ system_ssh_allow_tcp_forwarding | regex_replace('[\r\n].*', '') }}
+# NOTE: AcceptEnv is cumulative in sshd — 50-redhat.conf AcceptEnv COLORTERM cannot be
+# overridden from this file regardless of drop-in order. COLORTERM forwarding is always active.
 
-ClientAliveInterval 300
-ClientAliveCountMax 2
+ClientAliveInterval {{ system_ssh_client_alive_interval | int }}
+ClientAliveCountMax {{ system_ssh_client_alive_count_max | int }}  # compiled default 3; tightened to 2 — disconnect after 2 unacknowledged keepalive probes (10 min with ClientAliveInterval 300)
+# ChannelTimeout and UnusedConnectionTimeout require OpenSSH >= 9.2 (2023-02-02).
+# Fedora 44 ships 10.2p1; Rocky Linux 10 ships 9.9p1 — both above the 9.2 feature minimum, but below the 10.3 bz3827 fix.
+# NOTE: UCT closes connections with no open channels after N seconds regardless of ChannelTimeout
+# or OpenSSH version. bz3827: ChannelTimeout + UCT together caused UCT to fire prematurely (even
+# with channels open) on < 10.3; that is why ChannelTimeout is disabled here until all targets run >= 10.3.
+# Default: disabled (system_ssh_channel_timeout: ""); set e.g. "global 1h" in config.yml once all targets run OpenSSH >= 10.3.
+{% if system_ssh_channel_timeout %}
+ChannelTimeout {{ system_ssh_channel_timeout | regex_replace('[\r\n].*', '') }}
+{% endif %}
+# system_ssh_unused_connection_timeout: default 3600 (1h, tolerates VS Code Remote SSH idle) — directive is always emitted; set '' in config.yml to omit directive; integer 0 is also falsy and omits it (not emitted as UnusedConnectionTimeout 0).
+{# '' or 0 to omit/disable #}
+{% if system_ssh_unused_connection_timeout %}
+UnusedConnectionTimeout {{ system_ssh_unused_connection_timeout | int }}
+{% endif %}
+TCPKeepAlive no  # OpenSSH compiled default is yes; disabled in favour of encrypted ClientAlive messages (ClientAliveInterval/CountMax above)
+SyslogFacility AUTHPRIV  # compiled default is AUTH; explicit here to guarantee AUTHPRIV regardless of 50-redhat.conf presence or order
 LogLevel VERBOSE
-UsePAM yes
-StrictModes yes
-UseDNS no
-MaxStartups 10:30:60
-RekeyLimit 1G 1h
+UsePAM yes  # compiled default no; setting no bypasses PAM account/session modules (faillock lockout, audit, MOTD); matches 50-redhat.conf; explicit (first-occurrence)
+MaxStartups 10:30:60  # start:rate:full; full ceiling tightened from OpenSSH default 10:30:100
+GSSAPIAuthentication no  # overrides 50-redhat.conf which sets yes on Fedora/RHEL; without this line the effective value is yes even though the compiled default is no; placed before RekeyLimit so first-occurrence semantics protect this directive even if system_ssh_rekey_limit contains injected text
+
+# CIS 4.2.12 — approved algorithms. NOTE: sshd processes drop-in files lexicographically;
+# 00-hardening.conf loads before 40-redhat-crypto-policies.conf, so this explicit list
+# takes precedence over the system crypto policy for SSH. This is intentional — the system
+# crypto policy is more permissive than this hardened list. update-crypto-policies
+# configures sshd via 40-redhat-crypto-policies.conf, but this file takes precedence:
+# sshd uses first-occurrence semantics and 00-hardening.conf sorts alphabetically before
+# 40-redhat-crypto-policies.conf.
+# Ciphers/MACs/KexAlgorithms placed before RekeyLimit: first-occurrence semantics mean
+# an injected duplicate (e.g. via system_ssh_rekey_limit newline injection) is silently ignored.
+Ciphers {{ ssh_ciphers | regex_replace('[\r\n].*', '') }}
+MACs {{ ssh_macs | regex_replace('[\r\n].*', '') }}  # MACs controls the MAC algorithm negotiation for all connections; for AEAD ciphers (gcm, chacha20) the negotiated MAC algorithm is not applied for packet authentication — the cipher provides authentication intrinsically
+KexAlgorithms {{ ssh_kex_algorithms | regex_replace('[\r\n].*', '') }}
+RekeyLimit {{ system_ssh_rekey_limit | regex_replace('[\r\n].*', '') }}  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window; regex_replace strips any newline suffix to prevent sshd config injection
+Compression no  # OpenSSH 10.2p1 (Fedora 44) compiled default is yes (delayed is a legacy synonym); disabled — no benefit for interactive sessions and reduces protocol complexity

@@ -1,0 +1,42 @@
+---
+- name: Prepare (distrobox role)
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Create stub distrobox binary (records argv to log, exits 0)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/distrobox
+        content: |
+          #!/bin/sh
+          echo "$@" >> /tmp/distrobox-calls.log
+          exit 0
+        mode: "0755"
+      become: true
+
+    - name: Create initial podman container-exists state file (absent → rc=1)
+      ansible.builtin.copy:
+        dest: /tmp/podman-container-exists-rc
+        content: "1"
+        mode: "0644"
+
+    - name: Create stub podman binary
+      ansible.builtin.copy:
+        dest: /usr/local/bin/podman
+        content: |
+          #!/bin/sh
+          if [ "$1" = "container" ] && [ "$2" = "exists" ]; then
+            rc=$(cat /tmp/podman-container-exists-rc 2>/dev/null || echo 1)
+            exit "$rc"
+          elif [ "$1" = "inspect" ]; then
+            echo "false"
+            exit 0
+          elif [ "$1" = "start" ]; then
+            exit 0
+          elif [ "$1" = "exec" ]; then
+            echo "/usr/bin/python3"
+            exit 0
+          fi
+          exit 0
+        mode: "0755"
+      become: true

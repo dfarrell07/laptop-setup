@@ -2,183 +2,641 @@
 # roles/claude/tasks/main.yml
 # Claude Code install, instance isolation, settings.
 
+# --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: SECURITY assert claude_install_url is constrained to known-safe domains (defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always
+  # (only --tags something would skip this, but that's acceptable). Do NOT add tags: [always]
+  # as that would allow --skip-tags always to bypass this defense-in-depth check.
+  ansible.builtin.assert:
+    that:
+      - claude_install_url | default('https://claude.ai/install.sh') is match('^https://(claude\.ai|anthropic\.com)/')
+    fail_msg: >-
+      SECURITY: claude_install_url must start with https:// and use claude.ai or
+      anthropic.com domain. An arbitrary URL would cause the installer to download
+      and execute an arbitrary shell script during provisioning (RCE).
+      This check is duplicated in pre_flight_checks.yml; it runs again here to protect
+      against --start-at-task flag bypassing play-level pre_tasks. Allowed:
+      https://claude.ai/* or https://anthropic.com/*.
+
+- name: SECURITY assert claude_log_dir contains only safe path characters (defense-in-depth)
+  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always
+  # (only --tags something would skip this, but that's acceptable). Do NOT add tags: [always]
+  # as that would allow --skip-tags always to bypass this defense-in-depth check.
+  ansible.builtin.assert:
+    that:
+      - claude_log_dir | default('') is match('^[a-zA-Z0-9/._~-]*$')
+    fail_msg: >-
+      SECURITY: claude_log_dir contains characters outside [a-zA-Z0-9/._~-].
+      An attacker can inject logrotate stanza syntax (braces, newlines) via
+      --start-at-task, bypassing pre_tasks guards. The injected postrotate
+      script executes as root when logrotate.timer fires, enabling shadow
+      exfiltration or arbitrary local privilege escalation.
+      This check duplicates pre_flight_checks.yml to protect against
+      --start-at-task bypass. Use only simple directory paths in claude_log_dir.
+
 # --- Install Claude Code ---
 - name: Check if Claude Code is installed
   ansible.builtin.command:
-    cmd: claude --version
+    cmd: "{{ claude_bin_path }} --version"
   register: claude_version_check
   changed_when: false
   failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+
+- name: Fail when install method is unrecognized
+  ansible.builtin.assert:
+    that:
+      - claude_install_method in ['native', 'skip']
+    fail_msg: >-
+      claude_install_method '{{ claude_install_method }}' is unrecognized; valid values: 'native', 'skip'.
+
+- name: Warn when claude_pinned_version is unset (supply chain advisory — sha256 also unset)
+  ansible.builtin.debug:
+    msg: >-
+      SUPPLY CHAIN ADVISORY: claude_pinned_version is not set in config.yml.
+      Downloading the latest installer from {{ claude_install_url }} installs
+      whatever version the CDN currently serves. Set claude_pinned_version
+      (e.g. "1.0.3") in config.yml to pin to a specific release.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_pinned_version | length == 0
+    - claude_install_sha256 | length == 0  # sha256 fail gate fires next; this is informational context
+
+- name: Fail when claude_install_sha256 is set but claude_pinned_version is unset (incomplete version pin)
+  ansible.builtin.fail:
+    msg: >-
+      SUPPLY CHAIN: claude_install_sha256 is set in config.yml but claude_pinned_version is not.
+      The sha256 hash verifies the installer script content but does not pin the Claude Code
+      binary version that script installs — install.sh may download "latest" internally, so
+      different binary versions are installed across provisioning runs even when sha256 passes.
+      Set claude_pinned_version (e.g. "1.0.3") alongside claude_install_sha256 to pin both the
+      installer content and the installed binary version. The CLAUDE_VERSION environment variable
+      is forwarded to the installer when claude_pinned_version is set (main.yml line 143).
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_pinned_version | length == 0
+    - claude_install_sha256 | length > 0
+
+- name: Warn when claude_install_sha256 is unset and Claude already installed (integrity gap)
+  ansible.builtin.debug:
+    msg: >-
+      SUPPLY CHAIN ADVISORY: claude_install_sha256 is not set in config.yml and Claude Code
+      is already installed. SHA256 verification is only enforced on first install or
+      version-pinned upgrades. The currently installed binary has not been hash-verified
+      by Ansible and may have been updated via 'claude update' outside Ansible control.
+      Obtain the SHA256 for the currently installed release and set claude_install_sha256
+      in config.yml, together with claude_pinned_version, so future re-provisions
+      re-verify the installer before running it.
+  when:
+    - claude_install_method == 'native'
+    - claude_install_sha256 | length == 0
+    - claude_version_check.rc == 0
+    - claude_pinned_version | length == 0
+
+- name: Fail when claude_install_sha256 is unset (hash required for integrity verification)
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: claude_install_sha256 is not set in config.yml.
+      Provisioning requires a SHA256 hash for the Claude Code installer to guard against
+      CDN compromise, rogue certificates, or DNS/BGP hijacks that could deliver arbitrary
+      shell code. This check runs regardless of whether Claude is already installed — a
+      binary updated via 'claude update' outside Ansible is unverified until a hash is set.
+      Per-release hash-fetch workflow:
+        curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh
+        sha256sum /tmp/claude-install.sh
+      Set claude_install_sha256: <hash> in config.yml and re-run provisioning.
+      The hash changes with each Claude Code release; update it after each upstream release.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_install_sha256 | length == 0
+
+- name: Assert claude_install_sha256 format if set (format validation)
+  ansible.builtin.assert:
+    that:
+      - claude_install_sha256 | string is match('^[a-f0-9]{64}$')
+    fail_msg: >-
+      SECURITY: claude_install_sha256 in config.yml is not a valid SHA256 hash.
+      Must be 64 lowercase hexadecimal characters. Got: {{ claude_install_sha256 }}.
+  when:
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+    - claude_install_sha256 | length > 0
 
 - name: Install Claude Code via native binary
-  ansible.builtin.shell:  # noqa: command-instead-of-shell risky-shell-pipe command-instead-of-module no-changed-when
-    cmd: "curl -fsSL {{ claude_install_url }} | bash"
   when:
-    - claude_version_check.rc != 0
+    - claude_version_check.rc != 0 or (claude_pinned_version | length > 0
+      and claude_pinned_version not in
+      (claude_version_check.stdout | default('') | trim).split())
     - claude_install_method == 'native'
+    - packages_install_binaries | bool
+  block:
+    # SECURITY: claude_install_sha256 is mandatory (provisioning fails above if unset).
+    # get_url checksum= downloads and verifies atomically; the hash is validated before
+    # the script is executed. Domain restriction (claude.ai/anthropic.com) + HTTPS provide
+    # transport-layer integrity; the SHA256 check adds content integrity independent of TLS.
+    - name: Create secure temporary file for Claude Code install script
+      ansible.builtin.tempfile:
+        state: file
+        prefix: claude-install.
+        suffix: .sh
+      register: _claude_temp_file
 
-# --- Instance isolation directories ---
-- name: Create work instance config directory
+    - name: Download Claude Code install script to temporary file
+      ansible.builtin.get_url:
+        url: "{{ claude_install_url }}"
+        dest: "{{ _claude_temp_file.path }}"
+        mode: "0700"
+        timeout: 60
+        # SECURITY: omit branch replaced with a deliberately-invalid dummy hash so that
+        # if the ansible.builtin.fail guard above is bypassed (e.g. --start-at-task),
+        # get_url fails at checksum mismatch rather than silently downloading unverified.
+        checksum: >-
+          {{ ('sha256:' ~ claude_install_sha256) if claude_install_sha256 | length > 0 else
+          'sha256:0000000000000000000000000000000000000000000000000000000000000000' }}
+
+    - name: Run Claude Code install script
+      ansible.builtin.command:  # noqa: no-changed-when
+        cmd: bash "{{ _claude_temp_file.path }}"
+        chdir: /tmp
+      environment: "{{ {'CLAUDE_VERSION': claude_pinned_version} if claude_pinned_version else {} }}"
+      timeout: 150
+
+  rescue:
+    - name: Clean up Claude Code install script on failure
+      ansible.builtin.file:
+        path: "{{ _claude_temp_file.path }}"
+        state: absent
+      failed_when: false
+      when: _claude_temp_file is defined
+
+    - name: Record Claude install failure (CSB restriction)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: claude
+        _csb_task_name: "Install Claude Code via native binary"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install Claude Code manually after provisioning:
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+        _csb_ticket_summary: "Cannot install Claude Code on CSB (fapolicyd blocks installer)"
+        _csb_ticket_body: >-
+          The Claude Code installer could not run ({{ claude_install_url }} may be blocked
+          by fapolicyd). Install manually after provisioning:
+          curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+      when: csb_rhel
+    - name: Fail — Claude Code install failed on non-CSB machine
+      ansible.builtin.fail:
+        msg: >-
+          Claude Code install failed ({{ claude_install_url }} may be blocked).
+          Install manually: curl -fsSL {{ claude_install_url }} -o /tmp/claude-install.sh && bash /tmp/claude-install.sh
+      when: not csb_rhel
+
+# --- Instance isolation directories and settings ---
+# Build the active instance list. Three cases:
+#   default only:    default always present; personal when claude_personal_instance_enabled
+#   +work:           profile=work adds claude_work_config_dir
+#   +remote-control: is_macos + claude_remote_control_enabled adds claude_remote_control_config_dir
+  always:
+    - name: Remove Claude Code install script
+      ansible.builtin.file:
+        path: "{{ _claude_temp_file.path }}"
+        state: absent
+      failed_when: false
+      when: _claude_temp_file is defined
+- name: Set active Claude instance directories
+  ansible.builtin.set_fact:
+    _claude_instances: >-
+      {{ ([claude_default_config_dir]
+          + ([claude_personal_config_dir] if (claude_personal_instance_enabled | bool) else [])
+          + ([claude_work_config_dir] if (profile == 'work') else [])
+          + ([claude_remote_control_config_dir] if (is_macos and claude_remote_control_enabled | bool) else []))
+         | unique }}
+
+- name: Create Claude instance config directories
   ansible.builtin.file:
-    path: "{{ claude_work_config_dir }}"
+    path: "{{ item }}"
     state: directory
     mode: "0700"
-  when: profile == 'work'
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
-- name: Create personal instance config directory
+- name: Ensure ~/.config/claude directory exists
   ansible.builtin.file:
-    path: "{{ claude_personal_config_dir }}"
+    path: "{{ claude_queue_runtime_config_dir }}"
     state: directory
     mode: "0700"
+  when: profile == 'work' or claude_queue_enabled | bool
 
-# --- Settings ---
-- name: Deploy work instance settings
-  ansible.builtin.template:
-    src: settings.json.j2
-    dest: "{{ claude_work_config_dir }}/settings.json"
+- name: Deploy Claude work-env file
+  ansible.builtin.copy:
+    content: |
+      export CLAUDE_CONFIG_DIR={{ claude_work_config_dir }}
+      # Source Vertex backend env (ANTHROPIC_VERTEX_PROJECT_ID lives outside repo in claude-code-vertex/env.sh)
+      [ -f "${HOME}/.config/claude-code-vertex/env.sh" ] && . "${HOME}/.config/claude-code-vertex/env.sh"
+    dest: "{{ claude_queue_runtime_config_dir }}/work-env"
     mode: "0600"
+    force: true
   when: profile == 'work'
 
-- name: Deploy personal instance settings
-  ansible.builtin.template:
-    src: settings.json.j2
-    dest: "{{ claude_personal_config_dir }}/settings.json"
-    mode: "0600"
+- name: Remove Claude work-env file when not work profile
+  ansible.builtin.file:
+    path: "{{ claude_queue_runtime_config_dir }}/work-env"
+    state: absent
+  when: profile != 'work'
 
-# --- Instance CLAUDE.md ---
-- name: Deploy work instance CLAUDE.md
+# Deploy security-critical settings (sandbox, deny lists, telemetry, MCP policy)
+# to settings.local.json, not settings.json.  Claude Code's /config command
+# overwrites settings.json (theme, model, etc.) but does NOT touch
+# settings.local.json, so security policy survives user preference changes.
+# Claude Code merges both files; settings.local.json takes precedence.
+- name: Deploy instance settings.local.json
+  ansible.builtin.template:
+    src: settings.local.json.j2
+    dest: "{{ item }}/settings.local.json"
+    mode: "0600"
+    force: true
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
+
+- name: Deploy instance CLAUDE.md (managed by Ansible, use CLAUDE.local.md for local edits)
   ansible.builtin.template:
     src: CLAUDE.md.j2
-    dest: "{{ claude_work_config_dir }}/CLAUDE.md"
+    dest: "{{ item }}/CLAUDE.md"
     mode: "0600"
-  when: profile == 'work'
-
-- name: Deploy personal instance CLAUDE.md
-  ansible.builtin.template:
-    src: CLAUDE.md.j2
-    dest: "{{ claude_personal_config_dir }}/CLAUDE.md"
-    mode: "0600"
+    force: true
+  loop: "{{ _claude_instances }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
 # --- Security: ~/.claude permissions ---
 # Claude Code resets ~/.claude to 0755 on every launch, defeating a one-time
 # chmod.  Use systemd-tmpfiles to re-apply 0700 at each boot instead.
 - name: Deploy claude-privacy tmpfiles config
-  ansible.builtin.copy:
-    content: |
-      # Gate ~/.claude so world cannot traverse into it.
-      # Claude Code resets this to 0755 on launch; tmpfiles restores 0700 at boot.
-      z %h/.claude 0700 - - -
-    dest: "{{ ansible_user_dir }}/.config/user-tmpfiles.d/claude-privacy.conf"
+  ansible.builtin.template:
+    src: claude-privacy.conf.j2
+    dest: "{{ ansible_facts['user_dir'] }}/.config/user-tmpfiles.d/claude-privacy.conf"
     mode: "0644"
-  when: ansible_system == 'Linux'
-
-- name: Apply claude-privacy tmpfiles now
-  ansible.builtin.command:
-    cmd: systemd-tmpfiles --user --create
-  changed_when: false
-  when: ansible_system == 'Linux'
-
-- name: Set ~/.claude directory permissions (macOS fallback)
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.claude"
-    mode: "0700"
-  when: ansible_system == 'Darwin'
-  failed_when: false
+  when: is_linux
+  notify: Apply claude-privacy tmpfiles
 
 # --- Git safety (defense-in-depth) ---
 # core.fsmonitor, safe.bareRepository, core.hooksPath are set via gitconfig.j2
-- name: Remove unsafe safe.directory entries  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: git config --global --unset-all safe.directory
+- name: Remove unsafe safe.directory wildcard entries  # noqa: command-instead-of-module risky-shell-pipe
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      found=$(git config --global --get-all safe.directory 2>/dev/null | grep -cE '^\*{1,2}$|^/$' || true)
+      if [[ "$found" -gt 0 ]]; then
+        for pat in '^\*$' '^\*\*$' '^/$'; do
+          git config --global --unset-all safe.directory "$pat" 2>/dev/null || true
+        done
+        echo CHANGED; exit 0
+      fi
+      exit 0
+    executable: /bin/bash
   register: claude_safe_dir
-  changed_when: claude_safe_dir.rc == 0
-  failed_when: false
+  changed_when: "'CHANGED' in claude_safe_dir.stdout"
 
 # --- Task queue (systemd timer + poller script) ---
+- name: Assert claude_queue_repo is set when queue is enabled
+  ansible.builtin.assert:
+    that:
+      - claude_queue_repo | length > 0
+    fail_msg: "claude_queue_repo must be set in config.yml when claude_queue_enabled=true"
+  when: claude_queue_enabled | bool
+
+- name: Assert claude_queue_allowed_authors is non-empty when queue is enabled
+  ansible.builtin.assert:
+    that:
+      - claude_queue_allowed_authors | length > 0
+    fail_msg: >-
+      claude_queue_allowed_authors must be set in config.yml when claude_queue_enabled=true.
+      Empty list disables author allowlist, allowing any GitHub user to trigger provisioning.
+      Set to a list of trusted GitHub logins, e.g.: claude_queue_allowed_authors: [myuser]
+  when: claude_queue_enabled | bool
+
+- name: Assert dotfiles_github_user is set for macOS launchd agent naming
+  ansible.builtin.assert:
+    that:
+      - dotfiles_github_user | length > 0
+      - dotfiles_github_user != 'CHANGE_ME'
+    fail_msg: "dotfiles_github_user must be set in config.yml (used in launchd reverse-DNS label)"
+  when:
+    - is_macos
+    - claude_queue_enabled | bool or claude_remote_control_enabled | bool
+
+- name: Install util-linux for flock (macOS, queue enabled)
+  community.general.homebrew:
+    name: util-linux
+    state: present
+  when:
+    - claude_queue_enabled | bool
+    - is_macos
+
+- name: Deploy queue-repos.conf stub (first run only — edit to add repos)
+  ansible.builtin.template:
+    src: queue-repos.conf.j2
+    dest: "{{ claude_queue_runtime_config_dir }}/queue-repos.conf"
+    mode: "0600"
+    force: false
+  when: claude_queue_enabled | bool
+
 - name: Deploy task queue poller script
   ansible.builtin.copy:
     src: claude-queue-poller.sh
-    dest: "{{ ansible_user_dir }}/.local/bin/claude-queue-poller.sh"
+    dest: "{{ claude_queue_poller_path }}"
     mode: "0700"
   when: claude_queue_enabled | bool
 
-- name: Deploy task queue systemd service
-  ansible.builtin.template:
-    src: claude-queue.service.j2
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.service"
-    mode: "0644"
+- name: Deploy and enable task queue systemd units
   when:
     - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
+    - is_linux
+    - not (system_is_container)  # user inotify triggers daemon-reload, crashes container PID 1
+  block:
+    - name: Ensure ~/.config/systemd/user directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+        state: directory
+        mode: "0755"
 
-- name: Deploy task queue systemd timer
-  ansible.builtin.template:
-    src: claude-queue.timer.j2
-    dest: "{{ ansible_user_dir }}/.config/systemd/user/claude-queue.timer"
-    mode: "0644"
+    - name: Deploy task queue systemd service
+      ansible.builtin.template:
+        src: claude-queue.service.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.service"
+        mode: "0644"
+      register: _queue_service
+
+    - name: Deploy task queue systemd timer
+      ansible.builtin.template:
+        src: claude-queue.timer.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/claude-queue.timer"
+        mode: "0644"
+      register: _queue_timer
+
+    - name: Find unmanaged unit files in ~/.config/systemd/user
+      ansible.builtin.find:
+        paths: "{{ ansible_facts['user_dir'] }}/.config/systemd/user"
+        patterns:
+          - "*.service"
+          - "*.timer"
+        file_type: any
+        recurse: false
+      register: _systemd_user_units
+
+    - name: Find transient unit files in user systemd transient directory
+      ansible.builtin.find:
+        paths: "/run/user/{{ ansible_facts['user_uid'] }}/systemd/transient"
+        patterns:
+          - "*.service"
+          - "*.timer"
+        file_type: any
+        recurse: false
+      register: _systemd_transient_units
+      failed_when: false
+
+    - name: Fail on transient systemd user unit files before daemon-reload
+      ansible.builtin.fail:
+        msg: >-
+          Transient systemd user unit file detected in
+          /run/user/{{ ansible_facts['user_uid'] }}/systemd/transient/:
+          {{ item.path }}. A transient unit pre-planted here can shadow
+          vendor or managed units before daemon-reload. Remove it before
+          re-running provisioning.
+      loop: "{{ _systemd_transient_units.files | default([]) }}"
+
+    - name: Inspect the GNOME SSH agent mask deployed by dotfiles
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/gcr-ssh-agent.service"
+        follow: false
+        get_checksum: false
+      register: _claude_gcr_agent_mask
+      when: >-
+        'gcr-ssh-agent.service' in
+        (_systemd_user_units.files | map(attribute='path') | map('basename') | list)
+
+    - name: Assert the managed GNOME SSH agent mask points to /dev/null
+      ansible.builtin.assert:
+        that:
+          - _claude_gcr_agent_mask.stat.islnk | default(false)
+          - _claude_gcr_agent_mask.stat.lnk_source | default('') == '/dev/null'
+        fail_msg: "SECURITY: gcr-ssh-agent.service must be the /dev/null mask deployed by dotfiles."
+      when: not _claude_gcr_agent_mask.skipped | default(false)
+
+    - name: Read the playbook-managed SSH agent unit before accepting it
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      loop: "{{ _systemd_user_units.files }}"
+      when:
+        - item.path | basename == 'ssh-agent.service'
+        - item.isreg | default(false)
+      register: _claude_ssh_agent_units
+      no_log: true
+
+    - name: Assert the SSH agent unit matches the dotfiles role template
+      vars:
+        _claude_dotfiles_defaults: "{{ lookup('file', role_path ~ '/../dotfiles/defaults/main.yml') | from_yaml }}"
+        _claude_agent_template_vars:
+          dotfiles_ssh_agent_timeout: "{{ dotfiles_ssh_agent_timeout | default(_claude_dotfiles_defaults.dotfiles_ssh_agent_timeout) }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item.content | b64decode | trim) ==
+            (lookup('template', role_path ~ '/../dotfiles/templates/ssh-agent.service.j2',
+            template_vars=_claude_agent_template_vars) | trim)
+        fail_msg: >-
+          SECURITY: ssh-agent.service differs from the playbook-managed template;
+          run the dotfiles role before enabling the queue.
+      loop: "{{ _claude_ssh_agent_units.results }}"
+      when: not item.skipped | default(false)
+      no_log: true
+
+    - name: Warn on unmanaged systemd user unit files before daemon-reload
+      ansible.builtin.fail:
+        msg: >-
+          Unmanaged systemd user unit file detected before daemon-reload:
+          {{ item.path }}. This file is not managed by this playbook and may
+          have been planted by an attacker. Remove it or add it to the
+          allowlist before re-running provisioning.
+      loop: "{{ _systemd_user_units.files }}"
+      when: >-
+        item.path | basename not in ['claude-queue.service', 'claude-queue.timer', 'ssh-agent.service', 'gcr-ssh-agent.service']
+        or (not item.isreg | default(false) and item.path | basename != 'gcr-ssh-agent.service')
+
+    - name: Reload systemd user daemon after deploying queue units  # noqa: no-handler
+      ansible.builtin.systemd:
+        scope: user
+        daemon_reload: true
+      when: _queue_service.changed or _queue_timer.changed
+      register: _daemon_reload
+      ignore_errors: true
+
+    - name: Warn if daemon reload failed (no active user systemd session)
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: systemd user daemon-reload failed ({{ _daemon_reload.msg | default('unknown error') }}).
+          This is expected if there is no active user systemd session; the timer will be active after login.
+      when: _daemon_reload.failed | default(false)
+
+    - name: Enable task queue timer
+      ansible.builtin.systemd:
+        name: claude-queue.timer
+        scope: user
+        state: started
+        enabled: true
+      register: _timer_enable
+      ignore_errors: true  # required: sets .failed=True so Warn task below can trigger; do NOT replace with failed_when: false
+
+- name: Warn if timer enable failed (no active user systemd session)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: claude-queue.timer enable failed ({{ _timer_enable.msg | default('unknown error') }}).
+      This is expected on real machines provisioned without an active user session; the timer will be active after login.
   when:
     - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
+    - is_linux
+    - not (system_is_container)
+    - _timer_enable.failed | default(false)
 
-- name: Enable task queue timer
+- name: Get primary group name for logrotate su directive
+  ansible.builtin.command:
+    cmd: id -gn
+  register: _primary_group_name
+  changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - claude_queue_enabled | bool
+    - is_linux
+    - not (system_is_container)
+
+- name: Deploy logrotate config for claude-queue-poller.log
+  ansible.builtin.template:
+    src: claude-queue-poller-logrotate.j2
+    dest: /etc/logrotate.d/claude-queue-poller
+    mode: "0644"
+  become: true
+  tags: [become]
+  when:
+    - claude_queue_enabled | bool
+    - is_linux
+    - not (system_is_container)
+
+# --- Disable task queue when not enabled (cleanup if previously enabled) ---
+- name: Stop and disable task queue timer (when disabled)
   ansible.builtin.systemd:
     name: claude-queue.timer
     scope: user
-    state: started
-    enabled: true
+    state: stopped
+    enabled: false
+  when:
+    - not (claude_queue_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user systemd stop crashes Podman container PID 1
+  failed_when: false
+
+- name: Remove task queue systemd unit files (when disabled)
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/.config/systemd/user/{{ item }}"
+    state: absent
+  loop:
+    - claude-queue.service
+    - claude-queue.timer
+  register: _claude_queue_unit_removal
+  when:
+    - not (claude_queue_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # files do not exist in containers (deploy was skipped)
+
+- name: Remove task queue poller script (when disabled)
+  ansible.builtin.file:
+    path: "{{ claude_queue_poller_path }}"
+    state: absent
+  when:
+    - not (claude_queue_enabled | bool)
+
+- name: Reload systemd user daemon after removing task queue unit files  # noqa: no-handler
+  ansible.builtin.systemd:
+    scope: user
     daemon_reload: true
   when:
-    - claude_queue_enabled | bool
-    - ansible_system == 'Linux'
-  failed_when: false
+    - not (claude_queue_enabled | bool)
+    - is_linux
+    - not (system_is_container)  # scope:user daemon-reload crashes Podman container PID 1
+    - _claude_queue_unit_removal.changed
+  ignore_errors: true
+  register: _claude_queue_daemon_reload_cleanup
+
+- name: Warn if systemd user daemon reload failed after unit removal
+  ansible.builtin.debug:
+    msg: "WARNING: daemon-reload after unit removal failed: {{ _claude_queue_daemon_reload_cleanup.msg | default('unknown error') }}"
+  when: _claude_queue_daemon_reload_cleanup is defined and _claude_queue_daemon_reload_cleanup.failed | default(false)
+
+- name: Remove logrotate config for claude-queue-poller.log (when disabled)
+  ansible.builtin.file:
+    path: /etc/logrotate.d/claude-queue-poller
+    state: absent
+  become: true
+  tags: [become]
+  when:
+    - not (claude_queue_enabled | bool)
+    - is_linux
+    - not (system_is_container)
+
+# --- macOS: launchd agent list (single source of truth for cleanup and load loops) ---
+- name: Set launchd agent list
+  ansible.builtin.set_fact:
+    _claude_launchd_agents: >-
+      {{ [] if not is_macos else [
+         {'label': 'queue',
+          'plist_path': ansible_facts['user_dir'] ~
+          '/Library/LaunchAgents/com.' ~ dotfiles_github_user ~
+          '.claude-queue.plist',
+          'enabled': claude_queue_enabled | bool},
+         {'label': 'remote-control',
+          'plist_path': ansible_facts['user_dir'] ~
+          '/Library/LaunchAgents/com.' ~ dotfiles_github_user ~
+          '.claude-remote-control.plist',
+          'enabled': claude_remote_control_enabled | bool}] }}
+
+# --- macOS: launchd cleanup when disabled ---
+- name: Cleanup disabled launchd agents (macOS)
+  ansible.builtin.include_tasks: launchd_cleanup.yml
+  vars:
+    _launchd_label: "{{ item.label }}"
+    _launchd_plist_path: "{{ item.plist_path }}"
+    _launchd_enabled: "{{ item.enabled }}"
+  loop: "{{ _claude_launchd_agents }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: is_macos
+
+- name: Warn when Remote Control is enabled on Linux (macOS-only feature)
+  ansible.builtin.debug:
+    msg: >-
+      claude_remote_control_enabled is true but no systemd unit is configured for Linux
+      — launchd autostart is macOS-only. Run `claude --remote-control` manually on Linux if needed.
+  when: claude_remote_control_enabled | bool and is_linux
 
 # --- macOS: launchd services ---
-- name: Ensure log directory exists (macOS)
+- name: Ensure log directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.local/share/log"
+    path: "{{ claude_log_dir }}"
     state: directory
-    mode: "0755"
-  when: ansible_os_family == 'Darwin'
+    mode: "0750"
+  when: claude_queue_enabled | bool or (is_macos and claude_remote_control_enabled | bool)
 
-- name: Deploy task queue launchd plist (macOS)
-  ansible.builtin.template:
-    src: claude-queue.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-queue.plist"
-    mode: "0644"
-  when:
-    - ansible_os_family == 'Darwin'
-    - claude_queue_enabled | bool
-
-- name: Load task queue launchd plist (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-queue.plist"
-  when:
-    - ansible_os_family == 'Darwin'
-    - claude_queue_enabled | bool
-  changed_when: false
-  failed_when: false
-
-- name: Deploy Remote Control launchd plist (macOS)
-  ansible.builtin.template:
-    src: claude-remote-control.plist.j2
-    dest: "{{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist"
-    mode: "0644"
-  when:
-    - ansible_os_family == 'Darwin'
-    - claude_remote_control_enabled | bool
-
-- name: Load Remote Control launchd plist (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: "launchctl load -w {{ ansible_user_dir }}/Library/LaunchAgents/com.dfarrell07.claude-remote-control.plist"
-  when:
-    - ansible_os_family == 'Darwin'
-    - claude_remote_control_enabled | bool
-  changed_when: false
-  failed_when: false
-
-- name: Start brew autoupdate (macOS)  # noqa: command-instead-of-module
-  ansible.builtin.command:
-    cmd: brew autoupdate start 43200 --upgrade --cleanup
-  when: ansible_os_family == 'Darwin'
-  changed_when: false
-  failed_when: false
+- name: Manage enabled launchd agents (macOS)
+  ansible.builtin.include_tasks: launchd_load.yml
+  vars:
+    _launchd_label: "{{ item.label }}"
+    _launchd_plist_path: "{{ item.plist_path }}"
+    _launchd_enabled: "{{ item.enabled }}"
+  loop: "{{ _claude_launchd_agents }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: is_macos

@@ -1,0 +1,36 @@
+---
+- name: Verify config template-injection test results
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Read verified fixture list
+      ansible.builtin.slurp:
+        src: /tmp/ssti-guard-results.json
+      register: _ssti_report
+
+    - name: Assert every expected fixture was verified
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_ssti_report.content | b64decode | from_json) ==
+            ['string', 'list', 'nested mapping', 'statement', 'unsafe tagged template',
+            'missing config after rejected payload', 'malformed YAML', 'non-mapping YAML',
+            'safe values', 'unsafe tagged safe value']
+
+    - name: Inspect payload execution marker
+      ansible.builtin.stat:
+        path: /tmp/ssti-guard-payload-executed
+      register: _ssti_payload_marker
+
+    - name: Inspect controller payload execution marker
+      ansible.builtin.stat:
+        path: /tmp/ssti-guard-payload-executed
+      delegate_to: localhost
+      become: false
+      register: _ssti_controller_marker
+
+    - name: Assert malicious payloads never executed
+      ansible.builtin.assert:
+        that:
+          - not _ssti_payload_marker.stat.exists
+          - not _ssti_controller_marker.stat.exists

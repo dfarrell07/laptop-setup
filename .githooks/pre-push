@@ -1,0 +1,141 @@
+#!/bin/bash
+# Pre-push hook: enforce vault encryption, Signed-off-by, configured GPG signing, and gitleaks
+# SECURITY: Blocks push if:
+#   1. Any vault.yml file is unencrypted (secrets exposure prevention)
+#   2. Any commit lacks Signed-off-by trailer (supply-chain validation)
+#   3. Critical supply-chain files modified without a signature when policy enables signing
+#   4. Secrets detected by gitleaks (credentials leakage prevention)
+# DEFENSE-IN-DEPTH: This hook can be bypassed via core.hooksPath override. GitHub Actions provides secondary protection.
+# Together they provide multi-layer defense against supply-chain attacks and secrets leakage.
+
+set -euo pipefail
+
+failed=0
+_repo_root=$(git rev-parse --show-toplevel)
+_gpg_policy=$("$_repo_root/scripts/gpg-policy.sh")
+
+# Read Git's update stream once. Each check must see every pushed ref.
+updates=()
+while IFS= read -r update; do
+  [ -n "$update" ] && updates+=("$update")
+done
+
+# SECURITY: Verify hooks are enabled and not bypassed via core.hooksPath override
+# Attack: git config --local core.hooksPath /dev/null (or any other path) disables this entire hook
+# Detection: Compare current config against expected value; fatal error if overridden
+current_hookspath=$(git config --local --get core.hooksPath 2>/dev/null || true)
+if [ -n "$current_hookspath" ] && [ "$current_hookspath" != ".githooks" ]; then
+  echo "CRITICAL SECURITY ERROR: core.hooksPath override detected" >&2
+  echo "  Current setting: core.hooksPath = $current_hookspath" >&2
+  echo "  Expected:       core.hooksPath = .githooks (or unset)" >&2
+  echo "" >&2
+  echo "This override disables pre-push vault checks." >&2
+  echo "An attacker may have modified .git/config to bypass hook enforcement." >&2
+  echo "" >&2
+  echo "FIX: Restore core.hooksPath to .githooks or unset it:" >&2
+  echo "  make hooks" >&2
+  echo "Then restart the push." >&2
+  echo "" >&2
+  echo "Note: GitHub Actions will also catch and reject any pushed commits" >&2
+  echo "      if vault.yml is unencrypted, providing secondary protection." >&2
+  exit 1
+fi
+
+# Iterate through vault files in the push
+while IFS= read -r -d '' f; do
+  if [ ! -f "$f" ]; then
+    continue
+  fi
+
+  # Check if file starts with $ANSIBLE_VAULT (encrypted marker)
+  if ! head -1 "$f" | grep -q '^\$ANSIBLE_VAULT'; then
+    # Accept only the restricted secret-free template; all real values need encryption.
+    if python3 "$_repo_root/scripts/verify-vault-stub.py" < "$f"; then
+      echo "NOTE: $f is a plaintext stub (vault_placeholder marker + empty values) — OK" >&2
+      continue
+    fi
+    echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
+    echo "ERROR: Unencrypted vault files cannot be pushed to prevent secrets exposure." >&2
+    failed=1
+  else
+    # File has vault marker on line 1; validate actual encryption by attempting decryption
+    # This prevents marker spoofing (plaintext file with forged $ANSIBLE_VAULT prefix).
+    # Attack: Attacker writes plaintext secrets with $ANSIBLE_VAULT;1.1;AES256 prefix to bypass this check.
+    # Defense: Require actual decryption success (not just format validation).
+    vault_pass_file=""
+    if [ -f "vault-pass.sh" ]; then
+      vault_pass_file="vault-pass.sh"
+    elif [ -f "scripts/vault-pass-ci.sh" ]; then
+      # Fallback to CI stub (e.g., in CI environments where vault-pass.sh is gitignored)
+      vault_pass_file="scripts/vault-pass-ci.sh"
+    fi
+
+    if [ -n "$vault_pass_file" ]; then
+      if ! ansible-vault view --vault-password-file="$vault_pass_file" "$f" >/dev/null 2>&1; then
+        echo "ERROR: $f has vault marker but is not validly encrypted or password is incorrect." >&2
+        echo "ERROR: Run: ansible-vault encrypt $f" >&2
+        failed=1
+      fi
+    else
+      # vault-pass.sh and vault-pass-ci.sh both missing: cannot validate decryption, fail-fast
+      echo "ERROR: $f has vault marker but vault-pass.sh/scripts/vault-pass-ci.sh is missing." >&2
+      echo "ERROR: Cannot validate encryption without password provider. Run: ansible-vault view $f" >&2
+      echo "ERROR: (Requires vault-pass.sh or scripts/vault-pass-ci.sh in repo or environment)" >&2
+      failed=1
+    fi
+  fi
+done < <(git ls-files -z -- '*vault.yml')
+
+# Validate each ref once; new branches have a zero remote SHA, deletions a zero local SHA.
+zero_sha=0000000000000000000000000000000000000000
+critical_pattern='^(scripts/|\.githooks/|collections-dist/|\.github/'
+critical_pattern+='|Makefile(\.sha256)?$|roles/(packages|repos_dnf)/defaults/main\.yml$'
+critical_pattern+='|requirements-(test\.lock|bootstrap\.txt)$|package(-lock)?\.json$|\.gitleaks\.toml$|\.gpg-enforcement$)'
+
+for update in "${updates[@]}"; do
+  read -r _local_ref local_sha remote_ref remote_sha <<< "$update"
+  [ "$local_sha" = "$zero_sha" ] && continue
+
+  if [ "$remote_sha" = "$zero_sha" ]; then
+    if ! base_sha=$(git merge-base "$local_sha" origin/main); then
+      echo "ERROR: Cannot determine the push base; fetch origin/main first" >&2
+      failed=1
+      continue
+    fi
+  else
+    base_sha="$remote_sha"
+  fi
+
+  range="${base_sha}..${local_sha}"
+  if ! commits=$(git rev-list "$range"); then
+    echo "ERROR: Cannot inspect pushed commits for $remote_ref" >&2
+    failed=1
+    continue
+  fi
+
+  for commit in $commits; do
+    body=$(git log -1 --format=%B "$commit")
+    if ! grep -q '^Signed-off-by:' <<< "$body"; then
+      echo "ERROR: Commit $commit is missing Signed-off-by: trailer (use git commit -s)" >&2
+      failed=1
+    fi
+
+    modified_files=$(git diff-tree --root --no-commit-id --name-only -r -m "$commit")
+    if [ "$_gpg_policy" = enabled ] && grep -Eq "$critical_pattern" <<< "$modified_files"; then
+      if ! git verify-commit "$commit"; then
+        echo "ERROR: Commit $commit modifies supply-chain files without a valid signature" >&2
+        failed=1
+      fi
+    fi
+  done
+
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "ERROR: gitleaks is required before pushing (run make packages)" >&2
+    failed=1
+  elif ! gitleaks git --log-opts "$range" --redact --max-decode-depth 2; then
+    echo "ERROR: Secret scanning failed for $remote_ref" >&2
+    failed=1
+  fi
+done
+
+exit "$failed"

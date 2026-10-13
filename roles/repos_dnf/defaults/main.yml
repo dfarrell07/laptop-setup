@@ -1,2 +1,52 @@
 ---
+profile: work  # fallback for standalone invocation
+is_fedora: false  # fallback; authoritative value in group_vars/all/vars.yml
+csb_detected: false  # fallback; authoritative value in group_vars/all/vars.yml
+csb_rhel: false  # fallback; authoritative value in group_vars/all/vars.yml
+
+# Repo toggle fallbacks — authoritative values in group_vars/all/vars.yml.
+# Required here for standalone-invocability (see vars.yml line 46).
+repo_gh_cli: true
+repo_google_chrome: false
+repo_google_cloud_sdk: false
+repo_mullvad: true
+repo_docker_ce: false
+repo_redhat: true
+repo_rpmfusion_free: true
+repo_rpmfusion_nonfree: false
+repo_tailscale: true
+
 repos_dnf_google_chrome_repo: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
+
+# RPM Fusion GPG key fingerprints — pinned to detect MITM on initial key fetch.
+# Primary fingerprints of the upstream 2020 certificates published at
+# https://download1.rpmfusion.org/{free,nonfree}/fedora/RPM-GPG-KEY-rpmfusion-{free,nonfree}-fedora-2020
+# Free and nonfree use separate certificates; Fedora 44 release RPMs verify with these keys.
+repos_dnf_rpmfusion_gpg_fingerprint: "E9A491A3DE247814E7E067EAE06F8ECDD651FF2E"
+repos_dnf_rpmfusion_nonfree_gpg_fingerprint: "79BDB88F9BBF73910FD4095B6A2AF96194843C65"
+
+# Tailscale GPG key fingerprint — pinned to detect MITM on initial key fetch.
+# Fingerprint valid for: https://pkgs.tailscale.com/stable/fedora/repo.gpg
+# Compare the primary certificate fingerprint, excluding subkey fingerprints.
+repos_dnf_tailscale_gpg_fingerprint: "2596A99EAAB33821893C0A79458CA832957F5868"
+
+# Red Hat internal GPG key fingerprint (work profile only)
+# Pinned to detect MITM attacks on initial key fetch from internal Red Hat domains.
+# If GPG key is compromised at fetch time, fingerprint verification fails before import.
+# Fingerprint valid for: Red Hat internal package repos (pkgs.devel.redhat.com).
+# Must be defined in config.yml (gitignored) when repos_dnf_redhat_gpgkey is used.
+# To extract fingerprint: gpg --show-keys --with-colons /path/to/key.gpg | grep "^fpr" | cut -d: -f10
+repos_dnf_redhat_gpg_fingerprint: ""
+
+# Minimum google-cloud-cli version floor (MITM downgrade protection).
+# repo_gpgcheck: false on packages.cloud.google.com lets a MITM serve unsigned repomd.xml
+# that lists an older signed RPM; this floor ensures the installed version is not below a
+# known-good release. RPM-level gpgcheck still verifies payload authenticity.
+# Update when upgrading gcloud: rpm -q --queryformat '%{VERSION}' google-cloud-cli
+repos_dnf_gcloud_min_version: "500.0.0"
+
+# Internal Red Hat / work-profile repo URLs — set in config.yml (gitignored), NOT here.
+# If defined (in config.yml), these are used by the acli and redhat-internal repo tasks.
+# Setting them here (even commented-out and re-enabled) defeats the 'is defined' guard
+# and passes an empty baseurl to yum_repository, causing a cryptic failure.
+# See default.config.yml Additional toggles for the correct override location.

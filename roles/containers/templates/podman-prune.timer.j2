@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description={{ containers_prune_schedule | capitalize }} podman storage cleanup
+
+[Timer]
+OnCalendar={{ containers_prune_schedule | regex_replace('\n', '') }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

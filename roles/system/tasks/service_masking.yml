@@ -1,0 +1,611 @@
+---
+# Security: remove any pre-existing drop-in directories for units this file manages as masked.
+# An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
+# the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
+- name: Probe drop-in dirs for content before removal (csb_detected advisory)
+  ansible.builtin.find:
+    paths: "/etc/systemd/system/{{ item }}.d"
+    file_type: any
+    recurse: false
+  loop:
+    - bluetooth.service
+    - thermald.service
+    - ModemManager.service
+    - tuned-ppd.service
+    - tuned.service
+    - power-profiles-daemon.service
+    - cups-browsed.service
+    - cups.socket
+    - cups.path
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-pstoreoops.service
+    - abrt-xorg.service
+    - avahi-daemon.service
+    - avahi-daemon.socket
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+    - iscsi.service
+    - iscsid.service
+    - iscsi-init.service
+    - iscsi-onboot.service
+    - iscsi-shutdown.service
+    - iscsi-starter.service
+    - iscsid.socket
+    - iscsiuio.socket
+    - iscsiuio.service
+    - cockpit.service
+    - cockpit.socket
+    - ctrl-alt-del.target
+  register: _dropin_probe
+  when:
+    - csb_detected | bool
+    - not system_is_container
+    - not csb_rhel
+  failed_when: false
+
+- name: Warn on non-empty drop-in dirs before removal (possible IT-placed config on csb_detected)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: /etc/systemd/system/{{ item.item }}.d contains {{ item.matched }} file(s)
+      and will be removed by security hardening. Verify no IT-managed drop-in exists here
+      before continuing; re-add any legitimate IT config after provisioning.
+  loop: "{{ _dropin_probe.results | default([]) }}"
+  when:
+    - csb_detected | bool
+    - not system_is_container
+    - not csb_rhel
+    - item.matched | default(0) | int > 0
+
+- name: Remove pre-existing drop-in directories for managed masked units
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d"
+    state: absent
+  loop:
+    - bluetooth.service
+    - thermald.service
+    - ModemManager.service
+    - tuned-ppd.service
+    - tuned.service
+    - power-profiles-daemon.service
+    - cups-browsed.service
+    - cups.socket
+    - cups.path
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-pstoreoops.service
+    - abrt-xorg.service
+    - avahi-daemon.service
+    - avahi-daemon.socket
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+    - iscsi.service
+    - iscsid.service
+    - iscsi-init.service
+    - iscsi-onboot.service
+    - iscsi-shutdown.service
+    - iscsi-starter.service
+    - iscsid.socket
+    - iscsiuio.socket
+    - iscsiuio.service
+    - cockpit.service
+    - cockpit.socket
+    - ctrl-alt-del.target
+  when:
+    - not system_is_container
+    - not csb_rhel
+    - not csb_detected  # csb_detected (hybrid) may have IT-managed drop-ins; probe+warn above handles that path
+
+# --- Mask bluetooth (default: enabled; set system_disable_bluetooth: true in config.yml to disable) ---
+- name: Mask bluetooth service
+  ansible.builtin.systemd:
+    name: bluetooth.service
+    masked: true
+    force: true
+    state: stopped
+  when:
+    - system_disable_bluetooth | bool
+    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
+    - not system_is_container  # bluetooth not present in containers; mask+stop crash container systemd
+  failed_when: false
+
+- name: Bluetooth service enable and configure (system_disable_bluetooth disabled)
+  when:
+    - not (system_disable_bluetooth | bool)
+    - not csb_rhel  # RHEL CSB: IT manages bluetooth hardware policy
+    - not system_is_container  # bluetooth config resets in containers; handler restart reverts changes
+  block:
+    - name: Unmask bluetooth service when system_disable_bluetooth disabled
+      ansible.builtin.systemd:
+        name: bluetooth.service
+        masked: false
+        enabled: true
+        state: started
+      failed_when: false
+
+    - name: Stat /etc/bluetooth/main.conf
+      ansible.builtin.stat:
+        path: /etc/bluetooth/main.conf
+      register: system_bluetooth_conf_stat
+
+    - name: Set BlueZ Privacy=device in /etc/bluetooth/main.conf
+      ansible.builtin.lineinfile:
+        path: /etc/bluetooth/main.conf
+        regexp: '^#?Privacy\s*='
+        line: 'Privacy = {{ system_bluetooth_privacy | regex_replace("\n", "") }}'
+        insertafter: '^\[General\]'
+        create: false
+      when: system_bluetooth_conf_stat.stat.exists
+      notify: Restart bluetooth
+
+    - name: Set BlueZ Name in /etc/bluetooth/main.conf
+      ansible.builtin.lineinfile:
+        path: /etc/bluetooth/main.conf
+        regexp: '^#?Name\s*='
+        line: 'Name = {{ system_bluetooth_name | regex_replace("\n", "") }}'
+        insertafter: '^\[General\]'
+        create: false
+      when:
+        - system_bluetooth_conf_stat.stat.exists
+        - system_bluetooth_name | length > 0
+      notify: Restart bluetooth
+
+# --- Mask thermald (Intel-only; exits immediately on AMD hardware) ---
+- name: Mask/unmask thermald (Intel-only daemon)
+  vars:
+    _intel: "{{ 'Intel' in (ansible_facts['processor'] | default([]) | join(' ')) }}"
+  ansible.builtin.systemd:
+    name: thermald
+    masked: "{{ not _intel }}"
+    enabled: "{{ _intel }}"
+    state: "{{ 'stopped' if not _intel else 'started' }}"
+  when:
+    - not system_is_container  # thermald not present in containers; mask/stop crash container systemd
+    - not csb_rhel  # RHEL CSB: IT manages power management daemons
+    - is_dnf
+  failed_when: false
+
+# --- Mask ModemManager (WWAN/USB modems) ---
+- name: Mask ModemManager (system_disable_modemmanager enabled)
+  ansible.builtin.systemd:
+    name: ModemManager.service
+    masked: true
+    force: true
+    state: stopped
+  when:
+    - system_disable_modemmanager | bool
+    - not system_is_container  # no WWAN interfaces in containers; mask+stop crash container systemd
+    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
+  failed_when: false
+
+- name: Verify ModemManager masking succeeded (covert modem guard)
+  ansible.builtin.systemd_service:
+    name: ModemManager.service
+  register: _modemmanager_facts
+  when:
+    - system_disable_modemmanager | bool
+    - not system_is_container
+    - not csb_rhel
+
+- name: Fail if ModemManager is not masked (covert cellular network risk)
+  ansible.builtin.fail:
+    msg: >-
+      ModemManager masking failed: UnitFileState={{ _modemmanager_facts.status.UnitFileState | default('unknown') }}.
+      ModemManager must be masked when system_disable_modemmanager=true.
+      Investigate: systemctl mask --force ModemManager.service; journalctl -u ModemManager.
+  when:
+    - system_disable_modemmanager | bool
+    - not system_is_container
+    - not csb_rhel
+    - _modemmanager_facts.status is defined
+    - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
+
+- name: Unmask ModemManager (system_disable_modemmanager disabled)
+  ansible.builtin.systemd:
+    name: ModemManager.service
+    masked: false
+  when:
+    - not (system_disable_modemmanager | bool)
+    - not system_is_container  # no WWAN interfaces in containers
+    - not csb_rhel  # RHEL CSB: IT manages modem hardware policy
+  failed_when: false
+
+# --- TLP battery charge management (ThinkPad) ---
+- name: Install TLP for ThinkPad battery charge thresholds
+  ansible.builtin.dnf:
+    name:
+      - tlp
+      - tlp-rdw
+    state: present
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not override
+    - is_dnf
+  failed_when: false
+  register: _system_tlp_install
+
+- name: Warn if TLP install failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: TLP install failed (rc={{ _system_tlp_install.rc | default('n/a') }});
+      power management daemon masking, config deploy, and service enable will be skipped
+  when:
+    - _system_tlp_install.rc | default(0) != 0
+
+- name: Detect TLP (may not be installed)  # noqa: command-instead-of-module — probe optional unit without starting it
+  ansible.builtin.command:
+    cmd: systemctl cat tlp
+  register: _system_tlp_disable_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
+    - not system_is_container
+    - is_dnf
+
+- name: Stop and disable TLP when TLP disabled
+  ansible.builtin.systemd:
+    name: tlp
+    state: stopped
+    enabled: false
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel  # RHEL CSB: IT manages power daemons; do not stop
+    - not system_is_container
+    - is_dnf
+    - (_system_tlp_disable_check.rc | default(-1)) == 0
+
+- name: Unmask power management daemons when TLP disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    enabled: true
+    state: started
+  loop:
+    - tuned-ppd
+    - power-profiles-daemon
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  failed_when: false
+
+- name: Unmask tuned.service when TLP disabled
+  ansible.builtin.systemd:
+    name: tuned.service
+    masked: false
+    # intentionally not started: let tuned remain stopped on resume; systemd starts it on next boot
+  when:
+    - not (system_tlp_enabled | bool)
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  failed_when: false
+
+- name: TLP power management (enabled, install succeeded, not RHEL CSB)
+  when:
+    - system_tlp_enabled | bool
+    - not csb_rhel  # RHEL CSB: IT manages power-profiles-daemon and tuned-ppd
+    - _system_tlp_install.rc | default(0) == 0
+  block:
+    - name: Mask power management daemons that conflict with TLP
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: true
+        state: stopped
+      loop:
+        - tuned-ppd
+        - tuned
+        - power-profiles-daemon
+      when:
+        - is_dnf
+        - not system_is_container
+      failed_when: false
+
+    - name: Deploy TLP ThinkPad charge threshold config
+      ansible.builtin.template:
+        src: tlp-thinkpad.conf.j2
+        dest: /etc/tlp.d/50-thinkpad.conf
+        mode: "0644"
+      failed_when: false
+      notify: Restart tlp
+
+    - name: Enable and start TLP service
+      ansible.builtin.systemd:
+        name: tlp
+        state: started
+        enabled: true
+      when:
+        - not system_is_container
+      failed_when: false
+
+# --- cups-browsed (CVE-2024-47176) and cups service/socket/path ---
+# system_disable_printing: true  → cups-browsed masked+stopped; cups.service disabled;
+#                                   cups.socket+cups.path masked (no socket/path activation)
+# system_disable_printing: false → cups-browsed unmasked but NOT started (CVE risk only when running);
+#                                   cups.service started+enabled; cups.socket+cups.path unmasked
+# cups.service is never masked (masking it while cups.socket is live breaks Flatpak print dialogs).
+- name: Mask cups-browsed (RCE entry point) when printing disabled
+  ansible.builtin.systemd:
+    name: cups-browsed
+    masked: true
+    state: stopped
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
+  failed_when: false
+  register: _cups_browsed_mask_result
+
+- name: Verify cups-browsed masking succeeded (CVE-2024-47176 guard)
+  ansible.builtin.systemd_service:
+    name: cups-browsed
+  register: _cups_browsed_facts
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Fail if cups-browsed is not masked (CVE-2024-47176 RCE risk)
+  ansible.builtin.fail:
+    msg: >-
+      cups-browsed masking failed: UnitFileState={{ _cups_browsed_facts.status.UnitFileState | default('unknown') }}.
+      cups-browsed must be masked when system_disable_printing=true (CVE-2024-47176).
+      Investigate: systemctl mask cups-browsed; journalctl -u cups-browsed.
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel
+    - not system_is_container
+    - _cups_browsed_facts.status is defined
+    - (_cups_browsed_facts.status.UnitFileState | default('')) != 'masked'
+
+- name: Unmask cups-browsed when printing enabled
+  ansible.builtin.systemd:
+    name: cups-browsed
+    masked: false
+    # intentionally not started: CVE-2024-47176 RCE risk; start manually if network discovery required
+  when:
+    - not (system_disable_printing | bool)
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container
+  failed_when: false
+
+- name: Disable cups.service when system_disable_printing
+  ansible.builtin.systemd:
+    name: cups
+    state: stopped
+    enabled: false
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container  # stopping active socket units crashes Debian privileged Podman containers
+  failed_when: false
+
+- name: Enable and start cups.service when printing enabled
+  ansible.builtin.systemd:
+    name: cups
+    state: started
+    enabled: true
+  when:
+    - not (system_disable_printing | bool)
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container
+  failed_when: false
+
+- name: Mask cups.socket and cups.path when system_disable_printing
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - cups.socket
+    - cups.path
+  when:
+    - system_disable_printing | bool
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container  # masking active socket units triggers daemon-reload, crashes Debian containers
+  failed_when: false
+
+- name: Unmask and start cups.socket and cups.path when printing enabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+    state: started
+    enabled: true
+  loop:
+    - cups.socket
+    - cups.path
+  when:
+    - not (system_disable_printing | bool)
+    - not csb_rhel  # RHEL CSB: IT manages CUPS/printing via Satellite
+    - not system_is_container
+  failed_when: false
+
+- name: Mask ABRT services (redundant with systemd-coredump)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+    state: stopped
+  loop:
+    - abrtd.service
+    - abrt-journal-core.service
+    - abrt-oops.service
+    - abrt-vmcore.service
+    - abrt-pstoreoops.service
+    - abrt-xorg.service
+  when:
+    - system_mask_abrt | bool
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  failed_when: false
+
+- name: Unmask ABRT services (system_mask_abrt disabled)
+  when:
+    - not (system_mask_abrt | bool)
+    - not csb_rhel
+    - not system_is_container
+    - is_dnf
+  block:
+    - name: Unmask ABRT services when system_mask_abrt disabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: false
+        enabled: true
+        state: started
+      loop:
+        - abrtd.service
+        - abrt-journal-core.service
+        - abrt-oops.service
+        - abrt-xorg.service
+      failed_when: false
+
+    - name: Unmask ABRT oneshot boot services when system_mask_abrt disabled
+      ansible.builtin.systemd:
+        name: abrt-vmcore.service
+        masked: false
+        enabled: true
+      failed_when: false
+
+    - name: Unmask abrt-pstoreoops (vendor default disabled; do not enable)
+      ansible.builtin.systemd:
+        name: abrt-pstoreoops.service
+        masked: false
+      failed_when: false
+
+# --- Mask avahi-daemon (mDNS hostname exposure on local network) ---
+- name: Configure avahi-daemon masking (mask when system_disable_avahi)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_disable_avahi | bool }}"
+    state: "{{ 'stopped' if system_disable_avahi else 'started' }}"
+    enabled: "{{ not (system_disable_avahi | bool) }}"
+  loop:
+    - avahi-daemon.service
+    - avahi-daemon.socket
+  register: _avahi_mask_result
+  when:
+    - not csb_rhel  # RHEL CSB: IT manages mDNS/avahi policy
+    - not system_is_container  # mask+stop ops crash Debian privileged Podman containers via daemon-reload
+  failed_when: false
+
+- name: Warn if avahi-daemon units failed to reach masked state
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: avahi-daemon masking failed for one or more units
+      ({{ _avahi_mask_result.results | selectattr('failed', 'equalto', true) | map(attribute='item') | list | join(', ') }}).
+      avahi-daemon may remain active, exposing mDNS on UDP 5353.
+  when:
+    - system_disable_avahi | bool
+    - not csb_rhel
+    - not system_is_container
+    - _avahi_mask_result.results is defined
+    - _avahi_mask_result.results | selectattr('failed', 'equalto', true) | list | length > 0
+
+# Note: NFS stays stopped/disabled even when unmasked — workstations never serve NFS.
+- name: Configure NFS server and rpcbind masking (CIS 2.2.7)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_mask_nfs_server | bool }}"
+    enabled: false
+    state: stopped
+  loop:
+    - nfs-server.service
+    - rpcbind.service
+    - rpcbind.socket
+  when:
+    - not csb_rhel
+    - not system_is_container  # rpcbind.socket masking triggers daemon-reload, crashes Debian containers
+  failed_when: false
+
+# Note: iSCSI units stay stopped/disabled even when unmasked — workstations never initiate iSCSI sessions.
+- name: Configure iSCSI initiator masking (CIS 2.3.x)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ system_mask_iscsi | bool }}"
+    enabled: false
+    state: stopped
+    force: true
+  loop:
+    - iscsi.service
+    - iscsid.service
+    - iscsi-init.service
+    - iscsi-onboot.service
+    - iscsi-shutdown.service
+    - iscsi-starter.service
+    - iscsid.socket
+    - iscsiuio.socket
+    - iscsiuio.service
+  when:
+    - not csb_rhel
+    - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
+    - is_dnf
+  failed_when: false
+
+# --- Cockpit (web console — port 9090; disabled by default) ---
+- name: Stat cockpit unit file to detect installation
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/cockpit.socket
+  register: _cockpit_stat
+
+- name: Configure cockpit masking (mask when not system_enable_cockpit)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: "{{ not (system_enable_cockpit | bool) }}"
+  loop:
+    - cockpit.service
+    - cockpit.socket
+  when:
+    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
+    - not system_is_container  # socket masking triggers daemon-reload, crashes Debian containers
+    - _cockpit_stat.stat.exists
+  failed_when: false
+
+- name: Configure cockpit state and enablement (installed units only)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: "{{ 'started' if system_enable_cockpit else 'stopped' }}"
+    enabled: "{{ system_enable_cockpit | bool }}"
+  loop:
+    - cockpit.service
+    - cockpit.socket
+  when:
+    - not csb_rhel  # RHEL CSB: IT manages cockpit access; do not mask
+    - not system_is_container
+    - _cockpit_stat.stat.exists
+  failed_when: false
+
+- name: Mask Ctrl+Alt+Delete reboot target
+  ansible.builtin.systemd:
+    name: ctrl-alt-del.target
+    masked: true
+    force: true
+  when:
+    - not csb_rhel  # RHEL CSB: IT manages Ctrl+Alt+Delete policy via Satellite
+    - not system_is_container  # target masking can trigger daemon-reload in privileged containers
+
+# OVN/openvswitch service masking — kind manages OVS and OVN in containers, system-level
+# OVS/OVN daemons conflict with kind's container-based management for OVN-K dev.
+- name: Mask openvswitch and OVN services (ovs-vswitchd, ovsdb-server, ovn-controller, ovn-northd)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - ovs-vswitchd.service
+    - ovsdb-server.service
+    - ovn-controller.service
+    - ovn-northd.service
+  when:
+    - profile == 'work'  # OVN-K/kind dev workstation
+    - not csb_rhel  # User-managed Fedora hybrid CSB
+    - not system_is_container
+  failed_when: false  # openvswitch/ovn packages may not be installed

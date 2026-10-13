@@ -1,0 +1,308 @@
+---
+# roles/system/tasks/chrony.yml
+# --- Chrony NTS (authenticated time sync) ---
+# Mask timesyncd before the apt install so chrony's postinst does not race
+# for UDP 123 with a still-running timesyncd.
+- name: Install chrony with timesyncd rollback (Debian)
+  block:
+    - name: Stop and mask systemd-timesyncd before chrony install (Debian)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: true
+        state: stopped
+      when:
+        - is_apt
+        - system_chrony_service_enabled | bool
+        - not system_is_container
+      failed_when: false
+
+    - name: Install chrony (Debian/Ubuntu — must happen in system role Play 1; packages role runs after)
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+      when:
+        - is_apt
+        # Debian postinst starts chrony automatically; skip in containers (system_chrony_service_enabled:
+        # false) to prevent the daemon start from crashing the Podman container.
+        - system_chrony_service_enabled | bool
+        - not system_is_container
+  rescue:
+    - name: Restore timesyncd if chrony install failed (Debian)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: false
+        state: started
+        enabled: true
+      ignore_errors: true
+      register: _chrony_restore_result
+      when:
+        - is_apt
+        - not system_is_container
+
+    - name: Re-raise chrony install failure
+      ansible.builtin.fail:
+        msg: >-
+          chrony install failed; {{
+          'systemd-timesyncd has been unmasked and started to restore a time source'
+          if _chrony_restore_result is not failed
+          else 'timesyncd restore also failed — no active time source' }}
+
+- name: Install chrony with timesyncd rollback (Fedora)
+  block:
+    - name: Stop and mask systemd-timesyncd before chrony install (Fedora)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: true
+        state: stopped
+      failed_when: false
+      when:
+        - is_dnf
+        - system_chrony_service_enabled | bool
+        - not system_is_container
+        - not csb_rhel
+
+    - name: Install chrony (Fedora/RHEL)
+      ansible.builtin.dnf:
+        name: chrony
+        state: present
+      when:
+        - is_dnf
+        - system_chrony_service_enabled | bool
+        - not system_is_container
+        - not csb_rhel
+  rescue:
+    - name: Restore timesyncd if chrony install failed (Fedora)
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        masked: false
+        state: started
+        enabled: true
+      ignore_errors: true
+      register: _chrony_restore_result
+      when:
+        - is_dnf
+        - not system_is_container
+        - not csb_rhel
+
+    - name: Re-raise chrony install failure
+      ansible.builtin.fail:
+        msg: >-
+          chrony install failed; {{
+          'systemd-timesyncd has been unmasked and started to restore a time source'
+          if _chrony_restore_result is not failed
+          else 'timesyncd restore also failed — no active time source' }}
+
+- name: Set chrony service name fact
+  ansible.builtin.set_fact:
+    _chrony_svc: "{{ 'chrony' if is_apt else 'chronyd' }}"
+
+- name: Assert NTS server list non-empty when authselectmode=require
+  ansible.builtin.assert:
+    that: system_chrony_nts_servers | length > 0
+    fail_msg: "system_chrony_authselectmode=require but system_chrony_nts_servers is empty — no NTS sources, chrony will not sync"
+  when:
+    - system_chrony_authselectmode == 'require'
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
+- name: Assert minsources does not exceed NTS server count with authselectmode=require
+  ansible.builtin.assert:
+    that: system_chrony_minsources | int <= system_chrony_nts_servers | length
+    fail_msg: >-
+      system_chrony_authselectmode=require but system_chrony_minsources
+      ({{ system_chrony_minsources }}) exceeds NTS server count
+      ({{ system_chrony_nts_servers | length }}) — chrony cannot reach quorum
+  when:
+    - system_chrony_authselectmode == 'require'
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
+- name: "Warn: sourcedir suppressed — DHCP sources incompatible with authselectmode=require"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_dhcp_sourcedir is set but system_chrony_authselectmode=require —
+      DHCP-provided NTP sources are unauthenticated and cannot be used in require mode;
+      the sourcedir directive has been suppressed in chrony.conf. To use DHCP sources,
+      set system_chrony_authselectmode: prefer in config.yml.
+  when:
+    - system_chrony_dhcp_sourcedir | length > 0
+    - system_chrony_authselectmode == 'require'
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
+- name: "Warn: no NTS servers configured — chrony uses unauthenticated pool only"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_nts_servers is empty — chrony has no NTS sources and
+      will use only the unauthenticated fallback pool ({{ system_chrony_fallback_pool }}).
+      Time sync is unauthenticated and vulnerable to on-path NTP spoofing.
+      Set system_chrony_nts_servers in config.yml to restore authenticated time sync.
+  when:
+    - system_chrony_nts_servers | length == 0
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not csb_rhel
+
+- name: Probe optional chrony leap-second file support
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/chronyd
+      - -p
+      - -f
+      - /dev/null
+      - leapseclist /usr/share/zoneinfo/leap-seconds.list
+  register: _chrony_leapseclist_probe
+  changed_when: false
+  failed_when:
+    - _chrony_leapseclist_probe.rc != 0
+    - "'Invalid directive' not in _chrony_leapseclist_probe.stderr"
+  when:
+    - not csb_rhel
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not system_is_container
+
+- name: Install native chrony configuration validator
+  ansible.builtin.copy:
+    src: validate-chrony.py
+    dest: /usr/local/bin/laptop-setup-validate-chrony
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - not csb_rhel
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not system_is_container
+
+- name: Deploy NTS-authenticated chrony config
+  ansible.builtin.template:
+    src: chrony-nts.conf.j2
+    dest: "{{ '/etc/chrony/chrony.conf' if is_apt else '/etc/chrony.conf' }}"
+    mode: "0644"
+    validate: /usr/local/bin/laptop-setup-validate-chrony %s
+  notify: Restart chronyd
+  when:
+    # Skip on RHEL CSB (IT manages NTP via IPA/Kerberos; replacing chrony.conf breaks kinit).
+    # On Fedora CSB hybrid (csb_detected=true, Fedora distribution), NTS is safe to deploy.
+    - not csb_rhel
+    # Skip if chrony is not installed (system_chrony_service_enabled: false skips the install above).
+    - system_chrony_service_enabled | bool
+    # Only deploy when chrony was actually installed (mirrors the platform guards on the install tasks).
+    - is_dnf or is_apt
+    # Chrony is not installed in containers (install tasks above are guarded by not system_is_container).
+    - not system_is_container
+
+- name: Stop and disable chrony when chrony is disabled
+  ansible.builtin.systemd:
+    name: "{{ _chrony_svc }}"
+    state: stopped
+    enabled: false
+  when:
+    - not (system_chrony_service_enabled | bool)
+    - is_dnf or is_apt
+    - not system_is_container
+    - not csb_rhel
+  failed_when: false
+
+- name: Unmask systemd-timesyncd when chrony is disabled
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: false
+    state: started
+    enabled: true
+  when:
+    - is_apt
+    - not (system_chrony_service_enabled | bool)
+    - not system_is_container
+  failed_when: false
+
+- name: Enable systemd-timesyncd when chrony is disabled (Fedora fallback)
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    masked: false
+    state: started
+    enabled: true
+  when:
+    - is_dnf
+    - not (system_chrony_service_enabled | bool)
+    - not system_is_container
+    - not csb_rhel
+  register: _chrony_timesyncd_fallback
+  ignore_errors: true
+
+- name: "Warn: timesyncd re-enabled as fallback (chrony disabled, Fedora)"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_service_enabled=false — systemd-timesyncd re-enabled as fallback
+      time source on Fedora. To restore chrony NTS, set system_chrony_service_enabled: true.
+  when:
+    - is_dnf
+    - not (system_chrony_service_enabled | bool)
+    - not system_is_container
+    - not csb_rhel
+    - _chrony_timesyncd_fallback is not failed
+
+- name: "Warn: no time sync active (timesyncd not available on this host)"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_service_enabled=false — systemd-timesyncd is not available on this
+      host (not installed by default on Fedora; not packaged on RHEL) — no fallback time
+      source active. To restore authenticated time sync, set
+      system_chrony_service_enabled: true in config.yml.
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - not (system_chrony_service_enabled | bool)
+    - _chrony_timesyncd_fallback is failed
+
+- name: Ensure chrony/chronyd is enabled
+  ansible.builtin.systemd:
+    name: "{{ _chrony_svc }}"
+    state: started
+    enabled: true
+  when:
+    - system_chrony_service_enabled | bool
+    - is_dnf or is_apt
+    - not system_is_container
+    - not csb_rhel
+
+- name: "Warn: NTS-KE may be blocked on CSB Fedora hybrid"
+  ansible.builtin.debug:
+    msg: >-
+      chrony NTS deployed on CSB Fedora hybrid — if TCP 4460 is blocked by corporate firewall,
+      NTS-KE will fail silently and chrony falls back to unauthenticated pool; set
+      system_chrony_authselectmode: require in config.yml to surface this as an error
+  when:
+    - system_chrony_service_enabled | bool
+    - csb_detected
+    - not csb_rhel
+    - system_chrony_authselectmode != 'require'
+
+- name: "Warn: authselectmode require means no fallback if TCP 4460 blocked"
+  ansible.builtin.debug:
+    msg: >-
+      system_chrony_authselectmode=require — if TCP 4460 (NTS-KE) is blocked, chrony
+      will not sync at all (no unauthenticated fallback). Set authselectmode: prefer
+      if this host may be used on restricted networks.
+  when:
+    - system_chrony_service_enabled | bool
+    - system_chrony_authselectmode == 'require'
+    - not csb_rhel
+
+- name: "Warn: authselectmode prefer — unauthenticated fallback active (standard deployment)"
+  ansible.builtin.debug:
+    msg: >-
+      chrony NTS deployed with authselectmode=prefer — requires TCP 4460 to
+      {{ system_chrony_nts_servers | join('/') }}; if blocked, chrony falls back to
+      unauthenticated pool (not cryptographically verified, vulnerable to on-path NTP
+      spoofing). Default is require; prefer was explicitly set in config.yml and
+      acknowledged via system_chrony_authselectmode_prefer_confirmed: true.
+  when:
+    - system_chrony_service_enabled | bool
+    - not csb_detected
+    - system_chrony_authselectmode != 'require'

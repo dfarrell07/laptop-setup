@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.laptop-setup.homebrew-update</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ _packages_brew_prefix.stdout | e }}/bin/brew</string>
+    <string>update</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>{{ packages_brew_autoupdate_interval | int }}</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{ _packages_brew_prefix.stdout | e }}/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOMEBREW_NO_AUTO_UPDATE</key>
+    <string>1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/homebrew-update.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ ansible_facts['user_dir'] | e }}/.local/state/log/homebrew-update-error.log</string>
+</dict>
+</plist>

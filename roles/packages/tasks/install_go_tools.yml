@@ -1,0 +1,308 @@
+---
+# roles/packages/tasks/install_go_tools.yml
+# Install Go tools via `go install` (extracted from main.yml)
+#
+# WHY NOT SHA256 COMPILED BINARIES: Go binary SHA256 is non-deterministic (toolchain
+# version, build flags, architecture all affect output). The Go module checksum database
+# (GOSUMDB) is the correct integrity mechanism — it's validated below. See 812cd185.
+#
+# SUPPLY CHAIN MODEL: GOSUMDB prevents tampered modules; this file fails on checksum
+# mismatches and never retries them (retry logic stops on 'checksum mismatch' in stderr).
+# Known gap: maintainer compromise passes GOSUMDB (same as XZ Utils 2024 vector).
+
+- name: Compute effective GOSUMDB proxy environment
+  # Prefers packages_gosumdb_proxy; falls back to auto-detected proxy when
+  # network_proxied=true. Decouples GOSUMDB proxy from general network proxy.
+  ansible.builtin.set_fact:
+    _gosumdb_proxy_env: >-
+      {{
+        packages_gosumdb_proxy if (packages_gosumdb_proxy | default('') | length > 0)
+        else (proxy_url if (network_proxied | bool) else '')
+      }}
+  become: false
+
+- name: "Validate GONOSUMDB/GOSUMDB: (1/3) no public module domains in GONOSUMDB"
+  vars:
+    _pub_mod_re: '(^|,)(\*|github\.com|golang\.org|mvdan\.cc|sigs\.k8s\.io|k8s\.io|gopkg\.in)(,|$)'
+  ansible.builtin.assert:
+    that:
+      - dotfiles_gonosumdb | default('') | regex_search(_pub_mod_re) is none
+    fail_msg: >-
+      dotfiles_gonosumdb contains a public module pattern that bypasses Go checksum-database
+      verification. Use only private domain prefixes (e.g. '*.redhat.com,*.engineering.redhat.com').
+
+- name: "Validate GONOSUMDB/GOSUMDB: (2/3) GOSUMDB not disabled and valid hostname"
+  # Accepts: FQDN (e.g. sum.golang.org) and FQDN:port (e.g. sum.corp.com:443)
+  # Rejects: 'off', empty string, IP addresses, single-label hostnames (localhost)
+  vars:
+    _dns_label_re: '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
+    _gosumdb_end_re: '\Z'
+    _gosumdb_fqdn_re: >-
+      {{ '^' ~ _dns_label_re ~ '([.]' ~ _dns_label_re ~ ')+(:[0-9]{1,5})?' ~ _gosumdb_end_re }}
+  ansible.builtin.assert:
+    that:
+      - packages_gosumdb | type_debug == 'str'
+      - packages_gosumdb | regex_search(_gosumdb_fqdn_re) is not none
+      - packages_gosumdb.split(':')[0] | length <= 253
+      - >-
+        packages_gosumdb | regex_search('^[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}(:[0-9]{1,5})?$') is none
+      - >-
+        ':' not in packages_gosumdb or
+        (packages_gosumdb.rsplit(':', 1)[1] | int >= 1 and packages_gosumdb.rsplit(':', 1)[1] | int <= 65535)
+    fail_msg: >-
+      GOSUMDB must not be 'off' or empty (enables GOPROXY tampering/init() injection) and must
+      be a valid FQDN or FQDN:port (not IP/localhost). Invalid value: {{ packages_gosumdb | default('(undefined)') }}
+  when: packages_gosumdb is defined
+
+- name: "Validate GONOSUMDB/GOSUMDB: (3/3) GOSUMDB server reachable (hijack mitigation)"
+  ansible.builtin.uri:
+    url: "https://{{ packages_gosumdb | default('sum.golang.org') }}/latest"
+    timeout: 5
+    status_code: 200
+    return_content: false
+  changed_when: false
+  register: gosumdb_reachability
+  failed_when: gosumdb_reachability.status != 200
+  retries: 2
+  delay: 3
+  until: gosumdb_reachability.status == 200
+  environment:
+    # omit preserves inherited proxy; only override when explicitly configured
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+    # omit preserves inherited proxy; only override when explicitly configured
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+
+
+- name: "Validate GOTOOLCHAIN=auto: probe proxy.golang.org for toolchain reachability"
+  # When GOTOOLCHAIN=auto and the installed Go is older than work tools require (1.26+
+  # for gopls; 1.25+ for gofumpt/govulncheck), go install silently downloads a newer
+  # toolchain from proxy.golang.org mid-loop.
+  # If that endpoint is blocked on the CSB network (even via HTTP proxy), the failure
+  # message is an opaque go-module error with no indication to set GOTOOLCHAIN=local.
+  # Probe early so the user gets an actionable message before the install loop starts.
+  ansible.builtin.uri:
+    url: "https://proxy.golang.org/golang.org/toolchain/@latest"
+    timeout: 10
+    return_content: false
+  changed_when: false
+  failed_when: false
+  register: _gotoolchain_proxy_probe
+  environment:
+    HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+    HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+  when:
+    - packages_gotoolchain == 'auto'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
+    - _golang_installed_version is version('1.26', '<')
+
+- name: "Fail early: proxy.golang.org unreachable with GOTOOLCHAIN=auto (toolchain download required)"
+  ansible.builtin.fail:
+    msg: >-
+      GOTOOLCHAIN=auto but proxy.golang.org is unreachable
+      (HTTP status: {{ _gotoolchain_proxy_probe.status | default('network error') }}).
+      The installed Go ({{ _golang_installed_version }}) is older than the Go 1.26+ required
+      by gopls. Without proxy.golang.org, `go install` will fail mid-provisioning
+      with an opaque toolchain download error.
+      Fix options:
+        1. Set packages_gotoolchain: local in config.yml and upgrade golang to Go 1.26+
+           (dnf upgrade golang).
+        2. Ensure proxy.golang.org is reachable, directly or via HTTPS_PROXY.
+  when:
+    - packages_gotoolchain == 'auto'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
+    - _golang_installed_version is version('1.26', '<')
+    - _gotoolchain_proxy_probe is defined
+    - _gotoolchain_proxy_probe.status | default(-1) | int != 200
+
+- name: Create GOTMPDIR directory for Go tool compilation
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/tmp"
+    state: directory
+    mode: "0700"
+
+- name: Assert Go version sufficient for work tools when GOTOOLCHAIN=local
+  # gopls requires Go 1.26+; gofumpt/govulncheck require Go 1.25+. Fedora 44 ships Go 1.24.
+  # With GOTOOLCHAIN=local, go install exits non-zero for modules requiring a newer toolchain,
+  # causing an opaque "Go tool install failed" error.  Fail early with an actionable message.
+  ansible.builtin.assert:
+    that:
+      - _golang_installed_version is version('1.26', '>=')
+    fail_msg: >-
+      GOTOOLCHAIN=local (packages_gotoolchain default) but the installed Go toolchain
+      ({{ _golang_installed_version }}) is older than the minimum required by work-profile tools
+      (gopls@v{{ packages_gopls_version }} needs Go 1.26+).
+      Set packages_gotoolchain: auto in config.yml to allow automatic toolchain download,
+      or upgrade the golang package to Go 1.26+.
+  when:
+    - packages_gotoolchain == 'local'
+    - profile == 'work'
+    - _golang_available | default(false)
+    - _golang_installed_version is defined
+
+- name: Identify subctl Go module entries requiring the CLI build metadata
+  ansible.builtin.set_fact:
+    _packages_subctl_go_modules: >-
+      {{ (packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []))
+         | select('match', '^github[.]com/submariner-io/subctl/cmd@') | list }}
+
+- name: Validate selected subctl module versions before linker flag interpolation
+  vars:
+    _subctl_go_module_re: '^github[.]com/submariner-io/subctl/cmd@v[0-9]+([.][0-9]+)*(-[a-zA-Z0-9]+)?\Z'
+  ansible.builtin.assert:
+    that:
+      - >-
+        _packages_subctl_go_modules | reject('match', _subctl_go_module_re) | list | length == 0
+    fail_msg: "subctl Go module entries must use pinned semantic versions."
+
+- name: Ensure Go executable and private build directories exist
+  ansible.builtin.file:
+    path: "{{ ansible_facts['user_dir'] }}/{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: go/bin, mode: '0755'}
+    - {path: .local/bin, mode: '0755'}
+    - {path: tmp, mode: '0700'}
+    - {path: .cache, mode: '0700'}
+  when: _golang_available | default(false)
+
+- name: Create private subctl build directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: ansible_subctl_go_
+    path: "{{ ansible_facts['user_dir'] }}/.cache"
+  register: _packages_subctl_go_tmpdir
+  when:
+    - _golang_available | default(false)
+    - _packages_subctl_go_modules | length > 0
+
+- name: Install selected Go modules and the subctl CLI
+  block:
+    - name: Install Go tools
+      # No 'creates:' guard — version bumps would be silently ignored. Pinned versions
+      # with warm cache are fast. Every run reports as changed (false positive, accepted).
+      # Do NOT add @latest entries. See defaults/main.yml for rationale.
+      ansible.builtin.command:
+        argv: >-
+          {{ ['go', 'install']
+             + (['-ldflags', '-X github.com/submariner-io/subctl/pkg/version.Version='
+                ~ (item.rsplit('@', 1)[1] | regex_replace('^v', ''))]
+                if item in _packages_subctl_go_modules else [])
+             + [item] }}
+      timeout: "{{ 600 if item in _packages_subctl_go_modules else 300 }}"
+      changed_when: true
+      when: _golang_available | default(false)
+      environment:
+        GOPATH: "{{ ansible_facts['user_dir'] }}/go"
+        GOBIN: >-
+          {{ _packages_subctl_go_tmpdir.path if item in _packages_subctl_go_modules
+             else ansible_facts['user_dir'] ~ '/go/bin' }}
+        GOTMPDIR: "{{ ansible_facts['user_dir'] }}/tmp"  # security: prevent /tmp noexec failures + explicit tmpdir for Go compiler
+        GOTOOLCHAIN: "{{ packages_gotoolchain }}"
+        # omit preserves inherited proxy; only override when explicitly configured
+        HTTPS_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+        # omit preserves inherited proxy; only override when explicitly configured
+        HTTP_PROXY: "{{ _gosumdb_proxy_env if _gosumdb_proxy_env else omit }}"
+        # security-critical: pin proxy, prevent GOPROXY env injection; override packages_goproxy in config.yml for corporate mirrors
+        GOPROXY: "{{ packages_goproxy }}"
+        GONOSUMDB: "{{ dotfiles_gonosumdb | default('') }}"  # explicit empty overrides inherited shell GONOSUMDB=*
+        GOPRIVATE: "{{ dotfiles_goprivate | default(omit) }}"
+        GOSUMDB: "{{ packages_gosumdb | default('sum.golang.org') }}"  # security-critical
+        CC: /usr/bin/gcc  # pin compiler identity; prevent caller CC injection into CGO builds
+        CGO_CFLAGS: ''  # clear inherited flags; prevent CGO_CFLAGS injection
+        CGO_CXXFLAGS: ''  # clear inherited flags; prevent CGO_CXXFLAGS injection
+        CGO_LDFLAGS: ''  # clear inherited flags; prevent CGO_LDFLAGS injection
+        CGO_ENABLED: '1'  # explicit; some tools (subctl, golangci-lint) require CGO
+      loop: "{{ packages_go_install + (packages_go_install_work | default([]) if profile == 'work' else []) }}"
+      loop_control:
+        label: "{{ item | regex_replace('@.*', '') | basename }}"
+      register: packages_go_results
+      # PERMISSION-DENIED IS TRANSIENT: Retried (not task failure). All other errors
+      # (checksum mismatch, GOSUMDB timeout) halt immediately to prevent TOCTOU bypass.
+      # Do NOT set failed_when: false — masks checksum mismatches (init() injection risk).
+      failed_when: |-
+        packages_go_results.rc != 0 and
+        'permission denied' not in (packages_go_results.stderr | default(''))
+      retries: 3
+      delay: 5
+      until: |-
+        packages_go_results.rc == 0 or
+        (packages_go_results.rc != 0 and 'permission denied' not in (packages_go_results.stderr | default('')))
+
+    - name: Install the subctl CLI under its expected executable name
+      when:
+        - _golang_available | default(false)
+        - _packages_subctl_go_modules | length > 0
+      block:
+        - name: Copy compiled subctl main package to Go bin directory
+          ansible.builtin.copy:
+            src: "{{ _packages_subctl_go_tmpdir.path }}/cmd"
+            dest: "{{ ansible_facts['user_dir'] }}/go/bin/subctl"
+            remote_src: true
+            mode: "0755"
+  always:
+    - name: Remove private subctl build directory
+      ansible.builtin.file:
+        path: "{{ _packages_subctl_go_tmpdir.path }}"
+        state: absent
+      when: _packages_subctl_go_tmpdir.path is defined
+
+- name: Collect failed Go tool names (checksum or permission errors)
+  ansible.builtin.set_fact:
+    _packages_go_failed: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | map(attribute='item')
+        | list
+      }}
+    _packages_go_checksum_errors: >-
+      {{
+        packages_go_results.results | default([])
+        | selectattr('rc', 'defined')
+        | selectattr('rc', '!=', 0)
+        | selectattr('stderr', 'defined')
+        | selectattr('stderr', 'contains', 'checksum mismatch')
+        | map(attribute='item')
+        | list
+      }}
+
+- name: Fail immediately on checksum verification errors (init() injection risk)
+  ansible.builtin.fail:
+    msg: >-
+      Go module checksum verification failed for: {{ _packages_go_checksum_errors | join(', ') }}.
+      This indicates GOPROXY tampering or module compromise. Verify GOSUMDB reachability
+      (default: sum.golang.org), check for MITM attacks, and retry.
+  when:
+    - _packages_go_checksum_errors | length > 0
+
+- name: Record Go tool install failures (CSB — network/timeout only)
+  ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+  vars:
+    _csb_role: packages
+    _csb_task_name: "Go tools (go install)"
+    _csb_error: "Failed tools: {{ _packages_go_failed | join(', ') }}"
+    _csb_action: >-
+      Install Go tools manually or configure GOPROXY/GONOSUMDB/GOPRIVATE
+      to allow access via the corporate proxy.
+    _csb_ticket_summary: "Cannot install Go tools on CSB (network/proxy restriction)"
+    _csb_ticket_body: >-
+      'go install' failed for: {{ _packages_go_failed | join(', ') }}.
+      The corporate network may block go.googlesource.com or Go module proxies.
+      Configure GOPROXY, GONOSUMDB, and GOPRIVATE, or install tools manually.
+  when:
+    - csb_rhel | bool
+    - _packages_go_failed | length > 0
+    - _packages_go_checksum_errors | length == 0
+
+- name: Fail on Go tool install errors (non-CSB)
+  ansible.builtin.fail:
+    msg: "Go tool install failed: {{ _packages_go_failed | join(', ') }}"
+  when:
+    - not csb_rhel | bool
+    - _packages_go_failed | length > 0

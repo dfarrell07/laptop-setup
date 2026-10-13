@@ -2,178 +2,436 @@
 # roles/desktop/tasks/main.yml
 # Desktop environment: Sway/GNOME/i3 (Linux), AeroSpace (macOS), Alacritty, fonts.
 
-- name: Detect desktop environment
-  ansible.builtin.set_fact:
-    desktop_detected: >-
-      {{ 'sway' if (ansible_env.XDG_SESSION_TYPE | default('') == 'wayland' and
-                    ansible_env.XDG_CURRENT_DESKTOP | default('') == 'sway')
-         else ('gnome' if (ansible_env.XDG_CURRENT_DESKTOP | default('') is search('GNOME'))
-         else ('i3' if (ansible_env.XDG_CURRENT_DESKTOP | default('') == 'i3')
-         else 'unknown')) }}
-  when: desktop_environment == 'auto'
-
 - name: Set effective desktop
   ansible.builtin.set_fact:
-    desktop_effective: "{{ desktop_environment if desktop_environment != 'auto' else desktop_detected | default('unknown') }}"
+    desktop_effective: >-
+      {{ desktop_environment if desktop_environment != 'auto'
+         else ('sway' if (ansible_facts['env']['XDG_SESSION_TYPE'] | default('') == 'wayland' and
+                          ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'sway')
+               else ('gnome' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') is search('GNOME'))
+               else ('i3' if (ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') == 'i3')
+               else 'unknown'))) }}
 
-- name: Install common desktop packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_common_packages }}"
-    state: present
-  become: true
-  tags: [become]
-  when: ansible_pkg_mgr in ['dnf', 'dnf5']
-
-- name: Install Sway packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_sway_packages }}"
-    state: present
-  become: true
-  tags: [become]
+- name: Warn when desktop_environment explicitly set to unknown
+  ansible.builtin.debug:
+    msg: >-
+      desktop_environment is set to 'unknown' — no WM packages will be installed.
+      Set desktop_environment: sway, i3, or gnome in config.yml if a WM is needed.
   when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
-    - desktop_effective == 'sway'
+    - desktop_effective == 'unknown'
+    - desktop_environment != 'auto'
 
-- name: Install i3 packages
-  ansible.builtin.dnf:
-    name: "{{ desktop_i3_packages }}"
+- name: Fail when auto-detection falls through to unknown on Linux
+  ansible.builtin.fail:
+    msg: >-
+      desktop_environment is 'auto' but no desktop session was detected
+      (XDG_SESSION_TYPE='{{ ansible_facts['env']['XDG_SESSION_TYPE'] | default('') }}',
+      XDG_CURRENT_DESKTOP='{{ ansible_facts['env']['XDG_CURRENT_DESKTOP'] | default('') }}').
+      Set desktop_environment: sway, i3, or gnome in config.yml before running
+      make all — auto-detection requires an active desktop session and will not
+      work on bare installs or remote SSH provisioning.
+  when:
+    - desktop_effective == 'unknown'
+    - desktop_environment == 'auto'
+    - is_linux
+
+- name: Assert display timeout is greater than lock timeout
+  ansible.builtin.assert:
+    that: desktop_wm_idle_display_timeout | int > desktop_wm_idle_lock_timeout | int
+    fail_msg: >-
+      desktop_wm_idle_display_timeout ({{ desktop_wm_idle_display_timeout }}s) must be greater
+      than desktop_wm_idle_lock_timeout ({{ desktop_wm_idle_lock_timeout }}s). If the display
+      powers off before the screen locks, the resume handler will wake the display and expose
+      an unlocked desktop. Set display_timeout > lock_timeout in config.yml.
+  when: desktop_effective in ['sway', 'i3']
+
+- name: Assert desktop_wm_hide_edge_borders is an allowlist value
+  ansible.builtin.assert:
+    that: >-
+      desktop_wm_hide_edge_borders | length == 0
+      or desktop_wm_hide_edge_borders in ['none', 'vertical', 'horizontal', 'both', 'smart', 'smart_no_gaps']
+    fail_msg: >-
+      SECURITY: desktop_wm_hide_edge_borders contains a disallowed value.
+      Input: '{{ desktop_wm_hide_edge_borders }}'
+      Mechanism: bare rendering in sway/i3 config templates allows newline injection.
+      Example: "smart\nexec xterm" injects an exec directive run at WM start/restart.
+      Impact: arbitrary commands execute as the user when the window manager starts.
+      Fix: set desktop_wm_hide_edge_borders to one of:
+        none, vertical, horizontal, both, smart, smart_no_gaps (or '' to omit).
+  tags: [always]
+
+- name: Install desktop packages (dnf)
+  when: is_dnf
+  block:
+    - name: Install desktop packages (dnf)
+      vars:
+        _wm_pkgs: >-
+          {{ (desktop_sway_packages if desktop_effective == 'sway' else [])
+             + (desktop_i3_packages if desktop_effective == 'i3' else [])
+             + (desktop_gnome_packages if desktop_effective == 'gnome' else [])
+             + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
+      ansible.builtin.dnf:
+        name: "{{ desktop_dnf_packages + _wm_pkgs }}"
+        state: present
+      become: true
+      tags: [become]
+      register: _desktop_dnf_install
+  rescue:
+    - name: Warn if desktop packages install failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: desktop package installation failed (some packages may not be available in repos).
+          alacritty is not in Fedora 44 base repos — install via copr, flatpak, or use fallback terminal.
+          Continuing provisioning...
+
+- name: Install desktop packages (apt)
+  vars:
+    _apt_wm_pkgs: >-
+      {{ (desktop_sway_apt_packages if desktop_effective == 'sway' else [])
+         + (desktop_alacritty_packages if desktop_terminal == 'alacritty' else []) }}
+  ansible.builtin.apt:
+    name: "{{ desktop_apt_packages + _apt_wm_pkgs }}"
     state: present
+    update_cache: true
+    cache_valid_time: 3600
   become: true
   tags: [become]
-  when:
-    - ansible_pkg_mgr in ['dnf', 'dnf5']
-    - desktop_effective == 'i3'
-    - ansible_distribution == 'Fedora'
+  when: is_apt
 
 # --- Alacritty config ---
-- name: Ensure Alacritty config directory
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/alacritty"
-    state: directory
-    mode: "0755"
+- name: Deploy Alacritty configuration
+  when:
+    - desktop_terminal == 'alacritty'
+    - not (_desktop_dnf_install.failed | default(false))
+  block:
+    - name: Ensure Alacritty config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/alacritty"
+        state: directory
+        mode: "0755"
 
-- name: Deploy Alacritty config
-  ansible.builtin.template:
-    src: alacritty.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/alacritty/alacritty.toml"
-    mode: "0644"
+    - name: Deploy Alacritty config
+      ansible.builtin.template:
+        src: alacritty.toml.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/alacritty/alacritty.toml"
+        mode: "0644"
 
 # --- i3 config ---
-- name: Ensure i3 config directory
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/i3"
-    state: directory
-    mode: "0755"
+- name: Deploy i3 configuration
   when: desktop_effective == 'i3'
+  block:
+    - name: Ensure i3 config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/i3"
+        state: directory
+        mode: "0755"
 
-- name: Deploy i3 config
-  ansible.builtin.template:
-    src: i3.config.j2
-    dest: "{{ ansible_user_dir }}/.config/i3/config"
-    mode: "0644"
-  when: desktop_effective == 'i3'
+    - name: Deploy i3 config
+      ansible.builtin.template:
+        src: i3.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/i3/config"
+        mode: "0644"
+        force: false
+
+# --- i3 TrackPoint config (X11 persistent, via xorg.conf.d) ---
+- name: TrackPoint config for i3 (X11, xorg.conf.d)
+  when:
+    - desktop_effective == 'i3'
+    - desktop_i3_trackpoint_id | length > 0
+  become: true
+  tags: [become]
+  block:
+    - name: Ensure /etc/X11/xorg.conf.d exists (i3 TrackPoint)
+      ansible.builtin.file:
+        path: /etc/X11/xorg.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Deploy TrackPoint libinput config (i3/X11)
+      ansible.builtin.template:
+        src: xorg-trackpoint.conf.j2
+        dest: /etc/X11/xorg.conf.d/90-trackpoint.conf
+        mode: "0644"
 
 # --- Sway config ---
-- name: Ensure Sway config directory
+- name: Ensure Pictures directory exists for screenshots
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/sway"
+    path: "{{ ansible_facts['user_dir'] }}/Pictures"
     state: directory
     mode: "0755"
+  when: desktop_effective in ['sway', 'i3']
+
+- name: Deploy Sway configuration and GTK settings
   when: desktop_effective == 'sway'
+  block:
+    - name: Ensure Sway config directories
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [sway, swaylock, xdg-desktop-portal, gtk-3.0, gtk-4.0]
 
-- name: Deploy Sway config
-  ansible.builtin.template:
-    src: sway.config.j2
-    dest: "{{ ansible_user_dir }}/.config/sway/config"
+    - name: Deploy Sway config
+      ansible.builtin.template:
+        src: sway.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/sway/config"
+        mode: "0644"
+
+    - name: Deploy swaylock config (show-failed-attempts, indicator-caps-lock)
+      ansible.builtin.template:
+        src: swaylock.config.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/swaylock/config"
+        mode: "0644"
+
+    - name: Deploy xdg-desktop-portal portals.conf (Sway screen sharing)
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['user_dir'] }}/.config/xdg-desktop-portal/portals.conf"
+        mode: "0644"
+        content: |
+          # {{ ansible_managed }}
+          [preferred]
+          default=gtk
+          org.freedesktop.impl.portal.Screenshot=wlr
+          org.freedesktop.impl.portal.ScreenCast=wlr
+
+    # GTK settings.ini (Sway: no GNOME settings daemon; GTK reads files directly)
+    - name: Deploy GTK settings (Sway)
+      ansible.builtin.template:
+        src: gtk-settings.ini.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/{{ item }}/settings.ini"
+        mode: "0644"
+      loop: [gtk-3.0, gtk-4.0]
+
+    - name: Set GTK dark color-scheme via dconf (xdg-desktop-portal-gtk)
+      community.general.dconf:
+        key: /org/gnome/desktop/interface/color-scheme
+        value: "'prefer-dark'"
+      when: not (system_is_container | default(false))
+      register: _desktop_dconf_dark
+      ignore_errors: true
+
+    - name: Warn if GTK dark color-scheme dconf write failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: dconf write for color-scheme failed (dbus/dconf unavailable?).
+          GTK3/4 direct reads use settings.ini; portal-querying GTK4 apps may not see dark theme.
+      when: _desktop_dconf_dark.failed | default(false)
+
+- name: Deploy TERMINAL environment.d config (Sway/i3)
+  ansible.builtin.copy:
+    content: "TERMINAL={{ desktop_terminal }}\n"
+    dest: "{{ ansible_facts['user_dir'] }}/.config/environment.d/terminal.conf"
     mode: "0644"
-  when: desktop_effective == 'sway'
+  when:
+    - is_linux
+    - desktop_effective in ['sway', 'i3']
+    - not system_is_container  # ~/.config/environment.d not created in containers (common task guards it)
 
-# --- i3status-rust config (shared by i3 and Sway) ---
-- name: Ensure i3status-rust config directory
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/i3status-rust"
-    state: directory
-    mode: "0755"
+# --- i3status config (shared by i3 and Sway) ---
+- name: Deploy i3status config (shared by i3 and Sway)
   when: desktop_effective in ['i3', 'sway']
+  block:
+    - name: Ensure i3status config directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/i3status"
+        state: directory
+        mode: "0755"
 
-- name: Deploy i3status-rust config
-  ansible.builtin.template:
-    src: i3status-rust.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/i3status-rust/config.toml"
-    mode: "0644"
-  when: desktop_effective in ['i3', 'sway']
+    - name: Deploy i3status config
+      ansible.builtin.template:
+        src: i3status.conf.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/i3status/config"
+        mode: "0644"
 
 # --- Chrome managed policies ---
-- name: Create Chrome managed policies directory
-  ansible.builtin.file:
-    path: /etc/opt/chrome/policies/managed
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
+- name: Chrome and Chromium managed policies
   when:
-    - desktop_deploy_chrome_policies | default(true) | bool
-    - ansible_system == 'Linux'
+    - desktop_deploy_chrome_policies
+    - is_linux
+    - not system_is_container
+  block:
+    - name: Stat CSB Chrome managed policy file
+      ansible.builtin.stat:
+        path: /etc/opt/chrome/policies/managed/csb-chrome-policies.json
+      register: desktop_csb_chrome
 
-- name: Deploy Chrome security policy
-  ansible.builtin.copy:
-    src: chrome-security-policy.json
-    dest: /etc/opt/chrome/policies/managed/security.json
-    mode: "0644"
-    validate: "python3 -c \"import json; json.load(open('%s'))\""
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(true) | bool
-    - ansible_system == 'Linux'
+    - name: Deploy local Chrome policies when no CSB policy exists
+      when: not desktop_csb_chrome.stat.exists
+      become: true
+      tags: [become]
+      block:
+        - name: Create managed policies directory
+          ansible.builtin.file:
+            path: "{{ item }}/policies/managed"
+            state: directory
+            mode: "0755"
+          loop:
+            - /etc/opt/chrome
+            - /etc/chromium
 
-- name: Create Chromium managed policies directory
-  ansible.builtin.file:
-    path: /etc/chromium/policies/managed
-    state: directory
-    mode: "0755"
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(true) | bool
-    - ansible_system == 'Linux'
-
-- name: Deploy Chromium security policy
-  ansible.builtin.copy:
-    src: chrome-security-policy.json
-    dest: /etc/chromium/policies/managed/security.json
-    mode: "0644"
-    validate: "python3 -c \"import json; json.load(open('%s'))\""
-  become: true
-  tags: [become]
-  when:
-    - desktop_deploy_chrome_policies | default(true) | bool
-    - ansible_system == 'Linux'
+        - name: Deploy security policy
+          ansible.builtin.copy:
+            src: chrome-security-policy.json
+            dest: "{{ item }}/policies/managed/security.json"
+            mode: "0644"
+          loop:
+            - /etc/opt/chrome
+            - /etc/chromium
 
 # --- Shell ---
-- name: Set zsh as default shell
+# ansible.builtin.user calls usermod, which cannot modify SSSD/LDAP-only accounts
+# that have no /etc/passwd entry. Probe first; for SSSD/LDAP accounts, chsh and
+# usermod both read only /etc/passwd and cannot write to LDAP backends —
+# the correct approach is override_shell in sssd.conf.
+# CI gap: all molecule scenarios use the vagrant/root user which is in /etc/passwd,
+# so the SSSD path (tasks below with _local_user.rc != 0 condition) is never
+# exercised in CI. A real SSSD/LDAP environment cannot be reproduced in Podman-based
+# molecule. The failed_when: false + warn task provides runtime resilience.
+- name: Check if user has a local /etc/passwd entry
+  ansible.builtin.command:
+    cmd: grep -q "^{{ ansible_facts['user_id'] }}:" /etc/passwd
+  register: _zsh_local_user_check
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when: is_linux
+
+- name: Check if zsh is installed
+  ansible.builtin.stat:
+    path: /bin/zsh
+  register: _zsh_binary_stat
+  when: is_linux
+
+- name: Fail if zsh binary is missing (prevents broken login)
+  ansible.builtin.fail:
+    msg: >-
+      Cannot set zsh as default shell: /bin/zsh does not exist.
+      The packages role may have failed to install zsh, or this role was run
+      without packages. Run 'make packages' first to install zsh, then retry.
+  when:
+    - is_linux
+    - not _zsh_binary_stat.stat.exists
+
+- name: Set zsh as default shell (local /etc/passwd user)
   ansible.builtin.user:
-    name: "{{ ansible_user_id }}"
+    name: "{{ ansible_facts['user_id'] }}"
     shell: /bin/zsh
   become: true
   tags: [become]
   when:
-    - ansible_user_shell | default('/bin/bash') != '/bin/zsh'
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) == 0
+
+# For SSSD/LDAP domain accounts, chsh and usermod only modify /etc/passwd
+# and cannot write to LDAP backends. Set override_shell in sssd.conf instead —
+# this takes effect for the domain user on next login after sssd restarts.
+- name: Get SSSD domain section for override_shell
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      result=$(awk -F'[][]' '/^\[domain\// {print $2; exit}' /etc/sssd/sssd.conf 2>/dev/null)
+      if [ -z "$result" ]; then
+        result=$(find /etc/sssd/conf.d/ -name '*.conf' 2>/dev/null |
+          xargs -r awk -F'[][]' '/^\[domain\// {print $2; exit}' 2>/dev/null |
+          head -1)
+      fi
+      echo "$result"
+    executable: /bin/bash
+  register: _sssd_domain_section
+  changed_when: false
+  failed_when: false
+  become: true
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+
+- name: Set zsh via override_shell in sssd.conf (SSSD/LDAP user)
+  community.general.ini_file:
+    path: /etc/sssd/sssd.conf
+    section: "{{ _sssd_domain_section.stdout }}"
+    option: override_shell
+    value: /bin/zsh
+    no_extra_spaces: true
+    mode: "0600"
+  become: true
+  tags: [become]
+  register: _sssd_override_shell_result
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+    - _sssd_domain_section.stdout | default('') | length > 0
+    - _zsh_binary_stat.stat.exists
+
+- name: Restart sssd after override_shell change
+  ansible.builtin.systemd:
+    name: sssd
+    state: restarted
+  become: true
+  tags: [become]
+  when:
+    - is_linux
+    - _sssd_override_shell_result is defined
+    - _sssd_override_shell_result is changed
+
+- name: Warn if SSSD domain not found (cannot set shell automatically)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not set zsh as default shell for {{ ansible_facts['user_id'] }}.
+      The account has no local /etc/passwd entry (SSSD/LDAP-managed) and no
+      [domain/...] section was found in /etc/sssd/sssd.conf.
+      Manual fix: add 'override_shell = /bin/zsh' to the [domain/...] stanza
+      in /etc/sssd/sssd.conf, then run 'systemctl restart sssd'.
+  when:
+    - is_linux
+    - _zsh_local_user_check.rc | default(1) != 0
+    - _sssd_domain_section.stdout | default('') | length == 0
 
 # --- macOS: AeroSpace config ---
-- name: Ensure AeroSpace config directory (macOS)
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config/aerospace"
-    state: directory
-    mode: "0755"
-  when: ansible_os_family == 'Darwin'
+- name: Deploy AeroSpace configuration (macOS)
+  when: is_macos
+  block:
+    - name: Validate supported macOS terminal application
+      ansible.builtin.assert:
+        that:
+          - desktop_terminal in ['ghostty', 'terminal', 'alacritty']
+          - desktop_macos_terminal_app == {'ghostty':'Ghostty', 'terminal':'Terminal', 'alacritty':'Alacritty'}[desktop_terminal]
+          - >-
+            desktop_macos_terminal_path == ('/System/Applications/Utilities/Terminal.app' if desktop_terminal == 'terminal'
+            else '/Applications/' + desktop_macos_terminal_app + '.app')
+        fail_msg: >-
+          Choose ghostty or terminal on macOS, with the matching application name
+          and path; Alacritty requires an existing independently installed app.
 
-- name: Deploy AeroSpace config (macOS)
-  ansible.builtin.template:
-    src: aerospace.toml.j2
-    dest: "{{ ansible_user_dir }}/.config/aerospace/aerospace.toml"
-    mode: "0644"
-  when: ansible_os_family == 'Darwin'
+    - name: Ensure AeroSpace config directory (macOS)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.config/aerospace"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy AeroSpace config (macOS)
+      ansible.builtin.template:
+        src: aerospace.toml.j2
+        dest: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
+        mode: "0644"
+        force: false
+
+    - name: Inspect seeded AeroSpace binding before migrating the terminal default
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
+      register: _desktop_aerospace_content
+      no_log: true
+
+    - name: Migrate the old factory terminal binding while preserving custom bindings
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_facts['user_dir'] }}/.config/aerospace/aerospace.toml"
+        regexp: "^alt-enter = 'exec-and-forget open -na Alacritty'$"
+        line: "alt-enter = 'exec-and-forget open -na {{ desktop_macos_terminal_app }}'"
+      when:
+        - desktop_terminal in ['ghostty', 'terminal']
+        - >-
+          "alt-enter = 'exec-and-forget open -na Alacritty'" in
+          (_desktop_aerospace_content.content | b64decode).splitlines()
 
 # --- macOS: defaults ---
 - name: Set macOS defaults
@@ -185,131 +443,76 @@
   loop: "{{ desktop_macos_defaults }}"
   loop_control:
     label: "{{ item.domain }} {{ item.key }}"
-  when: ansible_os_family == 'Darwin'
+  when: is_macos
 
 # --- macOS: firewall ---
-- name: Enable macOS firewall
+- name: Check macOS firewall settings
   ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw {{ item.check_cmd }}
+  register: _fw_check_results
   changed_when: false
+  check_mode: false  # read-only probe — must run in check mode
   become: true
   tags: [become]
-  when: ansible_os_family == 'Darwin'
+  when: is_macos
   failed_when: false
+  timeout: 30
+  loop: "{{ desktop_macos_firewall_settings }}"
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Enable macOS firewall stealth mode
+- name: Enable macOS firewall settings
   ansible.builtin.command:
-    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
-  changed_when: false
+    cmd: /usr/libexec/ApplicationFirewall/socketfilterfw {{ item.set_cmd }}
+  register: _fw_enable_results
+  changed_when: _fw_enable_results.rc == 0
   become: true
   tags: [become]
-  when: ansible_os_family == 'Darwin'
+  when:
+    - is_macos
+    - >-
+      not (_fw_check_results.results[ansible_loop.index0].stdout | default('')
+           | regex_search(item.match_re | default(item.match_str | regex_escape)))
   failed_when: false
+  timeout: 30
+  loop: "{{ desktop_macos_firewall_settings }}"
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
+
+- name: Warn if macOS firewall settings enable failed
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: socketfilterfw {{ item.set_cmd }} exited {{ _fw_enable_results.results[ansible_loop.index0].rc | default(0) }}
+      — {{ item.name }} firewall setting may still be off
+  when:
+    - is_macos
+    - _fw_enable_results.results[ansible_loop.index0].rc | default(0) != 0
+  loop: "{{ desktop_macos_firewall_settings }}"
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
 
 # --- GNOME hardening (Linux only, GNOME desktops) ---
-- name: Check if GNOME is installed
-  ansible.builtin.command:
-    cmd: gnome-shell --version
-  register: desktop_gnome_check
-  changed_when: false
-  failed_when: false
-  when: ansible_system == 'Linux'
-
-- name: Disable notifications on lock screen
-  community.general.dconf:
-    key: /org/gnome/desktop/notifications/show-in-lock-screen
-    value: "false"
-  failed_when: false
+- name: GNOME hardening dconf settings
   when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - is_linux
+    - desktop_effective == 'gnome'
+    - not (system_is_container | default(false))
+  block:
+    - name: Apply GNOME dconf hardening and UI settings
+      community.general.dconf:
+        key: "{{ item.key }}"
+        value: "{{ item.value }}"
+      loop: "{{ desktop_gnome_hardening_dconf + desktop_gnome_ui_dconf }}"
+      loop_control:
+        label: "{{ item.key }}"
+      ignore_errors: true
+      register: _desktop_gnome_dconf_results
 
-- name: Ensure screen lock is enabled
-  community.general.dconf:
-    key: /org/gnome/desktop/screensaver/lock-enabled
-    value: "true"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable USB automount
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/automount
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable autorun from removable media
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/autorun-never
-    value: "true"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable automount-open
-  community.general.dconf:
-    key: /org/gnome/desktop/media-handling/automount-open
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Set screen idle timeout (CIS 900s max)
-  community.general.dconf:
-    key: /org/gnome/desktop/session/idle-delay
-    value: "uint32 300"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Set screen lock delay after idle
-  community.general.dconf:
-    key: /org/gnome/desktop/screensaver/lock-delay
-    value: "uint32 0"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable location services
-  community.general.dconf:
-    key: /org/gnome/system/location/enabled
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable recent files tracking
-  community.general.dconf:
-    key: /org/gnome/desktop/privacy/remember-recent-files
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable GNOME RDP
-  community.general.dconf:
-    key: /org/gnome/desktop/remote-desktop/rdp/enable
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
-
-- name: Disable GNOME VNC
-  community.general.dconf:
-    key: /org/gnome/desktop/remote-desktop/vnc/enable
-    value: "false"
-  failed_when: false
-  when:
-    - ansible_system == 'Linux'
-    - desktop_gnome_check.rc | default(1) == 0
+    - name: Warn if GNOME dconf writes failed
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: some GNOME dconf writes failed (dbus/dconf unavailable?).
+          Failed keys: {{ _desktop_gnome_dconf_results.results | selectattr('failed') | map(attribute='item.key') | list | join(', ') }}
+      when: _desktop_gnome_dconf_results.results | selectattr('failed') | list | length > 0

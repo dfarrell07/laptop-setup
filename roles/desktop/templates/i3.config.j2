@@ -1,14 +1,23 @@
 # {{ ansible_managed }}
 
-set $mod Mod1
-set $term {{ desktop_i3_terminal }}
+set $mod Mod4
+set $term {{ desktop_terminal }}
 
-font pango:DejaVu Sans Mono 10
+font pango:{{ desktop_wm_font_family | regex_replace('[\n\r].*', '') }} {{ desktop_wm_font_size }}
 
 # Autostart
-exec_always --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
+exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork -c {{ desktop_wm_lock_color }}
+exec --no-startup-id xautolock -time {{ (desktop_wm_idle_lock_timeout | int // 60) }} -locker 'i3lock -c {{ desktop_wm_lock_color }}'
+exec --no-startup-id xset dpms 0 0 {{ desktop_wm_idle_display_timeout }}
+exec --no-startup-id xset r rate {{ desktop_wm_repeat_delay | int }} {{ desktop_wm_repeat_rate | int }}
+exec --no-startup-id dunst
+exec --no-startup-id {{ desktop_i3_polkit_agent }}  # polkit-gnome removed Fedora 41+
+exec --no-startup-id clipit -n  # clipboard manager daemon — persists clipboard content after source app closes
 exec_always --no-startup-id nm-applet
 exec_always --no-startup-id autorandr --change
+
+# Floating window drag/resize with mouse
+floating_modifier $mod
 
 # Terminal
 bindsym $mod+Return exec $term
@@ -18,18 +27,9 @@ bindsym $mod+Shift+q kill
 
 # Launcher
 bindsym $mod+d exec dmenu_run
+bindsym $mod+Shift+d exec arandr
 
-# Focus (vim keys)
-bindsym $mod+h focus left
-bindsym $mod+j focus down
-bindsym $mod+k focus up
-bindsym $mod+l focus right
-
-# Move window
-bindsym $mod+Shift+h move left
-bindsym $mod+Shift+j move down
-bindsym $mod+Shift+k move up
-bindsym $mod+Shift+l move right
+{% include '_focus_move.j2' %}
 
 # Split
 bindsym $mod+b split h
@@ -43,28 +43,7 @@ bindsym $mod+f fullscreen toggle
 bindsym $mod+Shift+space floating toggle
 bindsym $mod+space focus mode_toggle
 
-# Workspaces
-bindsym $mod+1 workspace number 1
-bindsym $mod+2 workspace number 2
-bindsym $mod+3 workspace number 3
-bindsym $mod+4 workspace number 4
-bindsym $mod+5 workspace number 5
-bindsym $mod+6 workspace number 6
-bindsym $mod+7 workspace number 7
-bindsym $mod+8 workspace number 8
-bindsym $mod+9 workspace number 9
-bindsym $mod+0 workspace number 10
-
-bindsym $mod+Shift+1 move container to workspace number 1
-bindsym $mod+Shift+2 move container to workspace number 2
-bindsym $mod+Shift+3 move container to workspace number 3
-bindsym $mod+Shift+4 move container to workspace number 4
-bindsym $mod+Shift+5 move container to workspace number 5
-bindsym $mod+Shift+6 move container to workspace number 6
-bindsym $mod+Shift+7 move container to workspace number 7
-bindsym $mod+Shift+8 move container to workspace number 8
-bindsym $mod+Shift+9 move container to workspace number 9
-bindsym $mod+Shift+0 move container to workspace number 10
+{% include '_workspaces.j2' %}
 
 # Resize mode
 mode "resize" {
@@ -77,14 +56,31 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
-# Audio (PipeWire via pactl)
-bindsym XF86AudioRaiseVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ +5%
-bindsym XF86AudioLowerVolume exec --no-startup-id pactl set-sink-volume @DEFAULT_SINK@ -5%
-bindsym XF86AudioMute exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ toggle
+# Audio (PipeWire via wpctl; -l 1.0 caps raise at 100% — same as Sway config)
+bindsym XF86AudioRaiseVolume exec --no-startup-id wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+bindsym XF86AudioLowerVolume exec --no-startup-id wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym XF86AudioMute exec --no-startup-id wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioMicMute exec --no-startup-id wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+
+# Media keys (playerctl)
+bindsym XF86AudioPlay exec --no-startup-id playerctl play-pause
+bindsym XF86AudioNext exec --no-startup-id playerctl next
+bindsym XF86AudioPrev exec --no-startup-id playerctl previous
+bindsym XF86AudioStop exec --no-startup-id playerctl stop
 
 # Brightness
 bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl set +5%
 bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
+
+# Browser (uses same variable as Sway: desktop_wm_browser)
+bindsym $mod+Shift+b exec {{ desktop_wm_browser }}
+
+# Manual screen lock ($mod+l is taken by focus-right)
+bindsym $mod+Ctrl+l exec --no-startup-id i3lock -c {{ desktop_wm_lock_color }}
+
+# Screenshot (scrot for X11)
+bindsym Print exec --no-startup-id scrot ~/Pictures/screenshot-%F-%H-%M-%S.png
+bindsym $mod+Print exec --no-startup-id scrot -s ~/Pictures/screenshot-%F-%H-%M-%S.png
 
 # Session
 bindsym $mod+Shift+c reload
@@ -92,17 +88,9 @@ bindsym $mod+Shift+r restart
 bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Yes' 'i3-msg exit'"
 
 # Appearance
-default_border pixel 1
-default_floating_border pixel 1
-hide_edge_borders smart
+default_border pixel {{ desktop_wm_border_width | int }}
+default_floating_border pixel {{ desktop_wm_floating_border_width | int }}
+{% if desktop_wm_hide_edge_borders | length > 0 %}hide_edge_borders {{ desktop_wm_hide_edge_borders | regex_replace('[^a-zA-Z_]', '') }}{% endif %}
 
 # Status bar
-bar {
-    status_command i3status-rust ~/.config/i3status-rust/config.toml
-    position top
-    colors {
-        background #282a36
-        statusline #f8f8f2
-        separator #6272a4
-    }
-}
+{% include '_bar_colors.j2' %}

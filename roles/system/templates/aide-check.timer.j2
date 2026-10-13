@@ -1,11 +1,12 @@
 # {{ ansible_managed }}
 [Unit]
-Description=Daily AIDE file integrity check
+Description=Hourly AIDE file integrity check
 
 [Timer]
-OnCalendar=*-*-* 05:00:00
+OnCalendar={{ system_aide_check_calendar | regex_replace('[\r\n].*', '') }}
+# Run missed check on next boot if system was off at scheduled time
 Persistent=true
-RandomizedDelaySec=15m
+RandomizedDelaySec={{ system_aide_check_random_delay | regex_replace('[\r\n].*', '') }}
 
 [Install]
 WantedBy=timers.target

@@ -1,2 +1,24 @@
 ---
 ssh_github_known_hosts_url: "https://api.github.com/meta"
+
+# Pinned ED25519 fallback when GitHub API is unreachable; update from
+# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+# HostKeyAlgorithms in ssh_config.j2 restricts github.com to ssh-ed25519. Last verified: 2026-08-02
+ssh_github_known_hosts_fallback:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+# Fallback for standalone invocation without the dotfiles role in the play.
+dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
+profile: work  # fallback for standalone invocation
+dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; authoritative in group_vars/all/vars.yml
+ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
+# Set in config.yml as a list of dicts: [{host: gitlab.example.com, fingerprint: "SHA256:..."}]
+# fingerprint is optional; when set, the scanned key fingerprint is asserted before seeding known_hosts.
+# Plain strings are also accepted (no fingerprint pinning): [gitlab.example.com, ...]
+ssh_work_keyscan_hosts: []
+# fallback; authoritative in group_vars/all/vars.yml; check-vars-sync.py enforces this mirror
+ssh_pubkey_accepted_algorithms:
+  - ssh-ed25519
+  - ssh-ed25519-cert-v01@openssh.com
+  - sk-ssh-ed25519@openssh.com
+  - sk-ssh-ed25519-cert-v01@openssh.com

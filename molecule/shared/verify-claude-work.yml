@@ -1,0 +1,95 @@
+---
+# Shared assertions: Claude work instance directory and settings
+# Imported by fedora/verify.yml and rocky/verify.yml
+
+- name: Verify Claude work config directory
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-work"
+  register: verify_claude_work
+
+- name: Assert Claude work config directory exists with mode 0700
+  ansible.builtin.assert:
+    that:
+      - verify_claude_work.stat.exists
+      - verify_claude_work.stat.isdir
+      - verify_claude_work.stat.mode == '0700'
+    fail_msg: >-
+      Claude work config dir missing or wrong permissions
+      (exists={{ verify_claude_work.stat.exists | default(false) }},
+      mode={{ verify_claude_work.stat.mode | default('absent') }},
+      expected isdir+0700)
+
+- name: Verify Claude work settings.local.json exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+  register: verify_claude_work_settings
+
+- name: Assert Claude work settings.local.json exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - verify_claude_work_settings.stat.exists
+      - verify_claude_work_settings.stat.mode == '0600'
+    fail_msg: "Claude work settings.local.json not deployed or wrong permissions"
+
+- name: Read Claude work settings for structural verification
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.claude-work/settings.local.json"
+  register: verify_claude_work_content
+  no_log: true
+  when: verify_claude_work_settings.stat.exists
+
+- name: Validate Claude work settings.local.json sandbox and deny config
+  vars:
+    _work_settings: "{{ verify_claude_work_content.content | b64decode | from_json }}"
+  ansible.builtin.assert:
+    that:
+      - _work_settings.sandbox.enabled | default(false) == true
+      - _work_settings.sandbox.failIfUnavailable | default(false) == true
+      - _work_settings.sandbox.allowUnsandboxedCommands | default(true) == false
+      - _work_settings.enableAllProjectMcpServers | default(true) == false
+      - "'Write(**/.git/hooks/**)' in _work_settings.permissions.deny"
+      - "'Edit(**/.git/hooks/**)' in _work_settings.permissions.deny"
+  when: verify_claude_work_settings.stat.exists
+
+- name: Verify Claude work CLAUDE.md exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.claude-work/CLAUDE.md"
+  register: verify_claude_md_work
+
+- name: Assert Claude work CLAUDE.md exists
+  ansible.builtin.assert:
+    that: verify_claude_md_work.stat.exists
+    fail_msg: "Claude CLAUDE.md not deployed (work profile)"
+
+- name: Verify Claude work-env file exists
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/claude/work-env"
+  register: verify_claude_work_env
+
+- name: Assert Claude work-env exists with mode 0600
+  ansible.builtin.assert:
+    that:
+      - verify_claude_work_env.stat.exists
+      - verify_claude_work_env.stat.mode == '0600'
+    fail_msg: "Claude work-env missing or wrong permissions"
+
+- name: Assert Claude work-env contains CLAUDE_CONFIG_DIR export
+  ansible.builtin.command:
+    cmd: grep -q 'CLAUDE_CONFIG_DIR' "{{ ansible_user_dir }}/.config/claude/work-env"
+  changed_when: false
+  when: verify_claude_work_env.stat.exists
+
+# Note: this git-email check also serves as the standalone work-profile git assertion
+# (previously in verify-work-profile.yml, now consolidated here).
+- name: Check git user.email is work email
+  ansible.builtin.command: git config --global user.email  # noqa: command-instead-of-module
+  register: verify_git_email
+  changed_when: false
+
+- name: Assert git email is work profile
+  ansible.builtin.assert:
+    that: "dotfiles_user_email_work in verify_git_email.stdout"
+    fail_msg: >-
+      git user.email ('{{ verify_git_email.stdout }}') does not contain
+      expected '{{ dotfiles_user_email_work }}' —
+      gitconfig.j2 profile conditional regression?

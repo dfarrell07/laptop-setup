@@ -1,0 +1,118 @@
+---
+name: Galaxy Drift Check
+
+on:
+  schedule:
+    - cron: '17 4 1 * *'  # Monthly on the 1st
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  galaxy-drift:
+    name: Ansible Galaxy Version Drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install Ansible
+        run: |
+          pip install --require-hashes -r <(awk '
+            /^[A-Za-z0-9_.-]+==/ {
+              selected = ($0 ~ /^(ansible|ansible-core|cffi|cryptography|jinja2)==/ ||
+                          $0 ~ /^(markupsafe|packaging|pycparser|pyyaml|resolvelib)==/)
+            }
+            selected {print}
+          ' requirements-test.lock)
+
+      - name: Install latest collection versions
+        run: |
+          WORK_DIR=$(mktemp -d)
+          echo "GALAXY_WORK_DIR=$WORK_DIR" >> "$GITHUB_ENV"
+          while IFS= read -r coll; do
+            ANSIBLE_COLLECTIONS_PATH="$WORK_DIR" ANSIBLE_COLLECTIONS_SCAN_SYS_PATH=false \
+              ansible-galaxy collection install "$coll" --collections-path "$WORK_DIR" --force
+          done < <(python3 -c "import yaml; [print(c['name']) for c in yaml.safe_load(open('requirements.yml'))['collections']]")
+
+      - name: Check for version drift
+        run: |
+          python3 - "$GALAXY_WORK_DIR" <<'PYEOF'
+          import json, sys, pathlib, yaml
+
+          work_dir = pathlib.Path(sys.argv[1])
+          reqs = yaml.safe_load(open('requirements.yml'))
+          unpinned = [c['name'] for c in reqs.get('collections', []) if 'version' not in c]
+          [print(f'::error::{n}: no version pin in requirements.yml') for n in unpinned]
+          unpinned and sys.exit(1)
+          pinned = {c['name']: c['version'] for c in reqs.get('collections', []) if 'version' in c}
+
+          drift = []
+          errors = []
+          for fqcn, pinned_ver in sorted(pinned.items()):
+              namespace, name = fqcn.split('.', 1)
+              manifest = work_dir / 'ansible_collections' / namespace / name / 'MANIFEST.json'
+              if not manifest.exists():
+                  print(f'::error::{fqcn}: MANIFEST.json not found after latest install — cannot verify')
+                  errors.append(fqcn)
+                  continue
+              data = json.loads(manifest.read_text())
+              latest = data['collection_info']['version']
+              if latest != pinned_ver:
+                  drift.append((fqcn, pinned_ver, latest))
+                  print(f'DRIFT  {fqcn}: pinned {pinned_ver} -> latest {latest}')
+              else:
+                  print(f'OK  {fqcn} == {pinned_ver}')
+
+          if errors:
+              print(f'ERROR: could not verify {len(errors)} collection(s): {errors}')
+              sys.exit(1)
+          if drift:
+              print()
+              print('Version drift detected. Update requirements.yml:')
+              for fqcn, old, new in drift:
+                  print(f'  {fqcn}: {old} -> {new}')
+              sys.exit(1)
+          print('All pinned collections are current.')
+          PYEOF
+
+  create-drift-issue:
+    name: Create drift issue
+    needs: [galaxy-drift]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Create drift issue (scheduled run only)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Galaxy collection drift detected"
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          BODY="Monthly drift check found version mismatch or verification error. See run: $RUN_URL"
+          EXISTING=$(gh issue list --label dependencies --state open \
+            --search "$TITLE in:title" --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "dependencies" \
+              || echo '::warning::gh issue create failed — check token permissions and label existence'
+          fi

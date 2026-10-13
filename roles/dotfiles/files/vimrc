@@ -1,0 +1,41 @@
+" Seeded by Ansible — safe to customize
+
+set nocompatible
+set nomodeline
+set secure
+set noswapfile
+set tabstop=2
+set shiftwidth=2
+set expandtab
+set autoindent
+set number
+set ruler
+set showcmd
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
+set history=5000
+set undolevels=1000
+set backspace=indent,eol,start
+if has('clipboard')
+  set clipboard=unnamedplus
+endif
+" 24-bit color and dark background for accurate terminal color rendering
+if has('termguicolors')
+  set termguicolors
+endif
+set background=dark
+colorscheme habamax
+syntax on
+filetype plugin indent on
+
+autocmd FileType go setlocal noexpandtab tabstop=4 shiftwidth=4
+autocmd FileType rust setlocal tabstop=4 shiftwidth=4 expandtab
+autocmd FileType python setlocal tabstop=4 shiftwidth=4 expandtab
+autocmd FileType markdown,text,gitcommit setlocal spell
+
+augroup vimrc_restore
+  autocmd!
+  autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
+augroup END

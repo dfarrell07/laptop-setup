@@ -1,0 +1,122 @@
+---
+# A boot-time sysctl ratchet runs before udev, networking and firewalld finish
+# loading their modules. Keep the irreversible lock in an ordered service.
+- name: Inspect the managed kernel module lockdown unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/kernel-modules-lockdown.service
+    follow: false
+  register: _system_module_lock_unit
+
+- name: Require safe metadata before reading an existing module lockdown unit
+  ansible.builtin.assert:
+    that:
+      - >-
+        not _system_module_lock_unit.stat.exists or
+        (_system_module_lock_unit.stat.isreg and _system_module_lock_unit.stat.uid == 0
+         and _system_module_lock_unit.stat.mode == '0644')
+    fail_msg: "Kernel module lockdown unit must be a root-owned regular file with mode 0644"
+
+- name: Read the existing managed module lockdown unit
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/kernel-modules-lockdown.service
+  register: _system_module_lock_content
+  no_log: true
+  when: _system_module_lock_unit.stat.exists
+
+- name: Reject an unmanaged module lockdown unit before service operations
+  ansible.builtin.assert:
+    that:
+      - >-
+        not _system_module_lock_unit.stat.exists or
+        (_system_module_lock_content.content | b64decode)
+        == lookup('template', 'kernel-modules-lockdown.service.j2')
+    fail_msg: "Existing kernel module lockdown unit does not match the approved managed service"
+
+- name: Ensure the private system helper directory exists
+  ansible.builtin.file:
+    path: /usr/local/libexec
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: system_modules_disabled | int == 1
+
+- name: Deploy the firewall readiness helper
+  ansible.builtin.copy:
+    src: wait-firewalld.py
+    dest: /usr/local/libexec/laptop-setup-wait-firewalld.py
+    owner: root
+    group: root
+    mode: '0644'
+  when: system_modules_disabled | int == 1
+
+- name: Deploy the ordered module lockdown service
+  ansible.builtin.template:
+    src: kernel-modules-lockdown.service.j2
+    dest: /etc/systemd/system/kernel-modules-lockdown.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: _system_module_lock_deploy
+  when: system_modules_disabled | int == 1
+
+- name: Reload systemd after deploying the module lockdown service
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - system_modules_disabled | int == 1
+    - _system_module_lock_deploy.changed
+
+- name: Finish pending system handlers before locking module loading
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the ordered module lockdown service
+  ansible.builtin.systemd:
+    name: kernel-modules-lockdown.service
+    enabled: true
+    state: started
+  when:
+    - system_modules_disabled | int == 1
+    - not ansible_check_mode or _system_module_lock_unit.stat.exists
+
+- name: Stop and disable the managed service when the module lock is disabled
+  ansible.builtin.systemd:
+    name: kernel-modules-lockdown.service
+    enabled: false
+    state: stopped
+  when:
+    - system_modules_disabled | int == 0
+    - _system_module_lock_unit.stat.exists
+
+- name: Remove the managed service when the module lock is disabled
+  ansible.builtin.file:
+    path: /etc/systemd/system/kernel-modules-lockdown.service
+    state: absent
+  register: _system_module_lock_remove
+  when: system_modules_disabled | int == 0
+
+- name: Reload systemd after removing the module lockdown service
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - system_modules_disabled | int == 0
+    - _system_module_lock_remove.changed
+
+- name: Read the actual module loading lock
+  ansible.builtin.slurp:
+    src: /proc/sys/kernel/modules_disabled
+  register: _system_module_lock_actual
+
+- name: Require the module lock to be active when configured
+  ansible.builtin.assert:
+    that: (_system_module_lock_actual.content | b64decode | trim) == '1'
+  when:
+    - system_modules_disabled | int == 1
+    - not ansible_check_mode
+
+- name: Report the reboot needed to release an existing one-way module lock
+  ansible.builtin.debug:
+    msg: "REBOOT REQUIRED: module loading is still locked until reboot; the startup lock service has been disabled"
+  when:
+    - system_modules_disabled | int == 0
+    - (_system_module_lock_actual.content | b64decode | trim) == '1'

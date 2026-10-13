@@ -1,0 +1,51 @@
+# Ansible managed
+[Unit]
+Description=AIDE file integrity check
+ConditionPathExists=/var/lib/aide/aide.db.gz
+OnFailure=aide-notify@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/aide --check
+# Emit a SHA-256 fingerprint of the reference database to journald after each
+# clean run so that silent rebaselining (aide --init && mv aide.db.new.gz
+# aide.db.gz by an attacker) produces a hash-discontinuity visible in journal
+# history even if the local database has been overwritten.  Stdout of
+# ExecStartPost is captured by journald under SyslogIdentifier=aide-check;
+# no network socket is needed (RestrictAddressFamilies=none is preserved).
+ExecStartPost=/bin/sh -c 'sha256sum /var/lib/aide/aide.db.gz'
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# Exit code 1 means AIDE found integrity violations — this is a genuine failure.
+# Removing SuccessExitStatus=1 lets systemd mark the unit failed on violations,
+# making them visible via 'systemctl --failed' and journalctl.
+SyslogIdentifier=aide-check
+
+# Systemd sandbox options compatible with full-filesystem read access:
+NoNewPrivileges=true
+# AIDE needs CAP_DAC_READ_SEARCH to read mode-0000 files (shadow, gshadow) as root
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+# aide --check is read-only; prevent any writes to /usr, /boot, /etc
+ProtectSystem=strict
+# aide --check writes report_url=file:/var/log/aide/aide.log (default aide.conf)
+ReadWritePaths=/var/log/aide
+# prevent aide --check process from overwriting the reference database
+ReadOnlyPaths=/var/lib/aide/aide.db.gz
+PrivateDevices=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+ProtectKernelLogs=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=none
+ProcSubset=pid
+UMask=0077

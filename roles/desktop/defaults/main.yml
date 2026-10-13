@@ -1,61 +1,280 @@
 ---
 desktop_environment: auto  # auto, sway, i3, gnome
 
-desktop_alacritty_font_size: 11.0
-desktop_i3_terminal: alacritty
+desktop_alacritty_font_family: DejaVu Sans Mono
+desktop_alacritty_font_size: 12.0
+desktop_alacritty_scrollback_lines: 50000
+desktop_wm_font_family: DejaVu Sans Mono
+desktop_wm_font_size: 10
+desktop_terminal: "{{ 'ghostty' if ansible_facts['system'] | default('Linux') == 'Darwin' else 'alacritty' }}"
+desktop_macos_terminal_app: "{{ {'ghostty': 'Ghostty', 'terminal': 'Terminal', 'alacritty': 'Alacritty'}[desktop_terminal] }}"
+desktop_macos_terminal_path: >-
+  {{ '/System/Applications/Utilities/Terminal.app' if desktop_terminal == 'terminal'
+     else '/Applications/' ~ desktop_macos_terminal_app ~ '.app' }}
+
+desktop_sway_hidpi_scale: "1.0"  # ThinkPad P16v 2560x1600: set 1.5 in config.yml; check with: swaymsg -t get_outputs
+desktop_sway_cursor_theme: Adwaita  # cursor theme; propagated to seat config and XCURSOR_THEME for XWayland apps
+desktop_sway_cursor_size: "{{ (24 * desktop_sway_hidpi_scale | float) | int }}"  # cursor size in px; seat config + XCURSOR_SIZE
+desktop_sway_libva_driver: ''  # VA-API driver: radeonsi (AMD), iHD (Intel); empty string omits export for libva auto-detection
+desktop_sway_vdpau_driver: ''  # VDPAU driver: radeonsi (AMD), va_gl (Intel via libva), nvidia (NVIDIA proprietary)
+desktop_wm_idle_lock_timeout: 300   # seconds of idle before screen lock activates (swaylock on Sway, i3lock on i3)
+desktop_wm_idle_display_timeout: 600  # seconds of idle before display powers off
+desktop_wm_lock_color: "000000"     # screen lock background color (hex, no #) — used by swaylock (Sway) and i3lock (i3)
+desktop_sway_keyboard_layout: ''  # e.g. us, de, fr — empty inherits system locale
+desktop_sway_keyboard_variant: ''    # XKB variant (e.g. 'intl', 'altgr-intl'); empty = none
+desktop_sway_keyboard_options: ''    # XKB options (e.g. 'caps:escape', 'ctrl:nocaps'); empty = none
+desktop_wm_repeat_delay: 200       # ms before key repeat starts (lower = snappier)
+desktop_wm_repeat_rate: 50         # key repeats per second after delay
+desktop_wm_browser: firefox  # browser executable for $mod+Shift+b keybinding
+desktop_i3status_battery_num: ''  # battery device number; empty disables battery block; ThinkPad: set '0' (BAT0) in config.yml
+desktop_gtk_theme: Adwaita-dark  # GTK theme for Sway (no GNOME settings daemon; written to gtk-3.0/gtk-4.0 settings.ini)
+desktop_gtk_icon_theme: Adwaita  # GTK icon theme for Sway
+
+# AMD k10temp PCI path for i3status CPU temperature block.
+# k10temp hwmon index on ThinkPad P16v Gen 1 AMD. hwmon index varies by machine/kernel; verify with:
+# ls /sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon*/temp1_input
+desktop_i3status_cpu_temp_path: ""  # set correct hwmon sysfs path in config.yml; empty disables the block
+# '*' = all displays (safe default); set specific name in config.yml for per-output scale/adaptive_sync
+desktop_sway_output: "*"  # find output names with: swaymsg -t get_outputs
+desktop_sway_adaptive_sync: "disabled"  # VRR/FreeSync; enable per-output in config.yml with a specific output name for VRR-capable displays
+desktop_sway_xwayland: ''  # set "disable" for pure-Wayland sessions (breaks XWayland-only apps); empty = sway default (enabled)
+desktop_sway_polkit_agent: "{{ '/usr/bin/lxqt-policykit-agent' if is_apt else '/usr/libexec/lxqt-policykit-agent' }}"
+desktop_i3_polkit_agent: "/usr/bin/lxpolkit"  # Fedora/Debian path for lxpolkit
+# Workspace-to-output assignments for multi-monitor setups; empty = no assignments written.
+# Example (config.yml):
+#   desktop_sway_workspace_outputs:
+#     - { workspace: 1, output: eDP-1 }
+#     - { workspace: 2, output: HDMI-A-1 }
+# Find output names with: swaymsg -t get_outputs | grep name
+desktop_sway_workspace_outputs: []
+
+# TrackPoint scroll device identifier (empty by default — no TrackPoint config
+# applied unless set). Find with: swaymsg -t get_inputs | grep -A2 TrackPoint
+desktop_sway_trackpoint_id: ''  # set in config.yml, e.g. '2:10:TPPS/2_IBM_TrackPoint'
+desktop_sway_trackpoint_accel_profile: flat  # flat avoids libinput adaptive curve that makes TrackPoint erratic
+desktop_sway_trackpoint_pointer_accel: "-0.5"  # negative = slower; tune between -0.4 and -0.6 for ThinkPads
+desktop_sway_trackpoint_scroll_factor: 0.5    # scroll wheel emulation factor; lower = slower scroll
+
+# Touchpad settings (applies to type:touchpad input)
+desktop_sway_touchpad_tap: ''                 # tap-to-click; empty = omit (libinput default: disabled)
+desktop_sway_touchpad_natural_scroll: ''      # natural scroll; empty = omit (libinput default: disabled)
+desktop_sway_touchpad_dwt: ''                 # disable-while-typing; empty = omit (libinput default: enabled)
+desktop_sway_touchpad_middle_emulation: ''  # middle-click emulation; empty = omit (libinput default: disabled)
+
+# Appearance
+desktop_wm_border_width: "{{ [1, (desktop_sway_hidpi_scale | float) | round | int] | max }}"
+desktop_wm_floating_border_width: "{{ desktop_wm_border_width }}"
+desktop_wm_hide_edge_borders: ''  # valid values: both, vertical, horizontal, smart, smart_no_gaps; empty = omit (sway/i3 default: none)
+desktop_sway_gaps_inner: 0
+desktop_sway_gaps_outer: 0
+desktop_sway_focus_follows_mouse: ''  # '' = omit directive (sway default); set yes/no/workspace to write literally
+
+# TrackPoint libinput config for X11/i3 (/etc/X11/xorg.conf.d/90-trackpoint.conf).
+# Empty by default — no xorg.conf.d file written unless set.
+# Find device name with: xinput list | grep -i trackpoint
+desktop_i3_trackpoint_id: ''  # set in config.yml, e.g. 'TPPS/2 Elan TrackPoint'
+desktop_i3_trackpoint_accel_profile: flat
+desktop_i3_trackpoint_pointer_accel: "-0.5"
 
 desktop_sway_packages:
   - sway
   - swayidle
   - swaylock
+  - swaybg
   - wofi
   - grim
   - slurp
   - brightnessctl
+  - i3status
+  - mako
+  - lxqt-policykit  # polkit-gnome removed from Fedora 41+; Qt6 Wayland-native polkit agent (binary: /usr/libexec/lxqt-policykit-agent)
+  - network-manager-applet
+  - xdg-desktop-portal
+  - xdg-desktop-portal-wlr
+  - xdg-desktop-portal-gtk
+  - wireplumber
+  - wdisplays
+  - pulseaudio-utils  # pactl for PulseAudio-compat debugging; keybindings use wpctl, i3status uses libpulse (device="pulse")
+  - wl-clipboard      # wl-copy/wl-paste — essential for clipboard in Wayland terminal workflows
+  - cliphist          # clipboard history manager for Wayland (clipboard dies with source app without it)
+  - playerctl         # media key control (play/pause/next/prev via sway keybindings)
+  - pavucontrol       # PulseAudio/PipeWire volume GUI
 
 desktop_i3_packages:
   - i3
-  - i3status-rust
+  - i3status   # i3status-rust is not in Fedora repos; install via COPR or cargo
   - i3lock
   - dmenu
+  - pulseaudio-utils  # pactl for PulseAudio-compat debugging; keybindings use wpctl, i3status uses libpulse (device="pulse")
   - xss-lock
   - autorandr
+  - brightnessctl
+  - playerctl
+  - network-manager-applet
+  - lxpolkit  # polkit-gnome removed from Fedora 41+; lxpolkit is the lightweight graphical polkit agent
+  - arandr
+  - dunst
+  - scrot
+  - xautolock
+  - xset          # X11 DPMS + keyboard repeat rate (used in i3 config autostart)
+  - clipit        # X11 clipboard manager daemon — persists clipboard content after app close; clipit -n runs headless
+  - xsel          # X11 clipboard CLI — tmux copy-pipe fallback when wl-copy unavailable
+  - wireplumber   # WirePlumber session manager — required for wpctl (audio volume keybindings via XF86Audio*)
+  - pavucontrol   # PulseAudio/PipeWire volume GUI
 
-desktop_common_packages:
-  - alacritty
-  - gvim
+desktop_gnome_packages:
+  - gnome-tweaks
+  - gnome-extensions-app
+
+desktop_dnf_packages:
+  - python3-psutil  # required by community.general.dconf
+  - dconf
+  - vim-X11  # gvim was renamed to vim-X11 in Fedora 41+
   - dejavu-sans-mono-fonts
   - terminus-fonts
   - gnome-keyring
+  - meld  # GTK graphical diff/merge tool; requires display session
 
-desktop_deploy_chrome_policies: true
+desktop_apt_packages:
+  - python3-psutil  # required by community.general.dconf
+  - dconf-cli
+  - vim-gtk3
+  - fonts-dejavu-core
+  - fonts-terminus
+  - gnome-keyring
+  - meld  # GTK graphical diff/merge tool; requires display session
+
+desktop_alacritty_packages:
+  - alacritty
+
+desktop_sway_apt_packages:
+  - sway
+  - swayidle
+  - swaylock
+  - swaybg
+  - wofi
+  - grim
+  - slurp
+  - brightnessctl
+  - i3status
+  - mako-notifier          # Fedora: mako
+  - lxqt-policykit
+  - network-manager-gnome  # Fedora: network-manager-applet
+  - xdg-desktop-portal
+  - xdg-desktop-portal-wlr
+  - xdg-desktop-portal-gtk
+  - wireplumber
+  - wdisplays
+  - pavucontrol
+  - playerctl
+  - wl-clipboard  # wl-copy/wl-paste — essential for clipboard in Wayland terminal workflows
+  - cliphist      # clipboard history manager for Wayland (clipboard dies with source app without it)
+  - pulseaudio-utils
+
+desktop_deploy_chrome_policies: false
+
+# Alacritty terminal color scheme — Catppuccin Mocha defaults; override any key in config.yml
+desktop_alacritty_color_bg: "#1e1e2e"
+desktop_alacritty_color_fg: "#cdd6f4"
+desktop_alacritty_color_normal_black: "#45475a"
+desktop_alacritty_color_normal_red: "#f38ba8"
+desktop_alacritty_color_normal_green: "#a6e3a1"
+desktop_alacritty_color_normal_yellow: "#f9e2af"
+desktop_alacritty_color_normal_blue: "#89b4fa"
+desktop_alacritty_color_normal_magenta: "#cba6f7"
+desktop_alacritty_color_normal_cyan: "#89dceb"
+desktop_alacritty_color_normal_white: "#bac2de"
+desktop_alacritty_color_bright_black: "#585b70"
+desktop_alacritty_color_bright_white: "#a6adc8"
+desktop_alacritty_color_surface0: "#313244"
+desktop_alacritty_color_overlay0: "#6c7086"
+
+# Bar theme colors — Catppuccin Mocha defaults; override any key in config.yml
+# Default palette matches desktop_alacritty_color_* values above; set both groups
+# in config.yml explicitly if you want a unified palette across terminal and bar.
+desktop_bar_bg: "#1e1e2e"
+desktop_bar_fg: "#cdd6f4"
+desktop_bar_separator: "#585b70"
+desktop_bar_focused_ws_bg: "#89b4fa"
+desktop_bar_focused_ws_text: "#1e1e2e"
+desktop_bar_active_ws_bg: "#313244"
+desktop_bar_active_ws_text: "#cdd6f4"
+desktop_bar_inactive_ws_bg: "#1e1e2e"
+desktop_bar_inactive_ws_text: "#6c7086"
+desktop_bar_urgent_ws_bg: "#f38ba8"
+desktop_bar_urgent_ws_text: "#1e1e2e"
+desktop_bar_binding_mode_bg: "#cba6f7"
+desktop_bar_binding_mode_text: "#1e1e2e"
+
+desktop_gnome_hardening_dconf:
+  # CIS: disable lock-screen notifications (avoids info leak on locked display)
+  - key: /org/gnome/desktop/notifications/show-in-lock-screen
+    value: "false"
+  # CIS: screen lock must be enabled
+  - key: /org/gnome/desktop/screensaver/lock-enabled
+    value: "true"
+  # CIS: idle timeout ≤900s; desktop_wm_idle_lock_timeout must satisfy requirement
+  - key: /org/gnome/desktop/session/idle-delay
+    value: "uint32 {{ desktop_wm_idle_lock_timeout }}"
+  # disable location services (privacy)
+  - key: /org/gnome/system/location/enabled
+    value: "false"
+  # disable recent-files tracking (privacy)
+  - key: /org/gnome/desktop/privacy/remember-recent-files
+    value: "false"
+
+# GNOME UI consistency settings (non-hardening) — keyboard feel to match Sway/i3
+desktop_gnome_ui_dconf:
+  # keyboard repeat delay — match Sway/i3 200ms
+  - key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
+    value: "uint32 {{ desktop_wm_repeat_delay }}"
+  # keyboard repeat interval — match Sway/i3 50 rep/s → 20ms
+  - key: /org/gnome/desktop/peripherals/keyboard/repeat-interval
+    value: "uint32 {{ (1000 / desktop_wm_repeat_rate) | int }}"
+
+desktop_macos_key_repeat: 2          # macOS key repeat rate (lower = faster; macOS default 6)
+desktop_macos_initial_key_repeat: 15  # macOS delay before repeat starts (lower = shorter; macOS default 25)
+desktop_macos_auto_quote_substitution: false  # NSAutomaticQuoteSubstitutionEnabled — disable smart quotes
+desktop_macos_auto_dash_substitution: false   # NSAutomaticDashSubstitutionEnabled — disable smart dashes
+desktop_macos_finder_show_all_extensions: true  # AppleShowAllExtensions — show all file extensions in Finder
+desktop_macos_finder_show_posix_path: true      # _FXShowPosixPathInTitle — show full path in Finder title bar
 
 desktop_macos_defaults:
   - domain: NSGlobalDomain
     key: KeyRepeat
     type: int
-    value: 2
+    value: "{{ desktop_macos_key_repeat }}"
   - domain: NSGlobalDomain
     key: InitialKeyRepeat
     type: int
-    value: 15
+    value: "{{ desktop_macos_initial_key_repeat }}"
   - domain: NSGlobalDomain
     key: NSAutomaticQuoteSubstitutionEnabled
     type: bool
-    value: false
+    value: "{{ desktop_macos_auto_quote_substitution }}"
   - domain: NSGlobalDomain
     key: NSAutomaticDashSubstitutionEnabled
     type: bool
-    value: false
+    value: "{{ desktop_macos_auto_dash_substitution }}"
   - domain: com.apple.finder
     key: AppleShowAllExtensions
     type: bool
-    value: true
+    value: "{{ desktop_macos_finder_show_all_extensions }}"
   - domain: com.apple.finder
     key: _FXShowPosixPathInTitle
     type: bool
-    value: true
-  - domain: com.apple.screencapture
-    key: location
-    type: string
-    value: "{{ ansible_user_dir }}/Downloads"
+    value: "{{ desktop_macos_finder_show_posix_path }}"
+
+desktop_macos_firewall_settings:
+  - {name: global, check_cmd: --getglobalstate, set_cmd: --setglobalstate on, match_str: 'State = 1'}
+  - name: stealth
+    check_cmd: --getstealthmode
+    set_cmd: --setstealthmode on
+    match_str: 'Stealth Mode = 1'
+    match_re: '(?i)stealth\s+mode(?:\s+is)?\s*(?:=\s*1|enabled|on)\b'
+
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_dnf: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml

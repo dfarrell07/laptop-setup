@@ -1,69 +1,704 @@
 ---
+packages_bpfman_enabled: false  # shared opt-in flag; also used before the packages role
+profile: work  # fallback for standalone invocation
+
 # Sysctl hardening values
 system_sysctl_hardening:
-  kernel.yama.ptrace_scope: 1
-  kernel.kptr_restrict: 1
-  kernel.io_uring_disabled: 2
-  kernel.unprivileged_bpf_disabled: 1
-  kernel.dmesg_restrict: 1
-  kernel.perf_event_paranoid: 2
+  # kernel.yama.ptrace_scope: merged via system_ptrace_scope combine() in tasks.yml
+  # STIG RHEL-09-213075 — hide kernel pointers from all processes including root/CAP_SYSLOG (prevents KASLR bypass)
+  kernel.kptr_restrict: 2
+  # kernel.io_uring_disabled: merged via system_io_uring_disabled combine() in tasks.yml
+  # kernel.unprivileged_bpf_disabled: merged via system_unprivileged_bpf_disabled combine() in tasks.yml
+  # MAINTENANCE: pinned defaults override third-party sysctl.d (90-hardening.conf sorts last).
+  # On each Fedora upgrade review /usr/lib/sysctl.d/*.conf AND kernel compile-time defaults.
+  # source: kernel compile-time default (CONFIG_SECURITY_DMESG_RESTRICT=y), not a sysctl.d file
+  kernel.dmesg_restrict: 1         # CIS — restrict dmesg/kmsg to CAP_SYSLOG; prevents boot info leakage
+  # kernel.perf_event_paranoid: merged via system_perf_event_paranoid combine() in sysctl.yml
+  kernel.randomize_va_space: 2  # CIS 1.5.2 — full ASLR (stack, heap, mmap); explicit to survive conflicting sysctl.d drop-ins
+  # CIS 3.3.6/3.3.7 — disable ICMP redirects; router should not inform hosts
+  # of alternate routes (manual set; not auto-disabled by ip_forward=1)
   net.ipv4.conf.all.send_redirects: 0
   net.ipv4.conf.default.send_redirects: 0
+  # explicit set prevents redirect acceptance via kernel ANDCONF(conf.all=0, per-iface) in router
+  # mode (ip_forward=1); also guards against future ip_forward=false override in config.yml
   net.ipv4.conf.all.accept_redirects: 0
   net.ipv4.conf.default.accept_redirects: 0
+  # IPv6: same ANDCONF logic — conf.all=0 short-circuits per-iface; explicit set guards against
+  # future system_enable_ip_forward: false override in config.yml
   net.ipv6.conf.all.accept_redirects: 0
   net.ipv6.conf.default.accept_redirects: 0
-  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.all.accept_source_route: 0   # CIS — IPv4 source routing off; pinned to block sysctl.d override
   net.ipv4.conf.default.accept_source_route: 0
-  net.ipv6.conf.all.accept_source_route: 0
+  net.ipv6.conf.all.accept_source_route: 0   # CIS — IPv6 source routing off; default 0 (no vendor sysctl.d); pinned vs third-party sysctl.d
   net.ipv6.conf.default.accept_source_route: 0
-  net.ipv4.conf.all.rp_filter: 1
-  net.ipv4.conf.default.rp_filter: 1
+  # Fedora 50-default.conf resets all.rp_filter to 0 after the *.rp_filter=2 wildcard; pinning 2
+  # floors all interfaces at loose mode. NOTE: all=2 is also a ceiling — max(all=2,per-iface=1)=2,
+  # so strict-per-interface needs system_sysctl_extra_additional to lower all.rp_filter to 0 or 1.
+  net.ipv4.conf.all.rp_filter: 2  # kernel uses max(all, per-iface)
+  # loose (2) — OVN-K/Kubernetes asymmetric routing; strict (1) drops pod traffic
+  # (CIS recommends 1 on non-Kubernetes hosts); pinned in 90-hardening.conf to
+  # prevent third-party /etc/sysctl.d override of 50-default.conf setting
+  net.ipv4.conf.default.rp_filter: 2  # vendor 50-default.conf sets 2; pinned so
+  # 90-hardening.conf wins over any 51-89 third-party drop-in that sets 1
+  # CIS 3.3.2/3.3.3 — log packets with impossible source addresses. Kernel default=0; set to 1 here.
+  # With ip_forward=1 (default) and transient routing gaps (e.g., kind CNI init), may generate
+  # brief kernel log noise from pods before routes are established.
   net.ipv4.conf.all.log_martians: 1
   net.ipv4.conf.default.log_martians: 1
+  # CIS 3.3.4/3.3.5. NOTE: secure_redirects is a no-op when accept_redirects=0 (the default here);
+  # these entries only activate if accept_redirects is overridden to 1 via system_sysctl_extra_additional.
+  # When active: value 0 rejects redirects from non-gateway hosts; CIS mandates 0 regardless.
   net.ipv4.conf.all.secure_redirects: 0
   net.ipv4.conf.default.secure_redirects: 0
-  net.ipv6.conf.all.accept_ra: 0
-  net.ipv6.conf.default.accept_ra: 0
+  # net.ipv6.conf.all/default.accept_ra: merged via system_ipv6_accept_ra combine() in tasks.yml
+  # CIS — prevent SUID processes from writing core dumps (avoids privileged memory leaks).
+  # NOTE: this overrides 50-coredump.conf fs.suid_dumpable=2 and silently suppresses SUID crash
+  # capture even when system_coredump_storage: external. To re-enable SUID dumps: add
+  # fs.suid_dumpable: 2 to system_sysctl_extra in config.yml.
   fs.suid_dumpable: 0
-  net.ipv4.icmp_echo_ignore_broadcasts: 1
-  net.ipv4.icmp_ignore_bogus_error_responses: 1
-  net.ipv4.tcp_syncookies: 1
-  net.ipv4.tcp_rfc1337: 1
-  kernel.kexec_load_disabled: 1
-  net.core.bpf_jit_harden: 2
-  fs.inotify.max_user_watches: 524288
-  fs.inotify.max_user_instances: 512
+  # kernel.core_pattern: merged via system_core_pattern combine() in tasks.yml
+  # kernel.core_pipe_limit omitted: no known third-party override risk; 50-coredump.conf already sets it correctly.
+  # Fedora 44 kernel runtime defaults; pinned here to prevent /etc/sysctl.d override
+  net.ipv4.icmp_echo_ignore_broadcasts: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
+  net.ipv4.icmp_ignore_bogus_error_responses: 1  # CIS — kernel default; pinned to prevent third-party sysctl.d override
+  fs.protected_regular: 2    # CIS — value 2 covers world+group-writable sticky dirs (value 1 = world-writable only; Fedora default)
+  fs.protected_hardlinks: 1  # Fedora 44 default via 50-default.conf; pinned to block sysctl.d override
+  fs.protected_symlinks: 1  # same
+  fs.protected_fifos: 2    # CIS — value 2 covers world+group-writable sticky dirs (same rationale as fs.protected_regular)
+  # kernel.panic: merged via system_kernel_panic combine() in tasks.yml
+  # kernel.panic_on_oops: merged via system_kernel_panic_on_oops combine() in tasks.yml
+  # Fedora 44 kernel runtime default; pinned here to prevent /etc/sysctl.d override
+  net.ipv4.tcp_syncookies: 1       # CIS 3.3.8 — pinned to kernel default (1); guards against third-party sysctl.d override
+  # net.ipv4.tcp_timestamps: kept at kernel default (1); CIS 3.3.9 recommends 0, but 0 harms RTTM/PAWS on OVN-K/Submariner high-BDP links
+  net.ipv4.tcp_rfc1337: 1         # CIS — prevent TIME-WAIT assassination (RST injection into expiring connections)
+  # kernel.kexec_load_disabled: merged via system_kexec_load_disabled combine() in tasks.yml
+  # kernel.modules_disabled: applied by the ordered kernel-modules-lockdown.service
+  # kernel.sysrq: merged via system_sysrq combine() in tasks.yml
+  # net.core.bpf_jit_harden: merged via system_bpf_jit_harden combine() in tasks.yml
+  # net.ipv4.ip_forward: merged via system_enable_ip_forward combine() in tasks.yml
+  # net.ipv6.conf.all.forwarding: merged via system_enable_ip_forward combine() in tasks.yml
+  # NOTE: No IPv6 privacy protection is active in the default config (system_ipv6_accept_ra=0 disables SLAAC).
+  # Set system_ipv6_accept_ra: 2 to enable SLAAC with EUI-64 leakage prevention.
+  # IPv6 privacy extensions: use_tempaddr=2 enables temporary (privacy) addresses for outbound connections.
+  # Harmless when SLAAC is disabled (system_ipv6_accept_ra=0); required when SLAAC is enabled
+  # (system_ipv6_accept_ra=2) to prevent MAC-derived EUI-64 address leakage.
+  # Behaviorally inert in default config (no SLAAC addresses, so no temporary addresses generated);
+  # pre-set here so that running make all once (to set system_ipv6_accept_ra: 2)
+  # simultaneously activates both SLAAC and privacy extensions without a second pass.
+  net.ipv6.conf.all.use_tempaddr: 2
+  net.ipv6.conf.default.use_tempaddr: 2
+  # Swap minimization: minimize swap use to reduce the window during which decrypted
+  # vault material, Python heap pages, and other sensitive provisioning memory can be
+  # paged out to a persistent swap device (HDD/SSD/zram). Value 1 keeps swap as
+  # emergency OOM relief while strongly preferring RAM; value 0 disables swap entirely
+  # (risks OOM-killer on memory-constrained hosts during long provisioning runs).
+  # Swap pages written during provisioning persist across process exit and survive a
+  # reboot unless the swap device is cryptographically wiped (dm-crypt/LUKS). On
+  # default Fedora (zram) and RHEL (swap partition) hosts, any process with block
+  # device read access can recover these pages offline. Override to 0 in config.yml
+  # via system_sysctl_extra_additional if the host has full-disk encryption.
+  vm.swappiness: 1
 
 # Firewall
-system_firewall_icmp_types:
-  - destination-unreachable
-  - fragmentation-needed
-  - packet-too-big
-  - time-exceeded
-  - echo-reply
-  - parameter-problem
+# True on standard Fedora and Fedora hybrid (csb_detected, not RHEL). False on RHEL CSB (csb_rhel) where IT manages zone policy.
+# Override in config.yml to force-enable or force-disable zone management.
+system_firewall_manage_zone: "{{ not csb_rhel }}"
 
-# Services
-system_enable_libvirtd: "{{ install_virtualization | default(true) }}"
-system_enable_mullvad: "{{ install_vpn | default(true) }}"
+system_firewall_icmp_types:
+  # fragmentation-needed (IPv4) and packet-too-big (IPv6) are intentionally omitted.
+  # Conntrack marks them RELATED for established outbound flows and admits them before
+  # the drop zone's DROP target fires — explicit icmp-block allowlist entries are not
+  # needed and would also admit unsolicited PMTUd from arbitrary sources.
+  - neighbour-solicitation  # IPv6 NDP — required for link-local even when SLAAC disabled (accept_ra=0); conntrack does not track NS/NA
+  - neighbour-advertisement  # same — link-local MAC resolution fails without NA
+
+# Additional ICMP types merged with system_firewall_icmp_types at apply time.
+# With icmp-block-inversion enabled, adding an icmp-block ALLOWS that type through drop zone.
+# echo-request (ping) is NOT in the default list — it allows global pingability from the drop
+# zone which is overly permissive for most hosts. Add it here only on machines where OVN-K/kind
+# pod-to-host-gw connectivity testing requires ping reachability.
+# time-exceeded (traceroute reachability) is NOT in the default list — conntrack already admits
+# time-exceeded responses that match outbound tracked flows (the legitimate use case); the only
+# effect of adding it here is to allow unsolicited inbound time-exceeded, enabling external hosts
+# to map this machine's network position via traceroute.
+# parameter-problem (IPv4 type 12, IPv6 type 4) is NOT in the default list — conntrack already
+# admits parameter-problem responses to outbound flows; the only additional traffic this allows
+# is unsolicited inbound parameter-problem, which can probe IPv6 extension-header handling.
+# Example: system_firewall_icmp_extra_types: [echo-request]
+system_firewall_icmp_extra_types: []
+
+# Set false in config.yml to keep tftp in the libvirt zone (needed for PXE/network-boot VMs).
+# When true (default), tftp is removed from the libvirt zone because it is not needed for most hosts.
+system_libvirt_remove_tftp: true
+# Set true in config.yml to allow VMs to reach host on ssh_port (opt-in).
+# Default false; explicit opt-in required for VM→host SSH (e.g., ansible-provisioning guests).
+system_libvirt_open_ssh: false
 
 # Core dumps
+# Default 'none' — prevents systemd-coredump from writing process memory to
+# /var/lib/systemd/coredump/ (mode 0640, systemd-journal group readable).
+# During provisioning, ansible-playbook/gpg/ssh-agent hold vault plaintext and
+# SSH private keys; a crash would expose them to any local user in systemd-journal.
+# Opt-in for developers needing crash diagnostics: set system_coredump_storage: external
+# in config.yml (compressed files in /var/lib/systemd/coredump/, gdb/dlv friendly).
+# 'journal' embeds core in journald (same group-readable risk as external).
+# NOTE: fs.suid_dumpable=0 suppresses SUID crashes regardless of this setting (CIS 1.5.1 req a).
 system_coredump_storage: none
-system_coredump_process_size_max: 0
+system_coredump_process_size_max: 2G  # custom limit (upstream default 32G); 0 disables
+# Compress — compress dumps (matches systemd compiled-in default; explicit to survive distro build flag changes)
+system_coredump_compress: "yes"
+system_coredump_max_use: 2G        # MaxUse — max total coredump disk usage (upstream default: 10% of fs)
+system_coredump_keep_free: 1G      # KeepFree — free disk space to preserve (upstream default: 15% of fs)
+
+# Journald log retention and rate-limiting (deployed via 99-hardening.conf drop-in)
+# Override in config.yml for small-disk systems or high-throughput log environments.
+system_journald_storage: persistent  # explicit; Storage=auto+dir triggers persistence; drop-in makes intent unambiguous
+system_journald_max_use: 4G        # SystemMaxUse — max total journald disk usage
+system_journald_keep_free: 1G      # SystemKeepFree — free disk space to preserve
+system_journald_max_retention: 6month  # MaxRetentionSec — max log age before rotation
+system_journald_rate_interval: 30s  # RateLimitIntervalSec — sliding window for rate limiting (matches systemd compiled-in default)
+system_journald_rate_burst: 10000  # RateLimitBurst — burst log entries per rate interval (matches systemd compiled-in default)
+system_journald_compress: "yes"    # Compress — compress journal data (matches systemd compiled-in default)
 
 # USBGuard
-system_install_usbguard: true
+system_install_usbguard: true  # authoritative in group_vars/all/vars.yml; here for standalone molecule invocability
 system_usbguard_whitelist:
-  - "allow id 1050:* name \"YubiKey\" with-interface one-of { 03:*:* 0B:*:* }"
-  - "allow id 3297:1969 name \"Moonlander\" with-interface one-of { 03:*:* }"
-  - "allow with-connect-type \"hardwired\""
-  - "allow with-connect-type \"direct\""
+  - "allow id 1050:* name \"YubiKey*\" with-interface one-of { 03:*:* 0B:*:* }"
+  # Linux Foundation vendor ID (1d6b) for all kernel-generated xHCI root hubs.
+  # Root hubs have connect_type N/A (no port attribute), so they match neither
+  # the hardwired rule below nor any with-connect-type "not used" per-device rule.
+  # Without these, blocking root hubs cascades to block all downstream devices.
+  # These IDs are identical on every Linux system regardless of hardware vendor.
+  - "allow id 1d6b:0001 with-interface one-of { 09:*:* }"  # USB 1.1 root hubs
+  - "allow id 1d6b:0002 with-interface one-of { 09:*:* }"  # USB 2.0 root hubs
+  - "allow id 1d6b:0003 with-interface one-of { 09:*:* }"  # USB 3.0 root hubs
+  # Retained for Intel-based hardware where ACPI tables populate hardwired correctly.
+  # Interface class restriction excludes mass storage (08) and unexpected classes.
+  # NOTE: AMD machines (ThinkPad P16v Gen 1) report internal ports as 'not used',
+  # not 'hardwired'; this rule is a no-op on those hosts. Add per-device VID:PID
+  # rules via system_usbguard_extra_rules in config.yml for AMD internal devices.
+  - "allow with-connect-type \"hardwired\" with-interface one-of { 03:*:* 09:*:* 0E:*:* 01:*:* E0:01:01 FF:*:* }"
+
+# Machine-specific additional whitelist rules merged with the above.
+# Set in config.yml (gitignored) to add device-specific rules without
+# replacing the whole base list. Examples:
+#   system_usbguard_extra_rules:
+#     - 'allow id 1234:5678 name "My USB Hub"'
+#     - 'allow id 3297:1969 name "Moonlander*" with-interface one-of { 03:*:* }'
+#     - 'allow id 0483:df11 name "DFU in FS Mode" with-interface one-of { FE:01:* }'
+system_usbguard_extra_rules: []
+system_usbguard_present_device_policy: keep
+system_usbguard_inserted_device_policy: apply-policy
+
+# udev rules pre-plant scan: basenames of files in /etc/udev/rules.d that are not
+# RPM/dpkg-owned but are known-good (e.g. generated by local tooling). Files not
+# owned by a package and not listed here abort provisioning. Override in config.yml.
+system_udev_rules_whitelist: []
+
+# Locale, timezone, keymap
+system_locale: en_US.UTF-8
+system_keymap: us
+system_logind_idle_sec: 900   # seconds of inactivity before logind locks the session (CIS max 900)
+  # Set to 900 (15 min) by default to stagger with TMOUT (typically 600 s): shells time out first,
+  # giving a visible shell-exit cue before the screen locks. Lower to 600 in config.yml if you
+  # want simultaneous firing, or set equal to system_tmout for lock-then-shell-die ordering.
 
 # AIDE file integrity monitoring
-system_aide_enabled: true
+# Pre-provisioning blind spot: files planted in monitored paths (e.g. /etc/sudoers.d)
+# before 'aide --init' are baked into the initial DB as known-good and never alert.
+# Auditd write-watches (auditd-system.rules.j2) only cover writes after auditd starts,
+# so a pre-provisioning plant is invisible to both subsystems.
+# preflight.sh runs 'aide --check' when a DB exists to surface changes before provisioning.
+system_aide_enabled: false  # 5-10 min init on first provision; enable only when monitoring results
+# Paths added to /etc/aide.conf as 'NORMAL' entries with insertbefore: '^/etc\s'.
+# Override in config.yml to add or remove monitored paths without editing tasks.
+system_aide_monitoring_etc_paths:
+  - /etc/ssh/sshd_config.d      # sshd hardening drop-ins
+  - /etc/systemd/system/sshd.service.d # sshd unit override drop-ins (planted backdoors)
+  - /etc/systemd/system/tmp.mount.d  # /tmp hardening drop-in (override protection)
+  - /etc/NetworkManager/conf.d      # MAC randomization and DNS policy
+  - /etc/NetworkManager/dispatcher.d # root execution hooks (persistent scripts)
+  - /etc/systemd/logind.conf.d   # session timeout policy
+  - /etc/systemd/journald.conf.d # log persistence policy
+  - /etc/systemd/coredump.conf.d # coredump config integrity
+  - /etc/crypto-policies/config    # configured policy name (the meaningful decision)
+  - /etc/crypto-policies/policies  # custom policy files
+  - /etc/selinux/config          # SELinux enforcement mode (enforcing/permissive/disabled)
+  - /etc/sysctl.d                # kernel hardening parameters
+  - /etc/kernel                  # kernel cmdline parameters (next-boot install)
+  - /etc/chrony.d                # chrony NTS drop-in configs (time sync tampering)
+  - /etc/systemd/resolved.conf.d # DNS-over-TLS config (DoT server substitution)
+  - /etc/audit                   # auditd rules integrity
+  - /etc/modprobe.d              # kernel module blacklist integrity
+  - /etc/sudoers.d               # sudo policy integrity
+  - /etc/udev                    # udev rules integrity (persistent implant vector)
+  - /etc/aide.conf               # self-reference: detect config tampering
+  - /etc/dconf                   # GNOME system hardening policy
+  - /etc/dbus-1                  # D-Bus policy files (sha512+perms+owner+mtime via NORMAL)
+  - /etc/systemd/system/dnf-automatic.service.d   # dnf-automatic drop-ins (rogue ExecStartPost detection)
+  - /etc/systemd/system/dnf5-automatic.service.d  # dnf5-automatic drop-ins (rogue ExecStartPost detection)
+  - /etc/polkit-1                # polkit rules (privilege escalation backdoor vector)
+
+# AIDE check schedule
+system_aide_check_calendar: 'hourly'           # OnCalendar for aide-check.timer; override in config.yml
+system_aide_check_random_delay: 15m            # RandomizedDelaySec for aide-check.timer; override in config.yml
+
+# Systemd drop-in directory whitelist (under /etc/systemd/system/*.d)
+# Directories found by the early SECURITY check in system/tasks/main.yml that are NOT in this
+# list cause an immediate play failure before any handler-triggering task runs. This blocks
+# pre-planted override.conf backdoors (e.g. sshd.service.d/override.conf ExecStartPre= payloads)
+# from executing when a handler restarts the service mid-play.
+# Extend in config.yml (system_systemd_dropin_whitelist) to add site-local entries.
+system_systemd_dropin_whitelist:
+  - tmp.mount.d            # /tmp hardening drop-in (mounts.yml)
+  - dnf-automatic.service.d   # AIDE update hook for dnf-automatic (dnf_automatic.yml)
+  - dnf5-automatic.service.d  # AIDE update hook for dnf5-automatic (dnf_automatic.yml)
+  - aide-check.service.d      # future AIDE check timer override slot
+
+# Setuid binary scan — runs weekly regardless of system_aide_enabled.
+# Detects new/removed setuid and setgid binaries (perm /6000) by diffing
+# against a stored baseline in /var/lib/setuid-scan/baseline.
+# Deviations are logged to journald (SyslogIdentifier=setuid-scan) and
+# are visible via: journalctl -t setuid-scan
+# Disabled automatically on containers and RHEL CSB hosts (IT manages baseline).
+# Set false in config.yml to opt out on hosts where the scan is not desired.
+system_setuid_scan_enabled: true
+
+# TLP battery charge management (ThinkPad — applied via /etc/tlp.d/ drop-in)
+# Auto-detected from ansible_facts['form_factor'] (Notebook/Portable/Laptop = true, Desktop = false).
+# Override in config.yml: system_tlp_enabled: true/false
+system_tlp_enabled: "{{ ansible_facts['form_factor'] is defined and ansible_facts['form_factor'] in ['Notebook', 'Portable', 'Laptop'] }}"
+system_tlp_bat0_start: 20   # start charging when battery drops below this %
+system_tlp_bat0_stop: 80    # stop charging at this % (Li-ion longevity: keep 20-80%)
+system_tlp_platform_profile_ac: performance   # ACPI platform profile on AC (performance/balanced/low-power)
+system_tlp_platform_profile_bat: balanced     # ACPI platform profile on battery
+system_tlp_cpu_energy_policy_ac: balance_performance   # CPU EPP on AC (balance_performance/performance/power/balance_power)
+system_tlp_cpu_energy_policy_bat: balance_power        # CPU EPP on battery (balance_power reduces TDP)
 
 # Logind
-system_lid_switch: lock
+system_lid_switch: suspend
 system_lid_switch_external: lock
 system_lid_switch_docked: ignore
+system_power_key: lock  # HandlePowerKey action: lock (screen lock), suspend, poweroff, ignore
+
+# Service / device masking
+# CUPS socket activation: mask cups.socket and cups.path so socket activation cannot
+# restart the CUPS daemon even when cups.service is disabled. Set false if any
+# printing is needed — cups.socket is required for all print dialogs (native apps, browsers, GNOME, Flatpak).
+system_disable_printing: false
+# CIS 2.1.5: disable BT on machines with no BT peripherals. Set false in config.yml to
+# enable Bluetooth (requires reboot to take effect).
+system_disable_bluetooth: true
+# set true to mask ModemManager on machines that will never use WWAN/USB modems (mobile broadband, USB tethering)
+system_disable_modemmanager: false
+system_disable_thunderbolt: false  # set true to blacklist thunderbolt/thunderbolt_net on machines with no Thunderbolt peripherals
+# Basenames allowed in /etc/modprobe.d; unexpected entries fail provisioning (pre-plant attack guard).
+# Fedora baseline: hardening.conf (ours) + alsa-*.conf (sound subsystem defaults).
+# Add extra basenames here (or in config.yml) for CSB/IT-managed or site-specific drop-ins.
+system_modprobed_whitelist:
+  - hardening.conf
+  - alsa-base.conf
+  - alsa.conf
+  - dist-alsa.conf
+  - dist-oss.conf
+# install/start bolt; false on VMs and containers
+# authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+system_bolt_enabled: "{{ ansible_facts['virtualization_role'] | default('host') == 'host' }}"
+system_disable_sctp: false  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+system_bluetooth_privacy: device   # BlueZ Privacy= in /etc/bluetooth/main.conf; 'off' to disable
+system_bluetooth_name: "Bluetooth"  # BlueZ Name= in /etc/bluetooth/main.conf; shown to Bluetooth scanners
+system_disable_fingerprint: true  # mask fprintd — set false in config.yml to enable fingerprint auth
+system_mask_abrt: true  # mask ABRT to prevent automatic upstream crash reporting and reduce daemon surface area;
+# local core capture is handled by systemd-coredump; set false on RHEL CSB (guard in task)
+# SysRq bitmask: 0=disabled (CIS), 176=sync(16)+remount-ro(32)+reboot(128) for kernel dev/recovery.
+# Dangerous bits omitted from 176: raw-console(4), process-signalling(64), crash/dump(8).
+# Set in config.yml — e.g. system_sysrq: 176 on a ThinkPad used for OVN-K kernel debugging.
+system_sysrq: 0  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+
+# IPv6 Router Advertisement acceptance: 0=disabled (CIS — prevents SLAAC).
+# To enable SLAAC: set system_ipv6_accept_ra: 2 in config.yml (value 2, NOT 1).
+# The Linux kernel suppresses RA processing when accept_ra<=1 AND forwarding=1 (always
+# set by this playbook for Kubernetes/OVN-K). Only value 2 accepts RAs with forwarding=1.
+system_ipv6_accept_ra: 0
+# BPF JIT hardening: 1=blind unprivileged callers; 2=blind all (breaks bpftool jit dump).
+# Value 1 is a no-op when system_unprivileged_bpf_disabled=2; set 2 in config.yml for CIS strict.
+system_bpf_jit_harden: 1  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+
+# Write-once locked to 2 on stock Fedora 44 (CONFIG_BPF_UNPRIV_DEFAULT_OFF=y); EPERM on write is tolerated.
+# Override in config.yml only for custom kernels built without CONFIG_BPF_UNPRIV_DEFAULT_OFF.
+system_unprivileged_bpf_disabled: 2  # authoritative value in group_vars/all/vars.yml; kept here for standalone molecule invocability
+system_enable_ip_forward: true  # set false on terminal-only hosts without Kubernetes/kind or Tailscale subnet routing
+# OVN-K/Submariner performance tuning (profile: work only); not security hardening.
+# nf_conntrack_max: 4x kernel default (131072); rmem_max/wmem_max: 16 MiB (~80x kernel default 212992 bytes).
+# Override in config.yml: providing any value replaces this default entirely, so include these keys
+# explicitly when adding machine-specific sysctls on a work-profile host that needs OVN-K tuning.
+# Run 'make all' to deploy; values take effect immediately via sysctl --system without a reboot.
+# Example: system_sysctl_extra_additional: { "vm.swappiness": 0 }  # 0 eliminates swap on LUKS-encrypted hosts
+# WARNING: system_sysctl_extra is applied second-to-last; system_sysctl_extra_additional (below) has
+# higher precedence and silently overrides any matching key in system_sysctl_hardening. Do not set
+# these security-critical keys here without intent:
+# kernel.kptr_restrict, net.ipv4.conf.all.send_redirects, fs.suid_dumpable,
+# net.ipv4.conf.all.rp_filter (ceiling effect: per-iface strict=1 is silently promoted to
+# loose=2 by all.rp_filter=2; lower all.rp_filter to 0 or 1 here to achieve strict mode).
+# Also avoid these dynamically-merged keys (assembled via set_fact in sysctl.yml before the combine
+# chain applies system_sysctl_extra then system_sysctl_extra_additional); setting any of them in
+# system_sysctl_extra_additional silently overrides the corresponding toggle variable and creates an
+# inconsistency (e.g. net.ipv4.ip_forward: 0 in system_sysctl_extra_additional overrides
+# system_enable_ip_forward: true in 90-hardening.conf while system_enable_ip_forward still reads true
+# everywhere else). Use the toggle variable instead:
+# net.ipv4.ip_forward, net.ipv6.conf.all.forwarding, kernel.yama.ptrace_scope,
+# kernel.kexec_load_disabled, kernel.io_uring_disabled, kernel.sysrq, kernel.core_pattern,
+# kernel.panic, kernel.panic_on_oops, kernel.unprivileged_bpf_disabled, net.core.bpf_jit_harden,
+# net.ipv6.conf.all.accept_ra, net.ipv6.conf.default.accept_ra, kernel.perf_event_paranoid.
+_system_sysctl_work_defaults:
+  net.netfilter.nf_conntrack_max: 524288
+  net.core.rmem_max: 16777216
+  net.core.wmem_max: 16777216
+  # br_netfilter may not be loaded on a fresh install; sysctl.yml allows ENOENT on apply,
+  # and kernel_modules_kind.yml loads br_netfilter then re-runs sysctl --system to complete activation.
+  net.bridge.bridge-nf-call-iptables: 1   # required for OVN-K/Kubernetes: bridges pod traffic through iptables for NetworkPolicy
+  net.bridge.bridge-nf-call-ip6tables: 1  # required for OVN-K/Kubernetes: same for IPv6 pod traffic
+# inotify resource limits — performance/functionality tuning for inotify-heavy tools (VS Code Remote, etc.).
+# These are resource increases, not security restrictions; kept separate from system_sysctl_hardening.
+# Always applied (all profiles); not guarded by a profile condition.
+_system_sysctl_performance_defaults:
+  fs.inotify.max_user_watches: 1048576
+  fs.inotify.max_user_instances: 8192
+  # Fedora 41+ default (IncreaseVmMaxMapCount); duplicates /usr/lib/sysctl.d/10-map-count.conf exactly.
+  # Pinned here so 90-hardening.conf wins lexicographically and continuity is preserved if 10-map-count.conf changes.
+  vm.max_map_count: 1048576
+system_sysctl_extra: "{{ (_system_sysctl_work_defaults if profile == 'work' else {}) | combine(_system_sysctl_performance_defaults) }}"
+# WARNING: highest combine() precedence — silently overrides any matching key in system_sysctl_hardening or system_sysctl_extra
+system_sysctl_extra_additional: {}
+system_disable_usb_storage: false  # kernel-blocks usb_storage/uas when true; authoritative in group_vars/all/vars.yml
+system_disable_udf: true          # kernel-blocks udf module; set false if UDF media needed; authoritative in group_vars/all/vars.yml
+# Core dump handling: systemd-coredump (Fedora default) routes crashes to journalctl -b 0 -u systemd-coredump
+# and stores compressed in /var/lib/systemd/coredump/. Set to '|/bin/false' in config.yml to discard all
+# core dumps (CIS strict), or '' to use kernel default (%e.%p.%s.core in cwd). fs.suid_dumpable=0 prevents
+# SUID processes from dumping regardless of core_pattern.
+# The default value duplicates /usr/lib/sysctl.d/50-coredump.conf intentionally — writing it to
+# 90-hardening.conf anchors it against third-party drop-ins that might modify core_pattern
+# (sysctl.d uses lexicographic ordering; 90- wins over any competing file except 99-*).
+system_core_pattern: "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F"
+system_io_uring_disabled: 1  # 1=CAP_SYS_ADMIN only; set 2 to disable globally; authoritative in group_vars/all/vars.yml
+# Non-root apps using io_uring directly (tokio-uring, not standard tokio which uses epoll via mio; libuv, some DB clients) will receive
+# ENOSYS or
+# fall back to epoll — test affected workloads before applying on dev machines
+# Kernel lockdown mode: 'integrity' blocks loading unsigned kernel modules, some
+# debug interfaces (debugfs under lockdown), and hibernate-to-disk
+# (LOCKDOWN_HIBERNATION — `systemctl hibernate` returns EPERM; S3/S2idle suspend
+# is unaffected). Set '' to disable, or 'confidentiality' for stronger (but more
+# restrictive) mode. bpfman core unaffected; bpftrace requires 'integrity' or ''
+# (not 'confidentiality'). Set '' in config.yml if lockdown breaks debugging
+# workflows (KGDB, /sys/kernel/debug access, hibernate, etc.).
+system_kernel_lockdown: integrity
+
+# GRUB bootloader password (CIS 1.4.2) — protects against kernel param tampering
+# with physical console access (prevents removing lockdown=integrity before boot).
+# Default: false (opt-in). Set true in config.yml + configure system_grub_password_hash.
+system_grub_password_enabled: false
+# Generate via: grub2-mkpasswd-pbkdf2 (Fedora) or grub-mkpasswd-pbkdf2 (Debian)
+# Recommend storing in vault-encrypted config.yml (vault_grub_password_hash) for deployments.
+system_grub_password_hash: ""
+
+# Identity fallbacks — site.yml always sets these via set_fact from env,
+# but role defaults guard against standalone invocation or empty env vars.
+# An empty real_user_id would produce AllowUsers with no token in sshd,
+# locking out all users on the next sshd restart.
+# Must use lookup('env') not ansible_facts['user_id']/dir: those Ansible facts
+# resolve to root/root when the role runs with become: true at play level.
+real_user_home: >-
+  {{ lookup('pipe', 'python3 -c "import pwd,os; print(pwd.getpwuid(os.getuid()).pw_dir)" 2>/dev/null') | default(lookup('env', 'HOME'),
+  true) }}
+real_user_id: "{{ lookup('env', 'USER') }}"
+
+# Fallback for standalone invocation; authoritative value in group_vars/all/vars.yml.
+ssh_port: 722
+system_ssh_max_sessions: 10  # max concurrent SSH sessions per connection; 2 is too low for VS Code Remote SSH
+system_ssh_client_alive_interval: 300  # seconds between server keepalive probes (0 disables); override in config.yml
+system_ssh_client_alive_count_max: 2  # unacknowledged probes before server disconnects client; override in config.yml
+# disabled (bz3827): OpenSSH < 10.3 fires UnusedConnectionTimeout prematurely after ChannelTimeout;
+# standard ssh(1) unaffected, but API-style clients may disconnect;
+# set e.g. "global 1h" once all targets run >= 10.3
+system_ssh_channel_timeout: ""
+# seconds before idle connection with no channels is closed ("" to omit directive/disable); 3600=1h tolerates VS Code Remote SSH idle
+# periods; use '' to rely solely on ClientAlive keepalive
+system_ssh_unused_connection_timeout: 3600
+system_ssh_allow_agent_forwarding: "no"  # set 'yes' to forward ssh-agent to remote hosts (prefer ProxyJump instead)
+system_ssh_extra_allow_users: []  # users added to AllowUsers beyond real_user_id; set in config.yml for IT accounts
+system_ssh_allow_tcp_forwarding: "local"  # 'local' for -L tunnels (VS Code); 'yes' for both -L and -R; 'no' to disable
+system_ssh_rekey_limit: '1G 1h'  # OpenSSH default: cipher-dependent data only, no time limit; 1h bounds session-key exposure window
+# authoritative in group_vars/all/vars.yml; here for standalone molecule invocability; check-vars-sync.py enforces this mirror
+ssh_pubkey_accepted_algorithms:
+  - ssh-ed25519
+  - ssh-ed25519-cert-v01@openssh.com
+  - sk-ssh-ed25519@openssh.com
+  - sk-ssh-ed25519-cert-v01@openssh.com
+ssh_ciphers: 'chacha20-poly1305@openssh.com,aes256-gcm@openssh.com'
+ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
+ssh_kex_algorithms: "mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256,\
+  ecdh-sha2-nistp521,ecdh-sha2-nistp384"
+ssh_host_key_algorithms: 'ssh-ed25519'  # cert variant inert without a host CA; RSA/ECDSA excluded intentionally — on disk but unused
+
+# DNS-over-TLS (systemd-resolved). Deployed to /etc/systemd/resolved.conf.d/99-dot.conf on non-CSB Linux.
+# opportunistic: tries TLS, falls back to plain UDP/TCP 53 (default — safe on restricted networks)
+# yes: mandatory TLS — DNS fails completely on networks blocking port 853; only use on fully controlled networks
+system_dot_mode: opportunistic
+# allow-downgrade: try DNSSEC validation, accept downgrade if unavailable (default)
+# yes: strict DNSSEC — pairs with system_dot_mode: yes; set both for full DNSSEC enforcement
+# SECURITY TRADE-OFF: opportunistic + allow-downgrade (both defaults) allows an active on-path
+# attacker to simultaneously strip TLS transport and DNSSEC validation with no visible error.
+# Changing both to 'yes' closes the gap but breaks captive portals and corporate WiFi.
+# Verify internal DNS resolvers support port 853 before enabling strict mode.
+system_dnssec_mode: allow-downgrade
+system_dns_primary: >-
+  1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com
+  2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com
+system_dns_fallback: "9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net 2620:fe::fe#dns.quad9.net 2620:fe::9#dns.quad9.net"
+# ~. = catch-all required for Tailscale MagicDNS; per-link routing domains pushed by
+# NM-integrated VPNs win by specificity — see troubleshooting.md if split-DNS fails on non-NM VPNs
+system_dns_domains: "~."
+# LLMNR and mDNS via systemd-resolved drop-in (98-llmnr.conf).
+# 'no' disables each protocol (default — reduces broadcast traffic and attack surface).
+# Set 'yes' or 'resolve' (listen-only) for mDNS if avahi-daemon is masked (system_disable_avahi: true)
+# and .local resolution via resolved is desired instead. Independent of system_disable_avahi.
+system_resolved_llmnr: 'no'
+system_resolved_multicast_dns: 'no'
+
+# Crypto policy target for update-crypto-policies (Fedora/RHEL non-CSB only).
+# Override in config.yml, e.g. system_crypto_policy_target: DEFAULT:NO-SHA1:NO-RSASSA-PSS
+system_crypto_policy_target: DEFAULT:NO-SHA1
+
+# /tmp mount hardening (CIS 1.1.2.x): noexec,nosuid,nodev via systemd drop-in.
+# Default false: Fedora mounts /tmp with nosuid,nodev but not noexec; setting noexec breaks pip,
+# cargo, rustup, npm (native addons), and any tool that compiles and execs a binary from /tmp.
+# Set true in config.yml for stricter postures (CIS 1.1.2.x compliance); nosuid/nodev are always applied.
+system_tmp_noexec: false
+# /dev/shm mount hardening (CIS 1.1.7.x): noexec,nosuid,nodev via fstab + live remount.
+# Default true: CIS 1.1.7.x requires noexec on /dev/shm; nosuid/nodev are always applied.
+# Set false in config.yml when QEMU needs executable shared memory (memfd_create with MFD_EXEC
+# on Linux 6.3+ respects noexec on /dev/shm and returns EACCES), or when a JVM is configured
+# with -XX:+PerfDataSaveToFile writing executables to /dev/shm.
+system_devshm_noexec: true
+# /var/tmp bind-mount hardening (CIS 1.1.8): binds /var/tmp to /tmp with noexec,nosuid,nodev.
+# Default false: the bind-mount makes /var/tmp a tmpfs alias of /tmp — all contents are silently
+# lost on reboot, breaking dracut on kernel updates (FHS requires /var/tmp to persist across boots).
+# Set true only on hardened, non-development hosts where /var/tmp persistence is not required.
+system_var_tmp_noexec: false
+# /home nosuid force: on RHEL CSB-detected machines the nosuid tasks are skipped because
+# IT-managed NFS/autofs home directories may break with nosuid. Set true in config.yml
+# when /home is a known local mount on a RHEL CSB machine and nosuid is safe to apply.
+# NOTE: on Fedora hybrid (csb_detected=true, Fedora distribution), nosuid is applied
+# regardless of this flag — /home is a local btrfs partition and nosuid is always safe.
+system_home_nosuid_force: false
+# SELinux enforcement assertion: set false only in container CI environments where the
+# container image reports SELinux as disabled regardless of host policy (e.g., geerlingguy
+# Rocky images in Podman). On real hosts, leave true — the assert catches mis-configured
+# hosts before security-sensitive tasks run.
+# CI gap: SELinux enforcement is NOT verified by Podman-based scenarios when set false.
+system_selinux_enforcing_required: true
+system_selinux_policy: targeted  # SELinux policy type (targeted/minimum/strict)
+# Polkit rules directory scan: any file in /etc/polkit-1/rules.d not listed here
+# causes a hard failure. Fedora's packaged PKLA compatibility rule is accepted
+# only after RPM ownership and package integrity verification. Add managed
+# rule filenames (basename only) in config.yml to permit other rules. Example:
+#   system_polkitd_whitelist: [10-wheel.rules]
+system_polkitd_whitelist: []
+# LUKS keyfile cleanup: set true ONLY if this machine does NOT use rd.luks.key for
+# LUKS auto-unlock (i.e., no keyfile partition — the stale param just leaks the LUKS UUID).
+# If rd.luks.key is active and you set this true, the machine will require manual LUKS
+# passphrase entry on every reboot after provisioning. Default: false (preserve keyfile auth).
+system_remove_luks_key: false
+# LUKS TRIM/discard: set true ONLY to enable discard on full-disk encryption for SSD longevity.
+# WARNING: enabling discard allows SSD wear-leveling patterns to leak encrypted data locations;
+# only recommended for machines with disposable/non-sensitive data. CIS compliance mandates
+# false (default) to prevent wear-pattern fingerprinting attacks on sensitive systems.
+system_luks_discards_enabled: false
+# IOMMU passthrough mode for VFIO/libvirt PCI passthrough: set true only when actively
+# assigning PCI devices to VMs. Enabling iommu=pt bypasses DMA remapping for all devices
+# not assigned to a VM, trading full DMA isolation for passthrough performance.
+system_iommu_passthrough: false
+system_wifi_mac_rand: "{{ not csb_detected }}"
+system_wifi_powersave_disabled: "{{ not csb_rhel }}"
+system_nm_dispatcher_allowlist: []  # Extra basenames allowed in /etc/NetworkManager/dispatcher.d.
+  # CSB hosts auto-allow csb-fedora-logo. Add site-specific scripts here to suppress the audit fail.
+system_enable_cockpit: false  # set true to unmask cockpit (port 9090); LAN-accessible; use Tailscale for VPN-only access
+
+# Chrony NTS time sources. Override in config.yml for corporate environments that block
+# outbound NTP or require regional servers.
+# SECURITY: pre-flight validates hostnames by character allowlist only ([a-zA-Z0-9._:-]).
+# No domain-allowlist check is performed — config.yml integrity is the sole guard against
+# NTS server substitution. With system_chrony_authselectmode: require, a rogue entry fully
+# controls the clock (no unauthenticated fallback). Only list hostnames you explicitly trust.
+system_chrony_nts_servers:
+  - time.cloudflare.com
+  - nts.netnod.se
+  - ptbtime1.ptb.de
+  - ntppool1.time.nl
+system_chrony_fallback_pool: >-  # yamllint disable-line rule:line-length
+  {{ '2.fedora.pool.ntp.org' if is_fedora else '2.centos.pool.ntp.org' if is_dnf else '2.debian.pool.ntp.org' if is_apt else
+  'pool.ntp.org' }}
+system_chrony_minsources: 2
+system_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['container', 'docker', 'podman'] }}"
+system_chrony_service_enabled: "{{ not system_is_container }}"
+system_firewalld_running: false  # runtime set_fact in firewall.yml overrides; false ensures tag-isolated runs (--tags nm) are fail-safe
+system_chrony_authselectmode: require  # NTS-KE failure surfaces as a chrony startup error rather than
+  # silent fallback to unauthenticated NTP (prevents on-path clock manipulation when TCP 4460 is blocked).
+  # Set 'prefer' in config.yml if this host must sync on networks where TCP 4460 (NTS-KE) is blocked;
+  # also set system_chrony_authselectmode_prefer_confirmed: true to acknowledge the security trade-off.
+system_chrony_authselectmode_prefer_confirmed: false  # set true in config.yml alongside authselectmode: prefer
+system_chrony_makestep: "1.0 3"  # step on first 3 updates only, then slew; use '-1' only when clock may be wildly wrong at boot
+  # Security: '-1' means chrony steps on every sync cycle where offset >1.0 s — an attacker controlling
+  # any chrony source can cause an arbitrarily large clock step on any update, bypassing Kerberos
+  # (5-min window), TOTP (30-s window), and TLS certificate validity guards. '1.0 3' restricts
+  # stepping to the first three updates (boot convergence), then switches to slewing permanently.
+system_chrony_leapsecmode: slew  # 'step' to step the clock during a leap second instead of slewing
+system_chrony_leapseclist: /usr/share/zoneinfo/leap-seconds.list  # override in config.yml if tzdata not installed
+system_chrony_dhcp_sourcedir: ''  # NM-dispatcher DHCP NTP dir; disabled by default (DHCP-sourced NTP is opt-in).
+  # Set '/run/chrony-dhcp' in config.yml to accept corporate DHCP-pushed NTP sources.
+  # WARNING: enabling this trusts your local DHCP server to control your clock — a rogue
+  # DHCP server can push an attacker-controlled NTP source and enable replay/Kerberos attacks.
+system_chrony_driftfile: "{{ '/var/lib/chrony/chrony.drift' if is_apt else '/var/lib/chrony/drift' }}"  # apt: chrony.drift; dnf: drift
+system_chrony_ntsdumpdir: /var/lib/chrony   # NTS cookie persistence dir; override in config.yml for small /var partitions
+system_chrony_logdir: /var/log/chrony       # chrony log dir; override in config.yml for small /var/log partitions
+
+# Security hardening defaults — authoritative values live in group_vars/all/vars.yml
+# (which overrides these at precedence 5 when running via the project inventory).
+# Duplicated here so the system role is standalone-invocable in molecule scenarios,
+# where the molecule temp inventory does not load the project's group_vars directory.
+is_dnf5: false             # OS-detection baseline; csb_detect.yml overrides at runtime; kept here for standalone molecule invocability
+is_dnf: false              # authoritative in group_vars/all/vars.yml; here for standalone invocability
+is_apt: false              # authoritative in group_vars/all/vars.yml; here for standalone invocability
+csb_rhel: false            # authoritative in group_vars/all/vars.yml; here for standalone invocability
+csb_detected: false        # authoritative in group_vars/all/vars.yml; here for standalone invocability
+is_fedora: false           # authoritative in group_vars/all/vars.yml; here for standalone invocability
+system_disable_avahi: true        # mask avahi-daemon; false enables .local; authoritative in group_vars/all/vars.yml
+system_mask_nfs_server: true      # NFS mask (CIS 2.2.7); false: unmasks but NOT auto-started, enable manually; group_vars authoritative
+                                  # nfs-server/rpcbind disabled by vendor preset IF nfs-utils installed; mask is pre-emptive hardening
+                                  # on workstations where nfs-utils may not be present (creates /dev/null symlinks regardless)
+system_mask_iscsi: true           # mask iSCSI initiator (CIS 2.3.x); set false on iSCSI storage; authoritative in group_vars/all/vars.yml
+                                  # NOTE: masking iscsid.socket disables libvirt-daemon-driver-storage-iscsi;
+                                  # set false if VM iSCSI storage is required
+system_init_on_free: true         # zero freed memory pages (init_on_free=1); authoritative in group_vars/all/vars.yml
+system_faillock_even_deny_root: false  # lock root on auth failure; false on single-user hosts; group_vars/all/vars.yml authoritative
+system_faillock_audit: true            # log failed auth attempts via audit subsystem; set false to remove flag
+system_faillock_local_users_only: true  # prevent double-lockout with SSSD/IPA domain users; set false to remove flag
+system_pam_wheel_su: true              # restrict su to wheel group via pam_wheel.so; set false to remove the restriction
+system_sudo_timestamp_timeout: 15     # sudo credential cache duration in minutes; 0 = re-auth on every sudo; range [0, 60]
+system_go_env_sudoers: true           # write /etc/sudoers.d/go-env (GOTMPDIR env_keep); set false to remove the drop-in
+install_vpn: true           # fallback; authoritative value in group_vars/all/vars.yml
+install_virtualization: true # fallback; authoritative value in group_vars/all/vars.yml
+network_proxied: false  # authoritative in group_vars/all/vars.yml; here for standalone invocability
+proxy_url: ''           # authoritative in group_vars/all/vars.yml; here for standalone invocability
+system_tmout: 0                    # session inactivity timeout in seconds; 0 = disabled; 1–900 valid (CIS 5.5.5 max 900)
+system_faillock_deny: 5            # PAM lockout: failed attempts before account lock
+system_faillock_unlock_time: 900   # seconds before auto-unlock after failed attempts
+system_pwquality_minlen: 14        # minimum password length (CIS 5.3.2)
+system_pwquality_difok: 4          # characters that must differ from previous password
+system_pwquality_ucredit: -1       # require at least 1 uppercase character (CIS 5.3.3)
+system_pwquality_lcredit: -1       # require at least 1 lowercase character (CIS 5.3.3)
+system_pwquality_ocredit: -1       # require at least 1 special character (CIS 5.3.3)
+system_pwquality_dcredit: -1       # require at least 1 digit (CIS 5.3.3)
+system_pwquality_maxrepeat: 3      # maximum consecutive repeated characters
+system_pwquality_maxsequence: 3    # maximum consecutive characters in a monotonic sequence
+system_pwhistory_remember: 24      # number of previous passwords to remember (CIS 5.3.5)
+system_inactive_days: 30           # days inactive before account lock (CIS 5.5.1.5)
+system_gid0_allowed_accounts:     # accounts exempt from the GID-0 primary-group assert (CIS 6.2.x)
+  - root
+  - sync
+  - shutdown
+  - halt
+  - operator
+system_crond_whitelist:            # filenames (not paths) permitted in /etc/cron.d; unknown files abort provisioning
+  - 0hourly                        # cronie base package
+  - dailyjobs                      # cronie-noanacron
+  - sysstat                        # sysstat package
+system_sudoersd_whitelist:         # filenames (not paths) permitted in /etc/sudoers.d; unknown files abort provisioning
+  - 99-hardening                   # sudo Defaults hardening drop-in (managed by this role)
+  - go-env                         # GOTMPDIR env_keep drop-in (managed by this role)
+system_profiled_whitelist:         # filenames (not paths) permitted in /etc/profile.d; unknown files abort provisioning
+  - lang.sh                        # glibc-common locale setup
+  - less.sh                        # less pager env
+  - colorls.sh                     # color ls aliases
+  - vim.sh                         # vim editor env
+  - bash_completion.sh             # bash-completion package
+  - tmout.sh                       # managed by this role (session timeout)
+  - TMout.sh                       # legacy capitalisation variant
+system_pass_max_days: 365          # maximum password age in days (login.defs PASS_MAX_DAYS)
+system_pass_min_days: 1            # minimum days between password changes (login.defs PASS_MIN_DAYS)
+system_pass_warn_age: 7            # days of warning before password expires (login.defs PASS_WARN_AGE)
+system_auditd_max_log_file: 8      # MB per audit log file (auditd.conf max_log_file)
+system_auditd_num_logs: 5          # rotated files to keep (auditd.conf num_logs)
+system_umask: "027"                # default umask for login shells (login.defs UMASK)
+system_home_mode: "0700"           # CIS: new home directory permissions (login.defs HOME_MODE; Fedora 38+ shadow-utils)
+# With these values, a kernel panic does not reboot and a kernel oops does not halt — the system
+# continues running in an undefined state. Set panic=10 and panic_on_oops=1 in config.yml for
+# unattended or production hosts.
+system_kernel_panic: 0             # dev: preserve panic for kdump/KASAN/UBSAN; CIS: 10 (auto-reboot); kernel default=0
+system_kernel_panic_on_oops: 0     # dev: log-and-continue on OOPS; CIS 1.5.3: 1=halt; kernel default=0
+system_kexec_load_disabled: 1      # kdump uses kexec_file_load() (unaffected by this sysctl);
+                                   # CIS defense-in-depth independent of lockdown; set 0 in config.yml
+                                   # on machines where kdump requires kexec_load() and lockdown is also disabled.
+                                   # NOTE: lockdown=integrity blocks BOTH kexec_load() AND kexec_file_load() at
+                                   # the kernel level — but only AFTER reboot. In the post-provision/pre-reboot
+                                   # window, this sysctl blocks kexec_load() only; kexec_file_load() remains
+                                   # open to root (root can load a kernel stripped of all hardening parameters).
+                                   # Reboot SLA: smoke-test emits FAIL when lockdown is configured but not yet
+                                   # active — do not treat the host as hardened before that PASS. On Secure Boot
+                                   # machines kexec_file_load() enforces kernel signatures even pre-reboot,
+                                   # closing the window; on non-Secure-Boot machines the window is open until
+                                   # reboot activates lockdown (smoke-test secure-boot check is FAIL in that case).
+system_modules_disabled: 1        # ONE-WAY RATCHET: blocks ALL kernel module loads (incl. legitimate ones) until
+                                   # reboot. Closes the pre-reboot init_module() window where lockdown=integrity
+                                   # has not yet activated — an LPE-to-root exploit in that window could otherwise
+                                   # load an unsigned rootkit via init_module(). kexec_load_disabled=1 does not
+                                   # block init_module(); this sysctl does. No effect inside containers (guarded
+                                   # by not system_is_container). The ordered service locks at the end of
+                                   # system provisioning and after networking/firewalld during boot. Set 0 only
+                                   # if you load kernel modules at runtime after provisioning (e.g. kvm, vboxdrv,
+                                   # custom DKMS drivers) and accept the residual pre-reboot window.
+system_ptrace_scope: 1             # CIS 1.6.3 (parent-only attach); set 0 in config.yml for dev
+                                   # workstations needing unrestricted ptrace (gdb -p on arbitrary pids);
+                                   # normal child-process debugging unaffected by value 1
+system_perf_event_paranoid: 2      # CIS-compliant (>=2) and Fedora 44 default; value 3 requires CAP_SYS_ADMIN
+                                   # (breaks perf stat/top/record for non-root users); set 3 in config.yml
+                                   # for stricter posture on non-dev hosts
+
+# Logrotate /etc/logrotate.d whitelist — files allowed to exist after sudo config deploy.
+# Unexpected files are rejected by logrotate_sudo.yml to prevent planted postrotate root execution.
+# Extend in config.yml if your system installs additional logrotate drop-ins (e.g. chrony, sssd).
+system_logrotated_whitelist:
+  - sudo
+  - btmp
+  - wtmp
+  - dnf
+  - bootlog
+  - audit
+  - syslog
+
+# udev rules audit allowlist (SECURITY: pre-plant attack mitigation)
+# Basenames of files permitted in /etc/udev/rules.d/ — default empty because packages install
+# rules in /usr/lib/udev/rules.d/, not /etc/udev/rules.d/ (which is for local overrides only).
+# Provisioning fails if an unexpected file is found (pre-planted rule indicator).
+# To allow a legitimate file, add its basename to this list in config.yml.
+system_udev_rules_d_allowlist: []
+
+# D-Bus system.d allowlist (SECURITY: pre-plant attack mitigation)
+# Full paths of files in /etc/dbus-1/system.d/ that are NOT owned by any RPM package.
+# RPM-owned files are always permitted. Add non-RPM paths here only for locally-managed configs.
+# Provisioning fails if an unpackaged file is found (pre-planted policy indicator).
+# To allow a legitimate non-RPM file, add its full path to this list in config.yml.
+system_dbus_system_d_allowlist: []
+
+# dnf-automatic unattended update behavior: apply mode (install) vs download-only.
+# true: dnf-automatic applies security updates automatically (default for backward compatibility).
+# false: dnf-automatic downloads and stages updates but waits for manual `dnf upgrade`.
+# For dev laptops, set false in config.yml to prevent auto-installation of potentially
+# disruptive kernel/driver updates. Pre-reboot window: downloaded updates do not take effect
+# until the next `dnf upgrade` or system reboot. Applies to standard Fedora and hybrid CSB only
+# (RHEL CSB skips dnf-automatic entirely; IT manages updates via RHSM/Satellite).
+system_dnf_automatic_apply_updates: true
+# Filenames inside the dnf-automatic service drop-in directory that must not be removed
+# by the unauthorised-drop-in purge tasks. Add IT-managed filenames here when present.
+# Example: system_dnf_automatic_dropin_whitelist: [satellite-hook.conf]
+system_dnf_automatic_dropin_whitelist: []

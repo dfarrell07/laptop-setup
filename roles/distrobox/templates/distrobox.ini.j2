@@ -1,22 +1,47 @@
 # {{ ansible_managed }}
-[{{ distrobox_container_name }}]
-image={{ distrobox_container_image }}
-pull=true
-start_now=false
-init=false
-nvidia=false
-root=false
+[{{ distrobox_container_name | regex_replace('[\r\n]', '') }}]
+image={{ distrobox_container_image | regex_replace('[\r\n]', '') }}
+{% if distrobox_use_host_network %}
+# Host networking: container shares the host network namespace.
+# CAP_NET_ADMIN grants full iptables/nftables/routing control over the host stack.
+# Required for OVN-K/bpfman scenarios; set distrobox_use_host_network: false for general dev.
+# --cgroupns=private: container sees only its own cgroup subtree, not host service/PID metadata.
+# ACCEPTED RISK: systemd-in-container may behave unexpectedly under a private cgroup namespace
+# if the container runtime assigns a deep slice path that systemd cannot fully introspect.
+# Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
+# and document the specific runtime version as a known exception.
+# Distrobox supplies --network=host itself; a second network flag conflicts.
+additional_flags=--cap-add CAP_BPF --cap-add CAP_NET_ADMIN --cap-add CAP_PERFMON --cgroupns=private
+{% else %}
+# Isolated network (pasta): container has its own network namespace; CAP_NET_ADMIN omitted.
+# Set distrobox_use_host_network: true in config.yml only for OVN-K/bpfman host-network scenarios.
+# CAP_BPF + CAP_PERFMON: inert when kernel.unprivileged_bpf_disabled=2 (write-locked default) because
+# the kernel rejects bpf() from non-root processes regardless of container capabilities.
+# WARNING: lowering system_unprivileged_bpf_disabled to 0 or 1 in config.yml activates bpf() access
+# for ALL container processes holding CAP_BPF (including transitive npm/cargo/pip dependencies).
+# Any malicious package inside the container can then load eBPF programs attaching to host kprobes
+# or tracepoints. Only lower that sysctl if you understand this trade-off.
+# See references/troubleshooting.md "kernel.unprivileged_bpf_disabled=2 Is Write-Once".
+# --cgroupns=private: container sees only its own cgroup subtree, not host service/PID metadata.
+# ACCEPTED RISK: systemd-in-container may behave unexpectedly under a private cgroup namespace
+# if the container runtime assigns a deep slice path that systemd cannot fully introspect.
+# Tested with Podman rootless + crun; if systemd fails to start, remove --cgroupns=private
+# and document the specific runtime version as a known exception.
+# Disable Distrobox's implicit host network before choosing pasta.
+unshare_netns=true
+additional_flags=--network=pasta --cap-add CAP_BPF --cap-add CAP_PERFMON --cgroupns=private
+{% endif %}
 
-pre_init_hooks=dnf install -y 'dnf-command(config-manager)';
-
-additional_packages="{{ distrobox_packages | join(' ') }}"
+additional_packages={{ distrobox_packages | map('regex_replace', '[\r\n]', '') | join(' ') }}
 
 # Host delegation symlinks
+# ACCEPTED RISK: each entry creates /usr/local/bin/<cmd> -> /usr/bin/distrobox-host-exec,
+# which delegates execution to the host Podman daemon. Any container process can invoke
+# the delegated binary. podman is intentionally included — it is required for
+# container-in-container workflows (kind, OVN-K make targets). The allowlist in
+# common/tasks/pre_flight_checks.yml restricts distrobox_host_exec_commands to
+# [podman, flatpak, kind, docker]; shells and arbitrary binaries are rejected at
+# preflight to prevent trivial host-shell escape via distrobox-host-exec.
 {% for cmd in distrobox_host_exec_commands %}
-init_hooks=ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd }};
-{% endfor %}
-
-# Exports to host
-{% for bin in distrobox_exports %}
-init_hooks=distrobox-export --bin {{ bin }} --export-path {{ ansible_user_dir }}/.local/bin 2>/dev/null || true;
+init_hooks=mkdir -p /usr/local/bin && ln -sf /usr/bin/distrobox-host-exec /usr/local/bin/{{ cmd | quote }} || true;
 {% endfor %}

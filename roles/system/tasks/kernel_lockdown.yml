@@ -1,0 +1,475 @@
+---
+# --- Kernel lockdown ---
+- name: Check current kernel cmdline
+  ansible.builtin.command:
+    cmd: grubby --info=DEFAULT
+  register: system_grubby_info
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode to enable kernel-cmdline task conditionals
+
+- name: Warn when grubby probe failed (grubby-based cmdline hardening will be skipped)
+  ansible.builtin.debug:
+    msg: >-
+      grubby --info=DEFAULT failed (rc={{ system_grubby_info.rc }}) — all grubby-based kernel cmdline
+      hardening tasks (lockdown, vsyscall, IOMMU, init_on_free, page_alloc.shuffle) are being skipped
+      for the current boot entry. The /etc/kernel/cmdline shell fallback still runs but only takes
+      effect for future kernel installs, not the currently running boot entry.
+  when: system_grubby_info.rc != 0 and not csb_rhel
+
+# On RHEL CSB, IT manages the boot configuration — grubby --update-kernel=ALL and
+# /etc/kernel/cmdline edits are skipped. Fedora hybrid CSB runs its own kernel — lockdown applies.
+- name: 'Log RHEL CSB: grubby/kernel-cmdline hardening skipped (IT-managed)'
+  ansible.builtin.debug:
+    verbosity: 1
+    msg: "RHEL CSB detected — skipping grubby/kernel-cmdline hardening (IT manages RHEL boot config)"
+  when: csb_rhel
+
+- name: Kernel cmdline hardening block (skipped on RHEL CSB)
+  when: not csb_rhel
+  block:
+    # Secure Boot pre-check: lockdown=integrity without Secure Boot is defense-in-depth only.
+    # An attacker with physical access can replace the bootloader or kernel with one that strips
+    # the lockdown= parameter. Secure Boot is required to enforce lockdown against physical access.
+    - name: Probe Secure Boot state (lockdown=integrity pre-check)
+      ansible.builtin.command:
+        cmd: mokutil --sb-state
+      register: system_sb_state_result
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode for conditionals
+      when: system_kernel_lockdown | length > 0
+
+    - name: Warn about lockdown without Secure Boot — {{ system_kernel_lockdown }}
+      ansible.builtin.debug:
+        msg: >-
+          WARN: Secure Boot is NOT enabled
+          (mokutil --sb-state: {{ system_sb_state_result.stdout | default('') | trim }}).
+          lockdown={{ system_kernel_lockdown }} without Secure Boot has two gaps:
+          (1) pre-reboot window: kexec_file_load() is unblocked until reboot activates
+          lockdown — a root process can load a kernel stripped of all hardening parameters;
+          (2) physical access: the lockdown= cmdline parameter can be stripped by booting
+          a custom kernel. Enable Secure Boot in firmware to close both gaps. Reboot SLA:
+          smoke-test emits FAIL (kernel-lockdown and secure-boot) until lockdown is active
+          on the running kernel — do not use this host before those checks PASS.
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_sb_state_result.rc | default(-1) == 0
+        - "'SecureBoot enabled' not in (system_sb_state_result.stdout | default(''))"
+
+    - name: Assert Secure Boot enabled when GRUB password hardening is active
+      ansible.builtin.assert:
+        that:
+          - "'SecureBoot enabled' in (system_sb_state_result.stdout | default(''))"
+        fail_msg: >-
+          FAIL: system_grub_password_enabled is true but Secure Boot is NOT enabled.
+          Without Secure Boot, the GRUB password provides no physical-access protection —
+          an attacker can boot a custom bootloader that bypasses GRUB authentication.
+          Enable Secure Boot in firmware before activating GRUB password hardening,
+          or set system_grub_password_enabled: false to suppress this check.
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grub_password_enabled | default(false) | bool
+        - system_sb_state_result.rc | default(-1) == 0
+
+    - name: Remove stale kernel lockdown parameter before mode change
+      ansible.builtin.command:
+        cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      register: system_lockdown_stale_remove_result
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grubby_info.rc == 0
+        - "'lockdown=' in (system_grubby_info.stdout)"
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
+      changed_when: system_lockdown_stale_remove_result.rc == 0
+      failed_when: false
+
+    - name: "Enable kernel lockdown ({{ system_kernel_lockdown }})"
+      ansible.builtin.command:
+        argv:
+          - grubby
+          - "--args=lockdown={{ system_kernel_lockdown }}"
+          - --update-kernel=ALL
+      register: system_lockdown_result
+      when:
+        - system_kernel_lockdown | length > 0
+        - system_grubby_info.rc == 0
+        - "('lockdown=' ~ system_kernel_lockdown) not in (system_grubby_info.stdout)"
+      changed_when: system_lockdown_result.rc == 0
+      failed_when: system_lockdown_result.rc != 0 and system_grubby_info.rc == 0
+
+    - name: Remove kernel lockdown grub parameter (lockdown disabled)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="lockdown" --update-kernel=ALL
+      register: system_lockdown_remove_result
+      when:
+        - system_kernel_lockdown | length == 0
+        - system_grubby_info.rc == 0
+        - "'lockdown=' in (system_grubby_info.stdout)"
+      changed_when: system_lockdown_remove_result.rc == 0
+      failed_when: false
+
+    - name: Enable IOMMU for DMA protection (AMD)
+      ansible.builtin.command:
+        cmd: grubby --args="amd_iommu=on" --update-kernel=ALL
+      register: system_iommu_amd_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'amd_iommu=on' not in (system_grubby_info.stdout)"
+        - ansible_facts['processor'] | join(' ') | lower is search('amd')
+      changed_when: system_iommu_amd_result.rc == 0
+      failed_when: false
+
+    - name: Enable IOMMU for DMA protection (Intel)
+      ansible.builtin.command:
+        cmd: grubby --args="intel_iommu=on" --update-kernel=ALL
+      register: system_iommu_intel_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'intel_iommu=on' not in (system_grubby_info.stdout)"
+        - ansible_facts['processor'] | join(' ') | lower is search('intel')
+      changed_when: system_iommu_intel_result.rc == 0
+      failed_when: false
+
+    - name: Enable iommu=pt passthrough mode for VFIO/libvirt PCI passthrough
+      ansible.builtin.command:
+        cmd: grubby --args="iommu=pt" --update-kernel=ALL
+      register: system_iommu_pt_result
+      # iommu=pt switches the IOMMU from Translated (full DMA isolation per device) to
+      # Passthrough mode, bypassing DMA remapping for devices not assigned to a VM.
+      # This improves performance for VFIO PCI passthrough but degrades DMA protection
+      # for all other devices. Leave false unless actively using PCI passthrough to VMs.
+      when:
+        - system_iommu_passthrough | bool
+        - system_grubby_info.rc == 0
+        - "'iommu=pt' not in (system_grubby_info.stdout)"
+        - (ansible_facts['processor'] | join(' ') | lower is search('amd')) or
+          (ansible_facts['processor'] | join(' ') | lower is search('intel'))
+      changed_when: system_iommu_pt_result.rc == 0
+      failed_when: false
+
+    - name: Remove iommu=pt grub parameter (system_iommu_passthrough false)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="iommu=pt" --update-kernel=ALL
+      register: system_iommu_pt_remove_result
+      when:
+        - not (system_iommu_passthrough | bool)
+        - system_grubby_info.rc == 0
+        - "'iommu=pt' in (system_grubby_info.stdout)"
+      changed_when: system_iommu_pt_remove_result.rc == 0
+      failed_when: false
+
+    - name: Disable legacy vsyscall page (exploit gadget source)
+      ansible.builtin.command:
+        cmd: grubby --args="vsyscall=none" --update-kernel=ALL
+      register: system_vsyscall_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'vsyscall=none' not in (system_grubby_info.stdout)"
+      changed_when: system_vsyscall_result.rc == 0
+      failed_when: false
+
+    - name: Zero-fill freed memory pages (init_on_free — not a Fedora default)
+      ansible.builtin.command:
+        cmd: grubby --args="init_on_free=1" --update-kernel=ALL
+      register: system_init_on_free_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'init_on_free=1' not in (system_grubby_info.stdout)"
+        - system_init_on_free | bool
+      changed_when: system_init_on_free_result.rc == 0
+      failed_when: false
+
+    - name: Remove init_on_free grub parameter (system_init_on_free disabled)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="init_on_free" --update-kernel=ALL
+      register: system_init_on_free_remove_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'init_on_free=1' in (system_grubby_info.stdout)"
+        - not (system_init_on_free | bool)
+      changed_when: system_init_on_free_remove_result.rc == 0
+      failed_when: false
+
+    - name: Randomize page allocator free-list order (heap-spray defense)
+      ansible.builtin.command:
+        cmd: grubby --args="page_alloc.shuffle=1" --update-kernel=ALL
+      register: system_page_shuffle_result
+      when:
+        - system_grubby_info.rc == 0
+        - "'page_alloc.shuffle=1' not in (system_grubby_info.stdout)"
+      changed_when: system_page_shuffle_result.rc == 0
+      failed_when: false
+
+    - name: Read running kernel cmdline (vsyscall + page_alloc.shuffle active-boot probe)
+      ansible.builtin.command:
+        cmd: cat /proc/cmdline
+      register: _system_proc_cmdline
+      changed_when: false
+      failed_when: false
+      check_mode: false  # read-only probe — must run in check mode for conditionals
+
+    - name: Warn — vsyscall=none + page_alloc.shuffle=1 configured but not active in running kernel
+      ansible.builtin.debug:
+        msg: >-
+          WARN: vsyscall=none and/or page_alloc.shuffle=1 are written to the boot cmdline but are
+          NOT active in the running kernel. The vsyscall page at 0xffffffffff600000 remains mapped
+          (fixed-address ROP gadget: gettimeofday/time/getcpu entries) and page allocator free-list
+          order is deterministic — combined with KASLR bypass these enable reliable heap-spray + ROP
+          exploitation of kernel bugs in this pre-reboot window. Reboot to activate these mitigations.
+      when:
+        - _system_proc_cmdline.rc == 0
+        - "'vsyscall=none' not in (_system_proc_cmdline.stdout | default(''))"
+        - >-
+          ('vsyscall=none' in (system_grubby_info.stdout | default(''))) or
+          (system_vsyscall_result is defined and system_vsyscall_result is changed)
+
+    - name: Remove rd.luks.key grub parameter (leaks LUKS UUID; dracut falls back to passphrase)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="rd.luks.key" --update-kernel=ALL
+      register: system_luks_key_cleanup
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.key' in (system_grubby_info.stdout)"
+        - system_remove_luks_key | bool
+      changed_when: system_luks_key_cleanup.rc == 0
+      failed_when: false
+      # WARNING: set system_remove_luks_key: true in config.yml only if this machine does NOT
+      # use a LUKS keyfile for auto-unlock at boot. Removing rd.luks.key from the cmdline means
+      # LUKS will require manual passphrase entry on every reboot. Default: false (preserve keyfile auth).
+
+    - name: Remove rd.luks.key from /etc/default/grub (prevents grub2-mkconfig re-introducing it)
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '\s*rd\.luks\.key=\S+'
+        replace: ''
+      when:
+        - system_grubby_info.rc == 0
+        - system_remove_luks_key | bool
+      failed_when: false
+
+    - name: Remove rd.luks.allow-discards grub parameter (mitigates SSD wear-pattern fingerprinting)
+      ansible.builtin.command:
+        cmd: grubby --remove-args="rd.luks.allow-discards" --update-kernel=ALL
+      register: system_luks_allow_discards_remove
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.allow-discards' in (system_grubby_info.stdout)"
+        - not (system_luks_discards_enabled | bool)
+      changed_when: system_luks_allow_discards_remove.rc == 0
+      failed_when: false
+
+    - name: Remove rd.luks.options=discard grub parameter (SSD wear-pattern)
+      ansible.builtin.command:
+        cmd: grubby --remove-args='rd.luks.options' --update-kernel=ALL
+      register: system_luks_options_discard_remove
+      when:
+        - system_grubby_info.rc == 0
+        - "'rd.luks.options' in (system_grubby_info.stdout)"
+        - not (system_luks_discards_enabled | bool)
+      changed_when: system_luks_options_discard_remove.rc == 0
+      failed_when: false
+
+    # Persist the same policy in both sources: grub2-mkconfig can rebuild BLS
+    # entries from /etc/default/grub and must not discard earlier grubby updates.
+    - name: Compile persistent boot argument sources
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -I
+          - -c
+          - "{{ lookup('file', role_path ~ '/files/kernel-cmdline.py') }}"
+          - "{{ _system_boot_settings | to_json }}"
+      vars:
+        _system_boot_settings:
+          lockdown: "{{ system_kernel_lockdown }}"
+          init_on_free: "{{ system_init_on_free | bool }}"
+          passthrough: "{{ system_iommu_passthrough | bool }}"
+          remove_luks_key: "{{ system_remove_luks_key | bool }}"
+          amd: "{{ ansible_facts['processor'] | join(' ') | lower is search('amd') }}"
+          intel: "{{ ansible_facts['processor'] | join(' ') | lower is search('intel') }}"
+      register: system_boot_sources
+      changed_when: false
+      check_mode: false  # read-only compiler; copy tasks honor check mode
+      no_log: true
+      when:
+        - is_dnf
+        - not system_is_container
+
+    - name: Persist hardening arguments for future kernel installation
+      ansible.builtin.copy:
+        content: "{{ (system_boot_sources.stdout | from_json).kernel }}"
+        dest: /etc/kernel/cmdline
+        owner: root
+        group: root
+        mode: "{{ (system_boot_sources.stdout | from_json).kernel_mode }}"
+      register: system_kernel_cmdline_result
+      no_log: true
+      when:
+        - is_dnf
+        - not system_is_container
+
+    - name: Preserve hardening arguments across GRUB regeneration
+      ansible.builtin.copy:
+        content: "{{ (system_boot_sources.stdout | from_json).grub }}"
+        dest: /etc/default/grub
+        owner: root
+        group: root
+        mode: "{{ (system_boot_sources.stdout | from_json).grub_mode }}"
+      notify: Regenerate GRUB configuration
+      no_log: true
+      when:
+        - is_dnf
+        - not system_is_container
+        - (system_boot_sources.stdout | from_json).grub is defined
+
+    - name: Log grubby stderr for any non-zero return code
+      ansible.builtin.debug:
+        msg: "grubby failed ({{ item.key }}): rc={{ item.value.rc }} stderr={{ item.value.stderr | default('') }}"
+      loop: "{{ _grubby_results | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value.rc | default(0) | int != 0
+      vars:
+        _grubby_results:
+          lockdown: "{{ system_lockdown_result | default({}) }}"
+          lockdown_stale_remove: "{{ system_lockdown_stale_remove_result | default({}) }}"
+          lockdown_remove: "{{ system_lockdown_remove_result | default({}) }}"
+          iommu_amd: "{{ system_iommu_amd_result | default({}) }}"
+          iommu_intel: "{{ system_iommu_intel_result | default({}) }}"
+          iommu_pt: "{{ system_iommu_pt_result | default({}) }}"
+          iommu_pt_remove: "{{ system_iommu_pt_remove_result | default({}) }}"
+          vsyscall: "{{ system_vsyscall_result | default({}) }}"
+          init_on_free: "{{ system_init_on_free_result | default({}) }}"
+          init_on_free_remove: "{{ system_init_on_free_remove_result | default({}) }}"
+          page_shuffle: "{{ system_page_shuffle_result | default({}) }}"
+          luks_key_cleanup: "{{ system_luks_key_cleanup | default({}) }}"
+          luks_allow_discards_remove: "{{ system_luks_allow_discards_remove | default({}) }}"
+          luks_options_discard_remove: "{{ system_luks_options_discard_remove | default({}) }}"
+          kernel_cmdline: "{{ system_kernel_cmdline_result | default({}) }}"
+
+
+- name: Notify that reboot is required for kernel parameters
+  ansible.builtin.debug:
+    msg: "REBOOT REQUIRED: kernel params changed (lockdown/iommu/vsyscall/init_on_free/shuffle/luks-key/luks-discard). Reboot."
+  when: >-
+    system_lockdown_result is changed or
+    system_lockdown_stale_remove_result is changed or
+    system_lockdown_remove_result is changed or
+    system_iommu_amd_result is changed or
+    system_iommu_intel_result is changed or
+    system_iommu_pt_result is changed or
+    system_iommu_pt_remove_result is changed or
+    system_vsyscall_result is changed or
+    system_init_on_free_result is changed or
+    system_init_on_free_remove_result is changed or
+    system_page_shuffle_result is changed or
+    system_luks_key_cleanup is changed or
+    system_luks_allow_discards_remove is changed or
+    system_luks_options_discard_remove is changed or
+    system_kernel_cmdline_result is changed
+
+# Write /etc/motd.d/30-reboot-required when lockdown is configured but not yet active
+# in the running kernel. This persists across sessions until the host is rebooted.
+# The smoke-test emits FAIL for this condition; the MOTD ensures every login is a reminder.
+- name: Check whether kernel lockdown is active in the running kernel
+  ansible.builtin.slurp:
+    src: /sys/kernel/security/lockdown
+  register: _system_lockdown_active_raw
+  failed_when: false
+  changed_when: false
+  when:
+    - system_kernel_lockdown | length > 0
+    - not system_is_container
+
+- name: Write MOTD reboot notice when lockdown is configured but not active on running kernel
+  ansible.builtin.copy:
+    content: |
+      *** REBOOT REQUIRED ***
+      Kernel lockdown ({{ system_kernel_lockdown }}) has been written to the boot cmdline
+      but is NOT active on the running kernel. kexec_file_load() is unblocked until reboot.
+      Run `make smoke-test` after reboot to confirm kernel-lockdown PASS before using this machine.
+    dest: /etc/motd.d/30-reboot-required
+    mode: "0644"
+  when:
+    - system_kernel_lockdown | length > 0
+    - not system_is_container
+    - not csb_rhel
+    - _system_lockdown_active_raw is not failed
+    - _system_lockdown_active_raw.content is defined
+    - (_system_lockdown_active_raw.content | b64decode) is not search('\[(integrity|confidentiality)\]')
+
+- name: Remove MOTD reboot notice once lockdown is active on running kernel
+  ansible.builtin.file:
+    path: /etc/motd.d/30-reboot-required
+    state: absent
+  when: >-
+    system_is_container or
+    (system_kernel_lockdown | length > 0 and
+     _system_lockdown_active_raw is not failed and
+     _system_lockdown_active_raw.content is defined and
+     (_system_lockdown_active_raw.content | b64decode) is search('\[(integrity|confidentiality)\]')) or
+    system_kernel_lockdown | length == 0
+  failed_when: false
+
+# Write /etc/motd.d/31-iommu-pending when IOMMU cmdline params have been written
+# by grubby but are not yet active in the running kernel. Between provisioning and
+# reboot, hardware DMA remapping is inactive: PCIe/Thunderbolt bus masters can
+# access arbitrary host physical memory. Analogous to the lockdown MOTD above.
+- name: Check whether IOMMU is active in the running kernel
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      _proc=$(cat /proc/cmdline 2>/dev/null || echo "")
+      _etc=$(cat /etc/kernel/cmdline 2>/dev/null || echo "")
+      _configured=false
+      _active=false
+      if grep -q 'AuthenticAMD' /proc/cpuinfo 2>/dev/null; then
+        [[ "$_etc" == *"amd_iommu=on"* ]] && _configured=true
+        [[ "$_proc" == *"amd_iommu=on"* ]] && _active=true
+      fi
+      if grep -q 'GenuineIntel' /proc/cpuinfo 2>/dev/null; then
+        [[ "$_etc" == *"intel_iommu=on"* ]] && _configured=true
+        [[ "$_proc" == *"intel_iommu=on"* ]] && _active=true
+      fi
+      # /sys/class/iommu non-empty is a definitive runtime confirmation IOMMU is active
+      if [[ -d /sys/class/iommu ]] && [[ -n "$(ls -A /sys/class/iommu 2>/dev/null)" ]]; then
+        _active=true
+      fi
+      echo "configured=${_configured} active=${_active}"
+    executable: /bin/bash
+  register: _system_iommu_runtime_raw
+  failed_when: false
+  changed_when: false
+  when: not system_is_container
+
+- name: Write MOTD notice when IOMMU is configured but not active in running kernel
+  ansible.builtin.copy:
+    content: |
+      *** REBOOT REQUIRED ***
+      IOMMU (DMA remapping) has been written to the boot cmdline but is NOT active
+      on the running kernel. PCIe/Thunderbolt DMA protection is absent until reboot.
+      Run `make smoke-test` after reboot to confirm iommu PASS before using this machine.
+    dest: /etc/motd.d/31-iommu-pending
+    mode: "0644"
+  when:
+    - not system_is_container
+    - not csb_rhel
+    - _system_iommu_runtime_raw is not failed
+    - _system_iommu_runtime_raw.stdout is defined
+    - "'configured=true' in _system_iommu_runtime_raw.stdout"
+    - "'active=true' not in _system_iommu_runtime_raw.stdout"
+
+- name: Remove IOMMU MOTD notice once IOMMU is active or not configured
+  ansible.builtin.file:
+    path: /etc/motd.d/31-iommu-pending
+    state: absent
+  when: >-
+    system_is_container or
+    (_system_iommu_runtime_raw is not failed and
+     _system_iommu_runtime_raw.stdout is defined and
+     'active=true' in _system_iommu_runtime_raw.stdout) or
+    (_system_iommu_runtime_raw is not failed and
+     _system_iommu_runtime_raw.stdout is defined and
+     'configured=false' in _system_iommu_runtime_raw.stdout)
+  failed_when: false

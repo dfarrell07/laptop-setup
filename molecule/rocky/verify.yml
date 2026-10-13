@@ -1,0 +1,131 @@
+---
+- name: Verify (Rocky Linux 10)
+  hosts: all
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration defaults (provides ssh_port, system_* defaults)
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/default.config.yml"
+
+    - name: Load group_vars baselines for verify context
+      ansible.builtin.include_vars: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/group_vars/all/vars.yml"
+
+    - name: Set work profile and identity vars for verify context
+      ansible.builtin.set_fact:
+        profile: work
+        dotfiles_user_email_work: "molecule-test@ci.invalid"  # matches ci-default-vars.yml; re-stated here for verify phase
+        system_is_container: true  # converge forces true; verify must match or not-system_is_container guards run against absent files
+        csb_detected: true  # set_fact does not persist across plays; re-state so csb_detect.yml does not reset to false
+        csb_rhel: true  # set_fact does not persist across plays; re-state so csb_detect.yml in verify-common.yml does not reset to false
+        _csb_molecule_force: true  # prevents csb_detect.yml overriding csb_rhel (Rocky has no RHEL markers)
+        system_ssh_unused_connection_timeout: >-
+          {{ (lookup('file', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') ~ '/roles/system/defaults/main.yml')
+              | from_yaml).system_ssh_unused_connection_timeout }}
+        real_user_id: molecule  # ansible_user_id=root in container; subuid/subgid provisioned for molecule
+        claude_queue_enabled: true  # re-state so verify-claude-queue.yml assertions execute (service/timer skipped — test-vm only)
+
+  tasks:
+    # --- Shared assertions (all platforms) ---
+    - name: Include common verify assertions
+      ansible.builtin.import_tasks: ../shared/verify-common.yml
+
+    - name: Assert csb_rhel is true on Rocky (guard against _csb_molecule_force removal)
+      ansible.builtin.assert:
+        that: csb_rhel | bool
+        fail_msg: >-
+          csb_rhel was reset to false on Rocky after csb_detect.yml re-ran —
+          _csb_molecule_force guard removed from csb_detect.yml?
+
+    - name: Stat sshd hardening drop-in (must be absent on Rocky — sshd.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/ssh/sshd_config.d/00-hardening.conf
+      register: verify_sshd_dropin_rocky
+
+    - name: Assert sshd hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_sshd_dropin_rocky.stat.exists
+        fail_msg: "00-hardening.conf deployed on Rocky (csb_rhel=true) — sshd.yml not csb_rhel guard regressed"
+
+    - name: Stat logind hardening drop-in (must be absent on Rocky — logind.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/systemd/logind.conf.d/99-hardening.conf
+      register: verify_logind_dropin_rocky
+
+    - name: Assert logind hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_logind_dropin_rocky.stat.exists
+        fail_msg: "99-hardening.conf deployed on Rocky (csb_rhel=true) — logind.yml not csb_rhel guard regressed"
+
+    - name: Stat sudoers hardening drop-in (must be absent on Rocky — account_hardening.yml not csb_rhel guard)
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/99-hardening
+      register: verify_sudoers_dropin_rocky
+      become: true
+
+    - name: Assert sudoers hardening drop-in absent on Rocky (csb_rhel=true)
+      ansible.builtin.assert:
+        that: not verify_sudoers_dropin_rocky.stat.exists
+        fail_msg: "/etc/sudoers.d/99-hardening deployed on Rocky (csb_rhel=true) — account_hardening.yml not csb_rhel guard regressed"
+
+    - name: Include smoke-test verification
+      ansible.builtin.import_tasks: ../shared/verify-smoke.yml
+
+    # --- Shared assertions (dnf platforms) ---
+    - name: Include dnf verify assertions
+      ansible.builtin.import_tasks: ../shared/verify-dnf.yml
+
+    # DNS-over-TLS (99-dot.conf) checked in molecule/shared/verify-common.yml
+
+    - name: Stat repositories excluded on corporate RHEL
+      ansible.builtin.stat:
+        path: "/etc/yum.repos.d/{{ item }}"
+      loop:
+        - gh-cli.repo
+        - tailscale-stable.repo
+      register: verify_csb_external_repos
+
+    - name: Assert corporate RHEL excludes external consumer repositories
+      ansible.builtin.assert:
+        that: not item.stat.exists
+      loop: "{{ verify_csb_external_repos.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # --- Work profile checks ---
+    - name: Include Claude work instance directory and settings assertions
+      ansible.builtin.import_tasks: ../shared/verify-claude-work.yml
+
+    # --- Notes role ---
+    - name: Verify notes role
+      ansible.builtin.import_tasks: ../shared/verify-notes.yml
+
+    # --- Desktop role ---
+    - name: "Include Alacritty assertions (Chrome policy CI gap: not system_is_container)"
+      ansible.builtin.import_tasks: ../shared/verify-desktop-common.yml
+
+    # --- Redhat role: runs on Rocky (csb_detected=true); cert copy skipped ---
+    # redhat role runs on Rocky (csb_detected=true) but the file-copy block
+    # (when: not csb_rhel) is skipped because csb_rhel=true. The RPM-based
+    # install path (when: csb_rhel) also fails silently — no internal RHEL
+    # repos in CI. Certs are absent regardless.
+    - name: Stat Red Hat internal CA certs (must be absent on Rocky — cert-copy block skipped, not csb_rhel)
+      ansible.builtin.stat:
+        path: "/etc/pki/ca-trust/source/anchors/{{ item }}"
+      loop:
+        - 2022-IT-Root-CA.pem
+        - Eng-CA.crt
+      register: verify_rhit_ca_rocky
+
+    - name: Assert Red Hat CA certs absent on Rocky (is_rhel=false → cert-copy block skipped, not csb_rhel)
+      ansible.builtin.assert:
+        that: not item.stat.exists
+        fail_msg: "{{ item.item }} deployed on Rocky — cert-copy block should skip when is_rhel=false (csb_rhel=true required)"
+      loop: "{{ verify_rhit_ca_rocky.results }}"
+
+    # --- Claude task queue (converge sets claude_queue_enabled: true) ---
+    - name: Import Claude queue verification tasks
+      ansible.builtin.import_tasks: ../shared/verify-claude-queue.yml
+
+    # --- distrobox role: no-op path (packages_containers emptied in converge) ---
+    - name: Import distrobox no-op path assertions
+      ansible.builtin.import_tasks: ../shared/verify-distrobox-noop.yml

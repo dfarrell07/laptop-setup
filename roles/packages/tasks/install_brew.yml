@@ -1,0 +1,308 @@
+---
+# roles/packages/tasks/install_brew.yml
+# Install Homebrew packages and configure autoupdate.
+
+- name: Add Homebrew taps (macOS)
+  when: is_macos
+  block:
+    - name: Run homebrew_tap module for all configured taps
+      community.general.homebrew_tap:
+        name: "{{ item }}"
+        state: present
+      loop: >-
+        {{ packages_brew_taps
+           + (packages_brew_taps_yubikey if packages_yubikey_enabled | bool else [])
+           + (packages_brew_taps_work | default([]) if profile == 'work' else []) }}
+      async: 600
+      poll: 10
+  rescue:
+    - name: Warn Homebrew tap add failed (will fail play)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Add Homebrew taps in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or an invalid tap.
+    - name: Fail the play after Homebrew tap installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew tap installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and tap configuration, then re-run provisioning.
+
+- name: Install Homebrew packages (macOS)
+  when: is_macos
+  block:
+    - name: Run homebrew module for all configured formulas
+      community.general.homebrew:
+        name: >-
+          {{ packages_brew
+             + (packages_brew_yubikey if packages_yubikey_enabled | bool else [])
+             + (packages_brew_work | default([]) if profile == 'work' else [])
+             + (packages_brew_personal | default([]) if profile != 'work' else []) }}
+        state: present
+        update_homebrew: "{{ packages_brew_update }}"
+      async: 600
+      poll: 10
+      register: _packages_brew_formulas
+  rescue:
+    - name: Warn Homebrew package install failed (will fail play)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing formula.
+    - name: Fail the play after Homebrew package installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew package installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and formula names, then re-run provisioning.
+
+- name: Remind user mtr requires sudo for ICMP on macOS
+  ansible.builtin.debug:
+    msg: >-
+      mtr installed. ICMP mode requires sudo on macOS (raw socket). Run 'sudo mtr <host>'
+      or use '--tcp' flag for unprivileged TCP-mode traces.
+  when: is_macos and profile == 'work' and _packages_brew_formulas.changed | default(false)
+
+- name: Install Homebrew cask packages (macOS)
+  when: is_macos
+  block:
+    - name: Run homebrew_cask module for all configured casks
+      community.general.homebrew_cask:
+        name: >-
+          {{ packages_brew_cask
+             + (['lulu'] if packages_brew_cask_lulu_enabled | bool else [])
+             + (packages_brew_cask_work | default([]) if profile == 'work' else [])
+             + (packages_brew_cask_personal | default([]) if profile != 'work' else []) }}
+        state: present
+      async: 600
+      poll: 10
+      register: _packages_brew_casks
+  rescue:
+    - name: Warn Homebrew cask package install failed (will fail play)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: Install Homebrew cask packages in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          This may be a transient network error or a missing cask.
+    - name: Fail the play after Homebrew cask installation failure
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew cask installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and cask names, then re-run provisioning.
+
+- name: Remind user to approve LuLu system extension
+  ansible.builtin.debug:
+    msg: >-
+      LuLu installed. Open System Settings > Privacy & Security > System Extensions
+      and approve LuLu to activate the application firewall.
+  when: is_macos and packages_brew_cask_lulu_enabled | bool and _packages_brew_casks.changed | default(false)
+
+- name: AeroSpace window manager present (work profile) at {{ packages_aerospace_version }}
+  # Downloads the upstream GitHub Release zip and verifies against packages_aerospace_sha256,
+  # an independent integrity anchor in our own repo. This eliminates the supply chain risk
+  # on fresh provisioning that existed when the nikitabobko/tap cask was used: a tap owner
+  # compromise can update both the binary URL and the formula SHA256 simultaneously, making
+  # Homebrew's checksum pass while delivering a malicious binary. Direct download with our
+  # own pinned hash breaks that attack for fresh machines.
+  when:
+    - is_macos
+    - profile == 'work'
+    - packages_install_binaries | bool
+  block:
+    - name: Version check — aerospace
+      ansible.builtin.command:
+        cmd: aerospace --version
+      register: _aerospace_version_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: AeroSpace present at {{ packages_aerospace_version }}
+      when: packages_aerospace_version not in (_aerospace_version_check.stdout + _aerospace_version_check.stderr)
+      block:
+        - name: Create secure AeroSpace temp directory (TOCTOU guard)
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: aerospace_
+          register: _aerospace_tmpdir
+
+        - name: Download AeroSpace zip (SHA256-verified)
+          ansible.builtin.get_url:
+            url: >-
+              https://github.com/nikitabobko/AeroSpace/releases/download/v{{ packages_aerospace_version
+              }}/AeroSpace-v{{ packages_aerospace_version }}.zip
+            dest: "{{ _aerospace_tmpdir.path }}/AeroSpace.zip"
+            checksum: "sha256:{{ packages_aerospace_sha256 }}"
+            mode: "0600"
+            timeout: 120
+          register: _aerospace_download
+          retries: 3
+          delay: 10
+          until: _aerospace_download is succeeded
+
+        - name: Extract AeroSpace zip into secure temp directory
+          ansible.builtin.unarchive:
+            src: "{{ _aerospace_tmpdir.path }}/AeroSpace.zip"
+            dest: "{{ _aerospace_tmpdir.path }}"
+            remote_src: true
+
+        - name: Remove existing AeroSpace.app (version update)
+          ansible.builtin.file:
+            path: /Applications/AeroSpace.app
+            state: absent
+          become: true
+          tags: [become]
+
+        - name: Install AeroSpace.app to /Applications  # noqa: command-instead-of-module
+          # cp -r used instead of copy module to preserve symlinks inside the .app bundle
+          ansible.builtin.command:
+            cmd: >-
+              cp -r {{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/AeroSpace.app
+              /Applications/
+          become: true
+          tags: [become]
+          changed_when: true
+
+        - name: Install aerospace binary to /usr/local/bin
+          ansible.builtin.copy:
+            src: "{{ _aerospace_tmpdir.path }}/AeroSpace-v{{ packages_aerospace_version }}/bin/aerospace"
+            dest: /usr/local/bin/aerospace
+            mode: "0755"
+            remote_src: true
+          become: true
+          tags: [become]
+
+        - name: Remove quarantine from AeroSpace.app
+          ansible.builtin.command:
+            cmd: xattr -rd com.apple.quarantine /Applications/AeroSpace.app
+          changed_when: false
+          failed_when: false
+
+        - name: Remove quarantine from aerospace binary
+          ansible.builtin.command:
+            cmd: xattr -d com.apple.quarantine /usr/local/bin/aerospace
+          changed_when: false
+          failed_when: false
+
+      always:
+        - name: Remove AeroSpace secure temp directory
+          ansible.builtin.file:
+            path: "{{ _aerospace_tmpdir.path | default('') }}"
+            state: absent
+          when: _aerospace_tmpdir.path is defined
+
+  rescue:
+    - name: Warn AeroSpace install failed (will fail play)
+      ansible.builtin.debug:
+        msg: >-
+          PACKAGE INSTALL FAILED: AeroSpace download in role packages.
+          Error: {{ ansible_failed_result.msg | default('unknown') | truncate(200) }}.
+          Install manually from
+          https://github.com/nikitabobko/AeroSpace/releases/tag/v{{ packages_aerospace_version }}.
+    - name: Fail the play after AeroSpace installation failure
+      ansible.builtin.fail:
+        msg: >-
+          AeroSpace installation failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Check network connectivity and version configuration, then re-run provisioning.
+
+# Use the native brew update command; autoupdate is an external tap command.
+- name: Configure periodic Homebrew metadata refresh
+  when: is_macos
+  block:
+    - name: Locate the Homebrew installation prefix
+      ansible.builtin.command:
+        argv: [brew, --prefix]
+      register: _packages_brew_prefix
+      changed_when: false
+
+    - name: Validate native Homebrew update configuration
+      ansible.builtin.assert:
+        that:
+          - _packages_brew_prefix.stdout in ['/opt/homebrew', '/usr/local']
+          - packages_brew_autoupdate_interval | string is match('^[0-9]+$')
+          - packages_brew_autoupdate_interval | int <= 2147483647
+
+    - name: Check whether the graphical launchd domain is available
+      ansible.builtin.command:
+        argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}"]
+      register: _packages_brew_gui_domain
+      changed_when: false
+      failed_when: false
+
+    - name: Select the current user's launchd domain
+      ansible.builtin.set_fact:
+        _packages_brew_launchd_domain: "{{ 'gui' if _packages_brew_gui_domain.rc == 0 else 'user' }}/{{ ansible_facts['user_uid'] }}"
+
+    - name: Check for an update job in the previous login domain
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - print
+          - >-
+            {{ 'user' if _packages_brew_gui_domain.rc == 0 else 'gui' }}/{{ ansible_facts['user_uid']
+            }}/com.laptop-setup.homebrew-update
+      register: _packages_brew_previous_domain_job
+      changed_when: false
+      failed_when: false
+
+    - name: Unload the managed update job from the previous login domain
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - bootout
+          - >-
+            {{ 'user' if _packages_brew_gui_domain.rc == 0 else 'gui' }}/{{ ansible_facts['user_uid']
+            }}/com.laptop-setup.homebrew-update
+      changed_when: true
+      when: _packages_brew_previous_domain_job.rc == 0
+
+    - name: Check the registered Homebrew update job
+      ansible.builtin.command:
+        argv: [launchctl, print, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
+      register: _packages_brew_update_job
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure Homebrew update support directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents"
+        - "{{ ansible_facts['user_dir'] }}/.local/state/log"
+      when: packages_brew_autoupdate_interval | int > 0
+
+    - name: Deploy the periodic Homebrew metadata update agent
+      ansible.builtin.template:
+        src: homebrew-update.plist.j2
+        dest: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
+        mode: '0644'
+      register: _packages_brew_update_plist
+      when: packages_brew_autoupdate_interval | int > 0
+
+    - name: Unload the update job when its configuration changes or is disabled
+      ansible.builtin.command:
+        argv: [launchctl, bootout, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
+      changed_when: true
+      when:
+        - _packages_brew_update_job.rc == 0
+        - _packages_brew_update_plist.changed | default(false) or packages_brew_autoupdate_interval | int == 0
+
+    - name: Register the periodic metadata update job
+      ansible.builtin.command:
+        argv:
+          - launchctl
+          - bootstrap
+          - "{{ _packages_brew_launchd_domain }}"
+          - "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
+      changed_when: true
+      when:
+        - packages_brew_autoupdate_interval | int > 0
+        - _packages_brew_update_job.rc != 0 or _packages_brew_update_plist.changed
+
+    - name: Remove the disabled update agent
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/Library/LaunchAgents/com.laptop-setup.homebrew-update.plist"
+        state: absent
+      when: packages_brew_autoupdate_interval | int == 0

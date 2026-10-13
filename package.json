@@ -4,7 +4,7 @@
   "description": "Ansible workstation provisioning playbook",
   "private": true,
   "scripts": {
-    "lint:markdown": "markdownlint-cli2 '**/*.md' '#node_modules' '#collections' '#.claude' '#references'",
+    "lint:markdown": "node scripts/lint-markdown.mjs",
     "lint:commits": "commitlint --from origin/main --to HEAD"
   },
   "repository": {
@@ -15,6 +15,10 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@commitlint/cli": "21.0.2",
-    "markdownlint-cli2": "0.22.1"
+    "markdownlint": "0.41.1",
+    "js-yaml": "5.4.1"
+  },
+  "overrides": {
+    "katex": "0.18.2"
   }
 }

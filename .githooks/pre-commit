@@ -1,74 +1,229 @@
-#!/bin/sh
-# Pre-commit checks: vault encryption, secrets, YAML, shell, JSON
+#!/bin/bash
+# Pre-commit checks: vault encryption, secrets, YAML, shell, JSON, collections integrity
+
 failed=0
 
-# Block unencrypted vault files
-for f in $(git diff --cached --name-only -z -- '*vault.yml' | tr '\0' '\n'); do
-  if ! git show ":$f" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
-    echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
+# Verify single-file SHA256 baselines against the index, including atomic updates.
+# Archive/checksum hashes are checked by provisioning and CI; signing follows repository policy.
+check_modified_and_hash_baseline() {
+  local file_path="$1" hash_path="$2" error_desc="$3" critical_note="$4"
+  local file_mod=0 hash_mod=0
+
+  while IFS= read -r -d '' _; do
+    ((file_mod++))
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- "$file_path")
+
+  while IFS= read -r -d '' _; do
+    ((hash_mod++))
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- "$hash_path")
+
+  if [[ "$hash_path" == *.sha256 ]] && (( file_mod > 0 || hash_mod > 0 )); then
+    local baseline expected entry extra actual
+    if ! baseline=$(git show ":$hash_path" 2>/dev/null); then
+      echo "ERROR: Staged baseline $hash_path is missing" >&2
+      failed=1
+      return
+    fi
+    read -r expected entry extra <<< "$baseline"
+    if [[ ! "$expected" =~ ^[0-9a-f]{64}$ || "${entry#\*}" != "${file_path##*/}" ||
+          -n "$extra" || "$baseline" == *$'\n'* ]]; then
+      echo "ERROR: Staged baseline $hash_path must contain one SHA256 entry for ${file_path##*/}" >&2
+      failed=1
+      return
+    fi
+    local -a checksum
+    if command -v sha256sum >/dev/null 2>&1; then
+      checksum=(sha256sum)
+    elif command -v shasum >/dev/null 2>&1; then
+      checksum=(shasum -a 256)
+    else
+      echo "ERROR: SHA256 baseline verification requires sha256sum or shasum" >&2
+      failed=1
+      return
+    fi
+    if ! actual=$(set -o pipefail; git show ":$file_path" | "${checksum[@]}"); then
+      echo "ERROR: Cannot hash staged $file_path" >&2
+      failed=1
+      return
+    fi
+    if [[ "${actual%% *}" != "$expected" ]]; then
+      echo "ERROR: Staged $file_path does not match $hash_path — update the baseline for the reviewed file" >&2
+      failed=1
+    else
+      echo "INFO: Staged $file_path matches its SHA256 baseline" >&2
+    fi
+    return
+  fi
+
+  if [ "$file_mod" -gt 0 ] && [ "$hash_mod" -eq 0 ]; then
+    echo "ERROR: $error_desc modified but baseline not updated" >&2
+    echo "       CRITICAL: $critical_note" >&2
     failed=1
   fi
-done
 
-# Secret scanning
-if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --pre-commit --staged --redact --max-decode-depth 2; then
+  if [ "$file_mod" -gt 0 ] && [ "$hash_mod" -gt 0 ]; then
+    echo "INFO: $error_desc and baseline updated together; archive hash and source verification remain required" >&2
+  fi
+
+  if [ "$hash_mod" -gt 0 ] && [ "$file_mod" -eq 0 ]; then
+    echo "WARN: Baseline modified but $error_desc not changed — unusual" >&2
+  fi
+}
+
+# Guard scripts against integrity check disabling
+check_modified_and_hash_baseline 'scripts/verify-collections.sh' 'scripts/verify-collections.sh.sha256' \
+  'scripts/verify-collections.sh' 'Attacker could disable integrity checks at runtime'
+
+check_modified_and_hash_baseline 'scripts/verify-ansible-args.sh' 'scripts/verify-ansible-args.sh.sha256' \
+  'scripts/verify-ansible-args.sh' 'Attacker could bypass pre-flight security checks'
+
+check_modified_and_hash_baseline 'Makefile' 'Makefile.sha256' \
+  'Makefile' 'Attacker could disable VERIFY_AND_RUN dispatcher'
+
+# Guard collections against supply-chain tampering
+check_modified_and_hash_baseline 'collections-dist/*.tar.gz' 'collections-dist/SHA256SUMS' \
+  'collections-dist tarballs' 'Attacker could substitute with malicious versions'
+
+# Guard signatures against staleness
+_repo_root=$(git rev-parse --show-toplevel) || exit 1
+_gpg_policy=$("$_repo_root/scripts/gpg-policy.sh" --staged) || exit 1
+if [ "$_gpg_policy" = enabled ]; then
+  check_modified_and_hash_baseline 'collections-dist/SHA256SUMS' 'collections-dist/SHA256SUMS.asc' \
+    'collections-dist/SHA256SUMS' 'Stale signature prevents authenticated checksum verification'
+fi
+
+check_modified_and_hash_baseline 'scripts/vault-pass-ci.sh' 'scripts/vault-pass-ci.sh.sha256' \
+  'scripts/vault-pass-ci.sh' 'Attacker could disable xtrace protection or alter CI vault stub'
+
+check_modified_and_hash_baseline '.githooks/pre-commit' '.githooks/pre-commit.sha256' \
+  '.githooks/pre-commit' 'Attacker could disable security checks by modifying the pre-commit hook'
+
+# SECURITY GUARD: Block commits to vault-pass-ci.sh without xtrace protection
+# Protects against removal of 'set +x' that prevents shell tracing exposure of vault password
+_vpci_modified=0
+while IFS= read -r -d '' f; do
+  _vpci_modified=$(((_vpci_modified + 1)))
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 'scripts/vault-pass-ci.sh')
+
+if [ "$_vpci_modified" -gt 0 ]; then
+  if ! git show ":scripts/vault-pass-ci.sh" 2>/dev/null | grep -q 'set +x'; then
+    echo "ERROR: scripts/vault-pass-ci.sh modified but missing 'set +x' xtrace protection" >&2
+    echo "       CRITICAL: Vault password will be exposed in CI logs if shell tracing is enabled" >&2
+    echo "       Ensure script contains: set +x  # Disable xtrace before password output" >&2
     failed=1
   fi
 fi
 
-# YAML lint staged files
-if command -v yamllint >/dev/null 2>&1; then
-  yaml_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.yml' '*.yaml' | grep -v node_modules | grep -v collections)
-  if [ -n "$yaml_files" ]; then
-    if ! echo "$yaml_files" | xargs yamllint --strict; then
-      failed=1
-    fi
+# Block unencrypted vault files
+while IFS= read -r -d '' f; do
+  if ! _vault_content=$(git show ":$f" 2>/dev/null); then
+    echo "WARNING: could not read staged $f — skipping vault check" >&2
+    continue
   fi
+  if ! printf '%s' "$_vault_content" | head -1 | grep -q '^\$ANSIBLE_VAULT'; then
+    # Accept only the secret-free template, including empty strings and lists.
+    if printf '%s' "$_vault_content" | python3 "$_repo_root/scripts/verify-vault-stub.py"; then
+      echo "NOTE: $f is a plaintext stub (no real secrets) — OK" >&2
+      continue
+    fi
+    echo "ERROR: $f is not encrypted. Run: ansible-vault encrypt $f" >&2
+    failed=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*vault.yml')
+
+# Secret scanning
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks_args=()
+  [ -f .gitleaks.toml ] && gitleaks_args+=(--config .gitleaks.toml)
+  gitleaks git --pre-commit --staged --redact --max-decode-depth 2 "${gitleaks_args[@]}"
+  _gitleaks_rc=$?
+  if [ "$_gitleaks_rc" -ne 0 ]; then
+    failed=1
+  fi
+else
+  echo "ERROR: gitleaks not found — commit blocked (run 'make bootstrap-hooks' to install)" >&2
+  failed=1
+fi
+
+# YAML lint staged files
+YAMLLINT=""
+if command -v yamllint >/dev/null 2>&1; then
+  YAMLLINT=yamllint
+elif [ -x ".venv/bin/yamllint" ]; then
+  YAMLLINT=".venv/bin/yamllint"
+fi
+if [ -n "$YAMLLINT" ]; then
+  while IFS= read -r -d '' f; do
+    _yl_content=$(git show ":$f") || { echo "WARNING: could not read staged $f — skipping YAML lint" >&2; continue; }
+    printf '%s\n' "$_yl_content" | "$YAMLLINT" --strict -f parsable - 2>&1 | awk -v fn="$f" 'sub(/^stdin:/, fn":")||1'
+    # PIPESTATUS indices: [0]=printf [1]=yamllint [2]=awk — update index if pipe structure changes
+    _yl_rc=${PIPESTATUS[1]}
+    [ "$_yl_rc" -ne 0 ] && failed=1
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.yml' '*.yaml' | grep -zEv '(^|/)[^/]*vault\.yml$' | grep -zEv '^(collections|node_modules|\.venv)/') # collections/, node_modules/, .venv/ excluded: stdin-mode yamllint ignores the 'ignore:' config; exclude to match .yamllint + make lint behaviour
+else
+  echo "WARNING: yamllint not found — YAML lint skipped (run 'make lint' to install)" >&2
 fi
 
 # Shell lint staged scripts
 if command -v shellcheck >/dev/null 2>&1; then
-  sh_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.sh')
-  if [ -n "$sh_files" ]; then
-    if ! echo "$sh_files" | xargs shellcheck -S warning; then
-      failed=1
-    fi
+  sh_files=()
+  while IFS= read -r -d '' _f; do sh_files+=("$_f"); done < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.sh' '.githooks/pre-commit' '.githooks/commit-msg' '.githooks/prepare-commit-msg' '.githooks/pre-push' 'roles/dotfiles/files/git-template-*')
+  if (( ${#sh_files[@]} > 0 )); then
+    for _f in "${sh_files[@]}"; do
+      _sc_content=$(git show ":$_f") || { echo "WARNING: could not read staged $_f — skipping shellcheck" >&2; continue; }
+      printf '%s' "$_sc_content" | shellcheck -S warning - || failed=1
+    done
   fi
+else
+  echo "WARNING: shellcheck not found — shell lint skipped (run 'make bootstrap' to install)" >&2
 fi
 
 # JSON validation on staged files
-json_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.json' | grep -v node_modules | grep -v package-lock)
-if [ -n "$json_files" ]; then
-  for f in $json_files; do
-    if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "WARNING: python3 not found — JSON/lockfile validation skipped" >&2
+else
+  while IFS= read -r -d '' f; do
+    if ! _json_content=$(git show ":$f" 2>/dev/null); then
+      echo "WARNING: could not read staged $f — skipping JSON validation" >&2
+      continue
+    fi
+    if ! printf '%s' "$_json_content" | python3 -m json.tool > /dev/null; then
       echo "ERROR: $f is not valid JSON" >&2
       failed=1
     fi
-  done
-fi
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.json' | grep -z -v '^package-lock\.json$')
 
-# Lockfile integrity (only when package-lock.json is staged)
-if git diff --cached --name-only | grep -q 'package-lock.json'; then
-  if ! python3 -c "
+  # Guard against future supply-chain drift: all current packages use sha512 + registry.npmjs.org
+  # Lockfile integrity (only when package-lock.json is staged)
+  # Only checks repo-root package-lock.json; subdirectory lockfiles would need separate handling
+  if git diff --cached --name-only -z --diff-filter=ACMR | grep -qz '^package-lock\.json$'; then
+    if ! _pkglock_content=$(git show :package-lock.json 2>/dev/null); then
+      echo "WARNING: could not read staged package-lock.json — skipping lockfile validation" >&2
+    elif ! printf '%s' "$_pkglock_content" | python3 -c "
 import json, sys
-lock = json.load(open('package-lock.json'))
+try:
+    lock = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f'ERROR: package-lock.json is not valid JSON: {e}', file=sys.stderr)
+    sys.exit(1)
+errors = []
 for name, info in lock.get('packages', {}).items():
     if not name:
         continue
     integrity = info.get('integrity', '')
     resolved = info.get('resolved', '')
+    if resolved.startswith('https://registry.npmjs.org/') and not integrity:
+        errors.append(f'ERROR: Missing integrity in lockfile: {name}')
     if integrity and not integrity.startswith('sha512-'):
-        print(f'ERROR: Weak hash in lockfile: {name}', file=sys.stderr)
-        sys.exit(1)
-    if resolved and not resolved.startswith('https://registry.npmjs.org/'):
-        print(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}', file=sys.stderr)
-        sys.exit(1)
-    if resolved.startswith(('git://', 'git+', 'ssh://')):
-        print(f'ERROR: Git protocol dep bypasses ignore-scripts: {name}', file=sys.stderr)
-        sys.exit(1)
+        errors.append(f'ERROR: Weak hash in lockfile: {name}')
+    if resolved and not (resolved.startswith('https://registry.npmjs.org/') or resolved.startswith('file:')):
+        errors.append(f'ERROR: Non-npmjs registry in lockfile: {name} -> {resolved}')
+if errors:
+    print('\n'.join(errors), file=sys.stderr)
+    sys.exit(1)
 " 2>&1; then
-    failed=1
+      failed=1
+    fi
   fi
 fi
 

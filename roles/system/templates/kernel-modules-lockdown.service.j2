@@ -1,0 +1,19 @@
+[Unit]
+Description=Lock kernel module loading after required boot services
+After=systemd-modules-load.service network-online.target firewalld.service NetworkManager.service
+Wants=network-online.target
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/python3 -I /usr/local/libexec/laptop-setup-wait-firewalld.py
+ExecStartPre=/usr/bin/test -d /sys/module/br_netfilter
+ExecStartPre=/usr/bin/test -d /sys/module/ip_tables
+ExecStartPre=/usr/bin/test -d /sys/module/overlay
+ExecStartPre=/usr/bin/test -d /sys/module/tun
+ExecStart=/usr/sbin/sysctl -w kernel.modules_disabled=1
+RemainAfterExit=true
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

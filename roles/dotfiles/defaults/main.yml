@@ -1,20 +1,73 @@
 ---
-dotfiles_user_email_work: "dfarrell@redhat.com"
-dotfiles_user_email_personal: "dfarrell07@gmail.com"
-dotfiles_user_name: "Daniel Farrell"
-dotfiles_github_user: "dfarrell07"
-
+# --- Task-only vars (referenced in tasks/main.yml, not in any .j2 template) ---
+dotfiles_ohmyzsh_version: "076d692dac8b6969039ec0c6c1b54462f8ba59e5"  # used in tasks/main.yml, not templates
+dotfiles_forgit_version: "15db0016623b87472c0b6ff7488b123a74b82c7e"  # tag 26.08.0; used in tasks/main.yml, not templates
 dotfiles_oh_my_zsh_theme: gallois
 dotfiles_oh_my_zsh_plugins:
   - git
+  - kubectl
+  - forgit
   - python
   - history-substring-search
 
-dotfiles_aws_profile: "aws-acm-subm"
+dotfiles_gh_editor: vim  # seed-only gh editor (force: false); to change: gh config set editor; used in tasks/main.yml, not templates
+
+dotfiles_aws_profile: ""  # set in config.yml to your AWS CLI named profile; e.g. "aws-acm-subm"
+
+# Red Hat-specific defaults; override in config.yml with your organization's internal Go module domains.
+# Empty strings omit the export entirely (profile: work users without internal modules do not need these).
+dotfiles_gonosumdb: ""  # set in config.yml for private Go module domains; e.g. "*.redhat.com,*.engineering.redhat.com"
+dotfiles_goprivate: ""   # set in config.yml for private Go repos; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com"
+dotfiles_internal_git_host: ""  # internal HTTPS git hostname; when set, adds http sslCAInfo + SSH Host stanza
+
+profile: work  # playbook-level variable shared across 7 roles
 
 dotfiles_tmux_prefix: "C-a"
-dotfiles_tmux_history_limit: 50000
+dotfiles_tmux_history_limit: 50000  # 50k lines; tmux default 2000 — increase for long debug sessions
 
-dotfiles_internal_git_host: ""
 
-dotfiles_ssh_agent_timeout: 28800
+dotfiles_ssh_agent_timeout: 28800  # 8-hour key lifetime (workday policy); ssh-agent default is 0 = unlimited
+dotfiles_ssh_kex_pq_enabled: false  # runtime-overridden by set_fact after ssh -Q kex probe;
+                                    # default guards against undefined-var in template if probe skipped
+
+dotfiles_laptop_tailscale_host: ''  # set in config.yml; e.g. 'laptop.tail'
+dotfiles_mac_tailscale_host: ''     # set in config.yml; e.g. 'mac-desktop.tail'
+dotfiles_github_user: 'CHANGE_ME'  # override in config.yml
+dotfiles_ssh_agent_label: "com.{% if dotfiles_github_user != 'CHANGE_ME' %}{{ dotfiles_github_user }}{% else %}local{% endif %}.ssh-agent"
+# GitHub repo slug for cq() alias; override in config.yml if queue repo name differs
+dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"
+
+# Stable OS-managed bundle (update-ca-trust regenerates on CA install); override with a
+# specific anchor path (e.g. /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.pem) to pin
+# to a single CA rather than trusting the full system bundle.
+dotfiles_internal_ca_path: "{{ '/etc/ssl/certs/ca-certificates.crt' if is_apt else '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem' }}"
+
+# Work org directory names under ~/src/ — used by gitconfig.j2 includeIf blocks and
+# the ccp() guard in zshrc.j2 to route work repos to the work git identity / block personal Claude.
+# Override in config.yml to add or remove work orgs without editing templates.
+dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; without this, ccp() has no work-directory guard
+
+real_user_id: "{{ lookup('env', 'USER') }}"  # fallback; authoritative in site.yml play vars
+dotfiles_ssh_hardware_key_basename: id_ed25519_sk  # fallback; authoritative in group_vars/all/vars.yml
+dotfiles_ssh_redhat_key_basename: id_rsa_redhat  # fallback; authoritative in group_vars/all/vars.yml
+
+dotfiles_direnv_warn_timeout: "10s"  # upstream default 5s; 10s accommodates slow VPN/CSB shell init
+dotfiles_direnv_strict_env: true  # enables set -euo pipefail in .envrc; upstream default false
+dotfiles_direnv_disable_stdin: true  # blocks interactive prompts in .envrc; upstream default false; set false in config.yml
+
+is_apt: false  # fallback; authoritative value in group_vars/all/vars.yml; used transitively via dotfiles_internal_ca_path in gitconfig.j2
+is_linux: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
+is_macos: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml and handlers/main.yml, not templates
+dotfiles_homebrew_prefix: /opt/homebrew  # fallback; authoritative value in group_vars/all/vars.yml; Intel x86 uses /usr/local (set there)
+ssh_port: 722  # fallback for standalone molecule invocation; authoritative value in group_vars/all/vars.yml
+ssh_signing_key_basename: id_ed25519_sk_signing  # fallback; authoritative value in group_vars/all/vars.yml
+ssh_git_signing_pubkey: ""  # fallback; authoritative in group_vars/all/vars.yml (vault-backed); set in config.yml pre-vault
+# fallback; authoritative in group_vars/all/vars.yml
+ssh_ciphers: 'chacha20-poly1305@openssh.com,aes256-gcm@openssh.com'
+ssh_macs: 'hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com'
+system_is_container: false  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
+needs_container_tier: "host-only"  # fallback; authoritative value in group_vars/all/vars.yml; used in tasks/main.yml, not templates
+notes_repo_path: "{{ ansible_facts['user_dir'] }}/notes"  # mirrors roles/notes/defaults; used in zshrc.j2 notes alias
+dotfiles_user_name: 'CHANGE_ME'  # override in config.yml
+dotfiles_user_email_work: 'CHANGE_ME@work.invalid'  # override in config.yml
+dotfiles_user_email_personal: 'CHANGE_ME@personal.invalid'  # override in config.yml

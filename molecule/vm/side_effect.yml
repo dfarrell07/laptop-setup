@@ -1,0 +1,15 @@
+---
+- name: Activate configured hardening in the Fedora guest
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Reboot the guest after unchanged provisioning is verified
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        post_reboot_delay: 10
+
+    - name: Verify the hardened SSH transport reconnects
+      ansible.builtin.wait_for_connection:
+        timeout: 120

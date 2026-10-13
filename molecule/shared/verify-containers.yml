@@ -1,0 +1,122 @@
+---
+# molecule/shared/verify-containers.yml
+# Assertions for containers role (containers.conf).
+# Included by verify-dnf.yml and debian/verify.yml.
+
+- name: Verify containers config directory
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers"
+  register: verify_containers_dir
+
+- name: Assert containers config directory exists
+  ansible.builtin.assert:
+    that:
+      - verify_containers_dir.stat.exists
+      - verify_containers_dir.stat.isdir
+      - verify_containers_dir.stat.mode == '0700'
+    fail_msg: >-
+      Containers config directory missing, not a directory, or wrong mode
+      (expected 0700, got {{ verify_containers_dir.stat.mode | default('absent') }})
+
+- name: Verify containers.conf is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  register: verify_containers_conf
+
+- name: Assert containers.conf exists
+  ansible.builtin.assert:
+    that: verify_containers_conf.stat.exists
+    fail_msg: "containers.conf was not deployed (log_driver and pids_limit needed for kind)"
+
+- name: Assert containers.conf sets log_driver to k8s-file
+  ansible.builtin.command:
+    cmd: grep -qE '^log_driver\s*=\s*"k8s-file"' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Assert containers.conf sets pids_limit to {{ containers_pids_limit | default(65536) }}
+  ansible.builtin.command:
+    cmd: grep -q 'pids_limit = {{ containers_pids_limit | default(65536) }}' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Assert containers.conf sets default_ulimits for nofile
+  ansible.builtin.command:
+    cmd: grep -q 'default_ulimits.*nofile' "{{ ansible_user_dir }}/.config/containers/containers.conf"
+  changed_when: false
+
+- name: Verify policy.json is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/containers/policy.json"
+  register: verify_containers_policy
+
+- name: Assert policy.json exists
+  ansible.builtin.assert:
+    that: verify_containers_policy.stat.exists
+    fail_msg: "policy.json was not deployed (~/.config/containers/policy.json)"
+
+- name: Read deployed container signature policy
+  ansible.builtin.slurp:
+    src: "{{ ansible_user_dir }}/.config/containers/policy.json"
+  register: verify_container_policy
+
+- name: Assert policy.json default policy is reject
+  ansible.builtin.assert:
+    that:
+      - "(verify_container_policy.content | b64decode | from_json).default == [{'type': 'reject'}]"
+
+# CI gap: environment.d/containers.conf and KIND_EXPERIMENTAL_PROVIDER not verified in container CI
+# (containers role guards deploy with not system_is_container — user inotify triggers daemon-reload,
+# crashes PID 1); make test-vm only.
+- name: Verify environment.d containers.conf is deployed by containers role
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  register: verify_env_containers_conf
+  when: not (system_is_container | default(false))
+
+- name: Assert environment.d/containers.conf exists
+  ansible.builtin.assert:
+    that: verify_env_containers_conf.stat.exists == (containers_environment_d_enabled | default(false) | bool)
+    fail_msg: "environment.d/containers.conf existence must match containers_environment_d_enabled"
+  when: not (system_is_container | default(false))
+
+- name: Assert environment.d/containers.conf sets DOCKER_HOST
+  ansible.builtin.command:
+    cmd: grep -q 'DOCKER_HOST=unix://' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  changed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - containers_environment_d_enabled | default(false) | bool
+
+- name: Assert environment.d/containers.conf sets KIND_EXPERIMENTAL_PROVIDER
+  ansible.builtin.command:
+    cmd: grep -q 'KIND_EXPERIMENTAL_PROVIDER=podman' "{{ ansible_user_dir }}/.config/environment.d/containers.conf"
+  changed_when: false
+  when:
+    - not (system_is_container | default(false))
+    - containers_environment_d_enabled | default(false) | bool
+
+# CI gap: podman-prune.service/.timer not deployed in container CI (containers role guards
+# deploy with not system_is_container — user inotify triggers daemon-reload, crashes PID 1).
+# make test-vm is the only scenario that exercises these assertions.
+- name: Verify podman-prune.service unit file is deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.service"
+  register: verify_prune_service
+  when: not (system_is_container | default(false))
+
+- name: Assert podman-prune.service unit file exists
+  ansible.builtin.assert:
+    that: verify_prune_service.stat.exists == (containers_prune_enabled | default(false) | bool)
+    fail_msg: "podman-prune.service existence must match containers_prune_enabled"
+  when: not (system_is_container | default(false))
+
+- name: Verify podman-prune.timer unit file is deployed
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.config/systemd/user/podman-prune.timer"
+  register: verify_prune_timer
+  when: not (system_is_container | default(false))
+
+- name: Assert podman-prune.timer unit file exists
+  ansible.builtin.assert:
+    that: verify_prune_timer.stat.exists == (containers_prune_enabled | default(false) | bool)
+    fail_msg: "podman-prune.timer existence must match containers_prune_enabled"
+  when: not (system_is_container | default(false))

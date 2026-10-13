@@ -5,11 +5,15 @@ config.yml
 .vault_pass*
 scripts/vault-pass.sh
 
+# GnuPG homedir — contains private keys; never commit
+gpg/
+
 # Installed collections
 collections/
 
 # Ansible temp files
 *.retry
+temp
 
 # CSB report output
 csb-report.md
@@ -22,8 +26,10 @@ CLAUDE.local.md
 
 # Ansible runtime
 .ansible/
+galaxy_cache/
+/tmp/
 
-# Python venv
+# Python venv (hash-pinned lockfile requirements-test.lock is tracked; regenerate with `make pip-lock`)
 .venv/
 
 # Node.js
@@ -33,5 +39,35 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Dry-run audit loop state (ephemeral, machine-local)
+.dry-run-audit-state.json
+
 # Molecule runtime state
 .molecule/
+*.src.rpm
+*.rpm
+
+# RPM build/packaging artifacts (tarballs, specs, patches, keys, systemd units)
+# Root-anchored (/foo) to avoid shadowing tracked files in subdirectories.
+/*.patch
+/*.gpg
+/*.tar.gz
+/*.tar.gz.asc
+/*.spec
+/*.sysusers
+/*.pam
+/*.sysconfig
+/openssh-server-systemd-sysusers.conf
+/parallel_test.*
+/ssh-agent.*
+/ssh-host-keys-migration.*
+/sshd*
+
+# Stray system directories (AIDE/package artifacts)
+/etc/
+/usr/
+/var/
+
+# Version-string files at repo root (binary download debugging artifacts)
+/[0-9]*.[0-9]*.[0-9]*
+/hello.sh

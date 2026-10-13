@@ -1,0 +1,280 @@
+---
+# --- Auditd (audit daemon + rules) ---
+
+# Pre-plant detection: scan /etc/udev/rules.d for files not owned by any package.
+# A backdoor rule planted before provisioning executes as root on every matching uevent.
+# auditd write-watches only cover future writes; this scan closes the pre-existing-file gap.
+- name: Scan /etc/udev/rules.d for unowned rules files (dnf)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      rogue=""
+      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      for f in /etc/udev/rules.d/*.rules; do
+        [ -f "$f" ] || continue
+        b=$(basename "$f")
+        in_wl=0
+        for w in $whitelist; do [ "$b" = "$w" ] && in_wl=1 && break; done
+        [ "$in_wl" -eq 1 ] && continue
+        rpm -qf "$f" &>/dev/null || rogue="${rogue:+$rogue }$b"
+      done
+      printf '%s' "$rogue"
+    executable: /bin/bash
+  register: _udev_unowned_dnf
+  changed_when: false
+  failed_when: false
+  when:
+    - is_dnf
+    - not system_is_container
+  tags: [always]
+
+- name: "Guard: no unowned udev rules files (dnf)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any RPM:
+      {{ _udev_unowned_dnf.stdout }}. These may be pre-planted backdoor rules that
+      execute as root on every matching uevent. Remove suspicious files, or add
+      known-good basenames to system_udev_rules_whitelist in config.yml.
+  when:
+    - is_dnf
+    - not system_is_container
+    - _udev_unowned_dnf.stdout | default('') | trim | length > 0
+  tags: [always]
+
+- name: Scan /etc/udev/rules.d for unowned rules files (apt)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      rogue=""
+      whitelist="{{ system_udev_rules_whitelist | join(' ') }}"
+      for f in /etc/udev/rules.d/*.rules; do
+        [ -f "$f" ] || continue
+        b=$(basename "$f")
+        in_wl=0
+        for w in $whitelist; do [ "$b" = "$w" ] && in_wl=1 && break; done
+        [ "$in_wl" -eq 1 ] && continue
+        dpkg -S "$f" &>/dev/null || rogue="${rogue:+$rogue }$b"
+      done
+      printf '%s' "$rogue"
+    executable: /bin/bash
+  register: _udev_unowned_apt
+  changed_when: false
+  failed_when: false
+  when:
+    - is_apt
+    - not system_is_container
+  tags: [always]
+
+- name: "Guard: no unowned udev rules files (apt)"
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: unowned file(s) in /etc/udev/rules.d not belonging to any dpkg package:
+      {{ _udev_unowned_apt.stdout }}. These may be pre-planted backdoor rules that
+      execute as root on every matching uevent. Remove suspicious files, or add
+      known-good basenames to system_udev_rules_whitelist in config.yml.
+  when:
+    - is_apt
+    - not system_is_container
+    - _udev_unowned_apt.stdout | default('') | trim | length > 0
+  tags: [always]
+
+# CI gap: auditd install, config, and rules are NOT exercised in Podman-based molecule CI.
+# audit post-install scripts attempt to start auditd; the kernel audit subsystem is disabled
+# in privileged containers and auditd cannot set its priority (EPERM), causing cascading
+# systemd restart failures that crash PID 1. make test-vm provides full auditd coverage.
+- name: Install audit package
+  ansible.builtin.dnf:
+    name: audit
+    state: present
+  when:
+    - is_dnf
+    - not system_is_container
+  register: _audit_pkg_install
+  failed_when: false
+
+- name: Fail if audit package install failed
+  ansible.builtin.fail:
+    msg: >-
+      audit package install failed (rc={{ _audit_pkg_install.rc | default('n/a') }}).
+      The host will run permanently unaudited. Fix the package install failure
+      (network error, RPM conflict, or repo unavailability) then re-run provisioning.
+  when:
+    - _audit_pkg_install.rc | default(0) != 0
+    - not system_is_container
+    - not csb_rhel
+
+- name: Install auditd package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+  when:
+    - is_apt
+    - not system_is_container
+  register: _apt_audit_pkg_install
+  failed_when: false
+
+- name: Fail if auditd package install failed (Debian/Ubuntu)
+  ansible.builtin.fail:
+    msg: >-
+      auditd package install failed (rc={{ _apt_audit_pkg_install.rc | default('n/a') }}).
+      The host will run permanently unaudited. Fix the package install failure
+      (network error, dpkg conflict, or repo unavailability) then re-run provisioning.
+  when:
+    - _apt_audit_pkg_install.rc | default(0) != 0
+    - not system_is_container
+    - not csb_rhel
+
+- name: Apply auditd rules and configuration
+  when:
+    - not csb_rhel  # no SIEM at home; audit package not installed in container CI (see comment above)
+    - not system_is_container
+    - (is_dnf and _audit_pkg_install.rc | default(0) == 0) or (is_apt and _apt_audit_pkg_install.rc | default(0) == 0)
+  block:
+    - name: Find task-wide audit suppression rules
+      ansible.builtin.find:
+        paths: /etc/audit/rules.d
+        patterns: '*.rules'
+        file_type: file
+        contains: '^[ \t]*-a[ \t]+(never,task|task,never)([ \t]|$)'
+      register: _system_audit_task_suppression
+
+    - name: Require safe metadata before updating audit suppression fragments
+      ansible.builtin.assert:
+        that:
+          - item.uid == 0
+          - item.mode in ['0600', '0640']
+        fail_msg: "Audit suppression fragment must be root-owned and private: {{ item.path }}"
+      loop: "{{ _system_audit_task_suppression.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Remove unconditional task-wide audit suppression
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '(?m)^[ \t]*-a[ \t]+(?:never,task|task,never)[ \t]*(?:#.*)?(?:\r?\n|$)'
+        replace: ''
+      loop: "{{ _system_audit_task_suppression.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart auditd
+
+    - name: Find any remaining task-wide audit exclusions
+      ansible.builtin.find:
+        paths: /etc/audit/rules.d
+        patterns: '*.rules'
+        file_type: file
+        contains: '^[ \t]*-a[ \t]+(never,task|task,never)([ \t]|$)'
+      register: _system_audit_remaining_task_exclusions
+
+    - name: Reject scoped task exclusions that suppress managed audit watches
+      ansible.builtin.assert:
+        that: _system_audit_remaining_task_exclusions.matched == 0
+        fail_msg: >-
+          Task-wide exclusions disable managed auditing. Review these fragments:
+          {{ _system_audit_remaining_task_exclusions.files | map(attribute='path') | list }}
+      when: not ansible_check_mode
+
+    - name: Real_user_home must be a valid absolute path
+      ansible.builtin.assert:
+        that:
+          - real_user_home is regex('^/[a-zA-Z0-9_/.:@-]+$')
+          - real_user_home != '/'
+          - real_user_home is not search('\.\.')
+          - real_user_home is not search('\\./')
+        fail_msg: >-
+          real_user_home='{{ real_user_home }}' is not a valid absolute path.
+          A newline or special character in HOME would inject arbitrary directives into
+          the auditd rules file. Ensure HOME is set correctly before running.
+          real_user_home must not contain '..' or './' path traversal sequences.
+
+    - name: Detect late-sorting audit rules files with -e 0
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          problem=""
+          for f in /etc/audit/rules.d/*.rules; do
+            [ -f "$f" ] || continue
+            b=$(basename "$f")
+            [ "$b" \> "claude-code.rules" ] || continue
+            grep -qE '^[[:space:]]*-e[[:space:]]+0' "$f" && problem="${problem:+$problem }$b"
+          done
+          printf '%s' "$problem"
+        executable: /bin/bash
+      register: _auditd_late_e0_files
+      changed_when: false
+      failed_when: false
+
+    - name: "Guard: late-sorting audit rules must not disable enforcement"
+      ansible.builtin.fail:
+        msg: >-
+          SECURITY: file(s) in /etc/audit/rules.d/ sort after claude-code.rules and
+          contain '-e 0', which overrides audit enforcement after augenrules merge:
+          {{ _auditd_late_e0_files.stdout }}. Remove or rename so they sort before
+          claude-code.rules, then re-run provisioning.
+      when: _auditd_late_e0_files.stdout | trim | length > 0 and not csb_detected
+
+    - name: "Warn: late-sorting audit rules with -e 0 detected on hybrid CSB (accepted risk)"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: file(s) in /etc/audit/rules.d/ sort after claude-code.rules and
+          contain '-e 0': {{ _auditd_late_e0_files.stdout }}. On hybrid CSB the guard
+          does not abort, but augenrules will merge these last and may override the
+          -e 1 enforcement directive. Review and rename offending files to sort before
+          claude-code.rules, or add them to the audit whitelist if IT-managed.
+      when: _auditd_late_e0_files.stdout | trim | length > 0 and csb_detected
+
+    - name: Compile audit policy against the target filesystem
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -I
+          - -c
+          - "{{ lookup('file', role_path + '/files/audit-policy.py') }}"
+          - "{{ real_user_home }}"
+          - "{{ real_user_id }}"
+          - "{{ ansible_check_mode | ternary('check', 'apply') }}"
+        stdin: "{{ lookup('template', 'auditd-system.rules.j2') }}"
+      register: _audit_policy_compile
+      changed_when: _audit_policy_compile.rc == 0 and (_audit_policy_compile.stdout | from_json).created_directories | length > 0
+      check_mode: false
+
+    - name: Deploy auditd rules
+      # File sorts as 's' — before 'z' and digit-prefixed files. augenrules merges
+      # rules.d/ in lexicographic order; the last -e directive wins. If IT later deploys
+      # a z-finalize.rules or 99-it.rules ending with -e 2, it overrides our -e 1 intent
+      # on csb_detected machines. Accepted risk: Fedora hybrid CSB has no IT-managed
+      # SIEM pipeline (that is RHEL CSB only, blocked by the not csb_rhel guard above).
+      ansible.builtin.copy:
+        content: "{{ (_audit_policy_compile.stdout | from_json).content }}"
+        dest: /etc/audit/rules.d/claude-code.rules
+        owner: root
+        group: root
+        mode: "0640"
+      notify: Restart auditd
+
+    - name: Save the root-owned immutable audit policy receipt
+      ansible.builtin.copy:
+        content: "{{ (_audit_policy_compile.stdout | from_json).receipt | to_nice_json }}\n"
+        dest: /etc/audit/claude-code-policy.json
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Deploy auditd main configuration (CIS 4.1.2.x disk-space settings)
+      ansible.builtin.template:
+        src: auditd.conf.j2
+        dest: /etc/audit/auditd.conf
+        owner: root
+        group: root
+        mode: "0640"
+      notify: Reload auditd configuration
+      # IT owns auditd.conf on all csb_detected machines (RHEL CSB via SCAP; hybrid Fedora CSB via osquery/Kolide Fleet)
+      when: not csb_detected
+        # no drop-in mechanism exists — last writer wins with no merge. Deploying our
+        # SUSPEND disk-space settings would conflict with IT's STIG AU-5 HALT/SINGLE baseline on both tiers.
+
+    - name: Ensure auditd is enabled and started
+      ansible.builtin.systemd:
+        name: auditd
+        enabled: true
+        state: started

@@ -1,0 +1,131 @@
+---
+# roles/system/tasks/hardening_core.yml
+# SELinux enforcement + core hardening sub-orchestrator. Included from main.yml.
+# --- SELinux enforcement check ---
+- name: SELinux enforcement check
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - system_selinux_enforcing_required | bool
+  block:
+    - name: Fail - SELinux kernel-disabled with enforcing required
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['selinux'] is mapping
+        fail_msg: >-
+          SELinux is not active in the kernel (selinux fact is not a mapping).
+          system_selinux_enforcing_required is true but SELinux was disabled in
+          /etc/selinux/config and the host was rebooted with selinux=0 or
+          SELINUX=disabled. An attacker can use this path to neutralize SELinux
+          enforcement entirely. Fix: set SELINUX=enforcing in /etc/selinux/config
+          and reboot, or set system_selinux_enforcing_required: false to opt out.
+      when: ansible_facts['selinux'] is not mapping
+
+    - name: SELinux enforcement block
+      when: ansible_facts['selinux'] is mapping
+      block:
+        - name: Enforce SELinux enforcing mode
+          ansible.posix.selinux:
+            policy: "{{ system_selinux_policy }}"
+            state: enforcing
+          register: system_selinux_enforce_result
+
+        - name: Refresh SELinux facts after mode change  # noqa: no-handler — subsequent tasks require the updated SELinux facts
+          ansible.builtin.setup:
+            filter: ansible_selinux
+          when: system_selinux_enforce_result.changed
+
+        - name: Verify SELinux is enforcing
+          when: not ansible_check_mode and not (system_selinux_enforce_result.reboot_required | default(false))
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['selinux'].status == 'enabled'
+              - ansible_facts['selinux'].mode == 'enforcing'
+              - ansible_facts['selinux'].type == system_selinux_policy
+            fail_msg: >-
+              SELinux is {{ ansible_facts['selinux'].mode | default('disabled') }}
+              (type: {{ ansible_facts['selinux'].type | default('unknown') }}).
+              Fix: sudo setenforce 1 && sudo sed -i
+              's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+
+        - name: SELinux reboot required notice
+          when: system_selinux_enforce_result.reboot_required | default(false)
+          ansible.builtin.debug:
+            msg: SELinux config set to enforcing — reboot required for change to take effect
+
+- name: Polkit rules directory scan
+  tags: [always]
+  when:
+    - not csb_rhel
+    - not system_is_container
+  block:
+    - name: Find files in /etc/polkit-1/rules.d
+      ansible.builtin.find:
+        paths: /etc/polkit-1/rules.d
+        file_type: any
+      register: _polkit_rules_found
+
+    # Fedora ships this legacy compatibility bridge in /etc. Permit it only
+    # when the owning vendor package and all its installed files verify cleanly.
+    - name: Check owner of the Fedora Polkit compatibility rule
+      ansible.builtin.command:
+        argv: [rpm, -qf, --queryformat, "%{NAME}", /etc/polkit-1/rules.d/49-polkit-pkla-compat.rules]
+      register: _polkit_compat_owner
+      changed_when: false
+      failed_when: false
+      when:
+        - is_dnf
+        - "'/etc/polkit-1/rules.d/49-polkit-pkla-compat.rules' in (_polkit_rules_found.files | map(attribute='path') | list)"
+
+    - name: Verify the Fedora Polkit compatibility package
+      ansible.builtin.command:
+        argv: [rpm, --verify, polkit-pkla-compat]
+      register: _polkit_compat_integrity
+      changed_when: false
+      failed_when: false
+      when:
+        - _polkit_compat_owner is not skipped
+        - _polkit_compat_owner.rc == 0
+        - _polkit_compat_owner.stdout == 'polkit-pkla-compat'
+
+    - name: Record verified vendor Polkit rules
+      ansible.builtin.set_fact:
+        _polkit_verified_vendor_rules: >-
+          {{ ['49-polkit-pkla-compat.rules']
+             if (_polkit_compat_owner.rc | default(1) == 0
+                 and _polkit_compat_owner.stdout | default('') == 'polkit-pkla-compat'
+                 and _polkit_compat_integrity.rc | default(1) == 0
+                 and _polkit_compat_integrity.stdout | default('') | length == 0)
+             else [] }}
+
+    - name: Fail on unexpected polkit rules
+      ansible.builtin.fail:
+        msg: >-
+          Unexpected file(s) in /etc/polkit-1/rules.d:
+          {{ _polkit_rules_found.files | rejectattr('isdir') | map(attribute='path') | map('basename')
+             | difference(system_polkitd_whitelist + _polkit_verified_vendor_rules) | join(', ') }}.
+          A backdoor .rules file grants all pkexec/systemctl/GNOME actions without
+          authentication. Remove the file or add its basename to
+          system_polkitd_whitelist in config.yml to permit it.
+      when: >-
+        (_polkit_rules_found.files | rejectattr('isdir') | map(attribute='path') | map('basename')
+         | difference(system_polkitd_whitelist + _polkit_verified_vendor_rules)) | length > 0
+
+- name: Mount hardening
+  ansible.builtin.include_tasks: mounts.yml
+
+- name: Kernel module blacklist
+  ansible.builtin.include_tasks: kernel_modules_blacklist.yml
+
+- name: Sysctl hardening
+  ansible.builtin.include_tasks: sysctl.yml
+
+- name: Firewall configuration
+  ansible.builtin.include_tasks: firewall.yml
+
+- name: Kernel lockdown
+  ansible.builtin.include_tasks: kernel_lockdown.yml
+
+- name: Core dumps
+  ansible.builtin.include_tasks: coredumps.yml

@@ -1,0 +1,481 @@
+---
+# --- Setuid binary scan (runs regardless of system_aide_enabled) ---
+# Deploys a weekly systemd timer that finds all perm /6000 binaries on local
+# filesystems, diffs against a stored baseline, and logs deviations to journald.
+# Catches setuid persistence that AIDE would miss when AIDE is disabled, and
+# that auditd execve rules miss because they fire on invocation, not file creation.
+- name: Setuid binary scan — deploy scan script
+  ansible.builtin.copy:
+    src: setuid-scan.sh
+    dest: /usr/local/lib/setuid-scan.sh
+    owner: root
+    group: root
+    mode: "0700"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Setuid binary scan — deploy systemd service
+  ansible.builtin.copy:
+    src: setuid-scan.service
+    dest: /etc/systemd/system/setuid-scan.service
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  notify: Reload systemd daemon
+
+- name: Setuid binary scan — deploy systemd timer
+  ansible.builtin.copy:
+    src: setuid-scan.timer
+    dest: /etc/systemd/system/setuid-scan.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+  notify: Restart setuid-scan timer
+
+- name: Setuid binary scan — enable and start timer
+  ansible.builtin.systemd:
+    name: setuid-scan.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Setuid binary scan — remove when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/setuid-scan.timer
+    - /etc/systemd/system/setuid-scan.service
+    - /usr/local/lib/setuid-scan.sh
+  when:
+    - is_dnf
+    - not (system_setuid_scan_enabled | bool)
+    - not system_is_container
+
+# --- AIDE file integrity monitoring ---
+# Block-level guard: AIDE is DNF/RPM-only (aide package from Fedora/RHEL repos).
+# On non-DNF systems (Debian, macOS) this entire section skips cleanly.
+# Individual tasks drop their redundant 'when: system_aide_enabled | bool' —
+# the block-level condition covers both the pkg_mgr and enabled checks.
+- name: Warn that AIDE (CIS 1.3) is disabled
+  ansible.builtin.debug:
+    msg: 'CIS 1.3 WARNING: system_aide_enabled=false — filesystem integrity monitoring inactive; set true in config.yml to enable'
+  when:
+    - is_dnf
+    - not system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Warn that AIDE is not implemented for apt hosts
+  ansible.builtin.debug:
+    msg: 'CIS 1.3 WARNING: system_aide_enabled=true has no effect on apt hosts — AIDE setup is DNF/RPM-only.'
+  when:
+    - is_apt
+    - system_aide_enabled | bool
+    - not system_is_container
+
+- name: AIDE file integrity monitoring
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
+    - not system_is_container
+  block:
+    - name: Install AIDE
+      ansible.builtin.dnf:
+        name: aide
+        state: present
+
+    - name: Ensure AIDE monitors /usr/local/bin
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/usr/local/bin\s'
+        line: '/usr/local/bin NORMAL'
+        state: present
+      register: _aide_conf_r1
+
+    - name: Add /etc paths to AIDE monitoring
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: "^{{ item | regex_escape }}[$]?\\s"  # [$]? matches AIDE $ suffix; \s prevents matching /path.bak
+        line: "{{ item }} NORMAL"
+        insertbefore: '^/etc\s'  # must precede the /etc PERMS catch-all (first-match ordering)
+        state: present
+      loop: "{{ system_aide_monitoring_etc_paths }}"
+      loop_control:
+        label: "{{ item }}"
+      register: _aide_conf_r2
+
+    - name: Add /etc/bpfman to AIDE monitoring (work profile — bpfman installed)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/bpfman\s'
+        line: '/etc/bpfman NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: profile == 'work'
+      register: _aide_conf_r2b
+
+    - name: Remove /etc/bpfman from AIDE monitoring (personal profile)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/bpfman\s'
+        state: absent
+      when: profile != 'work'
+      register: _aide_conf_r2b_remove
+
+    - name: Add TLP conf.d to AIDE monitoring (battery/power policy)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.d\s'
+        line: '/etc/tlp.d NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: system_tlp_enabled | bool
+      register: _aide_conf_r3
+
+    - name: Remove /etc/tlp.d from AIDE monitoring (TLP disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.d\s'
+        state: absent
+      when: not system_tlp_enabled | bool
+      register: _aide_conf_r3_remove
+
+    - name: Add /etc/tlp.conf to AIDE monitoring (TLP global config)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.conf\s'  # whitespace-anchor prevents matching /etc/tlp.conf.bak etc.
+        line: '/etc/tlp.conf NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      when: system_tlp_enabled | bool
+      register: _aide_conf_r4
+
+    - name: Remove /etc/tlp.conf from AIDE monitoring (TLP disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/tlp\.conf\s'
+        state: absent
+      when: not system_tlp_enabled | bool
+      register: _aide_conf_r4_remove
+
+    - name: Add /etc/usbguard to AIDE monitoring (USB device whitelist integrity)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/usbguard\s'
+        line: '/etc/usbguard NORMAL'
+        insertbefore: '^/etc\s'
+        state: present
+      register: _aide_conf_r5
+      when: system_install_usbguard | bool
+
+    - name: Remove /etc/usbguard from AIDE monitoring (USBGuard disabled)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/usbguard\s'
+        state: absent
+      when: not system_install_usbguard | bool
+      register: _aide_conf_r5_remove
+
+    - name: Exclude /boot/grub2/grubenv from AIDE (rewritten every boot by GRUB)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^!/boot/grub2/grubenv'
+        line: '!/boot/grub2/grubenv'
+        insertbefore: '^/boot\s'
+        state: present
+      register: _aide_conf_r6
+
+    - name: Add /boot/loader/entries to AIDE monitoring (PERMS)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/boot/loader/entries\s'
+        line: '/boot/loader/entries PERMS'
+        insertbefore: '^/boot\s'
+        state: present
+      register: _aide_conf_r6b
+
+    - name: Add /boot/grub2/grub.cfg to AIDE monitoring (NORMAL)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/boot/grub2/grub\.cfg\s'
+        line: '/boot/grub2/grub.cfg NORMAL'
+        insertbefore: '^/boot\s'
+        state: present
+      register: _aide_conf_r6c
+
+    - name: Remove NetworkManager system-connections exclusion (blindspot fix)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^!/etc/NetworkManager/system-connections'
+        state: absent
+      register: _aide_conf_r6d
+
+    - name: Add /etc/NetworkManager/system-connections to AIDE monitoring (PERMS)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/etc/NetworkManager/system-connections\s'
+        line: '/etc/NetworkManager/system-connections PERMS'
+        insertbefore: '^/etc/NetworkManager\s'
+        state: present
+      register: _aide_conf_r6e
+
+    - name: Add /var/log/audit/audit.log to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/audit/audit\.log\s'
+        line: '/var/log/audit/audit.log NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6f
+
+    - name: Add /var/log/secure to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/secure\s'
+        line: '/var/log/secure NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6g
+
+    - name: Add /var/log/sudo.log to AIDE monitoring (content hash — override LOG group)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/log/sudo\.log\s'
+        line: '/var/log/sudo.log NORMAL'
+        insertbefore: '^/var/log\s'
+        state: present
+      register: _aide_conf_r6h
+
+    - name: Add /var/spool/cron to AIDE monitoring (crontab persistence)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: '^/var/spool/cron\s'
+        line: '/var/spool/cron NORMAL'
+        state: present
+      register: _aide_conf_r6i
+
+    - name: Add user systemd unit directory to AIDE monitoring (user-level persistence)
+      ansible.builtin.lineinfile:
+        path: /etc/aide.conf
+        regexp: "^{{ (real_user_home + '/.config/systemd/user') | regex_escape }}\\s"
+        line: "{{ real_user_home }}/.config/systemd/user NORMAL"
+        state: present
+      register: _aide_conf_r6j
+
+    - name: Check if AIDE database exists
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: system_aide_db
+
+    - name: Check if AIDE new database exists (interrupted prior init)
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.new.gz
+      register: system_aide_db_new
+
+    - name: Set fact — AIDE config changed (consolidates lineinfile registers)
+      ansible.builtin.set_fact:
+        _aide_conf_changed: >-
+          {{ _aide_conf_r1 is changed
+             or _aide_conf_r2 is changed
+             or _aide_conf_r2b is changed
+             or _aide_conf_r2b_remove is changed
+             or _aide_conf_r3 is changed
+             or _aide_conf_r3_remove is changed
+             or _aide_conf_r4 is changed
+             or _aide_conf_r4_remove is changed
+             or _aide_conf_r5 is changed
+             or _aide_conf_r5_remove is changed
+             or _aide_conf_r6 is changed
+             or _aide_conf_r6b is changed
+             or _aide_conf_r6c is changed
+             or _aide_conf_r6d is changed
+             or _aide_conf_r6e is changed
+             or _aide_conf_r6f is changed
+             or _aide_conf_r6g is changed
+             or _aide_conf_r6h is changed
+             or _aide_conf_r6i is changed
+             or _aide_conf_r6j is changed }}
+
+    - name: Reinitialize AIDE database on config change
+      when: _aide_conf_changed
+      block:
+        - name: Warn that AIDE reinit takes 5-10 minutes
+          ansible.builtin.debug:
+            msg: >-
+              AIDE {{ 'initialization' if not (system_aide_db.stat.exists | default(false))
+              else 'reinitialization' }} triggered by config change — this takes
+              5-10 minutes on a minimal filesystem; machines with OCI images, container
+              layers, or large source trees may take 20-30+ minutes. No output appears
+              during the scan — this is normal. Do not cancel.
+              Monitor in another terminal: watch -n 10 'ls -lh /var/lib/aide/aide.db.new.gz 2>/dev/null || echo not yet created'
+
+        - name: Find files in /etc/udev/rules.d before AIDE reinit (pre-planted rule guard)
+          ansible.builtin.find:
+            paths: /etc/udev/rules.d/
+            file_type: file
+          register: _aide_udev_reinit_precheck
+
+        - name: Assert /etc/udev/rules.d/ is empty before AIDE reinit
+          ansible.builtin.assert:
+            that: >-
+              _aide_udev_reinit_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) |
+              length == 0
+            fail_msg: >-
+              AIDE reinit aborted: /etc/udev/rules.d/ contains unauthorized file(s).
+              A pre-planted udev rule would be silently baselined as known-good,
+              making it permanently invisible to aide --check.
+              Unauthorized: {{ _aide_udev_reinit_precheck.files | map(attribute='path') | map('basename') |
+              difference(system_udev_rules_d_allowlist) | list }}
+              Whitelisted: {{ system_udev_rules_d_allowlist }}
+              Fix: remove unauthorized files, or add to system_udev_rules_d_allowlist in config.yml if legitimate.
+
+        - name: Reinitialize AIDE database and promote to active baseline
+          ansible.builtin.shell:  # noqa: command-instead-of-module
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
+          changed_when: true
+          register: system_aide_reinit_result
+
+    - name: Promote aide.db.new.gz to aide.db.gz (resume interrupted init)
+      ansible.builtin.command:
+        cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+      when:
+        - system_aide_db_new.stat.exists | default(false)
+        - system_aide_reinit_result is skipped  # DB promotion from interrupted init; result always defined even when skipped
+        - not (system_aide_db.stat.exists | default(false))
+      changed_when: true
+
+    - name: Remove stale aide.db.new.gz when active DB exists
+      ansible.builtin.file:
+        path: /var/lib/aide/aide.db.new.gz
+        state: absent
+      when: (system_aide_db.stat.exists | default(false)) and (system_aide_db_new.stat.exists | default(false)) and not _aide_conf_changed
+
+    # Reached when no DB exists and no reinit was triggered: either aide.conf was already fully configured
+    # (zero lineinfile changes, _aide_conf_changed=false) on first run, or the rescue block deleted aide.db.gz
+    # after a failed reinit and control returned here for a recovery re-init.
+    - name: Initialize AIDE database (first run or post-rescue)
+      when:
+        - not (system_aide_db.stat.exists | default(false))
+        - not (system_aide_db_new.stat.exists | default(false))
+        - system_aide_reinit_result is skipped  # always defined (register sets var even on skip), so is skipped test is safe
+      block:
+        - name: Warn that AIDE initialization takes 5-10 minutes
+          ansible.builtin.debug:
+            msg: >-
+              Starting AIDE database initialization — this scans the filesystem and takes
+              5-10 minutes on a minimal filesystem; machines with OCI images, container
+              layers, or large source trees may take 20-30+ minutes. No output appears
+              during the scan — this is normal. Do not cancel.
+              Monitor in another terminal: watch -n 10 'ls -lh /var/lib/aide/aide.db.new.gz 2>/dev/null || echo not yet created'
+
+        - name: Find files in /etc/udev/rules.d before AIDE init (pre-planted rule guard)
+          ansible.builtin.find:
+            paths: /etc/udev/rules.d/
+            file_type: file
+          register: _aide_udev_init_precheck
+
+        - name: Assert /etc/udev/rules.d/ is empty before AIDE init
+          ansible.builtin.assert:
+            that: >-
+              _aide_udev_init_precheck.files | map(attribute='path') | map('basename') | difference(system_udev_rules_d_allowlist) |
+              length == 0
+            fail_msg: >-
+              AIDE init aborted: /etc/udev/rules.d/ contains unauthorized file(s).
+              A pre-planted udev rule would be silently baselined as known-good,
+              making it permanently invisible to aide --check. aide --init must
+              run on a clean filesystem.
+              Unauthorized: {{ _aide_udev_init_precheck.files | map(attribute='path') | map('basename') |
+              difference(system_udev_rules_d_allowlist) | list }}
+              Whitelisted: {{ system_udev_rules_d_allowlist }}
+              Fix: remove unauthorized files, or add to system_udev_rules_d_allowlist in config.yml if legitimate.
+
+        - name: Initialize AIDE database and promote to active baseline
+          ansible.builtin.shell:  # noqa: command-instead-of-module
+            cmd: aide --init && mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          timeout: 1800  # 30 min ceiling; normal init is 5-10 min; surfaces hung I/O as a clean error
+          changed_when: true
+
+    - name: Deploy AIDE failure notification unit
+      ansible.builtin.copy:
+        src: aide-notify@.service
+        dest: /etc/systemd/system/aide-notify@.service
+        mode: "0644"
+      register: _aide_conf_r7
+      notify: Restart aide-check timer
+
+    - name: Deploy AIDE check service
+      ansible.builtin.copy:
+        src: aide-check.service
+        dest: /etc/systemd/system/aide-check.service
+        mode: "0644"
+      register: _aide_conf_r8
+      notify: Restart aide-check timer
+
+    - name: Deploy AIDE check timer
+      ansible.builtin.template:
+        src: aide-check.timer.j2
+        dest: /etc/systemd/system/aide-check.timer
+        mode: "0644"
+      register: _aide_conf_r9
+      notify: Restart aide-check timer
+
+    - name: Enable AIDE check timer
+      ansible.builtin.systemd:
+        name: aide-check.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+  rescue:
+    - name: Warn on AIDE initialization failure
+      ansible.builtin.debug:
+        msg: >-
+          AIDE block failed — check the error for the actual cause (config edit, unit deploy,
+          timer enable, or AIDE init failure such as disk exhaustion, OOM, or signal interruption).
+          Error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg) | default('unknown') | truncate(400) }}.
+          To recover: address the failure above, then re-run this playbook.
+          This rescue always removes aide.db.new.gz (partial). aide.db.gz is removed only when the
+          reinit command itself failed, forcing a fresh baseline on re-run; if the failure was in
+          unit deployment, aide.db.gz is preserved and the next run skips the 5-10 min reinit.
+
+    - name: Remove partial aide.db.new.gz after failed init
+      ansible.builtin.file:
+        path: /var/lib/aide/aide.db.new.gz
+        state: absent
+      # Continue recovery after the original failure; timer disable must still run.
+      ignore_errors: true  # noqa: ignore-errors
+
+    - name: Remove stale aide.db.gz after failed reinit
+      ansible.builtin.file:
+        path: /var/lib/aide/aide.db.gz
+        state: absent
+      # Continue recovery after the original failure; timer disable must still run.
+      ignore_errors: true  # noqa: ignore-errors
+      when: system_aide_reinit_result is defined and system_aide_reinit_result is failed
+
+    - name: Stop and disable aide-check.timer after failed init
+      ansible.builtin.systemd:
+        name: aide-check.timer
+        state: stopped
+        enabled: false
+      failed_when: false

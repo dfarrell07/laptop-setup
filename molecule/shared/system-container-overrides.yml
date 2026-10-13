@@ -1,0 +1,32 @@
+---
+# Shared container-safe overrides for the system role in all molecule CI scenarios.
+# Included by molecule/{fedora,rocky,debian}/converge.yml system role pre_tasks.
+# Prevents container-incompatible tasks from running in Podman-based CI scenarios.
+# NOTE: sshd hardening is exercised in Fedora/Rocky container CI (openssh-server is
+# pre-installed in those images). Debian container CI skips the openssh-server apt install
+# (daemon-reload on /etc/systemd/** writes crashes the container), so the sshd hardening
+# block is also skipped there (CI gap; make test-vm covers full sshd hardening on Debian).
+- name: Compute OS detection facts (mirrors csb_detect.yml for system role pre-context)
+  # In site.yml, csb_detect.yml runs in Play 1 pre_tasks before the system role, setting
+  # is_dnf/is_apt/is_rhel/is_fedora/is_linux via set_fact (p19) which overrides vars.yml (p18).
+  # In molecule converge.yml, csb_detect.yml runs later (common role, Play 3). This task
+  # replicates the same detection so system role tasks that guard on is_dnf/is_apt see the right value.
+  ansible.builtin.set_fact:
+    is_dnf: "{{ ansible_facts['pkg_mgr'] | default('') in ['dnf', 'dnf5'] }}"
+    is_dnf5: "{{ ansible_facts['pkg_mgr'] | default('') == 'dnf5' }}"
+    is_apt: "{{ ansible_facts['pkg_mgr'] | default('') == 'apt' }}"
+    is_fedora: "{{ ansible_facts['distribution'] == 'Fedora' }}"
+    is_linux: "{{ ansible_facts['system'] == 'Linux' }}"
+
+- name: Override for container testing (system role)
+  ansible.builtin.set_fact:
+    system_is_container: true             # explicit guard — auto-detect via virtualization_type may miss some images
+    system_kernel_lockdown: ''            # grubby cannot set kernel params in containers
+    install_virtualization: false         # libvirt not needed in CI container
+    real_user_id: molecule                # containers connect as root; override to avoid sshd AllowUsers assert
+    packages_install_binaries: false      # no binary downloads in container CI
+    # Public-only signing fixtures; no private key is stored in the repository.
+    ssh_signing_key_pub: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
+    ssh_git_signing_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci"
+    system_tmout: 300                   # exercises session timeout deployment path in Podman CI (VM uses 600)
+    # CI gap: SELinux enforcement check is NOT exercised by Podman-based scenarios — make test-vm required

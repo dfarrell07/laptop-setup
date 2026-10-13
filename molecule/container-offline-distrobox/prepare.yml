@@ -1,0 +1,28 @@
+---
+# Prepare: place /usr/bin/distrobox-host-exec and /usr/bin/distrobox-export stubs so
+# converge exercises the realistic production failure path — distrobox environment present
+# but mirror.openshift.com unreachable. The oc download block still fires and hits the
+# rescue because no oc stub is placed; distrobox-export is stubbed so the golangci-lint
+# export task (not guarded by container_oc_installed) can run and exit gracefully.
+- name: Prepare (container-offline-distrobox — distrobox environment with unreachable mirror)
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Create stub distrobox-host-exec (simulates distrobox environment)
+      ansible.builtin.copy:
+        dest: /usr/bin/distrobox-host-exec
+        content: |
+          #!/bin/sh
+          exec "$@"
+        mode: "0755"
+      become: true
+
+    - name: Create stub distrobox-export (allows golangci-lint export task to run gracefully)
+      ansible.builtin.copy:
+        dest: /usr/bin/distrobox-export
+        content: |
+          #!/bin/sh
+          exit 0
+        mode: "0755"
+      become: true

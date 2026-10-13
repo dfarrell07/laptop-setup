@@ -1,0 +1,34 @@
+---
+# molecule/shared/ci-default-vars.yml
+# Shared CI defaults loaded by ci-pre-tasks.yml via include_vars.
+# Converge files may override individual keys via set_fact (p19 beats include_vars p18).
+git_repos_list:
+  - url: https://github.com/dfarrell07/laptop-setup
+    dest: ci-test/laptop-setup
+    category: personal
+    depth: 1
+dotfiles_work_src_dirs: [ci-work]  # exercise configured work identity routing
+dotfiles_github_user: "dfarrell07"
+dotfiles_user_name: "Molecule CI Test"
+dotfiles_user_email_work: "molecule-test@ci.invalid"
+dotfiles_user_email_personal: "molecule-test@ci.invalid"
+dotfiles_gonosumdb: "test.example.com"  # non-empty so verify-common GONOSUMDB assertions run
+dotfiles_goprivate: "git.example.com"   # non-empty so verify-common GOPRIVATE assertions run
+notes_enabled: true
+packages_security_yubikey: []
+packages_containers: []
+packages_containers_work: []
+packages_containers_kubectl: []
+packages_networking: []
+packages_networking_work: []
+packages_support_work: []
+packages_go_install_work: []
+notes_transcrypt_password: ""
+claude_install_method: skip
+claude_queue_enabled: true
+claude_queue_allowed_authors: [dfarrell07]  # explicit allowlist; exercises the production queue guard
+claude_queue_repo: "dfarrell07/laptop-setup"
+# Public-only authentication fixture for containers; VM SSH transport retains its own key.
+ssh_auth_key_pub: >-
+  {{ 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO75wHkWbQR8wfCmzR0LhcCtlFHfzYq5+3uSSgYhkU1w molecule-test@ci'
+     if ansible_connection in ['podman', 'containers.podman.podman'] else '' }}

@@ -1,0 +1,33 @@
+{
+  "env": {
+{% for key, value in claude_telemetry_env.items() %}
+    {{ key | to_json }}: {{ value | to_json }}{{ "," if not loop.last else "" }}
+{% endfor %}
+  },
+  "sandbox": {{ claude_sandbox_config | to_json }},
+  "cleanupPeriodDays": {{ claude_cleanup_period_days }},
+  "enableAllProjectMcpServers": {{ claude_enable_all_project_mcp_servers | to_json }},
+  "permissions": {
+    "deny": [
+{% set deny_entries = [] %}
+{% for instance_dir in _claude_instances %}
+{% set _path = (instance_dir | replace(ansible_facts['user_dir'], '~')) + '/**' %}
+{% set _ = deny_entries.append("Read(" + _path + ")") %}
+{% set _ = deny_entries.append("Edit(" + _path + ")") %}
+{% set _ = deny_entries.append("Write(" + _path + ")") %}
+{% endfor %}
+{% for path in claude_deny_sensitive %}
+{% set _ = deny_entries.append("Read(" + path + ")") %}
+{% set _ = deny_entries.append("Edit(" + path + ")") %}
+{% set _ = deny_entries.append("Write(" + path + ")") %}
+{% endfor %}
+{% for path in claude_deny_write_only %}
+{% set _ = deny_entries.append("Edit(" + path + ")") %}
+{% set _ = deny_entries.append("Write(" + path + ")") %}
+{% endfor %}
+{% for entry in deny_entries %}
+      {{ entry | to_json }}{{ "," if not loop.last else "" }}
+{% endfor %}
+    ]
+  }
+}

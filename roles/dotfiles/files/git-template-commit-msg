@@ -1,0 +1,86 @@
+#!/bin/bash
+# Reject past-tense/gerund first words in commit description (allows noun-phrase subjects per repo convention)
+msg=$(head -1 "$1")
+# Require Signed-off-by (enforce 'git commit -s') — checked before any early-exit so reverts are also covered
+if ! grep -q '^Signed-off-by:' "$1"; then
+  echo "ERROR: Missing Signed-off-by — use --signoff / -s with your git command" >&2
+  exit 1
+fi
+# Signed-off-by still required above; these prefixes skip scope/tense/length checks only
+case "$msg" in
+  squash!*|fixup!*|amend!*) exit 0 ;;
+  Merge\ branch*|Merge\ pull*|Merge\ remote*|'Merge tag'*) exit 0 ;;
+  Revert\ *) exit 0 ;;
+esac
+if ! echo "$msg" | grep -qE '^[A-Z][-A-Za-z0-9/]*:[[:space:]]'; then
+  echo "ERROR: Missing or uncapitalized scope — format must be 'Scope: description' (space after colon required)" >&2
+  exit 1
+fi
+# Extract scope portion for scope-parts bad-word check below
+first=$(echo "$msg" | sed 's/^\([A-Z][-A-Za-z0-9/]*\):.*/\1/')
+# Extract the description word — the first word after "Scope: "
+# This is what should be imperative mood.
+desc_first=$(echo "$msg" | sed 's/^[A-Z][-A-Za-z0-9/]*:[[:space:]]*//' | awk '{print $1}')
+desc_first="${desc_first%:}"  # strip trailing colon: 'Added:' would not match 'added' in case without this
+if [ -z "$desc_first" ]; then
+  echo "ERROR: Subject has no description after scope colon" >&2
+  exit 1
+fi
+
+# Reject common past tense and gerund first words in the description (after scope colon)
+_bad_word() {
+  local _w
+  _w=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+  case "$_w" in
+    added|changed|created|deleted|enabled|disabled|expanded|fixed|\
+    implemented|improved|merged|moved|refactored|removed|renamed|\
+    replaced|resolved|reverted|started|stopped|updated|upgraded|\
+    adding|changing|creating|deleting|enabling|disabling|expanding|\
+    fixing|implementing|improving|merging|moving|refactoring|removing|\
+    renaming|replacing|resolving|reverting|starting|stopping|updating|\
+    upgrading) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+# Check description word (word after "Scope: ") — this is the critical tense check
+if _bad_word "$desc_first"; then
+  echo "ERROR: Use noun-phrase or imperative (not past-tense/gerund): write 'Scope: log addition' or 'Scope: add logging', not 'Scope: Added logging' ('$desc_first' is banned)" >&2
+  exit 1
+fi
+# Also catch when the scope word itself is a banned past-tense/gerund word (e.g. 'Fixed: add ...')
+# Split on '/' to handle multi-scope commits like 'Fixed/System: add foo'
+IFS='/' read -ra _scope_parts <<< "$first"
+for _part in "${_scope_parts[@]}"; do
+  if _bad_word "$_part"; then
+    echo "ERROR: Scope word '$_part' is a past-tense/gerund — use a role-area name (see CLAUDE.md scopes)" >&2
+    exit 1
+  fi
+done
+
+# Check length (wc -m counts Unicode characters, not bytes — consistent with deployed global hook)
+# This value must match header-max-length in commitlint.config.js
+len=$(printf '%s' "$msg" | LC_ALL=en_US.UTF-8 wc -m)
+if [ "$len" -gt 72 ]; then
+  echo "ERROR: Subject too long ($len > 72 chars)" >&2
+  exit 1
+fi
+
+# No trailing period
+if echo "$msg" | grep -qE '\.$'; then
+  echo "ERROR: Remove trailing period from subject line" >&2
+  exit 1
+fi
+
+# Sync message-format rules with .githooks/commit-msg.
+if command -v npx >/dev/null 2>&1; then
+  if [ -x "./node_modules/.bin/commitlint" ]; then
+    npx --no -- commitlint --edit "$1"
+    exit $?
+  else
+    echo "WARNING: commitlint not found in ./node_modules — run: npm install --ignore-scripts (or: make bootstrap)" >&2
+    exit 0
+  fi
+else
+  echo "WARNING: npx not found — commitlint skipped. Run make bootstrap to install Node.js deps." >&2
+  exit 0
+fi

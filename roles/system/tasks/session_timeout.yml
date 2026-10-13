@@ -1,0 +1,169 @@
+---
+# --- profile.d backdoor detection (runs before any write to /etc/profile.d) ---
+- name: Find all scripts in /etc/profile.d (backdoor pre-plant detection)
+  ansible.builtin.find:
+    paths: /etc/profile.d
+    patterns: "*.sh"
+    file_type: file
+  register: _profiled_files
+  when:
+    - not csb_rhel
+    - not system_is_container
+
+- name: Find /etc/profile.d files not owned by any RPM (backdoor pre-plant detection)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      find /etc/profile.d -maxdepth 1 -type f | while IFS= read -r f; do
+        rpm -qf "$f" &>/dev/null || printf '%s\n' "$f"
+      done
+    executable: /bin/bash
+  register: _profiled_unowned
+  failed_when: false
+  changed_when: false
+  when:
+    - is_dnf
+    - not system_is_container
+
+- name: Warn on unpackaged /etc/profile.d scripts not in system_profiled_whitelist (CSB — IT may deploy scripts)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Unexpected unpackaged file(s) in /etc/profile.d: {{ _unexpected | join(', ') }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Add the basename to
+      system_profiled_whitelist in config.yml to suppress this warning.
+  vars:
+    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+  when:
+    - is_dnf
+    - not system_is_container
+    - csb_detected
+    - _unexpected | length > 0
+
+- name: Abort on unpackaged /etc/profile.d scripts not in system_profiled_whitelist
+  ansible.builtin.assert:
+    that: _unexpected | length == 0
+    fail_msg: >-
+      SECURITY: Unexpected unpackaged file(s) in /etc/profile.d: {{ _unexpected | join(', ') }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Pre-planted backdoors in
+      this directory execute at every interactive login. Remove the file or
+      add its basename to system_profiled_whitelist in config.yml before
+      re-running provisioning.
+  vars:
+    _unexpected: "{{ (_profiled_unowned.stdout_lines | default([]) | map('basename') | list) | difference(system_profiled_whitelist) }}"
+  when:
+    - is_dnf
+    - not system_is_container
+    - not csb_detected
+
+- name: Abort on unexpected /etc/profile.d scripts not in system_profiled_whitelist (Debian fallback)
+  ansible.builtin.fail:
+    msg: >-
+      SECURITY: Unexpected file in /etc/profile.d: {{ item.path | basename }}
+      — sourced by every bash login shell including root (via /etc/profile)
+      and by 'su -' to root during provisioning. Pre-planted backdoors in
+      this directory execute at every interactive login. Remove the file or
+      add its basename to system_profiled_whitelist in config.yml before
+      re-running provisioning.
+  loop: "{{ _profiled_files.files | default([]) }}"
+  when:
+    - is_apt
+    - not system_is_container
+    - item.path | basename not in system_profiled_whitelist
+
+# --- Session timeout (TMOUT via profile.d — Fedora /etc/bashrc sources profile.d, covering non-login interactive shells too) ---
+- name: Deploy TMOUT to /etc/profile.d/tmout.sh (bash, Fedora/RHEL/macOS)
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # Auto-logout after inactivity (CIS 5.5.5 requires <=900s). Override system_tmout in config.yml.
+      readonly TMOUT={{ system_tmout | int }}
+      export TMOUT
+    dest: /etc/profile.d/tmout.sh
+    mode: "0644"
+  when:
+    - system_tmout | int > 0
+    - not csb_detected  # CSB: IT manages TMOUT via SCAP session policy on all CSB tiers; avoid duplicate readonly assignment
+    - not system_is_container  # /etc/profile.d write triggers PAM/pam_env re-evaluation; crashes privileged Podman container PID 1
+    - not is_apt  # Debian sets TMOUT in /etc/bash.bashrc; profile.d would cause a duplicate readonly assignment
+
+- name: Deploy TMOUT to /etc/bash.bashrc (Debian)
+  ansible.builtin.blockinfile:
+    path: /etc/bash.bashrc
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: CIS 5.5.5 session timeout"
+    block: |
+      readonly TMOUT={{ system_tmout | int }}  # CIS 5.5.5
+      export TMOUT  # CIS 5.5.5
+  when:
+    - is_apt
+    - system_tmout | int > 0
+
+# /etc/profile.d/*.sh is sourced by bash login shells and by zsh login shells
+# (Fedora zsh /etc/zprofile sources /etc/profile). The /etc/zshrc line is needed
+# for non-login interactive zsh shells (most terminal emulators). Redundant
+# readonly assignment for login zsh shells is silently ignored in zsh 5.9+.
+# On Fedora/RHEL: /etc/zshrc (compiled default GLOBAL_ZSHRC=/etc/zshrc).
+# On Debian: /etc/zsh/zshrc (compiled default GLOBAL_ZSHRC=/etc/zsh/zshrc;
+# /etc/zshrc is silently ignored by Debian's zsh binary).
+- name: Deploy session timeout to /etc/zshrc (Fedora/RHEL/macOS zsh)
+  ansible.builtin.lineinfile:
+    path: /etc/zshrc
+    line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    create: true  # system role runs before packages; zsh may not be installed yet on first provision
+    mode: "0644"
+  when:
+    - not is_apt
+    - not csb_detected  # CSB: IT manages TMOUT via SCAP session policy on all CSB tiers; avoid duplicate readonly assignment
+    - system_tmout | int > 0
+
+- name: Deploy session timeout to /etc/zsh/zshrc (Debian zsh — GLOBAL_ZSHRC)
+  ansible.builtin.lineinfile:
+    path: /etc/zsh/zshrc
+    line: "typeset -xr TMOUT={{ system_tmout | int }}  # CIS 5.5.5"
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    create: true
+    mode: "0644"
+  when:
+    - is_apt
+    - system_tmout | int > 0
+
+# Cleanup: remove TMOUT artifacts when system_tmout<=0 (operator disables timeout).
+# Without this, a previously deployed readonly TMOUT persists and cannot be overridden in user dotfiles.
+- name: Remove session timeout from profile.d when disabled
+  ansible.builtin.file:
+    path: /etc/profile.d/tmout.sh
+    state: absent
+  when:
+    - system_tmout | int <= 0
+    - not csb_detected  # CSB: IT manages TMOUT; we never write tmout.sh on CSB machines so nothing to clean up
+    - not is_apt  # Debian does not use profile.d for TMOUT; avoid spurious no-op on Debian hosts
+
+- name: Remove session timeout from /etc/bash.bashrc when disabled (Debian)
+  ansible.builtin.blockinfile:
+    path: /etc/bash.bashrc
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: CIS 5.5.5 session timeout"
+    state: absent
+  when:
+    - is_apt
+    - system_tmout | int <= 0
+
+- name: Remove TMOUT from /etc/zshrc when disabled (Fedora/RHEL/macOS)
+  ansible.builtin.lineinfile:
+    path: /etc/zshrc
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    state: absent
+  when:
+    - not is_apt
+    - not csb_detected  # CSB: IT manages TMOUT; we never write /etc/zshrc TMOUT on CSB machines so nothing to clean up
+    - system_tmout | int <= 0
+
+- name: Remove session timeout from /etc/zsh/zshrc when disabled (Debian)
+  ansible.builtin.lineinfile:
+    path: /etc/zsh/zshrc
+    regexp: '^\s*(typeset -xr\s+|readonly\s+)?TMOUT='
+    state: absent
+  when:
+    - is_apt
+    - system_tmout | int <= 0

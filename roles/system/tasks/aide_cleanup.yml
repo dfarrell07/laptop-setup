@@ -1,0 +1,76 @@
+---
+# roles/system/tasks/aide_cleanup.yml
+# AIDE cleanup when system_aide_enabled=false (prevents one-way ratchet).
+# Stops aide-check.timer, removes systemd units, and removes the aide package.
+- name: Remove AIDE infrastructure when disabled
+  when:
+    - is_dnf
+    - not (system_aide_enabled | bool)
+    - not csb_rhel  # CSB IT manages AIDE baseline; don't interfere
+    - not system_is_container  # daemon_reload: true always runs systemctl daemon-reload, crashing privileged Podman container PID 1
+  block:
+    - name: Disable and stop aide-check.timer when AIDE disabled
+      ansible.builtin.systemd:
+        name: aide-check.timer
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove AIDE systemd unit files when disabled
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/aide-check.service
+        - /etc/systemd/system/aide-check.timer
+        - /etc/systemd/system/aide-notify@.service
+        # Created by dnf_automatic.yml; removed here to prevent aide --update running against a non-existent DB.
+        # Both paths are listed so removal is correct regardless of whether csb_detect.yml ran —
+        # is_dnf5 defaults to false in isolated tag runs, which would miss the dnf5 path on Fedora 44+.
+        # state: absent is idempotent, so listing both is safe when only one exists.
+        - /etc/systemd/system/dnf-automatic.service.d/aide-update.conf
+        - /etc/systemd/system/dnf5-automatic.service.d/aide-update.conf
+      loop_control:
+        label: "{{ item }}"
+      register: system_aide_unit_removal
+
+    - name: Reload systemd after removing AIDE units  # noqa: no-handler
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: system_aide_unit_removal.changed
+
+    - name: Remove aide package when AIDE disabled
+      ansible.builtin.dnf:
+        name: aide
+        state: absent
+      ignore_errors: true
+      register: _aide_pkg_remove
+
+    - name: Warn if aide package removal failed
+      ansible.builtin.debug:
+        msg: "aide package removal failed — aide may still be installed; manual intervention may be required"
+      when: _aide_pkg_remove is failed
+
+    - name: Stat AIDE database before removal
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db.gz
+      register: _aide_db_exists
+
+    - name: Warn that AIDE database is being removed
+      ansible.builtin.debug:
+        msg: 'AIDE database at /var/lib/aide/aide.db.gz is being removed (system_aide_enabled=false). Re-enabling AIDE will require a full 5-10 minute baseline rebuild.'  # yamllint disable-line rule:line-length
+      when: _aide_db_exists.stat.exists | default(false)
+
+    - name: Remove AIDE database on disable (force fresh init on re-enable)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/aide/aide.db.gz
+        - /var/lib/aide/aide.db.new.gz
+
+    - name: Remove aide.conf.rpmsave artifact after package removal
+      ansible.builtin.file:
+        path: /etc/aide.conf.rpmsave
+        state: absent
+      failed_when: false

@@ -1,0 +1,409 @@
+---
+# roles/packages/tasks/install_oc_opm.yml
+# OpenShift CLI (oc+kubectl) and OPM operator registry tool downloads.
+# Included from main.yml; inherits become from the calling play.
+# Guarded by _packages_linux_x86_work (is_linux + x86_64 + profile==work +
+# packages_install_binaries); do not include directly without that guard.
+- name: Reject stable track (no independent checksum trust anchor)
+  ansible.builtin.assert:
+    that: packages_oc_version != 'stable'
+    fail_msg: >-
+      stable track disabled — pin packages_oc_version in config.yml for
+      supply-chain integrity (checksum comes from the same server as the binary)
+
+- name: Install oc and kubectl
+  block:
+    - name: Assert oc SHA256 is set for pinned version
+      ansible.builtin.assert:
+        that: packages_oc_sha256 | length == 64
+        fail_msg: "packages_oc_sha256 must be a 64-char hex string — update defaults/main.yml when bumping packages_oc_version"
+      when: packages_oc_version != 'stable'
+
+    - name: Check if oc is installed
+      ansible.builtin.command:
+        cmd: /usr/local/bin/oc version --client
+      register: packages_oc_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Check if kubectl exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: packages_kubectl_stat
+      check_mode: false
+
+    - name: Read kubectl source marker
+      ansible.builtin.command:
+        cmd: cat /var/lib/ansible-packages/kubectl-source
+      register: packages_kubectl_source_marker
+      failed_when: false
+      changed_when: false
+
+    - name: Oc + kubectl present at {{ packages_oc_version }}
+      when: >-
+        packages_oc_check.rc != 0 or
+        packages_oc_version == 'stable' or
+        (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
+        not packages_kubectl_stat.stat.exists or
+        (packages_kubectl_source == 'ocp' and
+         (packages_kubectl_source_marker.rc != 0 or
+          packages_kubectl_source_marker.stdout | trim != 'ocp'))
+      block:
+        # WARNING: stable track fetches sha256sum.txt from the same server as the binary
+        # (mirror.openshift.com) with no GPG verification — a compromised server can serve a
+        # matching (malicious binary + hash) pair and this check will pass. Use a pinned
+        # packages_oc_version with a hardcoded packages_oc_sha256 in defaults/main.yml for
+        # stronger supply-chain integrity guarantees.
+        - name: Fetch OpenShift client sha256sum.txt
+          ansible.builtin.uri:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/sha256sum.txt"
+            return_content: true
+            timeout: 300
+          register: packages_oc_sha256sums
+          check_mode: false
+          retries: 3
+          delay: 10
+          until: packages_oc_sha256sums.status == 200
+          when: packages_oc_version == 'stable'
+
+        - name: Extract SHA256 for openshift-client-linux.tar.gz
+          ansible.builtin.set_fact:
+            packages_oc_sha256: >-
+              {{ packages_oc_sha256sums.content
+                 | regex_findall('^([0-9a-f]{64})\s+openshift-client-linux\.tar\.gz$',
+                                 multiline=True)
+                 | first | default('') }}
+          when: packages_oc_version == 'stable'
+
+        - name: Assert oc SHA256 was found
+          ansible.builtin.assert:
+            that: packages_oc_sha256 | length == 64
+            fail_msg: "Could not extract SHA256 for openshift-client-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
+          when: packages_oc_version == 'stable'
+
+        - name: Create temporary directory for oc download
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: oc_
+          register: packages_oc_tempdir
+          become: true
+          tags: [become]
+
+        - name: OpenShift client tarball at {{ packages_oc_version }}
+          ansible.builtin.get_url:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/openshift-client-linux.tar.gz"
+            dest: "{{ packages_oc_tempdir.path }}/openshift-client-linux.tar.gz"
+            checksum: "sha256:{{ packages_oc_sha256 }}"
+            mode: "0644"
+            timeout: 300
+          register: packages_oc_download
+          retries: 3
+          delay: 10
+          until: packages_oc_download is succeeded
+          become: true
+          tags: [become]
+
+        - name: Inspect oc tarball without following symlinks
+          ansible.builtin.stat:
+            path: "{{ packages_oc_download.dest }}"
+            follow: false
+          register: _oc_archive_stat
+          become: true
+          tags: [become]
+
+        - name: Verify oc tarball is not a symlink
+          ansible.builtin.assert:
+            that:
+              - _oc_archive_stat.stat.isreg | default(false)
+              - not (_oc_archive_stat.stat.islnk | default(false))
+            fail_msg: "SECURITY: oc tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+          become: true
+          tags: [become]
+
+        - name: Build list of binaries to extract from OCP tarball
+          ansible.builtin.set_fact:
+            _oc_binaries_to_extract: >-
+              {{ ['oc'] + (['kubectl'] if packages_kubectl_source == 'ocp' else []) }}
+
+        - name: Extract oc and kubectl
+          # Idempotency guard: skip re-extraction when get_url reports the tarball
+          # is unchanged (sha256 matches the cached copy).  Still extracts
+          # when oc is absent from disk (rc != 0) even if the tarball is cached,
+          # covering the edge case of a manually deleted binary.  This matters
+          # most for packages_oc_version == 'stable', where the outer when-clause
+          # always fires and creates: /usr/local/bin/oc would wrongly prevent
+          # upgrades when the stable pointer advances to a new release.
+          # When packages_kubectl_source == 'upstream', only oc is extracted; kubectl
+          # is installed separately from dl.k8s.io via install_kubectl_upstream.yml.
+          ansible.builtin.unarchive:
+            src: "{{ packages_oc_download.dest }}"
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: "{{ ['--no-same-owner'] + _oc_binaries_to_extract }}"
+          when: packages_oc_download.changed or packages_oc_check.rc != 0 or not packages_kubectl_stat.stat.exists
+          become: true
+          tags: [become]
+
+        - name: Create ansible-packages state directory
+          ansible.builtin.file:
+            path: /var/lib/ansible-packages
+            state: directory
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Write kubectl source marker when kubectl extracted from OCP
+          ansible.builtin.copy:
+            content: "{{ packages_kubectl_source }}"
+            dest: /var/lib/ansible-packages/kubectl-source
+            mode: "0644"
+          become: true
+          tags: [become]
+          when:
+            - packages_kubectl_source == 'ocp'
+            - "'kubectl' in _oc_binaries_to_extract"
+
+      always:
+        - name: Clean up oc temporary directory
+          ansible.builtin.file:
+            path: "{{ packages_oc_tempdir.path }}"
+            state: absent
+          when: packages_oc_tempdir is defined
+          become: true
+          tags: [become]
+
+    - name: Verify oc binary is present
+      ansible.builtin.stat:
+        path: /usr/local/bin/oc
+      register: packages_oc_stat
+      check_mode: false
+
+    - name: Verify kubectl binary is present
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubectl
+      register: packages_kubectl_stat_post
+      check_mode: false
+
+    - name: Set permissions on oc and kubectl
+      ansible.builtin.file:
+        path: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop: [oc, kubectl]
+      become: true
+      tags: [become]
+      when: >-
+        (item == 'oc' and packages_oc_stat.stat.exists) or
+        (item == 'kubectl' and packages_kubectl_stat_post.stat.exists)
+
+  rescue:
+    - name: Record oc/kubectl download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "oc/kubectl"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install oc and kubectl manually from
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+        _csb_ticket_summary: "Cannot download oc/kubectl binary on CSB"
+        _csb_ticket_body: >-
+          oc and kubectl binaries could not be downloaded from mirror.openshift.com.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+      when: csb_rhel
+    - name: Warn oc/kubectl download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download oc/kubectl: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+      when: not csb_rhel
+
+- name: Install opm (Operator Package Manager)
+  block:
+    - name: Assert opm SHA256 is set for pinned version
+      ansible.builtin.assert:
+        that: packages_opm_sha256 | length == 64
+        fail_msg: >-
+          packages_opm_sha256 must be a 64-char hex string — update
+          packages_opm_sha256 and packages_oc_sha256 in defaults/main.yml
+          when bumping packages_oc_version
+      when: packages_oc_version != 'stable'
+
+    - name: Check if opm binary exists
+      ansible.builtin.command:
+        cmd: /usr/local/bin/opm version
+      register: packages_opm_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read opm OCP version marker
+      ansible.builtin.command:
+        cmd: cat /var/lib/ansible-packages/opm-ocp-version
+      register: packages_opm_marker
+      failed_when: false
+      changed_when: false
+
+    - name: Opm present at {{ packages_oc_version }}
+      when: >-
+        packages_opm_check.rc != 0 or
+        packages_oc_version == 'stable' or
+        packages_opm_marker.rc != 0 or
+        packages_opm_marker.stdout | trim != packages_oc_version
+      block:
+        - name: Extract SHA256 for opm-linux.tar.gz
+          ansible.builtin.set_fact:
+            packages_opm_sha256: >-
+              {{ packages_oc_sha256sums.content
+                 | regex_findall('^([0-9a-f]{64})\s+opm-linux\.tar\.gz$',
+                                 multiline=True)
+                 | first | default('') }}
+          when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
+
+        - name: Assert opm SHA256 was found
+          ansible.builtin.assert:
+            that: packages_opm_sha256 | length == 64
+            fail_msg: "Could not extract SHA256 for opm-linux.tar.gz from checksum file (oc_version={{ packages_oc_version }})"
+          when: packages_oc_version == 'stable' and packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums
+
+        - name: Fail if stable-mode opm SHA256 could not be loaded from sha256sum.txt
+          ansible.builtin.fail:
+            msg: >-
+              packages_oc_version is 'stable' but sha256sum.txt was not fetched
+              (oc block likely entered rescue). Cannot verify opm SHA256.
+          when:
+            - packages_oc_version == 'stable'
+            - not (packages_oc_sha256sums is defined and 'content' in packages_oc_sha256sums)
+
+        - name: Create temporary directory for opm download
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: opm_
+          register: packages_opm_tempdir
+          become: true
+          tags: [become]
+
+        - name: Opm tarball at {{ packages_oc_version }}
+          ansible.builtin.get_url:
+            url: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/{{ packages_oc_version }}/opm-linux.tar.gz"
+            dest: "{{ packages_opm_tempdir.path }}/opm-linux.tar.gz"
+            checksum: "sha256:{{ packages_opm_sha256 }}"
+            mode: "0644"
+            timeout: 300
+          register: packages_opm_download
+          retries: 3
+          delay: 10
+          until: packages_opm_download is succeeded
+          become: true
+          tags: [become]
+
+        - name: Inspect opm tarball without following symlinks
+          ansible.builtin.stat:
+            path: "{{ packages_opm_download.dest }}"
+            follow: false
+          register: _opm_archive_stat
+          become: true
+          tags: [become]
+
+        - name: Fail if opm tarball is a symlink (TOCTOU attack detected)
+          ansible.builtin.assert:
+            that:
+              - _opm_archive_stat.stat.isreg | default(false)
+              - not (_opm_archive_stat.stat.islnk | default(false))
+            fail_msg: "SECURITY: opm tarball is a symlink — aborting extraction to prevent TOCTOU attack"
+          become: true
+          tags: [become]
+
+        - name: Assert opm binary name exists in tarball  # noqa: command-instead-of-module — inspect archive members without extracting
+          ansible.builtin.command: tar -tzf {{ packages_opm_download.dest | quote }}
+          register: packages_opm_tarball_list
+          changed_when: false
+          failed_when: packages_opm_tarball_list.stdout_lines | select('equalto', packages_opm_binary_name) | list | length == 0
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+          become: true
+          tags: [become]
+
+        - name: Extract and install opm binary
+          when: packages_opm_download.changed or packages_opm_check.rc != 0
+          block:
+            - name: Extract opm binary
+              ansible.builtin.unarchive:
+                src: "{{ packages_opm_download.dest }}"
+                dest: /usr/local/bin
+                remote_src: true
+                extra_opts:
+                  - --no-same-owner
+                  - "{{ packages_opm_binary_name }}" # set in defaults/main.yml; verify when bumping packages_oc_version
+              become: true
+              tags: [become]
+
+            - name: Copy opm binary to /usr/local/bin/opm
+              ansible.builtin.copy:
+                src: /usr/local/bin/{{ packages_opm_binary_name }}
+                dest: /usr/local/bin/opm
+                remote_src: true
+                mode: '0755'
+              become: true
+              tags: [become]
+
+            - name: Remove source opm binary after copy
+              ansible.builtin.file:
+                path: /usr/local/bin/{{ packages_opm_binary_name }}
+                state: absent
+              become: true
+              tags: [become]
+
+        - name: Create ansible-packages state directory
+          ansible.builtin.file:
+            path: /var/lib/ansible-packages
+            state: directory
+            mode: "0755"
+          become: true
+          tags: [become]
+
+        - name: Write OCP version marker for opm (enables idempotent version-drift detection)
+          ansible.builtin.copy:
+            content: "{{ packages_oc_version }}"
+            dest: /var/lib/ansible-packages/opm-ocp-version
+            mode: "0644"
+          become: true
+          tags: [become]
+
+      always:
+        - name: Clean up opm temporary directory
+          ansible.builtin.file:
+            path: "{{ packages_opm_tempdir.path }}"
+            state: absent
+          when: packages_opm_tempdir is defined
+          become: true
+          tags: [become]
+
+        - name: Remove source opm binary artifact (safety cleanup)
+          ansible.builtin.file:
+            path: /usr/local/bin/{{ packages_opm_binary_name }}
+            state: absent
+          become: true
+          tags: [become]
+          when: packages_opm_download is defined
+
+  rescue:
+    - name: Record opm download failure (CSB)
+      ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/csb-failure-handler.yml"
+      vars:
+        _csb_role: packages
+        _csb_task_name: "opm"
+        _csb_error: "{{ ansible_failed_result.msg | default('unknown error') }}"
+        _csb_action: >-
+          Install opm manually from
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+        _csb_ticket_summary: "Cannot download opm binary on CSB"
+        _csb_ticket_body: >-
+          opm binary could not be downloaded from mirror.openshift.com.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+      when: csb_rhel
+    - name: Warn opm download failed
+      ansible.builtin.debug:
+        msg: >-
+          Failed to download opm: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Install manually from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/.
+      when: not csb_rhel
