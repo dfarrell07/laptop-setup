@@ -12,9 +12,36 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: vm
-          runner: ubuntu-22.04
-          timeout: 90
+        - scenario: fedora
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: rocky
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: debian
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: container
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: container-offline
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: container-offline-distrobox
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: distrobox-role
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: packages-binaries
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: ssti-guard
+          runner: ubuntu-24.04
+          timeout: 60
+        - scenario: macos
+          runner: macos-15
+          timeout: 60
     env:
       SKIP_GPG_VERIFY: '1'
     steps:
@@ -29,7 +56,7 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'dcfaeb5bf3911ea676b8cedc9c98a4ca49ba0abd2763500e74d066d0a0bd4b24',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '07cbf5fb204335f1efc4862ec181a1b5d29b16f4d9fff741c33be056c23ac49b',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
