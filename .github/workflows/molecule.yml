@@ -29,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '9f25acffb7bbbca2b418f162148f71e246695840fa9560c6b622d8cec3281e29',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '47fae85af9facb8b98a9ac09eebe98c15263f44258a38812a39baf8b2ba52d9a',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: c25d123718bdbba750363220f03c3ddd126161ea')\nPY_SNAPSHOT\n"
+        \ candidate tree: f3ebcc1d6c917777ba810698a132d9f8b79abbb1')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
@@ -70,10 +70,10 @@ jobs:
         \ >/dev/null\nif [ -c /dev/kvm ]; then\n  sudo chmod a+rw /dev/kvm\nelse\n  # Standard hosted runners lack KVM; exercise\
         \ the complete guest under TCG.\n  python3 - <<'PY_VM'\nfrom pathlib import Path\nimport yaml\npath = Path('molecule/vm/molecule.yml')\n\
         config = yaml.safe_load(path.read_text())\nfor platform in config['platforms']:\n    platform.setdefault('provider_raw_config_args',\
-        \ []).extend([\n        \"driver = 'qemu'\", \"cpu_mode = 'maximum'\",\n        \"serial :type => 'file', :source\
-        \ => {:path => '/var/log/libvirt/qemu/laptop-setup-serial.log'}\",\n    ])\n    platform.setdefault('instance_raw_config_args',\
-        \ []).append('vm.boot_timeout = 600')\npath.write_text(yaml.safe_dump(config, sort_keys=False))\nPY_VM\nfi\nvirsh\
-        \ -c qemu:///system list --all\n"
+        \ []).extend([\n        \"driver = 'qemu'\", \"cpu_mode = 'maximum'\",\n    ])\n    platform.setdefault('provider_raw_config_args',\
+        \ []).append(\"serial :type => 'file', :source => {:path => '/var/log/libvirt/qemu/laptop-setup-serial.log'}\")\n\
+        \    platform.setdefault('instance_raw_config_args', []).append('vm.boot_timeout = 600')\npath.write_text(yaml.safe_dump(config,\
+        \ sort_keys=False))\nPY_VM\nfi\nvirsh -c qemu:///system list --all\n"
     - name: Show native macOS firewall state
       if: matrix.scenario == 'macos'
       shell: bash
@@ -92,15 +92,18 @@ jobs:
     - name: Read disposable guest diagnostics
       if: always() && matrix.scenario == 'vm'
       shell: bash
-      run: "sudo tail -n 500 /var/log/libvirt/qemu/laptop-setup-serial.log || true\nvirsh -c qemu:///system list --all ||\
-        \ true\nif [ -e \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" ]; then\n  export PATH=\"$PWD/.venv/bin:$PATH\"\n  .venv/bin/ansible\
+      run: "for domain in $(virsh -c qemu:///system list --name); do virsh -c qemu:///system dumpxml \"$domain\"; done\nsudo\
+        \ tail -n 500 /var/log/libvirt/qemu/laptop-setup-serial.log || true\nvirsh -c qemu:///system list --all || true\n\
+        if [ -e \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" ]; then\n  export PATH=\"$PWD/.venv/bin:$PATH\"\n  .venv/bin/ansible\
         \ all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'grubby --info=ALL' || true\n\
-        \  .venv/bin/ansible all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'grub2-editenv\
-        \ list' || true\n  .venv/bin/ansible all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m\
-        \ command -a 'cat /etc/kernel/cmdline' || true\n  .venv/bin/ansible all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\"\
-        \ -m command -a 'podman logs --tail 250 fedora-dev' || true\nfi\n\nif [ -e \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\"\
-        \ ]; then\n  python3 - <<'PYDIAG'\nfrom pathlib import Path\nimport yaml\np = Path('molecule/vm/verify.yml')\nplays\
-        \ = yaml.safe_load(p.read_text())\nfor play in plays:\n    play['ignore_errors'] = True\nPath('molecule/vm/diagnostic-verify.yml').write_text(yaml.safe_dump(plays,\
+        \  .venv/bin/ansible all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'journalctl\
+        \ -b -u firewalld -u kernel-modules-lockdown --no-pager' || true\n  .venv/bin/ansible all -e ansible_port=722 -i \"\
+        $MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'grub2-editenv list' || true\n  .venv/bin/ansible all -e\
+        \ ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'cat /etc/kernel/cmdline' || true\n\
+        \  .venv/bin/ansible all -e ansible_port=722 -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -m command -a 'podman\
+        \ logs --tail 250 fedora-dev' || true\nfi\n\nif [ -e \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" ]; then\n  python3\
+        \ - <<'PYDIAG'\nfrom pathlib import Path\nimport yaml\np = Path('molecule/vm/verify.yml')\nplays = yaml.safe_load(p.read_text())\n\
+        for play in plays:\n    play['ignore_errors'] = True\nPath('molecule/vm/diagnostic-verify.yml').write_text(yaml.safe_dump(plays,\
         \ sort_keys=False))\nPYDIAG\n  export MOLECULE_PROJECT_DIRECTORY=\"$PWD\"\n  export MOLECULE_SCENARIO_DIRECTORY=\"\
         $PWD/molecule/vm\"\n  .venv/bin/ansible-playbook -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -e ansible_port=722\
         \ molecule/vm/diagnostic-verify.yml || true\nfi\n"
