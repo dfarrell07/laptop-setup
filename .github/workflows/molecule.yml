@@ -12,9 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: distrobox-role
-          runner: ubuntu-24.04
-          timeout: 60
+        - scenario: vm
+          runner: ubuntu-22.04
+          timeout: 90
     env:
       SKIP_GPG_VERIFY: '1'
     steps:
@@ -29,7 +29,7 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '676f1cec526f29f2d6714b3de9d8627047303a69b955de1ec4653e2f358a7906',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'cc531065fe44bf0e7d3a32bcb345d751a4f2e7008b6977034426d3ebc7aae5f8',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
@@ -86,9 +86,21 @@ jobs:
       env:
         SCENARIO: ${{ matrix.scenario }}
         GH_TOKEN: ${{ github.token }}
-      run: 'unset ANSIBLE_LIBRARY ANSIBLE_VARS_PLUGINS ANSIBLE_FILTER_PLUGINS ANSIBLE_LOOKUP_PLUGINS ANSIBLE_CALLBACK_PLUGINS
-        PYTHONPATH LD_PRELOAD PYTHONHOME GIT_TEMPLATE_DIR TMPDIR TEMP TMP
+      run: "export PATH=\"$PWD/.venv/bin:$PATH\"\nif [ \"$SCENARIO\" = vm ]; then\n  scripts/verify-ansible-args.sh .venv/bin/molecule\
+        \ test -s vm --destroy never\nelse\n  make \"test-$SCENARIO\"\nfi\n"
+    - name: Read disposable guest diagnostics
+      if: always() && matrix.scenario == 'vm'
+      shell: bash
+      run: "if [ -d \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" ]; then\n  export PATH=\"$PWD/.venv/bin:$PATH\"\n  .venv/bin/ansible\
+        \ all -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'grubby --info=ALL' || true\n  .venv/bin/ansible\
+        \ all -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'grub2-editenv list' || true\n  .venv/bin/ansible\
+        \ all -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -b -m command -a 'cat /etc/kernel/cmdline' || true\n  .venv/bin/ansible\
+        \ all -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -m command -a 'podman logs --tail 250 fedora-dev' || true\nfi\n"
+    - name: Destroy retained test guest
+      if: always() && matrix.scenario == 'vm'
+      shell: bash
+      run: 'export PATH="$PWD/.venv/bin:$PATH"
 
-        make "test-$SCENARIO"
+        scripts/verify-ansible-args.sh .venv/bin/molecule destroy -s vm
 
         '
