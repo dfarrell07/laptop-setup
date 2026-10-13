@@ -29,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '2339ce19f74d1c07298a177b8543bd6dffe9239138b93556fe97337bb5803d7e',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == '299c5519e58ede098821fd08b060bd617ea6a7b9b96320243c870c41f00011b0',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: 18c766b132b58a897bb1c7cab80c8b42e14c5a90')\nPY_SNAPSHOT\n"
+        \ candidate tree: ed6d80b5c024bae1444c918feeee77ca5edc29bf')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
@@ -99,7 +99,8 @@ jobs:
         \ -m command -a 'podman logs --tail 250 fedora-dev' || true\nfi\n\nif [ -e \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\"\
         \ ]; then\n  python3 - <<'PYDIAG'\nfrom pathlib import Path\nimport yaml\np = Path('molecule/vm/verify.yml')\nplays\
         \ = yaml.safe_load(p.read_text())\nfor play in plays:\n    play['ignore_errors'] = True\nPath('molecule/vm/diagnostic-verify.yml').write_text(yaml.safe_dump(plays,\
-        \ sort_keys=False))\nPYDIAG\n  .venv/bin/ansible-playbook -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -e ansible_port=722\
+        \ sort_keys=False))\nPYDIAG\n  export MOLECULE_PROJECT_DIRECTORY=\"$PWD\"\n  export MOLECULE_SCENARIO_DIRECTORY=\"\
+        $PWD/molecule/vm\"\n  .venv/bin/ansible-playbook -i \"$MOLECULE_EPHEMERAL_DIRECTORY/inventory\" -e ansible_port=722\
         \ molecule/vm/diagnostic-verify.yml || true\nfi\n"
     - name: Destroy retained test guest
       if: always() && matrix.scenario == 'vm'
