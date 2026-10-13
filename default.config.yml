@@ -12,7 +12,7 @@
 # site.yml enforces this — it will fail the play if any vault_* key
 # appears in config.yml.
 
-desktop_environment: CHANGE_ME  # set sway, i3, or gnome; auto detection fails before any WM is installed
+desktop_environment: CHANGE_ME  # Linux: sway/i3/gnome; macOS: aerospace; set explicitly before provisioning
 
 # ============================================================
 # USER IDENTITY — override ALL of these in config.yml
@@ -137,7 +137,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   system_mask_nfs_server: true     (group_vars/all/vars.yml) — masks nfs-server and rpcbind (CIS 2.2.7);
 #                                        set false if Vagrant NFS synced folders, NFS exports, or rpcbind are needed
 #   system_mask_iscsi: true          (group_vars/all/vars.yml) — mask iSCSI initiator units (CIS 2.3.x); set false on iSCSI storage machines
-#   system_tlp_enabled: true/false     (roles/system/defaults) — auto-detected from ansible_form_factor; override to force on/off
+#   system_tlp_enabled: false          (roles/system/defaults) — native power stack; set true to opt into TLP
 #   system_tlp_bat0_start: 20          (roles/system/defaults) — battery charge start threshold %
 #   system_tlp_bat0_stop: 80           (roles/system/defaults) — charge stop threshold (20-80% extends Li-ion life)
 #   system_tlp_platform_profile_ac: performance   (roles/system/defaults) — ACPI platform profile on AC
@@ -476,6 +476,7 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   dotfiles_ssh_hardware_key_basename: id_ed25519_sk  — YubiKey auth key stub basename (no extension)
 #   dotfiles_ssh_redhat_key_basename: id_rsa_redhat    — Red Hat internal git key basename (no extension)
 #   dotfiles_gonosumdb: ""   — GONOSUMDB for internal Go modules (default: ""; e.g. "*.redhat.com,*.engineering.redhat.com")
+#     Checksum exceptions support literals and '*' globs; broad public hosts/owners and managed public tools are rejected.
 #   dotfiles_goprivate: ""   — GOPRIVATE for internal Go repos (default: ""; e.g. "gitlab.cee.redhat.com,pkgs.devel.redhat.com")
 #   dotfiles_claude_queue_repo: "{{ dotfiles_github_user }}/claude-tasks"  — GitHub repo for cq() alias
 #   dotfiles_work_src_dirs: []  # set in config.yml: e.g. [my-org, my-other-org]; routes those dirs to work git identity
@@ -533,3 +534,36 @@ system_timezone: !unsafe UTC  # override in config.yml — e.g. America/Chicago,
 #   container_image: 'registry.fedoraproject.org/fedora-toolbox:44'
 #   container_release: '44'
 #   distrobox_create_timeout: 600       (roles/distrobox/defaults) — seconds before container create is killed; raise on slow networks
+
+# Old-laptop migration additions (see docs/old-laptop-migration-plan.md):
+#   codex_enabled: true                          (roles/codex/defaults)
+#   codex_install_method: npm                    (roles/codex/defaults) — skip for config-only provisioning
+#   codex_work_model: gpt-6.1-sol                 (roles/codex/defaults) — seed-only
+#   codex_personal_model: gpt-6-luna              (roles/codex/defaults) — seed-only
+#   codex_work_reasoning_effort: medium           (roles/codex/defaults)
+#   codex_personal_reasoning_effort: high         (roles/codex/defaults)
+#   claude_personal2_instance_enabled: true       (roles/claude/defaults)
+#   dotfiles_claude_launcher_args: [--dangerously-skip-permissions, --plugin-dir, .]
+#   dotfiles_codex_launcher_args: [--ask-for-approval=never, --sandbox=danger-full-access]
+#   packages_extra_pipx: []                      (roles/packages/defaults) — e.g. [ruff==0.15.20, skillsaw==0.17.0]
+#   packages_extra_npm: []                       (roles/packages/defaults) — e.g. [{name: '@google/gemini-cli', version: '0.60.0'}]
+#   git_repos_work_categories includes evpn + rh-context; make repos-evpn / make repos-rh-context
+#   Local zsh overrides: ~/.config/zsh/local.zsh (user owned, sourced last, backed up)
+#   claude_user_preferences: {model: opus, effortLevel: medium, alwaysThinkingEnabled: false, includeCoAuthoredBy: false}
+#     Defaults also seed tui: fullscreen. CLI edits to existing settings.json are preserved.
+#   claude_personal_plugin_settings: {}          — opt out of personal repo/plugin seeds
+#   claude_work_plugin_settings: {}              — opt out of additional work-home plugin seeds
+#   Shared AI working agreements: roles/common/files/agent-baseline.md (Codex seed-only; Claude managed)
+
+# Wider workstation audit additions (docs/old-laptop-second-pass.md):
+#   packages_extra_dnf: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, openssl-devel]
+#   packages_extra_apt: []             (roles/packages/defaults) — additive; e.g. [ccache, git-review, libssl-dev]
+#   packages_extra_brew: []            (roles/packages/defaults) — additive; e.g. [ccache, git-review]
+#   desktop_gnome_clock_format: 24h    (roles/desktop/defaults)
+#   desktop_gnome_touchpad_tap: true    (roles/desktop/defaults)
+#   desktop_gnome_touchpad_natural_scroll: true  (roles/desktop/defaults)
+#   desktop_gnome_dynamic_workspaces: false     (roles/desktop/defaults)
+#   desktop_gnome_workspace_count: 4   (roles/desktop/defaults)
+#   desktop_gnome_xkb_options: [lv3:ralt_switch]  (roles/desktop/defaults)
+#   dotfiles_legacy_grep_alias_enabled: false    (roles/dotfiles/defaults) — true restores old gi; overrides forgit's gi
+#   make workstation-audit            — private metadata report; no install/removal/service changes

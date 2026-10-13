@@ -1,0 +1,12 @@
+---
+codex_enabled: true
+# Version and platform package integrity pins live in files/package{-lock,}.json.
+codex_install_method: npm  # npm or skip (CI/config-only)
+packages_install_binaries: true  # shared offline switch
+codex_install_dir: "{{ ansible_facts['user_dir'] }}/.local/share/codex-cli"
+codex_work_config_dir: "{{ ansible_facts['user_dir'] }}/.codex"
+codex_personal_config_dir: "{{ ansible_facts['user_dir'] }}/.codex-personal"
+codex_work_model: gpt-6.1-sol
+codex_work_reasoning_effort: medium
+codex_personal_model: gpt-6-luna
+codex_personal_reasoning_effort: high

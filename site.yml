@@ -237,6 +237,10 @@
     - role: claude
       tags: [claude]
 
+    - role: codex
+      tags: [codex]
+      when: codex_enabled | default(true) | bool
+
     - role: distrobox
       tags: [distrobox]
       when: ansible_facts['system'] | default('Linux') == 'Linux' and distrobox_enabled | bool

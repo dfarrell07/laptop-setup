@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # test-queue-poller.sh — Unit tests for claude-queue-poller.sh functions.
 set -euo pipefail
 

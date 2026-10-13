@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE = ROOT / '.venv/bin/ansible-playbook'
 if not ANSIBLE.exists():
     ANSIBLE = Path(shutil.which('ansible-playbook'))
+TEST_TIMEOUT = max(30, int(os.environ.get('LAPTOP_SETUP_TEST_TIMEOUT', '0')))
 
 
 def guard(filename, name):
@@ -30,6 +31,14 @@ def guard(filename, name):
 
 
 class InputGuardTests(unittest.TestCase):
+    def test_personal2_config_path_cannot_inject_tmpfiles_directives(self):
+        task = guard('common/tasks/pre_flight_checks.yml', 'Assert claude config dir vars contain only safe path characters')
+        for path, accepted in [('/home/fixture/.claude-per2', True),
+                               ('/home/fixture/.claude-per2\n', False),
+                               ('/home/fixture/.claude-per2\nz /fixture/unrelated 0000 - - -\n#', False)]:
+            with self.subTest(path=path):
+                self.check(task, {'_config_raw': {'claude_personal2_config_dir': path}}, accepted)
+
     def check(self, task, variables, accepted):
         with tempfile.TemporaryDirectory() as directory:
             playbook = Path(directory) / 'guard.yml'
@@ -40,7 +49,7 @@ class InputGuardTests(unittest.TestCase):
             env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'))
             result = subprocess.run(
                 [str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
-                cwd=ROOT, env=env, capture_output=True, text=True, timeout=30,
+                cwd=ROOT, env=env, capture_output=True, text=True, timeout=TEST_TIMEOUT,
             )
             self.assertEqual(result.returncode, 0 if accepted else 2, result.stdout + result.stderr)
 

@@ -500,6 +500,21 @@
     - desktop_effective == 'gnome'
     - not (system_is_container | default(false))
   block:
+    - name: Validate GNOME preference types
+      ansible.builtin.assert:
+        that:
+          - desktop_gnome_clock_format in ['12h', '24h']
+          - desktop_gnome_clock_show_date is boolean
+          - desktop_gnome_touchpad_tap is boolean
+          - desktop_gnome_touchpad_natural_scroll is boolean
+          - desktop_gnome_dynamic_workspaces is boolean
+          - desktop_gnome_workspace_count | string is match('^[0-9]+$')
+          - desktop_gnome_workspace_count | int >= 1
+          - desktop_gnome_workspace_count | int <= 36
+          - desktop_gnome_xkb_options is sequence and desktop_gnome_xkb_options is not string and desktop_gnome_xkb_options is not mapping
+          - desktop_gnome_xkb_options | reject('string') | list | length == 0
+          - desktop_gnome_xkb_options | reject('match', '^[a-zA-Z0-9_:-]+$') | list | length == 0
+
     - name: Apply GNOME dconf hardening and UI settings
       community.general.dconf:
         key: "{{ item.key }}"

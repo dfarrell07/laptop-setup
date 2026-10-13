@@ -1,6 +1,9 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
-export PATH="$HOME/.local/bin:$HOME/bin:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
+{% if _system == 'Darwin' %}
+export PATH="{{ dotfiles_homebrew_prefix | trim }}/bin:$PATH"
+{% endif %}
+export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/go/bin:$HOME/bin:$HOME/.cargo/bin:$HOME/.krew/bin:$PATH"
 export GOPATH="$HOME/go"
 export GOTMPDIR="$HOME/tmp"  # go test compiles to TempDir then exec()s — /tmp may be noexec (nosuid mount on CSB/hardened hosts)
 export GOTOOLCHAIN='{{ packages_gotoolchain }}'  # 'local' prevents runtime toolchain downloads; 'auto' allows self-replacement on demand
@@ -29,12 +32,9 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/ssh-agent.socket}"
 {% if dotfiles_aws_profile %}
 export AWS_PROFILE='{{ dotfiles_aws_profile | replace("'", "'\''" ) }}'
 {% endif %}
-{% if dotfiles_gonosumdb %}
-export GONOSUMDB='{{ dotfiles_gonosumdb | replace("'", "'\''" ) }}'
-{% endif %}
-{% if dotfiles_goprivate %}
-export GOPRIVATE='{{ dotfiles_goprivate | replace("'", "'\''" ) }}'
-{% endif %}
+# Go ignores empty environment values; explicit patterns override stale GoENV entries.
+export GONOSUMDB='{{ (dotfiles_gonosumdb or dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
+export GOPRIVATE='{{ (dotfiles_goprivate or 'none') | replace("'", "'\''" ) }}'
 {% endif %}
 
 command -v direnv &>/dev/null && eval "$(direnv hook bash)"

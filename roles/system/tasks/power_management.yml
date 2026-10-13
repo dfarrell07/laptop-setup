@@ -1,0 +1,323 @@
+---
+# Fedora tuned packages conflict with TLP. Switch named packages explicitly;
+# rescue restores the previous stack best effort, without erasing unrelated deps.
+- name: Enable TLP as the sole power manager
+  when: system_tlp_enabled | bool
+  block:
+    - name: Gather packages before the power-manager transition
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Gather services before the power-manager transition
+      ansible.builtin.service_facts:
+
+    # service_facts reports active/exited oneshot units as stopped; TLP uses RemainAfterExit.
+    - name: Read TLP activity before the power-manager transition
+      ansible.builtin.command:
+        argv: [systemctl, is-active, --quiet, tlp.service]
+      register: _system_power_previous_tlp_activity
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Record the native packages and services for rollback
+      ansible.builtin.set_fact:
+        _system_power_previous_packages: >-
+          {{ ['tuned', 'tuned-ppd', 'power-profiles-daemon'] | intersect(ansible_facts.packages.keys() | list) }}
+        _system_power_previous_services: >-
+          {{ ansible_facts.services | dict2items
+             | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | list }}
+        _system_power_previous_tlp_service: "{{ ansible_facts.services.get('tlp.service', {}) }}"
+
+    - name: Inspect TLP configuration before replacing it
+      ansible.builtin.stat:
+        path: /etc/tlp.d/50-thinkpad.conf
+        follow: false
+      register: _system_power_previous_config
+
+    - name: Validate existing TLP configuration is a regular file
+      ansible.builtin.assert:
+        that:
+          - not _system_power_previous_config.stat.exists or
+            (_system_power_previous_config.stat.isreg and not _system_power_previous_config.stat.islnk)
+        fail_msg: The managed TLP configuration path must be a regular file, not a symlink or directory.
+
+    - name: Save existing TLP configuration for recovery
+      ansible.builtin.slurp:
+        src: /etc/tlp.d/50-thinkpad.conf
+      register: _system_power_previous_config_content
+      when: _system_power_previous_config.stat.exists
+
+    - name: Switch the complete native power stack to TLP
+      block:
+        - name: Remove native power packages that conflict with TLP
+          ansible.builtin.dnf:
+            name: [tuned, tuned-ppd, power-profiles-daemon]
+            state: absent
+            autoremove: false
+
+        - name: Install TLP without optional competing profile daemons
+          ansible.builtin.dnf:
+            name: [tlp, tlp-rdw]
+            state: present
+            install_weak_deps: false
+
+        - name: Mask native power daemons while TLP is selected
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            masked: true
+            state: "{{ 'stopped' if ansible_facts.services.get(item, {}).get('state') == 'running' else omit }}"
+            daemon_reload: true
+          loop: [tuned.service, tuned-ppd.service, power-profiles-daemon.service]
+
+        - name: Create TLP configuration directory
+          ansible.builtin.file:
+            path: /etc/tlp.d
+            state: directory
+            mode: "0755"
+
+        - name: Deploy TLP ThinkPad charge threshold config
+          ansible.builtin.template:
+            src: tlp-thinkpad.conf.j2
+            dest: /etc/tlp.d/50-thinkpad.conf
+            mode: "0644"
+          register: _system_tlp_configure
+
+        - name: Enable and start TLP service
+          ansible.builtin.systemd:
+            name: tlp.service
+            masked: false
+            state: "{{ 'restarted' if _system_tlp_configure.changed else 'started' }}"
+            enabled: true
+
+      rescue:
+        - name: Remove conflicting TLP packages before native recovery
+          ansible.builtin.dnf:
+            name: [tlp, tlp-rdw, tlp-pd]
+            state: absent
+            autoremove: false
+          when: _system_power_previous_packages | length > 0
+
+        - name: Restore native masks from before the failed TLP transition
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            masked: "{{ (_system_power_previous_services | items2dict).get(item, {}).get('status', '') == 'masked' }}"
+            daemon_reload: true
+          loop: [tuned.service, tuned-ppd.service, power-profiles-daemon.service]
+
+        - name: Restore previously installed native power packages
+          ansible.builtin.dnf:
+            name: "{{ _system_power_previous_packages }}"
+            state: present
+          when: _system_power_previous_packages | length > 0
+
+        - name: Restore previous native service states
+          ansible.builtin.systemd:
+            name: "{{ item.key }}"
+            masked: "{{ item.value.status | default('') == 'masked' and item.value.state != 'running' }}"
+            state: "{{ 'started' if item.value.state == 'running' else 'stopped' }}"
+            enabled: >-
+              {{ (item.value.status == 'enabled')
+                 if item.value.status | default('') in ['enabled', 'disabled'] else omit }}
+            daemon_reload: true
+          loop: "{{ _system_power_previous_services }}"
+          when: _system_power_previous_packages | length > 0
+
+        - name: Reapply previous masks without stopping active native services
+          ansible.builtin.systemd:
+            name: "{{ item.key }}"
+            masked: true
+          loop: "{{ _system_power_previous_services }}"
+          when:
+            - _system_power_previous_packages | length > 0
+            - item.value.status | default('') == 'masked'
+            - item.value.state == 'running'
+
+        - name: Restore TLP configuration present before the failed transition
+          ansible.builtin.copy:
+            content: "{{ _system_power_previous_config_content.content | b64decode }}"
+            dest: /etc/tlp.d/50-thinkpad.conf
+            mode: "{{ _system_power_previous_config.stat.mode }}"
+          when: _system_power_previous_config.stat.exists
+
+        - name: Remove TLP configuration created by the failed transition
+          ansible.builtin.file:
+            path: /etc/tlp.d/50-thinkpad.conf
+            state: absent
+          when: not _system_power_previous_config.stat.exists
+
+        - name: Restore the previous TLP service after a failed reconfiguration
+          ansible.builtin.systemd:
+            name: tlp.service
+            masked: >-
+              {{ _system_power_previous_tlp_service.status | default('') == 'masked'
+                 and _system_power_previous_tlp_activity.rc != 0 }}
+            state: "{{ 'started' if _system_power_previous_tlp_activity.rc == 0 else 'stopped' }}"
+            enabled: >-
+              {{ (_system_power_previous_tlp_service.status == 'enabled')
+                 if _system_power_previous_tlp_service.status | default('') in ['enabled', 'disabled'] else omit }}
+            daemon_reload: true
+          when:
+            - _system_power_previous_packages | length == 0
+            - _system_power_previous_tlp_service | length > 0
+
+        - name: Reapply the previous mask without stopping an active TLP service
+          ansible.builtin.systemd:
+            name: tlp.service
+            masked: true
+          when:
+            - _system_power_previous_packages | length == 0
+            - _system_power_previous_tlp_service | length > 0
+            - _system_power_previous_tlp_service.status | default('') == 'masked'
+            - _system_power_previous_tlp_activity.rc == 0
+
+        - name: Fail after attempting power-manager recovery
+          ansible.builtin.fail:
+            msg: >-
+              TLP transition failed; recovery attempted previous configuration and power-manager service states.
+              Inspect the active power manager.
+
+- name: Restore native power management after a managed TLP opt-out
+  when: not (system_tlp_enabled | bool)
+  block:
+    - name: Detect the managed TLP configuration
+      ansible.builtin.stat:
+        path: /etc/tlp.d/50-thinkpad.conf
+        follow: false
+      register: _system_tlp_config
+
+    - name: Validate managed TLP configuration before native restoration
+      ansible.builtin.assert:
+        that:
+          - not _system_tlp_config.stat.exists or
+            (_system_tlp_config.stat.isreg and not _system_tlp_config.stat.islnk)
+        fail_msg: The managed TLP configuration path must be a regular file, not a symlink or directory.
+
+    - name: Restore the native stack only after managed TLP configuration
+      when: _system_tlp_config.stat.exists
+      block:
+        - name: Detect a previously installed TLP service
+          ansible.builtin.command:
+            argv: [systemctl, cat, tlp.service]
+          register: _system_tlp_previous
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: Gather packages before native power restoration
+          ansible.builtin.package_facts:
+            manager: auto
+
+        - name: Gather services before native power restoration
+          ansible.builtin.service_facts:
+
+        - name: Read TLP activity before native power restoration
+          ansible.builtin.command:
+            argv: [systemctl, is-active, --quiet, tlp.service]
+          register: _system_previous_tlp_activity
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: Record TLP recovery state and select one native stack
+          ansible.builtin.set_fact:
+            _system_previous_tlp_packages: >-
+              {{ ['tlp', 'tlp-rdw', 'tlp-pd'] | intersect(ansible_facts.packages.keys() | list) }}
+            _system_previous_tlp_service: "{{ ansible_facts.services.get('tlp.service', {}) }}"
+            _system_previous_native_services: >-
+              {{ ansible_facts.services | dict2items
+                 | selectattr('key', 'in', ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']) | items2dict }}
+            _system_native_power_packages: >-
+              {{ ['tuned', 'tuned-ppd']
+                 if ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 41
+                 else (['power-profiles-daemon'] if ansible_distribution == 'Fedora' else ['tuned']) }}
+            _system_native_power_units: >-
+              {{ ['tuned.service', 'tuned-ppd.service']
+                 if ansible_distribution == 'Fedora' and ansible_distribution_major_version | int >= 41
+                 else (['power-profiles-daemon.service'] if ansible_distribution == 'Fedora' else ['tuned.service']) }}
+
+        - name: Switch managed TLP to the native power stack
+          block:
+            - name: Stop and disable the previously installed TLP service
+              ansible.builtin.systemd:
+                name: tlp.service
+                state: stopped
+                enabled: false
+              when: _system_tlp_previous.rc == 0
+
+            - name: Remove TLP packages before restoring native power packages
+              ansible.builtin.dnf:
+                name: [tlp, tlp-rdw, tlp-pd]
+                state: absent
+                autoremove: false
+
+            - name: Install the selected native power stack
+              ansible.builtin.dnf:
+                name: "{{ _system_native_power_packages }}"
+                state: present
+
+            - name: Unmask and start only the selected native power stack
+              ansible.builtin.systemd:
+                name: "{{ item }}"
+                masked: false
+                enabled: true
+                state: started
+                daemon_reload: true
+              loop: "{{ _system_native_power_units }}"
+
+            - name: Remove the managed TLP charge threshold configuration
+              ansible.builtin.file:
+                path: /etc/tlp.d/50-thinkpad.conf
+                state: absent
+
+          rescue:
+            - name: Remove native packages that conflict with TLP recovery
+              ansible.builtin.dnf:
+                name: "{{ _system_native_power_packages }}"
+                state: absent
+                autoremove: false
+              when: _system_previous_tlp_packages | length > 0
+
+            - name: Restore native masks changed by the failed opt-out
+              # Absent native units belong to the managed TLP stack and remain masked.
+              ansible.builtin.systemd:
+                name: "{{ item }}"
+                masked: "{{ _system_previous_native_services.get(item, {}).get('status', 'masked') == 'masked' }}"
+                daemon_reload: true
+              loop: "{{ _system_native_power_units }}"
+
+            - name: Restore previously installed TLP packages
+              ansible.builtin.dnf:
+                name: "{{ _system_previous_tlp_packages }}"
+                state: present
+                install_weak_deps: false
+              when: _system_previous_tlp_packages | length > 0
+
+            - name: Restore the previous TLP service
+              ansible.builtin.systemd:
+                name: tlp.service
+                masked: >-
+                  {{ _system_previous_tlp_service.status | default('') == 'masked'
+                     and _system_previous_tlp_activity.rc != 0 }}
+                state: "{{ 'started' if _system_previous_tlp_activity.rc == 0 else 'stopped' }}"
+                enabled: >-
+                  {{ (_system_previous_tlp_service.status == 'enabled')
+                     if _system_previous_tlp_service.status | default('') in ['enabled', 'disabled'] else omit }}
+                daemon_reload: true
+              when: _system_previous_tlp_packages | length > 0 and _system_tlp_previous.rc == 0
+
+            - name: Reapply the previous mask without stopping restored TLP
+              ansible.builtin.systemd:
+                name: tlp.service
+                masked: true
+              when:
+                - _system_previous_tlp_packages | length > 0
+                - _system_tlp_previous.rc == 0
+                - _system_previous_tlp_service.status | default('') == 'masked'
+                - _system_previous_tlp_activity.rc == 0
+
+            - name: Fail after attempting TLP recovery
+              ansible.builtin.fail:
+                msg: >-
+                  Native power restoration failed; previous TLP packages and service were restored where present.
+                  Managed config remains for retry.

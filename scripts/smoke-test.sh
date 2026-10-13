@@ -60,6 +60,10 @@ _cfg="$SCRIPT_DIR/../config.yml"
 profile="work"
 grep -qE '^profile:[[:space:]]*["'"'"']?personal["'"'"']?([[:space:]]|$)' "$_cfg" 2>/dev/null && profile="personal"
 [[ -z "$PROFILE_OVERRIDE" ]] || profile="$PROFILE_OVERRIDE"
+_codex_enabled=true
+grep -qiE '^codex_enabled:[[:space:]]*(false|no|off)([[:space:]]|$)' "$_cfg" 2>/dev/null && _codex_enabled=false
+_tlp_enabled=false
+grep -qiE '^system_tlp_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _tlp_enabled=true
 _bpfman_enabled=false
 grep -qiE '^packages_bpfman_enabled:[[:space:]]*(true|yes|on)([[:space:]]|$)' "$_cfg" 2>/dev/null && _bpfman_enabled=true
 _containers_environment_d_enabled=false
@@ -159,6 +163,13 @@ if [[ -x "$HOME/.krew/bin/krew" ]]; then
   if exec_cmd "$HOME/.krew/bin/krew" version &>/dev/null; then record "krew" "PASS"
   else record "krew" "FAIL" "krew installed but version failed"; fi
 else record "krew" "$_tool_absent" "not found"; fi
+if ! $_codex_enabled || [[ -n "$CONTAINER" ]]; then
+  record "codex" "SKIP" "disabled or host-only CLI"
+elif exec_cmd codex --version &>/dev/null; then
+  record "codex" "PASS"
+else
+  record "codex" "$_tool_absent" "not found — run: make codex"
+fi
 unset _tool_absent
 
 _test_if_installed() { # guard_path record_name cmd...
@@ -659,7 +670,7 @@ fi
 # Claude Code sandbox enabled (use jq if available, fall back to grep)
 # Security config is in settings.local.json (survives /config writes); fall
 # back to settings.json for instances provisioned before this change.
-for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
+for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.claude-per2"; do
   # Prefer settings.local.json (Ansible-managed security policy); fall back to settings.json
   sec_file="$d/settings.local.json"
   [[ -f "$sec_file" ]] || sec_file="$d/settings.json"
@@ -686,7 +697,7 @@ for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
 done
 
 # Claude directory permissions
-for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal"; do
+for d in "$HOME/.claude" "$HOME/.claude-work" "$HOME/.claude-personal" "$HOME/.claude-per2"; do
   [[ -d "$d" ]] || continue
   perms=$(stat -c '%a' "$d" 2>/dev/null || stat -f '%Lp' "$d" 2>/dev/null || echo "?")
   if [[ "$perms" == "700" ]]; then record "perms(${d##*/})" "PASS"
@@ -700,7 +711,7 @@ fi
 unset _ctf
 
 # Claude project CLAUDE.md presence
-for _cd in "$HOME/.claude-personal" "$HOME/.claude-work"; do
+for _cd in "$HOME/.claude-personal" "$HOME/.claude-work" "$HOME/.claude-per2"; do
   [[ -d "$_cd" ]] || continue
   label="${_cd##*/}"
   if [[ -f "$_cd/CLAUDE.md" ]]; then record "claude-md($label)" 'PASS'
@@ -1835,41 +1846,48 @@ EOF
     else record "rpmfusion-free-repo" "WARN" "rpmfusion-free repo not enabled (run: make repos_dnf; default repo_rpmfusion_free=true)"; fi
   fi
 
-  # TLP power management (ThinkPad battery care)
-  if systemctl is-enabled tlp.service &>/dev/null && systemctl is-active tlp.service &>/dev/null; then
-    record "tlp-service" "PASS"
-  elif systemctl is-enabled tlp.service &>/dev/null; then
-    record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
-  elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
-    record "tlp-service" "WARN" "TLP not installed on Debian (apt package not managed by this role) — battery charge thresholds absent on laptop hardware"
-  elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
-    record "tlp-service" "WARN" "TLP intentionally absent on RHEL CSB (IT manages power policy; cycle-41 not-csb_rhel guard)"
-  elif [[ -d /sys/class/power_supply/BAT0 ]]; then
-    record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
-  else record "tlp-service" "WARN" "tlp.service not enabled"; fi
-  if [[ -d /sys/class/power_supply/BAT0 ]]; then
-    if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
-    else record "tlp-config" "WARN" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
-  fi
-  # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
-  if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
-    _bat_end=$(cat "/sys/class/power_supply/BAT0/charge_control_end_threshold" 2>/dev/null || echo "?")
-    if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
-    else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
-    unset _bat_end
-  fi
-  if [[ -f /sys/class/power_supply/BAT0/charge_control_start_threshold ]]; then
-    _bat_start=$(cat "/sys/class/power_supply/BAT0/charge_control_start_threshold" 2>/dev/null || echo "?")
-    if [[ "$_bat_start" != "?" && "$_bat_start" -gt 0 && "$_bat_start" -lt 100 ]] 2>/dev/null; then
-      record "tlp-bat-start-threshold" "PASS"
-    else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi
-    unset _bat_start
-  fi
-  if command -v tlp &>/dev/null || [[ -d /etc/tlp.d ]]; then
-    if [[ "$(systemctl is-enabled power-profiles-daemon 2>/dev/null)" == "masked" ]]; then record "ppd-masked" "PASS"
-    else record "ppd-masked" "FAIL" "power-profiles-daemon not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"; fi
-    if [[ "$(systemctl is-enabled tuned-ppd 2>/dev/null)" == "masked" ]]; then record "tuned-ppd-masked" "PASS"
-    else record "tuned-ppd-masked" "FAIL" "tuned-ppd not masked — conflicts with TLP on Fedora 44"; fi
+  # TLP is an explicit opt-in; native power management is the baseline.
+  if $_tlp_enabled; then
+    # TLP power management (ThinkPad battery care)
+    if systemctl is-enabled tlp.service &>/dev/null && systemctl is-active tlp.service &>/dev/null; then
+      record "tlp-service" "PASS"
+    elif systemctl is-enabled tlp.service &>/dev/null; then
+      record "tlp-service" "WARN" "enabled but not active (reboot or: systemctl start tlp.service)"
+    elif grep -qiE '^ID=debian' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
+      record "tlp-service" "WARN" "TLP not installed on Debian (apt package not managed by this role) — battery charge thresholds absent on laptop hardware"
+    elif $CSB_HOST && grep -qiE '^ID="?rhel"?' /etc/os-release 2>/dev/null && [[ -d /sys/class/power_supply/BAT0 ]]; then
+      record "tlp-service" "WARN" "TLP intentionally absent on RHEL CSB (IT manages power policy; cycle-41 not-csb_rhel guard)"
+    elif [[ -d /sys/class/power_supply/BAT0 ]]; then
+      record "tlp-service" "FAIL" "tlp.service not enabled on laptop hardware (battery threshold protection absent)"
+    else record "tlp-service" "WARN" "tlp.service not enabled"; fi
+    if [[ -d /sys/class/power_supply/BAT0 ]]; then
+      if [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then record "tlp-config" "PASS"
+      else record "tlp-config" "WARN" "ThinkPad TLP config not deployed (/etc/tlp.d/50-thinkpad.conf)"; fi
+    fi
+    # Battery charge threshold (ThinkPad sysfs — only present on supported hardware)
+    if [[ -f /sys/class/power_supply/BAT0/charge_control_end_threshold ]]; then
+      _bat_end=$(cat "/sys/class/power_supply/BAT0/charge_control_end_threshold" 2>/dev/null || echo "?")
+      if [[ "$_bat_end" != "?" && "$_bat_end" -lt 100 ]] 2>/dev/null; then record "tlp-bat-threshold" "PASS"
+      else record "tlp-bat-threshold" "WARN" "end threshold=$_bat_end (expected <100 for battery longevity)"; fi
+      unset _bat_end
+    fi
+    if [[ -f /sys/class/power_supply/BAT0/charge_control_start_threshold ]]; then
+      _bat_start=$(cat "/sys/class/power_supply/BAT0/charge_control_start_threshold" 2>/dev/null || echo "?")
+      if [[ "$_bat_start" != "?" && "$_bat_start" -gt 0 && "$_bat_start" -lt 100 ]] 2>/dev/null; then
+        record "tlp-bat-start-threshold" "PASS"
+      else record "tlp-bat-start-threshold" "WARN" "start threshold=$_bat_start (expected >0 and <100)"; fi
+      unset _bat_start
+    fi
+    if command -v tlp &>/dev/null || [[ -f /etc/tlp.d/50-thinkpad.conf ]]; then
+      if [[ "$(systemctl is-enabled power-profiles-daemon 2>/dev/null)" == "masked" ]]; then record "ppd-masked" "PASS"
+      else record "ppd-masked" "FAIL" "power-profiles-daemon not masked — conflicts with TLP over battery thresholds and ACPI platform profiles"; fi
+      if [[ "$(systemctl is-enabled tuned 2>/dev/null)" == "masked" ]]; then record "tuned-masked" "PASS"
+      else record "tuned-masked" "FAIL" "tuned not masked while TLP is configured"; fi
+      if [[ "$(systemctl is-enabled tuned-ppd 2>/dev/null)" == "masked" ]]; then record "tuned-ppd-masked" "PASS"
+      else record "tuned-ppd-masked" "FAIL" "tuned-ppd not masked — conflicts with TLP on Fedora 44"; fi
+    fi
+  else
+    record "tlp-service" "SKIP" "native power baseline (system_tlp_enabled=false)"
   fi
 
   # Chrome policies (verify key security settings, not just file existence)

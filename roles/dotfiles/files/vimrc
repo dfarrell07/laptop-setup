@@ -39,3 +39,12 @@ augroup vimrc_restore
   autocmd!
   autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
 augroup END
+
+" Portable editing shortcuts retained from the old laptop.
+let mapleader = ","
+nnoremap 0 ^
+nnoremap <F5> :buffers<CR>:buffer<Space>
+nnoremap <leader>ss :setlocal spell! spelllang=en_us<CR>
+set belloff=all
+set breakindent
+set nofoldenable

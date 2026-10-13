@@ -39,6 +39,7 @@ CROSS_ROLE_MIRROR_KEYS = {
     ],
     "packages_install_binaries": [
         REPO_ROOT / "roles/claude/defaults/main.yml",
+        REPO_ROOT / "roles/codex/defaults/main.yml",
         REPO_ROOT / "roles/distrobox/defaults/main.yml",
         REPO_ROOT / "roles/packages/defaults/main.yml",
     ],

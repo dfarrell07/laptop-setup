@@ -1,0 +1,159 @@
+---
+- name: Validate Codex installation method and paths
+  ansible.builtin.assert:
+    that:
+      - codex_install_method in ['npm', 'skip']
+      - item is match('^' ~ (ansible_facts['user_dir'] | regex_escape) ~ '/[a-zA-Z0-9/._-]+$')
+      - "'..' not in item"
+    fail_msg: Codex paths must be simple absolute paths within the user home.
+  loop:
+    - "{{ codex_install_dir }}"
+    - "{{ codex_work_config_dir }}"
+    - "{{ codex_personal_config_dir }}"
+
+- name: Validate resolved Codex paths before modifying account data
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', 'python3') }}"
+      - -c
+      - |
+        import os, sys
+        home = os.path.realpath(sys.argv[1])
+        paths = [os.path.realpath(path) for path in sys.argv[2:]]
+        inside = all(path != home and os.path.commonpath([home, path]) == home for path in paths)
+        separate = all(os.path.commonpath([left, right]) not in [left, right]
+                       for index, left in enumerate(paths) for right in paths[index + 1:])
+        if not inside or not separate:
+            sys.exit('Codex paths must resolve to separate, non-overlapping directories strictly within the user home.')
+      - "{{ ansible_facts['user_dir'] }}"
+      - "{{ codex_install_dir }}"
+      - "{{ codex_work_config_dir }}"
+      - "{{ codex_personal_config_dir }}"
+  changed_when: false
+  check_mode: false
+
+- name: Validate distinct Codex account homes
+  ansible.builtin.assert:
+    that:
+      - codex_work_config_dir != codex_personal_config_dir
+      - codex_install_dir not in [codex_work_config_dir, codex_personal_config_dir]
+      - codex_work_model is string and codex_work_model | trim | length > 0
+      - codex_personal_model is string and codex_personal_model | trim | length > 0
+      - codex_work_model is not search('[\x00-\x1f\x7f]')
+      - codex_personal_model is not search('[\x00-\x1f\x7f]')
+      - codex_work_reasoning_effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+      - codex_personal_reasoning_effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+
+- name: Create private Codex account directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ codex_work_config_dir }}"
+    - "{{ codex_personal_config_dir }}"
+
+- name: Seed portable Codex settings without replacing user configuration
+  ansible.builtin.template:
+    src: config.toml.j2
+    dest: "{{ item }}/config.toml"
+    mode: "0600"
+    force: false
+  loop:
+    - "{{ codex_work_config_dir }}"
+    - "{{ codex_personal_config_dir }}"
+
+- name: Seed global Codex working agreements without replacing user instructions
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../common/files/agent-baseline.md"
+    dest: "{{ item }}/AGENTS.md"
+    mode: "0600"
+    force: false
+  loop:
+    - "{{ codex_work_config_dir }}"
+    - "{{ codex_personal_config_dir }}"
+
+- name: Install integrity-locked Codex CLI as the user
+  when:
+    - codex_install_method == 'npm'
+    - packages_install_binaries | bool
+  block:
+    - name: Create Codex installation and launcher directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ codex_install_dir }}"
+        - "{{ ansible_facts['user_dir'] }}/.local/bin"
+
+    - name: Deploy pinned Codex npm manifest and integrity lock
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ codex_install_dir }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - package.json
+        - package-lock.json
+      register: _codex_manifest
+
+    - name: Isolate npm global configuration
+      ansible.builtin.copy:
+        content: "# Managed empty npm configuration.\n"
+        dest: "{{ codex_install_dir }}/global.npmrc"
+        mode: "0644"
+
+    - name: Read installed Codex version
+      ansible.builtin.command:
+        argv:
+          - "{{ codex_install_dir }}/node_modules/.bin/codex"
+          - --version
+      register: _codex_version
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Codex from locked npm archives without lifecycle scripts
+      ansible.builtin.command:
+        argv:
+          - npm
+          - ci
+          - --ignore-scripts
+          - --include=optional
+          - --no-audit
+          - --no-fund
+          - --registry=https://registry.npmjs.org
+        chdir: "{{ codex_install_dir }}"
+      environment:
+        NPM_CONFIG_USERCONFIG: /dev/null
+        NPM_CONFIG_GLOBALCONFIG: "{{ codex_install_dir }}/global.npmrc"
+      timeout: 300
+      register: _codex_install
+      changed_when: _codex_install.rc == 0
+      when:
+        - not ansible_check_mode
+        - >-
+          _codex_manifest.changed or _codex_version.rc != 0 or
+          _codex_version.stdout | trim != 'codex-cli ' ~
+          (lookup('file', role_path ~ '/files/package.json') | from_json).dependencies['@openai/codex']
+
+    - name: Verify the installed Codex launcher and native binary
+      ansible.builtin.command:
+        argv:
+          - "{{ codex_install_dir }}/node_modules/.bin/codex"
+          - --version
+      register: _codex_installed_version
+      changed_when: false
+      failed_when: >-
+        _codex_installed_version.rc != 0 or
+        _codex_installed_version.stdout | trim != 'codex-cli ' ~
+        (lookup('file', role_path ~ '/files/package.json') | from_json).dependencies['@openai/codex']
+      when: not ansible_check_mode
+
+    - name: Link Codex CLI into user PATH
+      ansible.builtin.file:
+        src: "{{ codex_install_dir }}/node_modules/.bin/codex"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/bin/codex"
+        state: link
+        force: false
+      when: not ansible_check_mode

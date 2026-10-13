@@ -171,6 +171,7 @@ packages_apt:
 # Work-profile-only apt packages (Debian/Ubuntu).
 # Kubernetes CLIs (kubectl/kind/helm/kustomize) come from binary downloads, not apt.
 packages_apt_work:
+  - awscli
   # Debian 13 ships Go 1.24; gofumpt/govulncheck need 1.25, gopls needs 1.26.
   # GOTOOLCHAIN=auto (default in packages_gotoolchain) downloads the toolchain on demand.
   - golang  # work-only on Debian (mirrors packages_languages_work on Fedora); 300+ MB — skip for personal
@@ -392,6 +393,7 @@ packages_brew_cask: "{{ ['ghostty'] if desktop_terminal | default('ghostty') == 
 
 packages_brew_cask_work:
   - google-chrome
+  - gcloud-cli  # Vertex authentication and GCP workflows; SDK components remain vendor-managed
   - slack
   - keepassxc
 
@@ -399,6 +401,10 @@ packages_brew_cask_personal:
   - bitwarden
 
 packages_brew:
+  - bash  # macOS /bin/bash is 3.2; queue and setup scripts use modern Bash
+  - python3  # ensure unversioned Python is available for the repository venv
+  - coreutils  # GNU checksum/timeout commands used by provisioning and verification
+  - node  # npm runtime for the integrity-locked Codex CLI and repository tooling on both profiles
   - git  # Xcode CLT git is stale; brew git tracks upstream releases
   - git-lfs  # large file support — git_repos and notes roles register lfs filters; both profiles need this
   - openssh  # Apple's OpenSSH omits libfido2; brew build required for sk-ssh-ed25519 (FIDO2/YubiKey) SSH auth
@@ -430,6 +436,7 @@ packages_brew:
 packages_brew_personal: []
 
 packages_brew_work:
+  - awscli
   - ansible  # bootstrap installs for first run; kept here for idempotent reprovisioning — work-profile Macs only
   - golang
   - kubectl    # NOTE: unversioned on macOS (brew tracks latest); Linux uses pinned binary via install_binary_downloads.yml
@@ -448,3 +455,15 @@ packages_brew_work:
   - mtr  # requires sudo on macOS for ICMP (raw socket); on Linux, capabilities handle it
   - actionlint  # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_actionlint_version pin
   - zizmor      # NOTE: unversioned on macOS (brew tracks latest); Linux uses packages_zizmor_version pin
+
+# Optional user-space tools discovered on the old laptop. Pin each requested version.
+packages_extra_pipx: []  # e.g. [ruff==0.15.20, skillsaw==0.17.0]
+packages_extra_npm: []  # e.g. [{name: '@google/gemini-cli', version: '0.60.0'}]
+
+# Add native packages without replacing the base lists. Empty on a new machine.
+packages_extra_dnf: []
+packages_extra_apt: []
+packages_extra_brew: []
+
+# Fedora ships AWS CLI v2. RHEL package availability varies; use a configured extra list there.
+packages_aws_cli_fedora_work: [awscli2]

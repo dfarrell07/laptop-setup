@@ -223,8 +223,31 @@ desktop_gnome_hardening_dconf:
   - key: /org/gnome/desktop/privacy/remember-recent-files
     value: "false"
 
+# Portable GNOME preferences observed on the source laptop, configurable per user.
+desktop_gnome_clock_format: 24h
+desktop_gnome_clock_show_date: true
+desktop_gnome_touchpad_tap: true
+desktop_gnome_touchpad_natural_scroll: true
+desktop_gnome_dynamic_workspaces: false
+desktop_gnome_workspace_count: 4
+desktop_gnome_xkb_options: [lv3:ralt_switch]
+
 # GNOME UI consistency settings (non-hardening) — keyboard feel to match Sway/i3
 desktop_gnome_ui_dconf:
+  - key: /org/gnome/desktop/interface/clock-format
+    value: "{{ desktop_gnome_clock_format | to_json }}"
+  - key: /org/gnome/desktop/interface/clock-show-date
+    value: "{{ desktop_gnome_clock_show_date | bool | ternary('true', 'false') }}"
+  - key: /org/gnome/desktop/peripherals/touchpad/tap-to-click
+    value: "{{ desktop_gnome_touchpad_tap | bool | ternary('true', 'false') }}"
+  - key: /org/gnome/desktop/peripherals/touchpad/natural-scroll
+    value: "{{ desktop_gnome_touchpad_natural_scroll | bool | ternary('true', 'false') }}"
+  - key: /org/gnome/mutter/dynamic-workspaces
+    value: "{{ desktop_gnome_dynamic_workspaces | bool | ternary('true', 'false') }}"
+  - key: /org/gnome/desktop/wm/preferences/num-workspaces
+    value: "{{ desktop_gnome_workspace_count | int | string }}"
+  - key: /org/gnome/desktop/input-sources/xkb-options
+    value: "{{ desktop_gnome_xkb_options | to_json }}"
   # keyboard repeat delay — match Sway/i3 200ms
   - key: /org/gnome/desktop/peripherals/keyboard/repeat-delay
     value: "uint32 {{ desktop_wm_repeat_delay }}"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # setup-yubikeys.sh — Program one or more YubiKeys with the same HMAC-SHA1 secret
 # and write vault-pass.sh for ansible-vault integration.
 #

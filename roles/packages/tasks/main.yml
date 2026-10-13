@@ -3,6 +3,19 @@
 # Install packages via dnf (Fedora), apt (Debian), or brew (macOS).
 
 # --- Pre-role validation (defense-in-depth: protects against --start-at-task / --skip-tags always bypass) ---
+- name: Validate additive native package lists
+  ansible.builtin.assert:
+    that:
+      - item is sequence and item is not string and item is not mapping
+      - item | reject('string') | list | length == 0
+      - item | reject('match', '^[a-zA-Z0-9][a-zA-Z0-9+_.@/-]*$') | list | length == 0
+    fail_msg: Extra package lists must contain package names, without CLI flags or whitespace.
+  loop:
+    - "{{ packages_extra_dnf }}"
+    - "{{ packages_extra_apt }}"
+    - "{{ packages_extra_brew }}"
+
+
 - name: SECURITY assert binary version variables contain no path traversal (defense-in-depth)
   vars:
     _semver_pattern: '^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$'
@@ -305,7 +318,7 @@
     - name: Install apt packages (Debian/Ubuntu)
       ansible.builtin.apt:
         policy_rc_d: "{{ 101 if system_is_container else omit }}"
-        name: "{{ packages_apt }}"
+        name: "{{ packages_apt + packages_extra_apt }}"
         state: present
         update_cache: true
       become: true
@@ -591,3 +604,9 @@
         path: "{{ _krew_plugin_tmpdir.path }}"
         state: absent
       when: _krew_plugin_tmpdir.path is defined
+
+- name: Install optional user npm tools
+  ansible.builtin.include_tasks: install_npm_tools.yml
+  when:
+    - packages_install_binaries | bool
+    - packages_extra_npm | length > 0
