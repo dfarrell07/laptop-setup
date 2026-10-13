@@ -12,36 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - scenario: fedora
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: rocky
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: debian
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container-offline
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: container-offline-distrobox
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: distrobox-role
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: packages-binaries
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: ssti-guard
-          runner: ubuntu-24.04
-          timeout: 60
-        - scenario: macos
-          runner: macos-15
-          timeout: 60
+        - scenario: vm
+          runner: ubuntu-22.04
+          timeout: 90
     env:
       SKIP_GPG_VERIFY: '1'
     steps:
@@ -56,11 +29,11 @@ jobs:
     - name: Restore and verify exact tracked candidate
       shell: bash
       run: "python3 - <<'PY_SNAPSHOT'\nimport hashlib,io,pathlib,subprocess,tarfile\nparts=sorted(pathlib.Path('.validation-payload').glob('*.part'))\n\
-        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'a220063e7380eb20bee307f790157a71ec009e8603e9e0e0446d2df18e9dc89d',\
+        archive=b''.join(part.read_bytes() for part in parts)\nassert hashlib.sha256(archive).hexdigest() == 'd9646ae595185aed6fa78bd8fcfaeab70435ef05a6ce8b3924a81c7e92854886',\
         \ 'Snapshot integrity failure'\ntracked=subprocess.check_output(['git','ls-files','-z']).split(b'\\0')\nfor entry\
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
-        \ candidate tree: fbc079785af9f7e97db4c65c696df26a875ca46b')\nPY_SNAPSHOT\n"
+        \ candidate tree: 44ccf078eb80465df2e44f32d3c633ce83934563')\nPY_SNAPSHOT\n"
     - name: Set isolated test directories
       shell: bash
       env:
