@@ -47,8 +47,6 @@ jobs:
           timeout: 90
     env:
       SKIP_GPG_VERIFY: '1'
-      VAGRANT_HOME: ${{ runner.temp }}/validation-vagrant
-      MOLECULE_EPHEMERAL_DIRECTORY: ${{ runner.temp }}/molecule-${{ matrix.scenario }}
     steps:
     - name: Check out signed transport snapshot
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -66,6 +64,15 @@ jobs:
         \ in tracked:\n if entry:\n  path=pathlib.Path(entry.decode())\n  if path.is_file() or path.is_symlink(): path.unlink()\n\
         with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as source:\n source.extractall('.',filter='data')\nprint('Verified\
         \ candidate tree: f7041d1a206f61c5c8840a151306e1f16e20e281')\nPY_SNAPSHOT\n"
+    - name: Set isolated test directories
+      shell: bash
+      env:
+        SCENARIO: ${{ matrix.scenario }}
+      run: 'echo "VAGRANT_HOME=$RUNNER_TEMP/validation-vagrant" >> "$GITHUB_ENV"
+
+        echo "MOLECULE_EPHEMERAL_DIRECTORY=$RUNNER_TEMP/molecule-$SCENARIO" >> "$GITHUB_ENV"
+
+        '
     - name: Set up candidate dependencies
       uses: ./.github/actions/ci-setup
     - name: Install pinned hook scanner
