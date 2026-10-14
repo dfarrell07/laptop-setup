@@ -132,6 +132,19 @@ claude_deny_sensitive:
   - "/etc/sudoers"
   - "/etc/sudoers.d/**"
 
+# Paths inside the running instance's own config dir (other instances are denied wholesale).
+claude_own_instance_deny_read:
+  - ".credentials.json"
+  - "history.jsonl"
+  - "shell-snapshots/**"
+  - "file-history/**"
+  - "session-env/**"
+claude_own_instance_deny_write:
+  - ".credentials.json"
+  - "settings.json"
+  - "settings.local.json"
+  - "CLAUDE.md"  # Ansible-managed; local edits belong in CLAUDE.local.md
+
 claude_deny_write_only:
   - "~/.config/claude/**"  # Write/Edit denied; Read also denied via claude_deny_sensitive entry below — defense-in-depth
   - "~/.config/systemd/user/**"  # Claude-the-agent only; Ansible deploys claude-queue.service/timer here
