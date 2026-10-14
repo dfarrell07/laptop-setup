@@ -3061,14 +3061,30 @@
           and encrypt the vault.
       tags: [always]
 
+    - name: Read existing authorized_keys for an ed25519 bootstrap key
+      when:
+        - not _pf_is_molecule
+        - is_linux
+      ansible.builtin.slurp:
+        src: "{{ real_user_home | trim }}/.ssh/authorized_keys"
+      register: _pf_authorized_keys
+      failed_when: false
+      tags: [always]
+
     - name: SECURITY CRITICAL — Block provisioning when vault empty AND SSH hardening would cause lockout
       when:
         - not _pf_is_molecule
         - is_linux
+      vars:
+        # Fix option 2 below: a pre-existing ed25519/FIDO2 key keeps SSH usable after hardening
+        _pf_has_ed25519_key: >-
+          {{ (_pf_authorized_keys.content | default('') | b64decode).splitlines()
+             | select('match', '^\s*(ssh-ed25519|sk-ssh-ed25519@openssh\.com) ') | list | length > 0 }}
       ansible.builtin.assert:
         that:
           - >-
             (ssh_auth_key_pub | default('') | trim | length > 0) or
+            (_pf_has_ed25519_key | bool) or
             (ssh_port | default(722) | int == 22)
         fail_msg: >-
           SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning blocked.
