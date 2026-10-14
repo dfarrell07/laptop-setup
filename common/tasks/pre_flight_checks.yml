@@ -472,7 +472,7 @@
         _raw: "{{ _config_raw }}"
       ansible.builtin.assert:
         that:
-          - _raw.get('desktop_i3status_cpu_temp_path', '') | string is match('^(/sys/[a-zA-Z0-9/_.-]+)?$')
+          - _raw.get('desktop_i3status_cpu_temp_path', '') | string is match('^(/sys/[a-zA-Z0-9/_.:-]+)?$')
         fail_msg: >-
           SECURITY: desktop_i3status_cpu_temp_path in config.yml is not a valid sysfs path.
           Threat: i3status config injection — a '"' in the value closes the quoted string and a
