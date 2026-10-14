@@ -111,9 +111,10 @@
           - >-
             (_gonosumdb | length == 0) or
             (_gonosumdb | regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
-          - _gonosumdb | string is match('^[a-zA-Z0-9.,/_-]*$')
+          # '*' is allowed for glob prefixes like '*.redhat.com'; a bare '*' element is rejected above
+          - _gonosumdb | string is match('^[a-zA-Z0-9.,/_*-]*$')
         fail_msg: >-
-          SECURITY: dotfiles_gonosumdb contains a public module domain (github.com, golang.org,
+          SECURITY: dotfiles_gonosumdb contains unsafe characters or a public module domain (github.com, golang.org,
           k8s.io, etc.) that bypasses GOSUMDB checksum verification.
           Input: dotfiles_gonosumdb='{{ _gonosumdb }}' in config.yml or via -e.
           Mechanism: GONOSUMDB skips GOSUMDB for matching prefixes; a public domain in the list
