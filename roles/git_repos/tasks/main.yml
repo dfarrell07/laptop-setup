@@ -157,7 +157,7 @@
       Impact: privilege escalation via filesystem permission widening on sensitive system directories.
       Fix: set git_repos_base_dir to a path inside your home directory, e.g. ~/src (default).
   tags: [always]
-  when: git_repos_filtered | length > 0
+  when: git_repos_filtered | default([]) | length > 0  # always-tagged: runs under other roles' --tags
 
 - name: Ensure base directory exists
   ansible.builtin.file:
