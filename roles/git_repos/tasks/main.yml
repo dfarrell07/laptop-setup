@@ -116,7 +116,15 @@
   ansible.builtin.debug:
     msg: >-
       VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
-      Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
+      Skipping repos at {{ git_repos_vpn_check_host }} this run; connect to VPN and re-run 'make repos'.
+  when: git_repos_vpn_check.failed | default(false)
+
+# Without this, the known_hosts assertion below aborts the role whenever the VPN is down,
+# because the ssh role could not keyscan the VPN-gated host either.
+- name: Skip VPN-gated repos while the VPN host is unreachable
+  ansible.builtin.set_fact:
+    git_repos_filtered: >-
+      {{ git_repos_filtered | rejectattr('url', 'search', git_repos_vpn_check_host | regex_escape) | list }}
   when: git_repos_vpn_check.failed | default(false)
 
 - name: Stat base directory without following symlinks
