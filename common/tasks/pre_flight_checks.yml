@@ -1222,7 +1222,7 @@
         fail_msg: >-
           SECURITY: packages_opm_binary_name in config.yml contains path traversal characters
           (slashes or dots in leading position). This variable is used in become:true file/copy
-          tasks as path: /usr/local/bin/{{ packages_opm_binary_name }}; a value like
+          tasks as path: /usr/local/bin/<packages_opm_binary_name>; a value like
           "../../../etc/cron.d/evil" resolves to /etc/cron.d/evil and allows writing a
           root-owned cron job during provisioning (LPE). Allowed: alphanumeric, dot, underscore,
           hyphen only (e.g. "opm-rhel8", "opm.v0.22.0"). No slashes or path separators.
