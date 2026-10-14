@@ -13,6 +13,7 @@
       register: _packages_kubectl_source_marker_check
       failed_when: false
       changed_when: false
+      check_mode: false  # read-only probe; a skipped command reports rc=0 with empty stdout
 
     - name: Fail if kubectl source changed (requires manual intervention)
       when:
