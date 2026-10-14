@@ -95,7 +95,7 @@
       WARNING: csb_detected=true but fapolicyd not enforcing (hybrid tier).
       Binary downloads to /usr/local/bin will fail if IT enables fapolicyd enforcement.
       Persistent warning written to: /var/lib/ansible-packages/fapolicyd-binary-risk.txt
-      If binaries fail with EPERM, run: make container && distrobox enter {{ container_name }}
+      If binaries fail with EPERM, run: make container && distrobox enter {{ container_name | default('fedora-dev') }}
   when:
     - needs_container_tier == 'hybrid'
     - packages_install_binaries | bool
@@ -126,7 +126,7 @@
 
       Migration path if binaries fail with EPERM:
       1. Run: make container
-      2. Enter container: distrobox enter {{ container_name }}
+      2. Enter container: distrobox enter {{ container_name | default('fedora-dev') }}
       3. All dev tools will be available inside the container
 
       This file persists across reboots. Remove it manually if fapolicyd is disabled.
