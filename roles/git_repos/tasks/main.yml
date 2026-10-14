@@ -279,6 +279,8 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
-  when: item.0.dest in git_repos_available_dests
+  when:
+    - item.0.dest in git_repos_available_dests
+    - not ansible_check_mode  # check mode clones nothing, so the chdir target may not exist
   register: git_repos_remote_result
   changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']
