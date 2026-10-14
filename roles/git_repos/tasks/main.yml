@@ -111,6 +111,7 @@
       list | length > 0
   register: git_repos_vpn_check
   ignore_errors: true
+  check_mode: false  # read-only probe; wait_for is otherwise skipped in check mode
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
