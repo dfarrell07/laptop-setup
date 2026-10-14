@@ -2338,7 +2338,7 @@
                 (_gonosumdb_play | length == 0) or
                 (_gonosumdb_play |
                 regex_search('(^|,)(\\*|github\\.com|golang\\.org|mvdan\\.cc|sigs\\.k8s\\.io|k8s\\.io|gopkg\\.in)(,|$)') is none)
-              - _gonosumdb_play | string is match('^[a-zA-Z0-9.,/_-]*$')
+              - _gonosumdb_play | string is match('^[a-zA-Z0-9.,/_*-]*$')
             fail_msg: >-
               SECURITY: dotfiles_gonosumdb in play namespace (set via -e flag or config.yml)
               contains public module registry domains, bypassing Go checksum verification.
