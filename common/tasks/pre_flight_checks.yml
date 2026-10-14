@@ -153,7 +153,7 @@
         that:
           - >-
             (_gonosumdb | length == 0) or
-            (_gonosumdb | string is not match('^[[:space:]]*$'))
+            (_gonosumdb | string is not match('^\\s*$'))
         fail_msg: >-
           SECURITY: dotfiles_gonosumdb in config.yml must not be an empty or whitespace-only string.
           Setting GOSUMDB="" (empty or whitespace) disables Go module sum database verification,
