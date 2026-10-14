@@ -29,7 +29,8 @@
       check_mode: false
       changed_when: false
       failed_when: _ks_fingerprint not in _ks_fp_result.stdout
-      when: _ks_fingerprint | length > 0
+      # An unreachable host (e.g. off VPN) is reported below, not as a key mismatch
+      when: _ks_fingerprint | length > 0 and ssh_keyscan_result is succeeded
 
     - name: Warn — TOFU key acceptance (no fingerprint configured) for {{ _ks_host }}
       ansible.builtin.debug:
