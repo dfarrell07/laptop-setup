@@ -91,6 +91,7 @@
       ansible.builtin.command:
         cmd: rpm -q --queryformat '%{VERSION}' google-cloud-cli
       changed_when: false
+      check_mode: false
       register: _gcloud_installed_version
     - name: Assert google-cloud-cli meets minimum version floor (MITM downgrade guard)
       ansible.builtin.assert:

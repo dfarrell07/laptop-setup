@@ -9,6 +9,7 @@
     cmd: which go
   register: _go_binary_path
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: Set golang unavailable when not found
@@ -30,6 +31,7 @@
     cmd: go version
   register: _golang_version_check
   changed_when: false
+  check_mode: false
   failed_when: _golang_version_check.rc != 0
   when: _go_binary_path.rc == 0
 

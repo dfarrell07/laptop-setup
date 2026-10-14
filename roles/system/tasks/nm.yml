@@ -33,6 +33,7 @@
       - /etc/NetworkManager/dispatcher.d/90-console-login-helper-messages-gensnippet_if
   register: _nm_vendor_owner
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - not system_is_container
@@ -46,6 +47,7 @@
     argv: [rpm, --verify, console-login-helper-messages-issuegen]
   register: _nm_vendor_integrity
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - _nm_vendor_owner is not skipped

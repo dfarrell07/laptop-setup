@@ -290,6 +290,7 @@
     argv: [systemctl, show, --property=LoadState, --value, sshd.socket]
   register: _system_sshd_socket_load
   changed_when: false
+  check_mode: false
   when:
     - not csb_rhel
     - not system_is_container

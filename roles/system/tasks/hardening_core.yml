@@ -73,6 +73,7 @@
         argv: [rpm, -qf, --queryformat, "%{NAME}", /etc/polkit-1/rules.d/49-polkit-pkla-compat.rules]
       register: _polkit_compat_owner
       changed_when: false
+      check_mode: false
       failed_when: false
       when:
         - is_dnf
@@ -83,6 +84,7 @@
         argv: [rpm, --verify, polkit-pkla-compat]
       register: _polkit_compat_integrity
       changed_when: false
+      check_mode: false
       failed_when: false
       when:
         - _polkit_compat_owner is not skipped

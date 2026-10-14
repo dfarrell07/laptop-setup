@@ -39,6 +39,7 @@
       register: packages_kubectl_source_marker
       failed_when: false
       changed_when: false
+      check_mode: false
 
     - name: Oc + kubectl present at {{ packages_oc_version }}
       when: >-
@@ -243,6 +244,7 @@
       register: packages_opm_marker
       failed_when: false
       changed_when: false
+      check_mode: false
 
     - name: Opm present at {{ packages_oc_version }}
       when: >-

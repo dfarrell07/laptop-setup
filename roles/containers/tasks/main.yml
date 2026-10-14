@@ -374,6 +374,7 @@
     cmd: grep -E '^\s*unqualified-search-registries\s*=' /etc/containers/registries.conf
   register: containers_fqin_it_uqsr
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - is_linux
