@@ -1069,7 +1069,7 @@
           {{ _git_repos_list
              | map(attribute='dest', default='')
              | map('string')
-             | select('search', '\\.\\.|\\./')
+             | select('search', '\.\.|\./')
              | list }}
       ansible.builtin.assert:
         that:
@@ -1495,12 +1495,12 @@
             _cfg_content: "{{ _ansible_cfg_raw.content | b64decode }}"
             # Extract pipelining line from [defaults] section
             _pipelining_line: >-
-              {{ _cfg_content | regex_search('(?m)^\\s*pipelining\\s*=\\s*([^#\\n]+)') }}
+              {{ _cfg_content | regex_search('(?m)^\s*pipelining\s*=\s*([^#\n]+)') }}
             # Normalize: strip whitespace, comments, and convert to lowercase
             _pipelining_normalized: >-
-              {{ (_pipelining_line | default('') | regex_replace('.*=\\s*', '')
-              | regex_replace('\\s*#.*', '')
-              | regex_replace('^\\s+|\\s+$', '') | lower) }}
+              {{ (_pipelining_line | default('') | regex_replace('.*=\s*', '')
+              | regex_replace('\s*#.*', '')
+              | regex_replace('^\s+|\s+$', '') | lower) }}
           ansible.builtin.assert:
             that:
               - _pipelining_normalized is match('^(true|false|yes|no|on|off|1|0|)$')
@@ -2415,10 +2415,10 @@
           vars:
             _wl_invalid: >-
               {{ system_usbguard_whitelist | default([]) | map('string')
-              | reject('match', '^(allow|block|reject)\\s+.+') | list }}
+              | reject('match', '^(allow|block|reject)\s+.+') | list }}
             _er_invalid: >-
               {{ system_usbguard_extra_rules | default([]) | map('string')
-              | reject('match', '^(allow|block|reject)\\s+.+') | list }}
+              | reject('match', '^(allow|block|reject)\s+.+') | list }}
           ansible.builtin.assert:
             that:
               - system_usbguard_whitelist | default([]) | map('string') | select('search', '\n') | list | length == 0
