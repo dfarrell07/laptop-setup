@@ -16,6 +16,12 @@
   become: false
   tags: [always]
   block:
+    # Defined first: assertions throughout this file gate on it.
+    - name: Set molecule context flag
+      ansible.builtin.set_fact:
+        _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
+      tags: [always]
+
     - name: Scan user config for template injection
       ansible.builtin.include_tasks: config_ssti_guard.yml
       tags: [always]
@@ -2124,11 +2130,6 @@
           ansible.builtin.set_fact:
             _cosign_alt_verification_warned: true
           tags: [always]
-
-    - name: Set molecule context flag
-      ansible.builtin.set_fact:
-        _pf_is_molecule: "{{ lookup('env', 'MOLECULE_SCENARIO_NAME') != '' }}"
-      tags: [always]
 
     - name: Reject _csb_molecule_force outside molecule (CSB tier-routing bypass guard)
       when: not _pf_is_molecule
