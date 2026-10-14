@@ -325,12 +325,13 @@ fi
 
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
-[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+# Registry API root: 401 means reachable (auth required); the bare host returns 404
+[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io/v2/")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ "$_curl_ok" == true ]]; then
     _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
-    if [[ "$_http_code" =~ ^[23] ]]; then
+    if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
     else record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else
