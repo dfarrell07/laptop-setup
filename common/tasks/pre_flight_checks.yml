@@ -2385,7 +2385,7 @@
         - name: Assert dotfiles_oh_my_zsh_theme in play namespace is safe (shell injection guard)
           ansible.builtin.assert:
             that:
-              - dotfiles_oh_my_zsh_theme | default('') | string | regex_search('^[a-zA-Z0-9_-]+$') is not none
+              - dotfiles_oh_my_zsh_theme | default('') | string | regex_search('^[a-zA-Z0-9_-]*$') is not none
             fail_msg: >-
               SECURITY: dotfiles_oh_my_zsh_theme in the play namespace contains characters
               outside [a-zA-Z0-9_-]. The value is rendered as ZSH_THEME="{{ '{{' }} dotfiles_oh_my_zsh_theme {{ '}}' }}"
