@@ -965,7 +965,7 @@
               Impact: all vault secrets (SSH keys, git keys, registry tokens, GRUB hash) are exposed.
               Fix: run 'make setup-yubikeys' to replace the stub with YubiKey HMAC-SHA1 vault-pass.sh,
               then re-encrypt: 'make vault-edit'. See SECURITY.md for manual vault-pass.sh setup.
-            tags: [always]
+          tags: [always]
 
     - name: SECURITY — Assert vault-pass.sh and vault.yml have restrictive permissions (distrobox $HOME exposure)
       when: not _pf_is_molecule
@@ -993,7 +993,7 @@
               The distrobox container mounts $HOME, so any process inside the container can read this
               file and extract the vault password. Restrict it: chmod 0700 scripts/vault-pass.sh.
               The Makefile bootstrap target sets 0700; this check detects accidental permission drift.
-            tags: [always]
+          tags: [always]
 
         - name: Assert vault.yml is mode 0600
           when: _stat_vault_yml.stat.exists
@@ -1004,7 +1004,7 @@
               SECURITY: group_vars/all/vault.yml has mode {{ _stat_vault_yml.stat.mode }}, expected 0600.
               The distrobox container mounts $HOME; mode 0600 limits read access to the owner only.
               Restrict it: chmod 0600 group_vars/all/vault.yml.
-            tags: [always]
+          tags: [always]
 
     - name: SECURITY — Assert SSH git repo hosts are all pre-seeded in keyscan (TOFU mitigation)
       when: not _pf_is_molecule
