@@ -386,12 +386,12 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
 
 markdownlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npm run lint:markdown
+	@if [ -d node_modules ]; then npm run lint:markdown; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 commitlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npx --no -- commitlint --from origin/main --to HEAD
+	@if [ -d node_modules ]; then npx --no -- commitlint --from origin/main --to HEAD; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
