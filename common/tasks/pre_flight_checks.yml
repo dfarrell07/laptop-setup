@@ -2629,7 +2629,7 @@
             fail_msg: >-
               SECURITY: notes_repo_path in the play namespace contains an unsafe value
               (possibly set via -e flag, bypassing config.yml pre-flight validation).
-              This value is rendered verbatim into alias notes="cd {{ notes_repo_path }}"
+              This value is rendered verbatim into alias notes="cd <notes_repo_path>"
               in zshrc.j2; shell $() and backtick sequences expand at alias-definition
               time (every interactive shell open), executing arbitrary commands as the user.
               Example attack: make all -e notes_repo_path='$(evil_cmd)'
