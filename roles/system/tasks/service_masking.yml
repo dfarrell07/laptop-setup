@@ -206,6 +206,7 @@
     - system_disable_modemmanager | bool
     - not system_is_container
     - not csb_rhel
+    - not ansible_check_mode  # the mask above is only simulated in check mode
     - _modemmanager_facts.status is defined
     - (_modemmanager_facts.status.UnitFileState | default('')) != 'masked'
 
@@ -264,6 +265,7 @@
     - system_disable_printing | bool
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode  # the mask above is only simulated in check mode
     - _cups_browsed_facts.status is defined
     - (_cups_browsed_facts.status.UnitFileState | default('')) != 'masked'
 
