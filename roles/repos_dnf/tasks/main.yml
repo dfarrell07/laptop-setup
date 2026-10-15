@@ -596,6 +596,30 @@
 
 # Cleanup: remove stale .repo files for repos whose boolean was flipped to false.
 # yum_repository state: absent deletes /etc/yum.repos.d/<name>.repo idempotently.
+# A repo whose package is installed is kept: removing it silently stops that package's
+# security updates (e.g. a browser installed outside this playbook).
+- name: Gather installed packages before third-party repo cleanup
+  ansible.builtin.package_facts:
+    manager: rpm
+
+- name: Keep disabled third-party repos whose packages are installed
+  ansible.builtin.debug:
+    msg: >-
+      Keeping the {{ item.repo }} repo although {{ item.toggle }} is false: {{ item.pkg }} is
+      installed and would stop receiving updates. Set {{ item.toggle }}: true in config.yml to
+      silence this, or remove the package first.
+  loop:
+    - {repo: google-chrome, pkg: google-chrome-stable, toggle: repo_google_chrome, enabled: "{{ repo_google_chrome }}"}
+    - {repo: google-cloud-cli, pkg: google-cloud-cli, toggle: repo_google_cloud_sdk, enabled: "{{ repo_google_cloud_sdk }}"}
+    - {repo: mullvad, pkg: mullvad-vpn, toggle: repo_mullvad, enabled: "{{ repo_mullvad }}"}
+    - {repo: docker-ce, pkg: docker-ce, toggle: repo_docker_ce, enabled: "{{ repo_docker_ce }}"}
+    - {repo: tailscale-stable, pkg: tailscale, toggle: repo_tailscale, enabled: "{{ repo_tailscale }}"}
+  loop_control:
+    label: "{{ item.repo }}"
+  when:
+    - not (item.enabled | bool)
+    - item.pkg in ansible_facts.packages
+
 - name: Remove gh-cli repo when disabled
   ansible.builtin.yum_repository:
     name: gh-cli
@@ -606,31 +630,41 @@
   ansible.builtin.yum_repository:
     name: google-chrome
     state: absent
-  when: not repo_google_chrome
+  when:
+    - not repo_google_chrome
+    - "'google-chrome-stable' not in ansible_facts.packages"
 
 - name: Remove google-cloud-cli repo when disabled
   ansible.builtin.yum_repository:
     name: google-cloud-cli
     state: absent
-  when: not repo_google_cloud_sdk
+  when:
+    - not repo_google_cloud_sdk
+    - "'google-cloud-cli' not in ansible_facts.packages"
 
 - name: Remove mullvad repo when disabled
   ansible.builtin.yum_repository:
     name: mullvad
     state: absent
-  when: not repo_mullvad
+  when:
+    - not repo_mullvad
+    - "'mullvad-vpn' not in ansible_facts.packages"
 
 - name: Remove docker-ce repo when disabled
   ansible.builtin.yum_repository:
     name: docker-ce
     state: absent
-  when: not repo_docker_ce
+  when:
+    - not repo_docker_ce
+    - "'docker-ce' not in ansible_facts.packages"
 
 - name: Remove tailscale-stable repo when disabled
   ansible.builtin.yum_repository:
     name: tailscale-stable
     state: absent
-  when: not repo_tailscale
+  when:
+    - not repo_tailscale
+    - "'tailscale' not in ansible_facts.packages"
 
 - name: Remove acli repo when disabled
   ansible.builtin.yum_repository:
