@@ -247,7 +247,8 @@
   ansible.builtin.debug:
     msg: >-
       FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}:
-      {{ item.stderr | default('', true) or item.msg | default('unknown error') }}
+      {{ ((item.stderr | default('', true) or item.msg | default('unknown error')) | string).splitlines() | map('trim')
+         | reject('match', '^([+|]|Host key fingerprint is|$)') | join(' ') }}
   loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
