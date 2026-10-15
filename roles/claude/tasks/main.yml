@@ -143,11 +143,27 @@
     - packages_install_binaries | bool
     - claude_install_sha256 | length > 0
 
+- name: Report Claude Code install not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: Claude Code {{ claude_pinned_version or 'latest' }} would be installed from {{ claude_install_url }}; not simulated."
+  when:
+    - ansible_check_mode
+    # The pin is a floor: Claude's own updater moves installs forward, so only a missing
+    # or older binary is (re)installed; an exact match would downgrade on every run.
+    - claude_version_check.rc != 0 or (claude_pinned_version | length > 0
+      and (claude_version_check.stdout | default('') | regex_search('[0-9]+[.][0-9]+[.][0-9]+')
+           | default('0', true)) is version(claude_pinned_version, '<'))
+    - claude_install_method == 'native'
+    - packages_install_binaries | bool
+
 - name: Install Claude Code via native binary
   when:
+    - not ansible_check_mode  # downloads into a temp file that check mode never creates
+    # The pin is a floor: Claude's own updater moves installs forward, so only a missing
+    # or older binary is (re)installed; an exact match would downgrade on every run.
     - claude_version_check.rc != 0 or (claude_pinned_version | length > 0
-      and claude_pinned_version not in
-      (claude_version_check.stdout | default('') | trim).split())
+      and (claude_version_check.stdout | default('') | regex_search('[0-9]+[.][0-9]+[.][0-9]+')
+           | default('0', true)) is version(claude_pinned_version, '<'))
     - claude_install_method == 'native'
     - packages_install_binaries | bool
   block:

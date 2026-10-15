@@ -11,7 +11,7 @@ claude_install_method: native  # native (recommended) or skip (CI/testing — by
 claude_install_url: "https://claude.ai/install.sh"  # Fetches latest at provision time; post-install upgrades use `claude update`
 # SECURITY: SHA256 integrity verification is MANDATORY — set in config.yml before make all
 claude_install_sha256: ""
-claude_pinned_version: ""  # pin in config.yml (e.g. "1.0.3"); empty = installs latest (role debug advisory only — no smoke-test WARN)
+claude_pinned_version: ""  # minimum version, pin in config.yml (e.g. "1.0.3"); installed when missing or older; empty = latest
 claude_bin_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude"
 claude_queue_poller_path: "{{ ansible_facts['user_dir'] }}/.local/bin/claude-queue-poller.sh"
 
