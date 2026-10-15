@@ -111,10 +111,10 @@ offline: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox --skip-tags become
 
 container-rebuild: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true --skip-tags become
 
 backup: guard-not-root
 	scripts/backup.sh
@@ -286,23 +286,25 @@ update: guard-not-root preflight
 
 # --- Individual roles ---
 
+# Targets without --ask-become-pass skip become-tagged tasks: the always-tagged system
+# audits in the sudo play would otherwise call sudo with no password and fail.
 dotfiles: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles --skip-tags become
 
 packages: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,packages --ask-become-pass
 
 repos: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos --skip-tags become
 
 notes: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes --skip-tags become
 
 repos-%: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$*
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$* --skip-tags become
 
 ssh: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh --skip-tags become
 
 desktop: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,desktop --ask-become-pass
@@ -326,7 +328,7 @@ claude: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 codex: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
 
 distrobox: container  # alias for backwards compatibility
 
@@ -350,7 +352,7 @@ check: guard-not-root preflight
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-gitleaks test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
