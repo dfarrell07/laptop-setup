@@ -51,6 +51,10 @@
       become: false
       tags: [always]
 
+    - name: Verify sudo authentication (Play 1)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [repos_dnf, system]
+
     # SECURITY: Close pre-hardening cron window.
     # cronie is installed by default on Fedora and may already be running when provisioning
     # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
@@ -69,7 +73,8 @@
       when:
         - not system_is_container
         - not csb_detected
-      tags: [always]
+      # Not 'always': no-sudo targets (make dotfiles, ...) must not attempt become here
+      tags: [repos_dnf, system]
 
   roles:
     - role: repos_dnf
@@ -130,6 +135,10 @@
           {{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY')
              | default(playbook_dir, true) }}
       tags: [always]
+
+    - name: Verify sudo authentication (Play 2 targets run with --ask-become-pass)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [packages, desktop, redhat, containers, claude]
 
     - name: Set OS family facts (is_macos, is_linux)
       ansible.builtin.set_fact:
