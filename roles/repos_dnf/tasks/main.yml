@@ -443,6 +443,8 @@
         name: rpmfusion-free-release
         state: absent
       failed_when: false
+      # Only an unverifiable package is removed; a network or sudo failure keeps a working repo
+      when: "'cryptographic signature' in (ansible_failed_task.name | default(''))"
     - name: Warn RPM Fusion free failed (network error)
       ansible.builtin.debug:
         msg: >-
@@ -519,6 +521,8 @@
         name: rpmfusion-nonfree-release
         state: absent
       failed_when: false
+      # Only an unverifiable package is removed; a network or sudo failure keeps a working repo
+      when: "'cryptographic signature' in (ansible_failed_task.name | default(''))"
     - name: Warn RPM Fusion nonfree failed (network error)
       ansible.builtin.debug:
         msg: >-
