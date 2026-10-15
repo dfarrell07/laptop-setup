@@ -323,6 +323,25 @@ if [[ -f "$CONFIG_FILE" ]]; then
   fi
 fi
 
+# --- keyscan fingerprint guard (mirrors pre_flight_checks.yml; fails before the sudo prompt) ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  _bad_fp=$(python3 -I -c '
+import re, sys, yaml
+class L(yaml.SafeLoader): pass
+L.add_multi_constructor("!", lambda loader, tag, node: loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode) else None)
+hosts = (yaml.load(open(sys.argv[1]), Loader=L) or {}).get("ssh_work_keyscan_hosts") or []
+for h in hosts:
+    if isinstance(h, dict) and "fingerprint" in h and not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", str(h["fingerprint"])):
+        print(h.get("host", "?"))
+' "$CONFIG_FILE" 2>/dev/null | paste -sd' ' -)
+  if [[ -n "$_bad_fp" ]]; then
+    record "config_keyscan_fingerprints" "fail" "ssh_work_keyscan_hosts has placeholder/partial fingerprint(s) for: $_bad_fp; use the full SHA256 from ssh-keygen -lf, or drop the field for trust-on-first-use"
+  else
+    record "config_keyscan_fingerprints" "pass" "keyscan fingerprints well-formed or unset"
+  fi
+  unset _bad_fp
+fi
+
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
 # Registry API root: 401 means reachable (auth required); the bare host returns 404
