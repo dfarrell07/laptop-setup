@@ -17,6 +17,6 @@
       sudo authentication failed — the password entered at the BECOME password prompt was
       wrong or missing. Nothing privileged has run yet; re-run the same make target and
       retype it. Repeated failures count toward pam_faillock lockout
-      (check with: faillock --user "$USER").
+      (check with: sudo faillock --user "$USER"; the tally file is root-only).
       Detail: {{ (_become_probe.msg | default('')) | regex_replace('\[sudo via ansible, key=\w+\] ', '') | truncate(200) }}
   when: _become_probe is failed or _become_probe is unreachable
