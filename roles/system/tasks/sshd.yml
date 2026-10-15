@@ -427,6 +427,8 @@
   when:
     - _sshd_dropin_post_validation is defined
     - _sshd_dropin_post_validation.stat is defined
+    # check mode never writes the drop-in, so on a first provision there is nothing to compare
+    - _sshd_dropin_post_validation.stat.exists | default(false)
     - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
       _sshd_dropin_post_validation.stat.checksum
 
