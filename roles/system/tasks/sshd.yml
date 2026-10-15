@@ -200,7 +200,11 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
-      when: item.path | basename != '00-hardening.conf'
+      # Hybrid CSB: IT's remote-access role rewrites its drop-in from cron (PermitRootLogin no,
+      # also set here); 00-hardening.conf sorts first, so its directives still win.
+      when: >-
+        item.path | basename not in
+        (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
 
     - name: Remove unauthorized drop-ins from /etc/systemd/system/sshd.service.d  # noqa: command-instead-of-module
       ansible.builtin.find:
