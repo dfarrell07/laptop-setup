@@ -3,10 +3,28 @@
 # Install yamllint and ansible-lint via pipx (version-pinned).
 # Called from main.yml when is_dnf or is_apt or is_macos, and packages_install_binaries.
 
+- name: Check for pipx
+  ansible.builtin.command: sh -c 'command -v pipx'
+  register: _packages_pipx_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_dnf or is_apt or is_macos
+    - packages_install_binaries | bool
+
+- name: Report pipx packages not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: pipx is not installed yet (its package install was only simulated); yamllint and ansible-lint not simulated."
+  when:
+    - ansible_check_mode
+    - _packages_pipx_probe.rc | default(0) != 0
+
 - name: Install pipx packages (yamllint, ansible-lint)
   when:
     - is_dnf or is_apt or is_macos
     - packages_install_binaries | bool
+    - not ansible_check_mode or _packages_pipx_probe.rc | default(0) == 0
   block:
     - name: Yamllint present at {{ packages_yamllint_version }}
       community.general.pipx:
