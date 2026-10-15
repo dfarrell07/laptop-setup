@@ -134,10 +134,10 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    vault-pass.sh" for the manual vault-pass.sh template if needed. Then populate
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
-   vault.yml ships as plaintext — `make all` **requires** `distrobox_enabled: false` in `config.yml`
-   when the vault is unpopulated (site.yml healthcheck asserts non-empty SSH keys when container
-   provisioning is enabled), plus an ed25519/FIDO2 key already in `~/.ssh/authorized_keys` (the
-   pre-flight SSH lockout guard blocks otherwise). Once vault is populated, remove that override.
+   vault.yml ships as plaintext and `make all` still runs at the console: container provisioning
+   is deferred (finish with `make container`), and internal git hosts without a pinned fingerprint
+   in `ssh_work_keyscan_hosts` are skipped (finish with `make ssh repos`). Provisioning *over SSH*
+   with no ed25519/FIDO2 key is blocked, since hardening would strand the session.
    **WARNING**: if vault is unpopulated, no authorized_keys is written; after reboot sshd
    moves to port 722 and SSH login fails unless an out-of-band authorized_keys entry already
    exists. Additionally, sshd hardening will REJECT RSA/ECDSA keys — only ed25519 and FIDO2
