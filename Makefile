@@ -77,7 +77,9 @@ export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
-export ANSIBLE_DISPLAY_OK_HOSTS = false
+# Shown by default: the playbook reports warnings and notices through debug tasks, which
+# the default callback hides along with every other 'ok' result. QUIET=1 restores terse output.
+export ANSIBLE_DISPLAY_OK_HOSTS = $(if $(QUIET),false,true)
 # callback_result_format is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
 export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
@@ -90,6 +92,7 @@ help:
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
+	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
 	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
