@@ -325,7 +325,9 @@
             exit 1
           fi
       changed_when: false
-      when: repos_dnf_redhat_gpg_fingerprint | length > 0
+      when:
+        - repos_dnf_redhat_gpg_fingerprint | length > 0
+        - _redhat_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Clean up Red Hat GPG temporary directory
       ansible.builtin.file:
         path: "{{ _redhat_gpg_tmp_dir.path }}"
@@ -334,6 +336,7 @@
       when:
         - repos_dnf_redhat_gpg_fingerprint | length > 0
         - _redhat_gpg_tmp_dir is defined
+        - _redhat_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Add Red Hat internal repo
       ansible.builtin.yum_repository:
         name: redhat-internal
@@ -410,12 +413,15 @@
             exit 1
           fi
       changed_when: false
+      when: _rpmfusion_free_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Clean up RPM Fusion free GPG temporary directory
       ansible.builtin.file:
         path: "{{ _rpmfusion_free_gpg_tmp_dir.path }}"
         state: absent
       changed_when: false  # scratch storage is removed within this key-verification transaction
-      when: _rpmfusion_free_gpg_tmp_dir is defined
+      when:
+        - _rpmfusion_free_gpg_tmp_dir is defined
+        - _rpmfusion_free_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Install RPM Fusion free release
       ansible.builtin.dnf:
         # yamllint disable-line rule:line-length
@@ -487,12 +493,15 @@
             exit 1
           fi
       changed_when: false
+      when: _rpmfusion_nonfree_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Clean up RPM Fusion nonfree GPG temporary directory
       ansible.builtin.file:
         path: "{{ _rpmfusion_nonfree_gpg_tmp_dir.path }}"
         state: absent
       changed_when: false  # scratch storage is removed within this key-verification transaction
-      when: _rpmfusion_nonfree_gpg_tmp_dir is defined
+      when:
+        - _rpmfusion_nonfree_gpg_tmp_dir is defined
+        - _rpmfusion_nonfree_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Install RPM Fusion nonfree release
       ansible.builtin.dnf:
         name: >-  # yamllint disable-line rule:line-length
@@ -560,12 +569,15 @@
             exit 1
           fi
       changed_when: false
+      when: _tailscale_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Clean up Tailscale GPG temporary directory
       ansible.builtin.file:
         path: "{{ _tailscale_gpg_tmp_dir.path }}"
         state: absent
       changed_when: false  # scratch storage is removed within this key-verification transaction
-      when: _tailscale_gpg_tmp_dir is defined
+      when:
+        - _tailscale_gpg_tmp_dir is defined
+        - _tailscale_gpg_tmp_dir.path is defined  # tempfile creates nothing in check mode
     - name: Add Tailscale stable repo
       vars:
         _ts_path: >-
