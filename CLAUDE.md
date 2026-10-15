@@ -145,6 +145,7 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    after hardening deploys. Populate the vault with an ed25519 key (or manually add one to
    authorized_keys) before rebooting.
 3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
+3c. `make check` — full sudo dry run (`--check --diff`) of every play; review the diff, then provision
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
@@ -199,7 +200,7 @@ make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-user  # Post-run verification (user-space only, no sudo; wraps smoke-test.sh --user-only)
 make smoke-test-container  # Post-run verification (distrobox)
-make check            # Dry run (--check mode)
+make check            # Full dry run incl. sudo system play (--check --diff); runs preflight first
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh

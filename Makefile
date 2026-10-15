@@ -195,6 +195,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "     (For manual vault-pass.sh without hardware key, see SECURITY.md §Setting Up vault-pass.sh)"
 	@echo "     (For first provision without real secrets, vault.yml plaintext stub is fine.)"
 	@echo "  4. make preflight   # validate all pre-conditions before provisioning"
+	@echo "     make check       # full sudo dry run; review the diff before provisioning"
 	@echo "  5. make all         # full provisioning (run at local console or inside tmux)"
 	@echo "  6. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
 	@echo "  7. After reboot — required manual steps:"
@@ -344,7 +345,8 @@ preflight:
 csb-audit: guard-not-root preflight
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v
 
-check: guard-not-root
+# Full dry run of every play, including the sudo system play; run before 'make all'.
+check: guard-not-root preflight
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
