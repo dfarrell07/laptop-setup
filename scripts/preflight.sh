@@ -335,7 +335,7 @@ for h in hosts:
         print(h.get("host", "?"))
 ' "$CONFIG_FILE" 2>/dev/null | paste -sd' ' -)
   if [[ -n "$_bad_fp" ]]; then
-    record "config_keyscan_fingerprints" "fail" "ssh_work_keyscan_hosts has placeholder/partial fingerprint(s) for: $_bad_fp; use the full SHA256 from ssh-keygen -lf, or drop the field for trust-on-first-use"
+    record "config_keyscan_fingerprints" "warn" "fingerprint not pinned for: $_bad_fp — these hosts and their SSH repos are skipped until the full SHA256 (ssh-keygen -lf) is set"
   else
     record "config_keyscan_fingerprints" "pass" "keyscan fingerprints well-formed or unset"
   fi

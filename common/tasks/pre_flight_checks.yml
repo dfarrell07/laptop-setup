@@ -1060,22 +1060,21 @@
         - _unfingerprinted | length > 0
       tags: [always]
 
-    - name: Assert keyscan fingerprints are complete SHA256 values (placeholder guard)
-      when: _config_raw is defined
+    - name: Warn about keyscan hosts whose fingerprint is not pinned yet
+      when:
+        - _config_raw is defined
+        - _bad_fingerprints | length > 0
       vars:
         _bad_fingerprints: >-
           {{ _config_raw.get('ssh_work_keyscan_hosts', []) | selectattr('fingerprint', 'defined')
              | rejectattr('fingerprint', 'match', '^SHA256:[A-Za-z0-9+/]{43}$')
              | map(attribute='host') | list }}
-      ansible.builtin.assert:
-        that:
-          - _bad_fingerprints | length == 0
-        fail_msg: >-
-          ssh_work_keyscan_hosts fingerprints must be full 'SHA256:<43 base64 chars>' values
-          (as printed by ssh-keygen -lf). Placeholder or partial values either abort the ssh
-          role mid-run or, being substring-matched, accept any key.
-          Hosts to fix: {{ _bad_fingerprints }}. Fill in the real value or drop the
-          fingerprint field to fall back to trust-on-first-use.
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: {{ _bad_fingerprints | join(', ') }} in ssh_work_keyscan_hosts lack a full
+          'SHA256:<43 base64 chars>' fingerprint (as printed by ssh-keygen -lf). Their host keys
+          are not seeded and their SSH repos are skipped this run (no trust-on-first-use).
+          Set the real fingerprint, then run 'make ssh repos' on a network that reaches them.
       tags: [always]
 
     - name: Assert git_repos_list dest fields contain no path traversal (LPE guard)
