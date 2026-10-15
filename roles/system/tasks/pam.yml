@@ -184,6 +184,8 @@
       changed_when: false
       check_mode: false
       failed_when: _pam_authselect_preauth_count.stdout | int != 1
+      # check mode: enable-feature is simulated, so the real file lacks the stanzas yet
+      when: not ansible_check_mode or system_authselect_faillock_check.rc | default(0) == 0
 
     - name: Verify pam_faillock.so control flags in system-auth (functional guard)
       ansible.builtin.shell:
@@ -201,6 +203,8 @@
       check_mode: false
       register: _pam_faillock_control_flags_check
       failed_when: false
+      # check mode: enable-feature is simulated, so the real file lacks the stanzas yet
+      when: not ansible_check_mode or system_authselect_faillock_check.rc | default(0) == 0
 
     - name: Fail if pam_faillock.so control flags are incorrect (functional guard)
       ansible.builtin.fail:
@@ -537,6 +541,7 @@
     - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode or system_authselect_pwhistory_check.rc | default(0) == 0  # enable-feature simulated in check mode
 
 - name: Verify pam_pwhistory.so control flag in system-auth (functional guard)
   ansible.builtin.shell:
@@ -552,6 +557,7 @@
     - (system_authselect_bin.stat | default({})).exists | default(false)
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode or system_authselect_pwhistory_check.rc | default(0) == 0  # enable-feature simulated in check mode
 
 - name: Fail if pam_pwhistory.so control flag is incorrect (functional guard)
   ansible.builtin.fail:
