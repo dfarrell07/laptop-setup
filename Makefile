@@ -102,7 +102,7 @@ guard-not-root:
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
 all: guard-not-root preflight
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass
+	$(VERIFY_AND_RUN) --run-log=all ansible-playbook site.yml --ask-become-pass
 	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
 		npm ci --ignore-scripts; \
 	fi
@@ -351,8 +351,9 @@ csb-audit: guard-not-root preflight
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v
 
 # Full dry run of every play, including the sudo system play; run before 'make all'.
+# 'make check' and 'make all' log to ~/.cache/laptop-setup/logs/<target>-latest.log.
 check: guard-not-root preflight
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
+	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
