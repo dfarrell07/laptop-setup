@@ -33,6 +33,8 @@
         name: "{{ _dnf_auto_timer }}"
         state: started
         enabled: true
+      # check mode only simulates the install, so the timer unit does not exist yet
+      when: not (ansible_check_mode and system_dnf_automatic_installed is changed)
 
   rescue:
     - name: Record dnf-automatic install/enable failure (CSB restriction)
