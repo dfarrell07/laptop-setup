@@ -32,6 +32,17 @@ unset CDPATH  # CDPATH injection: cd "scripts/.." searches CDPATH before CWD; po
 
 # Collect all command-line arguments after the script name
 args=("$@")
+# --run-log=NAME (wrapper option, consumed here): log this run to a private file under the
+# invoking user's validated home. Only the name is caller-controlled; the directory is fixed.
+_run_log_name=""
+if [[ ${#args[@]} -gt 0 && "${args[0]}" == --run-log=* ]]; then
+    _run_log_name="${args[0]#--run-log=}"
+    args=("${args[@]:1}")
+    if [[ ! "$_run_log_name" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
+        echo "ERROR: --run-log name must match ^[a-z][a-z0-9-]{0,31}\$" >&2
+        exit 1
+    fi
+fi
 
 # Reject specific dangerous flags only
 # NOTE: --tags and --skip-tags are NOT blocked globally — they're needed for role-specific
@@ -449,6 +460,26 @@ unset ANSIBLE_CALLBACK_WHITELIST  # pre-2.15 alias for ANSIBLE_CALLBACKS_ENABLED
 unset ANSIBLE_ENABLE_TASK_DEBUGGER  # ANSIBLE_ENABLE_TASK_DEBUGGER=true drops into interactive task debugger on any failure; 'p task.args' in the debugger prints all task arguments including vault-decrypted SSH keys, registry tokens, and passwords
 unset ANSIBLE_LOG_FOLDER  # log_plays output directory control — log_plays reads ANSIBLE_LOG_FOLDER (default /var/log/ansible/hosts/); without this unset an attacker sets ANSIBLE_LOG_FOLDER=/tmp/evil/ to make the log_plays callback write to an attacker-controlled writable path
 unset ANSIBLE_LOG_PATH  # general Ansible run log — note: ANSIBLE_LOG_PATH is separate from ANSIBLE_LOG_FOLDER (log_plays); Ansible core reads this env var as ansible.cfg log_path; if set by an attacker, all task output (including debug output of vault-decrypted vars) is written to the specified path
+if [[ -n "$_run_log_name" ]]; then
+    # HOME was validated against the passwd database above. Ansible's log_path records the
+    # terminal output with no_log values censored; files are 0600 in a 0700 directory.
+    _run_log_dir="${HOME}/.cache/laptop-setup/logs"
+    if [[ -L "$_run_log_dir" ]]; then
+        echo "ERROR: ${_run_log_dir} is a symlink; refusing to log there" >&2
+        exit 1
+    fi
+    install -d -m 0700 "$_run_log_dir"
+    _run_log="${_run_log_dir}/${_run_log_name}-$(date +%Y%m%d-%H%M%S).log"
+    install -m 0600 /dev/null "$_run_log"
+    ln -sfn "${_run_log##*/}" "${_run_log_dir}/${_run_log_name}-latest.log"
+    # keep the newest 20 logs per name (generated names contain no whitespace)
+    # shellcheck disable=SC2012
+    ls -1t "${_run_log_dir}/${_run_log_name}-"2*.log | tail -n +21 | while IFS= read -r _old; do
+        rm -f -- "$_old"
+    done
+    export ANSIBLE_LOG_PATH="$_run_log"
+    echo "Logging this run to ${_run_log} (also ${_run_log_name}-latest.log)" >&2
+fi
 unset ANSIBLE_COW_PATH ANSIBLE_COW_SELECTION ANSIBLE_COW_ACCEPTLIST  # cowsay binary/template injection
 export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return before reading ANSIBLE_COW_PATH; load-bearing mitigation; unset above is defense-in-depth for child processes
 # ansible.cfg sets display_args_to_stdout=false, but ANSIBLE_DISPLAY_ARGS_TO_STDOUT env var
