@@ -237,6 +237,16 @@
       register: _sshd_temp_template
       changed_when: false  # validation scratch is removed in this transaction
 
+    # Check mode writes no temp file to move, so show the drop-in diff directly instead.
+    - name: Preview sshd hardening drop-in changes
+      ansible.builtin.template:
+        src: sshd-hardening.conf.j2
+        dest: /etc/ssh/sshd_config.d/00-hardening.conf
+        owner: root
+        group: root
+        mode: "0600"
+      when: ansible_check_mode
+
     - name: Atomically move config to production location for validation
       ansible.builtin.copy:
         src: /etc/ssh/sshd_config.d/.00-hardening.conf.tmp
@@ -247,6 +257,7 @@
         mode: "0600"
       notify: Restart sshd
       register: _sshd_config_copy
+      when: not ansible_check_mode
 
     - name: Validate sshd config after deploying new drop-in
       ansible.builtin.command:
