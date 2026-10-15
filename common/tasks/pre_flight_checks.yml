@@ -3070,23 +3070,43 @@
       failed_when: false
       tags: [always]
 
-    - name: SECURITY CRITICAL — Block provisioning when vault empty AND SSH hardening would cause lockout
+    - name: Determine whether hardened sshd will accept any key
       when:
         - not _pf_is_molecule
         - is_linux
-      vars:
+      ansible.builtin.set_fact:
         # Fix option 2 below: a pre-existing ed25519/FIDO2 key keeps SSH usable after hardening
-        _pf_has_ed25519_key: >-
-          {{ (_pf_authorized_keys.content | default('') | b64decode).splitlines()
-             | select('match', '^\s*(ssh-ed25519|sk-ssh-ed25519@openssh\.com) ') | list | length > 0 }}
+        _pf_ssh_login_ok: >-
+          {{ (ssh_auth_key_pub | default('') | trim | length > 0)
+             or ((_pf_authorized_keys.content | default('') | b64decode).splitlines()
+                 | select('match', '^\s*(ssh-ed25519|sk-ssh-ed25519@openssh\.com) ') | list | length > 0)
+             or (ssh_port | default(722) | int == 22) }}
+      tags: [always]
+
+    # At the console a keyless sshd only means "no remote SSH yet"; over SSH it strands the session.
+    - name: Notice — no SSH login key yet (console run)
+      when:
+        - not _pf_is_molecule
+        - is_linux
+        - not (_pf_ssh_login_ok | bool)
+        - lookup('env', 'SSH_CONNECTION') | length == 0
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: no ed25519/FIDO2 SSH key is available (vault empty, none in authorized_keys).
+          After hardening, sshd accepts no logins until one is added — console login is
+          unaffected. Run 'make setup-yubikeys', populate the vault, then 'make ssh system'.
+      tags: [always]
+
+    - name: SECURITY CRITICAL — Block provisioning over SSH when hardening would lock the session out
+      when:
+        - not _pf_is_molecule
+        - is_linux
+        - lookup('env', 'SSH_CONNECTION') | length > 0
       ansible.builtin.assert:
         that:
-          - >-
-            (ssh_auth_key_pub | default('') | trim | length > 0) or
-            (_pf_has_ed25519_key | bool) or
-            (ssh_port | default(722) | int == 22)
+          - _pf_ssh_login_ok | bool
         fail_msg: >-
-          SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning blocked.
+          SECURITY CRITICAL: SSH LOCKOUT RISK — provisioning over SSH blocked (this session would be stranded).
           Input: vault.yml is empty (ssh_auth_key_pub='{{ ssh_auth_key_pub | default("") }}').
           Mechanism: SSHD hardening applies PasswordAuthentication no + SSH port {{ ssh_port | default(722) }}
           + PubkeyAcceptedAlgorithms restricts to ed25519 variants only.
