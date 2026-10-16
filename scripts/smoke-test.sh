@@ -555,6 +555,9 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   else record "ssh-config-hash-known-hosts" "FAIL" "HashKnownHosts yes missing from ~/.ssh/config — host list exposed in plaintext"; fi
   if grep -qE '^[[:space:]]*StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
+  # Effective value: per-host blocks placed after Host * are silently ignored (first value wins)
+  if ssh -G github.com 2>/dev/null | grep -qx 'stricthostkeychecking true'; then record "ssh-config-github-strict" "PASS"
+  else record "ssh-config-github-strict" "FAIL" "github.com does not resolve to StrictHostKeyChecking yes (ssh -G) — run: make dotfiles"; fi
   if grep -qE '^[[:space:]]*ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
   else record "ssh-config-control-master" "FAIL" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
   if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "FAIL" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"

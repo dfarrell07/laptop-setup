@@ -1,43 +1,15 @@
 # {{ ansible_managed }}
 {% set _system = ansible_facts['system'] | default('Linux') %}
 
-Host *
-    VisualHostKey yes
-    HashKnownHosts yes
-    IdentitiesOnly yes
-    AddKeysToAgent confirm
-    ForwardAgent no
-    Ciphers {{ ssh_ciphers | regex_replace('[^\x20-\x7e]', '') }}
-    MACs {{ ssh_macs | regex_replace('[^\x20-\x7e]', '') }}
-    # KexAlgorithms — intentional choices, do not auto-modify:
-    # - sntrup761x25519-sha512: IETF canonical name (OpenSSH 10.0+; @openssh.com-suffixed form is a legacy alias); mlkem768x25519-sha256: 9.9+
-    # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
-    # - curve25519-sha256@libssh.org included: libssh servers advertise only the @libssh.org alias;
-    #   OpenSSH does not auto-expand it — both forms required for interoperability
-    # - ecdh-sha2-nistp{521,384,256} required: RHEL FIPS servers (gitlab.cee.redhat.com,
-    #   code.engineering.redhat.com) strip curve25519 and advertise only NIST ECDH curves;
-    #   per-host KexAlgorithms + after Host * is silently ignored (first-match semantics), so
-    #   NIST curves must appear here; non-FIPS servers still negotiate PQ or curve25519 first
-    # - mlkem768nistp256/mlkem1024nistp384 excluded: prefer x25519-based hybrid over NIST curve classical component
-    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256@libssh.org,curve25519-sha256,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256
-    ServerAliveInterval 60
-    ServerAliveCountMax 5
-    ControlMaster auto
-{% if _system == 'Linux' %}
-    ControlPath /run/user/%i/ssh/%r@%h-%p
-{% else %}
-    ControlPath ~/.ssh/sockets/%r@%h-%p
-    UseKeychain yes
-{% endif %}
-    ControlPersist 600
-    StrictHostKeyChecking accept-new
+# Host-specific blocks come before Host *: ssh uses the first value it finds for each
+# directive, so settings here (StrictHostKeyChecking yes, ControlMaster no) would be
+# ignored after Host * sets them.
 
 Host gh gist github.com gist.github.com
     HostName github.com
     User git
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
     HostKeyAlgorithms ssh-ed25519
-    StrictHostKeyChecking yes
     StrictHostKeyChecking yes
     # SK enforcement via IdentityFile+IdentitiesOnly rather than PubkeyAcceptedAlgorithms:
     # On Fedora-patched OpenSSH 10.2+ the crypto-policies layer intersects PubkeyAcceptedAlgorithms
@@ -73,6 +45,37 @@ Host {{ _ts_hosts | map('regex_replace', '[^\x20-\x7e]', '') | join(' ') }}
     Port {{ ssh_port | int }}
     IdentityFile ~/.ssh/{{ dotfiles_ssh_hardware_key_basename }}
 {% endif %}
+
+Host *
+    VisualHostKey yes
+    HashKnownHosts yes
+    IdentitiesOnly yes
+    AddKeysToAgent confirm
+    ForwardAgent no
+    Ciphers {{ ssh_ciphers | regex_replace('[^\x20-\x7e]', '') }}
+    MACs {{ ssh_macs | regex_replace('[^\x20-\x7e]', '') }}
+    # KexAlgorithms — intentional choices, do not auto-modify:
+    # - sntrup761x25519-sha512: IETF canonical name (OpenSSH 10.0+; @openssh.com-suffixed form is a legacy alias); mlkem768x25519-sha256: 9.9+
+    # - mlkem768/sntrup761: PQ-KEX, only emitted when dotfiles_ssh_kex_pq_enabled=true (probed at provision time)
+    # - curve25519-sha256@libssh.org included: libssh servers advertise only the @libssh.org alias;
+    #   OpenSSH does not auto-expand it — both forms required for interoperability
+    # - ecdh-sha2-nistp{521,384,256} required: RHEL FIPS servers (gitlab.cee.redhat.com,
+    #   code.engineering.redhat.com) strip curve25519 and advertise only NIST ECDH curves;
+    #   per-host KexAlgorithms + after Host * is silently ignored (first-match semantics), so
+    #   NIST curves must appear here; non-FIPS servers still negotiate PQ or curve25519 first
+    # - mlkem768nistp256/mlkem1024nistp384 excluded: prefer x25519-based hybrid over NIST curve classical component
+    KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256@libssh.org,curve25519-sha256,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256
+    ServerAliveInterval 60
+    ServerAliveCountMax 5
+    ControlMaster auto
+{% if _system == 'Linux' %}
+    ControlPath /run/user/%i/ssh/%r@%h-%p
+{% else %}
+    ControlPath ~/.ssh/sockets/%r@%h-%p
+    UseKeychain yes
+{% endif %}
+    ControlPersist 600
+    StrictHostKeyChecking accept-new
 
 # User-local overrides (not managed by Ansible).
 # Host-specific stanzas here still take effect for hosts not covered above; SSH first-match wins per
