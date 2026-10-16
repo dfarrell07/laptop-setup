@@ -2,59 +2,69 @@
 # Security: remove any pre-existing drop-in directories for units this file manages as masked.
 # An attacker can pre-create /etc/systemd/system/<unit>.service.d/persist.conf before provisioning;
 # the masking symlink prevents startup but the drop-in survives and activates if ever unmasked.
-- name: Probe drop-in dirs for content before removal (csb_detected advisory)
+- name: List existing drop-in dirs for managed masked units (csb_detected advisory)
   ansible.builtin.find:
-    paths: "/etc/systemd/system/{{ item }}.d"
+    paths: /etc/systemd/system
     file_type: any
     recurse: false
-  loop:
-    - bluetooth.service
-    - thermald.service
-    - ModemManager.service
-    - tuned-ppd.service
-    - tuned.service
-    - power-profiles-daemon.service
-    - cups-browsed.service
-    - cups.socket
-    - cups.path
-    - abrtd.service
-    - abrt-journal-core.service
-    - abrt-oops.service
-    - abrt-vmcore.service
-    - abrt-pstoreoops.service
-    - abrt-xorg.service
-    - avahi-daemon.service
-    - avahi-daemon.socket
-    - nfs-server.service
-    - rpcbind.service
-    - rpcbind.socket
-    - iscsi.service
-    - iscsid.service
-    - iscsi-init.service
-    - iscsi-onboot.service
-    - iscsi-shutdown.service
-    - iscsi-starter.service
-    - iscsid.socket
-    - iscsiuio.socket
-    - iscsiuio.service
-    - cockpit.service
-    - cockpit.socket
-    - ctrl-alt-del.target
-  register: _dropin_probe
+    patterns: "{{ _units | map('regex_replace', '$', '.d') | list }}"
+  vars:
+    _units:
+      - bluetooth.service
+      - thermald.service
+      - ModemManager.service
+      - cups-browsed.service
+      - cups.socket
+      - cups.path
+      - abrtd.service
+      - abrt-journal-core.service
+      - abrt-oops.service
+      - abrt-vmcore.service
+      - abrt-pstoreoops.service
+      - abrt-xorg.service
+      - avahi-daemon.service
+      - avahi-daemon.socket
+      - nfs-server.service
+      - rpcbind.service
+      - rpcbind.socket
+      - iscsi.service
+      - iscsid.service
+      - iscsi-init.service
+      - iscsi-onboot.service
+      - iscsi-shutdown.service
+      - iscsi-starter.service
+      - iscsid.socket
+      - iscsiuio.socket
+      - iscsiuio.service
+      - cockpit.service
+      - cockpit.socket
+      - ctrl-alt-del.target
+  register: _dropin_dirs
   when:
     - csb_detected | bool
     - not system_is_container
     - not csb_rhel
-    - item not in ['tuned.service', 'tuned-ppd.service', 'power-profiles-daemon.service']
+  failed_when: false
+
+# Probe only dirs that exist: find warns once per missing path, burying real warnings.
+- name: Probe drop-in dirs for content before removal (csb_detected advisory)
+  ansible.builtin.find:
+    paths: "{{ item }}"
+    file_type: any
+    recurse: false
+  loop: "{{ _dropin_dirs.files | default([]) | map(attribute='path') | list }}"
+  register: _dropin_probe
   failed_when: false
 
 - name: Warn on non-empty drop-in dirs before removal (possible IT-placed config on csb_detected)
   ansible.builtin.debug:
     msg: >-
-      WARNING: /etc/systemd/system/{{ item.item }}.d contains {{ item.matched }} file(s)
+      WARNING: {{ item.item }} contains {{ item.matched }} file(s)
       and will be removed by security hardening. Verify no IT-managed drop-in exists here
       before continuing; re-add any legitimate IT config after provisioning.
   loop: "{{ _dropin_probe.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
   when:
     - csb_detected | bool
     - not system_is_container
