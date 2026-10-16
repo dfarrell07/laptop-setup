@@ -168,10 +168,9 @@
         state: "{{ 'enabled' if system_ipv6_accept_ra | int >= 2 else 'disabled' }}"
       notify: Apply firewall rules
 
-    # On CSB, IT manages firewall zones — the primary interface is not in the drop zone,
-    # so adding 722/tcp to the drop zone would create a dead rule. Skip on CSB; the
-    # Fedora hybrid case (csb_detected + Fedora) opens port 722 in the redhat zone (system_firewall_csb_zone)
-    # via a separate task below; for RHEL CSB, IT's zone policy governs reachability.
+    # Runs wherever the drop zone is managed (standard and hybrid CSB Fedora). RHEL CSB
+    # skips this block (IT owns zone policy; fallback below). On hybrid CSB, VPN access
+    # goes through IT's redhat zone via the ssh service override further down.
     - name: Open SSH port in firewall
       ansible.posix.firewalld:
         port: "{{ ssh_port }}/tcp"
@@ -265,57 +264,59 @@
     - not (system_firewall_manage_zone | bool)
     - (system_firewall_info.firewalld_info.default_zone | default('')) == 'drop'
 
-- name: Open SSH port in redhat zone (CSB Fedora VPN)
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    zone: "redhat"
-    permanent: true
-    immediate: true
-    state: enabled
-  register: _system_redhat_ssh_open
-  when:
-    - system_firewalld_running | bool
-    - system_firewall_manage_zone | bool
-    - csb_detected
-    - is_fedora
-  failed_when: >-
-    (_system_redhat_ssh_open.failed | default(false)) and
-    'INVALID_ZONE' not in (_system_redhat_ssh_open.msg | default(''))
-  notify: Apply firewall rules
-
-- name: 'Warn: SSH port not opened in redhat zone (zone absent)'
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: csb_detected=true, is_fedora=true and the 'redhat' firewall zone
-      does not exist on this host. Port {{ ssh_port }}/tcp was not opened in the
-      redhat zone — VPN tun0 interface traffic may not reach sshd.
+# Hybrid CSB Fedora: IT's redhat_csb.firewall role rewrites the 'redhat' zone (tun0, wt0)
+# from a template every hour, allowing the 'ssh' service. Port edits in that zone are
+# reverted, so instead the local 'ssh' service definition follows sshd's port; IT's zone
+# keeps referencing 'ssh' and VPN traffic reaches sshd on {{ ssh_port }}.
+- name: Point the firewalld ssh service at the sshd port (CSB Fedora VPN)
+  ansible.builtin.copy:
+    dest: /etc/firewalld/services/ssh.xml
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <!-- Ansible managed (laptop-setup): sshd listens on {{ ssh_port }}, not 22 -->
+      <service>
+        <short>SSH</short>
+        <description>Secure Shell (SSH) on the port sshd is configured for.</description>
+        <port protocol="tcp" port="{{ ssh_port }}"/>
+      </service>
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - csb_detected
     - is_fedora
     - not csb_rhel | bool
-    - _system_redhat_ssh_open is defined
-    - "'INVALID_ZONE' in (_system_redhat_ssh_open.msg | default(''))"
+    - ssh_port | int != 22
+  notify: Apply firewall rules
 
-- name: Remove legacy ssh service from redhat zone
-  ansible.posix.firewalld:
-    zone: "redhat"
-    service: ssh
-    permanent: true
-    immediate: true
-    state: disabled
-  register: _system_redhat_ssh_remove
+- name: Remove the ssh service override when sshd uses port 22
+  ansible.builtin.file:
+    path: /etc/firewalld/services/ssh.xml
+    state: absent
+  when:
+    - system_firewalld_running | bool
+    - csb_detected
+    - is_fedora
+    - not csb_rhel | bool
+    - ssh_port | int == 22
+  notify: Apply firewall rules
+
+- name: 'Warn: redhat firewall zone absent (CSB Fedora VPN)'
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: csb_detected=true, is_fedora=true and the 'redhat' firewall zone
+      does not exist on this host. VPN tun0 interface traffic may not reach sshd
+      on port {{ ssh_port }}/tcp.
   when:
     - system_firewalld_running | bool
     - system_firewall_manage_zone | bool
     - csb_detected
     - is_fedora
-    - ssh_port | int != 22
-  failed_when: >-
-    (_system_redhat_ssh_remove.failed | default(false)) and
-    'INVALID_ZONE' not in (_system_redhat_ssh_remove.msg | default(''))
-  notify: Apply firewall rules
+    - not csb_rhel | bool
+    - system_firewall_info.firewalld_info.zones is defined
+    - "'redhat' not in system_firewall_info.firewalld_info.zones"
 
 - name: Remove ssh service from libvirt zone
   ansible.posix.firewalld:
