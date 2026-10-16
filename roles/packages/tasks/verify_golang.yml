@@ -20,10 +20,11 @@
 - name: Warn if golang is missing (likely package install failure)
   ansible.builtin.debug:
     msg: >-
-      WARNING: golang binary not found in PATH.
-      golang install may have failed in install_dnf_packages.yml, install_brew.yml, or apt install.
-      Skipping golang verification and go install tasks.
-      Re-run provisioning to retry golang installation.
+      {{ 'CHECK MODE: golang is not installed yet (its package install was only simulated);
+      golang verification and go install tasks are skipped.' if ansible_check_mode else
+      'WARNING: golang binary not found in PATH. golang install may have failed in
+      install_dnf_packages.yml, install_brew.yml, or apt install. Skipping golang verification
+      and go install tasks. Re-run provisioning to retry golang installation.' }}
   when: _go_binary_path.rc != 0
 
 - name: Verify golang version
