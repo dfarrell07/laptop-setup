@@ -978,14 +978,19 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
       else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
     fi
-    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0
-    if firewall-cmd --permanent --zone=trusted --query-interface=wt0 &>/dev/null; then
+    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0, except on CSB
+    # where IT's firewall role binds wt0 to its 'redhat' zone
+    wt_expect="trusted"
+    if $CSB_HOST && firewall-cmd --permanent --zone=redhat --query-interface=wt0 &>/dev/null; then
+      wt_expect="redhat"
+    fi
+    if firewall-cmd --permanent --zone="$wt_expect" --query-interface=wt0 &>/dev/null; then
       record "firewall-wt0-permanent" "PASS"
     else record "firewall-wt0-permanent" "FAIL" "wt0 not in permanent trusted zone config — NetBird peer traffic will be dropped (run: make system)"; fi
     if ip link show wt0 &>/dev/null; then
       wt_zone=$(firewall-cmd --get-zone-of-interface=wt0 2>/dev/null || echo "?")
-      if [[ "$wt_zone" == "trusted" ]]; then record "firewall-wt0-zone" "PASS"
-      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected 'trusted'"; fi
+      if [[ "$wt_zone" == "$wt_expect" ]]; then record "firewall-wt0-zone" "PASS"
+      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected '$wt_expect'"; fi
     fi
     # ICMP block-inversion must be enabled when drop zone is active
     if [[ "$zone" == "drop" ]]; then

@@ -253,6 +253,28 @@
     - not system_is_container
     - not system_firewalld_running | bool
 
+# On hybrid CSB, IT's redhat_csb.firewall template binds wt0 to the 'redhat' zone and
+# rewrites that zone hourly. Moving wt0 to trusted would put one interface in two zones
+# (firewalld ZONE_CONFLICT after IT's next run) and open every port to NetBird peers.
+- name: Probe permanent zone of wt0
+  ansible.builtin.command: firewall-cmd --permanent --get-zone-of-interface=wt0
+  register: _system_wt0_zone
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe; the assign task below depends on it
+  when:
+    - not system_is_container
+    - system_firewalld_running | bool
+    - csb_detected | bool
+
+- name: Note IT-managed wt0 zone (hybrid CSB)
+  ansible.builtin.debug:
+    msg: >-
+      wt0 (NetBird) stays in IT's 'redhat' zone, which IT's CSB firewall role manages;
+      it is not moved to the trusted zone.
+  when:
+    - (_system_wt0_zone.stdout | default('')) == 'redhat'
+
 - name: Assign wt0 (NetBird) to firewall trusted zone
   ansible.posix.firewalld:
     zone: trusted
@@ -263,6 +285,7 @@
   when:
     - not system_is_container  # firewalld module crashes privileged Podman containers
     - system_firewalld_running | bool
+    - (_system_wt0_zone.stdout | default('')) != 'redhat'
   notify:
     - Apply firewall rules
 
