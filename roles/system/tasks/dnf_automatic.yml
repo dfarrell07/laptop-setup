@@ -128,6 +128,16 @@
 # unauthorised files should be detected and warned about even in download-only mode.
 # The directory itself is removed wholesale by the task below (line 163), so the end state
 # is always correct; these tasks provide an early warning for unexpected IT-managed files.
+- name: Check whether the dnf-automatic service drop-in directory exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ _dnf_auto_svc }}.d"
+  register: _dnf_auto_dropin_dir
+  when:
+    - is_dnf
+    - not csb_rhel
+    - not system_is_container
+    - _dnf_auto_svc is defined
+
 - name: Find unauthorised drop-ins in dnf-automatic service drop-in directory
   ansible.builtin.find:
     paths: "/etc/systemd/system/{{ _dnf_auto_svc }}.d"
@@ -138,6 +148,7 @@
     - not csb_rhel
     - not system_is_container
     - _dnf_auto_svc is defined
+    - _dnf_auto_dropin_dir.stat.isdir | default(false)  # find warns on a missing dir
   failed_when: false
 
 - name: Compute preserved drop-in paths (aide-update.conf + system_dnf_automatic_dropin_whitelist)

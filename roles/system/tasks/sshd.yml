@@ -206,12 +206,18 @@
         item.path | basename not in
         (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
 
+    - name: Check whether sshd.service.d exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/sshd.service.d
+      register: _sshd_unit_dropin_dir
+
     - name: Remove unauthorized drop-ins from /etc/systemd/system/sshd.service.d  # noqa: command-instead-of-module
       ansible.builtin.find:
         paths: /etc/systemd/system/sshd.service.d
         patterns: "*.conf"
         file_type: file
       register: _sshd_unit_dropin_files
+      when: _sshd_unit_dropin_dir.stat.isdir | default(false)  # find warns on a missing dir
 
     - name: Delete all sshd.service.d drop-ins (none are playbook-owned)
       ansible.builtin.file:

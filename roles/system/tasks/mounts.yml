@@ -29,11 +29,17 @@
         mode: "0644"
       notify: Remount /tmp  # handler live-removes noexec; daemon_reload below handles first-provision
 
+    - name: Check tmp.mount.d exists (absent in check mode until created)
+      ansible.builtin.stat:
+        path: /etc/systemd/system/tmp.mount.d
+      register: _tmp_dropin_dir
+
     - name: Find all files in tmp.mount.d
       ansible.builtin.find:
         paths: /etc/systemd/system/tmp.mount.d
         file_type: file
       register: _tmp_dropin_files
+      when: _tmp_dropin_dir.stat.isdir | default(false)
 
     - name: Remove unauthorized drop-ins from tmp.mount.d (keep only hardening.conf)
       ansible.builtin.file:
