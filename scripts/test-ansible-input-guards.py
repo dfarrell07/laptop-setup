@@ -30,6 +30,9 @@ def guard(filename, name):
     return result
 
 
+SSH_ENV = {'SSH_CONNECTION': '192.0.2.1 50000 192.0.2.2 22'}
+
+
 class InputGuardTests(unittest.TestCase):
     def test_personal2_config_path_cannot_inject_tmpfiles_directives(self):
         task = guard('common/tasks/pre_flight_checks.yml', 'Assert claude config dir vars contain only safe path characters')
@@ -39,17 +42,19 @@ class InputGuardTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.check(task, {'_config_raw': {'claude_personal2_config_dir': path}}, accepted)
 
-    def check(self, task, variables, accepted):
+    def check(self, task, variables, accepted, env=None):
         with tempfile.TemporaryDirectory() as directory:
             playbook = Path(directory) / 'guard.yml'
             playbook.write_text(yaml.safe_dump([{
                 'name': 'Production input guard regression', 'hosts': 'localhost',
                 'gather_facts': False, 'vars': variables, 'tasks': task if isinstance(task, list) else [task],
             }], allow_unicode=True))
-            env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'))
+            env_vars = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(ROOT / 'scripts/vault-pass-ci.sh'))
+            env_vars.pop('SSH_CONNECTION', None)  # lockout guards differ for runs made over SSH
+            env_vars.update(env or {})
             result = subprocess.run(
                 [str(ANSIBLE), '-i', 'localhost,', '-c', 'local', str(playbook)],
-                cwd=ROOT, env=env, capture_output=True, text=True, timeout=TEST_TIMEOUT,
+                cwd=ROOT, env=env_vars, capture_output=True, text=True, timeout=TEST_TIMEOUT,
             )
             self.assertEqual(result.returncode, 0 if accepted else 2, result.stdout + result.stderr)
 
@@ -146,12 +151,15 @@ class InputGuardTests(unittest.TestCase):
             ('malformed entry\n', False),
             ('# no key\n', False),
         ]
-        for content, accepted in cases:
-            with self.subTest(content=content):
-                self.check(checks, {
-                    '_existing_authkeys': {'content': base64.b64encode(content.encode()).decode()},
-                    'ssh_pubkey_accepted_algorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com'],
-                }, accepted)
+        # Over SSH every incompatible case blocks; at the console only malformed entries do.
+        for over_ssh in (True, False):
+            for content, accepted in cases:
+                expected = accepted or (not over_ssh and content != 'malformed entry\n')
+                with self.subTest(content=content, over_ssh=over_ssh):
+                    self.check(checks, {
+                        '_existing_authkeys': {'content': base64.b64encode(content.encode()).decode()},
+                        'ssh_pubkey_accepted_algorithms': ['ssh-ed25519', 'sk-ssh-ed25519@openssh.com'],
+                    }, expected, SSH_ENV if over_ssh else None)
 
     def test_go_checksum_server(self):
         task = guard('roles/packages/tasks/install_go_tools.yml', '(2/3)')
@@ -258,11 +266,13 @@ class InputGuardTests(unittest.TestCase):
 
     def test_ssh_lockout_scope(self):
         task = guard('roles/ssh/tasks/main.yml', 'Assert — vault empty and no authorized_keys')
-        for system, key, accepted in [('Darwin', '', True), ('Linux', '', False),
-                                       ('Linux', 'ssh-ed25519 fixture', True)]:
-            with self.subTest(system=system, key=key):
+        for system, key, over_ssh, accepted in [('Darwin', '', True, True), ('Linux', '', True, False),
+                                                 ('Linux', '', False, True),
+                                                 ('Linux', 'ssh-ed25519 fixture', True, True)]:
+            with self.subTest(system=system, key=key, over_ssh=over_ssh):
                 self.check(task, {'ansible_facts': {'system': system}, 'ssh_auth_key_pub': key,
-                                  '_ssh_authkeys_stat': {'stat': {'exists': False}}}, accepted)
+                                  '_ssh_authkeys_stat': {'stat': {'exists': False}}}, accepted,
+                           SSH_ENV if over_ssh else None)
 
     def test_vendor_polkit_rules_fail_closed(self):
         source = yaml.safe_load((ROOT / 'roles/system/tasks/hardening_core.yml').read_text())
