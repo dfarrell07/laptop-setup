@@ -586,6 +586,7 @@ YubiKey stops responding after USBGuard is enabled. External keyboard (Moonlande
 USBGuard blocks all USB devices not in the whitelist (`/etc/usbguard/rules.conf`). The default deployed rules whitelist YubiKey (`1050:*`) and Linux root hubs (`1d6b:*`). Hardwired devices are covered on Intel hardware via connect-type. Devices not in the base list (Moonlander, fingerprint reader, webcam, Bluetooth adapter, AMD internal ports) must be added to `system_usbguard_extra_rules` in `config.yml`.
 
 **Fix:**
+- Easiest: plug the devices in and run `make usb-add`. It allows each blocked device now and appends an `id`/`name`/`with-interface` rule to `system_usbguard_extra_rules` in `config.yml`; run `make system` to write them to `rules.conf`. Before USBGuard is installed, it saves rules for connected devices no rule covers yet.
 - List blocked devices: `usbguard list-devices --blocked`
 - Temporarily allow: `usbguard allow-device <id>`
 - Permanently add to whitelist: add a rule to `system_usbguard_extra_rules` in `config.yml` (gitignored, per-machine) and re-run `make system`. Only add to `roles/system/defaults/main.yml` if the rule should apply to all machines (e.g., a new YubiKey model).

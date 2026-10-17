@@ -7,7 +7,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit
+       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit usb-add
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
 # The make -x check MUST precede 'override MAKEFLAGS :=' because:
@@ -93,6 +93,7 @@ help:
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
 	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
+	@echo "USB:        usb-add  (allow blocked/connected USB devices now; save rules to config.yml)"
 	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -281,6 +282,11 @@ vendor-collections: guard-not-root
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
 
+# Allow blocked USB devices now (USBGuard running) or connected ones not yet covered
+# (before USBGuard is installed); rules go to config.yml for the next make system.
+usb-add: guard-not-root
+	python3 scripts/usb-add.py
+
 update: guard-not-root preflight
 	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
@@ -440,6 +446,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-laptop-migration.py
 	.venv/bin/python3 scripts/test-claude-privacy.py
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
+	.venv/bin/python3 scripts/test-usb-add.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py
 	bash test-var-override.sh
 

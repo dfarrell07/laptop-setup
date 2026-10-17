@@ -98,7 +98,8 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 
 1. Connect ALL USB devices you regularly use (external drives, hubs, docks, keyboards, mice, etc.)
 2. Run: lsusb
-3. For each device you want to allow, add a rule to config.yml system_usbguard_extra_rules:
+3. Run `make usb-add` to save a rule for each connected device not yet covered, or add rules to config.yml
+   system_usbguard_extra_rules by hand:
 
    ```yaml
    system_usbguard_extra_rules:
@@ -108,6 +109,9 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
 
 ### After first provision, if a device is blocked
+
+Plug the device in and run `make usb-add`: it allows every blocked device now and saves its rule to
+config.yml; then run `make system`. By hand:
 
 1. Temporarily allow: `sudo usbguard allow-device <id>` (find id with: `sudo usbguard list-devices --blocked`)
 2. Permanently add: Add rule to config.yml and re-run make system
@@ -200,6 +204,7 @@ make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-user  # Post-run verification (user-space only, no sudo; wraps smoke-test.sh --user-only)
 make smoke-test-container  # Post-run verification (distrobox)
+make usb-add          # Allow blocked USB devices now + save rules to config.yml (then make system)
 make check            # Full dry run incl. sudo system play (--check --diff); runs preflight first; logs to ~/.cache/laptop-setup/logs/
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
