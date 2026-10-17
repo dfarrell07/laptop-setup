@@ -85,11 +85,22 @@ def read_config(path):
     return path.read_text(), format(stat.S_IMODE(metadata.st_mode), '04o')
 
 
+def summarize(before, after):
+    """Arguments added and removed, with key material references redacted."""
+    def redact(token):
+        key = token.partition('=')[0]
+        return key + '=<redacted>' if key == 'rd.luks.key' else token
+    old, new = Counter(before.split()), Counter(after.split())
+    return {'added': sorted(redact(t) for t in (new - old).elements()),
+            'removed': sorted(redact(t) for t in (old - new).elements())}
+
+
 def main():
     settings = json.loads(sys.argv[1])
     kernel = Path('/etc/kernel/cmdline')
     current, kernel_mode = read_config(kernel) if kernel.exists() or kernel.is_symlink() else (Path('/proc/cmdline').read_text(), '0644')
-    result = {'kernel': merge_arguments(current, settings) + '\n', 'kernel_mode': kernel_mode}
+    merged = merge_arguments(current, settings)
+    result = {'kernel': merged + '\n', 'kernel_mode': kernel_mode, 'summary': summarize(current, merged)}
     grub = Path('/etc/default/grub')
     if grub.exists() or grub.is_symlink():
         current, grub_mode = read_config(grub)

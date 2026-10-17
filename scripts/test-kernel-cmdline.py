@@ -78,6 +78,15 @@ class KernelCmdlineTests(unittest.TestCase):
         self.assertIn('rd.luks.allow-discards', kept)
         self.assertIn('rd.luks.options=discard', kept)
 
+    def test_summary_redacts_key_references(self):
+        before = 'root=UUID=fixture rd.luks.key=uuid=/keyfile:UUID=other rd.luks.allow-discards'
+        after = compiler.merge_arguments(before, dict(self.settings(), remove_luks_key=True))
+        summary = compiler.summarize(before, after)
+        self.assertIn('rd.luks.key=<redacted>', summary['removed'])
+        self.assertIn('rd.luks.allow-discards', summary['removed'])
+        self.assertIn('lockdown=integrity', summary['added'])
+        self.assertNotIn('keyfile', ' '.join(summary['added'] + summary['removed']))
+
     def test_reject_ambiguous_grub_sources(self):
         for value in ['GRUB_CMDLINE_LINUX=bare\n', 'GRUB_CMDLINE_LINUX="a"\nGRUB_CMDLINE_LINUX="b"\n']:
             with self.assertRaises(ValueError):
