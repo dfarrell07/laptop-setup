@@ -61,8 +61,8 @@ Host *
     #   OpenSSH does not auto-expand it — both forms required for interoperability
     # - ecdh-sha2-nistp{521,384,256} required: RHEL FIPS servers (gitlab.cee.redhat.com,
     #   code.engineering.redhat.com) strip curve25519 and advertise only NIST ECDH curves;
-    #   per-host KexAlgorithms + after Host * is silently ignored (first-match semantics), so
-    #   NIST curves must appear here; non-FIPS servers still negotiate PQ or curve25519 first
+    #   kept here, not per host, so other FIPS hosts work too (config.local, included after
+    #   Host *, cannot add them); non-FIPS servers still negotiate PQ or curve25519 first
     # - mlkem768nistp256/mlkem1024nistp384 excluded: prefer x25519-based hybrid over NIST curve classical component
     KexAlgorithms {% if dotfiles_ssh_kex_pq_enabled %}mlkem768x25519-sha256,sntrup761x25519-sha512,{% endif %}curve25519-sha256@libssh.org,curve25519-sha256,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256
     ServerAliveInterval 60
