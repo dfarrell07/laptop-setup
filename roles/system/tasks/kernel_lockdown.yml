@@ -261,11 +261,11 @@
 
     - name: Remove rd.luks.options=discard grub parameter (SSD wear-pattern)
       ansible.builtin.command:
-        cmd: grubby --remove-args='rd.luks.options' --update-kernel=ALL
+        cmd: grubby --remove-args='rd.luks.options=discard' --update-kernel=ALL
       register: system_luks_options_discard_remove
       when:
         - system_grubby_info.rc == 0
-        - "'rd.luks.options' in (system_grubby_info.stdout)"
+        - "'rd.luks.options=discard' in (system_grubby_info.stdout)"
         - not (system_luks_discards_enabled | bool)
       changed_when: system_luks_options_discard_remove.rc == 0
       failed_when: false
@@ -286,6 +286,7 @@
           init_on_free: "{{ system_init_on_free | bool }}"
           passthrough: "{{ system_iommu_passthrough | bool }}"
           remove_luks_key: "{{ system_remove_luks_key | bool }}"
+          luks_discards: "{{ system_luks_discards_enabled | bool }}"
           amd: "{{ ansible_facts['processor'] | join(' ') | lower is search('amd') }}"
           intel: "{{ ansible_facts['processor'] | join(' ') | lower is search('intel') }}"
       register: system_boot_sources

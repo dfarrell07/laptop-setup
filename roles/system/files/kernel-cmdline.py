@@ -33,6 +33,11 @@ def merge_arguments(text, settings):
             continue
         if key == 'rd.luks.key' and settings['remove_luks_key']:
             continue
+        # Same policy as the grubby discard removal, so kernel installs and
+        # grub2-mkconfig do not restore what that task removed.
+        if not settings['luks_discards'] and (key == 'rd.luks.allow-discards'
+                                              or (key == 'rd.luks.options' and value == 'discard')):
+            continue
         values.append(token)
     mode = settings['lockdown']
     if mode not in {'', 'none', 'integrity', 'confidentiality'}:
