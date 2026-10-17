@@ -207,6 +207,7 @@
     - ansible_facts['system'] == 'Linux'  # macOS setup configures an SSH client, not sshd
     - ssh_auth_key_pub | trim | length == 0
     - not _ssh_authkeys_stat.stat.exists
+    - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
   tags: [always]
 
 - name: Validate existing authorized_keys key types when vault is empty
@@ -233,7 +234,9 @@
       ansible.builtin.assert:
         that:
           - _existing_key_lines | reject('match', _ssh_authorized_key_pattern) | list | length == 0
-          - _existing_key_lines | length > 0 or ssh_allow_empty_authorized_keys | default(false)
+          - >-
+            _existing_key_lines | length > 0 or ssh_allow_empty_authorized_keys | default(false)
+            or lookup('env', 'SSH_CONNECTION') | length == 0
         fail_msg: >-
           SECURITY: authorized_keys is empty or contains an unrecognized entry.
           Supply a compatible Ed25519/FIDO2 key before enabling SSH hardening.
@@ -260,7 +263,9 @@
           (2) Add to authorized_keys: cat ~/.ssh/id_ed25519_bootstrap.pub >> ~/.ssh/authorized_keys
           (3) Test login with ed25519 key before rebooting
           OR populate vault with vault_ssh_auth_key_pub (ed25519) and re-run.
-      when: _existing_key_types | length > 0
+      when:
+        - _existing_key_types | length > 0
+        - lookup('env', 'SSH_CONNECTION') | length > 0  # console runs: pre-flight prints a notice instead
 
 - name: Slurp authorized_keys to detect backup keys that exclusive write will remove
   ansible.builtin.slurp:

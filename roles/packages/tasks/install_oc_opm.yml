@@ -39,15 +39,32 @@
       register: packages_kubectl_source_marker
       failed_when: false
       changed_when: false
+      check_mode: false
+
+    - name: Report check mode skips oc and kubectl install at {{ packages_oc_version }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: oc and kubectl {{ packages_oc_version }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          packages_oc_check.rc != 0 or
+          packages_oc_version == 'stable' or
+          (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
+          not packages_kubectl_stat.stat.exists or
+          (packages_kubectl_source == 'ocp' and
+          (packages_kubectl_source_marker.rc != 0 or
+          packages_kubectl_source_marker.stdout | trim != 'ocp'))
 
     - name: Oc + kubectl present at {{ packages_oc_version }}
-      when: >-
-        packages_oc_check.rc != 0 or
-        packages_oc_version == 'stable' or
-        (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
-        not packages_kubectl_stat.stat.exists or
-        (packages_kubectl_source == 'ocp' and
-         (packages_kubectl_source_marker.rc != 0 or
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          packages_oc_check.rc != 0 or
+          packages_oc_version == 'stable' or
+          (packages_oc_check.stdout | regex_findall('Client Version: (\d+\.\d+\.\d+[^\s]*)') + [''])[0] != packages_oc_version or
+          not packages_kubectl_stat.stat.exists or
+          (packages_kubectl_source == 'ocp' and
+          (packages_kubectl_source_marker.rc != 0 or
           packages_kubectl_source_marker.stdout | trim != 'ocp'))
       block:
         # WARNING: stable track fetches sha256sum.txt from the same server as the binary
@@ -243,13 +260,27 @@
       register: packages_opm_marker
       failed_when: false
       changed_when: false
+      check_mode: false
+
+    - name: Report check mode skips opm install at {{ packages_oc_version }}
+      ansible.builtin.debug:
+        msg: "CHECK MODE: opm {{ packages_oc_version }} would be downloaded, verified and installed; not simulated."
+      when:
+        - ansible_check_mode
+        - >-
+          packages_opm_check.rc != 0 or
+          packages_oc_version == 'stable' or
+          packages_opm_marker.rc != 0 or
+          packages_opm_marker.stdout | trim != packages_oc_version
 
     - name: Opm present at {{ packages_oc_version }}
-      when: >-
-        packages_opm_check.rc != 0 or
-        packages_oc_version == 'stable' or
-        packages_opm_marker.rc != 0 or
-        packages_opm_marker.stdout | trim != packages_oc_version
+      when:
+        - not ansible_check_mode  # downloads into a temp dir that check mode never creates
+        - >-
+          packages_opm_check.rc != 0 or
+          packages_oc_version == 'stable' or
+          packages_opm_marker.rc != 0 or
+          packages_opm_marker.stdout | trim != packages_oc_version
       block:
         - name: Extract SHA256 for opm-linux.tar.gz
           ansible.builtin.set_fact:

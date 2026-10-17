@@ -124,6 +124,9 @@ class SmokeTests(unittest.TestCase):
             chronyc = home / 'chronyc'
             chronyc.write_text('#!/bin/sh\nexit 4\n')
             chronyc.chmod(0o755)
+            hostname = home / 'hostname'  # a real *.csb host would skip the chrony checks
+            hostname.write_text('#!/bin/sh\necho fixture.example\n')
+            hostname.chmod(0o755)
             result = subprocess.run(
                 ['bash', '-E', '-c',
                  'trap \'printf "smoke command failed at line %s\\n" "$LINENO" >&2\' ERR; source "$1" "${@:2}"',

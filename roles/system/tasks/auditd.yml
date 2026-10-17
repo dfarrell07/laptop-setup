@@ -22,6 +22,7 @@
     executable: /bin/bash
   register: _udev_unowned_dnf
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - is_dnf
@@ -59,6 +60,7 @@
     executable: /bin/bash
   register: _udev_unowned_apt
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - is_apt
@@ -202,6 +204,7 @@
         executable: /bin/bash
       register: _auditd_late_e0_files
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: "Guard: late-sorting audit rules must not disable enforcement"

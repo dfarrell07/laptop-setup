@@ -32,6 +32,17 @@ unset CDPATH  # CDPATH injection: cd "scripts/.." searches CDPATH before CWD; po
 
 # Collect all command-line arguments after the script name
 args=("$@")
+# --run-log=NAME (wrapper option, consumed here): log this run to a private file under the
+# invoking user's validated home. Only the name is caller-controlled; the directory is fixed.
+_run_log_name=""
+if [[ ${#args[@]} -gt 0 && "${args[0]}" == --run-log=* ]]; then
+    _run_log_name="${args[0]#--run-log=}"
+    args=("${args[@]:1}")
+    if [[ ! "$_run_log_name" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
+        echo "ERROR: --run-log name must match ^[a-z][a-z0-9-]{0,31}\$" >&2
+        exit 1
+    fi
+fi
 
 # Reject specific dangerous flags only
 # NOTE: --tags and --skip-tags are NOT blocked globally — they're needed for role-specific
@@ -449,6 +460,26 @@ unset ANSIBLE_CALLBACK_WHITELIST  # pre-2.15 alias for ANSIBLE_CALLBACKS_ENABLED
 unset ANSIBLE_ENABLE_TASK_DEBUGGER  # ANSIBLE_ENABLE_TASK_DEBUGGER=true drops into interactive task debugger on any failure; 'p task.args' in the debugger prints all task arguments including vault-decrypted SSH keys, registry tokens, and passwords
 unset ANSIBLE_LOG_FOLDER  # log_plays output directory control — log_plays reads ANSIBLE_LOG_FOLDER (default /var/log/ansible/hosts/); without this unset an attacker sets ANSIBLE_LOG_FOLDER=/tmp/evil/ to make the log_plays callback write to an attacker-controlled writable path
 unset ANSIBLE_LOG_PATH  # general Ansible run log — note: ANSIBLE_LOG_PATH is separate from ANSIBLE_LOG_FOLDER (log_plays); Ansible core reads this env var as ansible.cfg log_path; if set by an attacker, all task output (including debug output of vault-decrypted vars) is written to the specified path
+if [[ -n "$_run_log_name" ]]; then
+    # HOME was validated against the passwd database above. Ansible's log_path records the
+    # terminal output with no_log values censored; files are 0600 in a 0700 directory.
+    _run_log_dir="${HOME}/.cache/laptop-setup/logs"
+    if [[ -L "$_run_log_dir" ]]; then
+        echo "ERROR: ${_run_log_dir} is a symlink; refusing to log there" >&2
+        exit 1
+    fi
+    install -d -m 0700 "$_run_log_dir"
+    _run_log="${_run_log_dir}/${_run_log_name}-$(date +%Y%m%d-%H%M%S).log"
+    install -m 0600 /dev/null "$_run_log"
+    ln -sfn "${_run_log##*/}" "${_run_log_dir}/${_run_log_name}-latest.log"
+    # keep the newest 20 logs per name (generated names contain no whitespace)
+    # shellcheck disable=SC2012
+    ls -1t "${_run_log_dir}/${_run_log_name}-"2*.log | tail -n +21 | while IFS= read -r _old; do
+        rm -f -- "$_old"
+    done
+    export ANSIBLE_LOG_PATH="$_run_log"
+    echo "Logging this run to ${_run_log} (also ${_run_log_name}-latest.log)" >&2
+fi
 unset ANSIBLE_COW_PATH ANSIBLE_COW_SELECTION ANSIBLE_COW_ACCEPTLIST  # cowsay binary/template injection
 export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return before reading ANSIBLE_COW_PATH; load-bearing mitigation; unset above is defense-in-depth for child processes
 # ansible.cfg sets display_args_to_stdout=false, but ANSIBLE_DISPLAY_ARGS_TO_STDOUT env var
@@ -460,7 +491,7 @@ export ANSIBLE_NOCOWS=1  # ANSIBLE_NOCOWS causes set_cowsay_info() to return bef
 unset ANSIBLE_DISPLAY_ARGS_TO_STDOUT
 export ANSIBLE_HASH_BEHAVIOUR=replace  # pin dict merge semantics — ANSIBLE_HASH_BEHAVIOUR=merge lets attacker-supplied -e dicts merge key-by-key with role-default security dicts instead of replacing them, potentially injecting keys without triggering replacement-based detection; 'replace' is the Ansible default and the only safe mode
 export ANSIBLE_INJECT_FACT_VARS=True  # pin fact injection — ANSIBLE_INJECT_FACT_VARS=False disables injection of ansible_facts dict keys as bare vars (ansible_distribution, ansible_user_dir, etc.); bare-var references in install_dnf_packages.yml (lines 13,19) and csb-report.yml (lines 98,108) evaluate as Undefined when injection is off; Undefined != 'Fedora' is True in Jinja2 so packages_security_rhel is appended on Fedora and repo_gh_cli guard evaluates incorrectly; bare ansible_user_dir in csb-report.yml becomes Undefined causing a template error; dict-form ansible_facts['key'] references used in pre_flight_checks.yml and csb_detect.yml are immune but the bare-var paths are not
-export ANSIBLE_BECOME_FLAGS=  # strip injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
+export ANSIBLE_BECOME_FLAGS='-H -S -n'  # pin to the sudo plugin default (empty drops -S, so sudo ignores the piped --ask-become-pass password and every become task fails); strips injected become flags — ANSIBLE_BECOME_FLAGS='-l' constructs 'sudo -l -u root ...' which prints allowed commands and exits without running the play; other flags can alter sudo behavior per policy in subtle ways; the playbook requires no non-default become flags so forcing empty is safe
 export ANSIBLE_BECOME_ASK_PASS=False  # prevent interactive become-password prompt — ANSIBLE_BECOME_ASK_PASS=True forces Ansible to open /dev/tty for the sudo password; in tmux sessions without a controlling tty or in CI this hangs or errors immediately, blocking all Play 1 become tasks (provisioning DoS); playbook uses vault or the invoking user's cached sudo credentials, so ask-pass is never needed
 export ANSIBLE_DIFF_ALWAYS=False  # suppress forced diff output — ANSIBLE_DIFF_ALWAYS=1 enables --diff globally for every file-writing task; in a logged tmux session or with stdout piped to tee/CI artifact this prints vault-derived content: authorized_keys (vault_ssh_public_keys), SSH private key material written to ~/.ssh/, registry token files, sshd drop-in contents, PAM config; False matches Ansible's default and ensures no caller-set value forces diff mode
 export ANSIBLE_VERBOSITY=0  # suppress caller-set verbosity — ANSIBLE_VERBOSITY=4 (equivalent to -vvvv) dumps full connection parameters, task variable dictionaries, and module argument payloads to stdout; this path is separate from no_log: true result suppression and bypasses it entirely, exposing sysctl hardening dict contents, authorized_keys payloads, SSH private key material, and registry token parameters in tmux scrollback or any stdout-logging pipeline; 0 matches Ansible's default and overrides any caller-set value

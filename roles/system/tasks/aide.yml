@@ -45,6 +45,16 @@
     - not system_is_container
   notify: Restart setuid-scan timer
 
+- name: Check for the setuid scan timer unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/setuid-scan.timer
+  register: _system_setuid_timer_unit
+  when:
+    - is_dnf
+    - system_setuid_scan_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
 - name: Setuid binary scan — enable and start timer
   ansible.builtin.systemd:
     name: setuid-scan.timer
@@ -56,6 +66,7 @@
     - system_setuid_scan_enabled | bool
     - not csb_rhel
     - not system_is_container
+    - not ansible_check_mode or _system_setuid_timer_unit.stat.exists  # unit only simulated in check mode
 
 - name: Setuid binary scan — remove when disabled
   ansible.builtin.file:
@@ -92,12 +103,33 @@
     - system_aide_enabled | bool
     - not system_is_container
 
+- name: Check whether AIDE is installed
+  ansible.builtin.command: rpm -q aide  # noqa: command-instead-of-module
+  register: _system_aide_rpm
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe — must run in check mode
+  when:
+    - is_dnf
+    - system_aide_enabled | bool
+    - not csb_rhel
+    - not system_is_container
+
+- name: Report AIDE setup not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: aide is not installed yet; install, aide.conf edits and database init not simulated."
+  when:
+    - ansible_check_mode
+    - _system_aide_rpm.rc | default(0) != 0
+
 - name: AIDE file integrity monitoring
   when:
     - is_dnf
     - system_aide_enabled | bool
     - not csb_rhel  # CSB IT manages AIDE baseline; don't overwrite
     - not system_is_container
+    # check mode only simulates the install, so /etc/aide.conf does not exist yet
+    - not (ansible_check_mode and _system_aide_rpm.rc | default(0) != 0)
   block:
     - name: Install AIDE
       ansible.builtin.dnf:

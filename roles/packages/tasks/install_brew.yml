@@ -214,6 +214,7 @@
         argv: [brew, --prefix]
       register: _packages_brew_prefix
       changed_when: false
+      check_mode: false
 
     - name: Validate native Homebrew update configuration
       ansible.builtin.assert:
@@ -227,6 +228,7 @@
         argv: [launchctl, print, "gui/{{ ansible_facts['user_uid'] }}"]
       register: _packages_brew_gui_domain
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Select the current user's launchd domain
@@ -243,6 +245,7 @@
             }}/com.laptop-setup.homebrew-update
       register: _packages_brew_previous_domain_job
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Unload the managed update job from the previous login domain
@@ -261,6 +264,7 @@
         argv: [launchctl, print, "{{ _packages_brew_launchd_domain }}/com.laptop-setup.homebrew-update"]
       register: _packages_brew_update_job
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Ensure Homebrew update support directories exist

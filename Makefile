@@ -7,7 +7,7 @@
        test-scripts test-poller test-gitleaks test-% \
        repos-% \
        preflight guard-not-root \
-       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit
+       pip-lock pip-sync npm setup-yubikeys vendor-collections migration-inventory workstation-audit usb-add
 
 # *** ORDERING CRITICAL — DO NOT MOVE THESE BLOCKS ***
 # The make -x check MUST precede 'override MAKEFLAGS :=' because:
@@ -77,7 +77,9 @@ export ANSIBLE_COLLECTIONS_PATH := $(CURDIR)/collections:~/.ansible/collections:
 
 # display_ok_hosts is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
-export ANSIBLE_DISPLAY_OK_HOSTS = false
+# Shown by default: the playbook reports warnings and notices through debug tasks, which
+# the default callback hides along with every other 'ok' result. QUIET=1 restores terse output.
+export ANSIBLE_DISPLAY_OK_HOSTS = $(if $(QUIET),false,true)
 # callback_result_format is a callback plugin option not in the core config schema;
 # ansible-config validate rejects it in [defaults]. Use the env var instead.
 export ANSIBLE_CALLBACK_RESULT_FORMAT = yaml
@@ -90,6 +92,8 @@ help:
 	@echo "Testing:    lint ci test test-scripts test-poller test-fedora test-rocky test-debian test-macos test-vm test-container test-container-offline test-container-offline-distrobox test-distrobox-role test-packages-binaries smoke-test smoke-test-container smoke-test-user check"
 	@echo "Linting:    shellcheck markdownlint commitlint check-vars-sync syntax-check"
 	@echo "Setup:      bootstrap bootstrap-test hooks npm setup-yubikeys vendor-collections"
+	@echo "Output:     QUIET=1 hides ok results, including debug warnings (e.g. make all QUIET=1)"
+	@echo "USB:        usb-add  (allow blocked/connected USB devices now; save rules to config.yml)"
 	@echo "Other:      backup backup-dry-run migration-inventory workstation-audit csb-audit diff vault-edit vault-view vault-diff pip-lock pip-sync preflight"
 
 # --- Primary targets ---
@@ -99,7 +103,7 @@ guard-not-root:
 		{ echo "ERROR: Do not run as root. Use -K for privilege escalation (make all)." >&2; exit 1; }
 
 all: guard-not-root preflight
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass
+	$(VERIFY_AND_RUN) --run-log=all ansible-playbook site.yml --ask-become-pass
 	@if command -v npm >/dev/null 2>&1 && [ ! -d node_modules ]; then \
 		npm ci --ignore-scripts; \
 	fi
@@ -111,10 +115,10 @@ offline: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --ask-become-pass -e packages_install_binaries=false
 
 container: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox --skip-tags become
 
 container-rebuild: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,distrobox -e container_replace=true --skip-tags become
 
 backup: guard-not-root
 	scripts/backup.sh
@@ -195,6 +199,7 @@ bootstrap: guard-not-root bootstrap-hooks
 	@echo "     (For manual vault-pass.sh without hardware key, see SECURITY.md §Setting Up vault-pass.sh)"
 	@echo "     (For first provision without real secrets, vault.yml plaintext stub is fine.)"
 	@echo "  4. make preflight   # validate all pre-conditions before provisioning"
+	@echo "     make check       # full sudo dry run; review the diff before provisioning"
 	@echo "  5. make all         # full provisioning (run at local console or inside tmux)"
 	@echo "  6. Reboot — kernel hardening (lockdown/IOMMU) and SSH port 722 only take effect after reboot"
 	@echo "  7. After reboot — required manual steps:"
@@ -277,6 +282,11 @@ vendor-collections: guard-not-root
 setup-yubikeys: guard-not-root
 	scripts/setup-yubikeys.sh
 
+# Allow blocked USB devices now (USBGuard running) or connected ones not yet covered
+# (before USBGuard is installed); rules go to config.yml for the next make system.
+usb-add: guard-not-root
+	python3 scripts/usb-add.py
+
 update: guard-not-root preflight
 	$(MAKE) npm
 	cd collections-dist && sha256sum -c SHA256SUMS
@@ -285,23 +295,25 @@ update: guard-not-root preflight
 
 # --- Individual roles ---
 
+# Targets without --ask-become-pass skip become-tagged tasks: the always-tagged system
+# audits in the sudo play would otherwise call sudo with no password and fail.
 dotfiles: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,dotfiles --skip-tags become
 
 packages: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,packages --ask-become-pass
 
 repos: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos --skip-tags become
 
 notes: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,notes --skip-tags become
 
 repos-%: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$*
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,repos -e repo_category=$* --skip-tags become
 
 ssh: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,ssh --skip-tags become
 
 desktop: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,desktop --ask-become-pass
@@ -325,7 +337,7 @@ claude: guard-not-root
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,claude --ask-become-pass
 
 codex: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common,codex --skip-tags become
 
 distrobox: container  # alias for backwards compatibility
 
@@ -344,11 +356,13 @@ preflight:
 csb-audit: guard-not-root preflight
 	$(VERIFY_AND_RUN) ansible-playbook site.yml --tags common --check -v
 
-check: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --ask-become-pass
+# Full dry run of every play, including the sudo system play; run before 'make all'.
+# 'make check' and 'make all' log to ~/.cache/laptop-setup/logs/<target>-latest.log.
+check: guard-not-root preflight
+	$(VERIFY_AND_RUN) --run-log=check ansible-playbook site.yml --check --diff --ask-become-pass
 
 diff: guard-not-root
-	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles
+	$(VERIFY_AND_RUN) ansible-playbook site.yml --check --diff --tags dotfiles --skip-tags become
 
 # NOTE: includes test-macos — requires macOS runner. On Linux use: make test
 ci: lint syntax-check test-scripts test-poller test-gitleaks test-fedora test-rocky test-debian test-macos test-container test-container-offline test-container-offline-distrobox test-packages-binaries test-distrobox-role test-ssti-guard
@@ -386,12 +400,12 @@ shellcheck:
 	shellcheck -S warning scripts/*.sh roles/claude/files/*.sh .githooks/pre-commit .githooks/commit-msg .githooks/prepare-commit-msg .githooks/pre-push roles/dotfiles/files/git-template-*
 
 markdownlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npm run lint:markdown
+	@if [ -d node_modules ]; then npm run lint:markdown; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 commitlint:
-	@test -d node_modules || { echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; exit 0; }
-	npx --no -- commitlint --from origin/main --to HEAD
+	@if [ -d node_modules ]; then npx --no -- commitlint --from origin/main --to HEAD; \
+	else echo "SKIP: node_modules absent — run: npm ci --ignore-scripts"; fi
 
 # Container-based molecule tests + script tests (Podman, no libvirt required).
 # Matches CI molecule coverage (test-macos excluded — requires macOS runner).
@@ -432,6 +446,7 @@ test-scripts: .venv
 	.venv/bin/python3 scripts/test-laptop-migration.py
 	.venv/bin/python3 scripts/test-claude-privacy.py
 	.venv/bin/python3 scripts/test-ansible-input-guards.py
+	.venv/bin/python3 scripts/test-usb-add.py
 	.venv/bin/python3 scripts/test-collection-source-verifier.py
 	bash test-var-override.sh
 

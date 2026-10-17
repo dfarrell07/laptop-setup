@@ -137,6 +137,11 @@
   become: true
   when: not system_is_container  # USBGuard not applicable in containers
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  register: _handler_usbguard_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_usbguard_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_usbguard_restart.msg | default('')))
 
 - name: Restart sshd
   ansible.builtin.systemd:
@@ -202,6 +207,11 @@
     - system_setuid_scan_enabled | bool
     - not system_is_container  # daemon_reload: true crashes privileged Podman container PID 1
   ignore_errors: "{{ system_is_container }}"  # noqa: ignore-errors
+  register: _handler_setuid_timer_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_setuid_timer_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_setuid_timer_restart.msg | default('')))
 
 - name: Restart aide-check timer
   ansible.builtin.systemd:
@@ -238,6 +248,11 @@
     daemon_reload: true
   become: true
   when: not system_is_container  # dnf-automatic not applicable in containers; daemon_reload: true crashes Podman containers
+  register: _handler_dnf_automatic_restart
+  # check mode never writes the unit or installs its package, so a missing unit is expected there
+  failed_when:
+    - _handler_dnf_automatic_restart is failed
+    - not (ansible_check_mode and 'Could not find the requested service' in (_handler_dnf_automatic_restart.msg | default('')))
 
 - name: Regenerate GRUB configuration  # noqa: command-instead-of-module
   ansible.builtin.shell: |

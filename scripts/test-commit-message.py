@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class CommitMessageTests(unittest.TestCase):
+    @unittest.skipUnless((ROOT / 'node_modules/.bin/commitlint').exists(),
+                         'commitlint is installed by npm ci --ignore-scripts')
     def test_scope_parser(self):
         for header, accepted in [('Desktop: repair terminal setup', True),
                                  ('Molecule/Desktop: repair terminal setup', True),

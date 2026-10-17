@@ -19,6 +19,7 @@
     executable: /bin/bash
   register: _required_modules_loaded
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - not csb_rhel
@@ -126,6 +127,7 @@
     - not csb_rhel
     - not system_is_container
     - profile == 'work'  # Bridge sysctls only in _system_sysctl_work_defaults
+    - not ansible_check_mode  # modprobe does not load modules under --check
 
 - name: Warn if any kernel module failed to load
   ansible.builtin.debug:

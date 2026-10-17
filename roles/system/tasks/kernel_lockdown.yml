@@ -261,11 +261,11 @@
 
     - name: Remove rd.luks.options=discard grub parameter (SSD wear-pattern)
       ansible.builtin.command:
-        cmd: grubby --remove-args='rd.luks.options' --update-kernel=ALL
+        cmd: grubby --remove-args='rd.luks.options=discard' --update-kernel=ALL
       register: system_luks_options_discard_remove
       when:
         - system_grubby_info.rc == 0
-        - "'rd.luks.options' in (system_grubby_info.stdout)"
+        - "'rd.luks.options=discard' in (system_grubby_info.stdout)"
         - not (system_luks_discards_enabled | bool)
       changed_when: system_luks_options_discard_remove.rc == 0
       failed_when: false
@@ -286,6 +286,7 @@
           init_on_free: "{{ system_init_on_free | bool }}"
           passthrough: "{{ system_iommu_passthrough | bool }}"
           remove_luks_key: "{{ system_remove_luks_key | bool }}"
+          luks_discards: "{{ system_luks_discards_enabled | bool }}"
           amd: "{{ ansible_facts['processor'] | join(' ') | lower is search('amd') }}"
           intel: "{{ ansible_facts['processor'] | join(' ') | lower is search('intel') }}"
       register: system_boot_sources
@@ -295,6 +296,21 @@
       when:
         - is_dnf
         - not system_is_container
+
+    # The copy tasks below use no_log (boot args can reference key material), which also
+    # hides their diff; this redacted summary keeps boot changes reviewable in make check.
+    - name: Show kernel boot argument changes
+      ansible.builtin.debug:
+        msg: >-
+          Boot arguments to add: {{ _boot_summary.added | join(' ') | default('none', true) }};
+          to remove: {{ _boot_summary.removed | join(' ') | default('none', true) }}.
+          Applied to /etc/kernel/cmdline, /etc/default/grub and existing boot entries; active after reboot.
+      vars:
+        _boot_summary: "{{ (system_boot_sources.stdout | from_json).summary }}"
+      when:
+        - is_dnf
+        - not system_is_container
+        - (_boot_summary.added + _boot_summary.removed) | length > 0
 
     - name: Persist hardening arguments for future kernel installation
       ansible.builtin.copy:

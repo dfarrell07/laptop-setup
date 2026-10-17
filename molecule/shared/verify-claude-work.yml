@@ -49,6 +49,9 @@
       - _work_settings.enableAllProjectMcpServers | default(true) == false
       - "'Write(**/.git/hooks/**)' in _work_settings.permissions.deny"
       - "'Edit(**/.git/hooks/**)' in _work_settings.permissions.deny"
+      # Each instance isolates the others but keeps its own memory and plans readable
+      - "'Read(~/.claude-work/**)' not in _work_settings.permissions.deny"
+      - "'Read(~/.claude-work/.credentials.json)' in _work_settings.permissions.deny"
   when: verify_claude_work_settings.stat.exists
 
 - name: Verify Claude work CLAUDE.md exists

@@ -51,6 +51,10 @@
       become: false
       tags: [always]
 
+    - name: Verify sudo authentication (Play 1)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [repos_dnf, system]
+
     # SECURITY: Close pre-hardening cron window.
     # cronie is installed by default on Fedora and may already be running when provisioning
     # begins. cron.yml runs at import position 21 of 25 in the system role (~10-20 min
@@ -69,7 +73,8 @@
       when:
         - not system_is_container
         - not csb_detected
-      tags: [always]
+      # Not 'always': no-sudo targets (make dotfiles, ...) must not attempt become here
+      tags: [repos_dnf, system]
 
   roles:
     - role: repos_dnf
@@ -131,6 +136,10 @@
              | default(playbook_dir, true) }}
       tags: [always]
 
+    - name: Verify sudo authentication (Play 2 targets run with --ask-become-pass)
+      ansible.builtin.import_tasks: common/tasks/become_probe.yml
+      tags: [packages, desktop, redhat, containers, claude]
+
     - name: Set OS family facts (is_macos, is_linux)
       ansible.builtin.set_fact:
         is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
@@ -169,11 +178,8 @@
       when: not _pf_is_molecule
       tags: [always]
 
-    # NOTE: vault SSH key population check for distrobox is enforced inside
-    # roles/distrobox/tasks/main.yml (lines 63-74) as defense-in-depth against
-    # --start-at-task bypasses. Keeping the check there (not here) limits the
-    # blast radius to the distrobox role on first provision with an empty vault,
-    # allowing dotfiles, ssh, git_repos, notes, and claude roles to succeed.
+    # NOTE: an empty vault is handled inside roles/distrobox/tasks/main.yml, which defers
+    # container provisioning (until 'make container') so the other roles still succeed.
 
     # REQUIRED GUARD — DO NOT REMOVE: Play 1 applies SSH port change + kernel
     # hardening before Play 2, so users who skip 'make preflight' get no other

@@ -28,7 +28,8 @@ class CollectionSignatureTests(unittest.TestCase):
             root = Path(directory)
             (root / 'fixture').write_bytes(SAFE)
             manifest = root / 'SHA256SUMS'
-            for tool in ['sha256sum', 'shasum']:
+            # shasum (perl-Digest-SHA) is native on macOS but absent from a default Fedora install
+            for tool in [name for name in ['sha256sum', 'shasum'] if shutil.which(name)]:
                 tools = root / tool
                 tools.mkdir()
                 (tools / tool).symlink_to(shutil.which(tool))

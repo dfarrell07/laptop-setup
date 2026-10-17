@@ -174,117 +174,93 @@
 # binary's SHA256 is checked against the GPG-verified checksums.txt to confirm the
 # binary matches the attested checksum.
 
-- name: Create secure temp directory for operator-sdk GPG verification
+- name: Verify operator-sdk checksums via GPG
+  # Downloads into a temp dir that check mode never creates; nothing to verify there.
   when:
     - is_linux
     - ansible_facts['architecture'] in ['x86_64', 'aarch64']
     - profile == 'work'
-  ansible.builtin.tempfile:
-    state: directory
-    suffix: _operator_sdk_gpg
-  register: _operator_sdk_tmpdir
+    - not ansible_check_mode
+  block:
+    - name: Create secure temp directory for operator-sdk GPG verification
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _operator_sdk_gpg
+      register: _operator_sdk_tmpdir
 
-- name: Download operator-sdk checksums file for GPG verification
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
-      }}/checksums.txt
-    dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
-    mode: "0600"
+    - name: Download operator-sdk checksums file for GPG verification
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
+          }}/checksums.txt
+        dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
+        mode: "0600"
 
-- name: Download operator-sdk checksums GPG signature
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.get_url:
-    url: >-
-      https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
-      }}/checksums.txt.asc
-    dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
-    mode: "0600"
+    - name: Download operator-sdk checksums GPG signature
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/operator-framework/operator-sdk/releases/download/v{{ packages_operator_sdk_version
+          }}/checksums.txt.asc
+        dest: "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
+        mode: "0600"
 
-- name: Import operator-framework GPG key
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.command:
-    argv:
-      - gpg
-      - --keyserver
-      - keyserver.ubuntu.com
-      - --recv-keys
-      - "{{ packages_operator_sdk_gpg_key_id }}"
-  changed_when: false
-  # Soft-fail only on CSB networks where keyserver.ubuntu.com (port 11371/443) may be
-  # filtered; the Warn task below emits an advisory. On non-CSB machines a keyserver
-  # failure is unexpected and should be surfaced. operator-sdk is installed via pinned
-  # SHA256 (packages_operator_sdk_sha256), but GPG provides the independent trust root
-  # confirming that hardcoded hash matches the operator-framework release team's signature.
-  failed_when: _operator_sdk_gpg_import.rc != 0 and not csb_detected
-  register: _operator_sdk_gpg_import
+    - name: Import operator-framework GPG key
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --keyserver
+          - keyserver.ubuntu.com
+          - --recv-keys
+          - "{{ packages_operator_sdk_gpg_key_id }}"
+      changed_when: false
+      # Soft-fail only on CSB networks where keyserver.ubuntu.com (port 11371/443) may be
+      # filtered; the Warn task below emits an advisory. On non-CSB machines a keyserver
+      # failure is unexpected and should be surfaced. operator-sdk is installed via pinned
+      # SHA256 (packages_operator_sdk_sha256), but GPG provides the independent trust root
+      # confirming that hardcoded hash matches the operator-framework release team's signature.
+      failed_when: _operator_sdk_gpg_import.rc != 0 and not csb_detected
+      register: _operator_sdk_gpg_import
 
-- name: Verify operator-sdk checksums file GPG signature
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.command:
-    argv:
-      - gpg
-      - --verify
-      - "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
-      - "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
-  changed_when: false
-  failed_when: false
-  register: _operator_sdk_gpg_verify
+    - name: Verify operator-sdk checksums file GPG signature
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --verify
+          - "{{ _operator_sdk_tmpdir.path }}/checksums.txt.asc"
+          - "{{ _operator_sdk_tmpdir.path }}/checksums.txt"
+      changed_when: false
+      failed_when: false
+      register: _operator_sdk_gpg_verify
 
-- name: Warn if operator-sdk GPG verification failed
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - _operator_sdk_gpg_verify.rc != 0
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: operator-sdk checksums file GPG verification failed (rc={{ _operator_sdk_gpg_verify.rc }}).
-      This can occur in offline environments or networks where GPG keyserver access is unavailable.
-      Proceeding without GPG verification. operator-sdk binary was verified via SHA256 checksum at
-      download time. If this is unexpected, verify manually:
-      gpg --verify checksums.txt.asc checksums.txt
+    - name: Warn if operator-sdk GPG verification failed
+        - _operator_sdk_gpg_verify.rc != 0
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: operator-sdk checksums file GPG verification failed (rc={{ _operator_sdk_gpg_verify.rc }}).
+          This can occur in offline environments or networks where GPG keyserver access is unavailable.
+          Proceeding without GPG verification. operator-sdk binary was verified via SHA256 checksum at
+          download time. If this is unexpected, verify manually:
+          gpg --verify checksums.txt.asc checksums.txt
 
-- name: Verify installed operator-sdk binary SHA256 against GPG-verified checksums
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-    - _operator_sdk_gpg_verify.rc == 0
-  ansible.builtin.shell: |
-    set -euo pipefail
-    arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
-    expected=$(grep "operator-sdk_linux_${arch}" \
-      {{ _operator_sdk_tmpdir.path }}/checksums.txt | awk '{print $1}')
-    actual=$(sha256sum /usr/local/bin/operator-sdk | awk '{print $1}')
-    [ "$expected" = "$actual" ]
-  args:
-    executable: /bin/bash
-  changed_when: false
-  failed_when: _operator_sdk_sha256_verify.rc != 0
-  register: _operator_sdk_sha256_verify
+    - name: Verify installed operator-sdk binary SHA256 against GPG-verified checksums
+        - _operator_sdk_gpg_verify.rc == 0
+      ansible.builtin.shell: |
+        set -euo pipefail
+        arch="{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
+        expected=$(grep "operator-sdk_linux_${arch}" \
+          {{ _operator_sdk_tmpdir.path }}/checksums.txt | awk '{print $1}')
+        actual=$(sha256sum /usr/local/bin/operator-sdk | awk '{print $1}')
+        [ "$expected" = "$actual" ]
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: _operator_sdk_sha256_verify.rc != 0
+      register: _operator_sdk_sha256_verify
 
-- name: Clean up operator-sdk GPG verification temporary directory
-  when:
-    - is_linux
-    - ansible_facts['architecture'] in ['x86_64', 'aarch64']
-    - profile == 'work'
-  ansible.builtin.file:
-    path: "{{ _operator_sdk_tmpdir.path }}"
-    state: absent
+    - name: Clean up operator-sdk GPG verification temporary directory
+      ansible.builtin.file:
+        path: "{{ _operator_sdk_tmpdir.path }}"
+        state: absent
 
 # --- Cosign pre-install self-verification (second trust root on re-provisioning) ---
 # TRUST MODEL: cosign uses Sigstore (Google OIDC keyless signing). The verification below

@@ -156,6 +156,7 @@
       - leapseclist /usr/share/zoneinfo/leap-seconds.list
   register: _chrony_leapseclist_probe
   changed_when: false
+  check_mode: false  # read-only parse; the template diff depends on it
   failed_when:
     - _chrony_leapseclist_probe.rc != 0
     - "'Invalid directive' not in _chrony_leapseclist_probe.stderr"

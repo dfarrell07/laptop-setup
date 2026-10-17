@@ -311,6 +311,15 @@
   when:
     - is_linux
     - not _zsh_binary_stat.stat.exists
+    - not ansible_check_mode
+
+- name: Report zsh not installed yet in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: /bin/zsh is absent; the packages role installs it before this step in a real run."
+  when:
+    - is_linux
+    - not _zsh_binary_stat.stat.exists
+    - ansible_check_mode
 
 - name: Set zsh as default shell (local /etc/passwd user)
   ansible.builtin.user:

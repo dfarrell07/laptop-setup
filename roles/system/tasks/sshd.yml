@@ -200,7 +200,16 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ _sshd_dropin_files.files | default([]) }}"
-      when: item.path | basename != '00-hardening.conf'
+      # Hybrid CSB: IT's remote-access role rewrites its drop-in from cron (PermitRootLogin no,
+      # also set here); 00-hardening.conf sorts first, so its directives still win.
+      when: >-
+        item.path | basename not in
+        (['00-hardening.conf'] + (['99-csb-remote-access.conf'] if csb_detected | default(false) else []))
+
+    - name: Check whether sshd.service.d exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/sshd.service.d
+      register: _sshd_unit_dropin_dir
 
     - name: Remove unauthorized drop-ins from /etc/systemd/system/sshd.service.d  # noqa: command-instead-of-module
       ansible.builtin.find:
@@ -208,6 +217,7 @@
         patterns: "*.conf"
         file_type: file
       register: _sshd_unit_dropin_files
+      when: _sshd_unit_dropin_dir.stat.isdir | default(false)  # find warns on a missing dir
 
     - name: Delete all sshd.service.d drop-ins (none are playbook-owned)
       ansible.builtin.file:
@@ -233,6 +243,16 @@
       register: _sshd_temp_template
       changed_when: false  # validation scratch is removed in this transaction
 
+    # Check mode writes no temp file to move, so show the drop-in diff directly instead.
+    - name: Preview sshd hardening drop-in changes
+      ansible.builtin.template:
+        src: sshd-hardening.conf.j2
+        dest: /etc/ssh/sshd_config.d/00-hardening.conf
+        owner: root
+        group: root
+        mode: "0600"
+      when: ansible_check_mode
+
     - name: Atomically move config to production location for validation
       ansible.builtin.copy:
         src: /etc/ssh/sshd_config.d/.00-hardening.conf.tmp
@@ -243,6 +263,7 @@
         mode: "0600"
       notify: Restart sshd
       register: _sshd_config_copy
+      when: not ansible_check_mode
 
     - name: Validate sshd config after deploying new drop-in
       ansible.builtin.command:
@@ -280,8 +301,9 @@
     - name: Fail after cleaning up broken sshd drop-in
       ansible.builtin.fail:
         msg: >-
-          sshd -t rejected 00-hardening.conf — the broken drop-in has been removed
-          to prevent SSH lockout on reboot. Review template rendering above.
+          Deploying or validating 00-hardening.conf failed, so the drop-in has been removed
+          to prevent SSH lockout on reboot. Error from '{{ ansible_failed_task.name | default('unknown') }}':
+          {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('unknown')) | truncate(300) }}
 
 # Mask sshd.socket to prevent port-22 socket activation (sshd.service on port 722 is authoritative).
 # Without masking, 'systemctl start sshd.socket' would reopen port 22 bypassing the drop-in.
@@ -290,6 +312,7 @@
     argv: [systemctl, show, --property=LoadState, --value, sshd.socket]
   register: _system_sshd_socket_load
   changed_when: false
+  check_mode: false
   when:
     - not csb_rhel
     - not system_is_container
@@ -410,6 +433,8 @@
   when:
     - _sshd_dropin_post_validation is defined
     - _sshd_dropin_post_validation.stat is defined
+    # check mode never writes the drop-in, so on a first provision there is nothing to compare
+    - _sshd_dropin_post_validation.stat.exists | default(false)
     - (_sshd_dropin_pre_handler.stat.checksum | default('')) !=
       _sshd_dropin_post_validation.stat.checksum
 

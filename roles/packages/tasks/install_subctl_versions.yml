@@ -14,8 +14,17 @@
       verification, or uses unsupported pattern syntax. Use private domain prefixes
       or literal private owners; only literals and '*' globs are supported.
 
+- name: Report versioned subctl builds not simulated in check mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: subctl {{ packages_subctl_versioned | map(attribute='version') | join(', ') }} go builds not simulated."
+  when:
+    - ansible_check_mode
+    - _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
+
 - name: Install versioned subctl binaries (subctlXX) for multi-cluster Submariner management
-  when: _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
+  when:
+    - not ansible_check_mode  # builds into a temp dir that check mode never creates
+    - _packages_linux_x86_work and packages_subctl_versioned | default([]) | length > 0
   vars:
     _subctl_installed: >-
       {{ ((packages_subctl_version_check.results[loop_idx].stdout | default('')) ~
@@ -149,7 +158,9 @@
       when: _subctl_tmpdir.path is defined
 
 - name: Install downstream RH subctl versions (registry.redhat.io/rhacm2/subctl-rhel{8,9})
-  when: _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
+  when:
+    - not ansible_check_mode  # extracts into a temp dir that check mode never creates
+    - _packages_linux_x86_work and packages_subctl_rh_versions | default([]) | length > 0
   block:
     - name: Check installed version of downstream RH subctl binaries
       ansible.builtin.command:

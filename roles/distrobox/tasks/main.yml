@@ -55,24 +55,22 @@
       A shell name (bash, sh, zsh) creates a trivial host-shell escape from the container.
       Fix: remove unlisted entries from distrobox_host_exec_commands in config.yml.
 
-- name: SECURITY assert vault SSH keys are populated for container provisioning
-  # NOTE: no tags — tasks with no tags run normally AND survive --skip-tags always.
-  # Duplicates the vault healthcheck in site.yml pre_tasks to protect against
-  # --start-at-task bypassing play-level pre_tasks (documented bypass in CLAUDE.md).
-  # _pf_is_molecule is set by pre_flight_checks.yml; default(false) ensures the
-  # assertion fires when pre_tasks are skipped via --start-at-task.
-  ansible.builtin.assert:
-    that:
-      - vault_ssh_auth_key is defined
-      - vault_ssh_auth_key | length > 0
-      - vault_ssh_auth_key_pub is defined
-      - vault_ssh_auth_key_pub | length > 0
-    fail_msg: >-
-      Container provisioning requires populated vault SSH keys. vault_ssh_auth_key
-      and vault_ssh_auth_key_pub cannot be empty when distrobox_enabled: true.
-      Run 'make setup-yubikeys' to populate vault, or set distrobox_enabled: false
-      in config.yml to skip container provisioning.
-  when: not (_pf_is_molecule | default(false))
+# The container is provisioned with the vault SSH keys; without them, defer it rather than
+# failing the whole run. 'make container' completes it once the vault is populated.
+- name: Defer container provisioning until vault SSH keys exist
+  when:
+    - not (_pf_is_molecule | default(false))
+    - (vault_ssh_auth_key | default('') | length == 0) or (vault_ssh_auth_key_pub | default('') | length == 0)
+  block:
+    - name: Notice — container provisioning deferred
+      ansible.builtin.debug:
+        msg: >-
+          NOTICE: skipping dev container provisioning — vault_ssh_auth_key(_pub) is empty.
+          Run 'make setup-yubikeys', populate the vault, then 'make container'.
+          (Or set distrobox_enabled: false in config.yml to stop this notice.)
+
+    - name: End the distrobox role for this run
+      ansible.builtin.meta: end_role
 
 # --- Detect container tool ---
 - name: Warn when container_release overrides but digest may be stale

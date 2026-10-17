@@ -111,12 +111,21 @@
       list | length > 0
   register: git_repos_vpn_check
   ignore_errors: true
+  check_mode: false  # read-only probe; wait_for is otherwise skipped in check mode
 
 - name: Warn if VPN-gated repo hosts are unreachable
   ansible.builtin.debug:
     msg: >-
       VPN-gated host {{ git_repos_vpn_check_host }} is unreachable (port {{ git_repos_vpn_check_port }}).
-      Repos at {{ git_repos_vpn_check_host }} require Red Hat VPN — connect to VPN or expect clone failures.
+      Skipping repos at {{ git_repos_vpn_check_host }} this run; connect to VPN and re-run 'make repos'.
+  when: git_repos_vpn_check.failed | default(false)
+
+# Without this, the known_hosts assertion below aborts the role whenever the VPN is down,
+# because the ssh role could not keyscan the VPN-gated host either.
+- name: Skip VPN-gated repos while the VPN host is unreachable
+  ansible.builtin.set_fact:
+    git_repos_filtered: >-
+      {{ git_repos_filtered | rejectattr('url', 'search', git_repos_vpn_check_host | regex_escape) | list }}
   when: git_repos_vpn_check.failed | default(false)
 
 - name: Stat base directory without following symlinks
@@ -148,7 +157,7 @@
       Impact: privilege escalation via filesystem permission widening on sensitive system directories.
       Fix: set git_repos_base_dir to a path inside your home directory, e.g. ~/src (default).
   tags: [always]
-  when: git_repos_filtered | length > 0
+  when: git_repos_filtered | default([]) | length > 0  # always-tagged: runs under other roles' --tags
 
 - name: Ensure base directory exists
   ansible.builtin.file:
@@ -161,7 +170,10 @@
   ansible.builtin.include_tasks: "{{ common_project_root }}/common/tasks/git-lfs-setup.yml"
   when: git_repos_filtered | length > 0
 
-- name: Assert SSH git repo hosts are in known_hosts (--start-at-task guard)
+# accept_newhostkey below would trust an unseen host key, so SSH repos are cloned only from
+# hosts the ssh role already seeded (pinned fingerprint or GitHub API). Unseeded hosts (off VPN,
+# fingerprint not yet pinned) are deferred to a later 'make ssh repos' instead of failing the run.
+- name: Check SSH git repo hosts are in known_hosts
   ansible.builtin.command:
     cmd: >-
       ssh-keygen -F "{{ item }}" -f "{{ ansible_facts['user_dir'] }}/.ssh/known_hosts"
@@ -169,8 +181,32 @@
     {{ git_repos_filtered | default([]) | map(attribute='url')
        | select('match', '^git@') | map('regex_replace', '^git@([^:]+):.*', '\1')
        | unique | list }}
+  register: _git_repos_known_hosts
   changed_when: false
+  failed_when: false
+  check_mode: false  # read-only probe
   tags: [always]
+
+- name: Defer SSH repos whose host key is not seeded
+  vars:
+    _unseeded: >-
+      {{ _git_repos_known_hosts.results | default([]) | rejectattr('rc', 'equalto', 0)
+         | map(attribute='item') | list }}
+  when: _unseeded | length > 0
+  tags: [always]
+  block:
+    - name: Warn about deferred SSH repos
+      ansible.builtin.debug:
+        msg: >-
+          Skipping SSH repos on {{ _unseeded | join(', ') }}: no known_hosts entry (host
+          unreachable or its fingerprint is not pinned in ssh_work_keyscan_hosts). Pin the
+          fingerprint, then run 'make ssh repos' on a network that reaches the host.
+
+    - name: Drop SSH repos on unseeded hosts
+      ansible.builtin.set_fact:
+        git_repos_filtered: >-
+          {{ git_repos_filtered | rejectattr('url', 'match',
+             '^git@(' ~ (_unseeded | map('regex_escape') | join('|')) ~ '):') | list }}
 
 - name: Clone repositories  # noqa: latest[git] SECURITY WARNING see SECURITY.md Internal SSH Git Host Setup
   ansible.builtin.git:
@@ -211,7 +247,8 @@
   ansible.builtin.debug:
     msg: >-
       FAILED to clone {{ item.item.url }} -> {{ item.item.dest }}:
-      {{ item.stderr | default('', true) or item.msg | default('unknown error') }}
+      {{ ((item.stderr | default('', true) or item.msg | default('unknown error')) | string).splitlines() | map('trim')
+         | reject('match', '^([+|]|Host key fingerprint is|$)') | join(' ') }}
   loop: "{{ git_repos_clone_results.results | default([]) | selectattr('failed', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.item.dest }}"
@@ -271,6 +308,8 @@
   loop: "{{ git_repos_filtered | subelements('extra_remotes', skip_missing=true) }}"
   loop_control:
     label: "{{ item.0.dest }} -> {{ item.1.name }}"
-  when: item.0.dest in git_repos_available_dests
+  when:
+    - item.0.dest in git_repos_available_dests
+    - not ansible_check_mode  # check mode clones nothing, so the chdir target may not exist
   register: git_repos_remote_result
   changed_when: git_repos_remote_result.stdout | trim in ['added', 'updated']

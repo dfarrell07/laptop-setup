@@ -4,7 +4,21 @@
 # _keyscan_host may be a plain hostname string or a dict:
 #   {host: hostname, fingerprint: "SHA256:..."}  (fingerprint is optional;
 #   when set, the scanned key fingerprint is asserted before known_hosts is seeded)
+# A fingerprint field that is set but not a full SHA256 (e.g. a placeholder awaiting the real
+# value) defers the host: nothing is seeded, so git_repos skips its SSH repos. Never TOFU here.
+- name: Defer host with unpinned fingerprint {{ _keyscan_host.host | default(_keyscan_host) }}
+  ansible.builtin.debug:
+    msg: >-
+      Not seeding {{ _keyscan_host.host }}: fingerprint '{{ _keyscan_host.fingerprint }}' is not a
+      full SHA256 value. Its SSH repos are skipped until the real fingerprint is set in config.yml.
+  when:
+    - _keyscan_host.fingerprint is defined
+    - _keyscan_host.fingerprint is not match('^SHA256:[A-Za-z0-9+/]{43}$')
+
 - name: Pre-seed known_hosts for {{ _keyscan_host.host | default(_keyscan_host) }}
+  when: >-
+    _keyscan_host.fingerprint is not defined or
+    _keyscan_host.fingerprint is match('^SHA256:[A-Za-z0-9+/]{43}$')
   vars:
     _ks_host: "{{ _keyscan_host.host | default(_keyscan_host) }}"
     _ks_fingerprint: "{{ _keyscan_host.fingerprint | default('') }}"
@@ -28,8 +42,11 @@
       register: _ks_fp_result
       check_mode: false
       changed_when: false
-      failed_when: _ks_fingerprint not in _ks_fp_result.stdout
-      when: _ks_fingerprint | length > 0
+      # Exact match against the scanned key fingerprints (field 2 of each ssh-keygen -l line)
+      failed_when: >-
+        _ks_fingerprint not in (_ks_fp_result.stdout_lines | map('split') | map(attribute=1, default='') | list)
+      # An unreachable host (e.g. off VPN) is reported below, not as a key mismatch
+      when: _ks_fingerprint | length > 0 and ssh_keyscan_result is succeeded
 
     - name: Warn — TOFU key acceptance (no fingerprint configured) for {{ _ks_host }}
       ansible.builtin.debug:

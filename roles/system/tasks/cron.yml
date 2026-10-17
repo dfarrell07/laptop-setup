@@ -89,6 +89,11 @@
         label: "{{ item.path }}"
       failed_when: false
 
+    - name: Check whether /etc/cron.d exists
+      ansible.builtin.stat:
+        path: /etc/cron.d
+      register: system_crond_files_dir
+
     - name: Find unmanaged files in /etc/cron.d
       ansible.builtin.find:
         paths: /etc/cron.d
@@ -96,6 +101,7 @@
         excludes: "{{ system_crond_whitelist }}"
       register: system_crond_files
       failed_when: false
+      when: system_crond_files_dir.stat.isdir | default(false)  # absent without cronie; find would warn
 
     - name: Abort on unexpected /etc/cron.d files not in system_crond_whitelist
       ansible.builtin.fail:
@@ -115,6 +121,11 @@
     - csb_detected
     - not system_is_container
   block:
+    - name: Check whether /etc/cron.d exists (CSB)
+      ansible.builtin.stat:
+        path: /etc/cron.d
+      register: system_crond_files_csb_dir
+
     - name: Find unmanaged files in /etc/cron.d (CSB)
       ansible.builtin.find:
         paths: /etc/cron.d
@@ -122,6 +133,7 @@
         excludes: "{{ system_crond_whitelist }}"
       register: system_crond_files_csb
       failed_when: false
+      when: system_crond_files_csb_dir.stat.isdir | default(false)  # absent without cronie; find would warn
 
     - name: Warn on unexpected /etc/cron.d files not in system_crond_whitelist (CSB — IT may drop files)
       ansible.builtin.debug:

@@ -555,6 +555,9 @@ if [[ -f "$HOME/.ssh/config" ]]; then
   else record "ssh-config-hash-known-hosts" "FAIL" "HashKnownHosts yes missing from ~/.ssh/config — host list exposed in plaintext"; fi
   if grep -qE '^[[:space:]]*StrictHostKeyChecking accept-new' "$HOME/.ssh/config"; then record "ssh-config-strict-host-key" "PASS"
   else record "ssh-config-strict-host-key" "FAIL" "StrictHostKeyChecking accept-new missing from ~/.ssh/config"; fi
+  # Effective value: per-host blocks placed after Host * are silently ignored (first value wins)
+  if ssh -G github.com 2>/dev/null | grep -qx 'stricthostkeychecking true'; then record "ssh-config-github-strict" "PASS"
+  else record "ssh-config-github-strict" "FAIL" "github.com does not resolve to StrictHostKeyChecking yes (ssh -G) — run: make dotfiles"; fi
   if grep -qE '^[[:space:]]*ControlMaster auto' "$HOME/.ssh/config"; then record "ssh-config-control-master" "PASS"
   else record "ssh-config-control-master" "FAIL" "ControlMaster auto missing from ~/.ssh/config — connection multiplexing not configured"; fi
   if ! grep -q 'MACs' "$HOME/.ssh/config"; then record "ssh-config-no-non-etm-macs" "FAIL" "MACs line absent — client uses OpenSSH defaults (may include non-ETM); run: make dotfiles"
@@ -978,14 +981,19 @@ if ! $USER_ONLY && [[ -z "$CONTAINER" ]] && $IS_LINUX; then
       if [[ "$ts_zone" == "trusted" ]]; then record "firewall-tailscale-zone" "PASS"
       else record "firewall-tailscale-zone" "FAIL" "tailscale0 in zone '$ts_zone', expected 'trusted'"; fi
     fi
-    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0
-    if firewall-cmd --permanent --zone=trusted --query-interface=wt0 &>/dev/null; then
+    # wt0 (NetBird VPN) — same trusted-zone requirement as tailscale0, except on CSB
+    # where IT's firewall role binds wt0 to its 'redhat' zone
+    wt_expect="trusted"
+    if $CSB_HOST && firewall-cmd --permanent --zone=redhat --query-interface=wt0 &>/dev/null; then
+      wt_expect="redhat"
+    fi
+    if firewall-cmd --permanent --zone="$wt_expect" --query-interface=wt0 &>/dev/null; then
       record "firewall-wt0-permanent" "PASS"
     else record "firewall-wt0-permanent" "FAIL" "wt0 not in permanent trusted zone config — NetBird peer traffic will be dropped (run: make system)"; fi
     if ip link show wt0 &>/dev/null; then
       wt_zone=$(firewall-cmd --get-zone-of-interface=wt0 2>/dev/null || echo "?")
-      if [[ "$wt_zone" == "trusted" ]]; then record "firewall-wt0-zone" "PASS"
-      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected 'trusted'"; fi
+      if [[ "$wt_zone" == "$wt_expect" ]]; then record "firewall-wt0-zone" "PASS"
+      else record "firewall-wt0-zone" "FAIL" "wt0 in zone '$wt_zone', expected '$wt_expect'"; fi
     fi
     # ICMP block-inversion must be enabled when drop zone is active
     if [[ "$zone" == "drop" ]]; then

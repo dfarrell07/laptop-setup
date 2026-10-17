@@ -323,14 +323,34 @@ if [[ -f "$CONFIG_FILE" ]]; then
   fi
 fi
 
+# --- keyscan fingerprint guard (mirrors pre_flight_checks.yml; fails before the sudo prompt) ---
+if [[ -f "$CONFIG_FILE" ]]; then
+  _bad_fp=$(python3 -I -c '
+import re, sys, yaml
+class L(yaml.SafeLoader): pass
+L.add_multi_constructor("!", lambda loader, tag, node: loader.construct_scalar(node) if isinstance(node, yaml.ScalarNode) else None)
+hosts = (yaml.load(open(sys.argv[1]), Loader=L) or {}).get("ssh_work_keyscan_hosts") or []
+for h in hosts:
+    if isinstance(h, dict) and "fingerprint" in h and not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", str(h["fingerprint"])):
+        print(h.get("host", "?"))
+' "$CONFIG_FILE" 2>/dev/null | paste -sd' ' -)
+  if [[ -n "$_bad_fp" ]]; then
+    record "config_keyscan_fingerprints" "warn" "fingerprint not pinned for: $_bad_fp — these hosts and their SSH repos are skipped until the full SHA256 (ssh-keygen -lf) is set"
+  else
+    record "config_keyscan_fingerprints" "pass" "keyscan fingerprints well-formed or unset"
+  fi
+  unset _bad_fp
+fi
+
 # --- Network connectivity ---
 net_urls=("github=https://github.com" "galaxy=https://galaxy.ansible.com")
-[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io")
+# Registry API root: 401 means reachable (auth required); the bare host returns 404
+[[ "$PROFILE" == "work" ]] && net_urls+=("registry=https://registry.redhat.io/v2/")
 for netlabel_url in "${net_urls[@]}"; do
   nlabel="${netlabel_url%%=*}" nurl="${netlabel_url#*=}"
   if [[ "$_curl_ok" == true ]]; then
     _http_code=$(curl -sSL --max-time 10 -o /dev/null -w '%{http_code}' "$nurl" 2>/dev/null)
-    if [[ "$_http_code" =~ ^[23] ]]; then
+    if [[ "$_http_code" =~ ^[23] || ( "$nlabel" == registry && "$_http_code" == 401 ) ]]; then
       record "net_${nlabel}" "pass" "$nurl reachable (HTTP $_http_code)"
     else record "net_${nlabel}" "fail" "$nurl unreachable (HTTP ${_http_code:-000})"; fi
   else

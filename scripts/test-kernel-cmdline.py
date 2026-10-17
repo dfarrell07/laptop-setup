@@ -14,7 +14,8 @@ spec.loader.exec_module(compiler)
 class KernelCmdlineTests(unittest.TestCase):
     def settings(self, mode='integrity', processor='amd', free=True, passthrough=False):
         return {'lockdown': mode, 'amd': processor == 'amd', 'intel': processor == 'intel',
-                'init_on_free': free, 'passthrough': passthrough, 'remove_luks_key': False}
+                'init_on_free': free, 'passthrough': passthrough, 'remove_luks_key': False,
+                'luks_discards': False}
 
     def test_both_boot_sources_and_repeat(self):
         for mode, processor, free, passthrough in [('integrity', 'amd', True, False),
@@ -64,6 +65,27 @@ class KernelCmdlineTests(unittest.TestCase):
         for malformed in ['foo="unterminated', 'foo=bare\\']:
             with self.assertRaises(ValueError):
                 compiler.merge_arguments(malformed, settings)
+
+    def test_luks_discards_follow_policy(self):
+        text = 'root=UUID=fixture rd.luks.allow-discards rd.luks.options=discard rd.luks.options=tpm2-device=auto'
+        settings = self.settings()
+        merged = shlex.split(compiler.merge_arguments(text, settings))
+        self.assertNotIn('rd.luks.allow-discards', merged)
+        self.assertNotIn('rd.luks.options=discard', merged)
+        self.assertIn('rd.luks.options=tpm2-device=auto', merged)
+        settings['luks_discards'] = True
+        kept = shlex.split(compiler.merge_arguments(text, settings))
+        self.assertIn('rd.luks.allow-discards', kept)
+        self.assertIn('rd.luks.options=discard', kept)
+
+    def test_summary_redacts_key_references(self):
+        before = 'root=UUID=fixture rd.luks.key=uuid=/keyfile:UUID=other rd.luks.allow-discards'
+        after = compiler.merge_arguments(before, dict(self.settings(), remove_luks_key=True))
+        summary = compiler.summarize(before, after)
+        self.assertIn('rd.luks.key=<redacted>', summary['removed'])
+        self.assertIn('rd.luks.allow-discards', summary['removed'])
+        self.assertIn('lockdown=integrity', summary['added'])
+        self.assertNotIn('keyfile', ' '.join(summary['added'] + summary['removed']))
 
     def test_reject_ambiguous_grub_sources(self):
         for value in ['GRUB_CMDLINE_LINUX=bare\n', 'GRUB_CMDLINE_LINUX="a"\nGRUB_CMDLINE_LINUX="b"\n']:

@@ -98,7 +98,8 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 
 1. Connect ALL USB devices you regularly use (external drives, hubs, docks, keyboards, mice, etc.)
 2. Run: lsusb
-3. For each device you want to allow, add a rule to config.yml system_usbguard_extra_rules:
+3. Run `make usb-add` to save a rule for each connected device not yet covered, or add rules to config.yml
+   system_usbguard_extra_rules by hand:
 
    ```yaml
    system_usbguard_extra_rules:
@@ -108,6 +109,9 @@ hardwired rule is ineffective. You MUST add VID:PID rules for internal devices.
 4. For USB mass storage, either add per-device rules OR ensure system_disable_usb_storage: false in config.yml (default is false)
 
 ### After first provision, if a device is blocked
+
+Plug the device in and run `make usb-add`: it allows every blocked device now and saves its rule to
+config.yml; then run `make system`. By hand:
 
 1. Temporarily allow: `sudo usbguard allow-device <id>` (find id with: `sudo usbguard list-devices --blocked`)
 2. Permanently add: Add rule to config.yml and re-run make system
@@ -134,9 +138,10 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    vault-pass.sh" for the manual vault-pass.sh template if needed. Then populate
    `group_vars/all/vault.yml` with real SSH keys (see Vault section below) and encrypt:
    `ansible-vault encrypt group_vars/all/vault.yml`. For a first provision without real secrets,
-   vault.yml ships as plaintext — `make all` **requires** `distrobox_enabled: false` in `config.yml`
-   when the vault is unpopulated (site.yml healthcheck asserts non-empty SSH keys when container
-   provisioning is enabled). Once vault is populated, remove that override.
+   vault.yml ships as plaintext and `make all` still runs at the console: container provisioning
+   is deferred (finish with `make container`), and internal git hosts without a pinned fingerprint
+   in `ssh_work_keyscan_hosts` are skipped (finish with `make ssh repos`). Provisioning *over SSH*
+   with no ed25519/FIDO2 key is blocked, since hardening would strand the session.
    **WARNING**: if vault is unpopulated, no authorized_keys is written; after reboot sshd
    moves to port 722 and SSH login fails unless an out-of-band authorized_keys entry already
    exists. Additionally, sshd hardening will REJECT RSA/ECDSA keys — only ed25519 and FIDO2
@@ -144,6 +149,7 @@ See references/troubleshooting.md § "system: USBGuard Blocks YubiKey or Keyboar
    after hardening deploys. Populate the vault with an ed25519 key (or manually add one to
    authorized_keys) before rebooting.
 3b. `make preflight` — validate all pre-conditions before provisioning (fast; re-run after any config.yml change)
+3c. `make check` — full sudo dry run (`--check --diff`) of every play; review the diff, then provision. `make check` and `make all` keep private logs in `~/.cache/laptop-setup/logs/` (`check-latest.log`, `all-latest.log`; newest 20 each)
 4. `make all` — full provisioning (asks for sudo password)
    **Run at the local console or inside tmux, NOT over SSH.** The system role restarts
    sshd mid-play, which sends SIGHUP to SSH sessions and kills the Ansible run. If you
@@ -198,7 +204,8 @@ make test-vm          # Molecule Fedora 44 VM tests (full, Vagrant+libvirt)
 make smoke-test       # Post-run verification (host)
 make smoke-test-user  # Post-run verification (user-space only, no sudo; wraps smoke-test.sh --user-only)
 make smoke-test-container  # Post-run verification (distrobox)
-make check            # Dry run (--check mode)
+make usb-add          # Allow blocked USB devices now + save rules to config.yml (then make system)
+make check            # Full dry run incl. sudo system play (--check --diff); runs preflight first; logs to ~/.cache/laptop-setup/logs/
 make diff             # Dotfiles check+diff (dry run)
 make csb-audit        # Preflight + common dry-run (CSB detection audit)
 make test-scripts     # bash -n syntax-check of 8 scripts/ files + executes test-hooks-security.sh
